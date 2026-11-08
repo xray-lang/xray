@@ -154,11 +154,14 @@ static XrXirStatus restriction_capture(void *context, const XirStorageCapture *c
     if (capture->kind == XIR_STORAGE_CAPTURE_STORABLE_FN)
         return capture->contents == UINT32_MAX && capture->exposure == UINT32_MAX ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
     if (capture->contents == UINT32_MAX) return XR_XIR_UNRESOLVED;
-    if (capture->kind == XIR_STORAGE_CAPTURE_FORMAL_FN) {
+    if (capture->kind == XIR_STORAGE_CAPTURE_FORMAL_FN || capture->kind == XIR_STORAGE_CAPTURE_HIDDEN_FN) {
         uint32_t f = capture->identity.function, p = capture->identity.value;
         if (capture->exposure != UINT32_MAX || f >= owner->module->function_count ||
-            p < owner->functions[f].captures || p >= owner->functions[f].parameters ||
-            !xr_xir_callable_signature(owner->module->types, owner->nodes[owner->offsets[f] + p].type))
+            p >= owner->functions[f].parameters ||
+            (p < owner->functions[f].captures) != (capture->kind == XIR_STORAGE_CAPTURE_HIDDEN_FN))
+            return XR_XIR_BAD_STRUCTURE;
+        XrXirType type = owner->nodes[owner->offsets[f] + p].type;
+        if (!xr_xir_callable_signature(owner->module->types, type) || xr_xir_type_is_c_callable(owner->module->types, type))
             return XR_XIR_BAD_STRUCTURE;
     } else if (capture->kind != XIR_STORAGE_CAPTURE_CELL) return XR_XIR_BAD_STRUCTURE;
     if (solver->carrier_count == solver->carrier_capacity) {
@@ -398,6 +401,10 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
             XrXirValueFlow edge = solver->view.functions[f].exposure_flows[e];
             if (!restriction_local_edge(solver, f, edge.source, edge.target, true)) return false;
         }
+        for (uint32_t e = 0; e < solver->view.functions[f].footprint_flow_count && escape_poll(owner); ++e) {
+            XrXirValueFlow edge = solver->view.functions[f].footprint_flows[e];
+            if (!restriction_local_edge(solver, f, edge.source, edge.target, false)) return false;
+        }
         uint32_t first = owner->offsets[f], end = owner->offsets[f + 1];
         for (uint32_t v = first; v < end && escape_poll(owner); ++v)
             for (uint32_t e = owner->nodes[v].head; e != UINT32_MAX; e = owner->edges[e].next) {
@@ -419,13 +426,23 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
     }
     for (uint32_t n = 0; n < solver->view.input_count && escape_poll(owner); ++n) {
         XirStorageInput input = solver->view.inputs[n];
-        if (input.function >= solver->view.function_count || input.handle >= owner->functions[input.function].parameters) {
+        if (input.bank > XIR_STORAGE_FOOTPRINT || input.function >= solver->view.function_count ||
+            input.handle >= owner->functions[input.function].parameters) {
             owner->status = XR_XIR_BAD_STRUCTURE; return false;
         }
         uint32_t index = restriction_node(solver, input.function, input.value, input.bank == XIR_STORAGE_EXPOSURE);
         if (owner->status != XR_XIR_OK) return false;
         bool hidden = input.handle < owner->functions[input.function].captures;
-        if (input.bank == XIR_STORAGE_EXPOSURE) {
+        if (input.bank == XIR_STORAGE_FOOTPRINT) {
+            XrXirType type = owner->nodes[owner->offsets[input.function] + input.handle].type;
+            if (input.value < owner->functions[input.function].physical_values ||
+                !xr_xir_callable_signature(owner->module->types, type) ||
+                xr_xir_type_is_c_callable(owner->module->types, type) ||
+                (!hidden && xr_xir_function_parameter_escaping(&owner->module->functions[input.function], input.handle))) {
+                owner->status = XR_XIR_BAD_STRUCTURE; return false;
+            }
+            restriction_input(solver, index, input.value);
+        } else if (input.bank == XIR_STORAGE_EXPOSURE) {
             if (hidden) restriction_input(solver, index, input.value);
             else solver->nodes[index].constant = true;
         } else if (hidden) {
@@ -480,6 +497,7 @@ static bool restriction_applications(HirRestrictionSolver *solver) {
     HirEscape *owner = &solver->builder->graph;
     for (uint32_t c = 0; c < solver->view.crossflow_count && escape_poll(owner); ++c) {
         XirStorageCrossFlow flow = solver->view.crossflows[c];
+        if (flow.bank > XIR_STORAGE_FOOTPRINT) {owner->status = XR_XIR_BAD_STRUCTURE; return false;}
         bool exposure = flow.bank == XIR_STORAGE_EXPOSURE;
         uint32_t source = restriction_node(solver, flow.source_function, flow.source, exposure);
         uint32_t target = restriction_node(solver, flow.target_function, flow.target, exposure);
