@@ -1,0 +1,1 @@
+fn accept(callback: CFn<i64>) {}

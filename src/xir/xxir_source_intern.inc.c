@@ -189,6 +189,26 @@ static bool source_signature_rest(SourceContext *ctx,XrXirType *type) {
 static bool source_reference_promise(SourceContext *ctx, AstNode *node,
     uint32_t function, SourceExpectedType expected, XrXirType *type) {
     const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
+    if (context && (context->flags & XR_XIR_CALLABLE_C_ABI)) {
+        const XrXirTypeNode *actual = xr_xir_callable_signature(&ctx->types, *type);
+        const XrXirFunctionIdentity *identity = &ctx->identities[function];
+        if (function >= ctx->first_closure || identity->native_callable || identity->nominal_owner ||
+            !ctx->bodies[function].node || ctx->bodies[function].node->type != AST_FUNCTION_DECL ||
+            ctx->bodies[function].node->as.function_decl.is_extern)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "CFn requires a module-level noncapturing function declaration");
+        if (!actual || actual->element != XR_XIR_NEVER || actual->result != context->result ||
+            actual->parameter_count != context->parameter_count || (actual->flags & XR_XIR_CALLABLE_REST))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "CFn requires an exact nonthrowing function signature");
+        for (uint32_t p = 0; p < actual->parameter_count; ++p)
+            if (actual->parameters[p].type != context->parameters[p].type ||
+                actual->parameters[p].mode != context->parameters[p].mode)
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "CFn requires an exact nonthrowing function signature");
+        XrXirTypeNode signature = *actual;
+        signature.flags |= XR_XIR_CALLABLE_C_ABI | XR_XIR_CALLABLE_NO_SUSPEND;
+        if (!source_intern_type(ctx, signature, type)) return false;
+        ctx->identities[function].promises |= XR_XIR_FUNCTION_NO_SUSPEND;
+        return true;
+    }
     if (!context || !(context->flags & XR_XIR_CALLABLE_NO_SUSPEND)) return true;
     if (!(ctx->identities[function].promises & XR_XIR_FUNCTION_NO_SUSPEND))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");

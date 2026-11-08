@@ -1,0 +1,3 @@
+fn worker() -> i64 { return 1 }
+fn callback() -> i64 { return await go worker() }
+const pointer: CFn<fn() -> i64> = callback

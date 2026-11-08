@@ -52,7 +52,8 @@ def main() -> None:
                      "root_const", "signature_throws", "signature_generic_try",
                      "closed_dispatch_pure", "closed_dispatch_reference",
                      "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive",
-                     "root_array_literal", "root_tuple_literal", "root_tuple_selected"):
+                     "root_array_literal", "root_tuple_literal", "root_tuple_selected",
+                     "cfn_signature", "cfn_reference", "cfn_indirect", "cfn_storable"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -108,6 +109,18 @@ def main() -> None:
         assert not checked.stdout and not checked.stderr, "root-rest-captures"
 
         rejected_effects = (
+            ("cfn_reject_argument", b"CFn requires one function type"),
+            ("cfn_reject_rest", b"variadic C callback type"),
+            ("cfn_reject_throwing_type", b"CFn callbacks must not throw business errors"),
+            ("cfn_reject_throwing_reference", b"CFn requires an exact nonthrowing function signature"),
+            ("cfn_reject_anonymous", b"CFn requires a module-level noncapturing function declaration"),
+            ("cfn_reject_nested", b"callable conversion may only weaken its outer execution contract"),
+            ("cfn_reject_captured", b"callable conversion may only weaken its outer execution contract"),
+            ("cfn_reject_fn_alias", b"callable conversion may only weaken its outer execution contract"),
+            ("cfn_reject_signature", b"CFn requires an exact nonthrowing function signature"),
+            ("cfn_reject_ordinary", b"callback argument requires exact shape and an admitted advertised bound"),
+            ("cfn_reject_ordinary_assignment", b"callable conversion may only weaken its outer execution contract"),
+            ("cfn_reject_suspend", b"declared no_suspend function may suspend"),
             ("nosuspend_await", b"declared no_suspend function may suspend"),
             ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
             ("nosuspend_chain", b"entry -> bridge -> leaf (suspending operation)"),

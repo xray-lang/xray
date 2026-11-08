@@ -1,0 +1,1 @@
+const callback: CFn<fn() -> i64> = fn() -> i64 { return 1 }

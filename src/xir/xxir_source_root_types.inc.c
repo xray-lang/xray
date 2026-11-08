@@ -126,7 +126,8 @@ static bool source_root_bottom_type(SourceContext *ctx, XrXirType original,
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"inferred capture nesting exhausted");
     XrXirTypeNode bottom = *node;
     if (bottom.kind == XR_XIR_TYPE_CALLABLE) {
-        bottom.flags = (bottom.flags & (XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST)) | XR_XIR_CALLABLE_ROOT_NONE;
+        bottom.flags = (bottom.flags & (XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_REST |
+            XR_XIR_CALLABLE_C_ABI)) | XR_XIR_CALLABLE_ROOT_NONE;
     } else if (bottom.kind == XR_XIR_TYPE_MAP) {
         if (!source_root_bottom_type(ctx,bottom.element,depth + 1,&bottom.element) ||
             !source_root_bottom_type(ctx,bottom.result,depth + 1,&bottom.result)) return false;

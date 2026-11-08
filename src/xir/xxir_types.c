@@ -162,6 +162,10 @@ static bool type_has_kind(const XrXirTypes *types, XrXirType type, uint32_t kind
 bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_CALLABLE);
 }
+XR_FUNC bool xr_xir_type_is_c_callable(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_callable_signature(types, type);
+    return node && (node->flags & XR_XIR_CALLABLE_C_ABI);
+}
 #include "xxir_class_field_cap.inc.c"
 bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_ARRAY);
@@ -291,6 +295,8 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
+        if ((node->flags & XR_XIR_CALLABLE_C_ABI) && node->element != XR_XIR_NEVER)
+            return XR_XIR_BAD_TYPE;
         if (!type_error_component(types,node->element,index) ||
             !xr_xir_callable_flags_valid(node->flags) ||
             (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
