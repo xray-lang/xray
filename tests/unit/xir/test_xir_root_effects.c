@@ -86,6 +86,7 @@ static void direct_root_equations(void) {
             .instructions = bind, .instruction_count = 2, .operands = arguments, .operand_count = 1},
         {.instructions = returned, .instruction_count = 4, .operands = arguments, .operand_count = 1}
     };
+    for (uint32_t f = 0; f < 5; ++f) functions[f].error_type = XR_XIR_NEVER;
     XrXirEffectParameter parameter = {.kind = XR_XIR_EFFECT_PARAMETER_VARIABLE};
     XrXirFunctionEffectContract contracts[5] = {{.parameters = &parameter, .parameter_count = 1},
         {0}, {0}, {.parameters = &parameter, .parameter_count = 1}, {0}};
@@ -93,7 +94,7 @@ static void direct_root_equations(void) {
     EffectMark mark = effect_mark();
     EffectCheckedRoots *roots = NULL;
     attempts = 0;
-    CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, &roots) == XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, NULL, &roots) == XR_XIR_OK);
     size_t sites = attempts;
     CHECK(effect_check_bits(roots, roots->function[0].root)[0] == 4);
     CHECK(effect_check_bits(roots, roots->function[1].root)[0] == 1);
@@ -133,7 +134,7 @@ static void direct_root_equations(void) {
         attempts = 0;
         injected = false;
         fail_at = point;
-        CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, &roots) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, NULL, &roots) == XR_XIR_OUT_OF_MEMORY);
         CHECK(injected && !roots);
         fail_at = SIZE_MAX;
         effect_mark_check(mark);
@@ -144,12 +145,12 @@ static void direct_root_equations(void) {
             XR_COMPILE_MEMORY_FINITE, finite_limits[i], true});
         uint64_t held = effect_stats(&finite).held_bytes;
         roots = NULL;
-        CHECK(effect_checked_roots_build(&finite, &module, contracts, NULL, &roots) == XR_XIR_MEMORY_LIMIT && !roots);
+        CHECK(effect_checked_roots_build(&finite, &module, contracts, NULL, NULL, &roots) == XR_XIR_MEMORY_LIMIT && !roots);
         effect_owner_free(&finite, held);
         effect_mark_check(mark);
     }
     roots = NULL;
-    CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, &roots) == XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context, &module, contracts, NULL, NULL, &roots) == XR_XIR_OK);
     memset(functions, 0xCE, sizeof(functions));
     memset(&callable, 0xCE, sizeof(callable));
     memset(apply, 0xCE, sizeof(apply));
@@ -168,7 +169,7 @@ static void generic_resource_failures(void) {
     EffectMark mark = effect_mark();
     EffectCheckedRoots *roots = NULL;
     attempts = 0;
-    CHECK(effect_checked_roots_build(&effect_context, module, contracts, NULL, &roots) == XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context, module, contracts, NULL, NULL, &roots) == XR_XIR_OK);
     size_t sites = attempts;
     CHECK(roots->functions > roots->templates && roots->terms &&
         effect_terms_scratch_retired(roots->terms));
@@ -179,7 +180,7 @@ static void generic_resource_failures(void) {
         attempts = 0;
         injected = false;
         fail_at = point;
-        XrXirStatus status = effect_checked_roots_build(&effect_context, module, contracts, NULL, &roots);
+        XrXirStatus status = effect_checked_roots_build(&effect_context, module, contracts, NULL, NULL, &roots);
         if (status != XR_XIR_OUT_OF_MEMORY || !injected || roots)
             fprintf(stderr, "generic allocation %zu/%zu status%u injected%d roots%p\n", point, sites,
                 status, injected, (void *)roots);
@@ -190,7 +191,7 @@ static void generic_resource_failures(void) {
     roots = NULL;
     EffectCheckedRoots *interfaces = NULL;
     XrXirCompileContext producer = effect_context;
-    CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, &interfaces) == XR_XIR_OK);
+    CHECK(effect_checked_roots_collect(&producer, module, contracts, NULL, NULL, &interfaces) == XR_XIR_OK);
     CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
     memset(&producer, 0xCE, sizeof(producer));
     CHECK(effect_checked_roots_link_take(&effect_context, module, NULL, &interfaces, &roots) == XR_XIR_OK && !interfaces);
@@ -206,77 +207,16 @@ static void generic_resource_failures(void) {
     printf("generic numeric binding: %zu allocation failures, retired scratch and producer-dead projection PASS\n", sites);
 }
 
-static XrXirStatus parameter_summary_try(const XrXirCompileContext *context,
-    const XrXirModule *module, XrXirEffectParameter *parameters) {
-    XrXirFunctionEffectContract contracts[3] = {0};
-    for (uint32_t f = 0; f < 3; ++f)
-        contracts[f] = (XrXirFunctionEffectContract){.parameter_count = 1, .parameters = &parameters[f]};
-    EffectParameterGraph graph = {.work = context, .module = *module};
-    XrXirStatus status = effect_parameter_graph_prepare(&graph, contracts);
-    if (status == XR_XIR_OK) status = effect_parameter_graph_collect(&graph);
-    XrXirFunction headers[3];
-    memcpy(headers, module->functions, sizeof(headers));
-    for (uint32_t f = 0; f < 3; ++f) {
-        headers[f].instructions = NULL;
-        headers[f].instruction_count = UINT32_MAX;
-    }
-    graph.module.functions = headers;
-    if (status == XR_XIR_OK) status = effect_parameter_graph_finish(&graph, contracts);
-    effect_parameter_graph_free(&graph);
+static XrXirStatus root_control_summary_build(const XrXirCompileContext *context,
+    const XrXirModule *module, XrCompileRequestControl *control, EffectControlSummary **output) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckedRoots *roots = NULL;
+    XrXirStatus status = effect_checked_roots_build(context, module, NULL, control, NULL, &roots);
+    if (status == XR_XIR_OK) status = effect_checked_control_project(context, roots, output);
+    effect_checked_roots_free(roots);
     return status;
 }
-static void parameter_summary_kernel(void) {
-    EffectMark baseline = effect_mark();
-    XrXirTypeNode callable = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER,
-        .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
-    XrXirTypes types = {.nodes = &callable, .count = 1};
-    XrXirType parameter = XR_XIR_CONSTRUCTED_TYPE_BASE;
-    uint32_t operand = 0;
-    XrXirInstruction rows[3][2] = {
-        {{.op = XR_XIR_CALL, .immediate = 1, .type = XR_XIR_CONSTRUCTED_TYPE_BASE, .args = {0, 1}},
-            {.op = XR_XIR_RETURN}},
-        {{.op = XR_XIR_FUNCTION_REF, .immediate = 2, .type = XR_XIR_CONSTRUCTED_TYPE_BASE, .args = {0, 1}},
-            {.op = XR_XIR_RETURN, .args = {1}}},
-        {{.op = XR_XIR_CALL_INDIRECT, .immediate = 0, .type = XR_XIR_UNIT}, {.op = XR_XIR_RETURN}}
-    };
-    XrXirFunction functions[3] = {0};
-    for (uint32_t f = 0; f < 3; ++f)
-        functions[f] = (XrXirFunction){.error_type = XR_XIR_NEVER, .parameters = &parameter, .parameter_count = 1,
-            .instructions = rows[f], .instruction_count = 2, .operands = &operand, .operand_count = 1};
-    functions[1].result = XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types, .functions = functions, .function_count = 3};
-    XrXirEffectParameter parameters[3] = {
-        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0},
-        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0},
-        {XR_XIR_EFFECT_PARAMETER_VARIABLE, 0}
-    }, empty[3];
-    memcpy(empty, parameters, sizeof(empty));
-    attempts = 0;
-    CHECK(parameter_summary_try(&effect_context, &module, parameters) == XR_XIR_OK);
-    size_t sites = attempts;
-    CHECK(parameters[0].kind == XR_XIR_EFFECT_PARAMETER_FIXED && parameters[0].uses == XR_XIR_EFFECT_USE_FIXED);
-    CHECK(parameters[1].kind == XR_XIR_EFFECT_PARAMETER_FIXED && parameters[1].uses ==
-        (XR_XIR_EFFECT_USE_CONST_CAPTURE | XR_XIR_EFFECT_USE_RETURN | XR_XIR_EFFECT_USE_INVOKE));
-    CHECK(parameters[2].kind == XR_XIR_EFFECT_PARAMETER_VARIABLE && parameters[2].uses == XR_XIR_EFFECT_USE_INVOKE);
-    effect_mark_check(baseline);
-    for (size_t point = 0; point < sites; ++point) {
-        memcpy(parameters, empty, sizeof(parameters));
-        attempts = 0; injected = false; fail_at = point;
-        CHECK(parameter_summary_try(&effect_context, &module, parameters) == XR_XIR_OUT_OF_MEMORY);
-        CHECK(injected && !memcmp(parameters, empty, sizeof(parameters)));
-        fail_at = SIZE_MAX;
-        effect_mark_check(baseline);
-    }
-    XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
-    uint64_t held = effect_stats(&finite).held_bytes;
-    CHECK(parameter_summary_try(&finite, &module, parameters) == XR_XIR_MEMORY_LIMIT);
-    CHECK(!memcmp(parameters, empty, sizeof(parameters)));
-    effect_owner_free(&finite, held);
-    effect_mark_check(baseline);
-    printf("parameter summaries: capture/forward masks, body-free closure, %zu allocation failures and finite owner PASS\n", sites);
-}
-
-static void control_summary_streamed(void) {
+static void control_summary_detached(void) {
     EffectMark baseline = effect_mark();
     XrXirInstruction rows[3][2] = {
         {{.op = XR_XIR_CALL, .immediate = 1}, {.op = XR_XIR_RETURN}},
@@ -288,39 +228,23 @@ static void control_summary_streamed(void) {
         functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .error_type = XR_XIR_NEVER,
             .instructions = rows[f], .instruction_count = 2};
     XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = functions, .function_count = 3};
-    XirControlBuilder *builder = NULL;
-    EffectControlSummary *summary = NULL, *retained = NULL;
-    CHECK(xir_effect_control_builder_new(&effect_context, &module, NULL, &builder) == XR_XIR_OK);
-    const uint32_t order[] = {1, 0, 2};
-    for (uint32_t at = 0; at < 3; ++at) {
-        uint32_t f = order[at];
-        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_OK);
-        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
-        CHECK(xir_effect_control_instruction(builder, &module, f, 1) == XR_XIR_BAD_STRUCTURE);
-        CHECK(xir_effect_control_end(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
-        CHECK(xir_effect_control_finish(builder, &module, &summary) == XR_XIR_BAD_STRUCTURE && !summary);
-        for (uint32_t i = 0; i < 2; ++i)
-            CHECK(xir_effect_control_instruction(builder, &module, f, i) == XR_XIR_OK);
-        CHECK(xir_effect_control_end(builder, &module, f) == XR_XIR_OK);
-        CHECK(xir_effect_control_begin(builder, &module, f) == XR_XIR_BAD_STRUCTURE);
-    }
+    EffectCheckedRoots *interfaces = NULL, *roots = NULL;
+    EffectControlSummary *summary = NULL;
+    CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &interfaces) == XR_XIR_OK);
     memset(rows, 0xCE, sizeof(rows));
     for (uint32_t f = 0; f < 3; ++f) {
         functions[f].instructions = NULL;
         functions[f].instruction_count = UINT32_MAX;
     }
-    CHECK(xir_effect_control_finish(builder, &module, &summary) == XR_XIR_OK);
-    CHECK(xir_effect_control_finish(builder, &module, &retained) == XR_XIR_BAD_STRUCTURE && !retained);
-    xir_effect_control_builder_free(builder);
+    CHECK(effect_checked_roots_link_take(&effect_context, &module, NULL, &interfaces, &roots) == XR_XIR_OK);
+    CHECK(effect_checked_control_project(&effect_context, roots, &summary) == XR_XIR_OK);
+    effect_checked_roots_free(roots);
     CHECK(summary->facts[0].suspend == XR_XIR_EFFECT_MAY && summary->causes[0].callee == 1);
     CHECK(summary->causes[0].distance == 2 && summary->causes[1].callee == 2);
-    CHECK(xir_effect_control_retain(&effect_context, summary, &retained) == XR_XIR_OK);
-    CHECK(xir_effect_control_retain(&effect_context, summary, &retained) == XR_XIR_BAD_STRUCTURE);
+    CHECK(summary->causes[2].cause == XR_XIR_EFFECT_CAUSE_SUSPEND);
     xir_effect_control_free(summary);
-    CHECK(retained->causes[2].cause == XR_XIR_EFFECT_CAUSE_SUSPEND);
-    xir_effect_control_free(retained);
     effect_mark_check(baseline);
-    puts("streamed control summaries close without bodies and retain independent ownership PASS");
+    puts("numeric control projections close without bodies and own detached values PASS");
 }
 static void module_interface_lifetime(void) {
     uint32_t imported = 1;
@@ -352,7 +276,7 @@ static void module_interface_lifetime(void) {
                 .instruction_count = f < 2 ? 2 : 1, .error_type = XR_XIR_NEVER};
         EffectCheckedRoots *interfaces = NULL, *roots = NULL;
         XrXirCompileContext producer = effect_context;
-        CHECK(effect_checked_roots_collect(&producer, &module, NULL, NULL, &interfaces) == XR_XIR_OK);
+        CHECK(effect_checked_roots_collect(&producer, &module, NULL, NULL, NULL, &interfaces) == XR_XIR_OK);
         CHECK(interfaces->terms && effect_terms_scratch_retired(interfaces->terms));
         memset(&producer, 0xCE, sizeof(producer));
         CHECK(interfaces->modules == 2 && interfaces->module_offsets[1] == 2 &&
@@ -391,9 +315,118 @@ static void module_interface_lifetime(void) {
     printf("module interfaces: body-free cross-module closure, %zu consumed-owner failures and detached reads PASS\n", sites);
 }
 
+static void suspension_parameter_equations(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType fn = XR_XIR_CONSTRUCTED_TYPE_BASE, cell = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_UNIT, .element = XR_XIR_NEVER,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_CONSTRUCTED_TYPE_BASE}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 2};
+    XrXirType parameter[] = {fn};
+    uint32_t argument[] = {0};
+    uint32_t escaping = 0;
+    XrXirInstruction rows[17][4] = {0};
+    XrXirFunction functions[17] = {0};
+    for (uint32_t f = 0; f < 17; ++f) {
+        rows[f][0] = (XrXirInstruction){.op = XR_XIR_RETURN};
+        functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .error_type = XR_XIR_NEVER,
+            .instructions = rows[f], .instruction_count = 1, .operands = argument, .operand_count = 1};
+    }
+    const uint32_t parameters[] = {0, 6, 10, 13, 14};
+    for (uint32_t p = 0; p < sizeof(parameters) / sizeof(*parameters); ++p) {
+        functions[parameters[p]].parameters = parameter;
+        functions[parameters[p]].parameter_count = 1;
+    }
+    rows[2][0] = (XrXirInstruction){.op = XR_XIR_SUSPEND};
+    rows[2][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    functions[2].instruction_count = 2;
+    const uint32_t callers[] = {3, 4, 7, 11, 12, 15, 16};
+    const uint32_t targets[] = {0, 0, 6, 10, 10, 13, 13};
+    for (uint32_t c = 0; c < sizeof(callers) / sizeof(*callers); ++c) {
+        uint32_t f = callers[c];
+        rows[f][0] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF, .type = fn,
+            .immediate = f == 4 || f == 12 || f == 16 ? 2 : 1};
+        rows[f][1] = (XrXirInstruction){.op = XR_XIR_CALL, .args = {0, 1}, .immediate = targets[c]};
+        rows[f][2] = (XrXirInstruction){.op = XR_XIR_RETURN};
+        functions[f].instruction_count = 3;
+    }
+    rows[5][0] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF, .type = fn, .immediate = 2};
+    rows[5][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    functions[5].instruction_count = 2;
+    functions[6].escaping_parameter_count = 1;
+    functions[6].escaping_parameters = &escaping;
+    rows[6][0] = (XrXirInstruction){.op = XR_XIR_CALL_INDIRECT};
+    rows[6][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    functions[6].instruction_count = 2;
+    functions[8].result = fn;
+    rows[8][0] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF, .type = fn, .immediate = 1};
+    rows[8][1] = (XrXirInstruction){.op = XR_XIR_FUNCTION_WEAKEN, .type = fn};
+    rows[8][2] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {1}};
+    functions[8].instruction_count = 3;
+    rows[9][0] = (XrXirInstruction){.op = XR_XIR_CALL_DEFAULT, .type = fn, .targets = {0, 0}};
+    rows[9][1] = (XrXirInstruction){.op = XR_XIR_CALL, .args = {0, 1}, .immediate = 0};
+    rows[9][2] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    functions[9].instruction_count = 3;
+    rows[10][0] = (XrXirInstruction){.op = XR_XIR_CELL_NEW, .type = cell};
+    rows[10][1] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = fn, .args = {1}};
+    rows[10][2] = (XrXirInstruction){.op = XR_XIR_CALL_INDIRECT, .immediate = 2};
+    rows[10][3] = (XrXirInstruction){.op = XR_XIR_RETURN};
+    functions[10].instruction_count = 4;
+    for (uint32_t f = 13; f < 15; ++f) {
+        rows[f][0] = (XrXirInstruction){.op = XR_XIR_CALL, .args = {0, 1}, .immediate = f == 13 ? 14 : 13};
+        rows[f][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+        functions[f].instruction_count = 2;
+    }
+    XrXirDefaultBinding binding = {.owner_kind = XR_XIR_DEFAULT_PARAMETER, .owner = 0, .ordinal = 0, .function = 8};
+    XrXirDefaultTable defaults = {.records = &binding, .count = 1};
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types, .functions = functions,
+        .function_count = 17, .defaults = &defaults};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots) == XR_XIR_OK);
+    CHECK(effect_check_suspend_bits(roots, roots->function[0].root)[0] == 4);
+    CHECK(effect_checked_suspend_mask(roots, roots->function[0].root) == 1);
+    const uint8_t expected[] = {1, 0, 2, 0, 2, 0, 1, 1, 0, 0, 1, 0, 2, 1, 1, 0, 2};
+    for (uint32_t f = 0; f < 17; ++f)
+        CHECK(effect_checked_suspend_mask(roots, roots->function[f].root) == expected[f]);
+    CHECK(effect_check_suspend_bits(roots, roots->function[13].root)[0] == 4);
+    CHECK(effect_check_suspend_bits(roots, roots->function[14].root)[0] == 4);
+    memset(rows, 0xCE, sizeof(rows));
+    memset(functions, 0xCE, sizeof(functions));
+    CHECK(effect_checked_suspend_mask(roots, roots->function[4].root) == 2);
+    CHECK(!effect_check_evaluate(roots, roots->function[4].root));
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+    puts("suspension formulas preserve callback substitution, aliases, latent values, defaults and recursive bounds PASS");
+}
+
+static void suspension_reason_order(void) {
+    EffectMark baseline = effect_mark();
+    XrXirInstruction rows[5][3] = {
+        {{.op = XR_XIR_CALL, .immediate = 1}, {.op = XR_XIR_CALL, .immediate = 2}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_CALL, .immediate = 0}, {.op = XR_XIR_CALL, .immediate = 3}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_CALL, .immediate = 4}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_SUSPEND}, {.op = XR_XIR_RETURN}},
+        {{.op = XR_XIR_SUSPEND}, {.op = XR_XIR_RETURN}}
+    };
+    XrXirFunction functions[5] = {0};
+    for (uint32_t f = 0; f < 5; ++f)
+        functions[f] = (XrXirFunction){.name = "f", .name_length = 1, .error_type = XR_XIR_NEVER,
+            .instructions = rows[f], .instruction_count = f < 2 ? 3 : 2};
+    XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = functions, .function_count = 5};
+    EffectControlSummary *summary = NULL;
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    CHECK(summary->causes[0].distance == 2 && summary->causes[0].callee == 1 && !summary->causes[0].instruction);
+    xir_effect_control_free(summary);
+    effect_mark_check(baseline);
+    puts("equal-length suspension causes retain source order across recursive component scheduling PASS");
+}
+
 static void control_summary_kernel(void) {
-    parameter_summary_kernel();
-    control_summary_streamed();
+    control_summary_detached();
+    suspension_parameter_equations();
+    suspension_reason_order();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
@@ -410,7 +443,7 @@ static void control_summary_kernel(void) {
     XrXirModule module = {.stage = XR_XIR_BUILT, .functions = functions, .function_count = count};
     EffectControlSummary *summary = NULL;
     EffectMark baseline = effect_mark();
-    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
     for (uint32_t f = 0; f < count; ++f) {
         CHECK(summary->facts[f].suspend == XR_XIR_EFFECT_MAY);
         CHECK(summary->facts[f].throws == XR_XIR_EFFECT_NONE);
@@ -418,7 +451,7 @@ static void control_summary_kernel(void) {
     }
     EffectControlSummary *occupied = summary;
     size_t before = attempts;
-    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &occupied) == XR_XIR_BAD_STRUCTURE);
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &occupied) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == summary && attempts == before);
     xir_effect_control_free(summary);
     effect_mark_check(baseline);
@@ -427,7 +460,7 @@ static void control_summary_kernel(void) {
     rows[2][0].immediate = 0;
     rows[3][0].immediate = 3;
     summary = NULL;
-    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
     for (uint32_t f = 0; f < 4; ++f) CHECK(summary->facts[f].suspend == XR_XIR_EFFECT_NONE);
     xir_effect_control_free(summary);
 
@@ -438,7 +471,7 @@ static void control_summary_kernel(void) {
     functions[2].instruction_count = blocks[2].count = 3;
     summary = NULL;
     attempts = 0;
-    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
     size_t sites = attempts;
     for (uint32_t f = 0; f < 4; ++f)
         CHECK(summary->facts[f].suspend == (f < 3 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
@@ -450,7 +483,7 @@ static void control_summary_kernel(void) {
         attempts = 0;
         injected = false;
         fail_at = point;
-        CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OUT_OF_MEMORY);
         CHECK(injected && !summary);
         fail_at = SIZE_MAX;
         effect_mark_check(baseline);
@@ -458,12 +491,12 @@ static void control_summary_kernel(void) {
     XrXirCompileContext finite = effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE, 128, true});
     uint64_t held = effect_stats(&finite).held_bytes;
     summary = NULL;
-    CHECK(effect_control_summary_build(&finite, &module, NULL, &summary) == XR_XIR_MEMORY_LIMIT && !summary);
+    CHECK(root_control_summary_build(&finite, &module, NULL, &summary) == XR_XIR_MEMORY_LIMIT && !summary);
     effect_owner_free(&finite, held);
     effect_mark_check(baseline);
 
     summary = NULL;
-    CHECK(effect_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
+    CHECK(root_control_summary_build(&effect_context, &module, NULL, &summary) == XR_XIR_OK);
     memset(functions, 0xCE, count * sizeof(*functions));
     memset(rows, 0xCE, count * sizeof(*rows));
     memset(terminal, 0xCE, sizeof(terminal));

@@ -1,0 +1,4 @@
+fn worker() -> i64 { return 7 }
+fn apply(callback: fn()) { callback() }
+fn test() { defer { apply(fn() { const result = await go worker() }) } }
+test()

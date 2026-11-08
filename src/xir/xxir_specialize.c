@@ -50,8 +50,6 @@ typedef struct SpecContext {
     XirSourceFacts *source_facts;
     const XrXirEffects *effects;
     XrXirEffects *verification_effects;
-    XirControlBuilder *control_builder;
-    EffectControlSummary *control_summary;
     XrXirCompileContext remaining;
     XrXirDiagnostic diagnostic;
     SpecMemory *memory;
@@ -549,23 +547,9 @@ static bool spec_call(SpecContext *c, uint32_t index, uint32_t i) {
 }
 static bool spec_calls(SpecContext *c, uint32_t index) {
     c->diagnostic.function = c->instances[index].declaration;
-    XrXirDeclarations declarations = {.functions = c->identities};
-    XrXirModule module = {.stage = XR_XIR_CHECKED, .functions = c->functions, .function_count = c->count,
-        .declarations = c->identities ? &declarations : NULL, .types = &c->types, .linkage_kind = XR_XIR_PROGRAM};
-    c->diagnostic.status = xir_effect_control_begin(c->control_builder, &module, index);
-    if (c->diagnostic.status != XR_XIR_OK) return false;
     uint32_t instructions = c->functions[index].instruction_count;
-    for (uint32_t i = 0; i < instructions; ++i) {
+    for (uint32_t i = 0; i < instructions; ++i)
         if (!spec_call(c, index, i)) return false;
-        /* Discovery may move descriptor arrays. Emit only after rebinding the
-         * actual final function and identity tables, without another body walk. */
-        declarations.functions = c->identities;
-        module.functions = c->functions;
-        module.function_count = c->count;
-        c->diagnostic.status = xir_effect_control_instruction(c->control_builder, &module, index, i);
-        if (c->diagnostic.status != XR_XIR_OK) return false;
-    }
-    c->diagnostic.status = xir_effect_control_end(c->control_builder, &module, index);
     return c->diagnostic.status == XR_XIR_OK;
 }
 static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
@@ -769,11 +753,6 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         }
     }
     if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
-    XrXirDeclarations control_declarations = {.functions = c.identities};
-    XrXirModule control_module = {.stage = XR_XIR_CHECKED, .functions = c.functions, .function_count = c.count,
-        .declarations = c.identities ? &control_declarations : NULL, .types = &c.types, .linkage_kind = XR_XIR_PROGRAM};
-    c.diagnostic.status = xir_effect_control_builder_new(&limits, &control_module, control, &c.control_builder);
-    if (c.diagnostic.status != XR_XIR_OK) goto done;
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
     if (pending) { pending->complete=true;goto done; }
     if (evaluation && !c.evaluation_found) { c.diagnostic.status=XR_XIR_BAD_TYPE;goto done; }
@@ -786,8 +765,6 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     c.diagnostic.status = spec_provenance(&c,&provenance);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     specialized.provenance = provenance;
-    c.diagnostic.status = xir_effect_control_finish(c.control_builder, &specialized, &c.control_summary);
-    if (c.diagnostic.status != XR_XIR_OK) { xr_xir_compile_provenance_free(provenance); goto done; }
     XrXirConstruction *projected = NULL;
     c.diagnostic.status = spec_materialization_construction(&c,&specialized,&projected);
     if (c.diagnostic.status == XR_XIR_OK) {
@@ -796,10 +773,6 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
             c.diagnostic.status = xr_xir_compile_recheck_provenance_take(&limits, &specialized,
                 &receiving, &provenance, &built, &c.diagnostic, control);
         }
-    }
-    if (c.diagnostic.status == XR_XIR_OK) {
-        built->control_summary = c.control_summary;
-        c.control_summary = NULL;
     }
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
@@ -824,8 +797,6 @@ done:
     xr_xir_compile_artifact_free(built);
     xir_source_facts_release(c.source_facts);
     xr_xir_compile_effects_free(c.verification_effects);
-    xir_effect_control_builder_free(c.control_builder);
-    xir_effect_control_free(c.control_summary);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;

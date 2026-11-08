@@ -1,0 +1,3 @@
+fn ignore(callback: fn() -> i64) -> i64 { return 7 }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return ignore(fn() -> i64 { return 99 }) }
+print(limited())

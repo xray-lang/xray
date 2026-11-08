@@ -127,7 +127,6 @@ struct XrXirArtifact {
     XirSourceFacts *source_facts;
     XrXirEffects *checked_effects;
     XrXirEffects *program_final;
-    EffectControlSummary *control_summary;
     uint32_t evaluation_only;
 };
 
@@ -159,8 +158,12 @@ XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext 
 /* Requires completed structural and type verification; never re-enters verification. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *compile_context, XirEffectInput input, XrXirEffects **output);
 XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
-    XirEffectInput input, EffectControlSummary *control, XrXirEffects **output);
-XR_FUNC EffectControlSummary *xir_effects_control_summary(const XrXirEffects *effects);
+    XirEffectInput input, const XrXirEffects *checked, XrXirEffects **output);
+struct XrHirEscapeFacts;
+XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *context,
+    XirEffectInput input, const struct XrHirEscapeFacts *lifetimes, XrXirEffects **output);
+XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, uint32_t value, bool *output);
 /* Private construction preparation grants no artifact or execution authority. */
 typedef struct XrXirRootRefiner {
     void *context;
@@ -171,6 +174,8 @@ typedef struct XrXirRootRefiner {
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
+    /* Reads the HIR-owned restricted-value classification synchronously. */
+    XrXirStatus (*restricted)(void *, uint32_t, uint32_t, bool *);
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);

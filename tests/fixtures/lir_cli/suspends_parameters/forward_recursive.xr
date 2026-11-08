@@ -1,0 +1,4 @@
+fn first(n: i64, callback: fn() -> i64) -> i64 { if (n < 1) { return callback() }; return second(n - 1, callback) }
+fn second(n: i64, callback: fn() -> i64) -> i64 { return first(n, callback) }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return first(2, fn() -> i64 { return 7 }) }
+print(limited())

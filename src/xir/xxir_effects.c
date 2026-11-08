@@ -13,7 +13,6 @@
  */
 #include "xxir_effects.h"
 #include "xxir_compile_memory.h"
-#include "xxir_effect_scc_internal.h"
 #include "xxir_read_scratch.h"
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_defaults_internal.h"
@@ -28,6 +27,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_cell_provenance_internal.h"
 #include "../base/xmalloc.h"
+#include "../hir/xhir_escape.h"
 #include <stdatomic.h>
 
 /* Private execution contexts share the existing equation-ID bound. Repeated
@@ -282,35 +282,6 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     }
 }
 
-static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
-    const XrXirInstruction *instruction,XrXirFunctionEffects *effect) {
-    XrXirOp op=instruction->op;EffectSeedProjection projection=effect_seed_opcode(op,effect);
-    if (projection==EFFECT_SEED_LOCAL) return true;
-    if (projection==EFFECT_SEED_INVALID) return false;
-    switch (op) {
-    case XR_XIR_CALL_REQUIREMENT: {
-        const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
-        if (!table || instruction->targets[0] >= table->count) return false;
-        const XrXirInterfaceDeclaration *declaration = &table->declarations[instruction->targets[0]];
-        if (instruction->targets[1] >= declaration->method_count) return false;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(types,
-            declaration->methods[instruction->targets[1]].signature);
-        if (!signature) return false;
-        if (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && effect->suspend < XR_XIR_EFFECT_UNKNOWN)
-            effect->suspend = XR_XIR_EFFECT_UNKNOWN;
-        return true;
-    }
-    case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_INDIRECT: {
-        const XrXirTypeNode *signature=xr_xir_callable_signature(types,callable);
-        if (!signature) return false;
-        if (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) return true;
-        if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
-        return true;
-    }
-    default: return false;
-    }
-}
 #include "xxir_effect_summary.inc.c"
 #include "xxir_effects_root.inc.c"
 
@@ -323,39 +294,62 @@ static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
 #include "xxir_effect_access_query.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *context,
-    XirEffectInput input, const XrXirRootRefiner *refiner, EffectControlSummary *control,
+    XirEffectInput input, const XrXirRootRefiner *refiner,
     XrXirEffects **output) {
-    return effect_checked_construct(context, input, refiner, control, output);
+    return effect_checked_construct(context, input, refiner, output);
 }
 /* The constructor has retired its graph before the only public ownership
  * move. Its staging can be observed only by private construction consumers. */
 static XrXirStatus effect_infer(const XrXirCompileContext *context,
-    XirEffectInput input,const XrXirRootRefiner *refiner,EffectControlSummary *control,XrXirEffects **output) {
+    XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
     const XrXirModule *module=input.module;
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=effect_infer_construct(context,input,refiner,control,&effects);
+    XrXirStatus status=effect_infer_construct(context,input,refiner,&effects);
     if (status==XR_XIR_OK) status=effect_outcomes_publish(context,module,effects);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, XrXirEffects **output) {
-    return effect_infer(context,input,NULL,NULL,output);
+    XrHirEscapeFacts *lifetimes = NULL;
+    XrHirEscapeDiagnostic failure = {0};
+    XrXirStatus status = xr_hir_escape_check(context, input.module, NULL, input.control, &failure, &lifetimes);
+    if (status == XR_XIR_OK) status = xir_effects_infer_escape_input(context, input, lifetimes, output);
+    xr_hir_escape_facts_free(lifetimes);
+    return status;
+}
+static XrXirStatus effect_escape_restricted(void *context, uint32_t function,
+    uint32_t value, bool *output) {
+    return xr_hir_escape_restricted(context, function, value, output);
+}
+XR_FUNC XrXirStatus xir_effects_infer_escape_input(const XrXirCompileContext *context,
+    XirEffectInput input, const XrHirEscapeFacts *lifetimes, XrXirEffects **output) {
+    if (!lifetimes) return XR_XIR_BAD_STRUCTURE;
+    XrXirRootRefiner refiner = {.context = (void *)lifetimes, .restricted = effect_escape_restricted};
+    return effect_infer(context, input, &refiner, output);
+}
+typedef struct EffectRestrictedSource {
+    const XrXirCompileContext *context;
+    const XrXirEffects *effects;
+} EffectRestrictedSource;
+static XrXirStatus effect_checked_restricted(void *context, uint32_t function,
+    uint32_t value, bool *output) {
+    const EffectRestrictedSource *source = context;
+    return xir_effects_value_restricted(source->context, source->effects, function, value, output);
 }
 XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
-    XirEffectInput input, EffectControlSummary *control, XrXirEffects **output) {
+    XirEffectInput input, const XrXirEffects *checked, XrXirEffects **output) {
     if (!input.module || input.module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
-    return effect_infer(context,input,NULL,control,output);
-}
-XR_FUNC EffectControlSummary *xir_effects_control_summary(const XrXirEffects *effects) {
-    const EffectFinalOutcomes *final = effect_final_outcomes(effects);
-    return final ? final->control_summary : NULL;
+    EffectRestrictedSource source = {context, checked};
+    XrXirRootRefiner refiner = {.context = &source, .restricted = effect_checked_restricted};
+    return checked ? effect_infer(context, input, &refiner, output) :
+        xr_xir_compile_effects_infer_verified_input(context, input, output);
 }
 XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     if (!refiner || !refiner->update || !refiner->context) return XR_XIR_BAD_STRUCTURE;
-    return effect_infer(context,input,refiner,NULL,output);
+    return effect_infer(context,input,refiner,output);
 }
 /* The constructor checks local errors before publishing. Trusted readers use
  * that result; the paranoid build independently checks the current body. */

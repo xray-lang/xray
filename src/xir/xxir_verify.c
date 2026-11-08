@@ -1653,7 +1653,7 @@ XR_FUNC XrXirStatus xir_compile_verify_source_effects_input(const XrXirCompileCo
     if (status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,input,effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED,NULL);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1675,7 +1675,7 @@ XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects_input(const XrXirCompi
     if(status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,input,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED,NULL);
     }
     if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal_input(context,input,effects);
     location.status=status;if(diagnostic) *diagnostic=location;
@@ -1699,7 +1699,7 @@ XR_FUNC XrXirStatus xir_compile_verify_provenance_effects_input(const XrXirCompi
     XrXirStatus status=structure_verify_source(context,input,source_effects,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,NULL,NULL,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,NULL,NULL,EFFECT_DECLARATION_OWNED,NULL);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1713,18 +1713,20 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
 /* The same complete checker consumes either freshly inferred facts or the
  * private prepared owner; neither path omits declarations or permissions. */
 static XrXirStatus verify_callable_lifetimes(const XrXirCompileContext *,
-    XirEffectInput, XrXirDiagnostic *);
+    XirEffectInput, XrXirDiagnostic *, XrHirEscapeFacts **);
 static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,
     XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrHirEscapeFacts *lifetimes=NULL;
     XrXirStatus status = structure_verify_source(context,input,NULL,&location);
-    if (status == XR_XIR_OK) status=verify_callable_lifetimes(context,input,&location);
+    if (status == XR_XIR_OK) status=verify_callable_lifetimes(context,input,&location,&lifetimes);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
-        status = declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED);
+        status = declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED,lifetimes);
     }
+    xr_hir_escape_facts_free(lifetimes);
     location.status = status;
     if (diagnostic) *diagnostic = location;
     return status;
@@ -1743,7 +1745,7 @@ XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileCont
     if(!xir_compile_context_valid(context)||!input.module||!effects)return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirCompileContext remaining=*context;
-    XrXirStatus status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_SOURCE);
+    XrXirStatus status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_SOURCE,NULL);
     location.status=status;
     if(diagnostic)*diagnostic=location;
     return status;
@@ -1753,9 +1755,9 @@ XR_FUNC XrXirStatus xir_compile_check_effect_declarations(const XrXirCompileCont
  * becomes observable. Only the Template consumer restricts this collector's
  * domain; ordinary verification never requests otherwise unused facts. */
 static XrXirStatus verify_callable_lifetimes(const XrXirCompileContext *context,
-    XirEffectInput input, XrXirDiagnostic *location) {
+    XirEffectInput input, XrXirDiagnostic *location, XrHirEscapeFacts **output) {
     XrHirEscapeDiagnostic failure={0};
-    XrXirStatus status=xr_hir_escape_check(context,input.module,NULL,input.control,&failure,NULL);
+    XrXirStatus status=xr_hir_escape_check(context,input.module,NULL,input.control,&failure,output);
     if(status!=XR_XIR_OK && location) {
         location->status=status;
         location->function=failure.function;
@@ -1770,13 +1772,15 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
+    XrHirEscapeFacts *lifetimes=NULL;
     XrXirStatus status=structure_verify_source(context,input,source_effects,&location);
-    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location);
+    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location,&lifetimes);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,EFFECT_DECLARATION_OWNED,lifetimes);
     }
     if (status==XR_XIR_OK && !owned) status=XR_XIR_BAD_STRUCTURE;
+    xr_hir_escape_facts_free(lifetimes);
     location.status=status;if (diagnostic) *diagnostic=location;
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
     *output=owned;return XR_XIR_OK;
@@ -1823,12 +1827,14 @@ static XrXirStatus verify_optional_effects(const XrXirCompileContext *context,
     if(!xir_compile_context_valid(context) || !output || *output || !input.module) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
+    XrHirEscapeFacts *lifetimes=NULL;
     XrXirStatus status=structure_verify_source(context,input,source_effects,&location);
-    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location);
+    if(status==XR_XIR_OK)status=verify_callable_lifetimes(context,input,&location,&lifetimes);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,EFFECT_DECLARATION_OPTIONAL);
+        status=declaration_effects_verify(input,&remaining,&location,NULL,&owned,EFFECT_DECLARATION_OPTIONAL,lifetimes);
     }
+    xr_hir_escape_facts_free(lifetimes);
     location.status=status;if(diagnostic) *diagnostic=location;
     if(status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
     *output=owned;return XR_XIR_OK;
@@ -1864,7 +1870,7 @@ XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContex
     if(status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,input,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED,NULL);
     }
     if(status==XR_XIR_OK) status=xir_effects_receiving_terminal_input(context,input,effects);
     location.status=status;if(diagnostic) *diagnostic=location;
@@ -1882,7 +1888,7 @@ XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *c
     if(status==XR_XIR_OK) status=xir_effects_built_copy_match_input(context,input,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED);
+        status=declaration_effects_verify(input,&remaining,&location,effects,NULL,EFFECT_DECLARATION_OWNED,NULL);
     }
     if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal_input(context,input,effects);
     location.status=status;if(diagnostic) *diagnostic=location;

@@ -1,0 +1,4 @@
+fn worker() -> i64 { return 7 }
+fn outer<T>(values: Array<T>, callback: fn(Array<T>) -> i64) -> i64 { const apply = fn(f: fn(Array<T>) -> i64) -> i64 { return f(values) }; return apply(callback) }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return outer<i64>([1,2], fn(values: Array<i64>) -> i64 { return await go worker() }) }
+print(limited())

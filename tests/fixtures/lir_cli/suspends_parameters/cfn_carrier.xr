@@ -1,0 +1,2 @@
+fn use(callback: CFn<fn(i64) -> i64>) -> bool { return true }
+print(true)
