@@ -736,6 +736,7 @@ static void execution_instance_parameters(void) {
     CHECK(xr_xir_compile_generics_structure_verify(&effect_context, &module) == XR_XIR_OK);
     EffectCheckedRoots *roots = NULL;
     CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    if (roots->terms) roots->terms->remaining = &effect_context;
     EffectCheckBuild build = {.memory = &effect_context, .module = &module, .roots = roots,
         .scratch = {.resources = effect_context.resources}};
     CHECK(effect_check_type_argument(&build, XR_XIR_CONSTRUCTED_TYPE_BASE + 3));
@@ -822,6 +823,51 @@ static void execution_storable_boundaries(void) {
     effect_mark_check(baseline);
 }
 
+static void execution_cell_input_boundaries(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType cell = XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_CONSTRUCTED_TYPE_BASE}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 2};
+    XrXirInstruction ret = {.op = XR_XIR_RETURN};
+    XrXirBlock block = {.count = 1};
+    XrXirFunction functions[] = {
+        {.parameters = &cell, .parameter_count = 1, .instructions = &ret, .instruction_count = 1,
+            .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER},
+        {.parameters = &cell, .parameter_count = 1, .instructions = &ret, .instruction_count = 1,
+            .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[] = {{0}, {.capture_owner = 1, .capture_count = 1}};
+    XrXirDeclarations declarations = {.functions = identities};
+    XrXirModule module = {.types = &types, .functions = functions, .function_count = 2,
+        .declarations = &declarations};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, true) == XR_XIR_OK);
+    XirStorageFlowView storage = {0};
+    CHECK(xir_storage_flow_view(roots->storage, &storage) == XR_XIR_OK && storage.input_count == 2);
+    for (uint32_t i = 0; i < storage.input_count; ++i) {
+        XirStorageInput input = storage.inputs[i];
+        CHECK(input.bank == XIR_STORAGE_CONTENTS && !input.handle);
+        XirExecutionValue value = {input.function, input.value, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+        ExecutionKindProbe probe = {XIR_EXECUTION_STORABLE, 0};
+        bool complete = false;
+        uint32_t remainder = UINT32_MAX;
+        CHECK(xir_execution_visit_value_environment_in(roots, &value, execution_kind_oracle,
+            &probe, &complete, &remainder) == XR_XIR_OK);
+        CHECK(input.function ? (!complete && remainder == XIR_EXECUTION_REMAINDER_OPAQUE && !probe.count) :
+            (complete && !remainder && probe.count == 1));
+        probe.count = 0;
+        CHECK(xir_execution_visit_value_captures_in(roots, &value, execution_kind_oracle,
+            &probe, &complete, &remainder) == XR_XIR_OK && !complete &&
+            remainder == XIR_EXECUTION_REMAINDER_OPAQUE && !probe.count);
+    }
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -833,6 +879,7 @@ static void control_summary_kernel(void) {
     point_request_failure();
     execution_instance_parameters();
     execution_storable_boundaries();
+    execution_cell_input_boundaries();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
