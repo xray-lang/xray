@@ -134,7 +134,8 @@ static inline bool xr_xir_callable_parameter_storage_valid(const XrXirTypes *typ
     const XrXirCallableParameter *parameter) {
     if (!parameter || parameter->escaping > 1u ||
         (parameter->escaping && (parameter->mode == XR_PARAM_REF ||
-         !xr_xir_callable_signature(types, parameter->type)))) return false;
+         !xr_xir_callable_signature(types, parameter->type) ||
+         xr_xir_type_is_c_callable(types, parameter->type)))) return false;
     bool cell = xr_xir_type_is_cell(types, parameter->type);
     return parameter->mode == XR_PARAM_READ || parameter->mode == XR_PARAM_MOVE ? !cell :
         parameter->mode == XR_PARAM_REF && cell;

@@ -131,14 +131,9 @@ static bool lifetime_extents(HirLifetimeConstraints *run) {
 }
 
 static uint32_t lifetime_clause_hash(HirLifetimeClause clause) {
-    uint32_t hash = 2166136261u;
-    hash = (hash ^ clause.function) * 16777619u;
-    hash = (hash ^ clause.restriction) * 16777619u;
-    hash = (hash ^ clause.exposure_input) * 16777619u;
-    hash = (hash ^ clause.storage_owner) * 16777619u;
-    hash = (hash ^ (uint32_t)clause.kind) * 16777619u;
-    hash = (hash ^ clause.parameter) * 16777619u;
-    return (hash ^ clause.borrowed) * 16777619u;
+    const uint32_t fields[] = {clause.function, clause.restriction, clause.exposure_input,
+        clause.storage_owner, (uint32_t)clause.kind, clause.parameter, clause.borrowed};
+    return xr_hash_bytes(fields, sizeof(fields));
 }
 
 static bool lifetime_clause_equal(HirLifetimeClause a, HirLifetimeClause b) {

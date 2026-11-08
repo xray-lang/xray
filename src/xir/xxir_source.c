@@ -720,7 +720,8 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         if (!source_substitute(ctx, sub, node.parameters[p].type, depth + 1, &parameters[p].type)) return false;
         if (node.kind == XR_XIR_TYPE_CALLABLE &&
             !xr_xir_callable_signature(&ctx->types,node.parameters[p].type) &&
-            xr_xir_callable_signature(&ctx->types,parameters[p].type)) parameters[p].escaping = 1;
+            xr_xir_callable_signature(&ctx->types,parameters[p].type) &&
+            !xr_xir_type_is_c_callable(&ctx->types,parameters[p].type)) parameters[p].escaping = 1;
     }
     node.parameters = parameters;
     if(node.kind==XR_XIR_TYPE_TUPLE)return source_hir_tuple_type(ctx,parameters,node.parameter_count,output);
@@ -1871,7 +1872,8 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
             function->consume_parameters,function->consume_parameter_count,p);
         parameters[p].escaping=xr_xir_function_parameter_escaping(function,p) ||
             (!xr_xir_callable_signature(&ctx->types,function->parameters[p]) &&
-             xr_xir_callable_signature(&ctx->types,parameters[p].type));
+             xr_xir_callable_signature(&ctx->types,parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types,parameters[p].type));
     }
     XrXirType result, error_type;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||

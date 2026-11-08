@@ -628,6 +628,27 @@ static void nonescape_observer_ownership(void) {
     }
     CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
+static void nonescape_c_callback_contract(void) {
+    XrXirType callback=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
+        .flags=XR_XIR_CALLABLE_ROOT_NONE|XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_C_ABI};
+    XrXirTypes types={.nodes=&signature,.count=1};
+    XrXirCallableParameter parameter={callback,XR_PARAM_READ,0};
+    CHECK(xr_xir_callable_parameter_storage_valid(&types,&parameter));
+    parameter.escaping=1;
+    CHECK(!xr_xir_callable_parameter_storage_valid(&types,&parameter));
+    XrXirInstruction ret={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}};
+    XrXirBlock block={0,1,0,0};
+    XrXirFunction body={.name="preserve",.name_length=8,.parameters=&callback,.parameter_count=1,
+        .result=callback,.blocks=&block,.block_count=1,.instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=&body,.function_count=1,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL;
+    CHECK(xir_fixture_check(suite_context,&module,&checked,NULL)==XR_XIR_OK && checked);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    uint32_t ordinal=0;
+    body.escaping_parameter_count=1;body.escaping_parameters=&ordinal;
+    CHECK(xir_fixture_check(suite_context,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+}
 static void nonescape_capture_calls(void) {
     XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
@@ -1297,7 +1318,8 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
-        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_observer_ownership();nonescape_capture_calls();
+        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_observer_ownership();
+        nonescape_c_callback_contract();nonescape_capture_calls();
         consumer_contexts_free();
         puts("Current Checked field bytes and semantic packet rejection PASS");
         return 0;
@@ -1377,6 +1399,7 @@ int main(int argc,char **argv) {
     nonescape_bound_prefix();
     nonescape_facts_ownership();
     nonescape_observer_ownership();
+    nonescape_c_callback_contract();
     nonescape_capture_calls();
     consumer_context=consumer_context_default();
     generic_callable_contracts(); generic_callable_depth();

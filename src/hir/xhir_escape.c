@@ -19,6 +19,7 @@
 #include "../xir/xxir_receive_control.h"
 #include "../shared/xerror_codes.h"
 #include "../shared/xr_utf8_core.h"
+#include "../base/xhash.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -367,6 +368,7 @@ static bool escape_prepare(HirEscape *owner) {
             if (p >= captures && xr_xir_type_is_cell(owner->module->types, body->parameters[p]))
                 owner->nodes[node].storage = ESCAPE_EXTERNAL;
             if (p >= captures && xr_xir_callable_signature(owner->module->types, body->parameters[p]) &&
+                !xr_xir_type_is_c_callable(owner->module->types, body->parameters[p]) &&
                 !xr_xir_function_parameter_escaping(body, p)) owner->nodes[node].parameter = node + 1;
         }
     }
@@ -455,7 +457,8 @@ static const char *escape_argument_reason(HirEscape *owner, uint32_t f,
         if (owner->module->declarations &&
             ordinal < owner->module->declarations->functions[op->immediate].capture_count) return NULL;
         if (xr_xir_function_parameter_escaping(target, ordinal)) return "an escaping parameter";
-        return xr_xir_callable_signature(owner->module->types, target->parameters[ordinal]) ? NULL : "a generic or stored value parameter";
+        return xr_xir_callable_signature(owner->module->types, target->parameters[ordinal]) &&
+            !xr_xir_type_is_c_callable(owner->module->types, target->parameters[ordinal]) ? NULL : "a generic or stored value parameter";
     }
     const XrXirTypeNode *signature = NULL;
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
@@ -471,7 +474,8 @@ static const char *escape_argument_reason(HirEscape *owner, uint32_t f,
     }
     if (!signature || ordinal >= signature->parameter_count) return "an unknown callee";
     if (signature->parameters[ordinal].escaping) return "an escaping parameter";
-    return xr_xir_callable_signature(owner->module->types, signature->parameters[ordinal].type) ? NULL : "a generic or stored value parameter";
+    return xr_xir_callable_signature(owner->module->types, signature->parameters[ordinal].type) &&
+        !xr_xir_type_is_c_callable(owner->module->types, signature->parameters[ordinal].type) ? NULL : "a generic or stored value parameter";
 }
 
 static bool escape_record_captures(HirEscape *owner, uint32_t f, uint32_t i, const XrXirInstruction *op) {

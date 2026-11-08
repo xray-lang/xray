@@ -269,7 +269,8 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p])) return XR_XIR_BAD_TYPE;
         bool escaping=xr_xir_function_parameter_escaping(callee,p+op->args[1]) ||
             (!xr_xir_callable_signature(module->types,callee->parameters[p+op->args[1]]) &&
-             xr_xir_callable_signature(module->types,signature->parameters[p].type));
+             xr_xir_callable_signature(module->types,signature->parameters[p].type) &&
+             !xr_xir_type_is_c_callable(module->types,signature->parameters[p].type));
         if(signature->parameters[p].escaping!=escaping ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,
             callee->parameters[p+op->args[1]],callee->consume_parameters,callee->consume_parameter_count,p+op->args[1]))
@@ -539,7 +540,8 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         uint32_t ordinal=function->escaping_parameters[p];
         if(ordinal>=function->parameter_count || (p&&function->escaping_parameters[p-1]>=ordinal))
             return XR_XIR_BAD_STRUCTURE;
-        if(!xr_xir_callable_signature(context->module->types,function->parameters[ordinal]))return XR_XIR_BAD_TYPE;
+        if(!xr_xir_callable_signature(context->module->types,function->parameters[ordinal]) ||
+            xr_xir_type_is_c_callable(context->module->types,function->parameters[ordinal]))return XR_XIR_BAD_TYPE;
     }
     uint32_t function_id = (uint32_t) (function - context->module->functions);
     if (xr_xir_function_is_generator(context->module,function_id) &&
