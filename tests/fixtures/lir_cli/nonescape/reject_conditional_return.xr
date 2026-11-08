@@ -1,3 +1,3 @@
-fn select(flag: bool, left: fn() -> i64, right: fn() -> i64) -> fn() -> i64 {
+fn choose(flag: bool, left: fn() -> i64, right: fn() -> i64) -> fn() -> i64 {
     return flag ? left : right
 }

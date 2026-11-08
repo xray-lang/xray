@@ -78,14 +78,14 @@ static void class_inline_capabilities(void) {
     for(unsigned i=0;i<3;++i){nodes[1].kind=kinds[i];nodes[1].element=XR_XIR_BOOL;
         CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==
             (i==2 ? XR_XIR_OK : XR_XIR_BAD_TYPE));}
-    /* A structurally valid array may still lack class-field capability. */
-    const XrXirTypeNode excluded_nodes[]={
+    /* A class field retains the array's admitted function handles. */
+    const XrXirTypeNode callback_nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_CONSTRUCTED_TYPE_BASE}};
-    const XrXirTypes excluded_types={excluded_nodes,2,NULL,NULL};
-    CHECK(xr_xir_compile_types_structure_verify(&owner.context,&excluded_types)==XR_XIR_OK);
-    CHECK(xr_xir_compile_class_field_verify(&owner.context,&excluded_types,
-        XR_XIR_CONSTRUCTED_TYPE_BASE+1)==XR_XIR_BAD_TYPE);
+    const XrXirTypes callback_types={callback_nodes,2,NULL,NULL};
+    CHECK(xr_xir_compile_types_structure_verify(&owner.context,&callback_types)==XR_XIR_OK);
+    CHECK(xr_xir_compile_class_field_verify(&owner.context,&callback_types,
+        XR_XIR_CONSTRUCTED_TYPE_BASE+1)==XR_XIR_OK);
     field=XR_XIR_ERROR;
     CHECK(xr_xir_compile_class_field_verify(&owner.context,&types,XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_BAD_TYPE);
     field=XR_XIR_I64;id.kind=XR_XIR_NOMINAL_CLASS;
