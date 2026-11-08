@@ -319,6 +319,14 @@ static void emit(const char *name, const char *path) {
     xr_compile_resources_release(r);
     /* The generated text is consumed only after both producers are gone. */
     CHECK(strstr(output.bytes, "xray_lir_entry(void)") && !strstr(output.bytes, "({"));
+    if (!strcmp(name, "extremes")) {
+        CHECK(strstr(output.bytes, "v1 = (int64_t)(-INT64_C(1) - INT64_C(9223372036854775807));"));
+        CHECK(strstr(output.bytes, "v4 = (int8_t)(-INT64_C(1) - INT64_C(0));"));
+    }
+    if (!strcmp(name, "arithmetic")) {
+        CHECK(strstr(output.bytes, "v1 = (int64_t)UINT64_C(0);"));
+        CHECK(strstr(output.bytes, "= (uint64_t)UINT64_C(18446744073709551615);"));
+    }
     if (!strncmp(name, "output-", 7)) {
         CHECK(strstr(output.bytes, "xrt_print_i64(v1, UINT32_C("));
         if (!strcmp(name, "output-unknown"))

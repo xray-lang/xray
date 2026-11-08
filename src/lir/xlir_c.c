@@ -494,19 +494,28 @@ static void c_integer(LirC *c, const XrLirInstructionView *v) {
         c_format(c, "    v%" PRIu32 " = %u;\n", v->result, (unsigned) v->bits);
         return;
     }
-    c_format(c, "    v%" PRIu32 " = (", c->scratch);
     if (v->op == XR_LIR_CONST) {
-        c_format(c, "UINT64_C(%" PRIu64 ")", v->bits);
-    } else {
-        if (v->op == XR_LIR_NEG)
-            c_text(c, "UINT64_C(0) - ");
-        c_text(c, "(uint64_t)");
-        c_value(c, v->operands[0]);
-        if (v->operand_count == 2) {
-            c_text(c, v->op == XR_LIR_ADD ? " + " : v->op == XR_LIR_SUB ? " - " : " * ");
-            c_text(c, "(uint64_t)");
-            c_value(c, v->operands[1]);
+        uint64_t mask = c_mask(v->type);
+        uint64_t bits = v->bits & mask;
+        /* Reconstruct constants here so the host optimizer sees no shared scratch dependency. */
+        if (v->type <= XR_LIR_I64 && bits > (mask >> 1)) {
+            c_format(c, "    v%" PRIu32 " = (%s)(-INT64_C(1) - INT64_C(%" PRIu64 "));\n",
+                     v->result, c_type(v->type), (~bits) & mask);
+        } else {
+            c_format(c, "    v%" PRIu32 " = (%s)UINT64_C(%" PRIu64 ");\n",
+                     v->result, c_type(v->type), bits);
         }
+        return;
+    }
+    c_format(c, "    v%" PRIu32 " = (", c->scratch);
+    if (v->op == XR_LIR_NEG)
+        c_text(c, "UINT64_C(0) - ");
+    c_text(c, "(uint64_t)");
+    c_value(c, v->operands[0]);
+    if (v->operand_count == 2) {
+        c_text(c, v->op == XR_LIR_ADD ? " + " : v->op == XR_LIR_SUB ? " - " : " * ");
+        c_text(c, "(uint64_t)");
+        c_value(c, v->operands[1]);
     }
     c_format(c, ") & UINT64_C(%" PRIu64 ");\n", c_mask(v->type));
     c_reconstruct(c, v->type, v->result);
