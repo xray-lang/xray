@@ -43,8 +43,9 @@ typedef struct XirStorageBinding {
 typedef struct XirStorageApplication {
     XirExecutionSiteKind kind;
     /* Function is the caller template. Declaration is the callee template. */
-    uint32_t site, function, instruction, declaration;
+    uint32_t site, function, instruction, block, declaration;
     uint32_t target, caller_instance, environment, order;
+    uint32_t reference, capture_environment;
     XirExecutionPort port, outcome;
     uint8_t protocol;
     uint32_t first, count;
