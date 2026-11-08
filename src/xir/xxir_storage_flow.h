@@ -74,6 +74,24 @@ typedef struct XirStorageUnknown {
 
 typedef struct XirStorageExposureSeed { uint32_t function, value, application; } XirStorageExposureSeed;
 
+/* A value may be an owned storage identity proxy. Execution's physical actual
+ * namespace remains unchanged. Environment IDs use the execution sentinels. */
+typedef XirExecutionValue XirStorageReference;
+typedef struct XirStorageObservation {
+    uint32_t function, instruction;
+    XirStoragePointKind point;
+    XirStorageReference reference;
+} XirStorageObservation;
+typedef struct XirStorageValuePoint {
+    uint32_t function, instruction, value, environment;
+    XirStoragePointKind point;
+} XirStorageValuePoint;
+typedef struct XirStorageCapture {
+    XirStorageReference identity;
+    uint32_t function, contents, exposure;
+} XirStorageCapture;
+typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
+
 typedef struct XirStorageFlowView {
     const XirStorageFlowFunction *functions;
     uint32_t function_count;
@@ -122,6 +140,17 @@ XR_FUNC XrXirStatus xir_storage_flow_expose(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind);
 XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t function,
     uint32_t instruction, uint32_t handle, XirStoragePointKind, uint32_t *value);
+/* Qualified observations project R/X values into the observation's function.
+ * A foreign identity never becomes a fabricated caller-local physical value. */
+XR_FUNC XrXirStatus xir_storage_flow_reference(XirStorageFlow *, const XirStorageObservation *,
+    uint32_t *contents, uint32_t *exposure);
+XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *, const XirStorageObservation *);
+/* Recursive carrier/capture relations come from the unique execution owner.
+ * Each callback observes a Cell reference at this use, including older heap
+ * instances retained across a backedge. It never freezes creation contents. */
+XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *, const XirStorageValuePoint *,
+    XirStorageCaptureVisitor, void *);
+XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirStorageValuePoint *);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until
