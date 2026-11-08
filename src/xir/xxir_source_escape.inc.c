@@ -70,6 +70,12 @@ static XrXirStatus source_escape_observe(void *context, const XrXirModule *modul
     return xr_hir_escape_builder_observe(ctx->escape_builder, function, instruction, op);
 }
 
+static XrXirStatus source_escape_points(void *context, const XirExecutionOwner *execution,
+    XirStorageFlow *storage, bool final, bool *ready) {
+    SourceContext *ctx = context;
+    return xr_hir_escape_builder_prepare_points(ctx->escape_builder, storage, execution, final, ready);
+}
+
 static XrXirStatus source_escape_finish(void *context, const XirExecutionOwner *execution,
     XirStorageFlow *storage, const XirRestrictionReceiver *receiver) {
     SourceContext *ctx = context;

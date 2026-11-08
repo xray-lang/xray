@@ -25,10 +25,19 @@ typedef struct HirRestrictionSolver {
     uint32_t count, edge_count, edge_capacity, carrier_count, carrier_capacity;
     uint32_t check_count, check_capacity, queue_first, queue_count;
     uint32_t observation;
+    HirEscapeObservation *base_observations;
+    uint32_t base_observation_count, base_use_count;
+    uint32_t remainder;
+    bool ready, final;
 } HirRestrictionSolver;
 
 static bool restriction_empty(const HirRestrictionNode *node) {
     return !node->constant && !node->count;
+}
+
+static XrXirStatus restriction_storage_status(HirRestrictionSolver *solver, XrXirStatus status) {
+    if (status == XR_XIR_UNRESOLVED) solver->remainder = xir_storage_flow_remainder(solver->storage);
+    return status;
 }
 
 static void restriction_free(HirRestrictionSolver *solver) {
@@ -39,6 +48,14 @@ static void restriction_free(HirRestrictionSolver *solver) {
     xr_compile_resources_free(solver->offsets); xr_compile_resources_free(solver->counts);
     xr_compile_resources_free(solver->point_values); xr_compile_resources_free(solver->obligations);
     xr_compile_resources_free(solver->queue);
+    xr_compile_resources_free(solver->base_observations);
+}
+
+static void escape_points_free(XrHirEscapeBuilder *builder) {
+    if (!builder->point_preparation) return;
+    restriction_free(builder->point_preparation);
+    xr_compile_resources_free(builder->point_preparation);
+    builder->point_preparation = NULL;
 }
 
 static uint32_t restriction_node(HirRestrictionSolver *solver, uint32_t f, uint32_t value, bool exposure) {
@@ -175,7 +192,8 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
         XirStorageObservation observation = {site->function, site->instruction, XIR_STORAGE_BEFORE,
             {actual.function, actual.value, actual.environment}};
         uint32_t contents = UINT32_MAX;
-        status = xir_storage_flow_reference(solver->storage, &observation, &contents, NULL);
+        status = restriction_storage_status(solver,
+            xir_storage_flow_reference(solver->storage, &observation, &contents, NULL));
         if (status != XR_XIR_OK) return status;
         status = escape_use(owner, site->function, site->instruction, contents, UINT32_MAX, "a ref or stored place");
         if (status != XR_XIR_OK || !restriction_append_observation(solver->builder,
@@ -184,7 +202,7 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
     return owner->status;
 }
 
-static bool restriction_observe_storage(HirRestrictionSolver *solver) {
+static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final) {
     XrHirEscapeBuilder *builder = solver->builder;
     HirEscape *owner = &builder->graph;
     owner->status = xir_execution_visit_calls(solver->execution, restriction_call_actuals, solver);
@@ -201,30 +219,38 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver) {
     }
     for (uint32_t u = 0; u < owner->use_count && escape_poll(owner); ++u) {
         HirEscapeUse use = owner->uses[u];
-        if (use.storage != UINT32_MAX) continue;
         if (use.value < owner->functions[use.function].physical_values &&
             !xr_xir_callable_signature(owner->module->types, owner->nodes[owner->offsets[use.function] + use.value].type)) continue;
         bool returned = use.reason && !strcmp(use.reason, "a return");
         XirStorageValuePoint point = {use.function, use.instruction,
             {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT},
             returned ? XIR_STORAGE_NORMAL : XIR_STORAGE_BEFORE};
-        owner->status = xir_storage_flow_expose_value(solver->storage, &point);
+        if (use.storage == UINT32_MAX) owner->status = restriction_storage_status(solver,
+            xir_storage_flow_expose_value(solver->storage, &point));
+        else {
+            point.point = XIR_STORAGE_NORMAL;
+            XirStorageObservation condition = {use.function, use.instruction, XIR_STORAGE_BEFORE,
+                {use.function, use.storage - owner->offsets[use.function], XIR_EXECUTION_CURRENT_ENVIRONMENT}};
+            owner->status = restriction_storage_status(solver,
+                xir_storage_flow_expose_value_when(solver->storage, &point, &condition));
+        }
     }
     for (uint32_t p = 0; p < builder->observation_count && escape_poll(owner); ++p) {
         HirEscapeObservation row = builder->observations[p];
         XirStorageValuePoint point = {row.function, row.instruction,
             {row.function, row.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}, row.point};
         solver->observation = p;
-        owner->status = xir_storage_flow_visit_value_captures(solver->storage, &point, restriction_capture, solver);
+        owner->status = restriction_storage_status(solver, xir_storage_flow_visit_value_captures(solver->storage, &point,
+            final ? XIR_STORAGE_QUERY_ALL : XIR_STORAGE_QUERY_CONTENTS, restriction_capture, solver));
     }
-    for (uint32_t u = 0; u < owner->use_count && escape_poll(owner); ++u) {
+    for (uint32_t u = 0; final && u < owner->use_count && escape_poll(owner); ++u) {
         HirEscapeUse use = owner->uses[u];
         uint32_t exposure = UINT32_MAX;
         bool local = false;
         if (use.storage != UINT32_MAX) {
             uint32_t handle = use.storage - owner->offsets[use.function];
-            owner->status = xir_storage_flow_exposure_at(solver->storage, use.function,
-                use.instruction, handle, XIR_STORAGE_BEFORE, &exposure);
+            owner->status = restriction_storage_status(solver, xir_storage_flow_exposure_at(solver->storage, use.function,
+                use.instruction, handle, XIR_STORAGE_BEFORE, &exposure));
             if (owner->status != XR_XIR_OK) break;
         }
         if (solver->check_count == solver->check_capacity) {
@@ -584,23 +610,60 @@ static bool restriction_publish(HirRestrictionSolver *solver, XrHirEscapeFacts *
     return true;
 }
 
-XR_FUNC XrXirStatus xr_hir_escape_builder_finish(XrHirEscapeBuilder *builder, XirStorageFlow *storage,
-    const XirExecutionOwner *execution, XrHirEscapeDiagnostic *diagnostic, XrHirEscapeFacts **output) {
-    if (!builder || builder->finished || !storage || !execution || !diagnostic || !output || *output)
-        return XR_XIR_BAD_STRUCTURE;
-    builder->finished = true;
-    *diagnostic = (XrHirEscapeDiagnostic){0};
+XR_FUNC XrXirStatus xr_hir_escape_builder_prepare_points(XrHirEscapeBuilder *builder, XirStorageFlow *storage,
+    const XirExecutionOwner *execution, bool final, bool *ready) {
+    if (!builder || builder->finished || !storage || !execution || !ready) return XR_XIR_BAD_STRUCTURE;
     HirEscape *owner = &builder->graph;
     for (uint32_t f = 0; f < builder->module.function_count && escape_poll(owner); ++f)
         if (builder->observed[f] != owner->functions[f].physical_values - owner->functions[f].parameters)
             owner->status = XR_XIR_BAD_STRUCTURE;
-    HirRestrictionSolver solver = {.builder=builder,.storage=storage,.execution=execution};
-    if (owner->status == XR_XIR_OK && restriction_observe_storage(&solver) && restriction_allocate(&solver) &&
-        restriction_seed(&solver) && restriction_applications(&solver) && restriction_close(&solver) &&
-        restriction_obligations(&solver)) {
-        owner->status = restriction_verdict(&solver, diagnostic);
-        if (owner->status == XR_XIR_OK) restriction_publish(&solver, output);
+    if (owner->status != XR_XIR_OK) return owner->status;
+    HirRestrictionSolver *solver = builder->point_preparation;
+    if (!solver) {
+        solver = xir_compile_calloc(owner->memory, 1, sizeof(*solver), &owner->status);
+        if (!solver) return owner->status;
+        *solver = (HirRestrictionSolver){.builder=builder,.storage=storage,.execution=execution,
+            .base_observation_count=builder->observation_count,.base_use_count=owner->use_count};
+        builder->point_preparation = solver;
+        solver->base_observations = xir_compile_copy(owner->memory, builder->observations,
+            (size_t)builder->observation_count * sizeof(*builder->observations), &owner->status);
+        if (owner->status != XR_XIR_OK) return owner->status;
     }
-    restriction_free(&solver);
+    if (solver->storage != storage || solver->execution != execution || (final && !solver->ready))
+        return XR_XIR_BAD_STRUCTURE;
+    if (solver->final) {*ready = true; return XR_XIR_OK;}
+    owner->use_count = solver->base_use_count;
+    builder->observation_count = solver->base_observation_count;
+    if (builder->observation_count) memcpy(builder->observations, solver->base_observations,
+        (size_t)builder->observation_count * sizeof(*builder->observations));
+    solver->carrier_count = 0; solver->check_count = 0; solver->remainder = 0;
+    bool complete = restriction_observe_storage(solver, final);
+    solver->view = (XirStorageFlowView){0};
+    if (!complete && owner->status == XR_XIR_UNRESOLVED && solver->remainder == XIR_EXECUTION_REMAINDER_STORAGE) {
+        owner->status = XR_XIR_OK; solver->ready = false; *ready = false;
+        return XR_XIR_OK;
+    }
+    if (owner->status != XR_XIR_OK) return owner->status;
+    solver->ready = true; solver->final = final; *ready = true;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xr_hir_escape_builder_finish(XrHirEscapeBuilder *builder, XirStorageFlow *storage,
+    const XirExecutionOwner *execution, XrHirEscapeDiagnostic *diagnostic, XrHirEscapeFacts **output) {
+    if (!builder || builder->finished || !storage || !execution || !diagnostic || !output || *output ||
+        !builder->point_preparation || !builder->point_preparation->final ||
+        builder->point_preparation->storage != storage || builder->point_preparation->execution != execution)
+        return XR_XIR_BAD_STRUCTURE;
+    builder->finished = true;
+    *diagnostic = (XrHirEscapeDiagnostic){0};
+    HirEscape *owner = &builder->graph;
+    HirRestrictionSolver *solver = builder->point_preparation;
+    owner->status = xir_storage_flow_view(storage, &solver->view);
+    if (owner->status == XR_XIR_OK && restriction_allocate(solver) && restriction_seed(solver) &&
+        restriction_applications(solver) && restriction_close(solver) && restriction_obligations(solver)) {
+        owner->status = restriction_verdict(solver, diagnostic);
+        if (owner->status == XR_XIR_OK) restriction_publish(solver, output);
+    }
+    escape_points_free(builder);
     return owner->status;
 }

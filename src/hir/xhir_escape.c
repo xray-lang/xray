@@ -84,8 +84,11 @@ struct XrHirEscapeBuilder {
     uint32_t *observed;
     HirEscapeObservation *observations;
     uint32_t observation_count, observation_capacity;
+    struct HirRestrictionSolver *point_preparation;
     bool finished;
 };
+
+static void escape_points_free(XrHirEscapeBuilder *);
 
 XR_FUNC void xr_hir_escape_facts_free(XrHirEscapeFacts *facts) {
     if (!facts) return;
@@ -625,6 +628,7 @@ static bool escape_facts_publish(HirEscape *owner, XrHirEscapeFacts **output) {
 
 XR_FUNC void xr_hir_escape_builder_free(XrHirEscapeBuilder *builder) {
     if (!builder) return;
+    escape_points_free(builder);
     if (builder->declarations) for (uint32_t f = 0; f < builder->module.function_count; ++f) {
         XrHirEscapeDeclaration row = builder->declarations[f];
         if (row.names) for (uint32_t p = 0; p < row.count; ++p)
@@ -742,7 +746,7 @@ static bool escape_observe_points(XrHirEscapeBuilder *builder, uint32_t f, uint3
 
 XR_FUNC XrXirStatus xr_hir_escape_builder_observe(XrHirEscapeBuilder *builder,
     uint32_t function, uint32_t instruction, const XrXirInstruction *op) {
-    if (!builder || builder->finished || !op || function >= builder->module.function_count ||
+    if (!builder || builder->finished || builder->point_preparation || !op || function >= builder->module.function_count ||
         instruction >= builder->module.functions[function].instruction_count ||
         op != &builder->module.functions[function].instructions[instruction] ||
         instruction != builder->observed[function]) return XR_XIR_BAD_STRUCTURE;

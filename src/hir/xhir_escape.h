@@ -28,6 +28,11 @@ XR_FUNC XrXirStatus xr_hir_escape_builder_new(const XrXirCompileContext *, const
 XR_FUNC XrXirStatus xr_hir_escape_builder_observe(XrHirEscapeBuilder *, uint32_t, uint32_t,
     const XrXirInstruction *);
 XR_FUNC void xr_hir_escape_builder_free(XrHirEscapeBuilder *);
+/* Non-final rounds register numeric requests without freezing exposure. A
+ * storage-only remainder requests another shared receiving round. The final
+ * round owns point captures before storage seals; finish only reads numbers. */
+XR_FUNC XrXirStatus xr_hir_escape_builder_prepare_points(XrHirEscapeBuilder *, XirStorageFlow *,
+    const XirExecutionOwner *, bool, bool *);
 XR_FUNC XrXirStatus xr_hir_escape_builder_finish(XrHirEscapeBuilder *, XirStorageFlow *,
     const XirExecutionOwner *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);
 XR_FUNC XrXirStatus xr_hir_escape_restriction(const XrHirEscapeFacts *, uint32_t,
