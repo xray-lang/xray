@@ -31,6 +31,7 @@ typedef struct HirEscapeNode {
     uint8_t storage;
     bool queued;
 } HirEscapeNode;
+typedef struct HirEscapeOrigin { uint32_t parameter, borrowed; } HirEscapeOrigin;
 typedef struct HirEscapeFunction { uint32_t parameters, captures, physical_values; } HirEscapeFunction;
 
 typedef struct HirEscapeEdge { uint32_t target, next, flags; } HirEscapeEdge;
@@ -517,8 +518,7 @@ static const char *escape_parameter_label(const char *name, char label[100]) {
 }
 
 static XrXirStatus escape_reject_origin(HirEscape *owner, uint32_t f, uint32_t i,
-    uint32_t parameter_origin, uint32_t borrowed_origin, const char *reason, XrHirEscapeDiagnostic *diagnostic) {
-    HirEscapeNode restricted = {.parameter=parameter_origin,.borrowed=borrowed_origin};
+    HirEscapeOrigin restricted, const char *reason, XrHirEscapeDiagnostic *diagnostic) {
     if (!reason || (!restricted.parameter && !restricted.borrowed)) return XR_XIR_OK;
     diagnostic->function = f;
     diagnostic->instruction = i;
@@ -543,7 +543,7 @@ static XrXirStatus escape_reject(HirEscape *owner, uint32_t f, uint32_t i,
     uint32_t index = escape_node(owner, f, value);
     if (owner->status != XR_XIR_OK) return owner->status;
     HirEscapeNode node = owner->nodes[index];
-    return escape_reject_origin(owner, f, i, node.parameter, node.borrowed, reason, diagnostic);
+    return escape_reject_origin(owner, f, i, (HirEscapeOrigin){node.parameter, node.borrowed}, reason, diagnostic);
 }
 
 static XrXirStatus escape_use(HirEscape *owner, uint32_t f, uint32_t i,

@@ -53,7 +53,7 @@ def main() -> None:
                     "escaping_storage", "escaping_compose", "ref_replacement", "contextual_keyword",
                     "borrow_slice", "borrow_ref", "stored_collection_values", "method_values", "requirement_value",
                     "local_snapshot", "local_overwrite", "generic_function_tuple", "loop_capture_instance",
-                    "local_nested_callback", "nested_cell_overwrite")
+                    "local_nested_callback", "nested_cell_overwrite", "local_capture_write")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name

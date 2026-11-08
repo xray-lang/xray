@@ -1,0 +1,7 @@
+fn leaf() -> i64 { return 7 }
+fn apply(callback: fn() -> i64) -> i64 {
+    var slot = leaf
+    const replace = fn() { slot = callback }
+    replace()
+    return slot()
+}
