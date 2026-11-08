@@ -28,12 +28,15 @@ typedef struct XirStorageCrossFlow {
 
 typedef struct XirStorageBinding {
     uint32_t formal_function, formal_value, actual_function, actual_value;
+    uint32_t actual_environment;
 } XirStorageBinding;
 
 typedef struct XirStorageApplication {
     XirExecutionSiteKind kind;
     /* Function is the caller template. Declaration is the callee template. */
     uint32_t site, function, instruction, declaration;
+    uint32_t target, caller_instance, environment, order;
+    XirExecutionPort port;
     uint32_t first, count;
 } XirStorageApplication;
 
