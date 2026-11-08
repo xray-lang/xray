@@ -270,7 +270,9 @@ add_executable(test_xir_checked xir/test_xir_checked.c)
 target_link_libraries(test_xir_checked PRIVATE xray_xir)
 add_executable(test_xir_checked_allocations xir/test_xir_checked_allocations.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
-    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
+    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c
+    ${CMAKE_SOURCE_DIR}/src/hir/xhir_escape.c
+    ${CMAKE_SOURCE_DIR}/src/xir/xxir_storage_flow.c)
 target_link_libraries(test_xir_checked_allocations PRIVATE xray_compile_resources)
 target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
