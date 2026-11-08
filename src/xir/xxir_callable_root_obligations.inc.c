@@ -11,7 +11,7 @@
  *   Constructing a value adds no body-execution edge to its creator.
  */
 #include "xxir_implementation.h"
-#include "xxir_effect_reference_internal.h"
+#include "xxir_effect_contract_internal.h"
 typedef struct DeclarationCallableRootCheck {
     XirEffectInput input;
     const XrXirEffects *effects;
