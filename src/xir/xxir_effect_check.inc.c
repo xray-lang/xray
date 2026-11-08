@@ -1675,6 +1675,11 @@ static XrXirStatus effect_check_effect_projection(EffectCheckBuild *build) {
         build->status = xir_execution_resolve_effect_site(roots, &site,
             effect_check_precise_capture, &resolve, &complete, &remainder);
         if (build->status != XR_XIR_OK) return build->status;
+        if ((!complete || resolve.foreign) && pending->result != UINT32_MAX)
+            effect_check_seed(roots, pending->result,
+                effect_check_type_mask(effect_check_types_read(build), pending->result_type),
+                (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT, pending->instruction,
+                    UINT32_MAX, UINT32_MAX, 0});
         if (complete || !(remainder & XIR_EXECUTION_REMAINDER_OPAQUE)) continue;
         if (!pending->root_linked) {
             if (!effect_check_alias(build, pending->node, pending->receiver)) return build->status;

@@ -929,6 +929,40 @@ static void execution_symbolic_environment_inputs(void) {
     effect_mark_check(baseline);
 }
 
+static void execution_callable_result_upper(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType returned = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirType factory = returned + 1;
+    XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64,
+            .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = returned,
+            .flags = XR_XIR_CALLABLE_ROOT_NONE | XR_XIR_CALLABLE_NO_SUSPEND}
+    };
+    XrXirTypes types = {.nodes = nodes, .count = 2};
+    XrXirInstruction code[] = {
+        {.op = XR_XIR_CALL_INDIRECT, .type = returned},
+        {.op = XR_XIR_CALL_INDIRECT, .type = XR_XIR_I64, .immediate = 1},
+        {.op = XR_XIR_RETURN, .args = {2}}
+    };
+    XrXirFunction function = {.parameters = &factory, .parameter_count = 1,
+        .instructions = code, .instruction_count = 3, .result = XR_XIR_I64, .error_type = XR_XIR_NEVER};
+    XrXirModule module = {.types = &types, .functions = &function, .function_count = 1};
+    XrXirEffectParameter parameter = {.kind = XR_XIR_EFFECT_PARAMETER_VARIABLE};
+    XrXirFunctionEffectContract contract = {.parameters = &parameter, .parameter_count = 1};
+    for (uint32_t bounded = 0; bounded < 2; ++bounded) {
+        nodes[0].flags = (bounded ? XR_XIR_CALLABLE_ROOT_NONE : XR_XIR_CALLABLE_ROOT_UNRESOLVED) |
+            XR_XIR_CALLABLE_NO_SUSPEND;
+        EffectCheckedRoots *roots = NULL;
+        CHECK(effect_checked_roots_build(&effect_context, &module, &contract, NULL, NULL, &roots, true) == XR_XIR_OK);
+        uint32_t pure_factory = 0, mask = UINT32_MAX;
+        CHECK(effect_checked_root_mask(roots, roots->function[0].root, &pure_factory, 1, &mask) == XR_XIR_OK);
+        CHECK(mask == (bounded ? 0 : XR_XIR_CALLABLE_ROOT_UNRESOLVED));
+        effect_checked_roots_free(roots);
+        effect_mark_check(baseline);
+    }
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -942,6 +976,7 @@ static void control_summary_kernel(void) {
     execution_storable_boundaries();
     execution_cell_input_boundaries();
     execution_symbolic_environment_inputs();
+    execution_callable_result_upper();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
