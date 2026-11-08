@@ -43,7 +43,7 @@ typedef struct StoragePublication {
 enum { STORAGE_EXPOSURE_KIND = 16 };
 typedef struct StorageExecution {
     XirExecutionSite site;
-    uint32_t applications[3], next;
+    uint32_t applications[3], next, binding_next;
     uint8_t *identity_parameters;
     bool bindings_ready, active;
 } StorageExecution;
@@ -107,6 +107,7 @@ struct XirStorageFlow {
     StorageExecution *sites;
     uint32_t site_count, site_capacity, site_index_capacity, generation;
     uint32_t *site_index;
+    uint32_t *target_heads, target_head_count, target_head_capacity;
     uint32_t progress, request_remainder;
     uint64_t revision;
     XrXirStatus status;
@@ -801,7 +802,8 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
         &flow->site_capacity, sizeof(*flow->sites))) return flow->status;
     uint32_t index = flow->site_count++;
     flow->sites[index] = (StorageExecution){.site = *site,
-        .applications = {UINT32_MAX, UINT32_MAX, UINT32_MAX}, .next = UINT32_MAX, .active = true};
+        .applications = {UINT32_MAX, UINT32_MAX, UINT32_MAX}, .next = UINT32_MAX,
+        .binding_next = UINT32_MAX, .active = true};
     flow->site_index[slot] = index + 1;
     if (!site->unresolved && !site->native_callable && site->declaration < flow->view.function_count) {
         uint32_t outcomes = storage_environment_site(site) ? 1 : 3;
@@ -931,12 +933,28 @@ static bool storage_bind_application(XirStorageFlow *flow, uint32_t site_index, 
 }
 
 static bool storage_reindex_sites(XirStorageFlow *flow) {
+    uint32_t targets = 0;
+    for (uint32_t s = 0; s < flow->site_count && storage_step(flow); ++s) {
+        StorageExecution record = flow->sites[s];
+        if (!record.active || record.applications[0] == UINT32_MAX) continue;
+        if (record.site.target >= UINT32_MAX - 1) { flow->status = XR_XIR_OVERFLOW; return false; }
+        if (record.site.target >= targets) targets = record.site.target + 1;
+    }
+    if (targets && !storage_reserve(flow, (void **)&flow->target_heads, targets - 1,
+        &flow->target_head_capacity, sizeof(*flow->target_heads))) return false;
+    flow->target_head_count = targets;
+    for (uint32_t t = 0; t < targets && storage_step(flow); ++t) flow->target_heads[t] = UINT32_MAX;
     for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f) {
         StorageFunction *row = &flow->rows[f];
         for (uint32_t p = 0; p < row->site_head_count; ++p) row->site_heads[p] = UINT32_MAX;
     }
     for (uint32_t s = 0; s < flow->site_count && storage_step(flow); ++s) {
         XirExecutionSite site = flow->sites[s].site;
+        flow->sites[s].binding_next = UINT32_MAX;
+        if (flow->sites[s].active && flow->sites[s].applications[0] != UINT32_MAX) {
+            flow->sites[s].binding_next = flow->target_heads[site.target];
+            flow->target_heads[site.target] = s;
+        }
         if (!flow->sites[s].active || storage_environment_site(&site)) continue;
         StorageFunction *row = &flow->rows[site.function];
         uint32_t point = site.instruction == UINT32_MAX ? row->body->instruction_count + site.block : site.instruction;
@@ -1340,6 +1358,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(flow->sites[s].identity_parameters);
     xr_compile_resources_free(flow->sites); flow->sites = NULL;
     xr_compile_resources_free(flow->site_index); flow->site_index = NULL;
+    xr_compile_resources_free(flow->target_heads); flow->target_heads = NULL;
     xr_compile_resources_free(flow->point_index); flow->point_index = NULL;
     xr_compile_resources_free(flow->point_value_index); flow->point_value_index = NULL;
     xr_compile_resources_free(flow->cross_index); flow->cross_index = NULL;
@@ -1561,6 +1580,7 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
 }
 
 #include "xxir_storage_point.inc.c"
+#include "xxir_storage_environment.inc.c"
 #include "xxir_storage_capture.inc.c"
 
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorageFlowView *output) {
