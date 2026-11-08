@@ -1,0 +1,7 @@
+fn counter() -> fn() -> i64 {
+    var value = 0
+    return fn() -> i64 {
+        value = value + 1
+        return value
+    }
+}
