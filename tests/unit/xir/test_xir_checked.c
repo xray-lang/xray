@@ -582,6 +582,65 @@ static void nonescape_facts_ownership(void) {
     xr_hir_escape_facts_free(copy);
     CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
+static void nonescape_capture_calls(void) {
+    XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
+        .result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    XrXirTypes types={.nodes=&signature,.count=1};
+    XrXirInstruction ret={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
+    XrXirInstruction direct[]={{.op=XR_XIR_CALL,.type=callable,.args={0,1},.immediate=1},ret};
+    XrXirInstruction invoke[]={
+        {.op=XR_XIR_INVOKE,.type=callable,.args={0,1},.targets={1,2},.immediate=1},
+        {.op=XR_XIR_INVOKE_RESULT,.type=callable,.immediate=0},ret,
+        {.op=XR_XIR_INVOKE_ERROR,.type=XR_XIR_ERROR,.immediate=0},ret};
+    XrXirBlock leaf={0,1,0,0},block={0,2,0,0},edges[]={{0,1,0,0},{1,2,0,0},{3,2,0,0}};
+    uint32_t argument=0,escaping=0;
+    XrXirFunction functions[]={
+        {.name="root",.name_length=4,.result=XR_XIR_UNIT,.blocks=&leaf,.block_count=1,
+            .instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="capture",.name_length=7,.parameters=&callable,.parameter_count=1,.result=callable,
+            .blocks=&leaf,.block_count=1,.instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="forward",.name_length=7,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,
+            .operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER,.escaping_parameters=&escaping}
+    };
+    XrXirFunctionIdentity identities[]={{0},{.capture_owner=1,.capture_count=1},{.capture_owner=1}};
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    for(unsigned protocol=0;protocol<2;++protocol) {
+        functions[2].instructions=protocol?invoke:direct;functions[2].instruction_count=protocol?5:2;
+        functions[2].blocks=protocol?edges:&block;functions[2].block_count=protocol?3:1;
+        functions[2].escaping_parameter_count=1;functions[2].escaping_parameters=&escaping;
+        XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+        xr_xir_compile_artifact_free(checked);checked=NULL;
+        functions[2].escaping_parameter_count=0;functions[2].escaping_parameters=NULL;
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+        CHECK(diagnostic.function==1 && diagnostic.instruction==0);
+    }
+    XrXirInstruction target[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},ret};
+    target[1].args[0]=1;
+    functions[1].result=XR_XIR_I64;functions[1].instructions=target;functions[1].instruction_count=2;
+    functions[1].blocks=&block;identities[1]=(XrXirFunctionIdentity){0};
+    functions[2].instructions=direct;functions[2].instruction_count=2;functions[2].blocks=&block;functions[2].block_count=1;
+    direct[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=callable,.args={0,1},.immediate=1};
+    XrXirType generic=XR_XIR_TYPE_PARAMETER_BASE;XrXirConstraint constraint={0};
+    XrXirGeneric generics[]={{0},{.constraints=&constraint,.parameter_count=1},{.arguments=&callable,.argument_count=1}};
+    for(unsigned stored=0;stored<2;++stored) {
+        built.generics=stored?generics:NULL;
+        functions[1].parameters=stored?&generic:&callable;
+        functions[1].escaping_parameter_count=stored?0:1;functions[1].escaping_parameters=stored?NULL:&escaping;
+        direct[0].type_arguments[1]=stored;
+        functions[2].escaping_parameter_count=1;functions[2].escaping_parameters=&escaping;
+        XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+        xr_xir_compile_artifact_free(checked);checked=NULL;
+        functions[2].escaping_parameter_count=0;functions[2].escaping_parameters=NULL;
+        CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+        CHECK(diagnostic.function==2 && diagnostic.instruction==0);
+    }
+}
 #include "xir_cell_checked_cases.h"
 static void constructed_contracts(void) {
     XrXirArtifact *checked = constructed_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
@@ -1192,7 +1251,7 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
-        nonescape_bound_prefix();nonescape_facts_ownership();
+        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_capture_calls();
         consumer_contexts_free();
         puts("Current Checked field bytes and semantic packet rejection PASS");
         return 0;
@@ -1271,6 +1330,7 @@ int main(int argc,char **argv) {
     capture_rejections(); capture_packet_rejection();
     nonescape_bound_prefix();
     nonescape_facts_ownership();
+    nonescape_capture_calls();
     consumer_context=consumer_context_default();
     generic_callable_contracts(); generic_callable_depth();
     consumer_context=consumer_context_default();
