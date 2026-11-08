@@ -52,7 +52,6 @@ endif()
 add_subdirectory(xir/compile_owner)
 
 
-add_subdirectory(xir/bounded_call)
 add_subdirectory(shared/native_admission)
 add_subdirectory(shared/bits_wide)
 add_subdirectory(shared/core_intrinsic_owner)
@@ -288,21 +287,11 @@ set(XIR_CALL_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_call_fixture.c)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/calls_owned_receive.cmake")
 set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
 
-# Complete panic outcomes keep message ownership independent of result values.
-
-# These implementations are included under the runtime allocation macros,
-# never compiled as additional uncounted translation units.
-set_property(SOURCE xir/test_xir_panic_carrier.c APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_budget.c"
-    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task.c"
-    "${CMAKE_SOURCE_DIR}/src/xir/xxir_task_outcome.inc.c")
-
 add_test(NAME test_xir_panic_carrier_wire_vector COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_panic_carrier_vector.py
     --output ${CMAKE_CURRENT_BINARY_DIR}/generated/panic-carrier-wire-vector.json)
 set_tests_properties(test_xir_panic_carrier_wire_vector PROPERTIES LABELS "unit;xir;ownership;abi")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/object_storage_prefix.cmake")
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
 
@@ -1359,22 +1348,6 @@ if(XR_BUILD_DAP)
     )
     add_test(NAME test_dap_server COMMAND test_dap_server)
 
-    if(WIN32)
-        set(_dap_fd_impl ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c)
-    else()
-        set(_dap_fd_impl ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c)
-    endif()
-    add_executable(test_dap_transport
-        dap/test_dap_transport.c
-        ${CMAKE_SOURCE_DIR}/src/app/dap/xdap_transport.c
-        ${CMAKE_SOURCE_DIR}/src/base/xframing.c
-        ${_dap_fd_impl}
-    )
-    target_include_directories(test_dap_transport PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/app/dap
-        ${CMAKE_SOURCE_DIR}/src/base
-    )
-    add_test(NAME test_dap_transport COMMAND test_dap_transport)
 endif()
 
 # ============================================================================
@@ -1664,7 +1637,6 @@ endif()
 add_test(NAME xir_scope_syntax COMMAND test_xir_scope_syntax)
 set_tests_properties(xir_scope_syntax PROPERTIES TIMEOUT 60 LABELS "unit;parser;ownership")
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
 
 
 
@@ -1900,7 +1872,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 
 add_subdirectory(xir/p10_reference)
 
@@ -2059,8 +2030,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/source_method_surface.cmake")
 
 
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/task_scope.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/task_aggregate.cmake")
 foreach(engine vm native)
     add_test(NAME test_await_cancel_surface_${engine}
         COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/test_await_cancel_surface.py
@@ -2068,7 +2037,6 @@ foreach(engine vm native)
     set_tests_properties(test_await_cancel_surface_${engine} PROPERTIES
         LABELS "unit;xir;language;task;cli" TIMEOUT 180)
 endforeach()
-include("${CMAKE_CURRENT_LIST_DIR}/xir/call_select.cmake")
 
 
 

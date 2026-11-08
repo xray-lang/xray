@@ -9,8 +9,6 @@
  * KEY CONCEPT:
  *   Fail every allocation in the actual reader, writer and semantic verifier.
  */
-#include "xir_program_input_fixture.h"
-#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "base/xhash.h"
@@ -90,8 +88,6 @@ static void packet_free(void *p) {
 #include "xir/xxir_layout.c"
 #include "xir/xxir_checked.c"
 #include "xir/xxir_specialize.c"
-#include "xir/xxir_program_match.c"
-#include "xir/xxir_program_input.c"
 #define XIR_CONSUMER_COUNTED_RESOURCES
 #include "xir_consumer_context_owner.h"
 #include "xir_checked_fixture.h"
@@ -407,83 +403,6 @@ static void provenance_packet_roundtrip(XrXirArtifact *closed) {
     printf("provenance packet: %zu write and %zu read allocation failures released\n", writes, reads);
 }
 
-static void native_packet_proof(void) {
-    XrXirArtifact *artifact=nominal_expression_lowered(suite_context);
-    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
-    CHECK(module->function_count==9);
-    XrXirCallEntry entries[9]={0};
-    for(uint32_t i=0;i<9;++i){entries[i].parameter_count=module->functions[i].parameter_count;
-        entries[i].parameters=module->functions[i].parameters;entries[i].result=module->functions[i].result;}
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(artifact),
-        entries,9,module->declarations,{0},module->types,xir_program_packet_borrow(artifact)};
-    XrXirProgramPacket proof=xir_program_packet_borrow(artifact);
-    size_t baseline=live,baseline_bytes=live_bytes,sites=0;
-    XrCompileResourceStats required={0};
-    XrXirProgramPermissions *permissions=NULL;
-    XrXirProgramInput *program_input=NULL;
-    for(size_t attempt=0;attempt<=sites;++attempt){
-        XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
-        XrCompileResourceStats before=consumer_context_stats(&probe);
-        packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-        CHECK(program_fixture_decode_prepare(&probe,&spec,&proof,&program_input,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
-        CHECK((permissions!=NULL)==!attempt);
-        if(!attempt){sites=packet_allocation_calls;required=consumer_context_stats(&probe);}
-        xir_program_permissions_free(permissions);permissions=NULL;
-            xir_program_input_free(program_input);program_input=NULL;
-        fail_at=SIZE_MAX;consumer_context_ephemeral_free(&probe,before);
-        CHECK(live==baseline && live_bytes==baseline_bytes);
-    }
-    for(uint32_t attack=0;attack<4;++attack){
-        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
-        if(attack==2)limits=(XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,consumer_context_owners[0].baseline.held_bytes,true};
-        XrXirCompileContext probe=consumer_context_ephemeral(limits);
-        XrCompileResourceStats before=consumer_context_stats(&probe);
-        if(!attack)artifact->checked_packet.bytes[0]^=1;
-        if(attack==1)artifact->checked_identity[0]^=1;
-        if(attack==3)entries[0].result=XR_XIR_BOOL;
-        CHECK(program_fixture_decode_prepare(&probe,&spec,&proof,&program_input,&permissions)==
-            (attack==2?XR_XIR_MEMORY_LIMIT:XR_XIR_BAD_STRUCTURE));
-        CHECK(!permissions && !program_input);
-        if(!attack)artifact->checked_packet.bytes[0]^=1;
-        if(attack==1)artifact->checked_identity[0]^=1;
-        entries[0].result=module->functions[0].result;
-        consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
-    }
-    for(uint64_t cap=16384;cap<=131072;cap*=2){
-        for(unsigned minus=0;minus<2;++minus){
-            XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,cap*7-minus,true});
-            XrCompileResourceStats before=consumer_context_stats(&probe);
-            XrXirStatus status=program_fixture_decode_prepare(&probe,&spec,&proof,&program_input,&permissions);
-            CHECK(status==XR_XIR_OK || status==XR_XIR_MEMORY_LIMIT);
-            CHECK((permissions!=NULL)==(status==XR_XIR_OK));
-            XrCompileResourceStats actual=consumer_context_stats(&probe);
-            CHECK(actual.peak_bytes<=cap*7-minus);
-            xir_program_permissions_free(permissions);permissions=NULL;
-        xir_program_input_free(program_input);program_input=NULL;
-            consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
-            printf("native proof whole cap %llu minus%u status%u peak%llu\n",(unsigned long long)cap,minus,status,(unsigned long long)actual.peak_bytes);
-        }
-    }
-    for(unsigned minus=0;minus<2;++minus){
-        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,required.peak_bytes-minus,true};
-        XrXirCompileContext probe=consumer_context_ephemeral(limits);XrCompileResourceStats before=consumer_context_stats(&probe);
-        CHECK(program_fixture_decode_prepare(&probe,&spec,&proof,&program_input,&permissions)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
-        CHECK((permissions!=NULL)==!minus);xir_program_permissions_free(permissions);permissions=NULL;
-        xir_program_input_free(program_input);program_input=NULL;
-        consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
-    }
-    XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true});
-    XrCompileResourceStats before=consumer_context_stats(&probe);XrXirProgramPacket overflowing=proof;overflowing.length=SIZE_MAX;
-    packet_allocation_calls=0;CHECK(program_fixture_decode_prepare(&probe,&spec,&overflowing,&program_input,&permissions)==XR_XIR_BUDGET && !packet_allocation_calls && !permissions);
-    consumer_context_ephemeral_free(&probe,before);
-    CHECK(live==baseline && live_bytes==baseline_bytes);
-    xr_xir_compile_artifact_free(artifact);artifact=NULL;
-    CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
-    printf("native packet proof census: sites=%zu allocated=%llu peak=%llu\n",sites,
-        (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes);
-    printf("native packet proof: %zu allocation failures released, held memory exact/minus\n",sites);
-}
-
 static void provenance_lowering(XrXirArtifact *closed) {
     XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *lowered = NULL;
@@ -751,7 +670,6 @@ int main(void) {
     packet_failures(20); packet_failures(21);
     specialization_failures(9);
     packet_failures(19);
-    native_packet_proof();
     XrXirArtifact *forwarding = nominal_forwarding_checked(suite_context);
     provenance_lowering(forwarding);
     xr_xir_compile_artifact_free(forwarding);forwarding=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());

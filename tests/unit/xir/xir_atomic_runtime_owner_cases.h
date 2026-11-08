@@ -135,70 +135,12 @@ static void core_carriers_and_capability(void) {
     CHECK(xr_xir_value_admit(&alias, (XrXirType)CORE_I64, &foreign_admission) == XR_XIR_VALUE_OK);
     XrXirAtomicRequest request = {&alias, NULL, NULL, 0, XR_XIR_ATOMIC_OPERATION_LOAD, XR_XIR_I64};
     XrXirAtomicProgress progress = {0}; XrXirValue output = {0};
-    CHECK(xr_xir_atomic_start(&request, &foreign_admission, NULL, &progress, &output).status == XR_XIR_RUN_OK && output.payload == 7);
+    CHECK(xr_xir_atomic_start(&request, &foreign_admission, &progress, &output).status == XR_XIR_RUN_OK && output.payload == 7);
     xr_xir_atomic_progress_clear(&progress); xr_xir_value_drop(&output); xr_xir_domain_drop(foreign);
     xr_xir_compile_type_arena_drop(owner.arena); owner.arena = NULL;
     xr_xir_domain_drop(owner.domain); owner.domain = NULL;
     xr_compile_resources_release(owner.context.resources); owner.context.resources = NULL;
     CHECK(xr_xir_value_valid(&alias) && compiler_observer.live && runtime_observer.live);
     xr_xir_value_drop(&alias); core_owner_free(&owner);
-}
-typedef struct CoreCallProbe { unsigned mode, resumes, releases, exits; XrXirCallView stale; } CoreCallProbe;
-static XrXirAction core_call_resume(XrXirCallView *view) {
-    CoreCallProbe *probe = (CoreCallProbe *)view->environment;
-    CHECK(xr_xir_call_execution_status(view) == XR_XIR_CALL_READY);
-    probe->stale = *view;
-    if (view->phase == XR_XIR_CALL_EXIT) {
-        ++probe->exits; CHECK(view->exit.status == XR_XIR_CALL_CANCELLED);
-        return (XrXirAction){.kind = XR_XIR_ACTION_EXIT_DONE};
-    }
-    ++probe->resumes;
-    XrXirCallView copied = *view; CHECK(xr_xir_call_execution_status(&copied) == XR_XIR_CALL_BAD_STATE);
-    if (probe->mode == 6) {
-        CHECK(xr_xir_call_request_cancel(view->activation) == XR_XIR_CALL_CANCEL_REQUESTED);
-        CHECK(xr_xir_call_execution_status(view) == XR_XIR_CALL_CANCELLED);
-        XrXirAtomicRequest request = {(const XrXirValue *)1, NULL, NULL, 0, XR_XIR_ATOMIC_OPERATION_LOAD, XR_XIR_I64};
-        XrXirAtomicProgress progress = {0}; XrXirValue output = {0};
-        XrXirAtomicOutcome result = xr_xir_atomic_start(&request, xr_xir_call_admission(view), view, &progress, &output);
-        CHECK(result.permission == XR_XIR_CALL_CANCELLED && !output.type && !progress.phase);
-        return (XrXirAction){.kind = XR_XIR_ACTION_CONTINUE};
-    }
-    XrXirAction action = xr_xir_call_fault(probe->mode == 0 ? XR_XIR_RUN_ATOMIC_ARGUMENT :
-        probe->mode == 1 ? XR_XIR_RUN_UNSUPPORTED : probe->mode == 2 ? XR_XIR_RUN_BAD_ARGUMENT : (XrXirRunStatus)99);
-    if (probe->mode == 4 || probe->mode == 5) {
-        action = xr_xir_call_fault(probe->mode == 4 ? XR_XIR_RUN_ATOMIC_ARGUMENT : XR_XIR_RUN_UNSUPPORTED);
-        action.flags = 1;
-    }
-    return action;
-}
-static void core_call_release(XrXirCallView *view, XrXirCallStatus reason) {
-    CoreCallProbe *probe = (CoreCallProbe *)view->environment;
-    CHECK(reason == (probe->mode == 0 ? XR_XIR_CALL_BAD_ARGUMENT : probe->mode == 1 ? XR_XIR_CALL_UNSUPPORTED :
-        probe->mode == 6 ? XR_XIR_CALL_CANCELLED : XR_XIR_CALL_BAD_STATE));
-    ++probe->releases;
-}
-static void core_call_statuses(void) {
-    CHECK(xr_xir_call_execution_status(NULL) == XR_XIR_CALL_BAD_STATE);
-    CoreOwner owner = {0}; core_owner_new(&owner);
-    for (unsigned mode = 0; mode < 7; ++mode) {
-        CoreCallProbe probe = {.mode = mode};
-        XrXirCallEntry entry = {.abi_version = XR_XIR_CALL_ABI_VERSION, .result = XR_XIR_I64,
-            .state_bytes = 16, .resume = core_call_resume, .release = core_call_release,
-            .environment = &probe, .flags = mode == 6 ? XR_XIR_ENTRY_EXIT : 0};
-        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-        XrXirCallAccounting accounting = {0}; config.accounting = &accounting;
-        config.entries = &entry; config.entry_count = 1; config.admission = owner.admission;
-        config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 4;
-        XrXirCall *call = NULL; CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        XrXirCallResult result = xr_xir_call_poll_bounded(call, 16);
-        CHECK(result.status == (mode == 0 ? XR_XIR_CALL_BAD_ARGUMENT : mode == 1 ? XR_XIR_CALL_UNSUPPORTED :
-            mode == 6 ? XR_XIR_CALL_CANCELLED : XR_XIR_CALL_BAD_STATE));
-        CHECK(xr_xir_call_result_valid(&result) && probe.resumes == 1 && probe.releases == 1 &&
-            probe.exits == (mode == 6 ? 1u : 0u));
-        CHECK(xr_xir_call_execution_status(&probe.stale) == XR_XIR_CALL_BAD_STATE);
-        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-        CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations == accounting.frees);
-    }
-    core_owner_free(&owner);
 }
 #endif

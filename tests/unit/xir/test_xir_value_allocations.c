@@ -13,7 +13,6 @@
 
 
 #include "base/xmalloc.h"
-#include "xir/xxir_call.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
@@ -81,7 +80,6 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_value.c"
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_float.c"
-#include "xir/xxir_call.c"
 #include "xir/xxir_output.c"
 static XrXirOutputStatus counted_float_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     size_t *published = context;
@@ -93,7 +91,7 @@ static void float_output_allocation(void) {
     XrXirValue values[] = {{XR_XIR_F32, 0, INT64_C(0x3dcccccd)}, {XR_XIR_F64, 0, INT64_MIN}};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 2, true};
     size_t published = 0, before = value_allocation_calls;
-    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_float_sink, &published, 9};
+    XrXirOutputSink sink = {XR_XIR_OUTPUT_ABI_VERSION, 0, counted_float_sink, &published, 9};
     fail_at = value_allocation_calls;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
     CHECK(value_allocation_calls == before + 1);
@@ -113,7 +111,7 @@ static void output_allocation(void) {
     XrXirValue values[] = {{XR_XIR_BOOL, 0, 0}, {XR_XIR_I64, 0, 0}, {XR_XIR_I64, 0, 123}};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 3, true};
     size_t published = 0;
-    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, counted_sink, &published, 12};
+    XrXirOutputSink sink = {XR_XIR_OUTPUT_ABI_VERSION, 0, counted_sink, &published, 12};
     fail_at = value_allocation_calls;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OOM && !published && !live);
     fail_at = SIZE_MAX;
@@ -138,9 +136,6 @@ static void output_allocation(void) {
     group.count = 3; group.values = NULL;
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_BAD_ARGUMENT);
     CHECK(value_allocation_calls == before && published == 1 && !live);
-}
-static XrXirAction identity_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->arguments[0], {0}, 0};
 }
 static void fail_sequence(void) {
     XrXirDomain *domain = NULL;
@@ -167,19 +162,6 @@ static void fail_sequence(void) {
         CHECK(string_pointer(&left)->length == 30 && left.payload == copy.payload);
         goto done;
     }
-    XrXirType type = XR_XIR_STRING;
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_STRING, 0, identity_resume, NULL, NULL, 0, 0};
-    XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
-    XrXirCall *call = NULL;
-    XrXirCallStatus admitted = xr_xir_call_new(&config, 0, &left, 1, &call);
-    if (admitted == XR_XIR_CALL_READY) {
-        xr_xir_value_drop(&left);
-        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_call_take_result(call, &left) == XR_XIR_CALL_RETURNED);
-        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-    } else CHECK(admitted == XR_XIR_CALL_OOM && !call);
-    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
  done:
     CHECK(status == XR_XIR_VALUE_OK || status == XR_XIR_VALUE_OOM);
     xr_xir_domain_drop(domain);
@@ -193,20 +175,6 @@ static void saturation(void) {
     XirString *string = string_pointer(&value);
     atomic_store(&string->object.references, UINT32_MAX);
     CHECK(xr_xir_value_copy(&value, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
-    XrXirValue first = {0};
-    CHECK(xr_xir_string_new(domain, "first", 5, &first) == XR_XIR_VALUE_OK);
-    XrXirValue arguments[] = {first, value};
-    XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING};
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, parameters, 2, XR_XIR_STRING,
-        0, identity_resume, NULL, NULL, 0, 0};
-    XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
-    XrXirCall *call = NULL;
-    size_t baseline = live;
-    CHECK(xr_xir_call_new(&config, 0, arguments, 2, &call) == XR_XIR_CALL_LIMIT && !call);
-    CHECK(live == baseline && !accounting.live_bytes && accounting.allocations == accounting.frees);
-    CHECK(atomic_load(&string_pointer(&first)->object.references) == 1);
-    xr_xir_value_drop(&first);
     atomic_store(&string->object.references, 1);
     atomic_store(&domain->references, UINT32_MAX);
     CHECK(xr_xir_string_new(domain, "y", 1, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
@@ -672,6 +640,51 @@ static void deep_value_admission_failures(void) {
 #include "xir_foreign_array_fi_cases.h"
 #include "xir_array_set_callback_case.h"
 #include "xir_value_path_replacement_cases.h"
+
+static void retired_execution_storage(void) {
+    const XrXirTypeNode nodes[] = {
+        {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64, .result = XR_XIR_NEVER},
+        {.kind = XR_XIR_TYPE_ITERATOR, .element = XR_XIR_I64, .result = XR_XIR_NEVER},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)256},
+        {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)257},
+        {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},
+        {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)257},
+    };
+    XrXirTypes types = {nodes, 6, NULL, NULL};
+    XrXirTypeArena *arena = NULL;
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, 1024, 0};
+    for (uint32_t kind = 0; kind < 2; ++kind) {
+        XrXirValue array = {0}, none = {0}, copy = {0};
+        CHECK(xr_xir_array_new((XrXirType)(258 + kind), NULL, 0, &admission, &array) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
+        xr_xir_value_drop(&copy);
+        CHECK(xr_xir_nullable_new((XrXirType)(260 + kind), NULL, &admission, &none) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_value_copy(&none, &copy) == XR_XIR_VALUE_OK);
+        xr_xir_value_drop(&copy);
+        xr_xir_value_drop(&array);
+        xr_xir_value_drop(&none);
+
+        XirObject retired = {0};
+        retired.kind = kind ? XR_XIR_TYPE_ITERATOR : XR_XIR_TYPE_TASK;
+        retired.type = (XrXirType)(256 + kind);
+        retired.arena = arena;
+        retired.domain = domain;
+        atomic_init(&retired.references, 1);
+        XirObject *pointer = &retired;
+        XrXirValue value = {(uint32_t)retired.type, 0, 0};
+        memcpy(&value.payload, &pointer, sizeof(pointer));
+        CHECK(!xr_xir_value_valid(&value));
+        CHECK(xr_xir_value_admit(&value, retired.type, &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+        CHECK(xr_xir_value_copy(&value, &copy) == XR_XIR_VALUE_BAD_ARGUMENT && !copy.type);
+        CHECK(atomic_load(&retired.references) == 1);
+    }
+    xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena);
+    CHECK(!live && !value_compile_live && !value_compile_bytes);
+}
 static void domain_identity_bytes_case(void) {
     const size_t baseline = live;
     CHECK(fail_at == SIZE_MAX && !closed_fail_all);
@@ -707,6 +720,7 @@ int main(int argc, char **argv) {
         if (mode >= 3) return 2;
         cross_domain_ring_case(mode, order); return 0;
     }
+    retired_execution_storage();
     value_path_replacement_cases(true);value_path_cases();
     storage_pack_cases();
     storage_cursor_cases();
@@ -734,7 +748,7 @@ int main(int argc, char **argv) {
     foreign_array_fi_cases();
     array_set_callback_case();
     domain_identity_bytes_case();
-    printf("Managed allocation failures: %zu; every domain, string and activation physically released\n", count);
+    printf("Managed allocation failures: %zu; every domain and value physically released\n", count);
     CHECK(!value_compile_live && !value_compile_bytes);
     return 0;
 }

@@ -14,10 +14,8 @@
 #define XIR_CALLABLE_ERROR_CASES_H
 #include "xir/xxir_type_inference.h"
 #include "xir/xxir_ctfe.h"
-#include "xir/xxir_program.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_array.h"
-#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_view_prepare_internal.h"
 #include "xir/xxir_implementation.h"
 #include "xir_effect_input_fixture.h"

@@ -26,14 +26,7 @@ add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/xir/xxir_scalar_core.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_float.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_output.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_program.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_program_match.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_program_input.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_call.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_task.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_task_budget.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_format.c"
-    "${XIR_OWNER_ROOT}/src/xir/xxir_instance.c")
+    "${XIR_OWNER_ROOT}/src/xir/xxir_format.c")
 if(WIN32)
     target_sources(xir_compile_owner_runtime PRIVATE
         "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c"

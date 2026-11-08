@@ -225,8 +225,7 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                 if (domain_sensitive && (object->kind == XIR_OBJECT_BUFFER_STORAGE ||
                     object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR ||
                     object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
-                    object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK ||
-                    object->kind == XR_XIR_TYPE_ITERATOR))
+                    object->kind == XIR_OBJECT_FUNCTION))
                     *domain_sensitive = true;
                 if (task && object->arena && xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena),object->type) &&
                     (object->arena!=admission->arena || !xr_xir_compile_type_arena_enum_sendable(object->arena,object->type))) {
@@ -282,9 +281,7 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                         object->type, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = map->length * (object->kind == XR_XIR_TYPE_MAP ? 2u : 1u);
-                } else if(object->kind==XR_XIR_TYPE_ITERATOR) {
-                    if(object->domain!=admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
-                } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC || object->kind == XR_XIR_TYPE_CHANNEL) {
+                } else if (object->kind == XR_XIR_TYPE_ATOMIC || object->kind == XR_XIR_TYPE_CHANNEL) {
 
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {

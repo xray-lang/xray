@@ -11,7 +11,18 @@
  */
 #ifndef XXIR_OUTPUT_H
 #define XXIR_OUTPUT_H
-#include "xxir_call.h"
+#include "xxir_scalar.h"
+#include "xxir_output_status.h"
+
+#define XR_XIR_OUTPUT_ABI_VERSION 38u
+
+typedef enum XrXirOutputStream { XR_XIR_STDOUT = 1, XR_XIR_STDERR = 2 } XrXirOutputStream;
+typedef struct XrXirOutputGroup {
+    XrXirOutputStream stream;
+    const XrXirValue *values;
+    uint32_t count;
+    bool line;
+} XrXirOutputGroup;
 typedef XrXirOutputStatus (*XrXirByteOutputEntry)(void *context, XrXirOutputStream stream, const char *bytes, size_t length);
 typedef struct XrXirOutputSink {
     uint32_t abi_version, reserved;

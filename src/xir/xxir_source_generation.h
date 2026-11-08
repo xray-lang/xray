@@ -14,10 +14,8 @@
 #define XXIR_SOURCE_GENERATION_H
 #include "xxir_source.h"
 #include "xxir_source_ast_owner.h"
-#include "xxir_instance_generation.h"
 struct XrCompileRequestControl;
 struct AstNode;
-struct XrXirProgram;
 typedef struct XrXirSourceGenerations XrXirSourceGenerations;
 typedef struct XrXirSourceGenerationConfig {
     XrXirCompileContext context;
@@ -116,27 +114,10 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(X
  * may only be aborted, never published into lexical history. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *,
     const XrXirSourceReplInput *, uint64_t *, XrXirSourceDiagnostic *);
-/* Source publication allocates and charges nothing. The execution coordinator
- * calls this only after the corresponding Instance candidate returned normally.
- * These declaration observations do not authenticate runtime publication. */
+/* Source publication allocates and charges nothing. Published declarations
+ * describe immutable compiler history and grant no runtime authority. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_publish(XrXirSourceGenerations *owner, uint64_t serial);
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_abort(XrXirSourceGenerations *owner, uint64_t serial);
-/* Binds one prepared record to a real sealed Program. The ordinary compiler
- * derives its exact specialized/Lowered proof and compares the sealed identity.
- * Every active foreign mutable slot must occur in the exact history receiving
- * map. This coverage admits no new library storage; Instance preparation still
- * verifies the actual published birth routes before execution.
- * Success retains the Program until record disposal. Repeat binding to the
- * same Program is allocation-free; replacing a binding or binding after publish
- * is rejected. This code correspondence alone grants no storage permission. */
-XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGenerations *owner,
-    uint64_t serial, struct XrXirProgram *program, XrCompileRequestControl *control);
-/* Prepares the already bound Program using the actual prior receiving map.
- * Runtime-owned routes borrow existing birth slots and initialized modules;
- * ordinary value admission still rejects incompatible type-arena identities.
- * Failure preserves the empty runtime serial and all published generations. */
-XR_FUNC XrXirCallStatus xr_xir_source_generation_prepare_instance(XrXirSourceGenerations *owner,
-    uint64_t serial, XrXirInstance *instance, uint64_t *runtime_serial);
 /* Views borrow their exact record until abort or owner destruction. Bindings
  * select only published root declarations and retain their birth generation;
  * query facts grant no access, construction or execution authority. Failure

@@ -12,7 +12,6 @@
 #ifndef XIR_RUNTIME_ALLOCATIONS_H
 #define XIR_RUNTIME_ALLOCATIONS_H
 #include "base/xmalloc.h"
-#include "xir/xxir_program.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -138,16 +137,11 @@ static void *runtime_realloc(void *pointer, size_t size) {
 #include "xir/xxir_scalar.c"
 #include "xir/xxir_scalar_core.c"
 #include "xir/xxir_float.c"
-#include "xir/xxir_call.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir.c"
 #include "xir/xxir_checked.c"
 #include "xir/xxir_defaults.c"
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
-#include "xir/xxir_program_match.c"
-#include "xir/xxir_program_input.c"
-#include "xir/xxir_program.c"
-#include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"
 #endif // XIR_RUNTIME_ALLOCATIONS_H

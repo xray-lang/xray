@@ -113,30 +113,6 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
         }
         return count==channel->recv_count && before==channel->recv_tail;
     }
-    if(object->kind==XR_XIR_TYPE_ITERATOR) {
-        XirGenerator *generator=(XirGenerator *)object;
-        if(atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_TERMINAL ||
-            generator->executor || generator->call) return true;
-        return graph_direct_edge(&generator->outcome.value,visit,context) &&
-            graph_direct_edge(&generator->outcome.panic.message,visit,context) &&
-            graph_direct_edge(&generator->outcome.panic.error,visit,context) &&
-            graph_direct_edge(&generator->outcome.panic.replaced_error,visit,context) &&
-            graph_direct_edge(&generator->outcome.prior_panic.message,visit,context) &&
-            graph_direct_edge(&generator->outcome.prior_panic.error,visit,context) &&
-            graph_direct_edge(&generator->outcome.prior_panic.replaced_error,visit,context);
-    }
-    if (object->kind == XR_XIR_TYPE_TASK) {
-        XirTask *task = (XirTask *)object;
-        if (atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL ||
-            task->executor || task->call) return true;
-        return graph_direct_edge(&task->outcome.value, visit, context) &&
-            graph_direct_edge(&task->outcome.panic.message, visit, context) &&
-            graph_direct_edge(&task->outcome.panic.error, visit, context) &&
-            graph_direct_edge(&task->outcome.panic.replaced_error, visit, context) &&
-            graph_direct_edge(&task->outcome.prior_panic.message,visit,context) &&
-            graph_direct_edge(&task->outcome.prior_panic.error,visit,context) &&
-            graph_direct_edge(&task->outcome.prior_panic.replaced_error,visit,context);
-    }
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         XirTuple *tuple = (XirTuple *)object;
         for (uint32_t i = 0; i < tuple->count; ++i)
@@ -255,17 +231,6 @@ static bool graph_release_empty_edge(const XrXirValue *value, void *payload, voi
     }
     return true;
 }
-static bool graph_active_task(XirObject *object) {
-    if(object->kind==XR_XIR_TYPE_ITERATOR) {
-        XirGenerator *generator=(XirGenerator *)object;
-        return atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_TERMINAL ||
-            generator->executor || generator->call;
-    }
-    if (object->kind != XR_XIR_TYPE_TASK) return false;
-    XirTask *task = (XirTask *)object;
-    return atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL ||
-        task->executor || task->call;
-}
 static XirObject *graph_retire_locked(XrXirDomain *domain, XirObject **pending) {
     XR_CHECK(xr_xir_domain_current(domain), "graph retirement owns the current domain generation");
     GraphScan scan = {.domain = domain};
@@ -278,7 +243,7 @@ static XirObject *graph_retire_locked(XrXirDomain *domain, XirObject **pending) 
         if (!graph_edges(o, graph_subtract, &scan)) { domain->graph_invalid = true; return NULL; }
     bool external = false;
     for (XirObject *o = domain->objects; o; o = o->graph_next)
-        if (o->graph_trial || graph_active_task(o)) { external = true; graph_mark(o, &scan); }
+        if (o->graph_trial) { external = true; graph_mark(o, &scan); }
     /* A host residual owner ends only when ALL of its external roots are gone. */
     if (domain->close_started && external) return NULL;
     while (scan.work) {

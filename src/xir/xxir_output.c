@@ -45,7 +45,7 @@ static bool output_piece(const XrXirValue *value, char *scalar, const char **byt
 XrXirOutputStatus xr_xir_output_render(void *context, const XrXirOutputGroup *group) {
     XrXirOutputSink *sink = context;
     if (!sink) return XR_XIR_OUTPUT_BAD_ARGUMENT;
-    if (sink->abi_version != XR_XIR_CALL_ABI_VERSION || sink->reserved) return XR_XIR_OUTPUT_BAD_ABI;
+    if (sink->abi_version != XR_XIR_OUTPUT_ABI_VERSION || sink->reserved) return XR_XIR_OUTPUT_BAD_ABI;
     if (!sink->write || !group ||
         (group->stream != XR_XIR_STDOUT && group->stream != XR_XIR_STDERR) ||
         (group->line && group->stream != XR_XIR_STDOUT) ||

@@ -70,17 +70,7 @@ static XrXirRunStatus atomic_value_status(XrXirValueStatus status) {
     }
 }
 static XrXirAtomicOutcome atomic_outcome(XrXirRunStatus status) {
-    return (XrXirAtomicOutcome){status, XR_XIR_CALL_READY, false};
-}
-static XrXirAtomicOutcome atomic_permission(const XrXirCallView *view,
-    XrXirValueAdmission *admission) {
-    XrXirAtomicOutcome result = atomic_outcome(XR_XIR_RUN_OK);
-    if (view) {
-        result.permission = xr_xir_call_execution_status(view);
-        if (result.permission == XR_XIR_CALL_READY && xr_xir_call_admission(view) != admission)
-            result.permission = XR_XIR_CALL_BAD_STATE;
-    }
-    return result;
+    return (XrXirAtomicOutcome){status, false};
 }
 static XrXirRunStatus atomic_ordering(const XrXirValue *value, XrXirAtomicOperation operation,
     XrXirValueAdmission *admission, uint32_t *ordinal) {
@@ -172,18 +162,16 @@ static XrXirRunStatus atomic_text(XirAtomic *cell, uint64_t bits,
     return atomic_value_status(xr_xir_string_new(admission->domain, text, length, output));
 }
 static XrXirAtomicOutcome atomic_attempt(XrXirAtomicProgress *progress,
-    XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
+    XrXirValueAdmission *admission, XrXirValue *output) {
     XirAtomic *cell = (XirAtomic *)object_pointer(&progress->receiver);
-    XrXirAtomicOutcome result = atomic_permission(view, admission);
-    if (result.permission != XR_XIR_CALL_READY) return result;
+    XrXirAtomicOutcome result = atomic_outcome(XR_XIR_RUN_OK);
     XrXirValue prepared = {0};
     if (progress->operation == XR_XIR_ATOMIC_OPERATION_COMPARE_EXCHANGE) {
         result.status = atomic_tuple_prepare(progress, cell, admission, &prepared);
         if (result.status != XR_XIR_RUN_OK) return result;
     }
     if (!atomic_work(admission, 1)) result.status = XR_XIR_RUN_STEP_LIMIT;
-    else result = atomic_permission(view, admission);
-    if (result.status != XR_XIR_RUN_OK || result.permission != XR_XIR_CALL_READY) {
+    if (result.status != XR_XIR_RUN_OK) {
         xr_xir_value_drop(&prepared); return result;
     }
     memory_order order = atomic_success_order(progress->ordering);
@@ -213,8 +201,6 @@ static XrXirAtomicOutcome atomic_attempt(XrXirAtomicProgress *progress,
         XR_CHECK(status == XR_XIR_NUMERIC_OK, "binary64 atomic arithmetic accepts every payload");
         previous = progress->observed;
         if (!atomic_work(admission, 1)) return atomic_outcome(XR_XIR_RUN_STEP_LIMIT);
-        result = atomic_permission(view, admission);
-        if (result.permission != XR_XIR_CALL_READY) return result;
         if (!atomic_compare_exchange_strong_explicit(&cell->bits, &progress->observed, desired,
             order, atomic_failure_order(progress->ordering))) {
             result.continuing = true; return result;
@@ -233,7 +219,7 @@ static XrXirAtomicOutcome atomic_attempt(XrXirAtomicProgress *progress,
     return result;
 }
 static XrXirAtomicOutcome xr_xir_atomic_resume_graph_operation(XrXirAtomicProgress *progress,
-    XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
+    XrXirValueAdmission *admission, XrXirValue *output) {
     if (!progress || progress->phase != 1 || !admission || !unit_value(output) ||
         !xr_xir_value_argument(&progress->receiver, admission->arena, (XrXirType)progress->receiver.type))
         return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
@@ -250,18 +236,18 @@ static XrXirAtomicOutcome xr_xir_atomic_resume_graph_operation(XrXirAtomicProgre
         (progress->operation == XR_XIR_ATOMIC_OPERATION_TO_STRING && progress->ordering != 4) ||
         !atomic_result_type(progress, cell->element,
             xr_xir_compile_type_arena_types(admission->arena))) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
-    return atomic_attempt(progress, admission, view, output);
+    return atomic_attempt(progress, admission, output);
 }
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
-    XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output) {
+    XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission_domain_current(admission)) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     xr_xir_value_graph_begin();
-    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_resume_graph_operation(progress, admission, view, output);
+    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_resume_graph_operation(progress, admission, output);
     xr_xir_value_graph_end();
     return graph_outcome;
 }
 static XrXirAtomicOutcome xr_xir_atomic_start_graph_operation(const XrXirAtomicRequest *request,
-    XrXirValueAdmission *admission, const XrXirCallView *view,
+    XrXirValueAdmission *admission,
     XrXirAtomicProgress *progress, XrXirValue *output) {
     if (!request) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     const XrXirValue *receiver = request->receiver, *operands = request->operands;
@@ -274,8 +260,7 @@ static XrXirAtomicOutcome xr_xir_atomic_start_graph_operation(const XrXirAtomicR
         operation < XR_XIR_ATOMIC_OPERATION_LOAD || operation > XR_XIR_ATOMIC_OPERATION_TO_STRING ||
         count != atomic_operand_count(operation) || (count && !operands))
         return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
-    XrXirAtomicOutcome result = atomic_permission(view, admission);
-    if (result.permission != XR_XIR_CALL_READY) return result;
+    XrXirAtomicOutcome result = atomic_outcome(XR_XIR_RUN_OK);
     XrXirType type = (XrXirType)receiver->type;
     XrXirType element = xr_xir_atomic_element(xr_xir_compile_type_arena_types(admission->arena), type);
     if (!element) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
@@ -297,14 +282,14 @@ static XrXirAtomicOutcome xr_xir_atomic_start_graph_operation(const XrXirAtomicR
     if (result.status != XR_XIR_RUN_OK) return result;
     for (uint32_t i = 0; i < count; ++i) prepared.operands[i] = (uint64_t)operands[i].payload;
     prepared.phase = 1; *progress = prepared;
-    return xr_xir_atomic_resume(progress, admission, view, output);
+    return xr_xir_atomic_resume(progress, admission, output);
 }
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request,
-    XrXirValueAdmission *admission, const XrXirCallView *view,
+    XrXirValueAdmission *admission,
     XrXirAtomicProgress *progress, XrXirValue *output) {
     if (!admission_domain_current(admission)) return atomic_outcome(XR_XIR_RUN_BAD_ARGUMENT);
     xr_xir_value_graph_begin();
-    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_start_graph_operation(request, admission, view, progress, output);
+    XrXirAtomicOutcome graph_outcome = xr_xir_atomic_start_graph_operation(request, admission, progress, output);
     xr_xir_value_graph_end();
     return graph_outcome;
 }

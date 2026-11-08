@@ -11,7 +11,7 @@
  */
 #ifndef XXIR_ATOMIC_H
 #define XXIR_ATOMIC_H
-#include "xxir_call.h"
+#include "xxir_scalar.h"
 
 typedef enum XrXirAtomicOperation {
     XR_XIR_ATOMIC_OPERATION_LOAD, XR_XIR_ATOMIC_OPERATION_STORE, XR_XIR_ATOMIC_OPERATION_ADD, XR_XIR_ATOMIC_OPERATION_SUB,
@@ -39,7 +39,6 @@ typedef struct XrXirAtomicProgress {
 
 typedef struct XrXirAtomicOutcome {
     XrXirRunStatus status;
-    XrXirCallStatus permission;
     bool continuing;
 } XrXirAtomicOutcome;
 
@@ -48,14 +47,13 @@ XR_FUNC bool xr_xir_atomic_capability(void);
 XR_FUNC XrXirValueStatus xr_xir_atomic_new(XrXirType type, const XrXirValue *initial,
     XrXirValueAdmission *admission, XrXirValue *output);
 /* Ordering is an exact nullable governed enum, or NULL for omission. All
- * arguments are evaluated before entry. Product callbacks supply their active
- * view; NULL is reserved for trusted direct runtime callers without a Call.
+ * arguments are evaluated before entry under the current admission domain.
  * A continuing outcome publishes no value and performs at most one cell CAS.
  * Success leaves progress owned until its frame clears it, including retries. */
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_start(const XrXirAtomicRequest *request,
-    XrXirValueAdmission *admission, const XrXirCallView *view,
+    XrXirValueAdmission *admission,
     XrXirAtomicProgress *progress, XrXirValue *output);
 XR_FUNC XrXirAtomicOutcome xr_xir_atomic_resume(XrXirAtomicProgress *progress,
-    XrXirValueAdmission *admission, const XrXirCallView *view, XrXirValue *output);
+    XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC void xr_xir_atomic_progress_clear(XrXirAtomicProgress *progress);
 #endif // XXIR_ATOMIC_H

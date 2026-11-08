@@ -52,8 +52,3 @@ target_link_libraries(test_mcp_knowledge_faults PRIVATE xray_mcp_faults)
 add_test(NAME test_mcp_knowledge_faults COMMAND test_mcp_knowledge_faults)
 set_tests_properties(test_mcp_knowledge_faults PROPERTIES
     LABELS "unit;mcp;faults;ownership;knowledge" TIMEOUT 120 COST 2 RUN_SERIAL TRUE)
-
-
-
-
-include("${CMAKE_CURRENT_LIST_DIR}/runtime_owner.cmake")

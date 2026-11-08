@@ -133,20 +133,4 @@ XR_FUNC void *xr_xir_domain_call_allocate(XrXirDomain *domain, uint64_t bytes, X
 XR_FUNC void xr_xir_domain_call_deallocate(XrXirDomain *domain, void *memory, uint64_t bytes);
 XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work);
 XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain);
-/* Only the real Instance producer path supplies this private source identity.
- * The binding gate pins the Program and its immutable certificate. Public
- * construction has no source identity. Authenticated weakening can retain it
- * without strengthening the new carrier's advertised bound. */
-typedef struct XirFunctionProducer {
-    const void *owner;
-    uint32_t function, instruction, site;
-} XirFunctionProducer;
-typedef struct XirFunctionConstruction {
-    const XrXirFunctionBinding *binding;
-    XrXirValueAdmission *admission;
-    const XirFunctionProducer *producer;
-} XirFunctionConstruction;
-XR_FUNC XrXirValueStatus xr_xir_function_new_produced(XrXirDomain *domain,XrXirTypeArena *arena,
-    XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output);
-XR_FUNC const XirFunctionProducer *xr_xir_function_producer(const XrXirValue *value);
 #endif // XXIR_VALUE_INTERNAL_H

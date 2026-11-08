@@ -12,7 +12,7 @@
  */
 
 
-#include "xir/xxir_call.h"
+#include "xir/xxir_output.h"
 #include "xir/xxir_atomic.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_types.h"
@@ -97,8 +97,8 @@ static int64_t value_atomic_execute(XrXirValue *receiver, XrXirValueAdmission *a
     XrXirAtomicRequest request = {receiver, &operand, NULL,
         operation == XR_XIR_ATOMIC_OPERATION_LOAD ? 0u : 1u, operation, XR_XIR_I64};
     XrXirAtomicProgress progress = {0};
-    XrXirAtomicOutcome outcome = xr_xir_atomic_start(&request, admission, NULL, &progress, &result);
-    CHECK(outcome.status == XR_XIR_RUN_OK && outcome.permission == XR_XIR_CALL_READY && !outcome.continuing);
+    XrXirAtomicOutcome outcome = xr_xir_atomic_start(&request, admission, &progress, &result);
+    CHECK(outcome.status == XR_XIR_RUN_OK && !outcome.continuing);
     xr_xir_atomic_progress_clear(&progress);
     CHECK(result.type == XR_XIR_I64 && !result.reserved);
     return result.payload;
@@ -185,47 +185,27 @@ static void concurrent_copies(unsigned kind) {
     xr_xir_domain_drop(domain);
 }
 typedef struct TypedOutput { uint32_t seen; bool reject; } TypedOutput;
-static XrXirOutputStatus typed_write(void *context, const XrXirOutputGroup *group) {
-    CHECK(group && !group->line && group->count == 1);
-    XrXirOutputStream stream = group->stream;
-    const XrXirValue *value = &group->values[0];
+static XrXirOutputStatus typed_write(void *context, XrXirOutputStream stream,
+    const char *bytes, size_t length) {
     TypedOutput *output = context;
-    CHECK(stream == (output->seen ? XR_XIR_STDERR : XR_XIR_STDOUT));
-    CHECK(value->type == (uint32_t) (output->seen ? XR_XIR_I64 : XR_XIR_BOOL));
-    CHECK(value->payload == (output->seen ? INT64_MIN : 1));
+    if (output->seen == 0) CHECK(stream == XR_XIR_STDOUT && length == 4 && !memcmp(bytes, "true", 4));
+    else CHECK(stream == XR_XIR_STDERR && length == 20 && !memcmp(bytes, "-9223372036854775808", 20));
     ++output->seen;
-    return (!output->reject) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
-}
-typedef struct TypedFrame { uint32_t pc; XrXirValue value; } TypedFrame;
-static XrXirAction typed_resume(XrXirCallView *view) {
-    TypedFrame *state = view->state;
-    if (state->pc++ == 0) {
-        state->value = (XrXirValue) {XR_XIR_BOOL, 0, 1};
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, &state->value, 1, {0}, {0}, 0};
-    }
-    if (state->pc == 2) {
-        state->value = (XrXirValue) {XR_XIR_I64, 0, INT64_MIN};
-        return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDERR, &state->value, 1, {0}, {0}, 0};
-    }
-    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+    return output->reject ? XR_XIR_OUTPUT_ERROR : XR_XIR_OUTPUT_OK;
 }
 static void typed_output(void) {
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
-        sizeof(TypedFrame), typed_resume, NULL, NULL, 0, 0};
     for (uint32_t mode = 0; mode < 3; ++mode) {
         TypedOutput output = {0, mode == 1};
-        XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = mode == 2 ? (XrXirOutputProvider) {0} : (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = (XrXirValueAdmission) {0};
-        XrXirCall *call = NULL;
-        CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
-        CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == (mode ? XR_XIR_CALL_OUTPUT_ERROR : XR_XIR_CALL_RETURNED));
+        XrXirOutputSink sink = {XR_XIR_OUTPUT_ABI_VERSION, 0, mode == 2 ? NULL : typed_write, &output, 64};
+        XrXirValue values[] = {{XR_XIR_BOOL, 0, 1}, {XR_XIR_I64, 0, INT64_MIN}};
+        for (uint32_t i = 0; i < 2; ++i) {
+            XrXirOutputGroup group = {i ? XR_XIR_STDERR : XR_XIR_STDOUT, &values[i], 1, false};
+            XrXirOutputStatus status = xr_xir_output_render(&sink, &group);
+            CHECK(status == (mode == 2 ? XR_XIR_OUTPUT_BAD_ARGUMENT : mode == 1 ? XR_XIR_OUTPUT_ERROR : XR_XIR_OUTPUT_OK));
+            if (status != XR_XIR_OUTPUT_OK) break;
+        }
         CHECK(output.seen == (mode == 2 ? 0u : mode == 1 ? 1u : 2u));
-        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-        CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
     }
-}
-static XrXirAction atomic_output_resume(XrXirCallView *view) {
-    return (XrXirAction) {XR_XIR_ACTION_OUTPUT, XR_XIR_STDOUT, view->arguments, 1, {0}, {0}, 0};
 }
 static void atomic_boundaries(void) {
     XrXirDomain *domain = NULL;
@@ -241,15 +221,6 @@ static void atomic_boundaries(void) {
     CHECK(!xr_xir_value_argument(&cell, NULL, XR_XIR_STRING));
     int64_t frame = 0;
     CHECK(xr_xir_owned_slot_copy(&frame, 0, NULL, XR_XIR_I64, 42) == XR_XIR_VALUE_BAD_ARGUMENT && !frame);
-    const XrXirType type = (XrXirType)256;
-    XrXirCallEntry entry = {XR_XIR_CALL_ABI_VERSION, &type, 1, XR_XIR_UNIT, 0, atomic_output_resume, NULL, NULL, 0, 0};
-    XrXirCallAccounting accounting = {0};
-    TypedOutput output = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 10; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, typed_write, &output}; config.admission = admission;
-    XrXirCall *call = NULL;
-    CHECK(xr_xir_call_new(&config, 0, &cell, 1, &call) == XR_XIR_CALL_READY);
-    CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_BAD_STATE && !output.seen);
-    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
     xr_xir_domain_drop(domain); xr_xir_value_drop(&cell);
     CHECK(value_atomic_execute(&copy, &admission, XR_XIR_ATOMIC_OPERATION_LOAD, 0) == INT64_MIN);
     xr_xir_compile_type_arena_drop(arena);

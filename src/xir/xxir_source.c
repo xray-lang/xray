@@ -25,7 +25,6 @@
 #include "xxir_literal_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
-#include "xxir_program_internal.h"
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"

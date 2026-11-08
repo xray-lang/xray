@@ -33,7 +33,6 @@ typedef struct XrXirSourceHistoryUnit {
     uint64_t serial;
     const SourceSemanticEnvironment *semantic;
     const XrXirArtifact *checked;
-    XrXirProgram *program;
     uint32_t entry_module;
     bool published;
     bool interactive;
