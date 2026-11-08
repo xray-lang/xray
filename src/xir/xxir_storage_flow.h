@@ -37,7 +37,8 @@ typedef struct XirStorageApplication {
     /* Function is the caller template. Declaration is the callee template. */
     uint32_t site, function, instruction, declaration;
     uint32_t target, caller_instance, environment, order;
-    XirExecutionPort port;
+    XirExecutionPort port, outcome;
+    uint8_t protocol;
     uint32_t first, count;
 } XirStorageApplication;
 
