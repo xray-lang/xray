@@ -685,6 +685,27 @@ static void c_callable_parameter_equations(void) {
     effect_mark_check(baseline);
 }
 
+static XrXirStatus failing_point_request(void *context, const XirExecutionOwner *execution,
+    XirStorageFlow *storage, bool final, bool *ready) {
+    (void)context; (void)execution; (void)storage; (void)final;
+    *ready = false;
+    return XR_XIR_OUT_OF_MEMORY;
+}
+
+static void point_request_failure(void) {
+    EffectMark baseline = effect_mark();
+    XrXirInstruction ret = {.op = XR_XIR_RETURN};
+    XrXirBlock block = {.count = 1};
+    XrXirFunction function = {.instructions = &ret, .instruction_count = 1,
+        .blocks = &block, .block_count = 1, .error_type = XR_XIR_NEVER};
+    XrXirModule module = {.functions = &function, .function_count = 1};
+    XrXirRootRefiner refiner = {.points = failing_point_request};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, &refiner, &roots, false) ==
+        XR_XIR_OUT_OF_MEMORY && !roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -693,6 +714,7 @@ static void control_summary_kernel(void) {
     execution_origin_namespaces();
     restriction_owner_relocation();
     c_callable_parameter_equations();
+    point_request_failure();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

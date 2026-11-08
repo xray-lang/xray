@@ -2171,10 +2171,12 @@ static XrXirStatus effect_checked_roots_link_take(const XrXirCompileContext *mem
             if (build.status == XR_XIR_OK && refiner && refiner->points)
                 build.status = refiner->points(refiner->context, roots, roots->storage, final, &ready);
             if (build.status == XR_XIR_OK) build.status = xir_execution_refresh_storage(roots);
+            if (build.status != XR_XIR_OK) break;
             uint32_t calls = roots->calls;
             for (uint32_t p = 0; p < roots->pending_count && build.status == XR_XIR_OK; ++p)
                 if (roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER)
                     effect_check_link_higher_order(&build, &roots->pending[p]);
+            if (build.status != XR_XIR_OK) break;
             bool content_changed = calls != roots->calls || edges != roots->storage_origins.count;
             bool origins_changed = content_changed || nodes != roots->storage_origins.nodes;
             if (final && content_changed) build.status = XR_XIR_UNRESOLVED;

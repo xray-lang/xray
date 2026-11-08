@@ -389,4 +389,3 @@ static XrXirStatus source_view_admit(void *owner,const XrXirModule *module,
     if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,module,diagnostic,status);
     return status;
 }
-

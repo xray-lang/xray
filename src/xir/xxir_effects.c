@@ -296,18 +296,13 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 #include "xxir_effect_relocate.inc.c"
 #include "xxir_effect_access_query.inc.c"
 
-static XrXirStatus effect_infer_construct(const XrXirCompileContext *context,
-    XirEffectInput input, const XrXirRootRefiner *refiner,
-    XrXirEffects **output) {
-    return effect_checked_construct(context, input, refiner, output);
-}
 /* The constructor has retired its graph before the only public ownership
  * move. Its staging can be observed only by private construction consumers. */
 static XrXirStatus effect_infer(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=effect_infer_construct(context,input,refiner,&effects);
+    XrXirStatus status=effect_checked_construct(context,input,refiner,&effects);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }
@@ -322,11 +317,6 @@ XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *
     (void)checked;
     if (!input.module || input.module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     return xir_effects_infer_lifetimes_input(context, input, output, NULL);
-}
-XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context,
-    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
-    if (!refiner || !refiner->update || !refiner->context) return XR_XIR_BAD_STRUCTURE;
-    return effect_infer(context,input,refiner,output);
 }
 /* The constructor checks local errors before publishing. Trusted readers use
  * that result; the paranoid build independently checks the current body. */
