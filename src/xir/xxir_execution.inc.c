@@ -127,14 +127,15 @@ XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
     const XirExecutionSite *site, uint32_t parameter, XirExecutionParameter *output) {
     const EffectCheckedRoots *roots = owner;
     if (!roots || !site || !output) return XR_XIR_BAD_STRUCTURE;
-    if (site->kind != XIR_EXECUTION_FORMAL && parameter >= site->argument_count) return XR_XIR_BAD_STRUCTURE;
+    bool input = site->kind == XIR_EXECUTION_FORMAL || site->kind == XIR_EXECUTION_CAPTURE_INPUT;
+    if (!input && parameter >= site->argument_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t target = UINT32_MAX;
-    if (site->kind == XIR_EXECUTION_FORMAL) {
+    if (input) {
         if (parameter || site->caller_instance >= roots->functions) return XR_XIR_BAD_STRUCTURE;
         target = site->caller_instance;
         const EffectCheckFunction *function = &roots->function[target];
-        if (site->receiver_function != function->declaration || site->receiver_value < function->capture_count ||
-            site->receiver_value >= function->parameters ||
+        if (site->receiver_function != function->declaration || site->receiver_value >= function->parameters ||
+            (site->receiver_value < function->capture_count) != (site->kind == XIR_EXECUTION_CAPTURE_INPUT) ||
             !roots->node[function->first + site->receiver_value].callable_input) return XR_XIR_BAD_STRUCTURE;
         parameter = site->receiver_value;
     } else if (site->kind == XIR_EXECUTION_CALL || site->kind == XIR_EXECUTION_CLEANUP_USE) {
@@ -191,11 +192,12 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
     const XirExecutionSite *site, uint32_t parameter, XirExecutionArgument *output) {
     const EffectCheckedRoots *roots = owner;
     if (!roots || !site || !output) return XR_XIR_BAD_STRUCTURE;
-    if (site->kind == XIR_EXECUTION_FORMAL) {
+    if (site->kind == XIR_EXECUTION_FORMAL || site->kind == XIR_EXECUTION_CAPTURE_INPUT) {
         if (parameter || site->caller_instance >= roots->functions) return XR_XIR_BAD_STRUCTURE;
         const EffectCheckFunction *function = &roots->function[site->caller_instance];
         if (site->receiver_function != function->declaration || site->receiver_value >= function->parameters ||
-            site->receiver_value < function->capture_count) return XR_XIR_BAD_STRUCTURE;
+            (site->receiver_value < function->capture_count) != (site->kind == XIR_EXECUTION_CAPTURE_INPUT))
+            return XR_XIR_BAD_STRUCTURE;
         const EffectCheckNode *node = &roots->node[function->first + site->receiver_value];
         if (!node->callable_input) return XR_XIR_BAD_STRUCTURE;
         *output = (XirExecutionArgument){.function = function->declaration, .value = site->receiver_value,

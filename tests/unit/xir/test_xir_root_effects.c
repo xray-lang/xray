@@ -868,6 +868,65 @@ static void execution_cell_input_boundaries(void) {
     effect_mark_check(baseline);
 }
 
+typedef struct ExecutionInputProbe {
+    const XirExecutionOwner *owner;
+    uint32_t function, count;
+} ExecutionInputProbe;
+
+static XrXirStatus execution_input_oracle(void *context, const XirExecutionSite *site) {
+    ExecutionInputProbe *probe = context;
+    CHECK(site->kind == (probe->function ? XIR_EXECUTION_CAPTURE_INPUT : XIR_EXECUTION_FORMAL));
+    CHECK(site->argument_count == 1 && site->target == UINT32_MAX && site->receiver_function == probe->function);
+    XirExecutionArgument actual = {0};
+    XirExecutionParameter formal = {0};
+    CHECK(xir_execution_argument(probe->owner, site, 0, &actual) == XR_XIR_OK &&
+        actual.function == probe->function && !actual.value && actual.type == XR_XIR_CONSTRUCTED_TYPE_BASE);
+    CHECK(xir_execution_parameter(probe->owner, site, 0, &formal) == XR_XIR_OK &&
+        formal.hidden == (probe->function != 0) && formal.type == actual.type);
+    XirExecutionSite forged = *site;
+    forged.kind = probe->function ? XIR_EXECUTION_FORMAL : XIR_EXECUTION_CAPTURE_INPUT;
+    CHECK(xir_execution_argument(probe->owner, &forged, 0, &actual) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_execution_parameter(probe->owner, &forged, 0, &formal) == XR_XIR_BAD_STRUCTURE);
+    ++probe->count;
+    return XR_XIR_OK;
+}
+
+static void execution_symbolic_environment_inputs(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType callable = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER,
+        .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    XrXirTypes types = {.nodes = &node, .count = 1};
+    XrXirInstruction ret = {.op = XR_XIR_RETURN};
+    XrXirFunction functions[] = {
+        {.parameters = &callable, .parameter_count = 1, .instructions = &ret,
+            .instruction_count = 1, .error_type = XR_XIR_NEVER},
+        {.parameters = &callable, .parameter_count = 1, .instructions = &ret,
+            .instruction_count = 1, .error_type = XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[] = {{0}, {.capture_owner = 1, .capture_count = 1}};
+    XrXirDeclarations declarations = {.functions = identities};
+    XrXirModule module = {.types = &types, .functions = functions, .function_count = 2,
+        .declarations = &declarations};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, true) == XR_XIR_OK);
+    for (uint32_t f = 0; f < 2; ++f) {
+        XirExecutionValue value = {f, 0, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+        ExecutionInputProbe probe = {roots, f, 0};
+        bool complete = false;
+        uint32_t remainder = UINT32_MAX;
+        CHECK(xir_execution_visit_value_environment_inputs_in(roots, &value, execution_input_oracle,
+            &probe, &complete, &remainder) == XR_XIR_OK && complete && !remainder && probe.count == 1);
+        probe.count = 0;
+        CHECK(xir_execution_visit_value_environment_in(roots, &value, execution_input_oracle,
+            &probe, &complete, &remainder) == XR_XIR_OK);
+        CHECK(f ? (!complete && remainder == XIR_EXECUTION_REMAINDER_PARAMETER && !probe.count) :
+            (complete && !remainder && probe.count == 1));
+    }
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -880,6 +939,7 @@ static void control_summary_kernel(void) {
     execution_instance_parameters();
     execution_storable_boundaries();
     execution_cell_input_boundaries();
+    execution_symbolic_environment_inputs();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
