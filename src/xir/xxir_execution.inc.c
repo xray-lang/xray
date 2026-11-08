@@ -200,7 +200,7 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
 XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *owner,
     uint32_t function, uint32_t value, XirExecutionVisitor visit, void *context, bool *complete) {
     XirExecutionValue reference = {function, value, XIR_EXECUTION_CURRENT_ENVIRONMENT};
-    return xir_execution_visit_value_captures_in(owner, &reference, visit, context, complete);
+    return xir_execution_visit_value_captures_in(owner, &reference, visit, context, complete, NULL);
 }
 
 #include "xxir_execution_origins.inc.c"
