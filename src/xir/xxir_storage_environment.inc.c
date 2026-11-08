@@ -116,7 +116,8 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         if (status == XR_XIR_UNRESOLVED) { proof->remainder |= XIR_EXECUTION_REMAINDER_STORAGE; continue; }
         if (status != XR_XIR_OK) return status;
         if (actual.cell) { proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE; continue; }
-        if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), actual.type)) continue;
+        if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), actual.type) ||
+            xr_xir_type_is_c_callable(xir_execution_types(flow->execution), actual.type)) continue;
         if (!storage_environment_push(proof, (StorageEnvironmentNode){
             .reference={actual.function, actual.value, actual.environment}, .target=UINT32_MAX,
             .kind=STORAGE_ENVIRONMENT_VALUE})) return flow->status;
@@ -155,7 +156,7 @@ static bool storage_environment_expand(StorageEnvironmentProof *proof, uint32_t 
             .reference={actual.function, actual.value, actual.environment}, .target=UINT32_MAX,
             .kind=STORAGE_ENVIRONMENT_VALUE})) return false;
     }
-    if (!bound && node.kind == STORAGE_ENVIRONMENT_HIDDEN) proof->remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
+    if (!bound) proof->remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
     return flow->status == XR_XIR_OK;
 }
 
