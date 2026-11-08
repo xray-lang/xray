@@ -167,4 +167,3 @@ XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *flow, const Xir
     *output = (XirStorageReference){point->function, value, XIR_EXECUTION_CURRENT_ENVIRONMENT};
     return XR_XIR_OK;
 }
-
