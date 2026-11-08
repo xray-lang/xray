@@ -14,7 +14,9 @@
 #define XXIR_STORAGE_FLOW_H
 #include "xxir_execution_internal.h"
 
-typedef enum XirStorageFlowBank { XIR_STORAGE_CONTENTS, XIR_STORAGE_EXPOSURE } XirStorageFlowBank;
+typedef enum XirStorageFlowBank {
+    XIR_STORAGE_CONTENTS, XIR_STORAGE_EXPOSURE, XIR_STORAGE_FOOTPRINT
+} XirStorageFlowBank;
 typedef enum XirStoragePointKind {
     XIR_STORAGE_BEFORE, XIR_STORAGE_NORMAL, XIR_STORAGE_ERROR, XIR_STORAGE_PANIC
 } XirStoragePointKind;
@@ -25,6 +27,10 @@ typedef struct XirStorageFlowFunction {
     uint32_t flow_count;
     const XrXirValueFlow *exposure_flows;
     uint32_t exposure_flow_count;
+    /* Environment dependencies transport restriction and loan facts. They do
+     * not identify the callable value itself and cannot select a callee. */
+    const XrXirValueFlow *footprint_flows;
+    uint32_t footprint_flow_count;
 } XirStorageFlowFunction;
 
 typedef struct XirStorageCrossFlow {
@@ -64,7 +70,8 @@ typedef struct XirStorageIdentity {
 typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllocation;
 
 /* Every formal Cell has an explicit contents input, including unused bodies.
- * The declaration identity determines whether it is a hidden capture. */
+ * A FOOTPRINT input names a separate callable-environment leaf. Its PointValue
+ * records the use point, while handle is the physical parameter ordinal. */
 typedef struct XirStorageInput {
     uint32_t function, value, handle;
     XirStorageFlowBank bank;
@@ -97,9 +104,13 @@ typedef struct XirStoragePointValue {
     uint32_t function, value, instruction;
     XirStoragePointKind point;
     XirStorageReference reference;
+    /* A separate environment input leaf, or UINT32_MAX. Intrinsic callable
+     * origins and the current footprint are independent dependencies. */
+    uint32_t footprint_input;
 } XirStoragePointValue;
 typedef enum XirStorageCaptureKind {
-    XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN
+    XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN,
+    XIR_STORAGE_CAPTURE_HIDDEN_FN
 } XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;

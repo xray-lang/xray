@@ -157,7 +157,7 @@ XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *flow, const Xir
     if (value == UINT32_MAX || !storage_relation(flow, point->function, source.value, value)) return flow->status;
     index = flow->view.point_value_count++;
     ((XirStoragePointValue *)points)[index] = (XirStoragePointValue){
-        point->function, value, point->instruction, point->point, point->reference};
+        point->function, value, point->instruction, point->point, point->reference, UINT32_MAX};
     uint32_t slot = storage_point_value_hash(*point) & (flow->point_index_capacity - 1);
     while (flow->point_index[slot]) slot = (slot + 1) & (flow->point_index_capacity - 1);
     flow->point_index[slot] = index + 1;

@@ -17,55 +17,66 @@ static uint32_t storage_relation_hash(XrXirValueFlow edge) {
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
-static bool storage_relation_index_grow(XirStorageFlow *flow, uint32_t function, XirStorageFlowBank bank) {
+typedef struct StorageRelationRow {
+    const XrXirValueFlow **edges;
+    uint32_t *count, *capacity;
+    uint32_t **index;
+    uint32_t *index_capacity;
+} StorageRelationRow;
+
+static StorageRelationRow storage_relation_row(XirStorageFlow *flow, uint32_t function,
+    XirStorageFlowBank bank) {
+    XirStorageFlowFunction *view = (XirStorageFlowFunction *)&flow->view.functions[function];
     StorageFunction *row = &flow->rows[function];
-    XirStorageFlowFunction view = flow->view.functions[function];
-    uint32_t **old = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_index : &row->flow_index;
-    uint32_t *size = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_index_capacity : &row->flow_index_capacity;
-    uint64_t next = *size ? (uint64_t)*size * 2 : 16;
+    if (bank == XIR_STORAGE_FOOTPRINT)
+        return (StorageRelationRow){&view->footprint_flows, &view->footprint_flow_count, &row->footprint_capacity,
+            &row->footprint_index, &row->footprint_index_capacity};
+    if (bank == XIR_STORAGE_EXPOSURE)
+        return (StorageRelationRow){&view->exposure_flows, &view->exposure_flow_count, &row->exposure_capacity,
+            &row->exposure_index, &row->exposure_index_capacity};
+    return (StorageRelationRow){&view->flows, &view->flow_count, &row->flow_capacity,
+        &row->flow_index, &row->flow_index_capacity};
+}
+
+static bool storage_relation_index_grow(XirStorageFlow *flow, uint32_t function, XirStorageFlowBank bank) {
+    StorageRelationRow row = storage_relation_row(flow, function, bank);
+    uint64_t next = *row.index_capacity ? (uint64_t)*row.index_capacity * 2 : 16;
     if (next > UINT32_MAX) { flow->status = XR_XIR_OVERFLOW; return false; }
     uint32_t capacity = (uint32_t)next;
     uint32_t *index = xir_compile_calloc(&flow->memory, capacity, sizeof(*index), &flow->status);
     if (!index) return false;
-    const XrXirValueFlow *edges = bank == XIR_STORAGE_EXPOSURE ? view.exposure_flows : view.flows;
-    uint32_t count = bank == XIR_STORAGE_EXPOSURE ? view.exposure_flow_count : view.flow_count;
-    for (uint32_t e = 0; e < count && storage_step(flow); ++e) {
-        uint32_t slot = storage_relation_hash(edges[e]) & (capacity - 1);
+    for (uint32_t e = 0; e < *row.count && storage_step(flow); ++e) {
+        uint32_t slot = storage_relation_hash((*row.edges)[e]) & (capacity - 1);
         while (index[slot] && storage_step(flow)) slot = (slot + 1) & (capacity - 1);
         index[slot] = e + 1;
     }
     if (flow->status != XR_XIR_OK) { xr_compile_resources_free(index); return false; }
-    xr_compile_resources_free(*old); *old = index; *size = capacity;
+    xr_compile_resources_free(*row.index); *row.index = index; *row.index_capacity = capacity;
     return true;
 }
 
 static bool storage_relation_bank(XirStorageFlow *flow, uint32_t function, uint32_t source,
     uint32_t target, XirStorageFlowBank bank) {
     if (flow->status != XR_XIR_OK) return false;
-    XirStorageFlowFunction *row = (XirStorageFlowFunction *)&flow->view.functions[function];
-    StorageFunction *work = &flow->rows[function];
-    if (source >= row->value_count || target >= row->value_count) {
+    XirStorageFlowFunction view = flow->view.functions[function];
+    if ((uint32_t)bank > XIR_STORAGE_FOOTPRINT || source >= view.value_count || target >= view.value_count) {
         flow->status = XR_XIR_BAD_STRUCTURE; return false;
     }
-    const XrXirValueFlow **edges = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_flows : &row->flows;
-    uint32_t *count = bank == XIR_STORAGE_EXPOSURE ? &row->exposure_flow_count : &row->flow_count;
-    uint32_t *capacity = bank == XIR_STORAGE_EXPOSURE ? &work->exposure_capacity : &work->flow_capacity;
-    uint32_t **index = bank == XIR_STORAGE_EXPOSURE ? &work->exposure_index : &work->flow_index;
-    uint32_t *index_capacity = bank == XIR_STORAGE_EXPOSURE ? &work->exposure_index_capacity : &work->flow_index_capacity;
-    if (!*index_capacity || *count >= *index_capacity / 2)
+    StorageRelationRow row = storage_relation_row(flow, function, bank);
+    if (!*row.index_capacity || *row.count >= *row.index_capacity / 2)
         if (!storage_relation_index_grow(flow, function, bank)) return false;
-    uint32_t slot = storage_relation_hash((XrXirValueFlow){source, target}) & (*index_capacity - 1);
-    while ((*index)[slot] && storage_step(flow)) {
-        XrXirValueFlow previous = (*edges)[(*index)[slot] - 1];
+    uint32_t slot = storage_relation_hash((XrXirValueFlow){source, target}) & (*row.index_capacity - 1);
+    while ((*row.index)[slot] && storage_step(flow)) {
+        XrXirValueFlow previous = (*row.edges)[(*row.index)[slot] - 1];
         if (previous.source == source && previous.target == target) return true;
-        slot = (slot + 1) & (*index_capacity - 1);
+        slot = (slot + 1) & (*row.index_capacity - 1);
     }
     if (flow->status != XR_XIR_OK) return false;
-    void *values = (void *)*edges;
-    if (!storage_reserve(flow, &values, *count, capacity, sizeof(**edges))) return false;
-    *edges = values;
-    ((XrXirValueFlow *)values)[*count] = (XrXirValueFlow){source, target};
-    (*index)[slot] = ++*count;
+    void *values = (void *)*row.edges;
+    if (!storage_reserve(flow, &values, *row.count, row.capacity, sizeof(**row.edges))) return false;
+    *row.edges = values;
+    ((XrXirValueFlow *)values)[*row.count] = (XrXirValueFlow){source, target};
+    (*row.index)[slot] = ++*row.count;
     ++flow->revision;
     return true;
 }
@@ -195,7 +206,8 @@ static bool storage_cross_index_grow(XirStorageFlow *flow) {
 
 static bool storage_cross(XirStorageFlow *flow, XirStorageCrossFlow edge) {
     if (flow->status != XR_XIR_OK) return false;
-    if (edge.source_function >= flow->view.function_count || edge.target_function >= flow->view.function_count ||
+    if ((uint32_t)edge.bank > XIR_STORAGE_FOOTPRINT ||
+        edge.source_function >= flow->view.function_count || edge.target_function >= flow->view.function_count ||
         edge.source >= flow->view.functions[edge.source_function].value_count ||
         edge.target >= flow->view.functions[edge.target_function].value_count) {
         flow->status = XR_XIR_BAD_STRUCTURE; return false;

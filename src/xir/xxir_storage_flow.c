@@ -66,9 +66,9 @@ typedef struct StorageFunction {
     bool events_ready;
     uint32_t *blocks, *predecessors;
     StoragePredecessor *edges;
-    uint32_t edge_count, edge_capacity, flow_capacity;
-    uint32_t *flow_index, *exposure_index;
-    uint32_t flow_index_capacity, exposure_index_capacity;
+    uint32_t edge_count, edge_capacity, flow_capacity, footprint_capacity;
+    uint32_t *flow_index, *exposure_index, *footprint_index;
+    uint32_t flow_index_capacity, exposure_index_capacity, footprint_index_capacity;
     uint32_t point_count, site_head_count;
     uint32_t *identity_heads;
     StorageIdentityLink *identity_links;
@@ -1303,6 +1303,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
         xr_compile_resources_free(row->blocks); xr_compile_resources_free(row->predecessors);
         xr_compile_resources_free(row->edges); xr_compile_resources_free(row->identity_heads);
         xr_compile_resources_free(row->flow_index); xr_compile_resources_free(row->exposure_index);
+        xr_compile_resources_free(row->footprint_index);
         xr_compile_resources_free(row->identity_links); xr_compile_resources_free(row->address_values);
         xr_compile_resources_free(row->addresses); xr_compile_resources_free(row->visited);
         xr_compile_resources_free(row->queue); xr_compile_resources_free(row->states);
@@ -1331,6 +1332,7 @@ XR_FUNC void xir_storage_flow_free(XirStorageFlow *flow) {
     for (uint32_t f = 0; flow->view.functions && f < flow->view.function_count; ++f) {
         xr_compile_resources_free((void *)flow->view.functions[f].flows);
         xr_compile_resources_free((void *)flow->view.functions[f].exposure_flows);
+        xr_compile_resources_free((void *)flow->view.functions[f].footprint_flows);
     }
     xr_compile_resources_free((void *)flow->view.functions);
     xr_compile_resources_free((void *)flow->view.crossflows);
@@ -1621,10 +1623,13 @@ static XirStorageFlow *storage_numeric_clone(const XirStorageFlow *source,
     for (uint32_t f = 0; f < copy->view.function_count && *status == XR_XIR_OK; ++f) {
         const XirStorageFlowFunction *from = &source->view.functions[f];
         functions[f] = *from; functions[f].flows = NULL; functions[f].exposure_flows = NULL;
+        functions[f].footprint_flows = NULL;
         functions[f].flows = storage_numeric_copy(&copy->memory, from->flows, from->flow_count,
             sizeof(*from->flows), control, status);
         functions[f].exposure_flows = storage_numeric_copy(&copy->memory, from->exposure_flows,
             from->exposure_flow_count, sizeof(*from->exposure_flows), control, status);
+        functions[f].footprint_flows = storage_numeric_copy(&copy->memory, from->footprint_flows,
+            from->footprint_flow_count, sizeof(*from->footprint_flows), control, status);
     }
     copy->view.crossflows = storage_numeric_copy(&copy->memory, source->view.crossflows,
         source->view.crossflow_count, sizeof(*source->view.crossflows), control, status);
@@ -1686,6 +1691,10 @@ static bool storage_remap_rows(StorageRelocate *map, XirStorageFlowView *target)
         }
         for (uint32_t e = 0; e < row->exposure_flow_count; ++e) {
             XrXirValueFlow *edge = (XrXirValueFlow *)&row->exposure_flows[e];
+            if (!storage_remap_value(map, f, &edge->source) || !storage_remap_value(map, f, &edge->target)) return false;
+        }
+        for (uint32_t e = 0; e < row->footprint_flow_count; ++e) {
+            XrXirValueFlow *edge = (XrXirValueFlow *)&row->footprint_flows[e];
             if (!storage_remap_value(map, f, &edge->source) || !storage_remap_value(map, f, &edge->target)) return false;
         }
     }
@@ -1753,7 +1762,11 @@ static bool storage_remap_points(StorageRelocate *map, XirStorageFlowView *targe
         XirStorageFlowFunction source = map->source->functions[point->function];
         uint32_t instructions = source.physical_values - source.parameter_count;
         if (point->value < source.physical_values || point->instruction >= instructions ||
+            (point->footprint_input != UINT32_MAX &&
+                (point->footprint_input < source.physical_values || point->footprint_input == point->value)) ||
             !storage_remap_value(map, point->function, &point->value) ||
+            (point->footprint_input != UINT32_MAX &&
+                !storage_remap_value(map, point->function, &point->footprint_input)) ||
             !storage_remap_value(map, point->reference.function, &point->reference.value)) {
             if (map->status == XR_XIR_OK) map->status = XR_XIR_BAD_STRUCTURE;
             return false;
