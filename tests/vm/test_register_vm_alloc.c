@@ -16,7 +16,8 @@
 static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
-    SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE } fault;
+    SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
+    ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE } fault;
 static size_t spill_state_failure_bytes=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
@@ -39,6 +40,7 @@ static void *moving_realloc(void *old, size_t size) {
     while (index < 4 && blocks[index].pointer != old) ++index;
     XR_CHECK(index < 4, "unknown stack allocation");
     if ((fault == INITIAL_STACK_FAILURE && !old) || (fault == GROWTH_FAILURE && old) ||
+        (fault == FRAME_GROWTH_FAILURE && old && index == 1) ||
         (fault == CELL_INITIAL_FAILURE && !old && index == 2) ||
         (fault == CELL_GROWTH_FAILURE && old && index == 2) ||
         (fault == SPILL_INITIAL_FAILURE && !old && index == 3) ||
@@ -83,6 +85,8 @@ static void moving_free(void *pointer) {
 #undef xrt_string_drop
 
 static void *execution_malloc(size_t size) {
+    if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
+        (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
     if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_bytes) { fault=NO_FAILURE;return NULL; }
     if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
     return real_malloc(size);
@@ -115,6 +119,47 @@ static void invoke(const XrRbcModule *module, XrtLocationOwner *owner, bool prep
     XR_CHECK(result == (value ? argument : 999), "success or preserved failure output");
     xr_rbc_execution_free(&execution);
     xr_rbc_outcome_free(&outcome);
+}
+
+static void entry_initialization(void) {
+    uint32_t code[6];
+    immediate(code, 0, XR_RBC_EQI, 0, 0);
+    XR_CHECK(xr_rbc_jump(code + 1, 1, 4, 6), "entry alternate definition");
+    immediate(code, 2, XR_RBC_LOADI, 1, 42);
+    XR_CHECK(xr_rbc_jump(code + 3, 3, 5, 6), "entry join");
+    immediate(code, 4, XR_RBC_LOADI, 2, 99); emit(code, 5, XR_RBC_RET, 1, 0, 0);
+    XrRbcFunction function = {.code=code,.code_count=6,.register_count=3,.parameter_count=1};
+    XrRbcModule module = {.functions=&function,.function_count=1};
+    XrtLocationOwner *owner = NULL;
+    XR_CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK, "entry locations");
+    for (uint64_t flag = 0; flag < 2; ++flag) {
+        XrRbcExecution *execution = NULL;
+        XR_CHECK(xr_rbc_module_prepare(&module,0,&flag,1,owner,&execution)==XR_RBC_OK,"entry prepared");
+        XR_CHECK(execution->entries[0].count==1 && execution->entries[0].registers[0]==1,
+            "a join retains zero initialization and an unused written local omits it");
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t result=99;
+        XR_CHECK(xr_rbc_outcome_bits(outcome,&result) && result==(flag?42:0),"raw initial zero is observable");
+        xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    }
+    immediate(code,0,XR_RBC_LOADI,0,42);emit(code,1,XR_RBC_RET,0,0,0);
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_STRING};
+    function=(XrRbcFunction){.code=code,.code_count=2,.register_count=2,
+        .register_kinds=kinds,.register_kind_count=2};
+    XrRbcExecution *execution=NULL;
+    XR_CHECK(xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution)==XR_RBC_OK,"managed entry prepared");
+    XR_CHECK(execution->entries[0].count==1 && execution->entries[0].registers[0]==1 &&
+        !execution->stack.slots[1].string,"unused managed locals always start empty");
+    xr_rbc_execution_free(&execution);
+    immediate(code,0,XR_RBC_LOADI,1,7);immediate(code,1,XR_RBC_LOADI,2,0);
+    immediate(code,2,XR_RBC_CALLN,0,0);emit(code,3,XR_RBC_RET,0,0,0);
+    const XrRbcNativeKind native=XR_RBC_NATIVE_PRINT_I64;
+    function=(XrRbcFunction){.code=code,.code_count=4,.register_count=3};
+    module.natives=&native;module.native_count=1;
+    XR_CHECK(xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution)==XR_RBC_OK,"native entry prepared");
+    XR_CHECK(execution->entries[0].count==1 && execution->entries[0].registers[0]==0 &&
+        !execution->stack.slots[0].bits,"void native calls preserve the destination's initial zero");
+    xr_rbc_execution_free(&execution);
+    xrt_locations_release(owner);
 }
 
 static void panic_after_growth(void) {
@@ -436,6 +481,7 @@ static void spill_cycle_admission_oom(void) {
 }
 
 int main(void) {
+    entry_initialization();
     spill_cycle_admission_oom();
     frame_cell_growth(NO_FAILURE,false);
     frame_cell_growth(CELL_INITIAL_FAILURE,false);
@@ -460,7 +506,13 @@ int main(void) {
     invoke(&module, owner, true, XR_RBC_OUT_OF_MEMORY);
     fault = INITIAL_STACK_FAILURE;
     invoke(&module, owner, true, XR_RBC_OUT_OF_MEMORY);
+    fault = ENTRY_TABLE_FAILURE;
+    invoke(&module, owner, true, XR_RBC_OUT_OF_MEMORY);
+    fault = ENTRY_TARGET_FAILURE;
+    invoke(&module, owner, true, XR_RBC_OUT_OF_MEMORY);
     fault = GROWTH_FAILURE;
+    invoke(&module, owner, false, XR_RBC_OUT_OF_MEMORY);
+    fault = FRAME_GROWTH_FAILURE;
     invoke(&module, owner, false, XR_RBC_OUT_OF_MEMORY);
     invoke(&module, owner, false, XR_RBC_OK);
     xrt_locations_release(owner);

@@ -42,6 +42,8 @@ typedef union {
     XrtString *string;
 } XrRbcRegister;
 
+#include "xrbc_entry.inc.c"
+
 typedef struct {
     size_t function, pc, base;
     uint32_t destination;
@@ -71,6 +73,7 @@ struct XrRbcOutcome {
 
 struct XrRbcExecution {
     const XrRbcModule *module;
+    XrRbcEntry *entries;
     XrRbcStack stack;
     XrRbcOutcome *pending;
     bool consumed;
@@ -289,37 +292,13 @@ static uint64_t xr_rbc_shift_right(uint64_t bits, uint64_t amount) {
     return result;
 }
 
-static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uint32_t destination,
-                               uint32_t target) {
-    const XrRbcFunction *callee = &module->functions[target];
-    XrRbcFrame caller = stack->frames[stack->depth - 1];
-    if (caller.base > SIZE_MAX - destination - 1 || stack->depth == SIZE_MAX)
-        return XR_RBC_OUT_OF_MEMORY;
-    size_t base = caller.base + destination + 1;
-    size_t cell_base = stack->cell_count;
-    size_t spill_base = stack->spill_count;
+static bool xr_rbc_call_reserve(XrRbcStack *stack, size_t base, const XrRbcFunction *callee) {
     if (base > SIZE_MAX - callee->register_count ||
-        cell_base > SIZE_MAX - callee->cell_count ||
-        spill_base > SIZE_MAX - callee->spill_count)
-        return XR_RBC_OUT_OF_MEMORY;
-    size_t slots = base + callee->register_count;
-    size_t frames = stack->depth + 1;
-    size_t cells = cell_base + callee->cell_count;
-    size_t spills = spill_base + callee->spill_count;
-    if ((slots > stack->slot_capacity || frames > stack->frame_capacity ||
-            cells > stack->cell_capacity || spills > stack->spill_capacity) &&
-        !xr_rbc_reserve(stack, slots, frames, cells, spills))
-        return XR_RBC_OUT_OF_MEMORY;
-    // Only arguments are live on entry; clearing the rest prevents stale
-    // bits from an earlier invocation from becoming observable.
-    memset(stack->slots + base + callee->parameter_count, 0,
-           (callee->register_count - callee->parameter_count) * sizeof(*stack->slots));
-    if (callee->spill_count)
-        memset(stack->spills + spill_base, 0, callee->spill_count * sizeof(*stack->spills));
-    stack->frames[stack->depth++] = (XrRbcFrame) {target, 0, base, destination, cell_base, 0, spill_base};
-    stack->cell_count = cell_base + callee->cell_count;
-    stack->spill_count = spill_base + callee->spill_count;
-    return XR_RBC_OK;
+        stack->cell_count > SIZE_MAX - callee->cell_count ||
+        stack->spill_count > SIZE_MAX - callee->spill_count || stack->depth == SIZE_MAX)
+        return false;
+    return xr_rbc_reserve(stack, base + callee->register_count, stack->depth + 1,
+        stack->cell_count + callee->cell_count, stack->spill_count + callee->spill_count);
 }
 
 static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
@@ -341,12 +320,12 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 }
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
-    const XrtLocationOwner *locations, XrRbcRegister *result) {
+    const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
     const XrRbcFunction *function;
+    XrRbcFrame *frame;
     XrRbcRegister *registers;
     size_t pc;
     uint32_t instruction, op, a, b, c;
-    XrRbcStatus status;
     // Dispatch mechanics follow the existing register interpreter: each
     // handler owns its next fetch on compilers supporting labels as values.
 #include "xrbc_dispatch.inc.c"
@@ -368,7 +347,12 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
     execution->module = module;
     execution->pending = xr_calloc(1, sizeof(*execution->pending));
-    if (!execution->pending ||
+    if (module->function_count > SIZE_MAX / sizeof(*execution->entries)) {
+        xr_rbc_execution_free(&execution);
+        return XR_RBC_OUT_OF_MEMORY;
+    }
+    execution->entries = xr_malloc(module->function_count * sizeof(*execution->entries));
+    if (!execution->pending || !execution->entries || !xr_rbc_entries(module, execution->entries) ||
         !xr_rbc_reserve(&execution->stack, function->register_count, 1, function->cell_count,
             function->spill_count) ||
         !xrt_locations_retain(locations)) {
@@ -378,11 +362,11 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->pending->locations = locations;
     execution->pending->status = XR_RBC_INVALID;
     execution->pending->result_kind = function->result_kind;
-    memset(execution->stack.slots, 0, function->register_count * sizeof(*execution->stack.slots));
+    xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
     if (argument_count)
         for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[i].bits = arguments[i];
-    if (function->spill_count)
-        memset(execution->stack.spills, 0, function->spill_count * sizeof(*execution->stack.spills));
+    if (function->reference_spill_count)
+        memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
     execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0};
     execution->stack.depth = 1;
     execution->stack.cell_count = function->cell_count;
@@ -394,7 +378,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
 static void xr_rbc_root(void *context) {
     XrRbcExecution *execution = context;
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
-        execution->pending->locations, &execution->pending->value);
+        execution->pending->locations, &execution->pending->value, execution->entries);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_STRING)
         execution->pending->value.string = xrt_string_root_take(execution->pending->value.string);
 }
@@ -438,6 +422,7 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     XrRbcExecution *owned = *execution;
     *execution = NULL;
     xr_rbc_stack_free(&owned->stack);
+    xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
     xr_free(owned);
 }
