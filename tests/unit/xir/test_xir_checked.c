@@ -503,7 +503,10 @@ static void nonescape_bound_prefix(void) {
     CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
     CHECK(diagnostic.function==1 && diagnostic.instruction==0);
     identities[1].capture_owner=1;identities[1].capture_count=1;
-    CHECK(xir_fixture_check(suite_context,&built,&checked,&diagnostic)==XR_XIR_OK && checked);
+    admitted=xir_fixture_check(suite_context,&built,&checked,&diagnostic);
+    if(admitted!=XR_XIR_OK)fprintf(stderr,"hidden prefix status%u function%u block%u instruction%u reason%u\n",
+        (unsigned)admitted,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(admitted==XR_XIR_OK && checked);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK && closed);
     bool found=false;
@@ -1219,7 +1222,9 @@ static void uninitialized_packet(void) {
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    const size_t instruction=125;
+    CheckedPacketFunction row=packet_function(&packet,0);
+    CHECK(row.instruction_count==4);
+    const size_t instruction=row.instructions;
     CHECK(packet32(&packet,instruction)==XR_XIR_LOCAL_UNINIT && packet32(&packet,instruction+40)==XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
