@@ -2,6 +2,7 @@
 #ifndef XHIR_ESCAPE_H
 #define XHIR_ESCAPE_H
 #include "../xir/xxir.h"
+#include "../xir/xxir_storage_flow.h"
 
 /* Parameter spellings are synchronous declaration borrows. No AST or caller
  * storage survives the analysis. Physical name offsets include hidden captures
@@ -27,6 +28,16 @@ XR_FUNC XrXirStatus xr_hir_escape_builder_new(const XrXirCompileContext *, const
 XR_FUNC XrXirStatus xr_hir_escape_builder_observe(XrHirEscapeBuilder *, uint32_t, uint32_t,
     const XrXirInstruction *);
 XR_FUNC void xr_hir_escape_builder_free(XrHirEscapeBuilder *);
+/* Non-final rounds register numeric requests without freezing exposure. A
+ * storage-only remainder requests another shared receiving round. The final
+ * round owns point captures before storage seals; finish only reads numbers. */
+XR_FUNC XrXirStatus xr_hir_escape_builder_prepare_points(XrHirEscapeBuilder *, XirStorageFlow *,
+    const XirExecutionOwner *, bool, bool *);
+XR_FUNC XrXirStatus xr_hir_escape_builder_finish(XrHirEscapeBuilder *, XirStorageFlow *,
+    const XirExecutionOwner *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);
+XR_FUNC XrXirStatus xr_hir_escape_restriction(const XrHirEscapeFacts *, uint32_t,
+    uint32_t, uint32_t, XirRestrictionFormula *);
+XR_FUNC XrXirStatus xr_hir_escape_facts_view(const XrHirEscapeFacts *, XirRestrictionView *);
 
 XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *, const XrXirModule *,
     const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);

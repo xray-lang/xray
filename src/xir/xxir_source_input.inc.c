@@ -257,6 +257,7 @@ done:
     xr_xir_compile_construction_free(ctx.construction);
     xr_hir_body_free(ctx.typed_body);ctx.typed_body=NULL;
     xr_hir_escape_facts_free(ctx.escape_facts);ctx.escape_facts=NULL;
+    xr_hir_escape_builder_free(ctx.escape_builder);ctx.escape_builder=NULL;
     source_release_retired_arrays(&ctx);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }
     xr_compile_module_graph_free(ctx.graph); xr_compile_module_resolver_free(resolver);

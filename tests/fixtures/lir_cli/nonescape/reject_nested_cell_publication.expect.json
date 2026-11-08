@@ -1,0 +1,4 @@
+{
+  "line": 10,
+  "message": "E0398: parameter 'callback' cannot escape through a ref or stored place. Declare 'callback: escaping fn(...)'"
+}

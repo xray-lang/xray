@@ -582,6 +582,52 @@ static void nonescape_facts_ownership(void) {
     xr_hir_escape_facts_free(copy);
     CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
 }
+static void nonescape_observer_ownership(void) {
+    XrCompileResourceStats baseline=consumer_context_stats(suite_context);
+    XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_UNIT};
+    XrXirTypes types={.nodes=&signature,.count=1};
+    XrXirInstruction ret={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
+    XrXirInstruction ops[]={{.op=XR_XIR_CALL,.type=XR_XIR_UNIT,.args={0,1},.immediate=1},ret};
+    XrXirBlock leaf={0,1,0,0},block={0,2,0,0};
+    uint32_t argument=0;
+    XrXirFunction functions[]={
+        {.name="root",.name_length=4,.result=XR_XIR_UNIT,.blocks=&leaf,.block_count=1,
+            .instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="capture",.name_length=7,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,
+            .blocks=&leaf,.block_count=1,.instructions=&ret,.instruction_count=1,.error_type=XR_XIR_NEVER},
+        {.name="forward",.name_length=7,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,
+            .blocks=&block,.block_count=1,.instructions=ops,.instruction_count=2,
+            .operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[]={{0},{.capture_owner=1,.capture_count=1},{.capture_owner=1}};
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
+    const char *name="callback";
+    XrHirEscapeDeclaration names[]={{0},{.captures=1},{.names=&name,.count=1}};
+    XrHirEscapeBuilder *builder=NULL;
+    size_t attempts=source_program_compile_attempts;
+    CHECK(xr_hir_escape_builder_new(suite_context,&module,names,NULL,&builder)==XR_XIR_OK && builder);
+    attempts=source_program_compile_attempts-attempts;
+    /* The descriptor itself can retire before the independent inventory. */
+    declarations.functions=NULL;
+    CHECK(xr_hir_escape_builder_observe(builder,2,1,&ops[1])==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_hir_escape_builder_observe(builder,2,0,&ops[0])==XR_XIR_OK);
+    CHECK(xr_hir_escape_builder_observe(builder,2,0,&ops[0])==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_hir_escape_builder_observe(builder,2,1,&ops[1])==XR_XIR_OK);
+    xr_hir_escape_builder_free(builder);builder=NULL;
+    declarations.functions=identities;
+    for(size_t ordinal=0;ordinal<attempts;++ordinal) {
+        source_program_compile_fail_at=source_program_compile_attempts+ordinal;
+        source_program_compile_injected=false;
+        CHECK(xr_hir_escape_builder_new(suite_context,&module,names,NULL,&builder)==XR_XIR_OUT_OF_MEMORY && !builder);
+        source_program_compile_fail_at=SIZE_MAX;
+        CHECK(source_program_compile_injected && consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
+    }
+    CHECK(consumer_context_stats(suite_context).held_bytes==baseline.held_bytes);
+}
 static void nonescape_capture_calls(void) {
     XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
@@ -1251,7 +1297,7 @@ int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
         consumer_context=consumer_context_default();
         byte_order();generic_method_packet_cases();
-        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_capture_calls();
+        nonescape_bound_prefix();nonescape_facts_ownership();nonescape_observer_ownership();nonescape_capture_calls();
         consumer_contexts_free();
         puts("Current Checked field bytes and semantic packet rejection PASS");
         return 0;
@@ -1330,6 +1376,7 @@ int main(int argc,char **argv) {
     capture_rejections(); capture_packet_rejection();
     nonescape_bound_prefix();
     nonescape_facts_ownership();
+    nonescape_observer_ownership();
     nonescape_capture_calls();
     consumer_context=consumer_context_default();
     generic_callable_contracts(); generic_callable_depth();
