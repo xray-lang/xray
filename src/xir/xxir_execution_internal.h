@@ -16,7 +16,8 @@
 
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
-    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL
+    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL,
+    XIR_EXECUTION_STORABLE
 } XirExecutionSiteKind;
 
 typedef enum XirExecutionPort {
@@ -103,6 +104,13 @@ typedef struct XirExecutionArgument {
     bool cell, escaping;
 } XirExecutionArgument;
 
+typedef struct XirExecutionParameter {
+    XrXirType type;
+    uint32_t mode;
+    /* Generic storage follows the original naked type parameter declaration. */
+    bool escaping, hidden, cell, generic_storage;
+} XirExecutionParameter;
+
 typedef XrXirStatus (*XirExecutionVisitor)(void *, const XirExecutionSite *);
 
 /* Function and value ordinals use the physical declaration namespace. Target
@@ -126,6 +134,10 @@ XR_FUNC XrXirStatus xir_execution_visit_captures(const XirExecutionOwner *,
  * environment application instead. Invalid requests preserve the output. */
 XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *,
     const XirExecutionSite *, uint32_t, XirExecutionArgument *);
+/* Reads the owning instance's closed formal contract without requiring an
+ * actual physical value. Type IDs use xir_execution_types(owner). */
+XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *,
+    const XirExecutionSite *, uint32_t, XirExecutionParameter *);
 
 /* This reads the same candidate relation as execution linking. Complete is
  * false when any callable origin remains opaque or symbolic. The visitor may

@@ -1,0 +1,8 @@
+fn send(channel: Channel<fn() -> i64>, callback: escaping fn() -> i64) {
+    channel.send(callback)
+    channel.trySend(callback)
+    channel.sendTimeout(callback, 1)
+}
+fn fallback(channel: Channel<fn() -> i64>, callback: escaping fn() -> i64) -> fn() -> i64 {
+    return channel.recvOr(callback)
+}

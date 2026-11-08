@@ -1,0 +1,3 @@
+fn send(channel: Channel<fn() -> i64>, callback: fn() -> i64) {
+    channel.trySend(callback)
+}

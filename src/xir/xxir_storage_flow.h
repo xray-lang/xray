@@ -99,13 +99,14 @@ typedef struct XirStoragePointValue {
     XirStorageReference reference;
 } XirStoragePointValue;
 typedef enum XirStorageCaptureKind {
-    XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN
+    XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN
 } XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;
     uint32_t function, contents, exposure;
     /* A formal carrier transports its independent restriction and loan facts.
-     * It does not claim that an unknown environment contains no Cells. */
+     * A storable terminal has no contents or exposure value. Known environment
+     * Cells remain separate captures. */
     XirStorageCaptureKind kind;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);

@@ -1,0 +1,3 @@
+fn fallback(channel: Channel<fn() -> i64>, callback: fn() -> i64) -> fn() -> i64 {
+    return channel.recvOr(callback)
+}
