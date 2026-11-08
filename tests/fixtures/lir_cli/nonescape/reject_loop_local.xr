@@ -1,0 +1,10 @@
+fn leaf() -> i64 { return 7 }
+fn choose(callback: fn() -> i64, count: i64) -> fn() -> i64 {
+    var alias = leaf
+    var index: i64 = 0
+    while (index < count) {
+        alias = callback
+        index = index + 1
+    }
+    return alias
+}
