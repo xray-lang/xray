@@ -630,12 +630,11 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);
 static void checked_effect_parameters(CheckedCursor *c, XrXirFunctionEffectContract *contract) {
     XrXirEffectParameter *parameters = checked_array(c, contract->parameters,
-        contract->parameter_count, sizeof(*parameters), 8);
+        contract->parameter_count, sizeof(*parameters), 4);
     if (c->reading) contract->parameters = parameters;
     for (uint32_t p = 0; p < contract->parameter_count && c->status == XR_XIR_OK; ++p) {
         XrXirEffectParameter value = parameters[p];
         value.kind = checked_u32(c, value.kind);
-        value.uses = checked_u32(c, value.uses);
         if (c->reading) parameters[p] = value;
     }
 }

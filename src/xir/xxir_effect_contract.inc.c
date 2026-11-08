@@ -201,7 +201,7 @@ static XrXirStatus effect_contract_parameters(
     for (uint32_t p = 0; p < contract->parameter_count; ++p) {
 
         const XrXirEffectParameter *parameter = &contract->parameters[p];
-        if (parameter->kind > XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC || parameter->uses & ~511u)
+        if (parameter->kind > XR_XIR_EFFECT_PARAMETER_VARIABLE)
             return XR_XIR_BAD_STRUCTURE;
         if (parameter->kind != XR_XIR_EFFECT_PARAMETER_FIXED &&
             !xr_xir_callable_signature(module->types, definition->parameters[p])) return XR_XIR_BAD_TYPE;

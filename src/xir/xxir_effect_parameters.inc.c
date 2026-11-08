@@ -33,8 +33,7 @@ static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
         if (derived->parameter_count != stored->parameter_count) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < derived->parameter_count; ++p) {
 
-            if (derived->parameters[p].kind != stored->parameters[p].kind ||
-                derived->parameters[p].uses != stored->parameters[p].uses) return XR_XIR_BAD_TYPE;
+            if (derived->parameters[p].kind != stored->parameters[p].kind) return XR_XIR_BAD_TYPE;
         }
 
         if (derived->formula.constant_mask != stored->formula.constant_mask ||
