@@ -79,7 +79,16 @@
     X(FGE, ABC)                                                                                    \
     X(STRING_F64, AB)                                                                               \
     X(ITOF, AB)                                                                                     \
-    X(FTOI, AB)
+    X(FTOI, AB)                                                                                     \
+    X(ADDI, ABS8)                                                                                  \
+    X(SUBI, ABS8)                                                                                  \
+    X(LTI, ASBX)                                                                                   \
+    X(LEI, ASBX)                                                                                   \
+    X(GTI, ASBX)                                                                                   \
+    X(GEI, ASBX)                                                                                   \
+    X(EQI, ASBX)                                                                                   \
+    X(MULI, ABS8)                                                                                  \
+    X(REMI, ABS8)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

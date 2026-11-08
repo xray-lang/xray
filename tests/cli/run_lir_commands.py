@@ -85,6 +85,45 @@ def main() -> None:
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
+        access = fixtures / "access"
+        accepted_access = ("default_class_positive.xr", "imported_default/root.xr",
+                           "imported_generic/root.xr", "imported_callable/root.xr",
+                           "pure_recursive.xr", "primitive_equality.xr",
+                           "latent_reference.xr", "immutable_scalar.xr")
+        for name in accepted_access:
+            checked = run("access-" + name.replace("/", "-") + "-check",
+                          [binary, "check", access / name], 0)
+            assert not checked.stdout and not checked.stderr, name
+        rejected_access = (
+            ("default_class_borrowed_input.xr", b"(CALL)"),
+            ("default_class_existing_alias.xr", b"(ARRAY_SET)"),
+            ("default_class_existing_alias_read.xr", b"(CALL_DEFAULT)"),
+            ("default_class_unknown.xr", b"view lifetime normalization"),
+            ("default_class_wrong_type.xr", b"expression cannot satisfy its declared type"),
+            ("default_class_opaque.xr", b"(CALL)"),
+            ("default_class_native.xr", b"(CALL)"),
+            ("imported_ordinary/root.xr", b"(CALL)"),
+            ("imported_slot/root.xr", b"(CALL_DEFAULT)"),
+            ("cleanup_hidden.xr", b"(CALL_DEFAULT)"),
+            ("mutable_scalar.xr", b"(CALL_DEFAULT)"),
+            ("immutable_reference.xr", b"(CALL_DEFAULT)"),
+            ("aggregate_equality.xr", b"(CALL_DEFAULT)"),
+            ("nominal_equality.xr", b"(CALL_DEFAULT)"),
+            ("generic_equality.xr", b"(CALL_DEFAULT)"),
+            ("string_equality.xr", b"(CALL_DEFAULT)"),
+            ("access_before_nosuspend.xr", b"(ARRAY_SET)"),
+            ("access_before_root.xr", b"(ARRAY_SET)"),
+        )
+        for name, diagnostic in rejected_access:
+            for command in ("check", "run", "build"):
+                destination = work / "access-refused.c"
+                destination.write_bytes(sentinel)
+                options = ["--c-only", "-o", destination] if command == "build" else []
+                refused = run("access-" + name.replace("/", "-") + "-" + command,
+                              [binary, command, access / name, *options], 1)
+                assert not refused.stdout and diagnostic in refused.stderr, (name, command)
+                assert destination.read_bytes() == sentinel, name
+
         source = effects / "generic_stringable.xr"
         vm = run("generic-stringable-vm", [binary, "run", source], 0)
         executable = work / ("generic-stringable.exe" if os.name == "nt" else "generic-stringable")

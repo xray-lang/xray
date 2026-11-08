@@ -108,6 +108,15 @@ static void test_recursive_and_loop(void) {
     OK(xr_lir_function_at(m, 1, &root));
     XrRbcProgram *program = compile(m, root);
     xr_lir_module_destroy(m);
+    const XrRbcFunction *fib = &xr_rbc_program_view(program)->functions[0];
+    unsigned subtracts = 0, comparisons = 0;
+    for (size_t pc = 0; pc < fib->code_count; ++pc) {
+        unsigned op = fib->code[pc] & 255;
+        subtracts += op == XR_RBC_SUBI;
+        comparisons += op == XR_RBC_LTI;
+        CHECK(op != XR_RBC_SUB && op != XR_RBC_LT);
+    }
+    CHECK(subtracts == 2 && comparisons == 1);
     uint64_t n = 32;
     CHECK(run(program, &n, 1) == 2178309);
     CHECK(xr_rbc_program_view(program)->function_count == 1);
@@ -119,6 +128,77 @@ static void test_recursive_and_loop(void) {
     n = 1000;
     CHECK(run(program, &n, 1) == 499500);
     xr_rbc_program_destroy(program);
+}
+
+static void test_immediate_selection(void) {
+    static const struct { XrLirOp op; int64_t literal; bool left, encoded; } cases[] = {
+        {XR_LIR_ADD, -128, false, true}, {XR_LIR_ADD, 127, true, true},
+        {XR_LIR_SUB, -1, false, true}, {XR_LIR_SUB, 1, true, false},
+        {XR_LIR_ADD, 128, false, false}, {XR_LIR_SUB, -129, false, false},
+        {XR_LIR_MUL, -128, false, true}, {XR_LIR_MUL, 127, true, true},
+        {XR_LIR_MUL, 128, false, false}, {XR_LIR_REM, -1, false, true},
+        {XR_LIR_REM, -128, false, true}, {XR_LIR_REM, 127, false, true},
+        {XR_LIR_REM, 128, false, false}, {XR_LIR_REM, 7, true, false},
+        {XR_LIR_REM, 0, false, true}
+    };
+    const uint64_t inputs[] = {0, 1, INT64_MAX, UINT64_C(0x8000000000000000), UINT64_MAX};
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType type = XR_LIR_I64;
+        XrLirFunction f = test_function(m, "immediate", &type, 1, type);
+        XrLirBlock block = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, block));
+        XrLirValue input = parameter(m, f, 0);
+        XrLirValue constant = test_constant(m, block, type, (uint64_t)cases[n].literal);
+        XrLirValue result = test_binary(m, block, cases[n].op,
+            cases[n].left ? constant : input, cases[n].left ? input : constant,
+            XR_LIR_PREDICATE_NONE);
+        // A non-immediate use keeps a real constant register alongside encoded uses.
+        XrLirValue one = test_constant(m, block, type, 1);
+        (void)test_binary(m, block, XR_LIR_DIV, constant, one, XR_LIR_PREDICATE_NONE);
+        result = test_binary(m, block, XR_LIR_MUL, result, constant, XR_LIR_PREDICATE_NONE);
+        test_return(m, block, result);
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+        XrRbcOp wanted;
+        switch (cases[n].op) {
+        case XR_LIR_ADD: wanted = XR_RBC_ADDI; break;
+        case XR_LIR_SUB: wanted = XR_RBC_SUBI; break;
+        case XR_LIR_MUL: wanted = XR_RBC_MULI; break;
+        default: wanted = XR_RBC_REMI; break;
+        }
+        unsigned immediate = 0;
+        for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
+            unsigned op = bytecode->code[pc] & 255;
+            immediate += op == (unsigned)wanted;
+        }
+        unsigned expected_count = (unsigned)cases[n].encoded;
+        if (cases[n].op == XR_LIR_MUL) expected_count *= 2;
+        CHECK(immediate == expected_count);
+        for (size_t a = 0; a < sizeof(inputs) / sizeof(*inputs); ++a) {
+            uint64_t literal = (uint64_t)cases[n].literal;
+            uint64_t lhs = cases[n].left ? literal : inputs[a];
+            uint64_t rhs = cases[n].left ? inputs[a] : literal;
+            uint64_t expected = 0;
+            if (cases[n].op == XR_LIR_REM) {
+                uint64_t bits = UINT64_MAX;
+                if (!rhs) {
+                    CHECK(execute(program, &inputs[a], 1, &bits) == XR_RBC_ARITHMETIC_PANIC);
+                    continue;
+                }
+                int64_t left, right;
+                memcpy(&left, &lhs, sizeof(left)); memcpy(&right, &rhs, sizeof(right));
+                expected = left == INT64_MIN && right == -1 ? 0 : (uint64_t)(left % right);
+            } else if (cases[n].op == XR_LIR_MUL) expected = lhs * rhs;
+            else expected = cases[n].op == XR_LIR_ADD ? lhs + rhs : lhs - rhs;
+            expected *= literal;
+            CHECK(run(program, &inputs[a], 1) == expected);
+        }
+        xr_rbc_program_destroy(program);
+    }
 }
 
 static void test_location_ownership(void) {
@@ -1272,6 +1352,7 @@ int main(void) {
     test_owned_arithmetic_panics();
     test_i64_identity_cast();
     test_recursive_and_loop();
+    test_immediate_selection();
     test_location_ownership();
     test_comparisons();
     test_arithmetic();

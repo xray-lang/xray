@@ -54,8 +54,8 @@ typedef struct SourceHistoryReceive {
 } SourceHistoryReceive;
 typedef struct SourceContext {
     XrModuleGraph *graph;
-    XrHirEscapeFacts *escape_facts; /* Independent numeric lifetime classifications. */
     XrHirEscapeBuilder *escape_builder; /* Synchronous single-inventory lifetime observer. */
+    XrXirEffects *semantic_prepare; /* Private numeric owner before lifetime relocation. */
     XrHirBody *typed_body; /* Closed before this construction replaces its type view. */
     XrHirItems *items; /* Synchronous module namespace; never a persistent graph borrow. */
     XrFrontendReport *report; /* Sole transferred child failure, before this context retires. */
@@ -67,6 +67,7 @@ typedef struct SourceContext {
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory,*retired_arrays;
     XrXirConstruction *construction;
+    bool view_normalized;
     SourceSemanticEnvironment **semantic_output;
     const struct XrXirSourceHistoryUnit *history_input, *self_unit;
     struct SourceHistoryReceive *history;

@@ -10,7 +10,7 @@
  *   Original declaration IDs survive while every structural child belongs to
  *   this context owner. Cross-pool import uses verified descriptor order.
  */
-#include "xxir_effect_context_domain.inc.c"
+
 
 static const XrXirTypes effect_empty_types={0};
 

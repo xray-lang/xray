@@ -538,12 +538,12 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         receiver_read=present || row.native_callable==XR_NATIVE_CALLABLE_BUFFER_LENGTH;
     }
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
-        if (!a->cells || !a->cells->default_access || view_flags_at(types,flags,op->type))
+        if (!a->cells || !a->cells->effects || view_flags_at(types,flags,op->type))
             return XR_XIR_UNRESOLVED;
-        /* Declaration identity is not SSA input. The scope authenticates the
-         * actual helper closure without retiring any caller loan or epoch. */
-        return xir_effects_default_access_site(a->cells->default_access,
-            a->resolver->check.context,a->function,event->instruction);
+        /* Current default identity selects the helper's numeric access fact
+         * without retiring any caller loan or epoch. */
+        return xir_effects_default_access_site(a->resolver->check.context,a->cells->effects,
+            (XirEffectInput){a->resolver->check.module,a->cells->construction,a->cells->control},a->function,event->instruction);
     }
     if (op->op==XR_XIR_CALL_REQUIREMENT) return XR_XIR_UNRESOLVED;
     if (((op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT) || op->op==XR_XIR_INVOKE_RESULT) && view_flags_at(types,flags,op->type)) {
@@ -556,7 +556,13 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         bool cell=xr_xir_type_is_cell(types,type),object=xr_xir_type_is_class(types,type);
         XrXirPlaceKind place=xr_xir_place_kind(a->body,value);XrXirOperandRole role=xr_xir_operand_role(op->op,p);
         if (borrowed) {
-            if (!call && !pointer) return XR_XIR_UNRESOLVED;
+            bool capture = false;
+            if (op->op == XR_XIR_FUNCTION_REF && a->cells && a->cells->effects) {
+                XrXirStatus status = xir_effects_value_restricted(a->resolver->check.context,
+                    a->cells->effects, a->function, result, &capture);
+                if (status != XR_XIR_OK) return status;
+            }
+            if (!call && !pointer && !capture) return XR_XIR_UNRESOLVED;
             const XrXirTypeNode *node=xr_xir_type_node(types,type);
             bool write=(borrowed&XR_XIR_VIEW_MUTABLE)!=0 || (node && node->kind==XR_XIR_TYPE_MUT_PTR &&
                 (call || ((op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY) && p==0)));

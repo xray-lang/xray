@@ -1,0 +1,2 @@
+fn test() -> i64 { var values: Array<u8> = [1,2]; const view: Slice<u8> = values; const read = fn() -> i64 { return len(view) }; values.push(3); return read() }
+print(test())

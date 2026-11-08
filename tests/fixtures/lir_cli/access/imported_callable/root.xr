@@ -1,0 +1,2 @@
+import {use} from "./lib"
+export fn storage_receiver()->i64{return use<i64>(1)}

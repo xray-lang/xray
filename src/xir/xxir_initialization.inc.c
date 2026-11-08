@@ -11,6 +11,7 @@
  *   A panic edge leaves every instruction of a protected block before that
  *   instruction's own effect, so handlers see only completed writes.
  */
+#include "xxir_instruction_flow.h"
 typedef struct InitializationNode {
     const XrXirFunction *function;
     const XrXirInstruction *op;
@@ -67,6 +68,22 @@ static XrXirStatus initialization_allocate(InitializationGraph *graph, const XrX
     for (uint32_t n=0;n<graph->node_count;++n) graph->nodes[n].head=UINT32_MAX;
     return XR_XIR_OK;
 }
+typedef struct InitializationConnect {
+    InitializationGraph *graph;
+    const InitializationView *view;
+} InitializationConnect;
+static XrXirStatus initialization_successor(void *opaque, const XirInstructionFlowEdge *edge) {
+    InitializationConnect *connect = opaque;
+    const InitializationView *view = connect->view;
+    if (edge->kind != XIR_INSTRUCTION_FLOW_NEXT && view->region &&
+        edge->target_block < view->region->first_block) return XR_XIR_OK;
+    if (edge->target < view->first || edge->target > view->function->instruction_count ||
+        (edge->kind == XIR_INSTRUCTION_FLOW_TARGET && !view->region &&
+         edge->target == view->function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
+    initialization_edge(connect->graph, view->offset + edge->source - view->first,
+        view->offset + edge->target - view->first, edge->kind != XIR_INSTRUCTION_FLOW_PANIC);
+    return XR_XIR_OK;
+}
 static XrXirStatus initialization_connect(InitializationGraph *graph) {
     for (uint32_t v=0;v<graph->view_count;++v) {
         const InitializationView *view=&graph->views[v];
@@ -75,28 +92,14 @@ static XrXirStatus initialization_connect(InitializationGraph *graph) {
         for (uint32_t i=view->first;i<function->instruction_count;++i) {
 
             const XrXirInstruction *op=&function->instructions[i];
-            if (!op->op || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             uint32_t node=view->offset+i-view->first;
             while (owner+1<function->block_count && function->blocks[owner+1].first<=i) ++owner;
             graph->nodes[node].block=owner;
             graph->nodes[node].function=function; graph->nodes[node].op=op; graph->nodes[node].instruction=i;
-            if (!op_rules[op->op].terminal) initialization_edge(graph,node,node+1,true);
-            for (uint32_t e=0;e<op_rules[op->op].edges;++e) {
-                uint32_t block=op->targets[e];
-                if (view->region && block<view->region->first_block) continue;
-                if (block>=function->block_count) return XR_XIR_BAD_STRUCTURE;
-                uint32_t target=function->blocks[block].first;
-                if (target<view->first || target>function->instruction_count ||
-                    (!view->region && target==function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
-                initialization_edge(graph,node,view->offset+target-view->first,true);
-            }
-            uint32_t handler=function->blocks[owner].panic;
-            if (handler && !(view->region && handler<view->region->first_block)) {
-                if (handler>=function->block_count) return XR_XIR_BAD_STRUCTURE;
-                uint32_t target=function->blocks[handler].first;
-                if (target<view->first || target>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-                initialization_edge(graph,node,view->offset+target-view->first,false);
-            }
+            InitializationConnect connect = {graph, view};
+            XrXirStatus status = xr_xir_instruction_flow_visit(function, i, owner,
+                XIR_INSTRUCTION_FLOW_ALL, initialization_successor, &connect);
+            if (status != XR_XIR_OK) return status;
         }
         if (!view->region) continue;
         const InitializationView *parent=NULL;

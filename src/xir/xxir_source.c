@@ -244,6 +244,7 @@ typedef struct SourceFunction {
     uint32_t debug_binding_count, debug_binding_capacity;
     SourceRootValue *root_values;
     bool *root_captures; uint32_t root_capture_count;
+    const char **root_capture_names;
     XrXirEffectParameter *effect_parameters;
     XrXirRootTerm *effect_terms;
     XrXirRootValueIdentity *effect_values;
@@ -2976,8 +2977,10 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
     body->root_capture_count = scan->count;
     ctx->identities[ctx->function].capture_count = scan->count;
     body->root_captures = scan->count ? source_alloc(ctx,scan->count,sizeof(*body->root_captures)) : NULL;
-    if (scan->count && !body->root_captures) return false;
+    body->root_capture_names = scan->count ? source_alloc(ctx,scan->count,sizeof(*body->root_capture_names)) : NULL;
+    if (scan->count && (!body->root_captures || !body->root_capture_names)) return false;
     for (SourceCapture *p = scan->captures; p; p = p->next) {
+        body->root_capture_names[p->index] = p->source->name;
         SourceName *symbol = add_name(ctx, &ctx->locals, p->source->name, node);
         if (!symbol) return false;
         symbol->kind = p->source->kind; symbol->index = p->index; symbol->type = p->source->type;

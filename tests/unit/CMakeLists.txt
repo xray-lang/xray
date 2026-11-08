@@ -270,7 +270,9 @@ add_executable(test_xir_checked xir/test_xir_checked.c)
 target_link_libraries(test_xir_checked PRIVATE xray_xir)
 add_executable(test_xir_checked_allocations xir/test_xir_checked_allocations.c
     ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
-    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)
+    ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c
+    ${CMAKE_SOURCE_DIR}/src/hir/xhir_escape.c
+    ${CMAKE_SOURCE_DIR}/src/xir/xxir_storage_flow.c)
 target_link_libraries(test_xir_checked_allocations PRIVATE xray_compile_resources)
 target_include_directories(test_xir_checked_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
@@ -1726,10 +1728,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/root_cause_trace.cmake")
 include(xir/callable_root_bounds.cmake)
 
 include(xir/callable_root_source.cmake)
-include(xir/source_copy_refinement.cmake)
-include(xir/invocation_zero_inputs.cmake)
-include(xir/effect_term_scratch.cmake)
-include(xir/refinement_context_lifetime.cmake)
 
 
 

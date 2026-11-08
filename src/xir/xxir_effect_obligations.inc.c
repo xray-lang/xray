@@ -11,26 +11,45 @@
  */
 #include "xxir_constraints.h"
 #include "xxir_callable_root_obligations.inc.c"
+/* The Source entry follows its synchronous access callback. Raw and external
+ * collectors complete the same access admission using their fresh owner. */
+typedef enum EffectDeclarationAdmission {
+    EFFECT_DECLARATION_OWNED, EFFECT_DECLARATION_OPTIONAL, EFFECT_DECLARATION_SOURCE
+} EffectDeclarationAdmission;
+
+static bool declaration_view_access_needed(const XrXirModule *module) {
+    for (uint32_t t=0;module->types && t<module->types->count;++t) {
+        XrXirTypeKind kind=module->types->nodes[t].kind;
+        if (kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE ||
+            kind==XR_XIR_TYPE_PTR || kind==XR_XIR_TYPE_MUT_PTR) return true;
+    }
+    return false;
+}
+
 static XrXirStatus declaration_effects_verify(XirEffectInput input,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, EffectDeclarationAdmission admission) {
     const XrXirModule *module=input.module;
+    bool require_owned=admission!=EFFECT_DECLARATION_OPTIONAL;
+    bool access=admission!=EFFECT_DECLARATION_SOURCE && declaration_view_access_needed(module);
     XrXirStatus local=prepared?xir_effects_local_errors_verify_input(remaining,input,prepared,diagnostic):
         xir_compile_local_errors_verify(remaining,module,diagnostic);
     if (local!=XR_XIR_OK) return local;
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
     if (output && (*output || prepared)) return XR_XIR_BAD_STRUCTURE;
     if (!module->declarations) {
-        if (!templated && (!output || !require_owned)) return XR_XIR_OK;
+        if (!access && !templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
-            xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &owned);
+            xir_effects_infer_lifetimes_input(remaining,input,&owned,diagnostic);
         if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match_input(remaining,
             input, prepared ? prepared : owned);
+        if (status==XR_XIR_OK && access)
+            status=xir_compile_view_cell_access_verified_input(remaining,input,prepared?prepared:owned,diagnostic);
         if (status==XR_XIR_OK && output) { *output=owned;owned=NULL; }
         xr_xir_compile_effects_free(owned);
         return status;
     }
-    bool present = templated || module->declarations->implementations != NULL;
+    bool present = access || templated || module->declarations->implementations != NULL;
     for (uint32_t f = 0; f < module->function_count; ++f) {
 
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
@@ -55,11 +74,13 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
             }
         }
     }
-    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xir_effects_infer_lifetimes_input(remaining,input,output,diagnostic) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xir_effects_infer_lifetimes_input(remaining,input,&effects,diagnostic);
     const XrXirEffects *facts = prepared ? prepared : effects;
     if (status == XR_XIR_OK) status = xir_effects_parameters_match_input(remaining, input, facts);
+    if (status == XR_XIR_OK && access)
+        status=xir_compile_view_cell_access_verified_input(remaining,input,facts,diagnostic);
     if (status == XR_XIR_OK) status = declaration_callable_root_verify(input, facts, remaining, diagnostic);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];

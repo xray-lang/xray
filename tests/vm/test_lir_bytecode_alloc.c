@@ -471,8 +471,71 @@ static void jump_threading(void) {
     CHECK(live_allocations == live);
     attempts = 0;
 }
+static void jump_compaction(void) {
+    uint32_t code[13], original[13], source_ids[13];
+    for (size_t pc = 0; pc < 13; ++pc) {
+        code[pc] = XR_RBC_RET0;
+        source_ids[pc] = (uint32_t)pc + 1;
+    }
+    CHECK(xr_rbc_encode(&code[2], (XrRbcOperands){XR_RBC_EQ, 0, 1, 0, 0}));
+    CHECK(xr_rbc_encode(&code[5], (XrRbcOperands){XR_RBC_LOADI, 2, 0, 0, 17}));
+    CHECK(xr_rbc_encode(&code[7], (XrRbcOperands){XR_RBC_LOADI, 2, 0, 0, 23}));
+    CHECK(xr_rbc_encode(&code[9], (XrRbcOperands){XR_RBC_RET, 2, 0, 0, 0}));
+    const size_t jumps[][2] = {{0, 2}, {3, 7}, {4, 5}, {6, 9}, {8, 9}, {11, 10}};
+    for (size_t j = 0; j < sizeof(jumps) / sizeof(jumps[0]); ++j)
+        CHECK(xr_rbc_jump(&code[jumps[j][0]], jumps[j][0], jumps[j][1], 13));
+    memcpy(original, code, sizeof(code));
+    XrRbcCompileDiagnostic diagnostic = {0};
+    RbcLirCompiler compiler = {
+        .code = code, .source_ids = source_ids, .code_count = 13, .diagnostic = &diagnostic};
+    size_t live = live_allocations;
+    fail_at = attempts + 1;
+    CHECK(!rbc_lir_compact_jumps(&compiler));
+    CHECK(compiler.status == XR_RBC_COMPILE_OUT_OF_MEMORY && compiler.code_count == 13);
+    CHECK(!memcmp(code, original, sizeof(code)) && live_allocations == live);
+    for (unsigned pc = 0; pc < 13; ++pc) CHECK(source_ids[pc] == pc + 1);
+    fail_at = SIZE_MAX;
+    compiler.status = XR_RBC_COMPILE_OK;
+    diagnostic = (XrRbcCompileDiagnostic){0};
+    CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 6);
+    CHECK(rbc_lir_jump_target(&compiler, 1) == 4 && rbc_lir_jump_target(&compiler, 3) == 5);
+    const uint32_t sources[] = {3, 4, 6, 7, 8, 10};
+    CHECK(!memcmp(source_ids, sources, sizeof(sources)));
+    XrRbcFunction function = {
+        .code = code, .code_count = compiler.code_count, .register_count = 3, .parameter_count = 2};
+    XrRbcModule module = {.functions = &function, .function_count = 1};
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_OK);
+    for (uint64_t argument = 1; argument <= 2; ++argument) {
+        uint64_t arguments[] = {1, argument}, bits = 0;
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, arguments, 2, owner, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+        CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == (argument == 1 ? 23u : 17u));
+        xr_rbc_execution_free(&execution);
+        xr_rbc_outcome_free(&outcome);
+    }
+    xrt_locations_release(owner);
+
+    CHECK(xr_rbc_encode(&code[0], (XrRbcOperands){XR_RBC_EQ, 0, 1, 0, 0}));
+    CHECK(xr_rbc_jump(&code[1], 1, 2, 3));
+    code[2] = XR_RBC_RET0;
+    compiler.code_count = 3;
+    CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 3);
+    CHECK((code[1] & 255) == XR_RBC_JMP && rbc_lir_jump_target(&compiler, 1) == 2);
+    CHECK(xr_rbc_jump(&code[0], 0, 0, 2));
+    code[1] = XR_RBC_RET0;
+    compiler.code_count = 2;
+    CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
+    CHECK(rbc_lir_jump_target(&compiler, 0) == 0 && live_allocations == live);
+    attempts = 0;
+}
+
 int main(void) {
     jump_threading();
+    jump_compaction();
     physical_string_copy_cycle();
     compiled_spills();
     literal_allocation_failures();

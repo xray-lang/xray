@@ -179,8 +179,9 @@ static bool source_effect_prepare(SourceContext *ctx) {
         contract->parameter_count = function->parameter_count; contract->parameters = body->effect_parameters;
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
             body->effect_parameters[p] = (XrXirEffectParameter){
-                xr_xir_callable_signature(&ctx->types,function->parameters[p]) ?
-                    XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED,0};
+                xr_xir_callable_signature(&ctx->types,function->parameters[p]) &&
+                    !xr_xir_function_parameter_escaping(function,p) ?
+                    XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED};
         }
         if (!source_effect_records(ctx,f,true) || !source_effect_records(ctx,f,false)) return false;
     }
@@ -226,8 +227,7 @@ static bool source_effect_library_match(SourceContext *ctx,
     if (!derived || derived->parameter_count != stored->parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"imported effect parameters changed shape");
     for (uint32_t p = 0; p < derived->parameter_count; ++p) {
-        if (derived->parameters[p].kind != stored->parameters[p].kind ||
-            derived->parameters[p].uses != stored->parameters[p].uses)
+        if (derived->parameters[p].kind != stored->parameters[p].kind)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"imported effect parameter facts do not match");
     }
     if (derived->formula.constant_mask != stored->formula.constant_mask ||
@@ -254,8 +254,7 @@ static bool source_effect_sync(SourceContext *ctx, const XrXirEffects *effects, 
         if (!derived || derived->parameter_count != stored->parameter_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared effect owner changed its physical parameters");
         for (uint32_t p = 0; p < derived->parameter_count; ++p) {
-            if (body->effect_parameters[p].kind != derived->parameters[p].kind ||
-                body->effect_parameters[p].uses != derived->parameters[p].uses) *changed = true;
+            if (body->effect_parameters[p].kind != derived->parameters[p].kind) *changed = true;
             body->effect_parameters[p] = derived->parameters[p];
         }
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

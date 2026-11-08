@@ -1,0 +1,5 @@
+interface Read { read() -> i64 }
+struct Token implements Read { read() -> i64 { return 7 } }
+fn call<T: Read>(value: T) -> i64 { return value.read() }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return call<Token>(Token{}) }
+print(limited())

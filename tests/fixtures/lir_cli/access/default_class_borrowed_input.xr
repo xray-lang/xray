@@ -1,0 +1,3 @@
+class Options{value:i64;init(){this.value=7}}
+fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+options.value}
+export fn incoming(v:Slice<u8>)->i64{return use(v)}

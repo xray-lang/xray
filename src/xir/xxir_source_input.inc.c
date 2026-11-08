@@ -256,7 +256,7 @@ done:
         xr_compile_declaration_manifest_free(manifest->declarations);
     xr_xir_compile_construction_free(ctx.construction);
     xr_hir_body_free(ctx.typed_body);ctx.typed_body=NULL;
-    xr_hir_escape_facts_free(ctx.escape_facts);ctx.escape_facts=NULL;
+    xr_xir_compile_effects_free(ctx.semantic_prepare);ctx.semantic_prepare=NULL;
     xr_hir_escape_builder_free(ctx.escape_builder);ctx.escape_builder=NULL;
     source_release_retired_arrays(&ctx);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }

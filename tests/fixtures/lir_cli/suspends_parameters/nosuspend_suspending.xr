@@ -1,0 +1,4 @@
+fn worker() -> i64 { return 7 }
+fn apply(callback: fn() -> i64) -> i64 { return callback() }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return apply(fn() -> i64 { return await go worker() }) }
+print(limited())

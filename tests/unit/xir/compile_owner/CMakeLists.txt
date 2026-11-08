@@ -20,6 +20,8 @@ add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir_verify.c"
     "${XR_ROOT}/src/xir/xxir_defaults.c"
     "${XR_ROOT}/src/xir/xxir_effects.c"
+    "${XR_ROOT}/src/xir/xxir_storage_flow.c"
+    "${XR_ROOT}/src/hir/xhir_escape.c"
     "${XR_ROOT}/src/xir/xxir_layout.c"
     "${XR_ROOT}/src/xir/xxir_checked.c"
     "${XR_ROOT}/src/xir/xxir_generic.c"

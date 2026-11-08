@@ -43,8 +43,12 @@ typedef struct XirStorageBinding {
 typedef struct XirStorageApplication {
     XirExecutionSiteKind kind;
     /* Function is the caller template. Declaration is the callee template. */
-    uint32_t site, function, instruction, declaration;
+    uint32_t site, function, instruction, block, declaration;
     uint32_t target, caller_instance, environment, order;
+    /* Reference is the execution owner's capture-call ID, or UINT32_MAX.
+     * Block is a caller-template ordinal. Both environments use application
+     * indices or the execution environment sentinels. */
+    uint32_t reference, capture_environment;
     XirExecutionPort port, outcome;
     uint8_t protocol;
     uint32_t first, count;
@@ -87,9 +91,22 @@ typedef struct XirStorageValuePoint {
     XirStorageReference reference;
     XirStoragePointKind point;
 } XirStorageValuePoint;
+/* A proxy records the actual observation point even when contents and their
+ * ordinary restriction formula are unchanged across several instructions. */
+typedef struct XirStoragePointValue {
+    uint32_t function, value, instruction;
+    XirStoragePointKind point;
+    XirStorageReference reference;
+} XirStoragePointValue;
+typedef enum XirStorageCaptureKind {
+    XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN
+} XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;
     uint32_t function, contents, exposure;
+    /* A formal carrier transports its independent restriction and loan facts.
+     * It does not claim that an unknown environment contains no Cells. */
+    XirStorageCaptureKind kind;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
 enum {
@@ -117,6 +134,8 @@ typedef struct XirStorageFlowView {
     uint32_t unknown_count;
     const XirStorageExposureSeed *exposure_seeds;
     uint32_t exposure_seed_count;
+    const XirStoragePointValue *point_values;
+    uint32_t point_value_count;
 } XirStorageFlowView;
 
 typedef struct XirStorageFlow XirStorageFlow;
@@ -154,6 +173,10 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *, uint32_t func
 XR_FUNC XrXirStatus xir_storage_flow_reference(XirStorageFlow *, const XirStorageObservation *,
     uint32_t *contents, uint32_t *exposure);
 XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *, const XirStorageObservation *);
+/* The returned reference names a storage-owned aux value in the observing
+ * function. New proxies add an ordinary dependency and require a Root round. */
+XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *, const XirStorageValuePoint *,
+    XirStorageReference *);
 /* Recursive carrier/capture relations come from the unique execution owner.
  * Each callback observes a Cell reference at this use, including older heap
  * instances retained across a backedge. It never freezes creation contents. */

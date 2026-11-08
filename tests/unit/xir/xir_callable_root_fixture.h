@@ -11,8 +11,8 @@
 #define XIR_CALLABLE_ROOT_FIXTURE_H
 /* The caller owns the ledger. All local descriptor storage is copied by the
  * ordinary Built-to-Checked path, never retained as fixture stack pointers. */
-static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t advertised,
-    uint32_t referenced, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+static XrXirStatus bound_fixture_build(const XrXirCompileContext *context, uint32_t advertised,
+    uint32_t referenced, bool weak_root, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrXirInstruction unit={.op=XR_XIR_RETURN};
     const XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5);
     XrXirInstruction init[]={
@@ -33,7 +33,7 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
     XrXirInstruction relay[]={
         {.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,1},.immediate=9}, {.op=XR_XIR_RETURN,.args={1,0}}};
     XrXirInstruction erased[]={
-        {.op=XR_XIR_FUNCTION_REF,.type=XR_XIR_CONSTRUCTED_TYPE_BASE,.immediate=3},
+        {.op=XR_XIR_FUNCTION_REF,.type=XR_XIR_CONSTRUCTED_TYPE_BASE+(weak_root?1u:0u),.immediate=weak_root?2:3},
         {.op=XR_XIR_FUNCTION_WEAKEN,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2),.args={0,0}},
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=1}, {.op=XR_XIR_RETURN,.args={2,0}}};
     XrXirBlock two={.count=2},three={.count=3},four={.count=4};
@@ -72,5 +72,9 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,13,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context, &built, output, diagnostic);
+}
+static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t advertised,
+    uint32_t referenced, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    return bound_fixture_build(context,advertised,referenced,false,output,diagnostic);
 }
 #endif // XIR_CALLABLE_ROOT_FIXTURE_H

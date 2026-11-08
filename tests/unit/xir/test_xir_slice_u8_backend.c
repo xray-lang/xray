@@ -559,105 +559,21 @@ static void scalar_slot_execution(const XrXirCompileContext *context) {
         XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
     }
 }
-typedef struct ClassScopeProbe {
+typedef struct ClassCallSite {
     const XrXirModule *module;
-    const XrXirConstruction *construction;
-    uint32_t caller,instruction,mode;
-    XrXirType result;
-    XrXirInstruction *mutation;
-    XrCompileResources *foreign_resources;
-    bool called;
-} ClassScopeProbe;
-static XrXirStatus class_scope_probe(void *data,const XrXirCompileContext *remaining,XirEffectDefaultAccessScope *scope) {
-    ClassScopeProbe *probe=data;probe->called=true;
-    const XrXirModule *module=probe->module;XrXirModule foreign=*module;
-    XrXirCompileContext changed=*remaining;
-    if(probe->mode==2) module=&foreign;
-    if(probe->mode==3) {CHECK(changed.limits.frame_bytes<UINT64_MAX);++changed.limits.frame_bytes;}
-    if(probe->mode==4)changed.limits.frame_bytes=1;
-    if(probe->mode==6)changed.resources=probe->foreign_resources;
-    int64_t saved=probe->mutation?probe->mutation->immediate:0;
-    if(probe->mode==5){CHECK(probe->mutation);probe->mutation->immediate=probe->caller;}
-    XrXirStatus expected=probe->mode==7?XR_XIR_UNRESOLVED:probe->mode==4?XR_XIR_BUDGET:
-        probe->mode==1?XR_XIR_BAD_TYPE:probe->mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
-    XrXirStatus status=xir_effects_class_call_access_site(scope,&changed,module,probe->caller,probe->instruction,
-        probe->mode==1?XR_XIR_I64:probe->result);
-    if(probe->mode==5)probe->mutation->immediate=saved;
-    if(expected==XR_XIR_OK && (status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_BUDGET))return status;
-    CHECK(status==expected);
-    status=xir_effects_class_call_access_site(scope,remaining,probe->module,probe->caller,probe->instruction,probe->result);
-    if(expected==XR_XIR_OK && (status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_BUDGET))return status;
-    CHECK(status==expected);
-    return XR_XIR_OK; /* A failed query must survive a callback that ignores it. */
-}
-static ClassScopeProbe class_scope_target(const XrXirArtifact *artifact) {
+    uint32_t caller,instruction;
+} ClassCallSite;
+static ClassCallSite class_call_site(const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
-    ClassScopeProbe probe={.module=module,.construction=xr_xir_compile_artifact_construction(artifact),.caller=named(module,"storage_receiver")};
+    ClassCallSite probe={.module=module,.caller=named(module,"storage_receiver")};
     const XrXirFunction *body=module->functions+probe.caller;bool found=false;
     for(uint32_t i=0;i<body->instruction_count;++i) {
         const XrXirInstruction *op=body->instructions+i;
         if((op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) && xr_xir_type_is_class(module->types,op->type)) {
-            probe.instruction=i;probe.result=op->type;found=true;break;
+            probe.instruction=i;found=true;break;
         }
     }
     CHECK(found);return probe;
-}
-static void class_scope_guards(const XrXirCompileContext *context,const XrXirArtifact *closed) {
-    ClassScopeProbe probe=class_scope_target(closed);
-    for(uint32_t mode=0;mode<5;++mode) {
-        probe.mode=mode;probe.called=false;
-        XrXirStatus status=xir_effects_default_access_operation_input(context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe);
-        CHECK(probe.called && status==(mode==4?XR_XIR_BUDGET:mode==1?XR_XIR_BAD_TYPE:mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
-    }    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
-    CHECK(xr_compile_resources_new(&caps,&probe.foreign_resources)==XR_COMPILE_RESOURCE_OK);
-    probe.mode=6;probe.called=false;
-    CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_BAD_STRUCTURE && probe.called);
-    xr_compile_resources_release(probe.foreign_resources);probe.foreign_resources=NULL;
-    const XrXirModule *module=probe.module;const XrXirFunction *body=module->functions+probe.caller;
-    XrXirFunction *functions=NULL;XrXirInstruction *ops=NULL;
-    CHECK(xr_compile_resources_calloc(context->resources,module->function_count,sizeof(*functions),(void **)&functions)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_calloc(context->resources,body->instruction_count,sizeof(*ops),(void **)&ops)==XR_COMPILE_RESOURCE_OK);
-    memcpy(functions,module->functions,(size_t)module->function_count*sizeof(*functions));memcpy(ops,body->instructions,(size_t)body->instruction_count*sizeof(*ops));
-    XrXirModule copy=*module;copy.functions=functions;functions[probe.caller].instructions=ops;
-    probe.module=&copy;probe.mutation=ops+probe.instruction;probe.mode=0;
-    CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){&copy,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_OK);
-    probe.mode=5;probe.called=false;
-    CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){&copy,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_BAD_STRUCTURE && probe.called);
-    CHECK(ops[probe.instruction].immediate==body->instructions[probe.instruction].immediate);
-    xr_compile_resources_free(ops);xr_compile_resources_free(functions);
-}
-static void class_scope_resources(const XrXirArtifact *closed) {
-    ClassScopeProbe probe=class_scope_target(closed);
-    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
-    XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
-    size_t physical_count=effects_compile_live,physical_bytes=effects_compile_bytes;
-    CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    size_t first=effects_compile_attempts;
-    CHECK(xir_effects_default_access_operation_input(&context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_OK && probe.called);
-    size_t sites=effects_compile_attempts-first;XrCompileResourceStats stats={0};
-    CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
-    uint64_t peak=stats.peak_bytes;
-    for(size_t i=0;i<sites;++i) {
-        effects_compile_fail_at=effects_compile_attempts+i;effects_compile_injected=false;probe.called=false;
-        XrXirStatus status=xir_effects_default_access_operation_input(&context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe);
-        effects_compile_fail_at=SIZE_MAX;
-        CHECK(effects_compile_injected && status==XR_XIR_OUT_OF_MEMORY);
-        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
-    }
-    probe.called=false;CHECK(xir_effects_default_access_operation_input(&context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_OK && probe.called);
-    context.limits.frame_bytes=1;probe.called=false;
-    CHECK(xir_effects_default_access_operation_input(&context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_BUDGET && !probe.called);
-    xr_compile_resources_release(context.resources);
-    for(unsigned minus=0;minus<2;++minus) {
-        caps.memory_mode=XR_COMPILE_MEMORY_FINITE;caps.memory_limit=peak-minus;context.limits=xr_xir_compile_default_limits();context.resources=NULL;probe.called=false;
-        CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
-        CHECK(xir_effects_default_access_operation_input(&context,(XirEffectInput){probe.module,probe.construction,NULL},class_scope_probe,&probe)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
-        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
-        xr_compile_resources_release(context.resources);
-    }
-    CHECK(effects_compile_live==physical_count && effects_compile_bytes==physical_bytes);
-    fprintf(stderr,"Class body Control scope: physical OOM sites=%zu held peak=%llu exact/minus1, frame BUDGET, first failure and same-owner reuse passed\n",sites,(unsigned long long)peak);
 }
 static XrXirArtifact *default_class_source(const XrXirCompileContext *context) {
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -675,7 +591,7 @@ static XrXirArtifact *default_class_source(const XrXirCompileContext *context) {
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     XrXirDiagnostic specialized={0};status=xr_xir_compile_specialize(checked,&closed,&specialized, NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"default Class specialize status=%u at %u/%u/%u\n",status,specialized.function,specialized.block,specialized.instruction);
-    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(checked);class_scope_guards(context,closed);return closed;
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(checked);return closed;
 }
 static void default_class_rejections(const XrXirCompileContext *context) {
     const char *const sources[]={default_class_borrowed_input,default_class_existing_alias,default_class_existing_alias_read,default_class_unknown,default_class_wrong_type,default_class_opaque,default_class_native};
@@ -753,7 +669,7 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
             XrXirOp op=module->functions[f].instructions[i].op;
             CHECK(op!=XR_XIR_CALL_DEFAULT&&op!=XR_XIR_INVOKE_DEFAULT);
         }
-        ClassScopeProbe probe=class_scope_target(closed);
+        ClassCallSite probe=class_call_site(closed);
         const XrXirInstruction *call=module->functions[probe.caller].instructions+probe.instruction;
         CHECK(call->op==XR_XIR_INVOKE && call->targets[0]!=call->targets[1]);
         const XrXirFunction *body=module->functions+probe.caller;
@@ -790,11 +706,9 @@ static void default_class_invoke_execution(const XrXirCompileContext *context) {
                 field_owner->module==owner->module&&field_owner->member_access==XR_XIR_MEMBER_PRIVATE);
         }
         fprintf(stderr,"Class invoke fixture%u: defaults absent, genuine Source default origin=%u\n",k,authorized);
-        probe.mode=k?7:0;
-        CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){module,probe.construction,NULL},
-            class_scope_probe,&probe)==(k?XR_XIR_UNRESOLVED:XR_XIR_OK) && probe.called);
+
         if(!k) {
-            class_scope_guards(context,closed);
+
             XrXirOrigin *origins=NULL;const XrXirProvenance *original=module->provenance;
             CHECK(original && original->count==module->function_count);
             CHECK(xr_compile_resources_calloc(context->resources,original->count,sizeof(*origins),(void **)&origins)==XR_COMPILE_RESOURCE_OK);
@@ -864,11 +778,11 @@ static XrXirArtifact *imported_default_source(const XrXirCompileContext *context
 }
 static void imported_default_origin_controls(const XrXirCompileContext *context,XrXirArtifact *closed) {
     const XrXirModule *module=xr_xir_compile_artifact_module(closed);
-    ClassScopeProbe probe=class_scope_target(closed);uint32_t target=(uint32_t)module->functions[probe.caller].instructions[probe.instruction].immediate;
+    ClassCallSite probe=class_call_site(closed);uint32_t target=(uint32_t)module->functions[probe.caller].instructions[probe.instruction].immediate;
     CHECK(module->declarations->functions[probe.caller].module!=module->declarations->functions[target].module);
     bool authorized=false;
     CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_OK && authorized);
-    CHECK(xir_effects_default_access_operation_input(context,(XirEffectInput){module,probe.construction,NULL},class_scope_probe,&probe)==XR_XIR_OK);
+
     XrXirProvenance *provenance=(XrXirProvenance *)module->provenance;CHECK(provenance && provenance->source);
     XrXirOrigin *origin=&provenance->origins[target];uint32_t saved=origin->function;
     origin->function=provenance->origins[probe.caller].function;authorized=true;
@@ -896,7 +810,7 @@ static void imported_default_origin_controls(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
 }
 static void imported_default_resources(const XrXirCompileContext *context,XrXirArtifact *closed) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(closed);ClassScopeProbe probe=class_scope_target(closed);
+    const XrXirModule *module=xr_xir_compile_artifact_module(closed);ClassCallSite probe=class_call_site(closed);
     uint32_t target=(uint32_t)module->functions[probe.caller].instructions[probe.instruction].immediate;
     size_t physical_count=effects_compile_live,physical_bytes=effects_compile_bytes;
     XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext work=*context;work.resources=NULL;
@@ -1039,11 +953,6 @@ int main(int argc,char **argv) {
     XrXirCompileContext context={0};const XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();uint8_t identity[32];XrXirArtifact *closed=NULL;
-    if(argc==2 && !strcmp(argv[1],"--class-scope-resources")) {
-        closed=default_class_source(&context);class_scope_resources(closed);
-        xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
-        CHECK(!effects_compile_live && !effects_compile_bytes);return 0;
-    }
     if (argc==2 && !strcmp(argv[1],"--local-storage-resources")) {xr_compile_resources_release(context.resources);local_storage_resources();return 0;}
     if(argc==3 && !strcmp(argv[1],"--emit-imported-default")) {closed=imported_default_source(&context,1);local_storage_emit(closed,argv[2]);}
     else if(argc==3 && !strcmp(argv[1],"--emit-default-class")) {closed=default_class_source(&context);local_storage_emit(closed,argv[2]);}

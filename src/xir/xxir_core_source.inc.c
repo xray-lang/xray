@@ -92,7 +92,7 @@ static void source_core_dispose(SourceContext *ctx,SourceContext *parent) {
     xr_hir_items_free(ctx->items);ctx->items=NULL;
     xr_hir_body_end(ctx->typed_body);
     xr_hir_body_free(ctx->typed_body);ctx->typed_body=NULL;
-    xr_hir_escape_facts_free(ctx->escape_facts);ctx->escape_facts=NULL;
+    xr_xir_compile_effects_free(ctx->semantic_prepare);ctx->semantic_prepare=NULL;
     xr_hir_escape_builder_free(ctx->escape_builder);ctx->escape_builder=NULL;
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);

@@ -104,6 +104,93 @@ static uint64_t run_function(XrRbcFunction function, const uint64_t *args, size_
     return result;
 }
 
+static void test_immediates(void) {
+    static const struct { uint64_t input, expected; int64_t immediate; XrRbcOp op; } cases[] = {
+        {INT64_MAX, UINT64_C(0x8000000000000000), 1, XR_RBC_ADDI},
+        {UINT64_C(0x8000000000000000), INT64_MAX, 1, XR_RBC_SUBI},
+        {0, UINT64_MAX, -1, XR_RBC_ADDI},
+        {0, 1, -1, XR_RBC_SUBI},
+        {0, UINT64_C(0xffffffffffffff80), -128, XR_RBC_ADDI},
+        {0, 128, -128, XR_RBC_SUBI},
+        {UINT64_MAX, 126, 127, XR_RBC_ADDI},
+        {127, 0, 127, XR_RBC_SUBI},
+        {UINT64_MAX, UINT64_MAX, 0, XR_RBC_ADDI},
+        {INT64_MAX, UINT64_MAX - 1, 2, XR_RBC_MULI},
+        {UINT64_MAX, 1, -1, XR_RBC_MULI},
+        {UINT64_C(0x8000000000000000), 0, -128, XR_RBC_MULI},
+        {15, 1, -7, XR_RBC_REMI},
+        {UINT64_MAX - 14, UINT64_MAX, 7, XR_RBC_REMI},
+        {UINT64_C(0x8000000000000000), 0, -1, XR_RBC_REMI},
+        {UINT64_MAX, UINT64_MAX, -128, XR_RBC_REMI}
+    };
+    uint32_t code[6];
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        for (unsigned destination = 0; destination < 2; ++destination) {
+            uint32_t slot = destination ? 254 : 0;
+            CHECK(xr_rbc_encode(code, (XrRbcOperands){cases[n].op, slot, 0, 0, cases[n].immediate}));
+            emit(code, 1, XR_RBC_RET, slot, 0, 0);
+            XrRbcFunction f = {.code=code, .code_count=2, .register_count=255, .parameter_count=1};
+            CHECK(run_function(f, &cases[n].input, 1) == cases[n].expected);
+        }
+    }
+    const XrRbcOperands invalid[] = {
+        {XR_RBC_ADDI, 0, 0, 0, 128}, {XR_RBC_SUBI, 0, 0, 0, -129},
+        {XR_RBC_ADDI, 0, 255, 0, 1}, {XR_RBC_SUBI, 255, 0, 0, 1},
+        {XR_RBC_ADDI, 0, 0, 1, 1}, {XR_RBC_LTI, 0, 1, 0, 1},
+        {XR_RBC_EQI, 0, 0, 0, 32768}, {XR_RBC_GEI, 0, 0, 0, -32769},
+        {XR_RBC_MULI, 0, 0, 0, 128}, {XR_RBC_REMI, 0, 0, 0, -129},
+        {XR_RBC_MULI, 0, 255, 0, 1}, {XR_RBC_REMI, 0, 0, 1, 1}
+    };
+    for (size_t n = 0; n < sizeof(invalid) / sizeof(*invalid); ++n) {
+        uint32_t sentinel = UINT32_C(0xdeadbeef);
+        CHECK(!xr_rbc_encode(&sentinel, invalid[n]) && sentinel == UINT32_C(0xdeadbeef));
+    }
+    const int64_t values[] = {INT64_MIN, -32769, -32768, -1, 0, 1, 32767, 32768, INT64_MAX};
+    const int64_t limits[] = {INT16_MIN, -1, 0, 1, INT16_MAX};
+    for (unsigned op = XR_RBC_LTI; op <= XR_RBC_EQI; ++op) {
+        for (size_t v = 0; v < sizeof(values) / sizeof(*values); ++v) {
+            for (size_t k = 0; k < sizeof(limits) / sizeof(*limits); ++k) {
+                immediate(code, 0, (XrRbcOp)op, 0, limits[k]);
+                CHECK(xr_rbc_jump(code + 1, 1, 4, 6));
+                immediate(code, 2, XR_RBC_LOADI, 0, 0); emit(code, 3, XR_RBC_RET, 0, 0, 0);
+                immediate(code, 4, XR_RBC_LOADI, 0, 1); emit(code, 5, XR_RBC_RET, 0, 0, 0);
+                bool expected = op == XR_RBC_LTI ? values[v] < limits[k] :
+                    op == XR_RBC_LEI ? values[v] <= limits[k] :
+                    op == XR_RBC_GTI ? values[v] > limits[k] :
+                    op == XR_RBC_GEI ? values[v] >= limits[k] : values[v] == limits[k];
+                uint64_t input = (uint64_t)values[v];
+                XrRbcFunction f = {.code=code, .code_count=6, .register_count=1, .parameter_count=1};
+                CHECK(run_function(f, &input, 1) == (uint64_t)expected);
+            }
+        }
+    }
+    uint32_t root = XR_RBC_RET0;
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS};
+    XrRbcFunction functions[] = {{.code=&root,.code_count=1,.register_count=1},
+        {.code=code,.code_count=6,.register_count=2,.register_kinds=kinds,.register_kind_count=2}};
+    XrRbcModule module = {.functions=functions,.function_count=2};
+    for (unsigned op = XR_RBC_LTI; op <= XR_RBC_EQI; ++op) {
+        immediate(code, 0, (XrRbcOp)op, 2, -1); reject_prepare(&module, 0, NULL, 0);
+        immediate(code, 0, (XrRbcOp)op, 0, -1);
+        emit(code, 1, XR_RBC_RET0, 0, 0, 0); reject_prepare(&module, 0, NULL, 0);
+        CHECK(xr_rbc_jump(code + 1, 1, 4, 6));
+        kinds[0] = XR_RBC_STRING; reject_prepare(&module, 0, NULL, 0); kinds[0] = XR_RBC_BITS;
+    }
+    CHECK(xr_rbc_encode(code, (XrRbcOperands){XR_RBC_ADDI, 1, 2, 0, -128}));
+    reject_prepare(&module, 0, NULL, 0);
+    CHECK(xr_rbc_encode(code, (XrRbcOperands){XR_RBC_SUBI, 1, 0, 0, 127}));
+    kinds[0] = XR_RBC_STRING; reject_prepare(&module, 0, NULL, 0);
+    const XrRbcOp arithmetic[] = {XR_RBC_MULI, XR_RBC_REMI};
+    for (size_t n = 0; n < sizeof(arithmetic) / sizeof(*arithmetic); ++n) {
+        CHECK(xr_rbc_encode(code, (XrRbcOperands){arithmetic[n], 1, 0, 0, -128}));
+        reject_prepare(&module, 0, NULL, 0);
+        kinds[0] = XR_RBC_BITS;
+        CHECK(xr_rbc_encode(code, (XrRbcOperands){arithmetic[n], 1, 2, 0, 7}));
+        reject_prepare(&module, 0, NULL, 0);
+        kinds[0] = XR_RBC_STRING;
+    }
+}
+
 static void test_f64_negation(void) {
     static const uint64_t vectors[][2] = {
 #define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
@@ -226,6 +313,21 @@ static void test_f64_family(void) {
             uint32_t code[2];emit(code,0,comparisons[p],destination,0,1);emit(code,1,XR_RBC_RET,destination,0,0);
             XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
             CHECK(run_function(f,args,2)==((float_relation_mask(a,b)>>p)&1u));
+            CHECK(RUNTIME_FLOAT_ENV());
+            uint32_t branch[8];
+            emit(branch,0,comparisons[p],destination,0,1);
+            CHECK(xr_rbc_encode(&branch[1],(XrRbcOperands){XR_RBC_EQI,destination,0,0,0}));
+            CHECK(xr_rbc_jump(&branch[2],2,5,8));
+            CHECK(xr_rbc_encode(&branch[3],(XrRbcOperands){XR_RBC_LOADI,3,0,0,17}));
+            CHECK(xr_rbc_jump(&branch[4],4,6,8));
+            CHECK(xr_rbc_encode(&branch[5],(XrRbcOperands){XR_RBC_LOADI,3,0,0,23}));
+            emit(branch,6,XR_RBC_ADD,3,3,destination);
+            emit(branch,7,XR_RBC_RET,3,0,0);
+            f=(XrRbcFunction){.code=branch,.code_count=8,.register_count=4,.parameter_count=2};
+            CHECK(run_function(f,args,2)==(((float_relation_mask(a,b)>>p)&1u)?18u:23u));
+            CHECK(RUNTIME_FLOAT_ENV());
+            CHECK(xr_rbc_encode(&branch[1],(XrRbcOperands){XR_RBC_EQI,destination,0,0,1}));
+            CHECK(run_function(f,args,2)==(((float_relation_mask(a,b)>>p)&1u)?24u:17u));
             CHECK(RUNTIME_FLOAT_ENV());
         }
     }
@@ -571,8 +673,9 @@ static void test_unknown_arithmetic_panic(void) {
     XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
     XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     uint64_t arguments[] = {42, 0};
-    for (unsigned op = 0; op < 2; ++op) {
-        emit(code, 0, op ? XR_RBC_REM : XR_RBC_DIV, 0, 0, 1);
+    for (unsigned op = 0; op < 3; ++op) {
+        if (op == 2) CHECK(xr_rbc_encode(code, (XrRbcOperands){XR_RBC_REMI, 0, 0, 0, 0}));
+        else emit(code, 0, op ? XR_RBC_REM : XR_RBC_DIV, 0, 0, 1);
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_module_prepare(&module, 0, arguments, 2, NULL, &execution) == XR_RBC_INVALID);
         CHECK(!execution);
@@ -986,6 +1089,7 @@ static void test_spill_managed_backedge(void) {
 }
 
 int main(int argc, char **argv) {
+    test_immediates();
     test_scalar_reload_copies();
     test_spill_layout_and_overwrite();
     test_spill_loop();
