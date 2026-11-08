@@ -28,7 +28,7 @@ static void float_output_group(void) {
         {XR_XIR_F64, 0, INT64_C(0x7ff8000000000000)}, {XR_XIR_F64, 0, INT64_C(0x4341c37937e08000)}
     };
     FloatOutputProbe probe = {0, true};
-    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, float_output_bytes, &probe, sizeof("0.1 0.1 -0.0 inf nan 1e+16\n") - 1};
+    XrXirOutputSink sink = {XR_XIR_OUTPUT_ABI_VERSION, 0, float_output_bytes, &probe, sizeof("0.1 0.1 -0.0 inf nan 1e+16\n") - 1};
     XrXirOutputGroup group = {XR_XIR_STDOUT, values, 6, true};
     CHECK(xr_xir_output_render(&sink, &group) == XR_XIR_OUTPUT_OK && probe.calls == 1);
     --sink.byte_limit;
