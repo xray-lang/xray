@@ -134,7 +134,12 @@ static void test_immediate_selection(void) {
     static const struct { XrLirOp op; int64_t literal; bool left, encoded; } cases[] = {
         {XR_LIR_ADD, -128, false, true}, {XR_LIR_ADD, 127, true, true},
         {XR_LIR_SUB, -1, false, true}, {XR_LIR_SUB, 1, true, false},
-        {XR_LIR_ADD, 128, false, false}, {XR_LIR_SUB, -129, false, false}
+        {XR_LIR_ADD, 128, false, false}, {XR_LIR_SUB, -129, false, false},
+        {XR_LIR_MUL, -128, false, true}, {XR_LIR_MUL, 127, true, true},
+        {XR_LIR_MUL, 128, false, false}, {XR_LIR_REM, -1, false, true},
+        {XR_LIR_REM, -128, false, true}, {XR_LIR_REM, 127, false, true},
+        {XR_LIR_REM, 128, false, false}, {XR_LIR_REM, 7, true, false},
+        {XR_LIR_REM, 0, false, true}
     };
     const uint64_t inputs[] = {0, 1, INT64_MAX, UINT64_C(0x8000000000000000), UINT64_MAX};
     for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
@@ -149,25 +154,46 @@ static void test_immediate_selection(void) {
         XrLirValue result = test_binary(m, block, cases[n].op,
             cases[n].left ? constant : input, cases[n].left ? input : constant,
             XR_LIR_PREDICATE_NONE);
-        // A second use still needs the real constant register when the first
-        // use is encoded in the instruction.
+        // A non-immediate use keeps a real constant register alongside encoded uses.
+        (void)test_binary(m, block, XR_LIR_XOR, constant, constant, XR_LIR_PREDICATE_NONE);
         result = test_binary(m, block, XR_LIR_MUL, result, constant, XR_LIR_PREDICATE_NONE);
         test_return(m, block, result);
         OK(xr_lir_module_finish(m, NULL));
         XrRbcProgram *program = compile(m, f);
         xr_lir_module_destroy(m);
         const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+        XrRbcOp wanted;
+        switch (cases[n].op) {
+        case XR_LIR_ADD: wanted = XR_RBC_ADDI; break;
+        case XR_LIR_SUB: wanted = XR_RBC_SUBI; break;
+        case XR_LIR_MUL: wanted = XR_RBC_MULI; break;
+        default: wanted = XR_RBC_REMI; break;
+        }
         unsigned immediate = 0;
         for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
             unsigned op = bytecode->code[pc] & 255;
-            immediate += op == XR_RBC_ADDI || op == XR_RBC_SUBI;
+            immediate += op == (unsigned)wanted;
         }
-        CHECK(immediate == (unsigned)cases[n].encoded);
+        unsigned expected_count = (unsigned)cases[n].encoded;
+        if (cases[n].op == XR_LIR_MUL) expected_count *= 2;
+        CHECK(immediate == expected_count);
         for (size_t a = 0; a < sizeof(inputs) / sizeof(*inputs); ++a) {
             uint64_t literal = (uint64_t)cases[n].literal;
             uint64_t lhs = cases[n].left ? literal : inputs[a];
             uint64_t rhs = cases[n].left ? inputs[a] : literal;
-            uint64_t expected = (cases[n].op == XR_LIR_ADD ? lhs + rhs : lhs - rhs) * literal;
+            uint64_t expected = 0;
+            if (cases[n].op == XR_LIR_REM) {
+                uint64_t bits = UINT64_MAX;
+                if (!rhs) {
+                    CHECK(execute(program, &inputs[a], 1, &bits) == XR_RBC_ARITHMETIC_PANIC);
+                    continue;
+                }
+                int64_t left, right;
+                memcpy(&left, &lhs, sizeof(left)); memcpy(&right, &rhs, sizeof(right));
+                expected = left == INT64_MIN && right == -1 ? 0 : (uint64_t)(left % right);
+            } else if (cases[n].op == XR_LIR_MUL) expected = lhs * rhs;
+            else expected = cases[n].op == XR_LIR_ADD ? lhs + rhs : lhs - rhs;
+            expected *= literal;
             CHECK(run(program, &inputs[a], 1) == expected);
         }
         xr_rbc_program_destroy(program);

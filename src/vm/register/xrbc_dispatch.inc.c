@@ -185,6 +185,11 @@ XR_RBC_CASE(MUL) {
     XR_RBC_BINARY(XR_RBC_REG(b) * XR_RBC_REG(c));
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(MULI) {
+    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
+    XR_RBC_REG(a) = XR_RBC_REG(b) * value;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(NEG) {
     XR_RBC_REG(a) = 0 - XR_RBC_REG(b);
     XR_RBC_NEXT();
@@ -260,8 +265,11 @@ XR_RBC_CASE(FTOI) {
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(DIV)
-XR_RBC_CASE(REM) {
-    int64_t lhs = xr_rbc_signed(XR_RBC_REG(b)), rhs = xr_rbc_signed(XR_RBC_REG(c));
+XR_RBC_CASE(REM)
+XR_RBC_CASE(REMI) {
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(b));
+    int64_t rhs = op == XR_RBC_REMI ?
+        (c <= INT8_MAX ? (int64_t)c : (int64_t)c - 256) : xr_rbc_signed(XR_RBC_REG(c));
     if (!rhs) {
         uint32_t source_id = function->source_ids ? function->source_ids[pc - 1] : 0;
         xrt_arithmetic_panic(op == XR_RBC_DIV ? 420u : 421u, source_id);
