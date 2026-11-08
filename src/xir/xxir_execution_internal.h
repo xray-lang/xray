@@ -16,7 +16,8 @@
 
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
-    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL
+    XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL,
+    XIR_EXECUTION_STORABLE
 } XirExecutionSiteKind;
 
 typedef enum XirExecutionPort {

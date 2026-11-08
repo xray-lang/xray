@@ -32,7 +32,7 @@ typedef struct EffectCheckNode {
     uint32_t component, reason[2];
     XrXirType type;
     uint32_t block, mode, cleanup_call, cleanup_parent;
-    bool cell, escaping, weaken, erased, callable_opaque, callable_input;
+    bool cell, escaping, weaken, erased, callable_opaque, callable_input, storable_value;
     uint32_t suspend_reason[2], suspend_call[2], suspend_parameter[2], suspend_instruction[2], suspend_distance[2], suspend_order[2];
     uint8_t cell_use, origin, bound, closed, suspend_bound;
     bool task_creation, restricted;
@@ -728,6 +728,15 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     const XrXirTypeNode *suspend_signature = xr_xir_callable_signature(build->module->types, op->type);
     bool callable = suspend_signature != NULL;
     if (callable) {
+        switch (op->op) {
+        case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_CALL_REQUIREMENT: case XR_XIR_INVOKE_RESULT:
+        case XR_XIR_SLOT_LOAD: case XR_XIR_ARRAY_GET: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET:
+        case XR_XIR_ENUM_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_VALUE_AT:
+        case XR_XIR_NULLABLE_UNWRAP:
+            build->roots->node[value].storable_value = true;
+            break;
+        default: break;
+        }
         switch (op->op) {
         case XR_XIR_FUNCTION_REF: case XR_XIR_CLASS_METHOD_REF:
         case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:

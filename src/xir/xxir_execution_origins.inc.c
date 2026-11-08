@@ -226,7 +226,18 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
                 continue;
             }
-            if (node->callable_opaque) unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+            if (observe_environment && node->storable_value) {
+                XirExecutionSite stored = {.kind = XIR_EXECUTION_STORABLE, .index = origin.value,
+                    .function = function.declaration, .instruction = origin.value >= function.parameters ?
+                        origin.value - function.parameters : UINT32_MAX, .block = node->block,
+                    .caller_instance = origin.function, .target = UINT32_MAX, .declaration = UINT32_MAX,
+                    .output_function = UINT32_MAX, .output_value = UINT32_MAX,
+                    .receiver_function = function.declaration, .receiver_value = origin.value,
+                    .registration = UINT32_MAX, .reference = UINT32_MAX, .environment = origin.environment,
+                    .capture_environment = origin.environment, .signature = node->type};
+                walk.status = visit(context, &stored);
+                predecessor = found = true;
+            } else if (node->callable_opaque) unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
             for (uint32_t c = node->calls; c != UINT32_MAX && walk.status == XR_XIR_OK; c = roots->call[c].next) {
                 EffectCheckCall call = roots->call[c];
                 if (call.protocol != 1) continue;

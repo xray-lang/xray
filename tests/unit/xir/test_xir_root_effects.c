@@ -761,6 +761,59 @@ static void execution_instance_parameters(void) {
     effect_mark_check(baseline);
 }
 
+typedef struct ExecutionKindProbe {
+    XirExecutionSiteKind kind;
+    uint32_t count;
+} ExecutionKindProbe;
+static XrXirStatus execution_kind_oracle(void *context, const XirExecutionSite *site) {
+    ExecutionKindProbe *probe = context;
+    CHECK(site->kind == probe->kind);
+    if (site->kind == XIR_EXECUTION_STORABLE) CHECK(!site->argument_count && site->target == UINT32_MAX);
+    ++probe->count;
+    return XR_XIR_OK;
+}
+
+static void execution_storable_boundaries(void) {
+    EffectMark baseline = effect_mark();
+    XrXirType fn = XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER,
+        .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    XrXirTypes types = {.nodes = &node, .count = 1};
+    uint32_t operand = 0, escaping = 0;
+    XrXirInstruction caller[] = {
+        {.op = XR_XIR_CALL, .type = fn, .args = {0, 1}, .immediate = 1},
+        {.op = XR_XIR_FUNCTION_WEAKEN, .type = fn, .args = {0}}, {.op = XR_XIR_RETURN, .args = {1}}
+    };
+    XrXirInstruction returned = {.op = XR_XIR_RETURN};
+    XrXirBlock blocks[] = {{.count = 3}, {.count = 1}};
+    XrXirFunction functions[] = {
+        {.parameters = &fn, .parameter_count = 1, .result = fn, .blocks = blocks, .block_count = 1,
+            .instructions = caller, .instruction_count = 3, .operands = &operand, .operand_count = 1,
+            .error_type = XR_XIR_NEVER, .escaping_parameters = &escaping, .escaping_parameter_count = 1},
+        {.parameters = &fn, .parameter_count = 1, .result = fn, .blocks = blocks + 1, .block_count = 1,
+            .instructions = &returned, .instruction_count = 1, .error_type = XR_XIR_NEVER,
+            .escaping_parameters = &escaping, .escaping_parameter_count = 1}
+    };
+    XrXirModule module = {.types = &types, .functions = functions, .function_count = 2};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, true) == XR_XIR_OK);
+    XirExecutionValue value = {0, 1, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+    ExecutionKindProbe probe = {XIR_EXECUTION_STORABLE, 0};
+    bool complete = false;
+    uint32_t remainder = UINT32_MAX;
+    CHECK(xir_execution_visit_value_environment_in(roots, &value, execution_kind_oracle,
+        &probe, &complete, &remainder) == XR_XIR_OK && complete && !remainder && probe.count == 1);
+    probe.count = 0;
+    CHECK(xir_execution_visit_value_captures_in(roots, &value, execution_kind_oracle,
+        &probe, &complete, &remainder) == XR_XIR_OK && !complete &&
+        (remainder & XIR_EXECUTION_REMAINDER_OPAQUE) && !probe.count);
+    value.value = 2; probe.kind = XIR_EXECUTION_FORMAL;
+    CHECK(xir_execution_visit_value_environment_in(roots, &value, execution_kind_oracle,
+        &probe, &complete, &remainder) == XR_XIR_OK && complete && !remainder && probe.count == 1);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -771,6 +824,7 @@ static void control_summary_kernel(void) {
     c_callable_parameter_equations();
     point_request_failure();
     execution_instance_parameters();
+    execution_storable_boundaries();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
