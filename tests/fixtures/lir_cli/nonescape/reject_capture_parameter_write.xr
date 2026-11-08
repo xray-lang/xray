@@ -1,0 +1,6 @@
+fn leaf() -> i64 { return 7 }
+fn outer() {
+    var slot = leaf
+    const setter = fn(next: fn() -> i64) { slot = next }
+    setter(leaf)
+}

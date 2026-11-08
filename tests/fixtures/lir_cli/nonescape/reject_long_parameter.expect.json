@@ -1,0 +1,4 @@
+{
+  "line": 2,
+  "message": "E0398: parameter 'callback_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...' cannot escape through a return. Declare 'callback_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...: escaping fn(...)'"
+}

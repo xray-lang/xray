@@ -18,6 +18,15 @@ typedef struct XrHirEscapeDiagnostic {
 } XrHirEscapeDiagnostic;
 
 typedef struct XrHirEscapeFacts XrHirEscapeFacts;
+typedef struct XrHirEscapeBuilder XrHirEscapeBuilder;
+
+/* Declaration spellings are copied. Body operands are a synchronous borrow
+ * through the final observer, and every instruction is submitted once. */
+XR_FUNC XrXirStatus xr_hir_escape_builder_new(const XrXirCompileContext *, const XrXirModule *,
+    const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeBuilder **);
+XR_FUNC XrXirStatus xr_hir_escape_builder_observe(XrHirEscapeBuilder *, uint32_t, uint32_t,
+    const XrXirInstruction *);
+XR_FUNC void xr_hir_escape_builder_free(XrHirEscapeBuilder *);
 
 XR_FUNC XrXirStatus xr_hir_escape_check(const XrXirCompileContext *, const XrXirModule *,
     const XrHirEscapeDeclaration *, XrCompileRequestControl *, XrHirEscapeDiagnostic *, XrHirEscapeFacts **);
