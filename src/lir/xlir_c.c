@@ -458,6 +458,21 @@ static bool c_literal_value(LirC *c, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
     return definition && definition->op == XR_LIR_LITERAL_ADDR;
 }
+/* A String literal is a borrow pinned by the root until the root ends. Of
+ * LIR's consuming uses, its drop releases nothing, and a result or edge
+ * transfer takes a fresh owner. */
+static bool c_string_literal(LirC *c, uint32_t id) {
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
+    return definition && definition->op == XR_LIR_STRING_LITERAL;
+}
+static void c_string_owner(LirC *c, uint32_t id) {
+    if (c_string_literal(c, id)) {
+        c_text(c, "xrt_string_retain(");
+        c_value(c, id);
+        c_text(c, ", UINT32_C(0))");
+    } else c_value(c, id);
+}
 static void c_declarations(LirC *c) {
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
@@ -573,11 +588,12 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
             return;
         }
         c_format(c, "        %s v%" PRIu64 " = ", c_type(c_value_type(c, edge->arguments[a])), temp);
-        c_value(c, edge->arguments[a]);
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING) c_string_owner(c, edge->arguments[a]);
+        else c_value(c, edge->arguments[a]);
         c_text(c, ";\n");
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
-        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING) {
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING && !c_string_literal(c, edge->arguments[a])) {
             c_text(c, "        "); c_value(c, edge->arguments[a]); c_text(c, " = NULL;\n");
         }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
@@ -629,7 +645,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             const uint8_t *bytes = NULL;
             size_t length = 0;
             xr_lir_literal_view(c->request->module, literal, &bytes, &length);
-            c_format(c, "    v%" PRIu32 " = xrt_string_new((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
+            c_format(c, "    v%" PRIu32 " = xrt_string_literal((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
                 v->result, v->bits, length, string_source);
             break;
         }
@@ -653,6 +669,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
             break;
         case XR_LIR_STRING_DROP:
+            if (c_string_literal(c, v->operands[0])) break;
             c_text(c, "    xrt_string_drop(&"); c_value(c, v->operands[0]); c_text(c, ");\n");
             break;
         case XR_LIR_STRING_CELL_DROP:
@@ -781,7 +798,8 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    return");
             if (v->operand_count) {
                 c_text(c, " ");
-                c_value(c, v->operands[0]);
+                if (c->view.result == XR_LIR_STRING) c_string_owner(c, v->operands[0]);
+                else c_value(c, v->operands[0]);
             }
             c_text(c, ";\n");
             break;

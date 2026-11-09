@@ -5,61 +5,204 @@
  * Licensed under the MIT License
  *
  * xnative_string.c - Typed access to the shared String and RC kernel
+ *
+ * KEY CONCEPT:
+ *   Guest locals are lost when a failure ends the root, so the root itself
+ *   records every String its guest owns. It holds one real reference per
+ *   String and counts guest references in an open-addressed table: retain and
+ *   drop touch no shared state, and ending the root releases each real
+ *   reference once. Root Strings are single unpublished blocks in the root
+ *   domain, whose live-byte limit charges every body and table. A literal is
+ *   one pinned object per root, lent to the guest without a count.
  */
 #include "xnative_string.h"
 #include "xir/xxir_value_internal.h"
-#include "xir/xxir_output.h"
 #include "xir/xxir_float.h"
 #include "base/xchecks.h"
+#include <string.h>
 
+/* count is the number of guest references; a pinned literal slot keeps its
+ * real reference at count zero until the root ends. */
 struct XrtStringOwner {
-    XrtStringOwner *next;
+    XrtString *string;
+    uint32_t count;
+    bool pinned;
+};
+struct XrtStringLiteral {
+    const char *bytes;
+    size_t length;
     XrtString *string;
 };
+enum { ROOT_TABLE_MINIMUM = 16 };
+_Static_assert(ROOT_TABLE_MINIMUM > 0 && (ROOT_TABLE_MINIMUM & (ROOT_TABLE_MINIMUM - 1)) == 0,
+    "root tables use power-of-two capacities");
 
-static XrXirValue string_borrow(const XrtString *string) {
+static XR_THREAD_LOCAL XrtStringBinding string_binding;
+XR_FUNC XrtStringBinding xrt_string_root_bind(XrtStringBinding binding) {
+    XrtStringBinding previous = string_binding;
+    string_binding = binding;
+    return previous;
+}
+static XrtStringRoot *string_root(uint32_t source_id) {
+    const XrtStringBinding *binding = &string_binding;
+    XR_CHECK(binding->root && source_id <= binding->sources, "String operations require an active root and source id");
+    return binding->root;
+}
+static size_t root_slot(const void *key, uint32_t capacity) {
+    uint64_t hash = (uint64_t)(uintptr_t)key * UINT64_C(0x9e3779b97f4a7c15);
+    return (size_t)(hash >> 32) & (capacity - 1);
+}
+static XrXirValue string_value(const XrtString *string) {
     XrXirValue value = {XR_XIR_STRING, 0, (int64_t)(intptr_t)string};
-    XR_CHECK(string && xr_xir_value_valid(&value), "A native String borrows a canonical live object");
     return value;
 }
-static XrtStringOwner *string_prepare(XrtStringRoot *root, uint32_t source_id) {
-    XrXirValueStatus status = XR_XIR_VALUE_OK;
+static void string_check(const XrtString *string) {
+    XrXirValue value = string_value(string);
+    XR_CHECK(string && xr_xir_value_valid(&value), "A native String borrows a canonical live object");
+}
+static XrtStringOwner *owner_find(const XrtStringRoot *root, const XrtString *string) {
+    if (!root->table) return NULL;
+    uint32_t mask = root->table_capacity - 1;
+    for (size_t i = root_slot(string, root->table_capacity);; i = (i + 1) & mask) {
+        XrtStringOwner *slot = &root->table[i];
+        if (slot->string == string) return slot;
+        if (!slot->string) return NULL;
+    }
+}
+/* A held slot proves a live canonical String; any other handle is validated. */
+static void root_borrow(const XrtStringRoot *root, const XrtString *string) {
+    if (!string || !root || !owner_find(root, string)) string_check(string);
+}
+static XrXirDomain *root_domain(XrtStringRoot *root, uint32_t source_id) {
     if (!root->domain) {
-        status = xr_xir_domain_new(root->byte_limit ? root->byte_limit : UINT64_MAX, &root->domain);
+        XrXirValueStatus status = xr_xir_root_domain_new(root->byte_limit ? root->byte_limit : UINT64_MAX,
+            &root->domain);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
     }
-    XrtStringOwner *owner = xr_xir_domain_allocate(root->domain, sizeof(*owner), &status);
-    if (!owner) xrt_value_failure(status, source_id);
-    *owner = (XrtStringOwner){0};
-    return owner;
+    return root->domain;
 }
-static XrtString *string_publish(XrtStringRoot *root, XrtStringOwner *owner,
-    XrXirValue *value, XrXirValueStatus status, uint32_t source_id) {
-    if (status != XR_XIR_VALUE_OK) {
-        xr_xir_value_drop(value);
-        xr_xir_domain_deallocate(root->domain, owner, sizeof(*owner));
-        xrt_value_failure(status, source_id);
-    }
-    XR_CHECK(value->type == XR_XIR_STRING && value->payload, "A String helper publishes one real owner");
-    owner->string = (XrtString *)(intptr_t)value->payload;
-    owner->next = root->owners;
-    root->owners = owner;
+static uint32_t root_grown(uint32_t capacity, uint32_t source_id) {
+    if (capacity > UINT32_MAX / 4) xrt_value_failure(XR_XIR_VALUE_LIMIT, source_id);
+    return capacity ? capacity * 2 : ROOT_TABLE_MINIMUM;
+}
+static void owner_place(XrtStringOwner *table, uint32_t capacity, XrtStringOwner owner) {
+    for (size_t i = root_slot(owner.string, capacity);; i = (i + 1) & (capacity - 1))
+        if (!table[i].string) { table[i] = owner; return; }
+}
+/* Make room for one more owner before anything is created, so publication
+ * cannot fail after a real reference exists. Load stays at most one half. */
+static void root_reserve(XrtStringRoot *root, uint32_t source_id) {
+    XrXirDomain *domain = root_domain(root, source_id);
+    if (root->table_count < root->table_capacity / 2) return;
+    uint32_t capacity = root_grown(root->table_capacity, source_id);
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    XrtStringOwner *table = xr_xir_domain_allocate(domain, (size_t)capacity * sizeof(*table), &status);
+    if (!table) xrt_value_failure(status, source_id);
+    memset(table, 0, (size_t)capacity * sizeof(*table));
+    for (uint32_t i = 0; i < root->table_capacity; ++i)
+        if (root->table[i].string) owner_place(table, capacity, root->table[i]);
+    if (root->table) xr_xir_domain_deallocate(domain, root->table, (size_t)root->table_capacity * sizeof(*table));
+    root->table = table;
+    root->table_capacity = capacity;
+}
+/* The handle is absent: a new object cannot alias a live one, and foreign
+ * handles are inserted only after a failed lookup. */
+static XrtString *root_adopt(XrtStringRoot *root, XrtString *string, bool pinned) {
+    owner_place(root->table, root->table_capacity, (XrtStringOwner){string, 1, pinned});
+    ++root->table_count;
+    ++root->held;
+    return string;
+}
+static XrtString *root_count(XrtStringRoot *root, XrtStringOwner *owner, uint32_t source_id) {
+    if (owner->count == UINT32_MAX) xrt_value_failure(XR_XIR_VALUE_REFCOUNT_LIMIT, source_id);
+    ++owner->count;
+    ++root->held;
     return owner->string;
 }
+/* Backward-shift deletion keeps every probe sequence free of holes. */
+static void owner_remove(XrtStringRoot *root, XrtStringOwner *slot) {
+    uint32_t mask = root->table_capacity - 1;
+    size_t hole = (size_t)(slot - root->table);
+    for (size_t next = (hole + 1) & mask; root->table[next].string; next = (next + 1) & mask) {
+        size_t home = root_slot(root->table[next].string, root->table_capacity);
+        if (((next - home) & mask) >= ((next - hole) & mask)) {
+            root->table[hole] = root->table[next];
+            hole = next;
+        }
+    }
+    root->table[hole] = (XrtStringOwner){0};
+    --root->table_count;
+}
+static void root_release(XrtStringRoot *root, XrtStringOwner *owner) {
+    --owner->count;
+    --root->held;
+    if (owner->count || owner->pinned) return;
+    XrtString *string = owner->string;
+    owner_remove(root, owner);
+    xr_xir_string_release(string);
+}
+static XrtString *root_publish(XrtStringRoot *root, XrtString *string, XrXirValueStatus status,
+    uint32_t source_id) {
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+    return root_adopt(root, string, false);
+}
+static XrtStringLiteral *literal_find(const XrtStringRoot *root, const char *bytes, size_t length) {
+    if (!root->literals) return NULL;
+    uint32_t mask = root->literal_capacity - 1;
+    for (size_t i = root_slot(bytes, root->literal_capacity);; i = (i + 1) & mask) {
+        XrtStringLiteral *slot = &root->literals[i];
+        if (!slot->string) return NULL;
+        if (slot->bytes == bytes && slot->length == length) return slot;
+    }
+}
+static void literal_place(XrtStringLiteral *table, uint32_t capacity, XrtStringLiteral literal) {
+    for (size_t i = root_slot(literal.bytes, capacity);; i = (i + 1) & (capacity - 1))
+        if (!table[i].string) { table[i] = literal; return; }
+}
+static void literal_reserve(XrtStringRoot *root, uint32_t source_id) {
+    if (root->literal_count < root->literal_capacity / 2) return;
+    uint32_t capacity = root_grown(root->literal_capacity, source_id);
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    XrtStringLiteral *table = xr_xir_domain_allocate(root->domain, (size_t)capacity * sizeof(*table), &status);
+    if (!table) xrt_value_failure(status, source_id);
+    memset(table, 0, (size_t)capacity * sizeof(*table));
+    for (uint32_t i = 0; i < root->literal_capacity; ++i)
+        if (root->literals[i].string) literal_place(table, capacity, root->literals[i]);
+    if (root->literals)
+        xr_xir_domain_deallocate(root->domain, root->literals, (size_t)root->literal_capacity * sizeof(*table));
+    root->literals = table;
+    root->literal_capacity = capacity;
+}
 XRAY_API XrtString *xrt_string_new(const char *bytes, size_t length, uint32_t source_id) {
-    XrtStringRoot *root = xrt_string_root_current(source_id);
-    XrtStringOwner *owner = string_prepare(root, source_id);
-    XrXirValue value = {0};
-    XrXirValueStatus status = xr_xir_string_new(root->domain, bytes, length, &value);
-    return string_publish(root, owner, &value, status, source_id);
+    XrtStringRoot *root = string_root(source_id);
+    root_reserve(root, source_id);
+    XrtString *string = NULL;
+    XrXirValueStatus status = xr_xir_root_string_new(root->domain, bytes, length, &string);
+    return root_publish(root, string, status, source_id);
+}
+/* The pinned slot holds the root's real reference and no guest owner, so a
+ * drop of the borrowed handle fails closed like any other non-owner. */
+XRAY_API XrtString *xrt_string_literal(const char *bytes, size_t length, uint32_t source_id) {
+    XrtStringRoot *root = string_root(source_id);
+    XrtStringLiteral *literal = literal_find(root, bytes, length);
+    if (literal) return literal->string;
+    root_reserve(root, source_id);
+    literal_reserve(root, source_id);
+    XrtString *string = NULL;
+    XrXirValueStatus status = xr_xir_root_string_new(root->domain, bytes, length, &string);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+    literal_place(root->literals, root->literal_capacity, (XrtStringLiteral){bytes, length, string});
+    ++root->literal_count;
+    owner_place(root->table, root->table_capacity, (XrtStringOwner){string, 0, true});
+    ++root->table_count;
+    return string;
 }
 XRAY_API XrtString *xrt_string_i64(int64_t value, uint32_t source_id) {
-    char bytes[32];
-    XrXirValue scalar = {XR_XIR_I64, 0, value};
-    const char *text = NULL;
-    size_t length = 0;
-    XR_CHECK(xr_xir_scalar_text(&scalar, bytes, &text, &length), "The canonical I64 formatter fits its fixed buffer");
-    return xrt_string_new(text, length, source_id);
+    XrtStringRoot *root = string_root(source_id);
+    root_reserve(root, source_id);
+    XrtString *string = NULL;
+    XrXirValueStatus status = xr_xir_root_string_i64(root->domain, value, &string);
+    return root_publish(root, string, status, source_id);
 }
 XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id) {
     char bytes[32];
@@ -70,73 +213,85 @@ XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id) {
 }
 XRAY_API XrtString *xrt_string_concat(const XrtString *left, const XrtString *right,
     uint32_t source_id) {
-    XrtStringRoot *root = xrt_string_root_current(source_id);
-    XrXirValue a = string_borrow(left), b = string_borrow(right), output = {0};
-    XrtStringOwner *owner = string_prepare(root, source_id);
-    XrXirValueStatus status = xr_xir_string_concat(root->domain, &a, &b, &output);
-    return string_publish(root, owner, &output, status, source_id);
+    XrtStringRoot *root = string_root(source_id);
+    root_borrow(root, left);
+    root_borrow(root, right);
+    root_reserve(root, source_id);
+    XrtString *string = NULL;
+    XrXirValueStatus status = xr_xir_root_string_concat(root->domain, left, right, &string);
+    return root_publish(root, string, status, source_id);
 }
 XRAY_API XrtString *xrt_string_retain(const XrtString *string, uint32_t source_id) {
-    XrtStringRoot *root = xrt_string_root_current(source_id);
-    XrXirValue source = string_borrow(string), output = {0};
-    XrtStringOwner *owner = string_prepare(root, source_id);
+    XrtStringRoot *root = string_root(source_id);
+    XrtStringOwner *owner = string ? owner_find(root, string) : NULL;
+    if (owner) return root_count(root, owner, source_id);
+    string_check(string);
+    root_reserve(root, source_id);
+    XrXirValue source = string_value(string), output = {0};
     XrXirValueStatus status = xr_xir_value_copy(&source, &output);
-    return string_publish(root, owner, &output, status, source_id);
-}
-static XrtStringOwner **string_owner(XrtStringRoot *root, const XrtString *string) {
-    XrtStringOwner **link = &root->owners;
-    while (*link && (*link)->string != string) link = &(*link)->next;
-    return link;
+    return root_publish(root, (XrtString *)(intptr_t)output.payload, status, source_id);
 }
 XR_FUNC XrtString *xrt_string_root_take(XrtString *string) {
-    XrtStringRoot *root = xrt_string_root_current(0);
-    XrtStringOwner **link = string_owner(root, string);
-    XR_CHECK(string && *link, "Only an actual current root owner can be transferred");
-    XrtStringOwner *owner = *link;
-    *link = owner->next;
-    xr_xir_domain_deallocate(root->domain, owner, sizeof(*owner));
+    XrtStringRoot *root = string_root(0);
+    XrtStringOwner *owner = string ? owner_find(root, string) : NULL;
+    XR_CHECK(owner && owner->count, "Only an actual current root owner can be transferred");
+    if (owner->count == 1 && !owner->pinned) {
+        XrXirValueStatus escape = string->object.root_private ? xr_xir_root_string_escape(string) : XR_XIR_VALUE_OK;
+        if (escape != XR_XIR_VALUE_OK) xrt_value_failure(escape, 0);
+        owner_remove(root, owner); // The root's real reference moves to the receiver.
+        --root->held;
+        return string;
+    }
+    XrXirValue source = string_value(string), output = {0};
+    XrXirValueStatus status = xr_xir_value_copy(&source, &output);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, 0);
+    --owner->count;
+    --root->held;
     return string;
 }
 XRAY_API void xrt_string_move(XrtString **destination, XrtString **source) {
-    XrtStringRoot *root = xrt_string_root_current(0);
-    XR_CHECK(destination && source && destination != source && !*destination &&
-        *source && *string_owner(root, *source), "Move consumes one current String owner into an empty slot");
+    XrtStringRoot *root = string_root(0);
+    XrtStringOwner *owner = source && *source ? owner_find(root, *source) : NULL;
+    XR_CHECK(destination && source && destination != source && !*destination && owner && owner->count,
+        "Move consumes one current String owner into an empty slot");
     *destination = *source;
     *source = NULL;
 }
 XRAY_API void xrt_string_drop(XrtString **string) {
     if (!string || !*string) return;
-    XrtString *owned = xrt_string_root_take(*string);
+    XrtStringRoot *root = string_root(0);
+    XrtStringOwner *owner = owner_find(root, *string);
+    XR_CHECK(owner && owner->count, "Only an actual current root owner can be dropped");
     *string = NULL;
-    xrt_string_owned_drop(&owned);
+    root_release(root, owner);
 }
 XRAY_API void xrt_string_owned_drop(XrtString **string) {
     if (!string || !*string) return;
-    XrXirValue value = string_borrow(*string);
+    XrtString *owned = *string;
+    string_check(owned);
     *string = NULL;
-    xr_xir_value_drop(&value);
+    xr_xir_string_release(owned);
 }
 XRAY_API const char *xrt_string_bytes(const XrtString *string, size_t *length) {
-    XrXirValue value = string_borrow(string);
-    const char *bytes = NULL;
-    XR_CHECK(length && xr_xir_string_view(&value, &bytes, length), "String bytes require a live canonical String");
-    return bytes;
+    root_borrow(string_binding.root, string);
+    XR_CHECK(length, "String bytes require a live canonical String");
+    *length = string->length;
+    return string->bytes;
 }
 XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id) {
-    XrXirValue value = string_borrow(string);
-    int64_t length = 0;
-    XrXirValueStatus status = xr_xir_string_length(&value, &length);
-    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
-    return length;
+    root_borrow(string_binding.root, string);
+    if (string->runes > INT64_MAX) xrt_value_failure(XR_XIR_VALUE_LIMIT, source_id);
+    return (int64_t)string->runes;
 }
 XR_FUNC void xrt_string_root_drain(XrtStringRoot *root) {
-    while (root->owners) {
-        XrtStringOwner *owner = root->owners;
-        root->owners = owner->next;
-        XrXirValue value = string_borrow(owner->string);
-        xr_xir_value_drop(&value);
-        xr_xir_domain_deallocate(root->domain, owner, sizeof(*owner));
-    }
-    xr_xir_domain_drop(root->domain);
-    root->domain = NULL;
+    for (uint32_t i = 0; i < root->table_capacity; ++i)
+        if (root->table[i].string) xr_xir_string_release(root->table[i].string);
+    if (root->table)
+        xr_xir_domain_deallocate(root->domain, root->table, (size_t)root->table_capacity * sizeof(*root->table));
+    if (root->literals)
+        xr_xir_domain_deallocate(root->domain, root->literals,
+            (size_t)root->literal_capacity * sizeof(*root->literals));
+    XrXirDomain *domain = root->domain;
+    *root = (XrtStringRoot){.byte_limit = root->byte_limit};
+    xr_xir_root_domain_release(domain);
 }

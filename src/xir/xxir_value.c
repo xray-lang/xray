@@ -57,6 +57,7 @@
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
 #include "../shared/xr_string_core.h"
+#include "../shared/xr_numeric_core.h"
 #include <inttypes.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -73,10 +74,35 @@ struct XrXirDomain {
     XirObject *objects;
     struct XrXirDomain *closed_previous, *closed_next;
     bool closed, close_started, close_pending, close_processing, graph_invalid;
+    bool root; /* xr_xir_root_domain_new: never closed, never budget-bound. */
     XrXirClassObservation *observation;
     XrCompileResources *compile_resources;
     XirPageRecord *pages;
 };
+/* A root domain carries its root thread's ledger: private_bytes counts the
+ * blocks of unescaped root Strings, which never touch the shared stats or
+ * the domain lock, and freed blocks wait in small per-size caches. Only the
+ * root thread writes the ledger; other threads read private_bytes, relaxed,
+ * when they admit an allocation against the same limit. */
+/* AddressSanitizer must observe every freed block, so it gets no cache. */
+#if defined(__SANITIZE_ADDRESS__)
+#define XIR_ROOT_CACHE_DEPTH 0
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define XIR_ROOT_CACHE_DEPTH 0
+#endif
+#endif
+#ifndef XIR_ROOT_CACHE_DEPTH
+#define XIR_ROOT_CACHE_DEPTH 8
+#endif
+enum { ROOT_BLOCK_GRANULE = 16, ROOT_CACHE_CLASSES = 16, ROOT_CACHE_DEPTH = XIR_ROOT_CACHE_DEPTH };
+typedef struct XirRootBlock { struct XirRootBlock *next; } XirRootBlock;
+typedef struct XirRootDomain {
+    XrXirDomain domain;
+    _Atomic(uint64_t) private_bytes;
+    XirRootBlock *cache[ROOT_CACHE_CLASSES];
+    uint32_t cached[ROOT_CACHE_CLASSES];
+} XirRootDomain;
 typedef struct XirAtomic {
     XirObject object;
     _Atomic(uint64_t) bits;
@@ -183,11 +209,6 @@ typedef struct XirArray {
     XrXirType element;
     uint32_t stride;
 } XirArray;
-typedef struct XirString {
-    XirObject object;
-    char *bytes;
-    size_t length, runes, capacity;
-} XirString;
 struct XirPointerOrigin {
     _Atomic(uint32_t) references;
     XrXirDomain *domain;
@@ -265,6 +286,7 @@ static void domain_unlock(XrXirDomain *domain) {
 static bool value_object_kind_known(uint32_t kind);
 static XrXirValueStatus struct_observe_operation(const XrXirValue *value,uint32_t field,
     XrXirValueAdmission *admission,XrXirValue *output,bool receiving);
+static bool root_string_escape(XirObject *object);
 #include "xxir_value_graph_control.inc.c"
 static bool unit_value(const XrXirValue *value) {
     return value && !value->type && !value->reserved && !value->payload;
@@ -582,19 +604,40 @@ XR_FUNC XrXirValueStatus xr_xir_compile_value_arena_borrow(XrCompileResources *r
     }
     xr_xir_value_graph_end();return status;
 }
-XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
+static size_t domain_base_bytes(const XrXirDomain *domain) {
+    return domain->root ? sizeof(XirRootDomain) : sizeof(XrXirDomain);
+}
+static uint64_t domain_private_bytes(XrXirDomain *domain) {
+    return domain->root ? atomic_load_explicit(&((XirRootDomain *)domain)->private_bytes, memory_order_relaxed) : 0;
+}
+/* Admission against the live-byte limit, which also covers a root ledger. */
+static bool domain_fits(XrXirDomain *domain, uint64_t bytes) {
+    uint64_t live = domain->stats.live_bytes, used = live + domain_private_bytes(domain);
+    return used >= live && used <= domain->limit && bytes <= domain->limit - used;
+}
+static XrXirValueStatus domain_create(uint64_t limit, size_t base, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (limit < sizeof(XrXirDomain)) return XR_XIR_VALUE_LIMIT;
-    XrXirDomain *domain = xr_malloc(sizeof(*domain));
+    if (limit < base) return XR_XIR_VALUE_LIMIT;
+    XrXirDomain *domain = xr_malloc(base);
     if (!domain) return XR_XIR_VALUE_OOM;
-    memset(domain, 0, sizeof(*domain));
+    memset(domain, 0, base);
     memcpy(domain->identity, domain_identity, sizeof(domain_identity));
     atomic_init(&domain->references, 1);
     atomic_init(&domain->locked, false);
     domain->limit = limit;
     domain->budget = (XrXirDomainBudgetStats){0};
-    domain->stats = (XrXirDomainStats) {sizeof(*domain), sizeof(*domain), 1, 0, 0};
+    domain->stats = (XrXirDomainStats) {base, base, 1, 0, 0};
     *output = domain;
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
+    return domain_create(limit, sizeof(XrXirDomain), output);
+}
+XR_FUNC XrXirValueStatus xr_xir_root_domain_new(uint64_t limit, XrXirDomain **output) {
+    XrXirValueStatus status = domain_create(limit, sizeof(XirRootDomain), output);
+    if (status != XR_XIR_VALUE_OK) return status;
+    (*output)->root = true;
+    atomic_init(&((XirRootDomain *)*output)->private_bytes, 0);
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus domain_compile_status(XrCompileResourceStatus status) {
@@ -665,7 +708,7 @@ XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain) {
 static void graph_domain_dispose(XrXirDomain *domain) {
     XR_CHECK(xr_xir_domain_current(domain), "domain disposal cannot consume a retired owner");
         class_observation_dispose(domain);
-        XR_CHECK(domain->stats.live_bytes == sizeof(*domain) &&
+        XR_CHECK(domain->stats.live_bytes == domain_base_bytes(domain) && !domain_private_bytes(domain) &&
                  domain->stats.allocations == domain->stats.frees + 1,
                  "domain still owns storage");
         XR_CHECK(!domain->budget.metadata_live && !domain->budget.call_live &&
@@ -677,6 +720,12 @@ static void graph_domain_dispose(XrXirDomain *domain) {
 XR_FUNC void xr_xir_domain_drop(XrXirDomain *domain) {
     if (!domain) return;
     XR_CHECK(xr_xir_domain_current(domain), "domain drop requires its actual storage generation");
+    /* A release that leaves another owner decides nothing, so only the final
+     * release takes the graph lock and races with closed-domain disposal. */
+    uint32_t count = atomic_load_explicit(&domain->references, memory_order_relaxed);
+    while (count > 1)
+        if (atomic_compare_exchange_weak_explicit(&domain->references, &count, count - 1,
+                memory_order_release, memory_order_relaxed)) return;
     graph_lock();
     bool dispose = xr_xir_reference_release(&domain->references) &&
         !domain->close_pending && !domain->close_processing;
@@ -689,6 +738,10 @@ XR_FUNC XrXirDomainStats xr_xir_domain_stats(XrXirDomain *domain) {
     domain_lock(domain);
     XrXirDomainStats stats = domain->stats;
     domain_unlock(domain);
+    /* Unescaped root Strings count as live. Peak follows the shared
+     * accounting only, so it never reports less than the current live bytes. */
+    stats.live_bytes += domain_private_bytes(domain);
+    if (stats.peak_bytes < stats.live_bytes) stats.peak_bytes = stats.live_bytes;
     return stats;
 }
 static bool domain_controls_valid(const XrXirDomainBudgetControls *controls) {
@@ -721,7 +774,8 @@ XR_FUNC XrXirValueStatus xr_xir_domain_new_budgeted(uint64_t value_limit,
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_domain_budget_bind(XrXirDomain *domain, const XrXirDomainBudgetControls *controls) {
-    if (!xr_xir_domain_current(domain) || domain->compile_resources || !domain_controls_valid(controls)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_current(domain) || domain->compile_resources || domain->root ||
+        !domain_controls_valid(controls)) return XR_XIR_VALUE_BAD_ARGUMENT;
     domain_lock(domain);
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
     if (!domain->budget.bound && domain->stats.allocations == 1 && !domain->stats.frees &&
@@ -809,7 +863,7 @@ static void *domain_payload_allocate(XrXirDomain *domain, size_t bytes, size_t a
         return NULL;
     }
     domain_lock(domain);
-    if (bytes > domain->limit - domain->stats.live_bytes || domain->stats.allocations == UINT64_MAX ||
+    if (!domain_fits(domain, bytes) || domain->stats.allocations == UINT64_MAX ||
         (domain->budget.bound && (bytes > domain->budget.requested_limit - domain->budget.requested_bytes ||
             domain->budget.work == domain->budget.work_limit))) {
         domain_unlock(domain);
@@ -846,29 +900,36 @@ XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain,void *memory,size_t by
 #include "xxir_buffer_storage_value.inc.c"
 #include "xxir_pointer_value.inc.c"
 #include "xxir_page_value.inc.c"
+#include "xxir_value_root_string.inc.c"
 static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
     XrXirDomain *domain = string->object.domain;
+    bool detach = string_body_inline(string); /* The header block cannot grow in place. */
     domain_lock(domain);
-    size_t extra = capacity - string->capacity;
-    if (extra > domain->limit - domain->stats.live_bytes || domain->stats.reallocations == UINT64_MAX ||
+    size_t extra = detach ? capacity : capacity - string->capacity;
+    uint64_t events = detach ? domain->stats.allocations : domain->stats.reallocations;
+    if (!domain_fits(domain, extra) || events == UINT64_MAX ||
         (domain->budget.bound && (capacity > domain->budget.requested_limit - domain->budget.requested_bytes ||
             domain->budget.work == domain->budget.work_limit))) {
         domain_unlock(domain);
         return XR_XIR_VALUE_LIMIT;
     }
     if (domain->budget.bound) { domain->budget.requested_bytes += capacity; ++domain->budget.work; }
-    void *replacement = string->bytes;
-    XrXirValueStatus status = domain_memory_resize(domain, &replacement, capacity);
-    if (status != XR_XIR_VALUE_OK) {
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    void *replacement = detach ? NULL : string->bytes;
+    if (detach) {
+        replacement = domain_memory_allocate(domain, capacity, false, &status);
+        if (replacement) memcpy(replacement, string->bytes, string->length + 1);
+    } else status = domain_memory_resize(domain, &replacement, capacity);
+    if (!replacement || status != XR_XIR_VALUE_OK) {
         domain_unlock(domain);
-        return status;
+        return status != XR_XIR_VALUE_OK ? status : XR_XIR_VALUE_OOM;
     }
     string->bytes = replacement;
     string->capacity = capacity;
     domain->stats.live_bytes += extra;
     if (domain->stats.live_bytes > domain->stats.peak_bytes)
         domain->stats.peak_bytes = domain->stats.live_bytes;
-    ++domain->stats.reallocations;
+    if (detach) ++domain->stats.allocations; else ++domain->stats.reallocations;
     domain_unlock(domain);
     return XR_XIR_VALUE_OK;
 }
@@ -1081,8 +1142,11 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain,pointer,sizeof(*pointer));
         } else if (object->type == XR_XIR_STRING) {
             XirString *string = (XirString *) object;
-            xr_xir_domain_deallocate(domain, string->bytes, string->capacity);
-            xr_xir_domain_deallocate(domain, string, sizeof(*string));
+            if (object->root_private) root_string_deallocate(string);
+            else {
+                xr_xir_domain_deallocate(domain, string->bytes, string->capacity);
+                xr_xir_domain_deallocate(domain, string, sizeof(*string));
+            }
         } else if (object->kind == XR_XIR_TYPE_CHANNEL) {
             XirChannel *channel = (XirChannel *)object;
             XR_CHECK(channel_header_valid(channel) && xr_channel_buffer_valid(&channel->buffer),

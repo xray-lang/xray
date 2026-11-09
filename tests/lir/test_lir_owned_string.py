@@ -77,9 +77,9 @@ def main():
         predicate = ' || '.join('line == ' + str(i) + 'u' for i in sites)
         invoke = ('XrtString *result=NULL;xrl_invoke(&result);size_t length=0;\n'
             ' const char *bytes=xrt_string_bytes(result,&length);\n'
-            ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7) || o->strings.owners)abort();\n'
+            ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7) || o->strings.held)abort();\n'
             ' xrt_string_owned_drop(&result);\n' if string_result else
-            f'int64_t result=99;xrl_invoke(&result);\n if(result!={expected_result} || o->strings.owners)abort();\n')
+            f'int64_t result=99;xrl_invoke(&result);\n if(result!={expected_result} || o->strings.held)abort();\n')
         observer = folder / 'normal-frame-observer.c'
         observer.write_text('#include "runtime/native/xnative_execution.h"\n#include <stdlib.h>\n#include <string.h>\n'
             'static unsigned cell_drops;\n'
@@ -93,7 +93,7 @@ def main():
             ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
             ' for(unsigned run=0;run<2;++run){\n'
             '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
-            f'  if(cell_drops!=(run+1)*{drops}u || o.visits!=run+1 || o.strings.owners || o.strings.domain)return 3;\n'
+            f'  if(cell_drops!=(run+1)*{drops}u || o.visits!=run+1 || o.strings.held || o.strings.domain)return 3;\n'
             ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
         obj = folder / ('normal-frame-observer.obj' if args.kind == 'msvc' else 'normal-frame-observer.o')
         exe = folder / ('normal-frame-observer.exe' if args.kind == 'msvc' else 'normal-frame-observer')
@@ -145,6 +145,7 @@ def main():
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
              ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n'),
              ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
+             ('literal-edges', args.source_root / 'tests/lir/programs/owned-string-literal-edges.xr', b'small\nbig\nsmallbig\n'),
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
              ('loop-branches', args.source_root / 'tests/lir/programs/owned-string-loop-branches.xr', b'left0\nright1\nright2\n'),
              ('sequential', args.source_root / 'tests/lir/programs/owned-string-sequential.xr', b'L-1\nlow-1\nR3\nhigh3\n')]

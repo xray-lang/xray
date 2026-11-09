@@ -374,7 +374,7 @@ static void observe_frame_root(void *data) {
     if(o->status!=XR_RBC_OK)return;
     if(o->execution->pending->result_kind==XR_RBC_STRING)
         o->result.string=xrt_string_root_take(o->result.string);
-    XR_CHECK(!o->execution->stack.depth && !o->strings.owners,
+    XR_CHECK(!o->execution->stack.depth && !o->strings.held,
         "actual normal Cell DROP precedes frame retirement and root drain");
     o->before_drain=true;
 }
@@ -432,7 +432,7 @@ static void frame_cell_growth(unsigned requested_fault,bool panic) {
         else XR_CHECK(status==XRT_EXECUTION_COMPLETED && o.status==XR_RBC_OK && o.before_drain &&
             o.result.bits==541 && observed_cell_drops==42 && !observed_cell_writes,
             "42 actual Cell drops precede successful drain after moving banks");
-        XR_CHECK(!o.strings.domain && !o.strings.owners,"failure or completed boundary reclaimed its root");
+        XR_CHECK(!o.strings.domain && !o.strings.held,"failure or completed boundary reclaimed its root");
         xr_rbc_execution_free(&o.execution);
     }
     xrt_locations_release(locations);

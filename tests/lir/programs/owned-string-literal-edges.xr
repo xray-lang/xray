@@ -1,0 +1,11 @@
+fn label(n: i64) -> string {
+    var text = "none"
+    if (n > 3) { text = "big" } else { text = "small" }
+    return text
+}
+fn twice(n: i64) -> string {
+    return label(n) + label(n + 5)
+}
+print(label(1))
+print(label(9))
+print(twice(0))
