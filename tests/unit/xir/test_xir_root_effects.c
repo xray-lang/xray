@@ -963,6 +963,8 @@ static void execution_callable_result_upper(void) {
     }
 }
 
+#include "xir_storage_environment_cases.h"
+
 static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
@@ -977,6 +979,7 @@ static void control_summary_kernel(void) {
     execution_cell_input_boundaries();
     execution_symbolic_environment_inputs();
     execution_callable_result_upper();
+    storage_environment_guard_cases();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));

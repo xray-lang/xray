@@ -116,8 +116,17 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         if (status == XR_XIR_UNRESOLVED) { proof->remainder |= XIR_EXECUTION_REMAINDER_STORAGE; continue; }
         if (status != XR_XIR_OK) return status;
         if (actual.cell) { proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE; continue; }
-        if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), actual.type) ||
-            xr_xir_type_is_c_callable(xir_execution_types(flow->execution), actual.type)) continue;
+        const XrXirTypes *types = xir_execution_types(flow->execution);
+        if (xr_xir_type_is_c_callable(types, actual.type)) continue;
+        if (!xr_xir_type_is_callable(types, actual.type)) {
+            /* This bounded proof admits only capture identities whose complete
+             * value has no borrowed or opaque environment. Composite values
+             * and unsubstituted binders require the general loan summary. */
+            if (actual.type != XR_XIR_UNIT && actual.type != XR_XIR_BOOL &&
+                actual.type != XR_XIR_RUNE && !xr_xir_type_is_number(actual.type) &&
+                actual.type != XR_XIR_STRING) proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
+            continue;
+        }
         if (!storage_environment_push(proof, (StorageEnvironmentNode){
             .reference={actual.function, actual.value, actual.environment}, .target=UINT32_MAX,
             .kind=STORAGE_ENVIRONMENT_VALUE})) return flow->status;

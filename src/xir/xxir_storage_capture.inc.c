@@ -200,7 +200,7 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
         XrXirStatus status = xir_storage_flow_point_value(flow, &use, &proxy);
         if (status != XR_XIR_OK) return status;
         walk->current_proxy = proxy;
-        status = xir_execution_visit_value_environment_in(flow->execution, &proxy,
+        status = xir_execution_visit_value_environment_inputs_in(flow->execution, &proxy,
             storage_capture_arguments, walk, &complete, &remainder);
         if (status != XR_XIR_OK) return status;
         walk->remainder |= remainder;
