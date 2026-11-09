@@ -113,7 +113,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         if(node->as.call_expr.type_arg_count)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"virtual class method requires a closed declaration");
         if(identity->member_access && ctx->identities[ctx->function].nominal_owner!=identity->nominal_owner)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its declaration owner");
-        SourceDirectRequest direct={method->index,{0},&receiver,result_context};
+        SourceDirectRequest direct={method->index,{0},&receiver,result_context,false};
         SourceDirectArguments prepared={0};SourceValue bound;
         if(!source_direct_arguments(ctx,node,&direct,&prepared)||prepared.receiver_count!=1||!prepared.count||
             !source_class_method_reference(ctx,node->as.call_expr.callee,prepared.values[0],method,&bound))return false;
@@ -141,7 +141,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         xr_xir_cell_element(&ctx->types,receiver.type) : receiver.type;
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver_type);
     SourceDirectRequest direct = {method->index,
-        {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context};
+        {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context,false};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirOp kind=(identity->promises & XR_XIR_FUNCTION_GENERATOR) ? XR_XIR_GENERATOR_NEW : XR_XIR_CALL;

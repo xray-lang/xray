@@ -258,7 +258,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
     if(inferred && !source_call_conversions(ctx,node,&(SourceCallConversions){SOURCE_CALL_FUNCTION,
-        substitution,function->parameters,NULL,arguments,function->parameter_count,0}))return false;
+        substitution,function->parameters,NULL,arguments,function->parameter_count,0,false}))return false;
     return source_constructor_emit(ctx,node,&(SourceConstructorEmission){type,index,(uint32_t)syntax.arg_count,arguments,plan.signature},value);
 }
 static bool source_constructor_call(SourceContext *ctx, AstNode *node, SourceExpectedType context,

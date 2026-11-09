@@ -53,7 +53,10 @@ def main() -> None:
                      "closed_dispatch_pure", "closed_dispatch_reference",
                      "root_parameter_forward", "root_parameter_capture", "root_parameter_recursive",
                      "root_array_literal", "root_tuple_literal", "root_tuple_selected",
-                     "cfn_signature", "cfn_reference", "cfn_indirect", "cfn_storable"):
+                     "cfn_signature", "cfn_reference", "cfn_indirect", "cfn_storable",
+                     "root_generic_identity_pure", "root_generic_forward_pure",
+                     "root_generic_array_pure", "root_generic_tuple_pure",
+                     "root_generic_scalar", "root_generic_generator"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -140,6 +143,10 @@ def main() -> None:
             ("root_factory_chain", b"GO target lacks proof for worker execution"),
             ("root_array_mutated", b"GO target lacks proof for worker execution"),
             ("root_tuple_rooted", b"GO target requires the current instance root execution"),
+            ("root_generic_identity", b"GO target requires the current instance root execution"),
+            ("root_generic_forward", b"GO target requires the current instance root execution"),
+            ("root_generic_array", b"GO target requires the current instance root execution"),
+            ("root_generic_tuple", b"GO target requires the current instance root execution"),
             ("redundant_root_apply", b"E0336: try body has no business-error source"),
             ("redundant_root_fixed", b"E0336: try body has no business-error source"),
             ("redundant_root_root", b"E0336: try body has no business-error source"),

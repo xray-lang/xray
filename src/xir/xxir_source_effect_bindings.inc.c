@@ -200,7 +200,8 @@ static bool source_effect_fixed_arguments(SourceContext *ctx,
         const XrXirFunctionEffectContract *callee = xir_effects_contract(effects,(uint32_t)call->immediate);
         if (!callee || binding.parameter >= callee->parameter_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"callback lost its prepared callee parameter");
-        if (callee->parameters[binding.parameter].kind != XR_XIR_EFFECT_PARAMETER_FIXED) continue;
+        if (xir_effect_parameter_identity(ctx->functions[call->immediate].parameters[binding.parameter],
+            (XrXirEffectParameterKind)callee->parameters[binding.parameter].kind)) continue;
         uint32_t i = binding.value - function->parameter_count;
         SourceRootValue *root = &ctx->bodies[f].root_values[i];
         XrXirInstruction *copy = (XrXirInstruction *)function->instructions + i;

@@ -1355,7 +1355,7 @@ static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue inpu
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
-    SourceDirectRequest direct={target->index,{0},NULL,result_context};
+    SourceDirectRequest direct={target->index,{0},NULL,result_context,false};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?
@@ -1537,7 +1537,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     if (target && target->kind == SOURCE_FUNCTION && !selected.method)
         return source_function_call(ctx,node,binding,target,result_context,value);
     if (target && target->kind == SOURCE_FUNCTION) {
-        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context};
+        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context,false};
         SourceDirectArguments prepared = {0};
         if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
         XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?

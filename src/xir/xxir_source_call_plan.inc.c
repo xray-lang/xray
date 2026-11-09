@@ -487,6 +487,7 @@ typedef struct SourceCallConversions {
     const XrXirCallableParameter *concrete;
     SourceValue *values;
     uint32_t count, value_offset;
+    bool fixed_generic_values;
 } SourceCallConversions;
 static bool source_call_conversions(SourceContext *ctx, AstNode *node, const SourceCallConversions *request) {
     if (!request->count) return true;
@@ -509,8 +510,10 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
             continue;
         }
         XrHirConversion recipe;
-        if (!source_conversion_plan(ctx,node,request->values[p+request->value_offset].type,
-            (SourceExpectedType){true,expected, false, false},&recipe)) goto done;
+        bool generic_value=!request->fixed_generic_values && request->family==SOURCE_CALL_FUNCTION &&
+            xir_effect_parameter_identity(request->formals[p],XR_XIR_EFFECT_PARAMETER_FIXED);
+        if (!source_conversion_plan_bound(ctx,node,request->values[p+request->value_offset].type,
+            (SourceExpectedType){true,expected, false, false},generic_value,&recipe)) goto done;
         if (!recipes && recipe.kind!=XR_HIR_CONVERSION_IDENTITY) {
             recipes=source_scratch(ctx,request->count-p,sizeof(*recipes),true);
             if (!recipes) goto done;

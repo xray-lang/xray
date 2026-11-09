@@ -63,6 +63,10 @@ enum XrXirEffectParameterUse {
     XR_XIR_EFFECT_USE_OTHER = 256
 };
 
+/* Generic value arguments retain their actual callable identity. The fixed
+ * storage contract does not make the binder a declared callable parameter. */
+XR_FUNC bool xir_effect_parameter_identity(XrXirType, XrXirEffectParameterKind);
+
 typedef struct XrXirEffectParameter {
     uint32_t kind;
     uint32_t uses;

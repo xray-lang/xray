@@ -16,6 +16,7 @@ typedef struct SourceDirectRequest {
     SourceSubstitution prefix;
     const SourceValue *receiver;
     SourceExpectedType expected_result;
+    bool fixed_generic_values;
 } SourceDirectRequest;
 typedef struct SourceDirectArguments {
     SourceSubstitution substitution;
@@ -88,7 +89,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     for (uint32_t p=supplied;p<function.parameter_count-(plan.rest_count?1u:0u);++p)
         if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;
     SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,
-        values,function.parameter_count,0};
+        values,function.parameter_count,0,request->fixed_generic_values};
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
     XrXirType result;
     if (!source_substitute(ctx,&substitution,function.result,0,&result)) goto done;

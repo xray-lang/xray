@@ -157,7 +157,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if (!source_requirement_prove(ctx,node,selected.member,application,substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
     SourceCallConversions conversions={SOURCE_CALL_REQUIREMENT,substitution,NULL,callable.parameters,
-        arguments,callable.parameter_count,1};
+        arguments,callable.parameter_count,1,false};
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
     if(!source_hir_call_commit(ctx,node,&plan,arguments,callable.parameter_count+1,callable.parameter_count+1))goto done;
     XrXirInstruction op = {XR_XIR_CALL_REQUIREMENT,callable.result,{0},
