@@ -198,6 +198,23 @@ static XrLirStatus rebuild_project(Rebuild *c, XrLirBlock block, uint32_t ordina
     return projected <= original ? XR_LIR_OK : XR_LIR_VERIFY_ERROR;
 }
 
+/* An omitted result names the single same-typed operand it now shares. Output
+ * verification still decides whether the resulting value flow is valid. */
+static XrLirStatus rebuild_omit(Rebuild *c, const XrLirInstructionView *source, bool terminal) {
+    if (terminal) return XR_LIR_VERIFY_ERROR;
+    if (!source->result) return XR_LIR_OK;
+    if (source->operand_count != 1 || source->edge_count) return XR_LIR_VERIFY_ERROR;
+    uint32_t alias = source->operands[0];
+    XrLirType type = XR_LIR_TYPE_INVALID;
+    if (!alias || alias > c->view.value_count || !c->values[alias].id ||
+        xr_lir_value_type(c->input, (XrLirValue){c->input, c->source.id, alias}, &type) != XR_LIR_OK ||
+        type != source->type)
+        return XR_LIR_VERIFY_ERROR;
+    XR_DCHECK(source->result <= c->view.value_count, "verified results identify existing values");
+    c->values[source->result] = c->values[alias];
+    return XR_LIR_OK;
+}
+
 static XrLirStatus rebuild_body(Rebuild *c) {
     size_t depth = 1;
     c->stack[0] = (RebuildFrame){c->view.entry, 0};
@@ -212,6 +229,11 @@ static XrLirStatus rebuild_body(Rebuild *c) {
             for (uint32_t n = 0; n < view.instruction_count; ++n) {
                 XrLirStatus status = rebuild_project(c, block, n, &instruction);
                 if (status != XR_LIR_OK) return status;
+                if (instruction.op == XR_LIR_OP_INVALID) {
+                    status = rebuild_omit(c, &instruction, n + 1 == view.instruction_count);
+                    if (status != XR_LIR_OK) return status;
+                    continue;
+                }
                 status = rebuild_instruction(c, c->blocks[block.id].handle,
                     &instruction, n + 1 == view.instruction_count);
                 if (status != XR_LIR_OK) return status;

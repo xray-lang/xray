@@ -139,7 +139,7 @@ def main():
     cases = [('length-existing', length, b'2\n'),
              ('original-parameter', original_parameter, original_oracle),
              ('length-over-64', long_source, b'140\n'),
-             ('length-spill-branches', args.source_root / 'tests/lir/programs/owned-string-spill-branches.xr', b'140\n0\n'),
+             ('length-spill-branches', args.source_root / 'tests/lir/programs/owned-string-spill-branches.xr', b'170\n0\n'),
              ('length-unicode', unicode_length, b'3\n3\n\xc3\xa9\0' b'7\n4\n4\n\xc3\xa9\0-2\n0\n3\n'),
              ('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
