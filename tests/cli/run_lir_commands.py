@@ -54,7 +54,7 @@ def main() -> None:
                     "borrow_slice", "borrow_ref", "stored_collection_values", "method_values", "requirement_value",
                     "local_snapshot", "local_overwrite", "generic_function_tuple", "loop_capture_instance",
                     "local_nested_callback", "nested_cell_overwrite", "local_capture_write", "owned_scalar_capture",
-                    "cfn_generic_collection", "ref_forward", "generator_owned_cell",
+                    "cfn_generic_collection", "cfn_view_lifetime", "ref_forward", "generator_owned_cell",
                     "generator_storable_cell", "go_storable_cell", "hidden_fn_value_chain")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)

@@ -1,0 +1,8 @@
+fn apply(callback:CFn<fn(i64)->i64>, value:i64)->i64 { return callback(value) }
+fn leaf(value:i64)->i64 { return value+1 }
+export fn worker()->i64 {
+    var text="abc"
+    const view:Slice<u8>=text.bytes()
+    const result=apply(leaf,3)
+    return len(view)+result
+}
