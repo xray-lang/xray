@@ -612,8 +612,8 @@ static uint64_t domain_private_bytes(XrXirDomain *domain) {
 }
 /* Admission against the live-byte limit, which also covers a root ledger. */
 static bool domain_fits(XrXirDomain *domain, uint64_t bytes) {
-    uint64_t live = domain->stats.live_bytes, used = live + domain_private_bytes(domain);
-    return used >= live && used <= domain->limit && bytes <= domain->limit - used;
+    uint64_t live_bytes = domain->stats.live_bytes, used_bytes = live_bytes + domain_private_bytes(domain);
+    return used_bytes >= live_bytes && used_bytes <= domain->limit && bytes <= domain->limit - used_bytes;
 }
 static XrXirValueStatus domain_create(uint64_t limit, size_t base, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;

@@ -21,12 +21,11 @@ typedef struct XirRootString {
     XirString string;
     size_t block_bytes;
     bool escaped;
-    char body[];
 } XirRootString;
 static bool string_body_inline(const XirString *string) {
-    return string->object.root_private && string->bytes == ((const XirRootString *)string)->body;
+    return string->object.root_private && string->bytes == (const char *)((const XirRootString *)string + 1);
 }
-#define ROOT_BLOCK_MINIMUM ((offsetof(XirRootString, body) + 1 + ROOT_BLOCK_GRANULE - 1) & \
+#define ROOT_BLOCK_MINIMUM ((sizeof(XirRootString) + ROOT_BLOCK_GRANULE) & \
     ~(size_t)(ROOT_BLOCK_GRANULE - 1))
 static size_t root_block_class(size_t bytes) {
     return (bytes - ROOT_BLOCK_MINIMUM) / ROOT_BLOCK_GRANULE;
@@ -43,8 +42,8 @@ static bool root_admit(XirRootDomain *root, uint64_t private_bytes, size_t bytes
 }
 static XrXirValueStatus root_string_allocate(XrXirDomain *domain, size_t length, XirString **output) {
     if (!xr_xir_domain_current(domain) || !domain->root || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (length > SIZE_MAX - offsetof(XirRootString, body) - ROOT_BLOCK_GRANULE) return XR_XIR_VALUE_LIMIT;
-    size_t bytes = (offsetof(XirRootString, body) + length + ROOT_BLOCK_GRANULE) & ~(size_t)(ROOT_BLOCK_GRANULE - 1);
+    if (length > SIZE_MAX - sizeof(XirRootString) - ROOT_BLOCK_GRANULE) return XR_XIR_VALUE_LIMIT;
+    size_t bytes = (sizeof(XirRootString) + length + ROOT_BLOCK_GRANULE) & ~(size_t)(ROOT_BLOCK_GRANULE - 1);
     XirRootDomain *ledger = (XirRootDomain *)domain;
     uint64_t private_bytes = atomic_load_explicit(&ledger->private_bytes, memory_order_relaxed);
     if (!root_admit(ledger, private_bytes, bytes)) return XR_XIR_VALUE_LIMIT;
@@ -72,10 +71,10 @@ static XrXirValueStatus root_string_allocate(XrXirDomain *domain, size_t length,
     string->object.root_private = true;
     root->block_bytes = bytes;
     root->escaped = false;
-    string->bytes = root->body;
+    string->bytes = (char *)(root + 1);
     string->length = length;
     string->runes = 0;
-    string->capacity = bytes - offsetof(XirRootString, body);
+    string->capacity = bytes - sizeof(XirRootString);
     string->bytes[length] = 0;
     *output = string;
     return XR_XIR_VALUE_OK;
