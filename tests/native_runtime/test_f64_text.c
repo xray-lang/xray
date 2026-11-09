@@ -49,7 +49,7 @@ static void native_text(void *data) {
     text_equal(value,witnesses[context->index].text);
     if(context->take) context->escaped=xrt_string_root_take(value);
     else xrt_string_drop(&value);
-    CHECK(!context->strings.owners);
+    CHECK(!context->strings.held);
 }
 static XrLirModule *text_module(XrLirType parameter, XrLirType result, unsigned arity,
     XrLirFunction *function,XrLirStatus *rejected) {
@@ -123,7 +123,7 @@ static void retired_results(XrtLocationOwner *locations) {
         xrt_string_owned_drop(&escaped);CHECK(!escaped);
         NativeText context={.index=1,.take=true};XrtExecutionFailure failure={0};
         CHECK(xrt_run_embedded_owned(locations,&failure,native_text,&context,&context.strings)==XRT_EXECUTION_COMPLETED);
-        CHECK(!context.strings.owners && !context.strings.domain && context.escaped);
+        CHECK(!context.strings.held && !context.strings.domain && context.escaped);
         text_equal(context.escaped,witnesses[1].text);
         xrt_string_owned_drop(&context.escaped);CHECK(!context.escaped);
     }
@@ -160,7 +160,7 @@ static void environment_cases(XrtLocationOwner *locations) {
             NativeText context={.index=i};XrtExecutionFailure failure={0};
             CHECK(xrt_run_embedded_owned(locations,&failure,native_text,&context,&context.strings)==XRT_EXECUTION_COMPLETED);
             environment_check(round,csr);
-            CHECK(!context.strings.owners && !context.strings.domain);
+            CHECK(!context.strings.held && !context.strings.domain);
             XrRbcOutcome *outcome=rbc_text(program,i);XrtString *escaped=NULL;
             environment_check(round,csr);
             CHECK(xr_rbc_outcome_take_string(outcome,&escaped));

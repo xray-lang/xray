@@ -32,7 +32,9 @@ typedef struct XrLirLowerFailure {
 
 /* Output and optional failure must initially be empty. The snapshot must
  * correspond to the source of the supplied specialization. An unsupported
- * operation never publishes a partial module or selects another executor. */
+ * operation never publishes a partial module or selects another executor.
+ * Published modules have passed String reference elision, so a copy binding
+ * that would only be dropped shares its source's reference instead. */
 /* Each complete execution starts fresh independent scalar storage. Mutable
  * i64 module Cells remain in the initializer activation while ordinary calls
  * and the actual declaration entry use them. No Cell address escapes its root;

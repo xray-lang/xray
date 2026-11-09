@@ -13,6 +13,7 @@
 #include "xlir_lower.h"
 #include "xlir_builder.h"
 #include "xlir_internal.h"
+#include "xlir_string_elide.h"
 #include "../xir/xxir_source_query.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
@@ -1903,6 +1904,24 @@ static bool lower_wrapper(Lower *c, XrLirFunction *output) {
     return true;
 }
 
+/* Copy bindings above retain unconditionally and blocks drop every remaining
+ * owner. The published module shares one reference wherever a copy or its
+ * source would otherwise only be dropped; the entry handle follows it. */
+static bool lower_elide(Lower *c, XrLirFunction *entry) {
+    XrLirModule *elided = NULL;
+    XrLirStatus status = xr_lir_string_elide(c->module, &elided);
+    if (status != XR_LIR_OK) {
+        c->instruction = UINT32_MAX;
+        lower_error(c, status, "String reference elision failed");
+        return false;
+    }
+    XR_DCHECK(entry->module == c->module, "the entry belongs to the elided module");
+    xr_lir_module_destroy(c->module);
+    c->module = elided;
+    entry->module = elided;
+    return true;
+}
+
 XR_FUNC void xr_lir_lowered_free(XrLirLowered *result) {
     if (!result)
         return;
@@ -2002,6 +2021,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         good = lower_wrapper(&c, &entry);
     if (good)
         good = lower_build(&c, xr_lir_module_finish(c.module, NULL));
+    if (good)
+        good = lower_elide(&c, &entry);
     if (good) {
         XR_DCHECK(c.status == XR_LIR_OK, "only a complete successful module is published");
         *output = (XrLirLowered) {c.module, entry};

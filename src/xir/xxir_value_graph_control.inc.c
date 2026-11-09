@@ -27,6 +27,7 @@ static void graph_object_initialize(XirObject *object) {
     object->graph_previous = object->graph_next = object->graph_work = NULL;
     object->graph_trial = 0;
     object->graph_registered = object->graph_live = object->graph_dead = false;
+    object->root_private = false;
 }
 static void graph_dirty(XrXirDomain *domain) {
     XR_CHECK(!domain || xr_xir_domain_current(domain), "graph dirtiness retains its current owner");
@@ -75,7 +76,7 @@ XR_FUNC void xr_xir_value_object_publish(XirObject *object) {
         xr_xir_domain_current(object->domain), "graph storage requires its current physical kind and domain");
     graph_lock();
     XR_CHECK(value_graph_operations && object && object->domain &&
-        !object->graph_registered && !object->graph_dead &&
+        !object->graph_registered && !object->graph_dead && !object->root_private &&
         atomic_load_explicit(&object->references, memory_order_relaxed),
         "complete value publication requires an operation and its original owner");
     XrXirDomain *domain = object->domain;
@@ -90,7 +91,8 @@ static bool graph_object_retain(XirObject *object) {
     XR_CHECK(object && value_object_kind_known(object->kind) &&
         xr_xir_domain_current(object->domain), "graph storage requires its current physical kind and domain");
     graph_lock();
-    bool retained = !object->graph_dead && xr_xir_reference_retain(&object->references);
+    bool retained = !object->graph_dead && root_string_escape(object) &&
+        xr_xir_reference_retain(&object->references);
     graph_unlock();
     return retained;
 }
@@ -107,6 +109,7 @@ static void graph_object_release_locked(XirObject *object, XirObject **pending) 
 XR_FUNC XrXirValueStatus xr_xir_domain_close(XrXirDomain *domain) {
     if (!domain) return XR_XIR_VALUE_OK;
     XR_CHECK(xr_xir_domain_current(domain), "domain close cannot consume a retired owner");
+    XR_CHECK(!domain->root, "a root domain holds unpublished Strings and is never closed");
     XrXirValueStatus pages=domain_pages_close(domain);
     if (pages!=XR_XIR_VALUE_OK) return pages;
     graph_lock();

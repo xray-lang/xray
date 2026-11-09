@@ -28,11 +28,6 @@ typedef struct XrtExecutionBinding {
 
 static XR_THREAD_LOCAL const XrtExecutionBinding *current_execution;
 
-XR_FUNC XrtStringRoot *xrt_string_root_current(uint32_t source_id) {
-    XR_CHECK(current_execution && current_execution->strings &&
-        source_id <= current_execution->map.count, "String operations require an active root and source id");
-    return current_execution->strings;
-}
 XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && binding->target && status != XR_XIR_VALUE_OK &&
@@ -51,14 +46,17 @@ static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure
     const XrtExecutionBinding binding = {.map = *map, .previous = current_execution,
         .target = &target, .failure = failure, .strings = strings};
     current_execution = &binding;
+    const XrtStringBinding previous_strings = xrt_string_root_bind((XrtStringBinding){strings, map->count});
     if (setjmp(target) == 0) {
         root(context);
         xrt_string_root_drain(strings);
         current_execution = binding.previous;
+        (void)xrt_string_root_bind(previous_strings);
         return XRT_EXECUTION_COMPLETED;
     }
     xrt_string_root_drain(strings);
     current_execution = binding.previous;
+    (void)xrt_string_root_bind(previous_strings);
     return XRT_EXECUTION_FAILURE;
 }
 
@@ -94,7 +92,7 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtStringRoot *strings) {
-    if (!locations || !failure || !root || !strings || strings->domain || strings->owners)
+    if (!locations || !failure || !root || !strings || !xrt_string_root_empty(strings))
         return XRT_EXECUTION_INVALID;
     XrtSourceMap map = {xrt_locations_get(locations, 1), xrt_locations_count(locations)};
     return run_bound(&map, failure, root, context, strings);

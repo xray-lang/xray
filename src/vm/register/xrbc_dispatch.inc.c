@@ -116,7 +116,8 @@ XR_RBC_CASE(CELL_WRITE) {
 }
 XR_RBC_CASE(STRING_LITERAL) {
     const XrRbcLiteral *literal = &module->literals[instruction >> 16];
-    XR_RBC_STRING(a) = xrt_string_new(literal->bytes, literal->length, XR_RBC_SOURCE());
+    XR_RBC_STRING(a) = xrt_string_retain(xrt_string_literal(literal->bytes, literal->length, XR_RBC_SOURCE()),
+        XR_RBC_SOURCE());
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(STRING_I64) {

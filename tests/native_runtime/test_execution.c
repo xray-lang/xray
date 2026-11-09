@@ -22,6 +22,8 @@
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #else
+#include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
@@ -466,7 +468,7 @@ static void native_frame_cell_root(void *data) {
         if(i==0 && c->mode==4)(void)xrt_clock_utc_offset_at(INT64_MAX,1);
     }
     xrt_string_drop(&c->cell);++c->normal_drops;
-    CHECK(!c->cell && !c->strings.owners);c->before_drain=true;++c->after;
+    CHECK(!c->cell && !c->strings.held);c->before_drain=true;++c->after;
 }
 static void native_frame_cell_recovery(void) {
     NativeFrameCell *c=xr_calloc(1,sizeof(*c));CHECK(c);
@@ -477,7 +479,7 @@ static void native_frame_cell_recovery(void) {
         XrtExecutionStatus status=xrt_run_embedded_owned(c->locations,&c->failure,native_frame_cell_root,c,&c->strings);
         if(mode==1)restore_output(saved);
         CHECK(status==(mode?XRT_EXECUTION_FAILURE:XRT_EXECUTION_COMPLETED));
-        CHECK(!c->strings.domain && !c->strings.owners);
+        CHECK(!c->strings.domain && !c->strings.held);
         if(!mode)CHECK(c->writes==3 && c->normal_drops==1 && c->after==1 && c->before_drain && !c->cell);
         else CHECK(c->writes==1 && !c->normal_drops && !c->after && !c->before_drain);
         if(mode==1)CHECK(c->failure.kind==XRT_FAILURE_OUTPUT && c->failure.detail.output.source_id==1);
@@ -487,14 +489,16 @@ static void native_frame_cell_recovery(void) {
         c->cell=NULL; // Failure retired the root; the old slot is no longer an owner.
     }
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
-    for(unsigned mode=5;mode<=7;++mode) {
+    // One allocation precedes the first write: the replacement block. Later
+    // replacements reuse the root's cached block and allocate nothing.
+    for(unsigned mode=5;mode<=5;++mode) {
         c->mode=mode;c->writes=c->normal_drops=c->after=0;c->before_drain=false;
         CHECK(xrt_run_embedded_owned(c->locations,&c->failure,native_frame_cell_root,c,&c->strings)==XRT_EXECUTION_FAILURE);
         native_string_fail_at=SIZE_MAX;
         CHECK(native_string_injected && c->failure.kind==XRT_FAILURE_VALUE &&
             c->failure.detail.value.status==XR_XIR_VALUE_OOM && c->failure.detail.value.source_id==1);
         CHECK(!c->writes && !c->normal_drops && !c->after && !c->before_drain);
-        CHECK(!c->strings.domain && !c->strings.owners && !native_string_live && !native_string_bytes);
+        CHECK(!c->strings.domain && !c->strings.held && !native_string_live && !native_string_bytes);
         c->cell=NULL;
     }
 #endif
@@ -513,7 +517,7 @@ static void native_f64_text_root(void *data) {
     XrtString *value=xrt_string_f64(UINT64_C(0x3ff4000000000000),1);
     owned_string_equal(value,"1.25",4);
     if(context->output)xrt_print_string("1.25",4,1);
-    xrt_string_drop(&value);CHECK(!value && !context->strings.owners);
+    xrt_string_drop(&value);CHECK(!value && !context->strings.held);
     ++context->after;
 }
 static void native_f64_text_recovery(void) {
@@ -521,40 +525,41 @@ static void native_f64_text_recovery(void) {
     context->locations=locations("native-f64-text.xr");
     CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
         context,&context->strings)==XRT_EXECUTION_COMPLETED);
-    CHECK(context->after==1 && !context->strings.domain && !context->strings.owners);
+    CHECK(context->after==1 && !context->strings.domain && !context->strings.held);
     context->after=0;context->output=true;SavedOutput saved=disable_output();
     XrtExecutionStatus status=xrt_run_embedded_owned(context->locations,&context->failure,
         native_f64_text_root,context,&context->strings);
     restore_output(saved);
-    CHECK(status==XRT_EXECUTION_FAILURE && !context->after && !context->strings.domain && !context->strings.owners);
+    CHECK(status==XRT_EXECUTION_FAILURE && !context->after && !context->strings.domain && !context->strings.held);
     CHECK(context->failure.kind==XRT_FAILURE_OUTPUT && context->failure.detail.output.source_id==1 &&
         context->failure.detail.output.operation==XRT_OUTPUT_WRITE && context->failure.detail.output.io.failed);
     context->output=false;context->strings.byte_limit=1;
     CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
         context,&context->strings)==XRT_EXECUTION_FAILURE);
     CHECK(context->failure.kind==XRT_FAILURE_VALUE && context->failure.detail.value.status==XR_XIR_VALUE_LIMIT &&
-        context->failure.detail.value.source_id==1 && !context->after && !context->strings.domain && !context->strings.owners);
+        context->failure.detail.value.source_id==1 && !context->after && !context->strings.domain && !context->strings.held);
     context->strings.byte_limit=0;
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     CHECK(!native_string_live && !native_string_bytes);
-    for(unsigned site=0;site<4;++site) {
+    // Domain, owner table and the one String block.
+    for(unsigned site=0;site<3;++site) {
         native_string_fail_at=native_string_calls+site;native_string_injected=false;
         CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
             context,&context->strings)==XRT_EXECUTION_FAILURE);
         native_string_fail_at=SIZE_MAX;
         CHECK(native_string_injected && context->failure.kind==XRT_FAILURE_VALUE &&
             context->failure.detail.value.status==XR_XIR_VALUE_OOM && context->failure.detail.value.source_id==1);
-        CHECK(!context->after && !context->strings.domain && !context->strings.owners &&
+        CHECK(!context->after && !context->strings.domain && !context->strings.held &&
             !native_string_live && !native_string_bytes);
         CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
             context,&context->strings)==XRT_EXECUTION_COMPLETED);
-        CHECK(context->after==1 && !context->strings.domain && !context->strings.owners &&
+        CHECK(context->after==1 && !context->strings.domain && !context->strings.held &&
             !native_string_live && !native_string_bytes);context->after=0;
     }
 #endif
     CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
         context,&context->strings)==XRT_EXECUTION_COMPLETED);
-    CHECK(context->after==1 && !context->strings.domain && !context->strings.owners);
+    CHECK(context->after==1 && !context->strings.domain && !context->strings.held);
     const XrtSourceLocation *location=xrt_locations_get(context->locations,1);
     CHECK(location && location->line==7 && location->column==9 &&
         location->path_length==strlen("native-f64-text.xr") && !memcmp(location->path,"native-f64-text.xr",location->path_length));
@@ -567,7 +572,7 @@ static void native_owned_strings(void) {
         context->mode=mode; context->outcome=owned_string_outcome(context->locations,XR_XIR_VALUE_OK);
         CHECK(xrt_run_embedded_owned(context->locations,&context->failure,owned_string_nested,context,
             &context->strings)==XRT_EXECUTION_COMPLETED);
-        CHECK(!context->outcome && !context->strings.owners && !context->strings.domain);
+        CHECK(!context->outcome && !context->strings.held && !context->strings.domain);
     }
     for (unsigned mode=0; mode<=5; ++mode) {
         context->mode=mode; context->after=0;
@@ -576,7 +581,7 @@ static void native_owned_strings(void) {
             owned_string_root,context,&context->strings);
         if (mode==1) restore_output(saved);
         CHECK(status==(mode>=1 && mode<=4 ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
-        CHECK(!context->strings.domain && !context->strings.owners);
+        CHECK(!context->strings.domain && !context->strings.held);
         CHECK(context->after==(mode==0 || mode==5 ? 1u : 0u));
         if (mode==1) CHECK(context->failure.kind==XRT_FAILURE_OUTPUT);
         if (mode==2 || mode==3) CHECK(context->failure.kind==XRT_FAILURE_ARITHMETIC_PANIC &&
@@ -591,7 +596,7 @@ static void native_owned_strings(void) {
     CHECK(xrt_run_embedded_owned(context->locations,&context->failure,owned_string_root,context,
         &context->strings)==XRT_EXECUTION_FAILURE);
     CHECK(context->failure.kind==XRT_FAILURE_VALUE && context->failure.detail.value.status==XR_XIR_VALUE_LIMIT &&
-        context->failure.detail.value.source_id==1 && !context->after && !context->strings.domain && !context->strings.owners);
+        context->failure.detail.value.source_id==1 && !context->after && !context->strings.domain && !context->strings.held);
     context->strings.byte_limit=context->peak;
     CHECK(xrt_run_embedded_owned(context->locations,&context->failure,owned_string_root,context,
         &context->strings)==XRT_EXECUTION_COMPLETED);
@@ -607,7 +612,7 @@ static void native_owned_strings(void) {
         native_string_fail_at=SIZE_MAX;
         CHECK(native_string_injected && context->failure.kind==XRT_FAILURE_VALUE &&
             context->failure.detail.value.status==XR_XIR_VALUE_OOM && !context->after);
-        CHECK(!native_string_live && !native_string_bytes && !context->strings.domain && !context->strings.owners);
+        CHECK(!native_string_live && !native_string_bytes && !context->strings.domain && !context->strings.held);
         native_string_fail_at=native_string_calls+site; native_string_injected=false;
         context->outcome=owned_string_outcome(context->locations,XR_XIR_VALUE_OOM);
         native_string_fail_at=SIZE_MAX;
@@ -619,11 +624,123 @@ static void native_owned_strings(void) {
     xrt_locations_release(context->locations); xr_free(context);
 }
 
+typedef struct RootSharing {
+    XrtLocationOwner *locations;
+    XrtStringRoot strings;
+    XrtExecutionFailure failure;
+    XrtString *outer, *escaped, *literal;
+    unsigned after;
+} RootSharing;
+static void root_sharing_inner(void *data) {
+    RootSharing *c = data;
+    // The inner root retains an outer root's unescaped String: it escapes.
+    XrtString *copy = xrt_string_retain(c->outer, 1);
+    CHECK(copy == c->outer && xrt_string_length(copy, 1) == 5);
+    // An inner literal is a distinct pinned object of the inner root.
+    XrtString *literal = xrt_string_literal("lit", 3, 1);
+    CHECK(literal != c->literal && xrt_string_length(literal, 1) == 3);
+    xrt_string_drop(&copy);
+}
+static void root_sharing_root(void *data) {
+    RootSharing *c = data;
+    static const char text[] = "lit";
+    c->literal = xrt_string_literal(text, 3, 1);
+    CHECK(c->literal == xrt_string_literal(text, 3, 1) && !c->strings.held);
+    XrtString *owned = xrt_string_retain(c->literal, 1);
+    CHECK(owned == c->literal && c->strings.held == 1);
+    XrtString *joined = xrt_string_concat(owned, c->literal, 1);
+    owned_string_equal(joined, "litlit", 6);
+    // Unescaped Strings are live bytes, and peak never reports less than live.
+    XrXirDomainStats stats = xr_xir_domain_stats(c->strings.domain);
+    CHECK(stats.live_bytes && stats.peak_bytes >= stats.live_bytes);
+    xrt_string_drop(&owned);
+    xrt_string_drop(&joined);
+    c->outer = xrt_string_new("outer", 5, 1);
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(c->locations, &failure, root_sharing_inner, c) == XRT_EXECUTION_COMPLETED);
+    owned_string_equal(c->outer, "outer", 5);
+    // A pinned literal and a unique String both transfer out of the root.
+    c->escaped = xrt_string_root_take(xrt_string_retain(c->literal, 1));
+    XrtString *unique = xrt_string_i64(-42, 1);
+    XrtString *taken = xrt_string_root_take(unique);
+    CHECK(taken == unique && c->strings.held == 1);
+    xrt_string_owned_drop(&taken);
+    xrt_string_drop(&c->outer);
+    CHECK(!c->strings.held);
+    ++c->after;
+}
+static void native_root_sharing(void) {
+    RootSharing *c = xr_calloc(1, sizeof(*c)); CHECK(c);
+    c->locations = locations("native-root-sharing.xr");
+    for (unsigned run = 0; run < 2; ++run) {
+        c->after = 0;
+        CHECK(xrt_run_embedded_owned(c->locations, &c->failure, root_sharing_root, c, &c->strings) ==
+            XRT_EXECUTION_COMPLETED);
+        CHECK(c->after == 1 && xrt_string_root_empty(&c->strings));
+        // The transferred literal outlives the root that pinned it.
+        owned_string_equal(c->escaped, "lit", 3);
+        xrt_string_owned_drop(&c->escaped);
+        CHECK(!c->escaped);
+    }
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    CHECK(!native_string_live && !native_string_bytes);
+#endif
+    xrt_locations_release(c->locations); xr_free(c);
+}
+
+#if !defined(XR_OS_WINDOWS)
+/* Every drop must name a reference its current root owns; anything else ends
+ * the process before a count or an object can be corrupted. */
+typedef struct MisuseContext { XrtLocationOwner *locations; XrtString *outer; unsigned mode; } MisuseContext;
+static void misuse_inner(void *data) {
+    MisuseContext *c = data;
+    xrt_string_drop(&c->outer); // Owned by the outer root, not by this one.
+}
+static void misuse_root(void *data) {
+    MisuseContext *c = data;
+    if (c->mode == 0) {
+        XrtString *borrowed = xrt_string_literal("lit", 3, 1);
+        xrt_string_drop(&borrowed);
+    } else if (c->mode == 1) {
+        XrtString *owned = xrt_string_new("once", 4, 1), *alias = owned;
+        xrt_string_drop(&owned);
+        xrt_string_drop(&alias);
+    } else {
+        c->outer = xrt_string_new("outer", 5, 1);
+        XrtExecutionFailure failure = {0};
+        (void)xrt_run_embedded(c->locations, &failure, misuse_inner, c);
+    }
+}
+static void native_string_misuse_aborts(void) {
+    MisuseContext context = {locations("native-string-misuse.xr"), NULL, 0};
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        context.mode = mode;
+        fflush(NULL);
+        pid_t child = fork();
+        CHECK(child >= 0);
+        if (!child) {
+            CHECK(freopen("/dev/null", "w", stderr));
+            XrtExecutionFailure failure = {0};
+            (void)xrt_run_embedded(context.locations, &failure, misuse_root, &context);
+            _exit(0);
+        }
+        int status = 0;
+        CHECK(waitpid(child, &status, 0) == child);
+        CHECK(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+    }
+    xrt_locations_release(context.locations);
+}
+#endif
+
 int main(void) {
     native_f64_text_recovery();
     native_frame_cell_recovery();
     native_shared_strings();
     native_owned_strings();
+    native_root_sharing();
+#if !defined(XR_OS_WINDOWS)
+    native_string_misuse_aborts();
+#endif
     Context *outer = xr_calloc(1, sizeof(*outer));
     Context *inner = xr_calloc(1, sizeof(*inner));
     CHECK(outer && inner);
