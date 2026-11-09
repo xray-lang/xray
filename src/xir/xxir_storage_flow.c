@@ -940,8 +940,19 @@ static bool storage_reindex_sites(XirStorageFlow *flow) {
         if (record.site.target >= UINT32_MAX - 1) { flow->status = XR_XIR_OVERFLOW; return false; }
         if (record.site.target >= targets) targets = record.site.target + 1;
     }
-    if (targets && !storage_reserve(flow, (void **)&flow->target_heads, targets - 1,
-        &flow->target_head_capacity, sizeof(*flow->target_heads))) return false;
+    if (targets > flow->target_head_capacity) {
+        uint64_t capacity = flow->target_head_capacity ? (uint64_t)flow->target_head_capacity * 2 : 32;
+        if (capacity < targets) capacity = targets;
+        if (capacity > UINT32_MAX) capacity = UINT32_MAX;
+        /* Every head is rebuilt below. The required target range is not a
+         * count of initialized elements that can be copied from the old index. */
+        uint32_t *heads = xir_compile_calloc(&flow->memory, (size_t)capacity,
+            sizeof(*heads), &flow->status);
+        if (!heads) return false;
+        xr_compile_resources_free(flow->target_heads);
+        flow->target_heads = heads;
+        flow->target_head_capacity = (uint32_t)capacity;
+    }
     flow->target_head_count = targets;
     for (uint32_t t = 0; t < targets && storage_step(flow); ++t) flow->target_heads[t] = UINT32_MAX;
     for (uint32_t f = 0; f < flow->view.function_count && storage_step(flow); ++f) {
