@@ -206,11 +206,12 @@ static XrXirStatus effect_checked_trace_next(EffectCheckTraceWalk *walk,
         EffectCheckCall call = roots->call[c];
         EffectCheckFunction callee = roots->function[roots->node[call.target].function];
         const uint64_t *bits = effect_check_bits(roots, call.target);
-        for (uint64_t p = 0; p < (uint64_t)callee.parameters * 2; ++p) {
+        for (uint64_t p = 0; p < (uint64_t)callee.parameters * 3; ++p) {
             if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
             uint32_t parameter = (uint32_t)(p % callee.parameters);
             if (parameter >= call.count) continue;
             uint32_t source = roots->argument[call.first + parameter];
+            if (p >= (uint64_t)callee.parameters * 2) source = effect_check_actual_contents(roots, source);
             if (!(roots->node[source].closed & wanted) || walk->visited[source]) continue;
             *next = source;
             *witness = (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_PARAMETER,

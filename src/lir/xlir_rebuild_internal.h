@@ -16,6 +16,8 @@
 /* begin owns analysis scratch; end runs once even when begin fails. The other
  * callbacks cannot allocate or fail. Rewrites modify only the local view,
  * preserve result/type/source, and cannot grow its operand/edge vectors.
+ * Setting op to XR_LIR_OP_INVALID omits a non-terminator; an omitted result
+ * then shares the mapping of its single operand, which must have its type.
  * Borrowed const arrays remain untouched. This does not describe inlining. */
 typedef struct XrLirCopyPlan {
     void *context;

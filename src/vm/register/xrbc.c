@@ -322,6 +322,8 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
     const XrRbcFunction *function;
+    const uint32_t *code;
+    const uint64_t *constants;
     XrRbcFrame *frame;
     XrRbcRegister *registers;
     size_t pc;

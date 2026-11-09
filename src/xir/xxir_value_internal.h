@@ -41,7 +41,18 @@ typedef struct XirObject {
     struct XirObject *graph_previous, *graph_next, *graph_work;
     uint32_t graph_trial;
     bool graph_registered, graph_live, graph_dead;
+    /* Only root Strings set this: one block holds header and body, and the
+     * object never enters the residual graph (see xr_xir_root_domain_new). */
+    bool root_private;
 } XirObject;
+_Static_assert(sizeof(XirObject) == 72, "the root flag occupies existing object header padding");
+/* The canonical String carrier. The body holds length bytes and one NUL;
+ * runes caches the Unicode scalar count. Holders read it without a lease. */
+typedef struct XirString {
+    XirObject object;
+    char *bytes;
+    size_t length, runes, capacity;
+} XirString;
 /* Operations exclude retirement snapshots without holding the graph lock.
  * Publication requires a complete object and an active operation lease. */
 XR_FUNC void xr_xir_value_graph_begin(void);
@@ -105,6 +116,30 @@ XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain);
  * Failure preserves all handles; no frame, call view or execution is required. */
 XR_FUNC XrXirValueStatus xr_xir_string_concat(XrXirDomain *domain,
     const XrXirValue *left, const XrXirValue *right, XrXirValue *output);
+/* A root domain backs one native execution root. It is never closed or
+ * budget-bound: closing it aborts and binding it fails. Strings own no edges,
+ * so no residual graph retirement can reach a String in an unclosed domain;
+ * root Strings therefore skip graph publication and their leases. */
+XR_FUNC XrXirValueStatus xr_xir_root_domain_new(uint64_t limit, XrXirDomain **output);
+/* Publish one complete root String owning one reference, allocated as a
+ * single block in a root domain. Borrowed inputs are live canonical Strings.
+ * Failure owns nothing and leaves *output NULL. */
+XR_FUNC XrXirValueStatus xr_xir_root_string_new(XrXirDomain *domain, const char *bytes,
+    size_t length, XirString **output);
+XR_FUNC XrXirValueStatus xr_xir_root_string_concat(XrXirDomain *domain,
+    const XirString *left, const XirString *right, XirString **output);
+// The canonical signed decimal text, without a scan of its ASCII bytes.
+XR_FUNC XrXirValueStatus xr_xir_root_string_i64(XrXirDomain *domain, int64_t value, XirString **output);
+/* The root ends: every unescaped String is gone. Frees cached blocks and
+ * drops the root's domain reference; escaped Strings keep the domain. */
+XR_FUNC void xr_xir_root_domain_release(XrXirDomain *domain);
+/* A root String that leaves its root pins its domain first; any generic
+ * retain does this implicitly. Fails only at the domain reference limit. */
+XR_FUNC XrXirValueStatus xr_xir_root_string_escape(XirString *string);
+/* Consume one reference to a live String. An unescaped root String is freed
+ * at once, an escaped one after one atomic decrement, and neither takes a
+ * graph operation; other Strings use the ordinary drop. */
+XR_FUNC void xr_xir_string_release(XirString *string);
 /* Only the actual NEW Instance calls this before any value publication. */
 XR_FUNC XrXirValueStatus xr_xir_domain_class_observation_open(XrXirDomain *domain,
     uint32_t capacity, XrXirClassObservation **output);

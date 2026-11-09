@@ -14,7 +14,7 @@
 
 #define XR_RBC_FETCH() \
     do { \
-        instruction = function->code[pc++]; \
+        instruction = code[pc++]; \
         op = instruction & 255; \
         a = (instruction >> 8) & 255; \
         b = (instruction >> 16) & 255; \
@@ -47,6 +47,8 @@ static const void *const dispatch[] = {
 XR_DCHECK(stack->depth > 0, "interpreter requires an active frame");
 frame = &stack->frames[stack->depth - 1];
 function = &module->functions[frame->function];
+code = function->code;
+constants = function->constants;
 registers = stack->slots + frame->base;
 pc = frame->pc;
 #if defined(__clang__) || defined(__GNUC__)
@@ -61,7 +63,7 @@ XR_RBC_CASE(MOV) {
 }
 XR_RBC_CASE(LOADK) {
     uint32_t index = instruction >> 16;
-    XR_RBC_REG(a) = function->constants[index];
+    XR_RBC_REG(a) = constants[index];
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(LOADI) {
@@ -114,7 +116,8 @@ XR_RBC_CASE(CELL_WRITE) {
 }
 XR_RBC_CASE(STRING_LITERAL) {
     const XrRbcLiteral *literal = &module->literals[instruction >> 16];
-    XR_RBC_STRING(a) = xrt_string_new(literal->bytes, literal->length, XR_RBC_SOURCE());
+    XR_RBC_STRING(a) = xrt_string_retain(xrt_string_literal(literal->bytes, literal->length, XR_RBC_SOURCE()),
+        XR_RBC_SOURCE());
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(STRING_I64) {
@@ -245,10 +248,10 @@ XR_RBC_CASE(FGE) {
 xr_rbc_float_compare: {
     // Admission guarantees the successor exists, and EQI retains its complete
     // jump/skip pair. Keep the boolean register for any later independent use.
-    if (function->code[pc] == ((uint32_t)XR_RBC_EQI | (a << 8))) {
+    if (code[pc] == ((uint32_t)XR_RBC_EQI | (a << 8))) {
         bool take = XR_RBC_REG(a) == 0;
         ++pc;
-        instruction = function->code[pc++];
+        instruction = code[pc++];
         if (take) goto xr_rbc_jump;
     }
     XR_RBC_NEXT();
@@ -314,7 +317,7 @@ XR_RBC_CASE(EQI) {
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(a));
     bool take = op == XR_RBC_LTI ? lhs < rhs : op == XR_RBC_LEI ? lhs <= rhs :
         op == XR_RBC_GTI ? lhs > rhs : op == XR_RBC_GEI ? lhs >= rhs : lhs == rhs;
-    instruction = function->code[pc++];
+    instruction = code[pc++];
     if (take) goto xr_rbc_jump;
     XR_RBC_NEXT();
 }
@@ -323,7 +326,7 @@ XR_RBC_CASE(LE)
 XR_RBC_CASE(EQ) {
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(a)), rhs = xr_rbc_signed(XR_RBC_REG(b));
     bool take = op == XR_RBC_LT ? lhs < rhs : op == XR_RBC_LE ? lhs <= rhs : lhs == rhs;
-    instruction = function->code[pc++];
+    instruction = code[pc++];
     if (take)
         goto xr_rbc_jump;
     XR_RBC_NEXT();
@@ -360,6 +363,8 @@ XR_RBC_CASE(CALL) {
     stack->cell_count += callee->cell_count;
     stack->spill_count += callee->spill_count;
     function = callee;
+    code = function->code;
+    constants = function->constants;
     pc = 0;
     XR_RBC_NEXT();
 }
@@ -409,6 +414,8 @@ XR_RBC_CASE(RET0) {
     registers = stack->slots + frame->base;
     XR_RBC_SLOT(destination) = value;
     function = &module->functions[frame->function];
+    code = function->code;
+    constants = function->constants;
     pc = frame->pc;
     XR_RBC_NEXT();
 }

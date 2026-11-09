@@ -141,6 +141,12 @@ XR_FUNC XrXirStatus xir_effect_callable_bound_matches(const XrXirCompileContext 
     xr_xir_type_match_scratch_free(&scratch);return status;
 }
 
+XR_FUNC bool xir_effect_parameter_identity(XrXirType formal, XrXirEffectParameterKind kind) {
+    uint32_t type = (uint32_t)formal;
+    return kind != XR_XIR_EFFECT_PARAMETER_FIXED ||
+        (type >= XR_XIR_TYPE_PARAMETER_BASE && type < XR_XIR_TYPE_PARAMETER_LIMIT);
+}
+
 static XrXirStatus effect_contract_vector(
     const void *data, uint32_t count, size_t size) {
     if ((uint64_t)count > SIZE_MAX / size) return XR_XIR_BUDGET;
@@ -586,7 +592,8 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     if (status == XR_XIR_OK) status = effect_contract_bindings(function,consumer);
     if (status != XR_XIR_OK) return status;
     if (!requirement && (parameter>=definition->parameter_count ||
-        definition->parameters[parameter].kind==XR_XIR_EFFECT_PARAMETER_FIXED)) return XR_XIR_BAD_TYPE;
+        !xir_effect_parameter_identity(module->functions[callee].parameters[parameter],
+            (XrXirEffectParameterKind)definition->parameters[parameter].kind))) return XR_XIR_BAD_TYPE;
     if (!requirement && module->declarations &&
         module->declarations->functions[callee].method_kind==XR_XIR_READ_METHOD && !parameter)
         return XR_XIR_BAD_TYPE;

@@ -484,6 +484,38 @@ static void test_call_windows(void) {
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
 }
 
+static void test_frame_constant_pools(void) {
+    uint32_t outer[6], middle[6], leaf[2];
+    for (unsigned f = 0; f < 2; ++f) {
+        uint32_t *code = f ? middle : outer;
+        uint32_t destination = f ? 254 : 2;
+        immediate(code, 0, XR_RBC_LOADK, 0, 0);
+        immediate(code, 1, XR_RBC_CALL, destination, f + 1);
+        immediate(code, 2, XR_RBC_LOADK, 1, 0);
+        emit(code, 3, XR_RBC_ADD, 0, 0, destination);
+        emit(code, 4, XR_RBC_ADD, 0, 0, 1);
+        emit(code, 5, XR_RBC_RET, 0, 0, 0);
+    }
+    immediate(leaf, 0, XR_RBC_LOADK, 0, 0);
+    emit(leaf, 1, XR_RBC_RET, 0, 0, 0);
+    const uint64_t pools[] = {100000, 20000, 300};
+    XrRbcFunction functions[] = {
+        {.code=outer, .code_count=6, .constants=pools, .constant_count=1, .register_count=3},
+        {.code=middle, .code_count=6, .constants=pools+1, .constant_count=1, .register_count=255},
+        {.code=leaf, .code_count=2, .constants=pools+2, .constant_count=1, .register_count=255}
+    };
+    XrRbcModule module = {.functions=functions, .function_count=3};
+    const uint64_t expected[] = {240300, 40300, 300};
+    for (uint32_t entry = 0; entry < 3; ++entry) {
+        uint64_t result = 0;
+        XrRbcStatus status = execute(&module, entry, NULL, 0, &result);
+        if (status != XR_RBC_OK || result != expected[entry])
+            fprintf(stderr, "frame pools entry%u status%u result%" PRIu64 " expected%" PRIu64 "\n",
+                entry, status, result, expected[entry]);
+        CHECK(status == XR_RBC_OK && result == expected[entry]);
+    }
+}
+
 static void test_rejections(void) {
     uint32_t code[2];
     uint64_t args[2] = {1, 0}, result = 42;
@@ -1112,6 +1144,7 @@ int main(int argc, char **argv) {
     test_arithmetic();
     test_branches();
     test_call_windows();
+    test_frame_constant_pools();
     test_rejections();
     test_prepare_unreachable();
     test_owned_execution();

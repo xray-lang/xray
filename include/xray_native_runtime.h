@@ -62,6 +62,11 @@ XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id);
 // with their original value status; an unsuccessful helper never returns NULL.
 typedef struct XirString XrtString;
 XRAY_API XrtString *xrt_string_new(const char *bytes, size_t length, uint32_t source_id);
+// Borrow the root's object for a literal span; retain it to own a reference.
+// The span stays at its address, unchanged, until the root ends. The root keeps
+// one object per (address, length) span until it ends, so evaluating the same
+// literal again allocates nothing.
+XRAY_API XrtString *xrt_string_literal(const char *bytes, size_t length, uint32_t source_id);
 XRAY_API XrtString *xrt_string_i64(int64_t value, uint32_t source_id);
 // Exact binary64 object bits use the canonical shortest decimal formatter.
 XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id);

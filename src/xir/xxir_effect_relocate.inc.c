@@ -29,7 +29,7 @@ static bool effect_relocation_step(EffectRelocation *relocation) {
 
 static uint32_t effect_relocation_node(EffectRelocation *relocation, uint32_t node) {
     if (node == UINT32_MAX) return node;
-    if (node >= relocation->source->nodes) {
+    if (node >= relocation->source->nodes || relocation->values[node] >= relocation->count) {
         relocation->status = XR_XIR_BAD_STRUCTURE;
         return UINT32_MAX;
     }
@@ -159,6 +159,7 @@ static XrXirStatus effect_relocation_allocate(const XrXirCompileContext *memory,
     relocation->values = xir_compile_alloc(memory, (size_t)roots->nodes * sizeof(*relocation->values),
         &relocation->status);
     if (relocation->status != XR_XIR_OK) return relocation->status;
+    if (roots->nodes) memset(relocation->values, 0xFF, (size_t)roots->nodes * sizeof(*relocation->values));
     uint64_t nodes = 0;
     for (uint32_t f = 0; f < roots->functions; ++f) {
         if (!effect_relocation_step(relocation)) return relocation->status;
@@ -169,17 +170,25 @@ static XrXirStatus effect_relocation_allocate(const XrXirCompileContext *memory,
             (map->instructions ? map->old_instructions : body->instruction_count) != old.values - old.parameters)
             return XR_XIR_BAD_STRUCTURE;
         uint64_t values = (uint64_t)body->parameter_count + body->instruction_count;
-        uint64_t aux = old.last - old.result;
-        uint64_t expressions = values * 2 + 2 + aux;
+        uint64_t first_tail = (uint64_t)old.first + (uint64_t)old.values * 2;
+        if (first_tail > old.last || old.last >= roots->nodes ||
+            old.root < first_tail || old.root > old.last ||
+            old.result < first_tail || old.result > old.last ||
+            old.result_contents < first_tail || old.result_contents > old.last)
+            return XR_XIR_BAD_STRUCTURE;
+        uint64_t tail_count = old.last - first_tail + 1;
+        uint64_t expressions = values * 2 + tail_count;
         if (values > UINT32_MAX || expressions > UINT32_MAX - nodes ||
             expressions > SIZE_MAX / sizeof(uint64_t) / old.words) return XR_XIR_OVERFLOW;
         EffectCheckFunction next = old;
         next.first = (uint32_t)nodes;
         next.values = (uint32_t)values;
         next.contents = next.first + next.values;
-        next.root = next.contents + next.values;
-        next.result = next.root + 1;
-        next.last = next.result + (uint32_t)aux;
+        uint32_t next_tail = next.contents + next.values;
+        next.result_contents = next_tail + (uint32_t)(old.result_contents - first_tail);
+        next.root = next_tail + (uint32_t)(old.root - first_tail);
+        next.result = next_tail + (uint32_t)(old.result - first_tail);
+        next.last = next.first + (uint32_t)expressions - 1;
         next.bits = NULL;
         next.suspend_bits = NULL;
         relocation->functions[f] = next;
@@ -196,10 +205,10 @@ static XrXirStatus effect_relocation_allocate(const XrXirCompileContext *memory,
             relocation->values[old.first + n] = next.first + value;
             relocation->values[old.contents + n] = next.contents + value;
         }
-        relocation->values[old.root] = next.root;
-        relocation->values[old.result] = next.result;
-        for (uint32_t a = 0; a < aux; ++a)
-            relocation->values[old.result + a + 1] = next.result + a + 1;
+        /* Preserve every non-value equation in the producer's order. Result
+         * contents and future auxiliary banks must move with their identities. */
+        for (uint32_t a = 0; a < tail_count; ++a)
+            relocation->values[(uint32_t)first_tail + a] = next_tail + a;
         nodes += expressions;
     }
     if (nodes > SIZE_MAX / sizeof(*relocation->nodes) ||
@@ -218,7 +227,8 @@ static XrXirStatus effect_relocation_nodes(EffectRelocation *relocation) {
         for (uint32_t n = next.first; n <= next.last; ++n) relocation->nodes[n] = effect_check_empty_node(f);
         for (uint32_t n = old.first; n <= old.last; ++n) {
             if (!effect_relocation_step(relocation)) return relocation->status;
-            uint32_t target = relocation->values[n];
+            uint32_t target = effect_relocation_node(relocation, n);
+            if (relocation->status != XR_XIR_OK) return relocation->status;
             EffectCheckNode node = roots->node[n];
             if (node.component != UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
             node.cleanup_parent = effect_relocation_frontier(relocation, f, node.cleanup_parent);

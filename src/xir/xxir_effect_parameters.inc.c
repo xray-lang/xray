@@ -59,7 +59,8 @@ static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
             }
             const XrXirFunctionEffectContract *callee = &effect_contracts_read(effects)[call->immediate];
             if (binding->parameter >= callee->parameter_count ||
-                callee->parameters[binding->parameter].kind == XR_XIR_EFFECT_PARAMETER_FIXED)
+                !xir_effect_parameter_identity(module->functions[call->immediate].parameters[binding->parameter],
+                    (XrXirEffectParameterKind)callee->parameters[binding->parameter].kind))
                 return XR_XIR_BAD_TYPE;
         }
     }

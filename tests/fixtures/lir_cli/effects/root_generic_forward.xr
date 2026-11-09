@@ -1,0 +1,6 @@
+var state:i64 = 1
+fn leaf()->i64 { return state }
+fn identity<T>(value:T)->T { return value }
+fn forward<T>(value:T)->T { return identity(value) }
+fn worker()->i64 { const g = forward(leaf); return g() }
+const task = go worker()

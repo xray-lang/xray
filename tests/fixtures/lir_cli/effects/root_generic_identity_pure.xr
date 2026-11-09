@@ -1,0 +1,4 @@
+fn leaf()->i64 { return 7 }
+fn identity<T>(value:T)->T { return value }
+fn worker()->i64 { const g = identity(leaf); return g() }
+const task = go worker()

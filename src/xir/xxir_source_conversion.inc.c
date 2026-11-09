@@ -11,8 +11,8 @@ static XrXirStatus source_conversion_intern(void *owner,const XrXirTypeNode *nod
     SourceContext *ctx=owner;
     return source_intern_type(ctx,*node,type)?XR_XIR_OK:ctx->diagnostic.status;
 }
-static bool source_conversion_plan(SourceContext *ctx,AstNode *site,XrXirType actual,
-    SourceExpectedType expected,XrHirConversion *output) {
+static bool source_conversion_plan_bound(SourceContext *ctx,AstNode *site,XrXirType actual,
+    SourceExpectedType expected,bool argument_bound,XrHirConversion *output) {
     AstNode *root=site;
     while(root && root->type==AST_GROUPING)root=root->as.grouping;
     if(root && root->type==AST_MOVE_EXPR && expected.present && actual!=expected.type &&
@@ -22,12 +22,17 @@ static bool source_conversion_plan(SourceContext *ctx,AstNode *site,XrXirType ac
     XrHirConversionInput input={.origin={site?site->node_id:0,range.module,range.line,range.column,range.end_line,range.end_column},
         .actual=actual,.expected=expected.type,.has_expected=expected.present,
         .infer_result=expected.infer_result,.inferred=expected.inferred,
-        .argument_bound=ctx->effect_argument && ctx->effect_argument->owner==ctx->function && ctx->effect_argument->syntax==site};
+        .argument_bound=argument_bound || (ctx->effect_argument && ctx->effect_argument->owner==ctx->function &&
+            ctx->effect_argument->syntax==site)};
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     XrHirConversionContext context={&ctx->compile,&ctx->types,&proof,ctx->request,ctx,source_conversion_intern};
     const char *reason=NULL;XrXirStatus status=xr_hir_conversion_check(&context,&input,output,&reason);
     return status==XR_XIR_OK || source_fail(ctx,site,status,reason);
+}
+static bool source_conversion_plan(SourceContext *ctx,AstNode *site,XrXirType actual,
+    SourceExpectedType expected,XrHirConversion *output) {
+    return source_conversion_plan_bound(ctx,site,actual,expected,false,output);
 }
 static bool source_conversion_emit(SourceContext *ctx,const XrHirConversion *conversion,SourceValue *value) {
     if(value->type!=conversion->source)

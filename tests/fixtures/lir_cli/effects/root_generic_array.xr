@@ -1,0 +1,5 @@
+var state:i64 = 1
+fn leaf()->i64 { return state }
+fn pick<T>(values:Array<T>)->T { return values[0] }
+fn worker()->i64 { const value=pick([leaf]); return value() }
+const task=go worker()

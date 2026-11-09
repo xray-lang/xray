@@ -115,7 +115,7 @@ static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_
         return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go value requires its exact exposed arguments");
     if (!source_call_plan_arguments(ctx,call,&plan,&syntax,NULL) ||
         !source_instantiation_prove(ctx,call,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,*target,0},substitution)) return false;
-    SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,storage.values,count,0};
+    SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,storage.values,count,0,true};
     if (!source_call_conversions(ctx,call,&conversions) || !source_hir_call_commit(ctx,call,&plan,storage.values,count,count)) return false;
     *output=(SourceDirectArguments){substitution,storage.values,count,result,0,plan.signature};return true;
 }
@@ -143,7 +143,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     SourceDirectArguments prepared = {0};
     uint32_t function=target ? target->index : UINT32_MAX;
     if (target) {
-        SourceDirectRequest direct = {function, {0}, NULL, child};
+        SourceDirectRequest direct = {function, {0}, NULL, child, true};
         if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
     } else if (!source_go_value_arguments(ctx,call,&function,&prepared)) return false;
     XrXirType error;

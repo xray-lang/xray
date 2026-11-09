@@ -50,6 +50,10 @@ typedef enum XrXirEffectBindingFamily {
     XR_XIR_EFFECT_BINDING_REQUIREMENT = 4
 } XrXirEffectBindingFamily;
 
+/* Generic value arguments retain their actual callable identity. The fixed
+ * storage contract does not make the binder a declared callable parameter. */
+XR_FUNC bool xir_effect_parameter_identity(XrXirType, XrXirEffectParameterKind);
+
 typedef struct XrXirEffectParameter {
     uint32_t kind;
 } XrXirEffectParameter;
