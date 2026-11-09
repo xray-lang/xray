@@ -67,6 +67,8 @@ static void test_encoding(void) {
     CHECK((word >> 16) == UINT16_MAX);
     CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_LOADI, 0, 0, 0, INT16_MIN}));
     CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_LOADI, 0, 0, 0, INT16_MAX}));
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_FLEK, 254, 253, 255, 0}));
+    CHECK((word >> 24) == 255);
     CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MIN}));
     CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MAX}));
     XrRbcOperands rejected[] = {
@@ -82,6 +84,10 @@ static void test_encoding(void) {
         {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MIN - 1},
         {XR_RBC_RET0, 1, 0, 0, 0},
         {XR_RBC_MOV, 0, 0, 1, 0},
+        {XR_RBC_FLEK, 255, 0, 0, 0},
+        {XR_RBC_FLEK, 0, 255, 0, 0},
+        {XR_RBC_FLEK, 0, 0, 256, 0},
+        {XR_RBC_FLEK, 0, 0, 0, 1},
     };
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         word = UINT32_C(0xdeadbeef);
@@ -377,6 +383,68 @@ static void test_float_kinds_and_spills(void) {
     XrRbcLiteral literal={"kept",4};module.literals=&literal;module.literal_count=1;
     CHECK(execute(&module,0,args,2,&result)==XR_RBC_OK && result==UINT64_C(0x4008000000000000));
     emit(code,1,XR_RBC_FADD,2,3,1);reject_prepare(&module,0,args,2);
+}
+
+static void test_float_constant_comparison(void) {
+    uint64_t constants[256] = {0};
+    uint32_t code[8];
+    XrRbcFunction function = {.code = code, .code_count = 2,
+        .constants = constants, .constant_count = 256,
+        .register_count = 3, .parameter_count = 1};
+    for (unsigned left = 0; left < 26; ++left) {
+        for (unsigned right = 0; right < 26; ++right) {
+            for (unsigned index = 0; index <= 255; index += 255) {
+                constants[index] = float_order_witnesses[right].bits;
+                uint64_t argument = float_order_witnesses[left].bits;
+                uint64_t expected = (float_relation_mask(left, right) >> 3) & 1u;
+                // The destination may overwrite the input. The constant field
+                // remains valid even when it exceeds every register index.
+                for (unsigned destination = 0; destination < 2; ++destination) {
+                    emit(code, 0, XR_RBC_FLEK, destination, 0, index);
+                    emit(code, 1, XR_RBC_RET, destination, 0, 0);
+                    function.code_count = 2;
+                    CHECK(run_function(function, &argument, 1) == expected);
+                    immediate(code, 1, XR_RBC_EQI, destination, 0);
+                    CHECK(xr_rbc_jump(code + 2, 2, 5, 8));
+                    immediate(code, 3, XR_RBC_LOADI, 2, 17);
+                    CHECK(xr_rbc_jump(code + 4, 4, 6, 8));
+                    immediate(code, 5, XR_RBC_LOADI, 2, 23);
+                    emit(code, 6, XR_RBC_ADD, 2, 2, destination);
+                    emit(code, 7, XR_RBC_RET, 2, 0, 0);
+                    function.code_count = 8;
+                    CHECK(run_function(function, &argument, 1) == (expected ? 18u : 23u));
+                }
+            }
+        }
+    }
+    emit(code, 0, XR_RBC_FLEK, 1, 0, 255);
+    emit(code, 1, XR_RBC_RET, 1, 0, 0);
+    function.code_count = 2;
+    function.parameter_count = 0;
+    constants[255] = 0;
+    // Entry clearing treats B as the only read, including a read before write.
+    CHECK(run_function(function, NULL, 0) == 1);
+    uint32_t root = XR_RBC_RET0;
+    XrRbcFunction functions[] = {{.code = &root, .code_count = 1, .register_count = 1}, function};
+    XrRbcModule module = {.functions = functions, .function_count = 2};
+    functions[1].constant_count = 255;
+    reject_prepare(&module, 0, NULL, 0);
+    functions[1].constant_count = 256;
+    emit(code, 0, XR_RBC_FLEK, 3, 0, 255);
+    reject_prepare(&module, 0, NULL, 0);
+    emit(code, 0, XR_RBC_FLEK, 1, 3, 255);
+    reject_prepare(&module, 0, NULL, 0);
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS, XR_RBC_BITS};
+    functions[1].register_kinds = kinds;
+    functions[1].register_kind_count = 3;
+    emit(code, 0, XR_RBC_FLEK, 1, 0, 255);
+    for (unsigned slot = 0; slot < 2; ++slot) {
+        for (unsigned kind = XR_RBC_STRING; kind <= XR_RBC_STRING_CELL; ++kind) {
+            kinds[slot] = (XrRbcRegisterKind)kind;
+            reject_prepare(&module, 0, NULL, 0);
+            kinds[slot] = XR_RBC_BITS;
+        }
+    }
 }
 
 static void test_workloads(bool timing) {
@@ -1121,6 +1189,7 @@ static void test_spill_managed_backedge(void) {
 }
 
 int main(int argc, char **argv) {
+    test_float_constant_comparison();
     test_immediates();
     test_scalar_reload_copies();
     test_spill_layout_and_overwrite();

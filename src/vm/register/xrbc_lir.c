@@ -48,7 +48,8 @@ typedef struct {
 typedef struct { size_t pc; uint32_t block; } RbcLirPatch;
 typedef struct {
     int16_t value;
-    bool known, materialize;
+    uint16_t constant;
+    bool known, pooled, materialize;
 } RbcLirImmediate;
 typedef struct {
     const XrLirModule *input;
@@ -204,11 +205,25 @@ static bool rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
     return true;
 }
 
+static bool rbc_lir_pool(RbcLirCompiler *c, uint64_t bits, uint32_t *index) {
+    if (c->constant_count > UINT16_MAX)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "constant pool exceeds encoding");
+    void *storage = c->constants;
+    if (!rbc_lir_grow(c, &storage, &c->constant_capacity,
+            c->constant_count + 1, sizeof(*c->constants))) return false;
+    c->constants = storage;
+    *index = (uint32_t)c->constant_count;
+    c->constants[c->constant_count++] = bits;
+    return true;
+}
+
 // Return the operand encoded in the instruction, or operand_count if both
 // operands still require registers. Selection depends only on immutable SSA.
 static uint32_t rbc_lir_immediate_operand(const RbcLirCompiler *c,
     const XrLirInstructionView *i) {
     if (i->operand_count != 2) return i->operand_count;
+    if (i->op == XR_LIR_FCMP && i->predicate == XR_LIR_LE &&
+        c->immediates[i->operands[1]].pooled) return 1;
     bool comparison = i->op == XR_LIR_ICMP || i->op == XR_LIR_CONDBR;
     if (!comparison && (i->type != XR_LIR_I64 ||
         (i->op != XR_LIR_ADD && i->op != XR_LIR_SUB &&
@@ -238,6 +253,16 @@ static bool rbc_lir_immediates(RbcLirCompiler *c) {
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
+            // Reuse entries at every other use of the same SSA constant. Only
+            // reserve values that already need LOADK, preserving pool limits.
+            if (i.op == XR_LIR_CONST && i.type == XR_LIR_F64 &&
+                i.bits > INT16_MAX && i.bits < UINT64_MAX - 32767 &&
+                c->constant_count <= UINT8_MAX) {
+                uint32_t index;
+                if (!rbc_lir_pool(c, i.bits, &index)) return false;
+                c->immediates[i.result].pooled = true;
+                c->immediates[i.result].constant = (uint16_t)index;
+            }
             if (i.op != XR_LIR_CONST || i.type != XR_LIR_I64 ||
                 (i.bits > INT16_MAX && i.bits < UINT64_MAX - 32767)) continue;
             c->immediates[i.result].known = true;
@@ -558,15 +583,9 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
     if (bits <= INT16_MAX || bits >= UINT64_MAX - 32767)
         return rbc_lir_emit(c, XR_RBC_LOADI, slot, 0, 0,
             bits <= INT16_MAX ? (int64_t) bits : -1 - (int64_t) ~bits);
-    if (c->constant_count > UINT16_MAX)
-        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "constant pool exceeds encoding");
-    void *storage = c->constants;
-    if (!rbc_lir_grow(c, &storage, &c->constant_capacity,
-            c->constant_count + 1, sizeof(*c->constants))) return false;
-    c->constants = storage;
-    uint32_t index = (uint32_t) c->constant_count;
-    c->constants[c->constant_count++] = bits;
-    return rbc_lir_emit(c, XR_RBC_LOADK, slot, 0, 0, index);
+    uint32_t index;
+    return rbc_lir_pool(c, bits, &index) &&
+        rbc_lir_emit(c, XR_RBC_LOADK, slot, 0, 0, index);
 }
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
@@ -662,6 +681,9 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     uint32_t result = i->result ? c->slots[i->result] : 0;
     switch (i->op) {
     case XR_LIR_CONST:
+        if (c->immediates[i->result].pooled)
+            return rbc_lir_emit(c, XR_RBC_LOADK, result, 0, 0,
+                c->immediates[i->result].constant);
         return c->output.lengths[i->result] || rbc_lir_constant(c, result, i->bits);
     case XR_LIR_LITERAL_ADDR:
         return true;
@@ -700,6 +722,9 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return rbc_lir_emit(c, XR_RBC_CELL_WRITE, c->slots[i->operands[0]],
             c->slots[i->operands[1]], 0, 0);
     case XR_LIR_FCMP: {
+        if (rbc_lir_immediate_operand(c, i) == 1)
+            return rbc_lir_emit(c, XR_RBC_FLEK, result, c->slots[i->operands[0]],
+                c->immediates[i->operands[1]].constant, 0);
         XrRbcOp op;
         switch (i->predicate) {
             case XR_LIR_EQ: op=XR_RBC_FEQ;break;
@@ -781,7 +806,8 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
-    if (i->op == XR_LIR_CONST && c->immediates[i->result].known &&
+    if (i->op == XR_LIR_CONST &&
+        (c->immediates[i->result].known || c->immediates[i->result].pooled) &&
         !c->immediates[i->result].materialize) return true;
     if(!c->spill_count)return rbc_lir_instruction(c,i);
     uint32_t staged[XR_RBC_REGISTER_COUNT_MAX],count=0,strings=0,bits=0;

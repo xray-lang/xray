@@ -153,6 +153,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
+    case XR_RBC_FLEK:
+        if (a >= registers || b >= registers || c >= function->constant_count) return false;
+        break;
     case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI: case XR_RBC_REMI:
         if (a >= registers || b >= registers) return false;
         break;

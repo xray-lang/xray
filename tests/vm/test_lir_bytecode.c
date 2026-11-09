@@ -683,6 +683,106 @@ static void test_i64_to_f64_admission(void) {
     xr_rbc_program_destroy(program);
 }
 
+static void test_f64_constant_comparison(void) {
+    const uint64_t constants[] = {0, UINT64_C(0x8000000000000000),
+        UINT64_C(0x4010000000000000), UINT64_C(0x7ff0000000000000),
+        UINT64_C(0x7ff8000000000000)};
+    for (unsigned n = 0; n < sizeof(constants) / sizeof(*constants); ++n) {
+        for (unsigned multiuse = 0; multiuse < 2; ++multiuse) {
+            XrLirModule *m = NULL;
+            OK(xr_lir_module_create(NULL, &m));
+            XrLirType type = XR_LIR_F64;
+            XrLirFunction f = test_function(m, "constant_comparison", &type, 1, XR_LIR_I1);
+            XrLirBlock body = test_block(m, f, NULL, 0);
+            OK(xr_lir_set_entry(m, f, body));
+            XrLirValue input = parameter(m, f, 0);
+            XrLirValue constant = test_constant(m, body, type, constants[n]);
+            XrLirValue operands[] = {input, constant}, result;
+            XrLirInstruction comparison = {.op = XR_LIR_FCMP, .type = XR_LIR_I1,
+                .predicate = XR_LIR_LE, .operands = operands, .operand_count = 2};
+            OK(xr_lir_emit_value(m, body, &comparison, &result));
+            if (multiuse) {
+                XrLirInstruction add = {.op = XR_LIR_FADD, .type = type,
+                    .operands = operands, .operand_count = 2};
+                XrLirValue unused;
+                OK(xr_lir_emit_value(m, body, &add, &unused));
+            }
+            test_return(m, body, result);
+            OK(xr_lir_module_finish(m, NULL));
+            XrRbcProgram *program = compile(m, f);
+            xr_lir_module_destroy(m);
+            const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+            unsigned encoded = 0, loaded = 0;
+            for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
+                uint32_t op = bytecode->code[pc] & 255;
+                encoded += op == XR_RBC_FLEK;
+                loaded += op == XR_RBC_LOADK;
+            }
+            CHECK(encoded == (unsigned)(n != 0));
+            CHECK(loaded == (unsigned)(n != 0 && multiuse));
+            CHECK(bytecode->constant_count == (size_t)(n != 0));
+            const uint64_t arguments[] = {0, UINT64_C(0x4010000000000000),
+                UINT64_C(0x7ff0000000000000), UINT64_C(0x7ff8000000000000)};
+            for (unsigned a = 0; a < sizeof(arguments) / sizeof(*arguments); ++a) {
+                bool expected = n != 4 && a != 3 &&
+                    (n == 3 || a == 0 || (n == 2 && a == 1));
+                CHECK(run(program, &arguments[a], 1) == (uint64_t)expected);
+            }
+            xr_rbc_program_destroy(program);
+        }
+    }
+}
+
+static void test_f64_constant_spills_and_phi(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType type = XR_LIR_F64;
+    XrLirFunction f = test_function(m, "constant_spill_phi", &type, 1, XR_LIR_I1);
+    XrLirBlock body = test_block(m, f, NULL, 0), yes = test_block(m, f, NULL, 0);
+    XrLirBlock no = test_block(m, f, NULL, 0), join = test_block(m, f, &type, 1);
+    OK(xr_lir_set_entry(m, f, body));
+    XrLirValue input = parameter(m, f, 0), constants[257], result = {0};
+    for (unsigned n = 0; n < 257; ++n)
+        constants[n] = test_constant(m, body, type,
+            UINT64_C(0x3ff0000000000000) + ((uint64_t)n << 44));
+    for (unsigned n = 0; n < 257; ++n) {
+        XrLirValue operands[] = {input, constants[n]};
+        XrLirInstruction comparison = {.op = XR_LIR_FCMP, .type = XR_LIR_I1,
+            .predicate = XR_LIR_LE, .operands = operands, .operand_count = 2};
+        OK(xr_lir_emit_value(m, body, &comparison, &result));
+    }
+    conditional(m, body, result, (XrLirEdge){yes, NULL, 0}, (XrLirEdge){no, NULL, 0});
+    test_branch(m, yes, join, constants, 1);
+    test_branch(m, no, join, constants + 256, 1);
+    XrLirValue operands[] = {input, block_parameter(m, join, 0)};
+    XrLirInstruction comparison = {.op = XR_LIR_FCMP, .type = XR_LIR_I1,
+        .predicate = XR_LIR_LE, .operands = operands, .operand_count = 2};
+    OK(xr_lir_emit_value(m, join, &comparison, &result));
+    test_return(m, join, result);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, f);
+    xr_lir_module_destroy(m);
+    const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+    CHECK(bytecode->spill_count && bytecode->constant_count == 257);
+    unsigned encoded = 0, ordinary = 0;
+    bool last_encodable = false, first_fallback = false;
+    for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
+        uint32_t word = bytecode->code[pc], op = word & 255;
+        encoded += op == XR_RBC_FLEK;
+        ordinary += op == XR_RBC_FLE;
+        last_encodable |= op == XR_RBC_FLEK && (word >> 24) == 255;
+        first_fallback |= op == XR_RBC_LOADK && (word >> 16) == 256;
+    }
+    CHECK(encoded == 256 && ordinary == 2 && last_encodable && first_fallback);
+    uint64_t argument = 0;
+    CHECK(run(program, &argument, 1) == 1);
+    argument = UINT64_C(0x7ff0000000000000);
+    CHECK(run(program, &argument, 1) == 0);
+    argument = UINT64_C(0x7ff8000000000000);
+    CHECK(run(program, &argument, 1) == 0);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_f64_constants_and_refusals(void) {
     const uint64_t bits[] = {0, UINT64_C(0x8000000000000000),
         UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
@@ -1336,6 +1436,8 @@ static void test_publication_admission(void) {
 }
 
 int main(void) {
+    test_f64_constant_comparison();
+    test_f64_constant_spills_and_phi();
     test_many_spilled_conditions();
     test_typed_spill_copy_cycle();
     test_publication_admission();

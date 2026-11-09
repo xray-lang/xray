@@ -38,6 +38,7 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, uint32_t word,
         break;
     case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_FNEG: case XR_RBC_ITOF: case XR_RBC_FTOI:
     case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI: case XR_RBC_REMI:
+    case XR_RBC_FLEK:
     case XR_RBC_CELL_READ: case XR_RBC_STRING_I64:
     case XR_RBC_STRING_F64: case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_TAKE:
     case XR_RBC_STRING_LEN: case XR_RBC_STRING_CELL_NEW:

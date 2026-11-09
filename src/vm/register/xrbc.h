@@ -88,7 +88,8 @@
     X(GEI, ASBX)                                                                                   \
     X(EQI, ASBX)                                                                                   \
     X(MULI, ABS8)                                                                                  \
-    X(REMI, ABS8)
+    X(REMI, ABS8)                                                                                  \
+    X(FLEK, ABK8)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -195,6 +196,8 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // UTC offset reads timestamp/id at A+1/A+2 and also returns I64 bits into A.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
 // A,B and execute the following JMP only when the comparison is true.
+// FLEK writes A with the F64 comparison B <= constants[C]. Its eight-bit C
+// field is a constant index, including 255, rather than a register operand.
 // PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its
 // location is the instruction's source map entry, never a scalar register.
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,

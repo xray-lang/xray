@@ -533,7 +533,56 @@ static void jump_compaction(void) {
     attempts = 0;
 }
 
+static void compiled_float_constants(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType type = XR_LIR_F64;
+    XrLirFunction root = test_function(m, "pooled_comparison", &type, 1, XR_LIR_I1);
+    XrLirBlock body = test_block(m, root, NULL, 0);
+    OK(xr_lir_set_entry(m, root, body));
+    XrLirValue input, result = {0};
+    OK(xr_lir_function_parameter(m, root, 0, &input));
+    for (unsigned n = 0; n < 40; ++n) {
+        XrLirValue constant = test_constant(m, body, type,
+            UINT64_C(0x4000000000000000) + ((uint64_t)n << 44));
+        XrLirValue operands[] = {input, constant};
+        XrLirInstruction comparison = {.op = XR_LIR_FCMP, .type = XR_LIR_I1,
+            .predicate = XR_LIR_LE, .operands = operands, .operand_count = 2};
+        OK(xr_lir_emit_value(m, body, &comparison, &result));
+    }
+    test_return(m, body, result);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic;
+    attempts = 0;
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    CHECK(program->module.functions[0].constant_count == 40);
+    uint64_t argument = 0, bits = 0;
+    CHECK(execute(program, &argument, 1, &bits) == XR_RBC_OK && bits == 1);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    // Relocation always moves the pool. Fail each real compilation allocation,
+    // including its initial reservation and both growth steps, before publish.
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0;
+        fail_at = point;
+        program = NULL;
+        CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    attempts = 0;
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    CHECK(execute(program, &argument, 1, &bits) == XR_RBC_OK && bits == 1);
+    xr_rbc_program_destroy(program);
+    xr_lir_module_destroy(m);
+    CHECK(!live_allocations);
+    attempts = 0;
+}
+
 int main(void) {
+    compiled_float_constants();
     jump_threading();
     jump_compaction();
     physical_string_copy_cycle();
