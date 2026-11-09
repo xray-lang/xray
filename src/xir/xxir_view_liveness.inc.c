@@ -10,8 +10,10 @@
  *   Normal edge operands and protected entry demand are distinct CFG facts.
  */
 #include "xxir_view_liveness_internal.h"
+#include "xxir_view_loan_internal.h"
 #include "xxir_receive_control.h"
 #include "../base/xchecks.h"
+#include "xxir_view_loan_transport.inc.c"
 
 typedef struct ViewLive {
     const XrXirCompileContext *context;
@@ -27,6 +29,9 @@ typedef struct ViewLive {
     uint8_t *reachable,*queued;
     uint64_t *storage,*inputs,*outputs,*current,*edge,*after;
     uint32_t count,words,total,head,tail,pending,edges;
+    const XirViewLoanFacts *loans;
+    XirViewLoanTransport *loan_transport;
+    uint64_t frame_bytes;
 } ViewLive;
 static bool view_live_type(const ViewLive *a,XrXirType type) {
     return xr_xir_type_node(a->module->types,type) &&
@@ -59,6 +64,9 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
     if (bytes>SIZE_MAX || bytes>a->context->limits.frame_bytes ||
         cells>(a->context->limits.frame_bytes-bytes)/sizeof(uint64_t) || cells>SIZE_MAX/sizeof(uint64_t))
         return XR_XIR_BUDGET;
+    a->frame_bytes=bytes+cells*sizeof(uint64_t);
+    uint64_t loan_bytes=xir_view_loan_transport_frame_bytes(a->loan_transport);
+    if (loan_bytes>a->context->limits.frame_bytes-a->frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     a->indices=xir_compile_alloc(a->context,(size_t)total*sizeof(*a->indices),&status);
     a->values=xir_compile_alloc(a->context,(size_t)a->count*sizeof(*a->values),&status);
@@ -94,6 +102,33 @@ static XrXirStatus view_live_value(ViewLive *a,uint64_t *bits,uint32_t value,boo
     uint64_t mask=UINT64_C(1)<<(id%64u);
     if (use) bits[id/64u]|=mask;else bits[id/64u]&=~mask;
     return XR_XIR_OK;
+}
+static XrXirStatus view_live_loan_physical(void *context,uint32_t value) {
+    ViewLive *a=context;
+    return view_live_value(a,a->current,value,true);
+}
+static XrXirStatus view_live_callable_loans(ViewLive *a,uint32_t instruction,uint32_t value) {
+    const XrXirTypes *types=a->module->types;
+    XrXirType type=xr_xir_operand_type(a->function,value);
+    if (!a->loans || !xr_xir_type_is_callable(types,type) || xr_xir_type_is_c_callable(types,type))
+        return XR_XIR_OK;
+    const XirRestrictionView *view=&a->loans->restrictions;
+    XirRestrictionFunction row=view->functions[a->location.function];
+    uint32_t first=0,last=view->point_count;
+    while (first<last) {
+        uint32_t middle=first+(last-first)/2;
+        XirRestrictionPoint point=view->points[middle];
+        if (point.function<a->location.function || (point.function==a->location.function &&
+            (point.instruction<instruction || (point.instruction==instruction && point.value<value)))) first=middle+1;
+        else last=middle;
+    }
+    if (first==view->point_count) return XR_XIR_UNRESOLVED;
+    XirRestrictionPoint point=view->points[first];
+    if (point.function!=a->location.function || point.instruction!=instruction || point.value!=value ||
+        point.carrier>=row.value_count) return XR_XIR_UNRESOLVED;
+    XirViewLoanDemand demand={.function=a->location.function,.carrier=point.carrier,
+        .frame_bytes=a->frame_bytes,.physical=view_live_loan_physical,.context=a};
+    return xir_view_loan_transport_demand(a->loan_transport,&demand);
 }
 static void view_live_enqueue(ViewLive *a,uint32_t block) {
     if (a->queued[block]) return;
@@ -171,6 +206,14 @@ static XrXirStatus view_live_instruction(ViewLive *a,uint32_t i) {
         uint32_t value=xr_xir_op_uses_operand_table(op->op) ? a->function->operands[op->args[0]+p] : op->args[p];
         status=view_live_value(a,a->current,value,true);if (status!=XR_XIR_OK) return status;
     }
+    bool call=xr_xir_op_references_function(op->op) || op->op==XR_XIR_CALL_REQUIREMENT ||
+        op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT;
+    if (a->loans && call) for (uint32_t p=0;p<view_live_operands(a,op);++p) {
+        uint32_t value=xr_xir_op_uses_operand_table(op->op)?a->function->operands[op->args[0]+p]:op->args[p];
+        status=view_live_callable_loans(a,i,value);if (status!=XR_XIR_OK) return status;
+    }
+    if (a->loans && (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT))
+        return view_live_callable_loans(a,i,(uint32_t)op->immediate);
     return XR_XIR_OK;
 }
 static XrXirStatus view_live_output(ViewLive *a,uint32_t b) {
@@ -253,27 +296,47 @@ static XrXirStatus view_live_visit(ViewLive *a) {
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
+static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
+    const XrXirModule *module,const XirViewLoanFacts *loans,const XirViewLiveRequest *request) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(context,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=xir_receive_poll(request->control);
+    if (status==XR_XIR_OK) status=xir_compile_view_static_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
+    XirViewLoanTransport *transport=NULL;
+    if (loans) status=xir_view_loan_transport_new(context,module,loans,flags,request->control,&transport);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
         if (module->declarations && module->declarations->functions[f].native_callable) {
             status=xir_native_callable_verify(module,f);continue;
         }
-        ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,.visitor=visitor,.user=user,
+        ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,
+            .visitor=request->visitor,.user=request->user,.loans=loans,.loan_transport=transport,.control=request->control,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=view_live_allocate(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_graph(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_solve(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_visit(&a);
-        if (diagnostic && status!=XR_XIR_OK) {*diagnostic=a.location;diagnostic->status=status;}
+        if (request->diagnostic && status!=XR_XIR_OK) {
+            *request->diagnostic=a.location;request->diagnostic->status=status;
+        }
         view_live_free(&a);
     }
-    xr_compile_resources_free(flags);return status;
+    xir_view_loan_transport_free(transport);xr_compile_resources_free(flags);return status;
+}
+XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
+    XirViewLiveRequest request={visitor,user,diagnostic,NULL};
+    return view_liveness_run(context,module,NULL,&request);
+}
+XR_FUNC XrXirStatus xir_compile_view_liveness_loans_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,const struct XrXirEffects *effects,const XirViewLiveRequest *request) {
+    XirViewLoanFacts loans={0};
+    XrXirStatus status=xir_effects_view_loan_facts(context,effects,&loans);
+    if (status!=XR_XIR_OK) return status;
+    if (!module || loans.restrictions.function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    XirViewLiveRequest callbacks=request?*request:(XirViewLiveRequest){0};
+    return view_liveness_run(context,module,&loans,&callbacks);
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,
     const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic,

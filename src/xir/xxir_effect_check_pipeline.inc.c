@@ -10,6 +10,7 @@
  *   Source refinement and specialization consume one numeric ROOT owner.
  *   No native frame or scheduling plan participates in semantic acceptance.
  */
+#include "xxir_view_loan_internal.h"
 
 static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     XirEffectInput input, XrXirEffects *effects) {
@@ -92,6 +93,21 @@ XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *cont
     const EffectCheckFunction *row = &effects->checked_roots->function[function];
     if (value >= row->values) return XR_XIR_BAD_STRUCTURE;
     *output = effects->checked_roots->node[row->first + value].restricted;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_view_loan_facts(const XrXirCompileContext *context,
+    const XrXirEffects *effects, XirViewLoanFacts *output) {
+    if (!output || !effects || !effects->checked_roots ||
+        !xir_effects_context_matches(context, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    if (!roots->storage || roots->restrictions.view.function_count != effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    XirViewLoanFacts view = {.restrictions = roots->restrictions.view, .execution = roots};
+    XrXirStatus status = xir_storage_flow_view(roots->storage, &view.storage);
+    if (status != XR_XIR_OK) return status;
+    if (view.storage.function_count != effects->count) return XR_XIR_BAD_STRUCTURE;
+    *output = view;
     return XR_XIR_OK;
 }
 

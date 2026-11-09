@@ -964,8 +964,10 @@ static void execution_callable_result_upper(void) {
 }
 
 #include "xir_storage_environment_cases.h"
+#include "xir_view_loan_transport_cases.h"
 
 static void control_summary_kernel(void) {
+    view_loan_transport_cases();
     control_summary_detached();
     suspension_parameter_equations();
     suspension_reason_order();
