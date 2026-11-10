@@ -46,7 +46,7 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
             layout.payload_alignment};
         XrXirValueStatus copied = xrt_module_layout_new(&spec, &program->module.state_layout);
-        if (copied != XR_XIR_VALUE_OK) status = copied == XR_XIR_VALUE_OUT_OF_MEMORY ?
+        if (copied != XR_XIR_VALUE_OK) status = copied == XR_XIR_VALUE_OOM ?
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID;
     }
     xr_free(modules); xr_free(slots);
