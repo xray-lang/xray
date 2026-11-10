@@ -45,7 +45,7 @@ struct XirViewLoanTransport {
     bool indexed;
 };
 
-static bool view_loan_step(XirViewLoanTransport *a) {
+static bool view_loan_transport_step(XirViewLoanTransport *a) {
     if (a->status == XR_XIR_OK) a->status = xir_receive_step(a->control, &a->progress);
     return a->status == XR_XIR_OK;
 }
@@ -92,7 +92,7 @@ static uint32_t view_loan_binding_hash(uint32_t application, uint32_t function, 
 static bool view_loan_bindings(XirViewLoanTransport *a) {
     const XirStorageFlowView *view = &a->facts->storage;
     uint64_t count = 0;
-    for (uint32_t n = 0; n < view->application_count && view_loan_step(a); ++n) {
+    for (uint32_t n = 0; n < view->application_count && view_loan_transport_step(a); ++n) {
         XirStorageApplication app = view->applications[n];
         if (app.function >= view->function_count || app.declaration >= view->function_count ||
             app.first > view->binding_count || app.count > view->binding_count - app.first ||
@@ -108,9 +108,9 @@ static bool view_loan_bindings(XirViewLoanTransport *a) {
     a->binding_capacity = (uint32_t)capacity;
     a->bindings = view_loan_allocate(a, capacity, sizeof(*a->bindings), true);
     if (!a->bindings) return false;
-    for (uint32_t n = 0; n < view->application_count && view_loan_step(a); ++n) {
+    for (uint32_t n = 0; n < view->application_count && view_loan_transport_step(a); ++n) {
         XirStorageApplication app = view->applications[n];
-        for (uint32_t b = 0; b < app.count && view_loan_step(a); ++b) {
+        for (uint32_t b = 0; b < app.count && view_loan_transport_step(a); ++b) {
             uint32_t id = app.first + b;
             XirStorageBinding binding = view->bindings[id];
             if (binding.formal_function != app.declaration ||
@@ -123,7 +123,7 @@ static bool view_loan_bindings(XirViewLoanTransport *a) {
             }
             uint32_t slot = view_loan_binding_hash(n, binding.formal_function, binding.formal_value) &
                 (a->binding_capacity - 1);
-            while (a->bindings[slot].value && view_loan_step(a)) {
+            while (a->bindings[slot].value && view_loan_transport_step(a)) {
                 XirStorageBinding previous = view->bindings[a->bindings[slot].value - 1];
                 if (a->bindings[slot].application == n && previous.formal_function == binding.formal_function &&
                     previous.formal_value == binding.formal_value) {
@@ -150,7 +150,7 @@ static bool view_loan_index(XirViewLoanTransport *a) {
     uint64_t values = 0, edges = s->crossflow_count;
     a->offsets = view_loan_allocate(a, (uint64_t)r->function_count + 1, sizeof(*a->offsets), false);
     if (!a->offsets) return false;
-    for (uint32_t f = 0; f < r->function_count && view_loan_step(a); ++f) {
+    for (uint32_t f = 0; f < r->function_count && view_loan_transport_step(a); ++f) {
         XirRestrictionFunction row = r->functions[f];
         uint64_t physical = (uint64_t)a->module->functions[f].parameter_count + a->module->functions[f].instruction_count;
         if (row.physical_values != physical || s->functions[f].physical_values != physical ||
@@ -167,14 +167,14 @@ static bool view_loan_index(XirViewLoanTransport *a) {
     a->edges = view_loan_allocate(a, edges, sizeof(*a->edges), false);
     if (a->status != XR_XIR_OK) return false;
     if (values) memset(a->heads, 255, (size_t)values * sizeof(*a->heads));
-    for (uint32_t f = 0; f < r->function_count && view_loan_step(a); ++f)
-        for (uint32_t e = 0; e < r->functions[f].flow_count && view_loan_step(a); ++e) {
+    for (uint32_t f = 0; f < r->function_count && view_loan_transport_step(a); ++f)
+        for (uint32_t e = 0; e < r->functions[f].flow_count && view_loan_transport_step(a); ++e) {
             XrXirValueFlow edge = r->functions[f].flows[e];
             uint32_t source = view_loan_value(a, f, edge.source), target = view_loan_value(a, f, edge.target);
             if (source == UINT32_MAX || target == UINT32_MAX) return false;
             view_loan_edge(a, f, edge.source, target, UINT32_MAX);
         }
-    for (uint32_t e = 0; e < s->crossflow_count && view_loan_step(a); ++e) {
+    for (uint32_t e = 0; e < s->crossflow_count && view_loan_transport_step(a); ++e) {
         XirStorageCrossFlow edge = s->crossflows[e];
         if ((uint32_t)edge.bank > XIR_STORAGE_FOOTPRINT) { a->status = XR_XIR_BAD_STRUCTURE; return false; }
         if (edge.bank == XIR_STORAGE_EXPOSURE) continue;
@@ -187,7 +187,7 @@ static bool view_loan_index(XirViewLoanTransport *a) {
         }
         view_loan_edge(a, edge.source_function, edge.source, target, edge.application);
     }
-    for (uint32_t n = 0; n < s->input_count && view_loan_step(a); ++n) {
+    for (uint32_t n = 0; n < s->input_count && view_loan_transport_step(a); ++n) {
         XirStorageInput input = s->inputs[n];
         if ((uint32_t)input.bank > XIR_STORAGE_FOOTPRINT) {a->status=XR_XIR_BAD_STRUCTURE;return false;}
         if (input.bank == XIR_STORAGE_EXPOSURE) continue;
@@ -212,7 +212,7 @@ static bool view_loan_index(XirViewLoanTransport *a) {
         a->terminals[value] |= VIEW_LOAN_INVOCATION;
         a->terminals[handle] |= VIEW_LOAN_INVOCATION;
     }
-    for (uint32_t n = 0; n < s->unknown_count && view_loan_step(a); ++n) {
+    for (uint32_t n = 0; n < s->unknown_count && view_loan_transport_step(a); ++n) {
         uint32_t value = view_loan_value(a, s->unknowns[n].function, s->unknowns[n].value);
         if (value == UINT32_MAX) return false;
         a->terminals[value] |= VIEW_LOAN_EXTERNAL;
@@ -261,7 +261,7 @@ static bool view_loan_state_index(XirViewLoanTransport *a) {
     if (next > UINT32_MAX) { a->status = XR_XIR_OVERFLOW; return false; }
     ViewLoanSlot *index = view_loan_allocate(a, next, sizeof(*index), true);
     if (!index) return false;
-    for (uint32_t n = 0; n < a->state_count && view_loan_step(a); ++n) {
+    for (uint32_t n = 0; n < a->state_count && view_loan_transport_step(a); ++n) {
         uint32_t slot = view_loan_state_hash(a->states[n].reference) & ((uint32_t)next - 1);
         while (index[slot].generation == a->generation) slot = (slot + 1) & ((uint32_t)next - 1);
         index[slot] = (ViewLoanSlot){n, a->generation};
@@ -279,7 +279,7 @@ static bool view_loan_push(XirViewLoanTransport *a, XirStorageReference referenc
     if (!a->index_capacity || a->state_count >= a->index_capacity/2)
         if (!view_loan_state_index(a)) return false;
     uint32_t slot = view_loan_state_hash(reference) & (a->index_capacity - 1), id = UINT32_MAX;
-    while (a->index[slot].generation == a->generation && view_loan_step(a)) {
+    while (a->index[slot].generation == a->generation && view_loan_transport_step(a)) {
         uint32_t candidate = a->index[slot].value;
         XirStorageReference previous = a->states[candidate].reference;
         if (previous.function == reference.function && previous.value == reference.value &&
@@ -308,7 +308,7 @@ static bool view_loan_substitute(XirViewLoanTransport *a, uint32_t id, bool *bou
     if (app.declaration != reference.function) return true;
     uint32_t slot = view_loan_binding_hash(reference.environment,reference.function,reference.value) &
         (a->binding_capacity - 1);
-    while (a->bindings[slot].value && view_loan_step(a)) {
+    while (a->bindings[slot].value && view_loan_transport_step(a)) {
         uint32_t index = a->bindings[slot].value - 1;
         XirStorageBinding binding = view->bindings[index];
         if (a->bindings[slot].application == reference.environment && index >= app.first &&
@@ -380,7 +380,7 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
         if (a->status != XR_XIR_OK) return false;
     }
     bool predecessor=false;
-    for (uint32_t e=a->heads[value];e!=UINT32_MAX && view_loan_step(a);e=a->edges[e].next) {
+    for (uint32_t e=a->heads[value];e!=UINT32_MAX && view_loan_transport_step(a);e=a->edges[e].next) {
         ViewLoanEdge edge=a->edges[e];uint32_t environment=reference.environment;
         if (edge.application != UINT32_MAX) {
             XirStorageApplication app=a->facts->storage.applications[edge.application];
@@ -395,13 +395,13 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
 
 static bool view_loan_grounded(XirViewLoanTransport *a) {
     uint32_t count=0;
-    for (uint32_t n=0;n<a->state_count && view_loan_step(a);++n) {
+    for (uint32_t n=0;n<a->state_count && view_loan_transport_step(a);++n) {
         if (!a->states[n].grounded) continue;
         if (!view_loan_grow(a,(void **)&a->queue,count,&a->queue_capacity,sizeof(*a->queue))) return false;
         a->queue[count++]=n;
     }
-    for (uint32_t cursor=0;cursor<count && view_loan_step(a);++cursor)
-        for (uint32_t e=a->states[a->queue[cursor]].head;e!=UINT32_MAX && view_loan_step(a);e=a->dependencies[e].next) {
+    for (uint32_t cursor=0;cursor<count && view_loan_transport_step(a);++cursor)
+        for (uint32_t e=a->states[a->queue[cursor]].head;e!=UINT32_MAX && view_loan_transport_step(a);e=a->dependencies[e].next) {
             uint32_t parent=a->dependencies[e].dependent;
             if (a->states[parent].grounded) continue;
             a->states[parent].grounded=true;
@@ -426,7 +426,7 @@ XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *a, cons
     if (++a->generation == 0) {memset(a->index,0,(size_t)a->index_capacity*sizeof(*a->index));++a->generation;}
     if (!view_loan_push(a,(XirStorageReference){demand->function,demand->carrier,
         XIR_EXECUTION_CURRENT_ENVIRONMENT},UINT32_MAX)) return a->status;
-    for (uint32_t n=0;n<a->state_count && view_loan_step(a);++n)
+    for (uint32_t n=0;n<a->state_count && view_loan_transport_step(a);++n)
         if (!view_loan_expand(a,n,demand)) return a->status;
     view_loan_grounded(a);return a->status;
 }
