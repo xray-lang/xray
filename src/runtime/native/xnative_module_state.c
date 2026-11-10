@@ -1,0 +1,348 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_module_state.c - Independently owned typed module values
+ *
+ * KEY CONCEPT:
+ *   A state retains immutable type operations and owns successful copies.
+ *   Empty scratch makes replacement atomic even when reference copying fails.
+ */
+#include "xnative_module_state.h"
+#include "xnative_string.h"
+#include "base/xchecks.h"
+#include "base/xmalloc.h"
+#include <stdatomic.h>
+#include <string.h>
+
+typedef struct XrtModuleType XrtModuleType;
+typedef XrXirValueStatus (*XrtModuleCopy)(const XrtModuleType *, const void *, void *);
+typedef void (*XrtModuleDrop)(const XrtModuleType *, void *);
+struct XrtModuleType {
+    XrtModuleTypeKind kind;
+    uint32_t size, alignment;
+    XrtModuleCopy copy;
+    XrtModuleDrop drop;
+};
+struct XrtModuleLayout {
+    atomic_size_t references;
+    XrtModuleLayoutSpec view;
+    XrtModuleType *types;
+    uint32_t *slot_counts;
+    uint64_t bytes;
+    uint32_t scratch_size;
+};
+enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
+enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
+struct XrtModuleRef {
+    XrtModuleState *state;
+    uint32_t slot;
+    uint8_t required_flags;
+};
+struct XrtModuleState {
+    XrtModuleLayout *layout;
+    uint8_t *payload, *scratch, *flags, *modules;
+    uint32_t *construction, *publication, *remaining;
+    XrtModuleRef *initializers, *published;
+    uint32_t construction_count, publication_count;
+    uint32_t allocation_alignment;
+    uint8_t unit;
+};
+
+static XrXirValueStatus module_scalar_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!type->size) return XR_XIR_VALUE_OK;
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (type->kind == XRT_MODULE_BOOL && *(const uint8_t *)source > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (type->kind == XRT_MODULE_RUNE) {
+        int64_t rune;
+        memcpy(&rune, source, sizeof(rune));
+        if (!xr_xir_rune_payload_valid(rune)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    memcpy(empty, source, type->size);
+    return XR_XIR_VALUE_OK;
+}
+
+static void module_scalar_drop(const XrtModuleType *type, void *value) {
+    if (type->size) memset(value, 0, type->size);
+}
+
+static XrXirValueStatus module_string_copy(const XrtModuleType *type, const void *source, void *empty) {
+    (void)type;
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtString *string;
+    memcpy(&string, source, sizeof(string));
+    XrtString *owned = NULL;
+    XrXirValueStatus status = xrt_string_owned_copy(string, &owned);
+    if (status == XR_XIR_VALUE_OK) memcpy(empty, &owned, sizeof(owned));
+    return status;
+}
+
+static void module_string_drop(const XrtModuleType *type, void *value) {
+    (void)type;
+    XrtString *owned;
+    memcpy(&owned, value, sizeof(owned));
+    memset(value, 0, sizeof(owned));
+    xrt_string_owned_drop(&owned);
+}
+
+static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
+    *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
+    switch (kind) {
+    case XRT_MODULE_UNIT: type->alignment = 1; return true;
+    case XRT_MODULE_BOOL: case XRT_MODULE_I8: case XRT_MODULE_U8:
+        type->size = type->alignment = 1; return true;
+    case XRT_MODULE_I16: case XRT_MODULE_U16: type->size = type->alignment = 2; return true;
+    case XRT_MODULE_I32: case XRT_MODULE_U32: case XRT_MODULE_F32:
+        type->size = type->alignment = 4; return true;
+    case XRT_MODULE_RUNE: case XRT_MODULE_I64: case XRT_MODULE_U64: case XRT_MODULE_F64:
+        type->size = type->alignment = 8; return true;
+    case XRT_MODULE_STRING:
+        type->size = sizeof(XrtString *); type->alignment = _Alignof(XrtString *);
+        type->copy = module_string_copy; type->drop = module_string_drop; return true;
+    default: return false;
+    }
+}
+
+static bool module_charge(uint64_t *bytes, uint64_t count, size_t size) {
+    if (size && count > (UINT64_MAX - *bytes) / size) return false;
+    *bytes += count * size;
+    return *bytes <= SIZE_MAX;
+}
+
+static void *module_copy_array(const void *source, uint32_t count, size_t size) {
+    if (!count) return NULL;
+    void *copy = xr_malloc((size_t)count * size);
+    if (copy) memcpy(copy, source, (size_t)count * size);
+    return copy;
+}
+
+#include "xnative_module_layout.inc.c"
+
+static void *module_payload(const XrtModuleState *state, uint32_t slot) {
+    uint64_t offset = state->layout->view.slots[slot].offset;
+    return state->payload ? state->payload + (size_t)offset : (void *)&state->unit;
+}
+
+static const XrtModuleType *module_slot_type(const XrtModuleState *state, uint32_t slot) {
+    return &state->layout->types[state->layout->view.slots[slot].type];
+}
+
+static bool module_reference_valid(const XrtModuleRef *reference) {
+    if (!reference || !reference->state || !reference->state->layout) return false;
+    XrtModuleState *state = reference->state;
+    if (reference->slot >= state->layout->view.slot_count) return false;
+    return (reference == &state->initializers[reference->slot] && reference->required_flags == SLOT_CONSTRUCTED) ||
+        (reference == &state->published[reference->slot] && reference->required_flags == SLOT_PUBLISHED);
+}
+
+XRAY_API void xrt_module_state_clear(XrtModuleState *state) {
+    if (!state || !state->layout) return;
+    while (state->construction_count) {
+        uint32_t slot = state->construction[--state->construction_count];
+        if (state->flags[slot] == SLOT_CONSTRUCTED) {
+            const XrtModuleType *type = module_slot_type(state, slot);
+            type->drop(type, module_payload(state, slot));
+            state->flags[slot] = 0;
+        }
+    }
+    while (state->publication_count) {
+        uint32_t slot = state->publication[--state->publication_count];
+        const XrtModuleType *type = module_slot_type(state, slot);
+        type->drop(type, module_payload(state, slot));
+        state->flags[slot] = 0;
+    }
+    if (state->modules) memset(state->modules, 0, state->layout->view.module_count);
+    if (state->remaining) memcpy(state->remaining, state->layout->slot_counts,
+        (size_t)state->layout->view.module_count * sizeof(*state->remaining));
+}
+
+XRAY_API void xrt_module_state_drop(XrtModuleState **owner) {
+    if (!owner || !*owner) return;
+    XrtModuleState *state = *owner;
+    *owner = NULL;
+    xrt_module_state_clear(state);
+    xr_free_aligned(state->payload, state->allocation_alignment);
+    xr_free_aligned(state->scratch, state->allocation_alignment);
+    xr_free(state->flags); xr_free(state->modules);
+    xr_free(state->construction); xr_free(state->publication); xr_free(state->remaining);
+    xr_free(state->initializers); xr_free(state->published);
+    xrt_module_layout_drop(&state->layout);
+    xr_free(state);
+}
+
+static XrXirValueStatus module_state_allocate(XrtModuleState *state) {
+    const XrtModuleLayoutSpec *layout = &state->layout->view;
+    uint32_t slots = layout->slot_count, modules = layout->module_count;
+    state->allocation_alignment = layout->payload_alignment < sizeof(void *) ?
+        (uint32_t)sizeof(void *) : layout->payload_alignment;
+    if (layout->payload_size) state->payload = xr_malloc_aligned((size_t)layout->payload_size, state->allocation_alignment);
+    if (state->layout->scratch_size) state->scratch = xr_malloc_aligned(state->layout->scratch_size, state->allocation_alignment);
+    if (slots) {
+        state->flags = xr_calloc(slots, 1);
+        state->construction = xr_malloc((size_t)slots * sizeof(*state->construction));
+        state->publication = xr_malloc((size_t)slots * sizeof(*state->publication));
+        state->initializers = xr_calloc(slots, sizeof(*state->initializers));
+        state->published = xr_calloc(slots, sizeof(*state->published));
+    }
+    state->modules = xr_calloc(modules, 1);
+    state->remaining = xr_malloc((size_t)modules * sizeof(*state->remaining));
+    if ((layout->payload_size && !state->payload) || (state->layout->scratch_size && !state->scratch) ||
+        (slots && (!state->flags || !state->construction || !state->publication || !state->initializers || !state->published)) ||
+        !state->modules || !state->remaining) return XR_XIR_VALUE_OOM;
+    if (state->payload) memset(state->payload, 0, (size_t)layout->payload_size);
+    if (state->scratch) memset(state->scratch, 0, state->layout->scratch_size);
+    memcpy(state->remaining, state->layout->slot_counts, (size_t)modules * sizeof(*state->remaining));
+    for (uint32_t s = 0; s < slots; ++s) {
+        state->initializers[s] = (XrtModuleRef){state, s, SLOT_CONSTRUCTED};
+        state->published[s] = (XrtModuleRef){state, s, SLOT_PUBLISHED};
+    }
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *layout, uint64_t limit, XrtModuleState **out) {
+    if (!layout || !out || *out) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint64_t bytes = layout->bytes;
+    uint32_t slots = layout->view.slot_count, modules = layout->view.module_count;
+    uint32_t alignment = layout->view.payload_alignment < sizeof(void *) ?
+        (uint32_t)sizeof(void *) : layout->view.payload_alignment;
+    if (!module_charge(&bytes, 1, sizeof(XrtModuleState)) ||
+        !module_charge(&bytes, layout->view.payload_size, 1) ||
+        !module_charge(&bytes, layout->scratch_size, 1) ||
+        !module_charge(&bytes, 2, alignment - 1) ||
+        !module_charge(&bytes, slots, 1 + 2 * sizeof(uint32_t) + 2 * sizeof(XrtModuleRef)) ||
+        !module_charge(&bytes, modules, 1 + sizeof(uint32_t))) return XR_XIR_VALUE_OVERFLOW;
+    if (bytes > limit) return XR_XIR_VALUE_MEMORY_LIMIT;
+    if (!xrt_module_layout_retain(layout)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    XrtModuleState *state = xr_calloc(1, sizeof(*state));
+    if (!state) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
+    state->layout = layout;
+    XrXirValueStatus status = module_state_allocate(state);
+    if (status != XR_XIR_VALUE_OK) { xrt_module_state_drop(&state); return status; }
+    *out = state;
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_begin(XrtModuleState *state, uint32_t module) {
+    if (!state || module >= state->layout->view.module_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (state->modules[module] != MODULE_EMPTY) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtModuleSpec spec = state->layout->view.modules[module];
+    for (uint32_t d = 0; d < spec.dependency_count; ++d)
+        if (state->modules[state->layout->view.dependencies[spec.first_dependency + d]] != MODULE_READY)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+    state->modules[module] = MODULE_INITIALIZING;
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_ready(XrtModuleState *state, uint32_t module) {
+    if (!state || module >= state->layout->view.module_count ||
+        state->modules[module] != MODULE_INITIALIZING || state->remaining[module]) return XR_XIR_VALUE_BAD_ARGUMENT;
+    state->modules[module] = MODULE_READY;
+    return XR_XIR_VALUE_OK;
+}
+
+static XrXirValueStatus module_initial_copy(XrtModuleState *state, uint32_t slot, const void *value) {
+    const XrtModuleType *type = module_slot_type(state, slot);
+    return type->copy(type, value, module_payload(state, slot));
+}
+
+XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t slot,
+    const void *value, XrtModuleRef **out) {
+    if (!state || !out || *out || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
+    if (!(spec->flags & XRT_MODULE_SLOT_MUTABLE) || state->flags[slot] ||
+        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = module_initial_copy(state, slot, value);
+    if (status != XR_XIR_VALUE_OK) return status;
+    state->flags[slot] = SLOT_CONSTRUCTED;
+    state->construction[state->construction_count++] = slot;
+    *out = &state->initializers[slot];
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_publish(XrtModuleRef *reference) {
+    if (!module_reference_valid(reference) || reference->required_flags != SLOT_CONSTRUCTED)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    uint32_t slot = reference->slot;
+    const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
+    if (state->flags[slot] != SLOT_CONSTRUCTED || !(spec->flags & XRT_MODULE_SLOT_MUTABLE) ||
+        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    state->flags[slot] |= SLOT_PUBLISHED;
+    state->publication[state->publication_count++] = slot;
+    --state->remaining[spec->module];
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *state, uint32_t slot, const void *value) {
+    if (!state || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
+    if ((spec->flags & XRT_MODULE_SLOT_MUTABLE) || state->flags[slot] ||
+        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = module_initial_copy(state, slot, value);
+    if (status != XR_XIR_VALUE_OK) return status;
+    state->flags[slot] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
+    state->publication[state->publication_count++] = slot;
+    --state->remaining[spec->module];
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *state, uint32_t slot, XrtModuleRef **out) {
+    if (!state || !out || *out || slot >= state->layout->view.slot_count ||
+        !(state->flags[slot] & SLOT_PUBLISHED)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *out = &state->published[slot];
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_borrow(const XrtModuleRef *reference, const void **out) {
+    if (!out || !module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    if ((state->flags[reference->slot] & reference->required_flags) != reference->required_flags)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    *out = module_payload(state, reference->slot);
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void *value) {
+    if (!module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    uint32_t slot = reference->slot;
+    if (!(state->layout->view.slots[slot].flags & XRT_MODULE_SLOT_MUTABLE) ||
+        (state->flags[slot] & reference->required_flags) != reference->required_flags)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtModuleType *type = module_slot_type(state, slot);
+    XrXirValueStatus status = type->copy(type, value, state->scratch);
+    if (status != XR_XIR_VALUE_OK) return status;
+    void *payload = module_payload(state, slot);
+    type->drop(type, payload);
+    if (type->size) { memcpy(payload, state->scratch, type->size); memset(state->scratch, 0, type->size); }
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_reference_cache(const XrtModuleRef *reference, XrtModuleAccess *out) {
+    if (!out || !module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    uint32_t slot = reference->slot;
+    const XrtModuleType *type = module_slot_type(state, slot);
+    *out = (XrtModuleAccess){.reference=(XrtModuleRef *)reference, .payload=module_payload(state, slot),
+        .flags=&state->flags[slot], .required_flags=reference->required_flags,
+        .size=type->size, .alignment=type->alignment, .kind=type->kind,
+        .is_mutable=(state->layout->view.slots[slot].flags & XRT_MODULE_SLOT_MUTABLE) != 0};
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_cache(const XrtModuleState *state, uint32_t slot, XrtModuleAccess *out) {
+    if (!state || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    return xrt_module_reference_cache(&state->published[slot], out);
+}
+
+XRAY_API void xrt_module_require(XrtModuleStatus status, uint32_t source_id) {
+    if (!status) return;
+    XR_CHECK(status <= XR_XIR_VALUE_IO, "Module errors preserve a shared value status");
+    xrt_value_failure((XrXirValueStatus)status, source_id);
+}
+
+XRAY_API_NORET void xrt_module_uninitialized(uint32_t source_id) {
+    xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+}

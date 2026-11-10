@@ -43,4 +43,7 @@ static inline bool xrt_string_root_empty(const XrtStringRoot *root) {
 /* The authenticated producer transfers one current root owner before close.
  * No retained handle into the root bookkeeping is exposed to its receiver. */
 XR_FUNC XrtString *xrt_string_root_take(XrtString *string);
+/* Produce a real independently lived reference without changing guest counts.
+ * A root-private String is escaped through the shared value copy operation. */
+XR_FUNC XrXirValueStatus xrt_string_owned_copy(const XrtString *, XrtString **);
 #endif // XNATIVE_STRING_H

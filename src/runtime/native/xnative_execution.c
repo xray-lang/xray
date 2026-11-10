@@ -11,6 +11,7 @@
  *   changes across recovery, so no changed automatic owner is lost to a jump.
  */
 #include "xnative_execution.h"
+#include "xnative_module_state.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
 #include "shared/xr_time_offset.h"
@@ -83,6 +84,39 @@ XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot roo
     XrtExecutionFailure failure = {0};
     if (run_bound(map, &failure, root, context, &strings) == XRT_EXECUTION_FAILURE)
         native_failure_exit(map, &failure);
+}
+
+typedef struct XrtStateInvocation {
+    XrtSynchronousStateRoot root;
+    void *context;
+    XrtModuleState *state;
+} XrtStateInvocation;
+
+static void state_root_invoke(void *context) {
+    const XrtStateInvocation *invocation = context;
+    invocation->root(invocation->context, invocation->state);
+}
+
+XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousStateRoot root,
+    void *context, const XrtModuleLayoutSpec *spec) {
+    XR_CHECK(root && spec && source_map_valid(map), "A state root requires a prepared map and layout");
+    XrtModuleLayout *layout = NULL;
+    XrtModuleState *state = NULL;
+    XrtModuleStatus status = xrt_module_layout_new(spec, &layout);
+    if (!status) status = xrt_module_state_new(layout, spec->byte_limit, &state);
+    xrt_module_layout_drop(&layout);
+    XrtExecutionFailure failure = {0};
+    if (status) {
+        xrt_module_state_drop(&state);
+        failure.kind = XRT_FAILURE_VALUE;
+        failure.detail.value.status = (XrXirValueStatus)status;
+        native_failure_exit(map, &failure);
+    }
+    XrtStringRoot strings = {0};
+    XrtStateInvocation invocation = {root, context, state};
+    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &strings);
+    xrt_module_state_drop(&state);
+    if (result == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);
 }
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,

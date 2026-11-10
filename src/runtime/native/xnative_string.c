@@ -231,6 +231,13 @@ XRAY_API XrtString *xrt_string_retain(const XrtString *string, uint32_t source_i
     XrXirValueStatus status = xr_xir_value_copy(&source, &output);
     return root_publish(root, (XrtString *)(intptr_t)output.payload, status, source_id);
 }
+XR_FUNC XrXirValueStatus xrt_string_owned_copy(const XrtString *string, XrtString **out) {
+    if (!string || !out || *out) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue source = string_value(string), value = {0};
+    XrXirValueStatus status = xr_xir_value_copy(&source, &value);
+    if (status == XR_XIR_VALUE_OK) *out = (XrtString *)(intptr_t)value.payload;
+    return status;
+}
 XR_FUNC XrtString *xrt_string_root_take(XrtString *string) {
     XrtStringRoot *root = string_root(0);
     XrtStringOwner *owner = string ? owner_find(root, string) : NULL;
