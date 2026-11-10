@@ -112,23 +112,9 @@ static XrXirStatus view_live_callable_loans(ViewLive *a,uint32_t instruction,uin
     XrXirType type=xr_xir_operand_type(a->function,value);
     if (!a->loans || !xr_xir_type_is_callable(types,type) || xr_xir_type_is_c_callable(types,type))
         return XR_XIR_OK;
-    const XirRestrictionView *view=&a->loans->restrictions;
-    XirRestrictionFunction row=view->functions[a->location.function];
-    uint32_t first=0,last=view->point_count;
-    while (first<last) {
-        uint32_t middle=first+(last-first)/2;
-        XirRestrictionPoint point=view->points[middle];
-        if (point.function<a->location.function || (point.function==a->location.function &&
-            (point.instruction<instruction || (point.instruction==instruction && point.value<value)))) first=middle+1;
-        else last=middle;
-    }
-    if (first==view->point_count) return XR_XIR_UNRESOLVED;
-    XirRestrictionPoint point=view->points[first];
-    if (point.function!=a->location.function || point.instruction!=instruction || point.value!=value ||
-        point.carrier>=row.value_count) return XR_XIR_UNRESOLVED;
-    XirViewLoanDemand demand={.function=a->location.function,.carrier=point.carrier,
+    XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
         .frame_bytes=a->frame_bytes,.physical=view_live_loan_physical,.context=a};
-    return xir_view_loan_transport_demand(a->loan_transport,&demand);
+    return xir_view_loan_transport_use(a->loan_transport,&use);
 }
 static void view_live_enqueue(ViewLive *a,uint32_t block) {
     if (a->queued[block]) return;

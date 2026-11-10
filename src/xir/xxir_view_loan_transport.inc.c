@@ -235,6 +235,7 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *conte
     if (!xir_compile_context_valid(context) || !module || !module->functions || !facts || !output || *output ||
         (module->declarations && !module->declarations->functions) ||
         facts->restrictions.function_count != module->function_count || !facts->restrictions.functions ||
+        (facts->restrictions.point_count && !facts->restrictions.points) ||
         facts->storage.function_count != module->function_count || !facts->storage.functions ||
         (facts->storage.application_count && !facts->storage.applications) ||
         (facts->storage.binding_count && !facts->storage.bindings) ||
@@ -433,4 +434,28 @@ XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *a, cons
 
 XR_FUNC uint64_t xir_view_loan_transport_frame_bytes(const XirViewLoanTransport *a) {
     return a ? a->bytes : 0;
+}
+
+XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *a, const XirViewLoanUse *use) {
+    if (!a || !use || !use->physical || use->function >= a->module->function_count ||
+        use->instruction >= a->module->functions[use->function].instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (a->status != XR_XIR_OK) return a->status;
+    const XirRestrictionView *view = &a->facts->restrictions;
+    uint32_t first = 0, last = view->point_count;
+    while (first < last) {
+        uint32_t middle = first + (last - first) / 2;
+        XirRestrictionPoint point = view->points[middle];
+        if (point.function < use->function || (point.function == use->function &&
+            (point.instruction < use->instruction || (point.instruction == use->instruction && point.value < use->value))))
+            first = middle + 1;
+        else last = middle;
+    }
+    if (first == view->point_count) return XR_XIR_UNRESOLVED;
+    XirRestrictionPoint point = view->points[first];
+    if (point.function != use->function || point.instruction != use->instruction || point.value != use->value ||
+        point.carrier >= view->functions[use->function].value_count) return XR_XIR_UNRESOLVED;
+    XirViewLoanDemand demand = {.function=use->function, .carrier=point.carrier,
+        .frame_bytes=use->frame_bytes, .physical=use->physical, .context=use->context};
+    return xir_view_loan_transport_demand(a, &demand);
 }

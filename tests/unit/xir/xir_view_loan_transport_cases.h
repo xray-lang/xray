@@ -110,6 +110,79 @@ static void view_loan_transport_definition(ViewLoanTransportFixture *fixture) {
     fixture->restrictions[1].flow_count = 1;
 }
 
+typedef enum ViewLoanAffineCase {
+    VIEW_LOAN_AFFINE_SHARED, VIEW_LOAN_AFFINE_ENDED,
+    VIEW_LOAN_AFFINE_MUTABLE, VIEW_LOAN_AFFINE_MUTABLE_ALIAS
+} ViewLoanAffineCase;
+
+static void view_loan_affine_availability(ViewLoanAffineCase kind) {
+    EffectMark baseline = effect_mark();
+    XrXirType slice = XR_XIR_CONSTRUCTED_TYPE_BASE, callable = slice + 1;
+    bool mutable = kind == VIEW_LOAN_AFFINE_MUTABLE || kind == VIEW_LOAN_AFFINE_MUTABLE_ALIAS;
+    bool duplicate = kind == VIEW_LOAN_AFFINE_MUTABLE_ALIAS;
+    bool rejected = kind == VIEW_LOAN_AFFINE_ENDED || duplicate;
+    XrXirCallableParameter parameter = {.type=slice};
+    XrXirTypeNode nodes[] = {
+        {.kind=mutable ? XR_XIR_TYPE_MUT_SLICE : XR_XIR_TYPE_SLICE, .element=XR_XIR_U8},
+        {.kind=XR_XIR_TYPE_CALLABLE, .result=XR_XIR_UNIT, .element=XR_XIR_NEVER,
+            .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED, .parameters=duplicate ? &parameter : NULL,
+            .parameter_count=duplicate ? 1u : 0u}
+    };
+    XrXirTypes types = {.nodes=nodes, .count=2};
+    uint32_t arguments[] = {0,0};
+    XrXirInstruction instructions[] = {
+        {.op=XR_XIR_FUNCTION_REF, .type=callable, .args={0,1}, .immediate=1},
+        {.op=XR_XIR_VIEW_LEN, .type=XR_XIR_I64},
+        {.op=XR_XIR_CALL_INDIRECT, .immediate=1},
+        {.op=XR_XIR_RETURN}
+    };
+    if (kind == VIEW_LOAN_AFFINE_ENDED) instructions[1] = (XrXirInstruction){.op=XR_XIR_VIEW_END};
+    if (duplicate) instructions[2].args[0] = instructions[2].args[1] = 1;
+    XrXirInstruction returned = {.op=XR_XIR_RETURN};
+    XrXirBlock blocks[] = {{.count=4}, {.count=1}};
+    XrXirType parameters[] = {slice,slice};
+    XrXirFunction functions[] = {
+        {.parameters=&slice, .parameter_count=1, .instructions=instructions, .instruction_count=4,
+            .operands=arguments, .operand_count=duplicate ? 2u : 1u, .blocks=blocks, .block_count=1, .error_type=XR_XIR_NEVER},
+        {.parameters=parameters, .parameter_count=duplicate ? 2u : 1u, .instructions=&returned, .instruction_count=1,
+            .blocks=blocks+1, .block_count=1, .error_type=XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[] = {{0}, {.capture_owner=1, .capture_count=1}};
+    XrXirSourceModule source_module = {0};
+    XrXirDeclarations declarations = {.modules=&source_module, .module_count=1, .functions=identities};
+    XrXirModule module = {.types=&types, .functions=functions, .function_count=2, .declarations=&declarations};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    if (roots->terms) roots->terms->remaining = &effect_context;
+    uint32_t intrinsic[] = {0,1,2,3,4,5,6,7,8};
+    XirRestrictionFormulaRow formulas[9] = {{0}};
+    XrXirValueFlow flows[] = {{0,1}, {1,5}};
+    uint32_t hidden_values = functions[1].parameter_count + 1;
+    XirRestrictionFunction rows[] = {{5,6,intrinsic,flows,2}, {hidden_values,hidden_values,intrinsic+6,NULL,0}};
+    XirRestrictionPoint point = {.function=0, .instruction=2, .value=1, .formula=5, .carrier=5};
+    XirRestrictionView view = {rows,2,formulas,6+hidden_values,NULL,0,&point,1};
+    CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_OK);
+    XrXirEffects effects = {.resources=effect_context.resources, .count=2, .checked_roots=roots};
+    XrXirDiagnostic diagnostic = {0};
+    CHECK(xir_compile_view_affine_verified(&effect_context, &module, &diagnostic) == XR_XIR_OK);
+    attempts = 0;
+    XrXirStatus status = xir_compile_view_affine_loans_verified(&effect_context, &module, &effects, NULL, &diagnostic);
+    size_t sites = attempts;
+    CHECK(status == (rejected ? XR_XIR_BAD_VALUE : XR_XIR_OK));
+    if (rejected) CHECK(diagnostic.function == 0 && diagnostic.instruction == 2);
+    else if (kind == VIEW_LOAN_AFFINE_SHARED) {
+        EffectMark retained = effect_mark();
+        for (size_t site = 0; site < sites; ++site) {
+            attempts=0; injected=false; fail_at=site;
+            CHECK(xir_compile_view_affine_loans_verified(&effect_context, &module, &effects, NULL,
+                &diagnostic) == XR_XIR_OUT_OF_MEMORY && injected);
+            fail_at=SIZE_MAX; effect_mark_check(retained);
+        }
+    }
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+}
+
 static void view_loan_transport_cases(void) {
     ViewLoanTransportFixture fixture;view_loan_transport_fixture(&fixture);
     EffectMark baseline=effect_mark();uint64_t mask=0;
@@ -158,6 +231,10 @@ static void view_loan_transport_cases(void) {
     CHECK(view_loan_transport_case(&fixture,5,&(uint64_t){0})==XR_XIR_UNRESOLVED);
     fixture.parameters[0]=XR_XIR_CONSTRUCTED_TYPE_BASE;
     view_loan_transport_definition(&fixture);
+    view_loan_affine_availability(VIEW_LOAN_AFFINE_SHARED);
+    view_loan_affine_availability(VIEW_LOAN_AFFINE_ENDED);
+    view_loan_affine_availability(VIEW_LOAN_AFFINE_MUTABLE);
+    view_loan_affine_availability(VIEW_LOAN_AFFINE_MUTABLE_ALIAS);
     effect_mark_check(baseline);
     printf("loan transport: isolated application inputs and %zu allocation failures PASS\n",sites);
 }
