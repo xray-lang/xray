@@ -14,11 +14,13 @@
 #ifndef XLIR_INTERNAL_H
 #define XLIR_INTERNAL_H
 #include "xlir_builder.h"
+#include "xlir_state.h"
 
 typedef struct XrLirValueData {
     XrLirType type;
     uint32_t block, instruction;
     bool parameter;
+    XrLirStateReference state_reference;
 } XrLirValueData;
 typedef struct XrLirInstructionData {
     XrLirInstructionView view;
@@ -61,6 +63,9 @@ struct XrLirModule {
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;
     bool finished;
+    XrLirStateLayout state_layout;
+    uint32_t state_entry;
+    bool state_layout_set;
 };
 
 /* Operand validation may reach a later block before its shape is checked. */
@@ -80,6 +85,7 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
     return definition->result == id ? definition : NULL;
 }
 XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
+XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirStateLayout *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *, uint32_t function,
                                                       const XrLirInstructionView *,

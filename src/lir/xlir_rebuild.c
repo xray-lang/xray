@@ -15,6 +15,7 @@
 #include "xlir_rebuild_internal.h"
 #include "xlir_builder.h"
 #include "xlir_verify.h"
+#include "xlir_state.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -52,6 +53,11 @@ static XrLirStatus rebuild_registry(Rebuild *c) {
     }
     // module_create copied parameter slices while their source was still live.
     xr_free(entries);
+    if (status == XR_LIR_OK) {
+        XrLirStateLayout layout;
+        status = xr_lir_state_layout_view(c->input, &layout);
+        if (status == XR_LIR_OK && layout.module_count) status = xr_lir_set_state_layout(c->output, &layout);
+    }
     for (uint32_t i = 0; status == XR_LIR_OK && i < xr_lir_literal_count(c->input); ++i) {
         XrLirLiteral old = {0}, owned = {0};const uint8_t *bytes = NULL;size_t length = 0;
         status = xr_lir_literal_at(c->input, i, &old);
@@ -77,7 +83,10 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status != XR_LIR_OK) return status;
     }
-    return XR_LIR_OK;
+    XrLirFunction entry;
+    XrLirStatus status = xr_lir_state_entry(c->input, &entry);
+    if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
+    return status;
 }
 
 static void rebuild_function_free(Rebuild *c) {
@@ -142,6 +151,14 @@ static XrLirStatus rebuild_parameters(Rebuild *c) {
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             status = xr_lir_block_parameter(c->output, *target, p, &c->values[view.parameters[p]]);
             if (status != XR_LIR_OK) return status;
+            if (c->types[p] == XR_LIR_STATE_REF) {
+                XrLirStateReference shape;
+                status = xr_lir_state_reference_view(c->input,
+                    (XrLirValue){c->input, c->source.id, view.parameters[p]}, &shape);
+                if (status == XR_LIR_OK) status = xr_lir_set_state_reference(c->output,
+                    c->values[view.parameters[p]], &shape);
+                if (status != XR_LIR_OK) return status;
+            }
         }
     }
     if (!c->blocks[c->view.entry].handle.id) return XR_LIR_VERIFY_ERROR;

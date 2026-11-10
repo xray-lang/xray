@@ -44,6 +44,8 @@ typedef enum XrLirType {
     XR_LIR_I64_CELL,
     XR_LIR_STRING,
     XR_LIR_STRING_CELL,
+    XR_LIR_STATE,
+    XR_LIR_STATE_REF,
     XR_LIR_TYPE_COUNT
 } XrLirType;
 

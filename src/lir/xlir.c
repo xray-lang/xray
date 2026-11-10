@@ -129,6 +129,8 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
     return f;
 }
 
+#include "xlir_state.inc.c"
+
 static void lir_instruction_free(XrLirInstructionData *instruction) {
     xr_free((void *) instruction->view.operands);
     for (uint32_t i = 0; i < 2; ++i)
@@ -163,6 +165,7 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     xr_free(m->functions);
     xr_free(m->intrinsics);
     xr_free(m->failure_path);
+    lir_state_layout_free(&m->state_layout);
     xr_free(m);
 }
 
@@ -182,6 +185,11 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !lir_types_valid(entry.parameters, entry.parameter_count) ||
             !xr_lir_internal_type_valid(entry.result, true))
             return XR_LIR_UNSUPPORTED;
+        if (entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF)
+            return XR_LIR_UNSUPPORTED;
+        for (uint32_t p = 0; p < entry.parameter_count; ++p)
+            if (entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF)
+                return XR_LIR_UNSUPPORTED;
         for (uint32_t j = 0; j < i; ++j)
             if (m->intrinsics[j].id == entry.id)
                 return XR_LIR_INVALID_ARGUMENT;
@@ -267,8 +275,12 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
         memchr(spec->name, 0, spec->name_length) ||
         !lir_types_valid(spec->parameters, spec->parameter_count) ||
         !xr_lir_internal_type_valid(spec->result, true) || spec->result == XR_LIR_I64_CELL ||
-        spec->result == XR_LIR_STRING_CELL)
+        spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
+        spec->result == XR_LIR_STATE_REF)
         return false;
+    for (uint32_t p = 0; p < spec->parameter_count; ++p)
+        if (spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&
+            (spec->kind != XR_LIR_FUNCTION_DEFINITION || p != spec->parameter_count - 1))) return false;
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
     if (spec->kind != XR_LIR_FUNCTION_EXTERNAL) return false;
@@ -311,7 +323,7 @@ static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,
     f->value_count = f->value_capacity = f->parameter_count;
     for (uint32_t i = 0; i < f->parameter_count; ++i) {
         f->parameters[i] = i + 1;
-        f->values[i] = (XrLirValueData) {f->parameter_types[i], 0, i, true};
+        f->values[i] = (XrLirValueData) {.type=f->parameter_types[i], .instruction=i, .parameter=true};
     }
     return true;
 }
@@ -394,7 +406,8 @@ XR_FUNC XrLirStatus xr_lir_add_block(XrLirModule *m, XrLirFunction handle, const
             return m->failure;
         }
         f->values = grown;
-        f->values[f->value_count] = (XrLirValueData) {types[i], f->block_count + 1, i, true};
+        f->values[f->value_count] = (XrLirValueData) {.type=types[i], .block=f->block_count + 1,
+            .instruction=i, .parameter=true};
         parameters[i] = ++f->value_count;
     }
     void *grown = lir_reserve(m, f->blocks, f->block_count, &f->block_capacity, sizeof(*f->blocks));
@@ -580,8 +593,13 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
     block->instructions = grown;
     if (category == 0) {
         f->values[f->value_count] =
-            (XrLirValueData) {input->type, handle.id, block->instruction_count, false};
+            (XrLirValueData) {.type=input->type, .block=handle.id, .instruction=block->instruction_count};
         instruction.view.result = ++f->value_count;
+        if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE) {
+            const XrLirStateSlot *slot = &m->state_layout.slots[input->bits];
+            f->values[f->value_count - 1].state_reference =
+                (XrLirStateReference){slot->payload, slot->mutable};
+        }
         *output = (XrLirValue) {m, handle.function, f->value_count};
     }
     block->instructions[block->instruction_count++] = instruction;

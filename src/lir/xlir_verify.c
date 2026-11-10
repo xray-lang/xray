@@ -20,7 +20,7 @@
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
-                                             "string", "string_cell"};
+                                             "string", "string_cell", "state", "state_ref"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -120,6 +120,9 @@ static bool lir_signature_matches(const XrLirFunctionData *f, const XrLirInstruc
             return false;
     return true;
 }
+
+static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uint32_t);
+#include "xlir_state_verify.inc.c"
 
 static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
@@ -249,7 +252,9 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                    : v->predicate != XR_LIR_PREDICATE_NONE)
         goto invalid;
     if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR &&
-        v->op != XR_LIR_STRING_LITERAL && v->bits)
+        v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
+        v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
+        v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->callee) || (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
@@ -308,7 +313,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             d->status = XR_LIR_UNSUPPORTED;
         return XR_LIR_UNSUPPORTED;
     }
-    if (!lir_scalar_instruction_types(f, v))
+    if (v->op >= XR_LIR_MODULE_BEGIN ? !lir_state_instruction_types(m, f, v) :
+        !lir_scalar_instruction_types(f, v))
         goto invalid;
     return XR_LIR_OK;
 invalid:
@@ -540,6 +546,7 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
 static bool lir_function_shape(const XrLirFunctionData *f) {
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(f->result, true) ||
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_CELL ||
+        f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)))
         return false;
@@ -742,11 +749,20 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");
+    XrLirStatus state_status = lir_state_layout_verify(m, d);
+    if (state_status != XR_LIR_OK) {
+        if (d && d->status == XR_LIR_OK)
+            lir_status_error(d, state_status, "state layout verification failed");
+        return state_status;
+    }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(f))
+        if (!lir_function_shape(f) || !lir_state_signature(m, f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
+        if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||
+            !f->parameter_count || f->parameter_types[f->parameter_count - 1] != XR_LIR_STATE))
+            return xr_lir_internal_error(d, "injected entry lacks its trailing state", index + 1, 0, 0, NULL);
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
         uint8_t *seen = f->value_count ? xr_malloc(f->value_count) : NULL;
@@ -772,6 +788,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             lir_graph_dominators(&graph);
             status = lir_uses(f, index + 1, &graph, d);
         }
+        if (status == XR_LIR_OK) status = lir_state_function(m, index, d);
         xr_free(graph.memory);
         if (status != XR_LIR_OK) {
             if (d && d->status == XR_LIR_OK) {
