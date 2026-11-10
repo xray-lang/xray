@@ -40,7 +40,10 @@ static bool source_view_prepare(SourceContext *ctx) {
     }
     if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&module,&diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&module,NULL,NULL,&diagnostic);
+    if (status==XR_XIR_OK) {
+        XirViewLiveRequest request={.diagnostic=&diagnostic,.control=ctx->request};
+        status=xir_compile_view_liveness_loans_verified(&ctx->compile,&module,ctx->semantic_prepare,&request);
+    }
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},NULL,NULL,&diagnostic);
     bool normalizing=status==XR_XIR_OK;
     if (normalizing) status=source_view_normalize(ctx,&module,&diagnostic);

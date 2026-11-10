@@ -246,7 +246,7 @@ static void strict_normalization(const XrXirCompileContext *context,const XrXirA
     const XrXirModule *module=xr_xir_compile_artifact_module(closed);XirViewNormalization *normalized=NULL;
     CHECK(xir_compile_view_normalize_verified(context,module,&normalized,NULL)==XR_XIR_BAD_STAGE && !normalized);
     bool called=false;XrXirModule foreign=*module;
-    XirViewNormalizationSource source={module,&called,foreign_source_owner};
+    XirViewNormalizationSource source={module,&called,foreign_source_owner,NULL,NULL};
     CHECK(xir_compile_view_normalize_source_verified(context,&foreign,&source,&normalized,NULL)==XR_XIR_BAD_STRUCTURE &&
         !normalized && !called);
     foreign.functions=module->functions+module->function_count;

@@ -5,16 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_storage_environment.inc.c - Bounded immutable environment transport
+ * xxir_storage_environment.inc.c - Bounded symbolic environment transport
  *
  * KEY CONCEPT:
  *   Callable origins come from the execution owner. A hidden callable can
- *   reuse intrinsic transport only after every binding has a closed environment
- *   dependency. Mutable Cells and unresolved recursive dependencies stay opaque.
+ *   transport explicit environment inputs after every known binding has a
+ *   closed dependency. An unbound ordinary noescape formal is a caller-held
+ *   loan contract, not an empty environment. Mutable Cells and unresolved
+ *   recursive dependencies stay opaque.
  */
 
 typedef enum StorageEnvironmentKind {
-    STORAGE_ENVIRONMENT_VALUE, STORAGE_ENVIRONMENT_FORMAL, STORAGE_ENVIRONMENT_HIDDEN
+    STORAGE_ENVIRONMENT_VALUE, STORAGE_ENVIRONMENT_CONTRACT, STORAGE_ENVIRONMENT_HIDDEN
 } StorageEnvironmentKind;
 
 typedef struct StorageEnvironmentNode {
@@ -107,7 +109,7 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         }
         return storage_environment_push(proof, (StorageEnvironmentNode){
             .reference={formal.function, formal.value, formal.environment}, .target=site->caller_instance,
-            .kind=parameter.hidden ? STORAGE_ENVIRONMENT_HIDDEN : STORAGE_ENVIRONMENT_FORMAL}) ? XR_XIR_OK : flow->status;
+            .kind=parameter.hidden ? STORAGE_ENVIRONMENT_HIDDEN : STORAGE_ENVIRONMENT_CONTRACT}) ? XR_XIR_OK : flow->status;
     }
     if (site->kind != XIR_EXECUTION_CALL || site->protocol != 1) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p = 0; p < site->argument_count && storage_step(flow); ++p) {
@@ -165,7 +167,12 @@ static bool storage_environment_expand(StorageEnvironmentProof *proof, uint32_t 
             .reference={actual.function, actual.value, actual.environment}, .target=UINT32_MAX,
             .kind=STORAGE_ENVIRONMENT_VALUE})) return false;
     }
-    if (!bound) proof->remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
+    /* A definition is checked even when it has no callers. Its ordinary
+     * noescape formal retains a symbolic environment leaf, substituted by
+     * the actual current footprint at each application. Hidden formals have
+     * no declaration contract and still require a real capture binding. */
+    if (!bound && node.kind != STORAGE_ENVIRONMENT_CONTRACT)
+        proof->remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
     return flow->status == XR_XIR_OK;
 }
 

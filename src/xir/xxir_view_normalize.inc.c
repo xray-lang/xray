@@ -264,7 +264,12 @@ static XrXirStatus view_normalize_verified(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) builder.plans=xir_compile_calloc(context,module->function_count,sizeof(*builder.plans),&status);
     n->functions=xir_compile_calloc(context,module->function_count,sizeof(*n->functions),&status);
     n->bodies=xir_compile_copy(context,module->functions,(size_t)module->function_count*sizeof(*n->bodies),&status);
-    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,view_normalize_visit,&builder,diagnostic);
+    if (status==XR_XIR_OK) {
+        if (source && source->effects) {
+            XirViewLiveRequest request={view_normalize_visit,&builder,diagnostic,source->control};
+            status=xir_compile_view_liveness_loans_verified(context,module,source->effects,&request);
+        } else status=xir_compile_view_liveness_verified(context,module,view_normalize_visit,&builder,diagnostic);
+    }
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
         bool preserved=false;status=view_normalize_preserved(&builder,f,&preserved);
         if (status==XR_XIR_OK && !preserved) status=view_normalize_body(context,module,f,builder.plans+f,n);

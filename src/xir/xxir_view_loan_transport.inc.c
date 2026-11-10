@@ -22,6 +22,7 @@ typedef struct ViewLoanState {
 typedef struct ViewLoanDependency { uint32_t dependent, next; } ViewLoanDependency;
 typedef struct ViewLoanSlot { uint32_t value, generation; } ViewLoanSlot;
 typedef struct ViewLoanBindingSlot { uint32_t application, value; } ViewLoanBindingSlot;
+enum { VIEW_LOAN_EXTERNAL = 1u, VIEW_LOAN_INVOCATION = 2u };
 
 struct XirViewLoanTransport {
     XrXirCompileContext memory;
@@ -192,12 +193,29 @@ static bool view_loan_index(XirViewLoanTransport *a) {
         if (input.bank == XIR_STORAGE_EXPOSURE) continue;
         uint32_t value = view_loan_value(a, input.function, input.value);
         if (value == UINT32_MAX) return false;
-        a->terminals[value] = 1;
+        if (input.bank != XIR_STORAGE_FOOTPRINT) {
+            a->terminals[value] |= VIEW_LOAN_EXTERNAL;
+            continue;
+        }
+        const XrXirFunction *function = &a->module->functions[input.function];
+        uint32_t captures = a->module->declarations ?
+            a->module->declarations->functions[input.function].capture_count : 0;
+        if (input.handle >= function->parameter_count || input.value <
+            r->functions[input.function].physical_values ||
+            !xr_xir_type_is_callable(a->module->types, function->parameters[input.handle]) ||
+            xr_xir_type_is_c_callable(a->module->types, function->parameters[input.handle]) ||
+            (input.handle >= captures && xr_xir_function_parameter_escaping(function, input.handle))) {
+            a->status = XR_XIR_BAD_STRUCTURE; return false;
+        }
+        uint32_t handle = view_loan_value(a, input.function, input.handle);
+        if (handle == UINT32_MAX) return false;
+        a->terminals[value] |= VIEW_LOAN_INVOCATION;
+        a->terminals[handle] |= VIEW_LOAN_INVOCATION;
     }
     for (uint32_t n = 0; n < s->unknown_count && view_loan_step(a); ++n) {
         uint32_t value = view_loan_value(a, s->unknowns[n].function, s->unknowns[n].value);
         if (value == UINT32_MAX) return false;
-        a->terminals[value] = 1;
+        a->terminals[value] |= VIEW_LOAN_EXTERNAL;
     }
     return a->status == XR_XIR_OK && view_loan_bindings(a);
 }
@@ -215,6 +233,7 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *conte
     const XrXirModule *module, const XirViewLoanFacts *facts, const uint8_t *flags,
     XrCompileRequestControl *control, XirViewLoanTransport **output) {
     if (!xir_compile_context_valid(context) || !module || !module->functions || !facts || !output || *output ||
+        (module->declarations && !module->declarations->functions) ||
         facts->restrictions.function_count != module->function_count || !facts->restrictions.functions ||
         facts->storage.function_count != module->function_count || !facts->storage.functions ||
         (facts->storage.application_count && !facts->storage.applications) ||
@@ -316,6 +335,7 @@ static bool view_loan_borrowed(const XirViewLoanTransport *a, XrXirType type) {
 }
 
 static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand) {
+    if (a->states[id].grounded) return true;
     XirStorageReference reference=a->states[id].reference;
     const XrXirFunction *function=&a->module->functions[reference.function];
     uint32_t physical=a->facts->restrictions.functions[reference.function].physical_values;
@@ -344,7 +364,16 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
     bool bound=false;
     if (!view_loan_substitute(a,id,&bound) || bound) return a->status == XR_XIR_OK;
     uint32_t value=view_loan_value(a,reference.function,reference.value);
-    if (a->terminals[value]) {a->status=XR_XIR_UNRESOLVED;return false;}
+    if (a->terminals[value] & VIEW_LOAN_EXTERNAL) {a->status=XR_XIR_UNRESOLVED;return false;}
+    if (a->terminals[value] & VIEW_LOAN_INVOCATION) {
+        if (reference.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT || reference.function != demand->function) {
+            a->status=XR_XIR_UNRESOLVED;return false;
+        }
+        /* The caller holds this symbolic loan throughout the invocation.
+         * Keep its independent graph edges even when restriction is constant.
+         * Applied demands took the exact actual binding above this branch. */
+        a->states[id].grounded=true;
+    }
     if (reference.function == demand->function && reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT &&
         reference.value < a->facts->restrictions.functions[reference.function].physical_values) {
         a->status=demand->physical(demand->context,reference.value);

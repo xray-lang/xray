@@ -39,10 +39,13 @@ XR_FUNC XrXirStatus xir_compile_view_normalize_verified(const XrXirCompileContex
  * immutable receiving generation. No caller bitset is executable authority.
  * Complete ordinary, origin, affine and liveness admission must precede it;
  * every normalized output repeats complete common admission. */
+struct XrXirEffects;
 typedef struct XirViewNormalizationSource {
     const XrXirModule *generation;
     void *owner;
     XrXirStatus (*checked_copy)(void *,const XrXirModule *,uint32_t,bool *);
+    const struct XrXirEffects *effects;
+    XrCompileRequestControl *control;
 } XirViewNormalizationSource;
 XR_FUNC XrXirStatus xir_compile_view_normalize_source_verified(const XrXirCompileContext *context,
     const XrXirModule *module,const XirViewNormalizationSource *source,

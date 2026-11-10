@@ -28,7 +28,9 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *,
     const XrXirModule *, const XirViewLoanFacts *, const uint8_t *flags,
     XrCompileRequestControl *, XirViewLoanTransport **);
 /* Physical callbacks name only the observing function's current frame.
- * Unknown inputs, foreign borrowed terminals and ungrounded cycles fail closed.
+ * Unapplied definition-local FOOTPRINT inputs retain the caller-held loan
+ * contract. Applied inputs require their actual binding. Unknown storage
+ * inputs, foreign borrowed terminals and ungrounded cycles fail closed.
  * A later failure invalidates every callback from this demand operation. */
 XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *, const XirViewLoanDemand *);
 XR_FUNC uint64_t xir_view_loan_transport_frame_bytes(const XirViewLoanTransport *);

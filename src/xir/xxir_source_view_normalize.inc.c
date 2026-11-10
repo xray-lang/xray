@@ -330,7 +330,7 @@ static bool source_view_effects(SourceContext *ctx,const XirViewNormalization *n
 
 static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     XirViewNormalization *n=NULL;
-    XirViewNormalizationSource source={module,ctx,source_view_checked_copy};
+    XirViewNormalizationSource source={module,ctx,source_view_checked_copy,ctx->semantic_prepare,ctx->request};
     XrXirStatus status=xir_compile_view_normalize_source_verified(&ctx->compile,module,&source,&n,diagnostic);
     if (status!=XR_XIR_OK) return status;
     XrXirConstruction *construction=NULL;
@@ -364,10 +364,13 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
             status=xr_xir_compile_initialization_check(&ctx->compile,&replacement,f,bodies[f].initialization_regions,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&replacement,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
     if (status==XR_XIR_OK) status=xir_effects_relocate_prepared(&ctx->compile,
         ctx->semantic_prepare,&replacement,n,ctx->request);
+    if (status==XR_XIR_OK) {
+        XirViewLiveRequest request={.diagnostic=diagnostic,.control=ctx->request};
+        status=xir_compile_view_liveness_loans_verified(&ctx->compile,&replacement,ctx->semantic_prepare,&request);
+    }
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
     if (status==XR_XIR_OK) {
         xr_xir_compile_construction_free(ctx->construction);
         ctx->view_normalized=true;

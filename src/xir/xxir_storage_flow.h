@@ -71,7 +71,11 @@ typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllo
 
 /* Every formal Cell has an explicit contents input, including unused bodies.
  * A FOOTPRINT input names a separate callable-environment leaf. Its PointValue
- * records the use point, while handle is the physical parameter ordinal. */
+ * records the use point, while handle is the physical parameter ordinal.
+ * The leaf denotes a caller-held loan for this invocation. Ordinary formals
+ * require the noescape declaration contract. Hidden formals require the
+ * storage producer's complete environment transport proof. Neither denotes
+ * an empty environment. Applications must substitute their actual footprint. */
 typedef struct XirStorageInput {
     uint32_t function, value, handle;
     XirStorageFlowBank bank;

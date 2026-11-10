@@ -84,6 +84,32 @@ static XrXirStatus view_loan_transport_case(ViewLoanTransportFixture *fixture,ui
     xir_view_loan_transport_free(transport);return status;
 }
 
+static void view_loan_transport_definition(ViewLoanTransportFixture *fixture) {
+    XrXirValueFlow flows[] = {{0,3}, {2,3}};
+    fixture->restrictions[1].flows = flows;
+    fixture->restrictions[1].flow_count = 2;
+    XirViewLoanTransport *transport = NULL;
+    uint64_t mask = 0;
+    CHECK(xir_view_loan_transport_new(&effect_context, &fixture->module, &fixture->facts,
+        fixture->flags, NULL, &transport) == XR_XIR_OK);
+    XirViewLoanDemand demand = {.function=1, .carrier=3,
+        .physical=view_loan_transport_physical, .context=&mask};
+    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_OK && mask == 1);
+    xir_view_loan_transport_free(transport);
+    uint32_t ordinal = 0;
+    fixture->functions[1].escaping_parameters = &ordinal;
+    fixture->functions[1].escaping_parameter_count = 1;
+    transport = NULL;
+    CHECK(xir_view_loan_transport_new(&effect_context, &fixture->module, &fixture->facts,
+        fixture->flags, NULL, &transport) == XR_XIR_OK);
+    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_BAD_STRUCTURE);
+    xir_view_loan_transport_free(transport);
+    fixture->functions[1].escaping_parameters = NULL;
+    fixture->functions[1].escaping_parameter_count = 0;
+    fixture->restrictions[1].flows = &fixture->formal_flow;
+    fixture->restrictions[1].flow_count = 1;
+}
+
 static void view_loan_transport_cases(void) {
     ViewLoanTransportFixture fixture;view_loan_transport_fixture(&fixture);
     EffectMark baseline=effect_mark();uint64_t mask=0;
@@ -131,6 +157,7 @@ static void view_loan_transport_cases(void) {
     fixture.parameters[0]=XR_XIR_TYPE_PARAMETER_BASE;
     CHECK(view_loan_transport_case(&fixture,5,&(uint64_t){0})==XR_XIR_UNRESOLVED);
     fixture.parameters[0]=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    view_loan_transport_definition(&fixture);
     effect_mark_check(baseline);
     printf("loan transport: isolated application inputs and %zu allocation failures PASS\n",sites);
 }
