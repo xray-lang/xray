@@ -17,6 +17,12 @@ typedef struct XirViewLoanDemand {
     XrXirStatus (*physical)(void *, uint32_t value);
     void *context;
 } XirViewLoanDemand;
+typedef struct XirViewLoanUse {
+    uint32_t function, instruction, value;
+    uint64_t frame_bytes;
+    XrXirStatus (*physical)(void *, uint32_t value);
+    void *context;
+} XirViewLoanUse;
 
 /* Requires ordinary admission and complete semantic facts for this generation.
  * The module, flags and semantic facts are immutable synchronous borrows.
@@ -33,6 +39,7 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *,
  * inputs, foreign borrowed terminals and ungrounded cycles fail closed.
  * A later failure invalidates every callback from this demand operation. */
 XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *, const XirViewLoanDemand *);
+XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *, const XirViewLoanUse *);
 XR_FUNC uint64_t xir_view_loan_transport_frame_bytes(const XirViewLoanTransport *);
 XR_FUNC void xir_view_loan_transport_free(XirViewLoanTransport *);
 #endif // XXIR_VIEW_LOAN_TRANSPORT_INTERNAL_H
