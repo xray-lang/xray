@@ -18,7 +18,7 @@ static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
     ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE } fault;
-static size_t spill_state_failure_bytes=2;
+static size_t spill_state_failure_entries=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
 static void observed_string_drop(XrtString **value,const XrRbcFunction *function,size_t pc) {
@@ -87,7 +87,7 @@ static void moving_free(void *pointer) {
 static void *execution_malloc(size_t size) {
     if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
         (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
-    if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_bytes) { fault=NO_FAILURE;return NULL; }
+    if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_entries * sizeof(RbcSpillState)) { fault=NO_FAILURE;return NULL; }
     if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
     return real_malloc(size);
 }
@@ -303,7 +303,7 @@ static void spill_branch_admission_oom(void) {
     XrtLocationOwner *owner=NULL;
     XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"spilled branch location owner");
     /* Two saved entries and the current state have distinct spill storage. */
-    spill_state_failure_bytes=3*function.spill_count;
+    spill_state_failure_entries=3*function.spill_count;
     for (unsigned i=0; i<2; ++i) {
         fault=i?NO_FAILURE:SPILL_STATE_FAILURE;
         XrRbcExecution *execution=NULL;
@@ -317,7 +317,7 @@ static void spill_branch_admission_oom(void) {
             xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
         }
     }
-    spill_state_failure_bytes=2;
+    spill_state_failure_entries=2;
     xrt_locations_release(owner);
     for (size_t i=0; i<4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size,"branch execution buffers reclaimed");
 }
