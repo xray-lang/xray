@@ -209,8 +209,6 @@ static bool lifetime_seed(HirLifetimeConstraints *run) {
     for (uint32_t c = 0; c < solver->check_count && run->failure == UINT32_MAX && escape_poll(graph); ++c) {
         HirRestrictionCheck *check = &solver->checks[c];
         HirEscapeUse use = graph->uses[check->use];
-        check->carrier = restriction_use_carrier(solver, use);
-        if (graph->status != XR_XIR_OK) return false;
         HirRestrictionNode r = solver->nodes[check->carrier];
         if (restriction_empty(&r)) continue;
         HirRestrictionNode x = {.constant=true};
@@ -229,6 +227,18 @@ static bool lifetime_seed(HirLifetimeConstraints *run) {
                 if (!lifetime_clause_add(run, clause)) return false;
             }
         }
+    }
+    return graph->status == XR_XIR_OK;
+}
+
+static bool lifetime_check_carriers(HirRestrictionSolver *solver, bool *needed) {
+    HirEscape *graph = &solver->builder->graph;
+    *needed = false;
+    for (uint32_t c = 0; c < solver->check_count && escape_poll(graph); ++c) {
+        HirRestrictionCheck *check = &solver->checks[c];
+        check->carrier = restriction_use_carrier(solver, graph->uses[check->use]);
+        if (graph->status != XR_XIR_OK) return false;
+        *needed |= !restriction_empty(&solver->nodes[check->carrier]);
     }
     return graph->status == XR_XIR_OK;
 }
@@ -308,7 +318,10 @@ static bool lifetime_apply(HirLifetimeConstraints *run, HirLifetimeClause clause
 static XrXirStatus restriction_constraints(HirRestrictionSolver *solver, XrHirEscapeDiagnostic *diagnostic) {
     HirEscape *graph = &solver->builder->graph;
     HirLifetimeConstraints run = {.solver=solver,.failure=UINT32_MAX};
-    if (lifetime_extents(&run) && lifetime_seed(&run))
+    bool needed = false;
+    /* Empty restriction obligations need no storage-extent projection.
+     * Independent storage, exposure and loan facts remain in their owner. */
+    if (lifetime_check_carriers(solver, &needed) && needed && lifetime_extents(&run) && lifetime_seed(&run))
         for (uint32_t c = 0; c < run.count && run.failure == UINT32_MAX && escape_poll(graph); ++c) {
             HirLifetimeClause clause = run.clauses[c];
             for (uint32_t a = run.applications[clause.function]; a != UINT32_MAX && escape_poll(graph); a = run.next_application[a])
