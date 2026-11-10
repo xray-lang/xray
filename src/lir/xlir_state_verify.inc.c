@@ -37,7 +37,7 @@ static XrLirStatus lir_state_layout_verify(const XrLirModule *m, XrLirDiagnostic
     if (!xr_lir_internal_state_layout_valid(layout) || !m->state_entry ||
         m->state_entry > m->function_count)
         return xr_lir_internal_error(d, "state layout or injected entry is invalid", 0, 0, 0, NULL);
-    if (layout->module_count > SIZE_MAX / sizeof(uint32_t)) return XR_LIR_OUT_OF_MEMORY;
+    if (sizeof(uint32_t) > SIZE_MAX / layout->module_count) return XR_LIR_OUT_OF_MEMORY;
     uint8_t *colors = xr_calloc(layout->module_count, 1);
     uint32_t *stack = xr_malloc((size_t)layout->module_count * sizeof(*stack));
     uint32_t *next = xr_calloc(layout->module_count, sizeof(*next));
@@ -118,7 +118,7 @@ static XrLirStatus lir_state_function(const XrLirModule *m, uint32_t index,
             edge_count += term->edges[e].argument_count;
     }
     if (edge_count > UINT32_MAX || edge_count > SIZE_MAX / sizeof(LirStateEdge) ||
-        f->value_count > SIZE_MAX / sizeof(uint32_t)) return XR_LIR_OUT_OF_MEMORY;
+        sizeof(uint32_t) > SIZE_MAX / f->value_count) return XR_LIR_OUT_OF_MEMORY;
     uint32_t *heads = xr_malloc((size_t)f->value_count * sizeof(*heads));
     uint32_t *queue = xr_malloc((size_t)f->value_count * sizeof(*queue));
     uint8_t *grounded = xr_calloc(f->value_count, 1);
