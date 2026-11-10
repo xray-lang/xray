@@ -17,6 +17,7 @@
 #include "xlir_c.h"
 #include "xlir_verify.h"
 #include "xlir_internal.h"
+#include "xlir_state.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include <inttypes.h>
@@ -38,7 +39,8 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64;
+    bool runtime, runtime_header, f64, state;
+    XrLirStateLayout state_layout;
 } LirC;
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -120,7 +122,8 @@ static void c_format(LirC *c, const char *format, ...) {
 static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **"};
+        NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **",
+        "XrtModuleState *", "XrtModuleRef *"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -160,7 +163,8 @@ static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(type))
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
     c->f64 |= type == XR_LIR_F64;
-    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL;
+    c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
+    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -182,6 +186,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 static bool c_located(const XrLirSource *source) {
     return source->path && source->path_length && source->line && source->column;
 }
+#include "xlir_c_state.inc.c"
 static void c_visit(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= xr_lir_function_count(c->request->module), "valid callee");
     if (!c->seen[id - 1]) {
@@ -247,7 +252,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (c_string_point(c, v)) {
+    if (c_string_point(c, v) || c_state_point(v)) {
         c->runtime = true;
         if (c_located(&v->source)) {
             if (c->location_count == UINT32_MAX)
@@ -256,6 +261,12 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         }
     }
     switch (v->op) {
+        case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
+        case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
+        case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
+        case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+            c->state = true;
+            break;
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_RETAIN:
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
@@ -415,7 +426,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) &&
                      !c_arithmetic_point(c, &v)) || !c_located(&v.source))
                     continue;
                 ++id;
@@ -483,6 +494,10 @@ static void c_declarations(LirC *c) {
         if (!parameter) {
             c_format(c, "    %s v%" PRIu32 ";\n", c_literal_value(c, id) ? "const void *" : c_type(c_value_type(c, id)), id);
             c_format(c, "    (void)&v%" PRIu32 ";\n", id);
+        }
+        if (c_value_type(c, id) == XR_LIR_STATE_REF) {
+            c_format(c, "    XrtModuleAccess xrl_access%" PRIu32 ";\n", id);
+            c_format(c, "    (void)&xrl_access%" PRIu32 ";\n", id);
         }
     }
     /* Unsigned expression storage is shared only across sequential instructions. */
@@ -591,14 +606,21 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING) c_string_owner(c, edge->arguments[a]);
         else c_value(c, edge->arguments[a]);
         c_text(c, ";\n");
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
+            c_format(c, "        XrtModuleAccess xrl_edge_access%" PRIu32
+                " = xrl_access%" PRIu32 ";\n", a, edge->arguments[a]);
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING && !c_string_literal(c, edge->arguments[a])) {
             c_text(c, "        "); c_value(c, edge->arguments[a]); c_text(c, " = NULL;\n");
         }
-    for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
+    for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
+            c_format(c, "        xrl_access%" PRIu32 " = xrl_edge_access%" PRIu32 ";\n",
+                block.parameters[a], a);
+    }
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_division(LirC *c, const XrLirInstructionView *v) {
@@ -639,6 +661,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
     uint32_t string_source = c_string_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
+    if (c_state_point(v)) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_state_instruction(c, v, source);
+        return;
+    }
     switch (v->op) {
         case XR_LIR_STRING_LITERAL: {
             XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
@@ -813,6 +840,10 @@ static void c_standalone_root(LirC *c, XrLirType result) {
     c->function = c->request->entry;
     c->block = c->instruction = 0;
     c->source = (XrLirSource) {0};
+    if (c->state) {
+        c_state_root(c, result);
+        return;
+    }
     c_text(c, "static void xrl_invoke(void *context) {\n");
     if (result == XR_LIR_STRING) {
         c_text(c, "    XrtString *owned = ");
@@ -854,6 +885,7 @@ static void c_preamble(LirC *c) {
     } else {
         c_text(c, "#include <stdint.h>\n\n");
     }
+    if (c->state && !c->f64) c_text(c, "#include <string.h>\n\n");
 }
 static void c_literals(LirC *c) {
     for (uint32_t i = 0; i < xr_lir_literal_count(c->request->module) && c_request_poll(c); ++i) {
@@ -874,10 +906,12 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
+    if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (root_result == XR_LIR_STRING)
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
     c_locations(c);
     c_literals(c);
+    if (c->state) c_state_layout(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -938,9 +972,20 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         !request->resources || !request->translation_unit || !request->module ||
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
-        entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.parameter_count) {
+        entry.kind != XR_LIR_FUNCTION_DEFINITION ||
+        (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;
+    }
+    if (entry.parameter_count) {
+        XrLirFunction state_entry = {0};
+        if (xr_lir_state_entry(request->module, &state_entry) != XR_LIR_OK ||
+            state_entry.id != request->entry.id ||
+            xr_lir_state_layout_view(request->module, &c.state_layout) != XR_LIR_OK) {
+            c_error(&c, XR_LIR_C_INVALID_LIR, "C entry lost its module state layout");
+            return c.status;
+        }
+        c.state = c.runtime = true;
     }
     if (!c_request_poll(&c))
         return c.status;

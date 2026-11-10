@@ -179,7 +179,10 @@ static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget
     return true;
 }
 static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
-    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_bits+window+(c->control_scratch?1u:0u);
+    for(uint32_t v=1;v<=c->view.value_count;++v)
+        c->state_scratch |= rbc_lir_value_type(c,v)==XR_LIR_STATE;
+    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_refs+c->temporary_bits+window+
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
     uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
@@ -205,7 +208,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     }
     for(uint32_t v=1;v<=c->view.value_count;++v) {
         XrLirType type=rbc_lir_value_type(c,v);
-        if(c->slots[v]!=UINT32_MAX || (type!=XR_LIR_STRING_CELL && type!=XR_LIR_I64_CELL))continue;
+        if(c->slots[v]!=UINT32_MAX ||
+            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {
@@ -223,7 +227,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         }
     }
     c->typed_spills=true;
-    c->scratch_count=c->temporary_strings+c->temporary_bits+(c->control_scratch?1u:0u);
+    c->scratch_count=c->temporary_strings+c->temporary_refs+c->temporary_bits+
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
     return true;
@@ -260,14 +265,14 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
     uint32_t destinations[255], sources[255], count = 0;
-    bool strings[255];
+    XrRbcRegisterKind kinds[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];
         if (destination != source) {
             destinations[count] = destination;
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input,c->function.id,edge.arguments[p]}, &type);
-            strings[count] = type == XR_LIR_STRING;
+            kinds[count] = rbc_lir_register_kind(type);
             sources[count++] = source;
         }
     }
@@ -282,7 +287,7 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
             for (uint32_t q = 0; q < count; ++q)
                 if (destinations[q] != UINT32_MAX && sources[q] == destinations[p]) used = true;
             if (used) continue;
-            if (emit && !rbc_lir_emit(c, strings[p] ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
+            if (emit && !rbc_lir_emit(c, kinds[p] == XR_RBC_STRING ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
                     destinations[p], sources[p], 0, 0))
                 return false;
             destinations[p] = UINT32_MAX;
@@ -292,10 +297,12 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (progress) continue;
         XR_DCHECK(first != UINT32_MAX, "a pending parallel copy has an old source");
         uint32_t source = sources[first];
-        uint32_t temporary = rbc_lir_copy_temporary(c, strings[first]);
+        uint32_t temporary = rbc_lir_copy_temporary(c, kinds[first]);
         if (temporary == UINT32_MAX) return false;
-        if (strings[first]) c->string_scratch = true;
-        if (emit && !rbc_lir_emit(c, strings[first] ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
+        if (kinds[first] == XR_RBC_STRING) c->string_scratch = true;
+        if (kinds[first] == XR_RBC_STATE) c->state_scratch = true;
+        if (kinds[first] == XR_RBC_STATE_REF) c->state_ref_scratch = true;
+        if (emit && !rbc_lir_emit(c, kinds[first] == XR_RBC_STRING ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
                 temporary, source, 0, 0)) return false;
         *scratch = true;
         for (uint32_t p = 0; p < count; ++p)

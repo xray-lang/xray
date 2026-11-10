@@ -13,6 +13,7 @@
 #include "xrbc_lir.h"
 #include "xrbc_internal.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_state.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
@@ -60,19 +61,21 @@ typedef struct {
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
     RbcLirImmediate *immediates;
-    uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits;
+    uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits, temporary_refs;
     bool typed_spills;
     uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
     uint32_t *code, *source_ids;
     uint64_t *constants;
     XrRbcRegisterKind *register_kinds, *cell_kinds;
+    XrRbcStateAccess *state_accesses;
+    size_t state_access_count, state_access_capacity;
     size_t code_count, code_capacity, source_id_capacity, constant_count, constant_capacity;
     size_t *blocks;
     RbcLirPatch *patches;
     size_t patch_count, patch_capacity;
     XrRbcCompileDiagnostic *diagnostic;
     XrRbcCompileStatus status;
-    bool string_scratch, control_scratch;
+    bool string_scratch, control_scratch, state_scratch, state_ref_scratch;
 } RbcLirCompiler;
 
 static XrRbcCompileStatus rbc_lir_error(XrRbcCompileDiagnostic *d,
@@ -342,6 +345,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
+             type != XR_LIR_STATE && type != XR_LIR_STATE_REF &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -365,6 +369,11 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             if (output->literals[i->edges[e].arguments[a]] ||
                 output->lengths[i->edges[e].arguments[a]]) return false;
     switch (i->op) {
+    case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
+    case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
+    case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+        return true;
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
@@ -465,15 +474,24 @@ rejected:
 
 /* Parallel copies run with no staged instruction operands. Reuse the first
  * temporary of the matching bank, never a slot from the other typed pool. */
-static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, bool string) {
-    uint32_t offset = string ? 1u : 0u;
+static XrRbcRegisterKind rbc_lir_register_kind(XrLirType type) {
+    return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL :
+        type == XR_LIR_STATE ? XR_RBC_STATE : type == XR_LIR_STATE_REF ? XR_RBC_STATE_REF : XR_RBC_BITS;
+}
+
+static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind) {
+    uint32_t offset = kind == XR_RBC_STRING ? 1u : kind == XR_RBC_STATE ? 2u :
+        kind == XR_RBC_STATE_REF ? 3u : 0u;
     if (c->typed_spills) {
-        if ((string && !c->temporary_strings) ||
-            (!string && !c->temporary_bits && !c->control_scratch)) {
+        if ((kind == XR_RBC_STRING && !c->temporary_strings) ||
+            (kind == XR_RBC_STATE_REF && !c->temporary_refs) ||
+            (kind == XR_RBC_BITS && !c->temporary_bits && !c->control_scratch)) {
             rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy has no matching typed scratch");
             return UINT32_MAX;
         }
-        offset = string ? 0u : c->temporary_strings;
+        offset = kind == XR_RBC_STRING ? 0u : kind == XR_RBC_STATE_REF ? c->temporary_strings :
+            c->temporary_strings + c->temporary_refs;
+        if (kind == XR_RBC_STATE) offset += c->temporary_bits + (c->control_scratch ? 1u : 0u);
         if (offset >= c->scratch_count) {
             rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy exceeds typed scratch budget");
             return UINT32_MAX;
@@ -491,21 +509,23 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
         xr_lir_block_at(c->input,c->function,b,&block);xr_lir_block_view(c->input,block,&view);
         for(uint32_t n=0;n<view.instruction_count;++n) {
             XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
-            uint64_t strings=0,bits=0;
+            uint64_t strings=0,bits=0,refs=0;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
-                    type==XR_LIR_STRING_CELL || type==XR_LIR_I64_CELL)continue;
-                if(type==XR_LIR_STRING)++strings;else ++bits;
+                    type==XR_LIR_STRING_CELL || type==XR_LIR_I64_CELL || type==XR_LIR_STATE)continue;
+                if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;else ++bits;
             }
             if(i.result && !c->output.literals[i.result] && !c->output.lengths[i.result]) {
                 if(i.type==XR_LIR_STRING)++strings;
-                else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_I64_CELL)++bits;
+                else if(i.type==XR_LIR_STATE_REF)++refs;
+                else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE)++bits;
             }
             if(strings>UINT32_MAX || bits>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
             if(c->temporary_strings<strings)c->temporary_strings=(uint32_t)strings;
             if(c->temporary_bits<bits)c->temporary_bits=(uint32_t)bits;
+            if(c->temporary_refs<refs)c->temporary_refs=(uint32_t)refs;
             if(i.op==XR_LIR_CONDBR)c->control_scratch=true;
             if(i.op==XR_LIR_CALL && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
                 uint32_t mapped=c->functions[i.callee-1];
@@ -540,7 +560,10 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
                 if (!rbc_lir_copies(c, i.edges[e], false, &scratch)) return false;
-                if (scratch) c->scratch_count = c->string_scratch ? 2u : 1u;
+                if (scratch) {
+                    uint32_t count = c->state_ref_scratch ? 4u : c->state_scratch ? 3u : c->string_scratch ? 2u : 1u;
+                    if (c->scratch_count < count) c->scratch_count = count;
+                }
             }
         }
     }
@@ -561,8 +584,7 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         XrLirType type = XR_LIR_TYPE_INVALID;
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, v}, &type);
         if (c->output.literals[v] || c->output.lengths[v]) continue;
-        XrRbcRegisterKind kind = type == XR_LIR_STRING ? XR_RBC_STRING :
-            type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL : XR_RBC_BITS;
+        XrRbcRegisterKind kind = rbc_lir_register_kind(type);
         uint32_t slot = c->slots[v];
         if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
         if (assigned[slot] && c->register_kinds[slot] != kind)
@@ -570,9 +592,16 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         assigned[slot] = true;
         c->register_kinds[slot] = kind;
     }
-    if(c->typed_spills)
+    if(c->typed_spills) {
         for(uint32_t r=0;r<c->temporary_strings;++r)c->register_kinds[c->slot_count+r]=XR_RBC_STRING;
-    else if (c->string_scratch) c->register_kinds[c->slot_count + 1] = XR_RBC_STRING;
+        for(uint32_t r=0;r<c->temporary_refs;++r)
+            c->register_kinds[c->slot_count+c->temporary_strings+r]=XR_RBC_STATE_REF;
+        if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1]=XR_RBC_STATE;
+    } else {
+        if(c->string_scratch)c->register_kinds[c->slot_count+1]=XR_RBC_STRING;
+        if(c->state_scratch)c->register_kinds[c->slot_count+2]=XR_RBC_STATE;
+        if(c->state_ref_scratch)c->register_kinds[c->slot_count+3]=XR_RBC_STATE_REF;
+    }
     for (uint32_t r = c->slot_count + c->scratch_count; r < c->register_count; ++r)
         c->register_kinds[r] = XR_RBC_CALL_WINDOW;
     return true;
@@ -677,9 +706,16 @@ static bool rbc_lir_literal(RbcLirCompiler *c, uint32_t origin, uint32_t *ordina
     return true;
 }
 
+#include "xrbc_lir_state.inc.c"
+
 static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t result = i->result ? c->slots[i->result] : 0;
     switch (i->op) {
+    case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
+    case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
+    case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+        return rbc_lir_state_instruction(c, i);
     case XR_LIR_CONST:
         if (c->immediates[i->result].pooled)
             return rbc_lir_emit(c, XR_RBC_LOADK, result, 0, 0,
@@ -805,30 +841,46 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     }
 }
 
+typedef struct RbcLirTemporaryUse { uint32_t strings, references, bits; } RbcLirTemporaryUse;
+
+static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, XrLirType type, RbcLirTemporaryUse *use) {
+    uint32_t *used = &use->bits, offset = c->temporary_strings + c->temporary_refs;
+    uint32_t capacity = c->temporary_bits;
+    if (type == XR_LIR_STRING) {
+        used = &use->strings; offset = 0; capacity = c->temporary_strings;
+    } else if (type == XR_LIR_STATE_REF) {
+        used = &use->references; offset = c->temporary_strings; capacity = c->temporary_refs;
+    }
+    if (type == XR_LIR_STATE || *used >= capacity) {
+        rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "spill exceeds its typed temporary registers");
+        return UINT32_MAX;
+    }
+    return c->slot_count + offset + (*used)++;
+}
+
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
     if (i->op == XR_LIR_CONST &&
         (c->immediates[i->result].known || c->immediates[i->result].pooled) &&
         !c->immediates[i->result].materialize) return true;
     if(!c->spill_count)return rbc_lir_instruction(c,i);
-    uint32_t staged[XR_RBC_REGISTER_COUNT_MAX],count=0,strings=0,bits=0;
+    uint32_t staged[XR_RBC_REGISTER_COUNT_MAX],count=0;
+    RbcLirTemporaryUse use = {0};
     uint32_t immediate = rbc_lir_immediate_operand(c, i);
     for(uint32_t a=0;a<i->operand_count;++a) {
         if (a == immediate) continue;
         uint32_t value=i->operands[a];
         if(c->spill_home[value]==UINT32_MAX || c->slots[value]!=UINT32_MAX)continue;
-        bool string=rbc_lir_value_type(c,value)==XR_LIR_STRING;
-        uint32_t slot=c->slot_count+(string?strings++:c->temporary_strings+bits++);
-        if(strings>c->temporary_strings || bits>c->temporary_bits || count==XR_RBC_REGISTER_COUNT_MAX)
+        uint32_t slot=rbc_lir_stage_slot(c,rbc_lir_value_type(c,value),&use);
+        if(slot==UINT32_MAX)return false;
+        if(count==XR_RBC_REGISTER_COUNT_MAX)
             return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"spill operands exceed typed temporary registers");
         if(!rbc_lir_emit(c,XR_RBC_RELOAD,slot,0,0,c->spill_home[value]))return false;
         c->slots[value]=slot;staged[count++]=value;
     }
     bool result=i->result && c->spill_home[i->result]!=UINT32_MAX;
     if(result) {
-        bool string=i->type==XR_LIR_STRING;
-        c->slots[i->result]=c->slot_count+(string?strings++:c->temporary_strings+bits++);
-        if(strings>c->temporary_strings || bits>c->temporary_bits)
-            return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"spill result exceeds typed temporary registers");
+        c->slots[i->result]=rbc_lir_stage_slot(c,i->type,&use);
+        if(c->slots[i->result]==UINT32_MAX)return false;
     }
     bool valid=rbc_lir_instruction(c,i);
     if(valid && result)
@@ -1045,6 +1097,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .source_ids=c->source_ids, .source_id_count=c->code_count, .cell_count=c->cell_count,
         .register_kinds=c->register_kinds, .register_kind_count=c->register_count,
         .cell_kinds=c->cell_kinds, .cell_kind_count=c->cell_count,
+        .state_accesses=c->state_accesses, .state_access_count=c->state_access_count,
         .result_kind=c->view.result == XR_LIR_STRING ? XR_RBC_STRING : XR_RBC_BITS,
         .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count};
     return true;
@@ -1058,12 +1111,14 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].source_ids);
         xr_free((void *) program->module.functions[f].register_kinds);
         xr_free((void *) program->module.functions[f].cell_kinds);
+        xr_free((void *) program->module.functions[f].state_accesses);
     }
     xr_free((void *) program->module.functions);
     for (size_t i = 0; i < program->module.literal_count; ++i)
         xr_free((void *)program->module.literals[i].bytes);
     xr_free((void *)program->module.literals);
     xrt_locations_release(program->locations);
+    xrt_module_layout_drop(&program->module.state_layout);
     xr_free(program);
 }
 
@@ -1157,11 +1212,12 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.source_ids);
             xr_free(c.register_kinds);
             xr_free(c.cell_kinds);
+            xr_free(c.state_accesses);
             xr_free(pool.mapping);
             return c.status;
         }
         if (!f) {
-            p->parameter_count = c.view.parameter_count;
+            p->parameter_count = c.view.parameter_count - (p->module.state_layout ? 1u : 0u);
             if (p->parameter_count)
                 memcpy(p->parameters, c.view.parameter_types,
                     p->parameter_count * sizeof(*p->parameters));
@@ -1212,6 +1268,14 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     uint32_t count = 1;
     ids[0] = entry.id;
     mapping[entry.id - 1] = 1;
+    status = rbc_lir_state_layout(input, entry, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
+        !p->module.state_layout) {
+        status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "only the designated entry receives module state", (XrLirSource){0});
+        goto done;
+    }
     if (!rbc_lir_closure(input, ids, mapping, &count, d)) {
         status = d->status;
         goto done;

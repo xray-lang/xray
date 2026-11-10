@@ -19,6 +19,7 @@
 
 #include "base/xdefs.h"
 #include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_module_state.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -89,7 +90,15 @@
     X(EQI, ASBX)                                                                                   \
     X(MULI, ABS8)                                                                                  \
     X(REMI, ABS8)                                                                                  \
-    X(FLEK, ABK8)
+    X(FLEK, ABK8)                                                                                  \
+    X(MODULE_BEGIN, ABX)                                                                           \
+    X(MODULE_READY, ABX)                                                                           \
+    X(STATE_CONSTRUCT, ABX)                                                                        \
+    X(STATE_PUBLISH, A)                                                                            \
+    X(STATE_INITIALIZE, ABX)                                                                       \
+    X(STATE_REFERENCE, ABX)                                                                        \
+    X(STATE_READ, ABK8)                                                                            \
+    X(STATE_WRITE, ABK8)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -105,8 +114,15 @@ typedef struct {
 } XrRbcOperands;
 
 typedef enum XrRbcRegisterKind {
-    XR_RBC_BITS, XR_RBC_STRING, XR_RBC_STRING_CELL, XR_RBC_CALL_WINDOW
+    XR_RBC_BITS, XR_RBC_STRING, XR_RBC_STRING_CELL, XR_RBC_CALL_WINDOW,
+    XR_RBC_STATE, XR_RBC_STATE_REF
 } XrRbcRegisterKind;
+
+// Slot metadata supplies the immutable payload type and mutability. A compact
+// instruction indexes this row without narrowing the slot's numeric identity.
+typedef struct XrRbcStateAccess {
+    uint32_t slot, state, value;
+} XrRbcStateAccess;
 
 typedef struct {
     const uint32_t *code;
@@ -132,6 +148,8 @@ typedef struct {
     // Spills are activation-owned indexed storage. The String prefix is the
     // immutable reference bitmap; the remaining slots contain scalar bits.
     uint32_t spill_count, reference_spill_count;
+    const XrRbcStateAccess *state_accesses;
+    size_t state_access_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -158,6 +176,10 @@ typedef struct {
     // Immutable bytes share the same borrowed lifetime as code/descriptors.
     const XrRbcLiteral *literals;
     size_t literal_count;
+    // One immutable owned layout supplies this module's capability identity.
+    // It is borrowed with the code. Each execution owns a distinct state.
+    XrtModuleLayout *state_layout;
+    uint32_t state_entry;
 } XrRbcModule;
 
 typedef enum {

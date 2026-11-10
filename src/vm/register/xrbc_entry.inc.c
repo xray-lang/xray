@@ -28,11 +28,29 @@ static void xr_rbc_entry_read(XrRbcEntryState *state, uint32_t slot) {
     if (slot >= state->parameters && state->defined[slot] != state->stamp) state->clear[slot] = 1;
 }
 
-static void xr_rbc_entry_instruction(const XrRbcModule *module, uint32_t word,
+static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunction *function, uint32_t word,
     XrRbcEntryState *state) {
     uint32_t op = word & 255, a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     bool writes = false;
     switch (op) {
+    case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY: case XR_RBC_STATE_PUBLISH:
+        xr_rbc_entry_read(state, a);
+        break;
+    case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE: {
+        XrRbcStateAccess access = function->state_accesses[word >> 16];
+        xr_rbc_entry_read(state, op == XR_RBC_STATE_INITIALIZE ? a : access.state);
+        if (op != XR_RBC_STATE_REFERENCE) xr_rbc_entry_read(state, access.value);
+        writes = op != XR_RBC_STATE_INITIALIZE;
+        break;
+    }
+    case XR_RBC_STATE_READ:
+        xr_rbc_entry_read(state, b);
+        writes = c != XRT_MODULE_UNIT;
+        break;
+    case XR_RBC_STATE_WRITE:
+        xr_rbc_entry_read(state, a);
+        if (c != XRT_MODULE_UNIT) xr_rbc_entry_read(state, b);
+        break;
     case XR_RBC_LOADK: case XR_RBC_LOADI: case XR_RBC_STRING_LITERAL: case XR_RBC_RELOAD:
         writes = true;
         break;
@@ -114,7 +132,7 @@ static bool xr_rbc_entries(const XrRbcModule *module, XrRbcEntry *entries) {
             state.clear[r] = function->register_kinds && function->register_kinds[r] != XR_RBC_BITS;
         for (size_t pc = 0; pc < function->code_count; ++pc) {
             if (targets[pc]) state.stamp = pc + 1;
-            xr_rbc_entry_instruction(module, function->code[pc], &state);
+            xr_rbc_entry_instruction(module, function, function->code[pc], &state);
         }
         entries[f].count = 0;
         for (uint32_t r = function->parameter_count; r < function->register_count; ++r)

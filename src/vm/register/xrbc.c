@@ -40,6 +40,8 @@ static uint64_t xr_rbc_float_bits(double value) {
 typedef union {
     uint64_t bits;
     XrtString *string;
+    XrtModuleState *state;
+    XrtModuleRef *state_ref;
 } XrRbcRegister;
 
 #include "xrbc_entry.inc.c"
@@ -76,6 +78,7 @@ struct XrRbcExecution {
     XrRbcEntry *entries;
     XrRbcStack stack;
     XrRbcOutcome *pending;
+    XrtModuleState *state;
     bool consumed;
 };
 
@@ -124,21 +127,32 @@ static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_
     return true;
 }
 
+static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32_t slot) {
+    return function->register_kinds ? function->register_kinds[slot] : XR_RBC_BITS;
+}
+
+#include "xrbc_state_admission.inc.c"
+
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     if (!(function->code && function->code_count && function->register_count &&
            function->register_count <= XR_RBC_REGISTER_COUNT_MAX &&
            function->parameter_count <= function->register_count &&
            function->cell_count <= 65536 && function->spill_count <= XR_RBC_SPILL_COUNT_MAX &&
            function->reference_spill_count <= function->spill_count &&
-           (!function->constant_count || function->constants))) return false;
+           (!function->constant_count || function->constants) &&
+           (function->state_accesses ? function->state_access_count <= 65536 :
+            function->state_access_count == 0))) return false;
     if ((function->register_kinds ? function->register_kind_count != function->register_count :
          function->register_kind_count != 0) ||
         (function->cell_kinds ? function->cell_kind_count != function->cell_count :
          function->cell_kind_count != 0) ||
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_STRING)) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_CALL_WINDOW ||
-            (i < function->parameter_count && function->register_kinds[i] == XR_RBC_CALL_WINDOW)) return false;
+        if ((unsigned)function->register_kinds[i] > XR_RBC_STATE_REF ||
+            (i < function->parameter_count &&
+                (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
+                 function->register_kinds[i] == XR_RBC_STATE_REF ||
+                 (function->register_kinds[i] == XR_RBC_STATE && i + 1 != function->parameter_count)))) return false;
     for (uint32_t i = 0; function->cell_kinds && i < function->cell_count; ++i)
         if (function->cell_kinds[i] != XR_RBC_BITS && function->cell_kinds[i] != XR_RBC_STRING) return false;
     return true;
@@ -153,6 +167,12 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
+    case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
+    case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
+    case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE:
+    case XR_RBC_STATE_READ: case XR_RBC_STATE_WRITE:
+        if (!xr_rbc_state_instruction_valid(module, function, word)) return false;
+        break;
     case XR_RBC_FLEK:
         if (a >= registers || b >= registers || c >= function->constant_count) return false;
         break;
@@ -242,6 +262,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
         if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
+    if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
         for (size_t pc = 0; pc < function->code_count; ++pc)
@@ -343,9 +364,13 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    if (argument_count != function->parameter_count) return XR_RBC_INVALID;
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
+    bool inject_state = module->state_layout && entry == module->state_entry;
+    if ((inject_state && !function->parameter_count) ||
+        argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
+        (!inject_state && function->parameter_count &&
+         rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
     for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
         if (function->register_kinds[p] != XR_RBC_BITS) return XR_RBC_INVALID;
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
@@ -367,9 +392,17 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->pending->locations = locations;
     execution->pending->status = XR_RBC_INVALID;
     execution->pending->result_kind = function->result_kind;
+    if (inject_state) {
+        XrXirValueStatus status = xrt_module_state_new(module->state_layout, UINT64_MAX, &execution->state);
+        if (status != XR_XIR_VALUE_OK) {
+            xr_rbc_execution_free(&execution);
+            return status == XR_XIR_VALUE_OUT_OF_MEMORY ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
+        }
+    }
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
     if (argument_count)
         for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[i].bits = arguments[i];
+    if (inject_state) execution->stack.slots[argument_count].state = execution->state;
     if (function->reference_spill_count)
         memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
     execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0};
@@ -418,6 +451,7 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
     // The common boundary has restored its caller before reclaiming the sole
     // heap stack descriptor, including allocations made by skipped VM frames.
     xr_rbc_stack_free(&execution->stack);
+    xrt_module_state_drop(&execution->state);
     execution->pending = NULL;
     return outcome;
 }
@@ -427,6 +461,7 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     XrRbcExecution *owned = *execution;
     *execution = NULL;
     xr_rbc_stack_free(&owned->stack);
+    xrt_module_state_drop(&owned->state);
     xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
     xr_free(owned);

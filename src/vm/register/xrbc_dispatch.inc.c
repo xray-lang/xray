@@ -241,6 +241,7 @@ XR_RBC_CASE(FLEK) {
     XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) <= xr_rbc_float(constants[c]);
     goto xr_rbc_float_compare;
 }
+#include "xrbc_state_dispatch.inc.c"
 XR_RBC_CASE(FGT) {
     XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) > xr_rbc_float(XR_RBC_REG(c));
     goto xr_rbc_float_compare;
