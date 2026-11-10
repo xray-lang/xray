@@ -396,7 +396,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         XrXirValueStatus status = xrt_module_state_new(module->state_layout, UINT64_MAX, &execution->state);
         if (status != XR_XIR_VALUE_OK) {
             xr_rbc_execution_free(&execution);
-            return status == XR_XIR_VALUE_OUT_OF_MEMORY ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
+            return status == XR_XIR_VALUE_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
         }
     }
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
