@@ -516,6 +516,41 @@ static void enum_arena_and_slot_boundaries(const XrXirTypes *types, const XrXirV
     xr_xir_owned_slot_clear(&slot, 0); CHECK(!slot && live == baseline);
 }
 #include "xir_error_value_cases.h"
+static void domainless_error_result_copy(const XrXirTypes *types) {
+    size_t baseline = live;
+    XrXirDomain *domain = NULL;
+    XrXirTypeArena *arena = NULL;
+    const XrCompileResourceLimits limits = value_compile_limits();
+    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
+    CHECK(value_compile_arena(types, 100, limits, &arena) == XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission = {.domain=domain, .arena=arena, .work=100000, .scratch_bytes=65536};
+    XrXirValue empty = {0}, thrown = {0}, staged = {0};
+    CHECK(xr_xir_enum_new(XR_XIR_CONSTRUCTED_TYPE_BASE, 0, NULL, 0, &admission, &empty) == XR_XIR_VALUE_OK);
+    CHECK(!object_pointer(&empty)->domain);
+    CHECK(xr_xir_error_erase(&empty, &admission, &thrown) == XR_XIR_VALUE_OK);
+    xr_xir_value_drop(&empty);
+    size_t before_drop = live;
+    xr_xir_domain_drop(domain);
+    CHECK(live + 1 == before_drop);
+    xr_xir_compile_type_arena_drop(arena);
+    /* The returning frame lends its error to the result, then retires. The
+     * arena reference alone keeps every subsequent result copy alive. */
+    size_t before = value_allocation_calls;
+    fail_at = value_allocation_calls;
+    CHECK(xr_xir_value_copy(&thrown, &staged) == XR_XIR_VALUE_OK);
+    xr_xir_value_drop(&thrown);
+    for (uint32_t i = 0; i < 64; ++i) {
+        XrXirValue copy = {0};
+        CHECK(xr_xir_value_copy(&staged, &copy) == XR_XIR_VALUE_OK);
+        CHECK(copy.type == XR_XIR_ERROR && copy.payload == staged.payload && !object_pointer(&copy)->domain);
+        xr_xir_value_drop(&copy);
+    }
+    CHECK(value_allocation_calls == before);
+    fail_at = SIZE_MAX;
+    xr_xir_value_drop(&staged);
+    CHECK(live == baseline);
+}
+
 static void enum_value_ownership(void) {
     const XrXirNominalVariant variants[] = {{{"Empty", 5}, 0, 0}, {{"Pair", 4}, 0, 2}};
     const XrXirNominalFieldIdentity fields[] = {{{"left", 4}, 0}, {{"right", 5}, 0}};
@@ -600,6 +635,7 @@ static void enum_value_ownership(void) {
     const XrXirNominalIdentity *escaped = &xr_xir_compile_type_arena_types(xr_xir_value_arena(&empty))->nominals->identities[0];
     CHECK(escaped->module.length == 5 && !memcmp(escaped->module.bytes, "alpha", 5));
     xr_xir_value_drop(&empty); CHECK(live == 0);
+    domainless_error_result_copy(&types);
 }
 
 static void deep_value_admission_failures(void) {

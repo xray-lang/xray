@@ -1022,9 +1022,11 @@ static XrXirValueStatus value_copy_on_domain(const XrXirValue *source,XrXirDomai
             return XR_XIR_VALUE_BAD_ARGUMENT;
         /* Empty enum storage belongs to its arena, with no value domain.
          * Execution owners charge their copy/admission work before retaining. */
-        if (!xr_xir_domain_is_compile(work_owner?work_owner:object->domain) && ((work_owner || !empty_enum_object(object)) &&
-            !xr_xir_domain_work(work_owner?work_owner:object->domain,1))) return XR_XIR_VALUE_LIMIT;
-        if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
+        bool empty = empty_enum_object(object);
+        XrXirDomain *domain = work_owner ? work_owner : object->domain;
+        if ((work_owner || !empty) && !xr_xir_domain_is_compile(domain) &&
+            !xr_xir_domain_work(domain,1)) return XR_XIR_VALUE_LIMIT;
+        if (!(empty ? xr_xir_compile_type_arena_retain(object->arena) :
             graph_object_retain(object))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
     *output = *source;
