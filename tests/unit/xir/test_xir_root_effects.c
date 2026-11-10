@@ -966,7 +966,47 @@ static void execution_callable_result_upper(void) {
 #include "xir_storage_environment_cases.h"
 #include "xir_view_loan_transport_cases.h"
 
+static void root_unbound_contents_causes(void) {
+    uint64_t callee_bits[7] = {0}, caller_bits[5] = {0};
+    EffectCheckFunction functions[] = {
+        {.first=0, .values=2, .contents=2, .parameters=1, .words=1,
+            .result_contents=4, .root=5, .result=6, .last=6, .declaration=0, .bits=callee_bits},
+        {.first=7, .values=1, .contents=8, .words=1,
+            .result_contents=9, .root=10, .result=11, .last=11, .declaration=1, .bits=caller_bits}
+    };
+    EffectCheckNode nodes[12] = {0};
+    XrXirRootEffectWitness terminals[24] = {0};
+    for (uint32_t n = 0; n < 12; ++n) {
+        nodes[n].function = n < 7 ? 0 : 1;
+        nodes[n].aliases = nodes[n].calls = nodes[n].bindings = UINT32_MAX;
+        nodes[n].reason[0] = nodes[n].reason[1] = UINT32_MAX;
+    }
+    EffectCheckedRoots roots = {.resources=effect_context.resources, .functions=2, .nodes=12,
+        .function=functions, .node=nodes, .terminals=terminals};
+    const EffectCheckFunction *callee = &functions[0], *caller = &functions[1];
+    EffectCheckCall call = {.target=callee->root, .protocol=1, .instruction=0};
+    effect_check_bits(&roots, callee->root)[0] = UINT64_C(1) << (2u + 2u * callee->parameters);
+    for (uint32_t bound = 1; bound <= 3; ++bound) {
+        nodes[callee->contents].bound = (uint8_t)bound;
+        nodes[caller->root].closed = 0;
+        nodes[caller->root].reason[0] = nodes[caller->root].reason[1] = UINT32_MAX;
+        effect_check_bits(&roots, caller->root)[0] = 0;
+        CHECK(effect_check_apply(&roots, caller->root, &call));
+        CHECK(effect_check_evaluate(&roots, caller->root));
+        CHECK(nodes[caller->root].closed == bound);
+        for (uint32_t bit = 0; bit < 2; ++bit) {
+            if (!(bound & (1u << bit))) continue;
+            EffectCheckCause cause = {0};
+            CHECK(nodes[caller->root].reason[bit] == caller->root);
+            CHECK(effect_checked_first_cause(&roots, caller->root, NULL, 0, bit != 0, &cause) == XR_XIR_OK);
+            CHECK(cause.function == caller->declaration && cause.witness.cause == XR_XIR_ROOT_CAUSE_INDIRECT);
+            CHECK(cause.witness.callee == callee->declaration && cause.witness.slot == 0);
+        }
+    }
+}
+
 static void control_summary_kernel(void) {
+    root_unbound_contents_causes();
     view_loan_transport_cases();
     control_summary_detached();
     suspension_parameter_equations();

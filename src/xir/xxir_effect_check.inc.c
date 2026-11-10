@@ -2020,15 +2020,10 @@ static bool effect_check_apply(EffectCheckedRoots *roots, uint32_t output, const
                         roots->node[callee->contents + parameter].bound;
                     if (!mask) continue;
                     changed |= (to[0] | mask) != to[0];
-                    to[0] |= mask;
-                    uint32_t reason = mask == 1 ? 0 : 1;
-                    if (roots->node[output].reason[reason] == UINT32_MAX) {
-                        roots->node[output].reason[reason] = output;
-                        roots->terminals[(size_t)output * 2 + reason] = (XrXirRootEffectWitness){
-                            bit < callee->parameters ? XR_XIR_ROOT_CAUSE_PARAMETER :
-                                bit < (uint64_t)callee->parameters * 2 ? XR_XIR_ROOT_CAUSE_CELL_PARAMETER : XR_XIR_ROOT_CAUSE_INDIRECT,
-                            call->instruction, callee->declaration, parameter, 0};
-                    }
+                    effect_check_seed(roots, output, (uint32_t)mask, (XrXirRootEffectWitness){
+                        bit < callee->parameters ? XR_XIR_ROOT_CAUSE_PARAMETER :
+                            bit < (uint64_t)callee->parameters * 2 ? XR_XIR_ROOT_CAUSE_CELL_PARAMETER : XR_XIR_ROOT_CAUSE_INDIRECT,
+                        call->instruction, callee->declaration, parameter, 0});
                 }
                 continue;
             }
