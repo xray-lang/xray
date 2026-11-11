@@ -19,6 +19,8 @@ REQUIRED = (
     "register_vm", "register_vm_native_print", "register_vm_alloc",
     "lir_bytecode", "lir_bytecode_alloc", "lir_bytecode_source",
     "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke", "test_lir_cli_effects",
+    # Cross-module ownership and capability transport need real native execution.
+    "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
 )
 
 
@@ -83,8 +85,7 @@ def main() -> None:
             "Requested and executed tests differ")
     require(not list(result.iter("skipped")) and not list(result.iter("failure"))
             and not list(result.iter("error")), "Current gates contain non-passing cases")
-    print("Current verification passed: exact CLI, full registration, "
-          "16 backend/W1-W4 tests and strict smoke.", flush=True)
+    print(f"Current verification passed: exact CLI, full registration, {len(REQUIRED)} tests.", flush=True)
 
 
 if __name__ == "__main__":
