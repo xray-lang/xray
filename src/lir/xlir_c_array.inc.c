@@ -41,6 +41,13 @@ static bool c_array_move_pair(LirC *c, const XrLirInstructionView *v,
 }
 static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
+    switch (shape->operation) {
+    case XR_LIR_ARRAY_OP_NEW: case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_GET:
+    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: break;
+    default:
+        c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
+        return;
+    }
     XrLirType element = shape->operation == XR_LIR_ARRAY_OP_NEW ? shape->result_element : shape->parameter_elements[0];
     const char *family = element == XR_LIR_I64 ? "i64" : "string";
     c_text(c, "    ");
