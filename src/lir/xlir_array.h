@@ -41,6 +41,11 @@ typedef struct XrLirArrayIntrinsic {
 XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *, XrLirModule **);
 XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType element,
     XrLirArrayOperation, uint32_t *id);
+/* SET and PUSH have exact ARRAY_CELL and ARRAY_REF receiver signatures.
+ * The operation query above selects ARRAY_CELL. This query selects either
+ * mutable binding representation without reading or copying its current value. */
+XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *, XrLirType element,
+    XrLirType receiver, XrLirArrayOperation, uint32_t *id);
 
 /* Explicit shapes belong only to function and block parameters. Instruction
  * results derive their shape from the actual producer, callee or intrinsic.

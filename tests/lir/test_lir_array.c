@@ -126,6 +126,16 @@ static void array_catalog(void) {
             CHECK(id && id != extra.id);
             CHECK(id == m->array_operations[family][op - 1]);
         }
+        for (uint32_t op = XR_LIR_ARRAY_OP_SET; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
+            uint32_t cell = 0, reference = 0;
+            OK(xr_lir_array_mutator(m, element, XR_LIR_ARRAY_CELL, (XrLirArrayOperation)op, &cell));
+            OK(xr_lir_array_mutator(m, element, XR_LIR_ARRAY_REF, (XrLirArrayOperation)op, &reference));
+            CHECK(cell != reference && reference == m->array_ref_operations[family][op - XR_LIR_ARRAY_OP_SET]);
+            const XrLirIntrinsic *entry = NULL;
+            for (uint32_t i = 0; i < m->intrinsic_count; ++i)
+                if (m->intrinsics[i].id == reference) entry = &m->intrinsics[i];
+            CHECK(entry && entry->parameters[0] == XR_LIR_ARRAY_REF && entry->result == XR_LIR_UNIT);
+        }
     }
     OK(xr_lir_module_finish(m, NULL));
     XrLirModule *copy = NULL;
@@ -137,6 +147,18 @@ static void array_catalog(void) {
     OK(xr_lir_array_intrinsic_view(copy, id, &shape));
     CHECK(shape.variadic && shape.operation == XR_LIR_ARRAY_OP_NEW && shape.result_element == XR_LIR_STRING);
     CHECK(xr_lir_array_operation(copy, XR_LIR_F64, XR_LIR_ARRAY_OP_NEW, &id) == XR_LIR_INVALID_ARGUMENT && !id);
+    OK(xr_lir_array_mutator(copy, XR_LIR_U64, XR_LIR_ARRAY_REF, XR_LIR_ARRAY_OP_PUSH, &id));
+    OK(xr_lir_array_intrinsic_view(copy, id, &shape));
+    CHECK(shape.operation == XR_LIR_ARRAY_OP_PUSH && shape.parameter_elements[0] == XR_LIR_U64);
+    CHECK(xr_lir_array_mutator(copy, XR_LIR_U64, XR_LIR_STATE_REF, XR_LIR_ARRAY_OP_PUSH, &id) ==
+        XR_LIR_INVALID_ARGUMENT && !id);
+    CHECK(xr_lir_array_mutator(copy, XR_LIR_U8, XR_LIR_ARRAY_REF, XR_LIR_ARRAY_OP_GET, &id) ==
+        XR_LIR_INVALID_ARGUMENT && !id);
+    uint32_t saved = copy->array_ref_operations[0][0];
+    copy->array_ref_operations[0][0] = copy->array_operations[0][XR_LIR_ARRAY_OP_SET - 1];
+    CHECK(xr_lir_verify(copy, NULL) == XR_LIR_VERIFY_ERROR);
+    copy->array_ref_operations[0][0] = saved;
+    OK(xr_lir_verify(copy, NULL));
     xr_lir_module_destroy(copy);
 }
 

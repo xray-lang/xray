@@ -785,6 +785,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_REPEAT] = {{0}};
+    uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
         const XrLirIntrinsic *entry = &m->intrinsics[i];
         bool array = xr_lir_internal_array_type(entry->result);
@@ -803,13 +804,18 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (!empty) {
             XrLirType element = entry->result == XR_LIR_ARRAY ?
                 shape->result_element : shape->parameter_elements[0];
-            uint32_t *id = &array_operations[xr_lir_internal_array_family(element)][(uint32_t)shape->operation - 1];
+            uint32_t family = xr_lir_internal_array_family(element);
+            bool reference = entry->parameter_count && entry->parameters[0] == XR_LIR_ARRAY_REF;
+            uint32_t *id = reference ? &array_ref_operations[family][(uint32_t)shape->operation - XR_LIR_ARRAY_OP_SET] :
+                &array_operations[family][(uint32_t)shape->operation - 1];
             if (*id) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation is duplicated");
             *id = entry->id;
         }
     }
     if (memcmp(array_operations, m->array_operations, sizeof(array_operations)))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation index is invalid");
+    if (memcmp(array_ref_operations, m->array_ref_operations, sizeof(array_ref_operations)))
+        return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array reference operation index is invalid");
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");

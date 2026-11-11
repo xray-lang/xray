@@ -54,7 +54,8 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
                 return xr_lir_internal_error(d, "Managed Cell use follows release or precedes initialization",
                     function, block + 1, i + 1, &v->source);
             bool allowed = type == XR_LIR_ARRAY_REF ?
-                v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE || v->op == XR_LIR_CALL :
+                v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE ||
+                v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INTRINSIC :
                 v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_CALL ||
                 v->op == XR_LIR_CALL_INTRINSIC || v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_ARRAY_BORROW;
             if (!allowed)
