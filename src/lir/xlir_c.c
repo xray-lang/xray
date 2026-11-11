@@ -908,8 +908,8 @@ static void c_literals(LirC *c) {
         XrLirLiteral literal = {0};const uint8_t *bytes = NULL;size_t length = 0;
         xr_lir_literal_at(c->request->module, i, &literal);
         xr_lir_literal_view(c->request->module, literal, &bytes, &length);
-        c_format(c, "_Static_assert(SIZE_MAX >= UINT64_C(%" PRIu64 "), \"literal length fits size_t\");\n",
-            (uint64_t)length);
+        c_format(c, "_Static_assert((uint64_t)(size_t)UINT64_C(%" PRIu64 ") == UINT64_C(%" PRIu64
+            "), \"literal length fits size_t\");\n", (uint64_t)length, (uint64_t)length);
         c_format(c, "static const unsigned char xrl_literal%" PRIu32 "[] = {", i + 1);
         for (size_t b = 0; b < length && c_request_poll(c); ++b) c_format(c, "0x%02x,", (unsigned)bytes[b]);
         c_text(c, "0};\n");
