@@ -135,12 +135,29 @@ static bool source_root_cell_fixed(SourceContext *ctx, uint32_t function, uint32
     return kind == 1 || kind == 3;
 }
 
+static bool source_root_cell_error(SourceContext *ctx, uint32_t function, uint32_t value,
+    XrXirStatus status, const char *message) {
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    SourceFunction *body = &ctx->bodies[function];
+    ctx->function = function; ctx->module = body->module;
+    source_fail(ctx,body->node,status,message);
+    uint32_t parameters = ctx->functions[function].parameter_count;
+    if (value >= parameters && value-parameters < ctx->functions[function].instruction_count && body->debug_points) {
+        XrXirSourceRange range = body->debug_points[value-parameters].range;
+        if (range.line > 0) {
+            ctx->diagnostic.module = range.module;
+            ctx->diagnostic.line = range.line; ctx->diagnostic.column = range.column;
+        }
+    }
+    return false;
+}
+
 static bool source_root_cell_set(SourceContext *ctx, uint32_t function, uint32_t value,
     XrXirType type, bool *changed) {
     const XrXirFunction *body = &ctx->functions[function];
     if (source_root_operand(ctx,function,value) == type) return true;
     if (source_root_cell_fixed(ctx,function,value))
-        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"shared Cell type conflicts with its fixed input");
+        return source_root_cell_error(ctx,function,value,XR_XIR_BAD_TYPE,"shared Cell type conflicts with its fixed input");
     if (value >= body->parameter_count) return source_root_set(ctx,function,value-body->parameter_count,type,changed);
     ((XrXirType *)body->parameters)[value] = type; *changed = true;
     return true;
@@ -189,7 +206,9 @@ static bool source_root_cell_identities(SourceContext *ctx, const XrXirEffects *
         if (fixed_left || fixed_right) {
             common = fixed_left ? a : b;
             status = xr_xir_compile_callable_weakening(&ctx->compile,&ctx->types,fixed_left ? b : a,common);
-            if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"shared Cell cannot satisfy its fixed callable bound");
+            if (status != XR_XIR_OK) return source_root_cell_error(ctx,
+                fixed_left ? edge.source_function : edge.target_function, fixed_left ? edge.source : edge.target,
+                status,"shared Cell cannot satisfy its fixed callable bound");
         } else if (!source_root_join_type(ctx,a,b,&common)) return false;
         XrXirType cell;
         if (!source_cell_type(ctx,common,&cell) ||

@@ -15,6 +15,9 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     body->node=node;body->module=original->module;body->type_owner=original->type_owner;
     body->generic_owner=original->generic_owner;body->type_parameters=original->type_parameters;
     body->type_parameter_count=original->type_parameter_count;body->parameters=original->parameters;
+    /* The shared capture parameters retain their inference classification. */
+    body->root_capture_count=original->root_capture_count;
+    body->root_captures=original->root_captures;body->root_capture_names=original->root_capture_names;
     ctx->generics[factory]=ctx->generics[producer];ctx->identities[factory]=ctx->identities[producer];
     ctx->identities[factory].promises=(no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0) |
         (ctx->identities[producer].promises&XR_XIR_FUNCTION_REST);
