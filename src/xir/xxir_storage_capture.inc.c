@@ -120,7 +120,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
         status = xir_execution_parameter(flow->execution, capture, 0, &parameter);
         if (status != XR_XIR_OK) return status;
         XirStorageReference proxy = walk->current_proxy;
-        if (!parameter.escaping && !parameter.generic_storage &&
+        if (!parameter.generic_storage &&
             !xr_xir_type_is_c_callable(xir_execution_types(flow->execution), parameter.type)) {
             XirStorageReference local;
             status = storage_local_reference(flow, walk->point.function,

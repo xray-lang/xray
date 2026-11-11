@@ -14,7 +14,8 @@
 
 typedef enum StorageEnvironmentCaseKind {
     STORAGE_ENVIRONMENT_CAPTURE, STORAGE_ENVIRONMENT_OPAQUE,
-    STORAGE_ENVIRONMENT_UNBOUND, STORAGE_ENVIRONMENT_CYCLE, STORAGE_ENVIRONMENT_CONTRACT
+    STORAGE_ENVIRONMENT_UNBOUND, STORAGE_ENVIRONMENT_CYCLE, STORAGE_ENVIRONMENT_CONTRACT,
+    STORAGE_ENVIRONMENT_ESCAPING_CONTRACT
 } StorageEnvironmentCaseKind;
 
 typedef struct StorageEnvironmentOriginProbe {
@@ -109,9 +110,14 @@ static void storage_environment_guard_case(const char *name, XrXirType captured,
     }
     if (kind == STORAGE_ENVIRONMENT_CYCLE)
         forward[1] = (XrXirInstruction){.op=XR_XIR_CALL, .args={0, 1}, .immediate=2};
-    if (kind == STORAGE_ENVIRONMENT_CONTRACT) {
+    uint32_t escaping_parameter=0;
+    if (kind == STORAGE_ENVIRONMENT_CONTRACT || kind == STORAGE_ENVIRONMENT_ESCAPING_CONTRACT) {
         outer[1] = ret;
         functions[0].instruction_count = blocks[0].count = 2;
+    }
+    if (kind == STORAGE_ENVIRONMENT_ESCAPING_CONTRACT) {
+        functions[2].escaping_parameters=&escaping_parameter;
+        functions[2].escaping_parameter_count=1;
     }
     XrXirConstraint constraint = {0};
     XrXirGeneric generics[4] = {{0}};
@@ -184,6 +190,7 @@ static void storage_environment_guard_cases(void) {
     storage_environment_guard_case("unbound", XR_XIR_I64, STORAGE_ENVIRONMENT_UNBOUND, XIR_EXECUTION_REMAINDER_PARAMETER);
     storage_environment_guard_case("cycle", XR_XIR_I64, STORAGE_ENVIRONMENT_CYCLE, XIR_EXECUTION_REMAINDER_PARAMETER);
     storage_environment_guard_case("declaration-contract", XR_XIR_I64, STORAGE_ENVIRONMENT_CONTRACT, 0);
+    storage_environment_guard_case("escaping-declaration-contract", XR_XIR_I64, STORAGE_ENVIRONMENT_ESCAPING_CONTRACT, 0);
 }
 
 #endif

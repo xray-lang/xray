@@ -693,23 +693,51 @@ static void c_callable_parameter_equations(void) {
     effect_mark_check(baseline);
 }
 
-static XrXirStatus unresolved_lifetime_case(void) {
+static uint32_t escaping_footprint_leaf(const EffectCheckedRoots *roots) {
+    XirStorageFlowView storage={0};
+    CHECK(xir_storage_flow_view(roots->storage,&storage)==XR_XIR_OK);
+    const XirRestrictionFunction *row=&roots->restrictions.view.functions[1];
+    for (uint32_t n=0;n<storage.input_count;++n) {
+        XirStorageInput input=storage.inputs[n];
+        if (input.function!=1 || input.bank!=XIR_STORAGE_FOOTPRINT) continue;
+        CHECK(!input.handle && input.value>=row->physical_values && input.value<row->value_count);
+        XirRestrictionFormulaRow formula=roots->restrictions.view.formulas[row->intrinsic[input.value]];
+        CHECK(!formula.constant && !formula.count && !formula.incomplete);
+        for (uint32_t e=0;e<row->flow_count;++e)
+            if (!row->flows[e].source && row->flows[e].target==input.value) return input.value;
+        CHECK(false);
+    }
+    CHECK(false);return UINT32_MAX;
+}
+
+static XrXirStatus unresolved_lifetime_case(bool opaque_result,bool relocate) {
     XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
-        .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND};
-    XrXirTypes types={.nodes=&node,.count=1};
+    XrXirTypeNode nodes[]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
+            .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND},
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=callable,
+            .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND}
+    };
+    XrXirTypes types={.nodes=nodes,.count=opaque_result?2u:1u};
     XrXirInstruction done={.op=XR_XIR_RETURN};
     XrXirInstruction capture[]={{.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2,.args={0,1}},
-        {.op=XR_XIR_RETURN,.args={1}}};
+        {.op=XR_XIR_RETURN,.args={1}}, {0}};
     XrXirInstruction invoke[]={{.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0},
         {.op=XR_XIR_RETURN,.args={1}}};
     XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}};
     XrXirBlock blocks[]={{.count=1},{.count=2},{.count=2},{.count=2}};
-    uint32_t zero=0;
+    uint32_t zero=0,argument=opaque_result?1u:0u;
+    XrXirType incoming=opaque_result?callable+1:callable;
+    if (opaque_result) {
+        capture[0]=(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=callable};
+        capture[1]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2,.args={0,1}};
+        capture[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2}};
+        blocks[1].count=3;
+    }
     XrXirFunction functions[]={
         {.name="init",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=blocks,.block_count=1,.error_type=XR_XIR_NEVER},
-        {.name="keep",.name_length=4,.parameters=&callable,.parameter_count=1,.result=callable,.instructions=capture,.instruction_count=2,
-            .blocks=blocks+1,.block_count=1,.operands=&zero,.operand_count=1,.error_type=XR_XIR_NEVER,
+        {.name="keep",.name_length=4,.parameters=&incoming,.parameter_count=1,.result=callable,.instructions=capture,.instruction_count=blocks[1].count,
+            .blocks=blocks+1,.block_count=1,.operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER,
             .escaping_parameters=&zero,.escaping_parameter_count=1},
         {.name="invoke",.name_length=6,.parameters=&callable,.parameter_count=1,.result=XR_XIR_I64,.instructions=invoke,.instruction_count=2,
             .blocks=blocks+2,.block_count=1,.error_type=XR_XIR_NEVER},
@@ -723,15 +751,48 @@ static XrXirStatus unresolved_lifetime_case(void) {
     XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=4,
         .declarations=&declarations};
     XrXirConstruction *construction=NULL;
-    XrXirEffects *effects=NULL;
+    XrXirEffects *effects=NULL,*prepared=NULL;
     XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_module_construction(&effect_context,&module,&construction);
     XirEffectInput input={&module,construction,NULL};
     if (status==XR_XIR_OK) status=xir_compile_structure_verify_input(&effect_context,input,&diagnostic);
-    if (status==XR_XIR_OK) status=xir_effects_infer_lifetimes_input(&effect_context,input,&effects,&diagnostic);
-    if (status!=XR_XIR_UNRESOLVED && fail_at==SIZE_MAX)
+    EffectLifetimePreparation lifetime={.diagnostic=&diagnostic};
+    if (status==XR_XIR_OK) status=xr_hir_escape_builder_new(&effect_context,&module,NULL,NULL,&lifetime.builder);
+    XrXirRootRefiner refiner={.context=&lifetime,.observe=effect_lifetime_observe,
+        .points=effect_lifetime_points,.prepare=effect_lifetime_finish};
+    if (status==XR_XIR_OK) status=xir_effects_prepare_verified_input(&effect_context,input,&refiner,&prepared);
+    XrXirFunction replacement[4];
+    XrXirInstruction rewritten[3]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},capture[0],capture[1]};
+    XrXirBlock rewritten_block={.count=3};
+    uint32_t values[]={0,2,3};
+    XirViewNormalizedFunction maps[4]={{0}};
+    if (status==XR_XIR_OK && !opaque_result) {
+        CHECK(!lifetime.builder);
+        uint32_t leaf=escaping_footprint_leaf(prepared->checked_roots);
+        if (relocate) {
+            memcpy(replacement,functions,sizeof(functions));
+            rewritten[2].args[0]=2;
+            replacement[1].instructions=rewritten;replacement[1].instruction_count=3;
+            replacement[1].blocks=&rewritten_block;
+            maps[1]=(XirViewNormalizedFunction){.instructions=rewritten,.values=values,.old_instructions=2};
+            module.functions=replacement;
+            XirViewNormalization normalization={.module=module,.bodies=replacement,.functions=maps};
+            XirStorageFlowView storage={0};
+            status=xir_storage_flow_seal(prepared->checked_roots->storage,&storage);
+            if (status==XR_XIR_OK) status=xir_effects_relocate_prepared(&effect_context,prepared,&module,&normalization,NULL);
+            if (status==XR_XIR_OK) CHECK(escaping_footprint_leaf(prepared->checked_roots)==leaf+1);
+        }
+    }
+    if (status==XR_XIR_OK) status=xir_effects_finish_prepared_input(&effect_context,input,&refiner,
+        &prepared,&effects,&diagnostic);
+    XrXirStatus expected=opaque_result?XR_XIR_UNRESOLVED:XR_XIR_OK;
+    if (status!=expected && fail_at==SIZE_MAX)
         fprintf(stderr,"unresolved fixture status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction);
-    CHECK(!effects);
+    if (status==XR_XIR_OK) CHECK(!opaque_result && effects);
+    else CHECK(!effects);
+    xr_xir_compile_effects_free(effects);
+    xr_xir_compile_effects_free(prepared);
+    xr_hir_escape_builder_free(lifetime.builder);
     xr_xir_compile_construction_free(construction);
     return status;
 }
@@ -798,18 +859,75 @@ static void task_transfer_ownership(void) {
     printf("Task transfer: raw definition bounds, no publication and %zu allocation failures PASS\n",sites);
 }
 
+static void scoped_task_transfer_ownership(void) {
+    XrXirArtifact *source=root_source("scoped_transfer.xr",XR_XIR_OK);
+    const XrXirModule *original=xr_xir_compile_artifact_module(source);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source);
+    uint32_t worker=root_find(original,"worker"),launch=root_find(original,"launch"),retained=root_find(original,"retained");
+    CHECK(worker<original->function_count && launch<original->function_count && retained<original->function_count);
+    XrXirType array=original->functions[retained].parameters[0];
+    CHECK(xr_xir_type_is_array(original->types,array) &&
+        xr_xir_type_is_callable(original->types,xr_xir_array_element(original->types,array)));
+    XrXirType previous=original->functions[worker].parameters[0];
+    EffectMark baseline=effect_mark();
+    XrXirStatus status=XR_XIR_OK;
+    XrXirFunction *functions=xir_compile_copy(&effect_context,original->functions,
+        (size_t)original->function_count*sizeof(*functions),&status);
+    CHECK(status==XR_XIR_OK && functions);
+    XrXirInstruction *code=xir_compile_copy(&effect_context,functions[launch].instructions,
+        (size_t)functions[launch].instruction_count*sizeof(*code),&status);
+    CHECK(status==XR_XIR_OK && functions && code);
+    functions[launch].instructions=code;
+    XrXirModule module=*original;
+    module.stage=XR_XIR_BUILT;module.provenance=NULL;module.functions=functions;
+    XrXirArtifact *checked=NULL;
+    XrXirDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_check_v2(&effect_context,&module,construction,&checked,&diagnostic)==XR_XIR_OK && checked);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    functions[worker].parameters=&array;
+    uint32_t spawn=UINT32_MAX,empty=0;
+    for (uint32_t i=0;i<functions[launch].instruction_count;++i) {
+        if (code[i].op==XR_XIR_SCOPED_GO) spawn=i;
+        if (code[i].type!=previous) continue;
+        if (code[i].op==XR_XIR_ARRAY_NEW) {CHECK(!code[i].args[1]);++empty;}
+        code[i].type=array;
+    }
+    CHECK(spawn!=UINT32_MAX && empty==1);
+    XirEffectInput input={&module,construction,NULL};
+    CHECK(xir_compile_structure_verify_input(&effect_context,input,&diagnostic)==XR_XIR_OK);
+    CHECK(xr_xir_compile_check_v2(&effect_context,&module,construction,&checked,&diagnostic)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(diagnostic.function==launch && diagnostic.instruction==spawn &&
+        diagnostic.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE);
+    xr_compile_resources_free(code);xr_compile_resources_free(functions);
+    effect_mark_check(baseline);
+    effect_artifact_free(source);
+    printf("Scoped Task transfer: authentic group and raw external Sendable refusal PASS\n");
+}
+
 static void unresolved_lifetime_ownership(void) {
     EffectMark baseline=effect_mark();
+    CHECK(unresolved_lifetime_case(false,false)==XR_XIR_OK);
+    effect_mark_check(baseline);
     attempts=0;
-    CHECK(unresolved_lifetime_case()==XR_XIR_UNRESOLVED);
+    CHECK(unresolved_lifetime_case(false,true)==XR_XIR_OK);
+    size_t relocated_sites=attempts;
+    effect_mark_check(baseline);
+    for (size_t site=0;site<relocated_sites;++site) {
+        attempts=0;injected=false;fail_at=site;
+        CHECK(unresolved_lifetime_case(false,true)==XR_XIR_OUT_OF_MEMORY && injected);
+        fail_at=SIZE_MAX;effect_mark_check(baseline);
+    }
+    attempts=0;
+    CHECK(unresolved_lifetime_case(true,false)==XR_XIR_UNRESOLVED);
     size_t sites=attempts;
     effect_mark_check(baseline);
     for (size_t site=0;site<sites;++site) {
         attempts=0;injected=false;fail_at=site;
-        CHECK(unresolved_lifetime_case()==XR_XIR_OUT_OF_MEMORY && injected);
+        CHECK(unresolved_lifetime_case(true,false)==XR_XIR_OUT_OF_MEMORY && injected);
         fail_at=SIZE_MAX;effect_mark_check(baseline);
     }
-    printf("unresolved lifetime: publication refused and %zu allocation failures PASS\n",sites);
+    printf("lifetime footprints: %zu relocated-contract and %zu opaque publication allocation failures PASS\n",
+        relocated_sites,sites);
 }
 
 static XrXirStatus failing_point_request(void *context, const XirExecutionOwner *execution,
@@ -1143,6 +1261,7 @@ static void control_summary_kernel(void) {
     restriction_owner_relocation();
     unresolved_lifetime_ownership();
     task_transfer_ownership();
+    scoped_task_transfer_ownership();
     c_callable_parameter_equations();
     point_request_failure();
     execution_instance_parameters();

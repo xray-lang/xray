@@ -489,11 +489,13 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
             XrXirType type = owner->nodes[owner->offsets[input.function] + input.handle].type;
             if (input.value < owner->functions[input.function].physical_values ||
                 !xr_xir_callable_signature(owner->module->types, type) ||
-                xr_xir_type_is_c_callable(owner->module->types, type) ||
-                (!hidden && xr_xir_function_parameter_escaping(&owner->module->functions[input.function], input.handle))) {
+                xr_xir_type_is_c_callable(owner->module->types, type)) {
                 owner->status = XR_XIR_BAD_STRUCTURE; return false;
             }
-            restriction_input(solver, index, input.value);
+            /* Formal escape permission determines restriction independently
+             * of the environment loan. Hidden formals reach this leaf only
+             * after bounded transport has excluded mutable captures. */
+            if (!restriction_local_edge(solver,input.function,input.handle,input.value,false)) return false;
         } else if (input.bank == XIR_STORAGE_EXPOSURE) {
             if (hidden) restriction_input(solver, index, input.value);
             else solver->nodes[index].constant = true;

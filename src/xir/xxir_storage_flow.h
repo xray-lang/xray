@@ -73,8 +73,8 @@ typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllo
  * A FOOTPRINT input names a separate callable-environment leaf. Its PointValue
  * records the use point, while handle is the physical parameter ordinal.
  * The leaf denotes a caller-held loan for this invocation. Ordinary formals
- * require the noescape declaration contract. Hidden formals require the
- * storage producer's complete environment transport proof. Neither denotes
+ * retain that loan independently of their escape permission. Hidden formals
+ * require the storage producer's complete environment transport proof. Neither denotes
  * an empty environment. Applications must substitute their actual footprint. */
 typedef struct XirStorageInput {
     uint32_t function, value, handle;

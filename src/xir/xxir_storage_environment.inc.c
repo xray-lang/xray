@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Callable origins come from the execution owner. A hidden callable can
  *   transport explicit environment inputs after every known binding has a
- *   closed dependency. An unbound ordinary noescape formal is a caller-held
+ *   closed dependency. An unbound ordinary callable formal is a caller-held
  *   loan contract, not an empty environment. Mutable Cells and unresolved
  *   recursive dependencies stay opaque.
  */
@@ -102,8 +102,7 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         if (status == XR_XIR_OK) status = xir_execution_parameter(flow->execution, site, 0, &parameter);
         if (status != XR_XIR_OK) return status;
         if (parameter.cell || parameter.generic_storage ||
-            xr_xir_type_is_c_callable(xir_execution_types(flow->execution), parameter.type) ||
-            (!parameter.hidden && parameter.escaping)) {
+            xr_xir_type_is_c_callable(xir_execution_types(flow->execution), parameter.type)) {
             proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
             return XR_XIR_OK;
         }
@@ -168,7 +167,7 @@ static bool storage_environment_expand(StorageEnvironmentProof *proof, uint32_t 
             .kind=STORAGE_ENVIRONMENT_VALUE})) return false;
     }
     /* A definition is checked even when it has no callers. Its ordinary
-     * noescape formal retains a symbolic environment leaf, substituted by
+     * callable formal retains a symbolic environment leaf, substituted by
      * the actual current footprint at each application. Hidden formals have
      * no declaration contract and still require a real capture binding. */
     if (!bound && node.kind != STORAGE_ENVIRONMENT_CONTRACT)

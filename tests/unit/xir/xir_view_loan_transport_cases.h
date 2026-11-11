@@ -102,8 +102,15 @@ static void view_loan_transport_definition(ViewLoanTransportFixture *fixture) {
     transport = NULL;
     CHECK(xir_view_loan_transport_new(&effect_context, &fixture->module, &fixture->facts,
         fixture->flags, NULL, &transport) == XR_XIR_OK);
-    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_OK && mask == 1);
     xir_view_loan_transport_free(transport);
+    fixture->restrictions[1].flows = &fixture->formal_flow;
+    fixture->restrictions[1].flow_count = 1;
+    /* A storable restriction contract does not erase actual borrowed sources. */
+    mask=0;
+    CHECK(view_loan_transport_case(fixture,5,&mask)==XR_XIR_OK && mask==1);
+    mask=0;
+    CHECK(view_loan_transport_case(fixture,6,&mask)==XR_XIR_OK && mask==2);
     fixture->functions[1].escaping_parameters = NULL;
     fixture->functions[1].escaping_parameter_count = 0;
     fixture->restrictions[1].flows = &fixture->formal_flow;
@@ -200,6 +207,7 @@ static void view_loan_transport_cases(void) {
     CHECK(view_loan_transport_case(&fixture,5,&mask)==XR_XIR_OK && mask==1);
     size_t sites=attempts;
     mask=0;CHECK(view_loan_transport_case(&fixture,6,&mask)==XR_XIR_OK && mask==2);
+    view_loan_transport_definition(&fixture);
     XirViewLoanTransport *transport=NULL;
     attempts=0;
     CHECK(xir_view_loan_transport_new(&effect_context,&fixture.module,&fixture.facts,
@@ -240,7 +248,6 @@ static void view_loan_transport_cases(void) {
     fixture.parameters[0]=XR_XIR_TYPE_PARAMETER_BASE;
     CHECK(view_loan_transport_case(&fixture,5,&(uint64_t){0})==XR_XIR_UNRESOLVED);
     fixture.parameters[0]=XR_XIR_CONSTRUCTED_TYPE_BASE;
-    view_loan_transport_definition(&fixture);
     view_loan_affine_availability(VIEW_LOAN_AFFINE_SHARED);
     view_loan_affine_availability(VIEW_LOAN_AFFINE_ENDED);
     view_loan_affine_availability(VIEW_LOAN_AFFINE_MUTABLE);

@@ -198,13 +198,10 @@ static bool view_loan_index(XirViewLoanTransport *a) {
             continue;
         }
         const XrXirFunction *function = &a->module->functions[input.function];
-        uint32_t captures = a->module->declarations ?
-            a->module->declarations->functions[input.function].capture_count : 0;
         if (input.handle >= function->parameter_count || input.value <
             r->functions[input.function].physical_values ||
             !xr_xir_type_is_callable(a->module->types, function->parameters[input.handle]) ||
-            xr_xir_type_is_c_callable(a->module->types, function->parameters[input.handle]) ||
-            (input.handle >= captures && xr_xir_function_parameter_escaping(function, input.handle))) {
+            xr_xir_type_is_c_callable(a->module->types, function->parameters[input.handle])) {
             a->status = XR_XIR_BAD_STRUCTURE; return false;
         }
         uint32_t handle = view_loan_value(a, input.function, input.handle);
