@@ -26,6 +26,7 @@ typedef struct HirLifetimeConstraints {
     HirStorageExtentEdge *edges;
     HirLifetimeClause *clauses;
     uint32_t *queue, *index, *applications, *next_application;
+    uint8_t *entry_inputs;
     uint32_t count, capacity, index_capacity, edge_count, edge_capacity;
     uint32_t queue_first, queue_count;
     uint32_t failure;
@@ -38,6 +39,7 @@ static void lifetime_constraints_free(HirLifetimeConstraints *run) {
     xr_compile_resources_free(run->clauses); xr_compile_resources_free(run->index);
     xr_compile_resources_free(run->queue); xr_compile_resources_free(run->applications);
     xr_compile_resources_free(run->next_application);
+    xr_compile_resources_free(run->entry_inputs);
 }
 
 static void lifetime_extent_enqueue(HirLifetimeConstraints *run, uint32_t value) {
@@ -77,7 +79,15 @@ static bool lifetime_extents(HirLifetimeConstraints *run) {
     run->applications = xir_compile_calloc(graph->memory, functions, sizeof(*run->applications), &graph->status);
     run->next_application = xir_compile_calloc(graph->memory, solver->view.application_count,
         sizeof(*run->next_application), &graph->status);
+    run->entry_inputs = xir_compile_calloc(graph->memory, values, sizeof(*run->entry_inputs), &graph->status);
     if (graph->status != XR_XIR_OK) return false;
+    for (uint32_t i = 0; i < solver->view.input_count && escape_poll(graph); ++i) {
+        XirStorageInput input = solver->view.inputs[i];
+        uint32_t value = restriction_node(solver, input.function, input.value, false);
+        if (graph->status != XR_XIR_OK) return false;
+        if (input.bank == XIR_STORAGE_CONTENTS) run->entry_inputs[value] |= 1u;
+        if (input.bank == XIR_STORAGE_EXPOSURE) run->entry_inputs[value] |= 2u;
+    }
     for (uint32_t v = 0; v < values; ++v) run->extents[v].head = UINT32_MAX;
     for (uint32_t f = 0; f < functions; ++f) run->applications[f] = UINT32_MAX;
     for (uint32_t a = 0; a < solver->view.application_count; ++a) {
@@ -271,9 +281,29 @@ static bool lifetime_actual(HirLifetimeConstraints *run, XirStorageApplication a
     return true;
 }
 
-static bool lifetime_apply(HirLifetimeConstraints *run, HirLifetimeClause clause, XirStorageApplication app) {
+static bool lifetime_entry_dependent(const HirLifetimeConstraints *run, HirLifetimeClause clause) {
+    uint32_t first = run->solver->offsets[clause.function];
+    return (clause.restriction != UINT32_MAX && (run->entry_inputs[first + clause.restriction] & 1u)) ||
+        (clause.exposure_input != UINT32_MAX && (run->entry_inputs[first + clause.exposure_input] & 2u));
+}
+
+static bool lifetime_apply(HirLifetimeConstraints *run, HirLifetimeClause clause, uint32_t application) {
     HirRestrictionSolver *solver = run->solver;
     HirEscape *graph = &solver->builder->graph;
+    XirStorageApplication app = solver->view.applications[application];
+    bool entry = lifetime_entry_dependent(run, clause);
+    /* Capturing an identity does not enter its body. Entry-dependent clauses
+     * remain on the callee and are instantiated by real or opaque entries.
+     * Definition-level restriction and storage-scope clauses still apply. */
+    if (app.kind == XIR_EXECUTION_CALL && (app.protocol == 1 || app.protocol == 4)) {
+        if (entry) return true;
+    }
+    /* A projected wrapper entry can follow internal writes. Its prior Cell
+     * contents cannot prove a restriction at that later point. Exposure is
+     * monotone, so an already exposed destination remains a valid witness. */
+    if (app.kind == XIR_EXECUTION_CALLBACK_ENTRY && app.entry_context != UINT32_MAX &&
+        clause.restriction != UINT32_MAX &&
+        (run->entry_inputs[solver->offsets[clause.function] + clause.restriction] & 1u)) return true;
     bool found_r = false;
     for (uint32_t p = 0; p < (clause.restriction == UINT32_MAX ? 1u : app.count) && escape_poll(graph); ++p) {
         HirRestrictionNode r = {.constant=true,.parameter=clause.parameter,.borrowed=clause.borrowed};
@@ -325,7 +355,7 @@ static XrXirStatus restriction_constraints(HirRestrictionSolver *solver, XrHirEs
         for (uint32_t c = 0; c < run.count && run.failure == UINT32_MAX && escape_poll(graph); ++c) {
             HirLifetimeClause clause = run.clauses[c];
             for (uint32_t a = run.applications[clause.function]; a != UINT32_MAX && escape_poll(graph); a = run.next_application[a])
-                if (!lifetime_apply(&run, clause, solver->view.applications[a])) break;
+                if (!lifetime_apply(&run, clause, a)) break;
         }
     if (graph->status == XR_XIR_OK && run.failure != UINT32_MAX) {
         HirLifetimeClause clause = run.clauses[run.failure];

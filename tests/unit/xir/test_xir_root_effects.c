@@ -1250,7 +1250,11 @@ static void root_unbound_contents_causes(void) {
     }
 }
 
+#include "xir_callback_entry_cases.h"
+
 static void control_summary_kernel(void) {
+    callback_entry_owner_cases();
+    callback_receiver_owner_cases();
     root_unbound_contents_causes();
     view_loan_transport_cases();
     control_summary_detached();

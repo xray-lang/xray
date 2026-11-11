@@ -731,6 +731,8 @@ static uint32_t storage_application(XirStorageFlow *flow, const XirExecutionSite
         .instruction = site->instruction, .block = site->block, .declaration = site->declaration,
         .target = site->target, .caller_instance = site->caller_instance,
         .reference = site->reference, .capture_environment = site->capture_environment,
+        .parent_kind = site->parent_kind, .callback_parameter = site->callback_parameter,
+        .entry_context = site->entry_context,
         .environment = site->environment, .order = site->order, .port = site->port,
         .outcome = outcome, .protocol = site->protocol};
     return index;
@@ -739,7 +741,8 @@ static uint32_t storage_application(XirStorageFlow *flow, const XirExecutionSite
 static uint32_t storage_site_hash(XirExecutionSite site) {
     uint32_t fields[] = {(uint32_t)site.kind, site.index, site.function, site.instruction, site.block,
         site.caller_instance, site.environment, site.reference, site.capture_environment,
-        site.target, site.declaration, site.order, (uint32_t)site.port};
+        site.target, site.declaration, site.order, (uint32_t)site.port,
+        (uint32_t)site.parent_kind, site.callback_parameter, site.entry_context, site.invocation_contract};
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
@@ -747,7 +750,9 @@ static bool storage_same_site(XirExecutionSite a, XirExecutionSite b) {
     return a.kind == b.kind && a.index == b.index && a.function == b.function && a.instruction == b.instruction &&
         a.block == b.block && a.caller_instance == b.caller_instance && a.environment == b.environment &&
         a.reference == b.reference && a.capture_environment == b.capture_environment && a.target == b.target &&
-        a.declaration == b.declaration && a.order == b.order && a.port == b.port;
+        a.declaration == b.declaration && a.order == b.order && a.port == b.port &&
+        a.parent_kind == b.parent_kind && a.callback_parameter == b.callback_parameter &&
+        a.entry_context == b.entry_context && a.invocation_contract == b.invocation_contract;
 }
 
 static bool storage_site_index_grow(XirStorageFlow *flow) {
@@ -776,8 +781,10 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
     if (!storage_step(flow)) return flow->status;
     if (site->function >= flow->view.function_count) return flow->status = XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *body = flow->rows[site->function].body;
+    bool cleanup = site->kind == XIR_EXECUTION_CLEANUP_USE ||
+        (site->kind == XIR_EXECUTION_CALLBACK_ENTRY && site->parent_kind == XIR_EXECUTION_CLEANUP_USE);
     if (site->order >= flow->rows[site->function].point_count) return flow->status = XR_XIR_BAD_STRUCTURE;
-    if ((site->instruction == UINT32_MAX && (site->kind != XIR_EXECUTION_CLEANUP_USE ||
+    if ((site->instruction == UINT32_MAX && (!cleanup ||
         site->port != XIR_EXECUTION_PANIC || site->block >= body->block_count)) ||
         (site->instruction != UINT32_MAX && site->instruction >= body->instruction_count))
         return flow->status = XR_XIR_BAD_STRUCTURE;
@@ -806,7 +813,7 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
         .binding_next = UINT32_MAX, .active = true};
     flow->site_index[slot] = index + 1;
     if (!site->unresolved && !site->native_callable && site->declaration < flow->view.function_count) {
-        uint32_t outcomes = storage_environment_site(site) ? 1 : 3;
+        uint32_t outcomes = storage_environment_site(site) || site->kind == XIR_EXECUTION_CALLBACK_ENTRY ? 1 : 3;
         for (uint32_t o = 0; o < outcomes; ++o) {
             uint32_t application = storage_application(flow, site, (XirExecutionPort)o);
             if (application == UINT32_MAX) return flow->status;
@@ -826,7 +833,8 @@ static uint32_t storage_call_input_bank(XirStorageFlow *flow, const XirExecution
     StorageAddress address;
     if (!storage_address(flow, site->function, handle, &address)) return UINT32_MAX;
     uint32_t root = address.count == 1 ? flow->rows[site->function].address_values[address.first] : handle;
-    if (site->kind != XIR_EXECUTION_CLEANUP_USE)
+    if (site->kind != XIR_EXECUTION_CLEANUP_USE &&
+        !(site->kind == XIR_EXECUTION_CALLBACK_ENTRY && site->parent_kind == XIR_EXECUTION_CLEANUP_USE))
         return storage_bank_state(flow, site->function, site->instruction, root, bank);
     uint32_t point = site->instruction == UINT32_MAX ? site->block : site->instruction;
     return storage_point(flow, site->function, point, root, storage_kind((uint32_t)site->port + 1, bank), site->order);
@@ -880,7 +888,7 @@ static bool storage_bind_application(XirStorageFlow *flow, uint32_t site_index, 
         if (!storage_binding(flow, (XirStorageBinding){site.declaration, p,
             actual.function, actual.value, actual.environment})) return false;
         uint32_t head = flow->rows[site.declaration].footprint_heads[p];
-        if (!storage_environment_site(&site) && head != UINT32_MAX) {
+        if (!storage_environment_site(&site) && site.kind != XIR_EXECUTION_CALLBACK_ENTRY && head != UINT32_MAX) {
             uint32_t footprint = UINT32_MAX;
             status = storage_call_footprint(flow, &site, actual, &footprint);
             if (status == XR_XIR_UNRESOLVED) { complete = false; continue; }
@@ -906,6 +914,8 @@ static bool storage_bind_application(XirStorageFlow *flow, uint32_t site_index, 
             !storage_is_handle(flow, site.function, handle)) { flow->status = XR_XIR_BAD_STRUCTURE; return false; }
         uint32_t formal = flow->rows[site.declaration].content_inputs[p];
         if (formal == UINT32_MAX) { complete = false; continue; }
+        /* An immediate callback invocation supplies a before-state violation
+         * witness. The opaque remainder preserves its later entry obligations. */
         uint32_t contents = storage_call_input(flow, &site, handle);
         if (formal == UINT32_MAX || contents == UINT32_MAX || !storage_binding(flow,
             (XirStorageBinding){site.declaration, formal, site.function, contents, UINT32_MAX})) return false;
@@ -966,7 +976,7 @@ static bool storage_reindex_sites(XirStorageFlow *flow) {
             flow->sites[s].binding_next = flow->target_heads[site.target];
             flow->target_heads[site.target] = s;
         }
-        if (!flow->sites[s].active || storage_environment_site(&site)) continue;
+        if (!flow->sites[s].active || storage_environment_site(&site) || site.kind == XIR_EXECUTION_CALLBACK_ENTRY) continue;
         StorageFunction *row = &flow->rows[site.function];
         uint32_t point = site.instruction == UINT32_MAX ? row->body->instruction_count + site.block : site.instruction;
         flow->sites[s].next = row->site_heads[point]; row->site_heads[point] = s;
@@ -1574,7 +1584,8 @@ static bool storage_start_exposure(XirStorageFlow *flow) {
     if (++flow->generation == 0) { flow->status = XR_XIR_OVERFLOW; return false; }
     for (uint32_t s = 0; s < flow->site_count && storage_step(flow); ++s) {
         if (!flow->sites[s].active) continue;
-        uint32_t outcomes = storage_environment_site(&flow->sites[s].site) ? 1 : 3;
+        uint32_t outcomes = storage_environment_site(&flow->sites[s].site) ||
+            flow->sites[s].site.kind == XIR_EXECUTION_CALLBACK_ENTRY ? 1 : 3;
         for (uint32_t o = 0; o < outcomes; ++o)
             if (!storage_bind_application(flow, s, (XirExecutionPort)o)) return false;
     }
@@ -1624,10 +1635,12 @@ XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *flow, const XirExecuti
     for (uint32_t s = 0; s < flow->site_count; ++s) flow->sites[s].active = false;
     flow->status = xir_execution_visit_captures(execution, storage_import_site, flow);
     if (flow->status == XR_XIR_OK) flow->status = xir_execution_visit_calls(execution, storage_import_site, flow);
+    if (flow->status == XR_XIR_OK) flow->status = xir_execution_visit_callback_entries(execution, storage_import_site, flow);
     if (flow->status != XR_XIR_OK || !storage_reindex_sites(flow)) return flow->status;
     for (uint32_t s = 0; s < flow->site_count && storage_step(flow); ++s) {
         if (!flow->sites[s].active) continue;
-        uint32_t outcomes = storage_environment_site(&flow->sites[s].site) ? 1 : 3;
+        uint32_t outcomes = storage_environment_site(&flow->sites[s].site) ||
+            flow->sites[s].site.kind == XIR_EXECUTION_CALLBACK_ENTRY ? 1 : 3;
         for (uint32_t o = 0; o < outcomes; ++o)
             if (!storage_bind_application(flow, s, (XirExecutionPort)o)) return flow->status;
     }

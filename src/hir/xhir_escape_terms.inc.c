@@ -284,6 +284,24 @@ static bool restriction_function_use(const HirEscape *owner, HirEscapeUse use) {
         !xr_xir_type_is_c_callable(owner->module->types, type);
 }
 
+static XrXirStatus restriction_callback_entry(void *context, const XirExecutionSite *site) {
+    HirRestrictionSolver *solver = context;
+    if (site->invocation_contract && site->parent_kind != XIR_EXECUTION_CLEANUP_USE) {
+        HirEscape *owner = &solver->builder->graph;
+        if (site->receiver_function != site->function || site->function >= owner->module->function_count ||
+            site->receiver_value >= owner->functions[site->function].physical_values) return XR_XIR_BAD_STRUCTURE;
+        /* The declared storable invocation contract retains its actual-point
+         * footprint. It does not assert an empty environment or zero access. */
+        if (!restriction_append_observation(solver->builder,
+            (HirEscapeObservation){site->function, site->instruction, site->receiver_value, XIR_STORAGE_BEFORE}))
+            return owner->status;
+        return XR_XIR_OK;
+    }
+    if (!site->unresolved && !site->remainder) return XR_XIR_OK;
+    return restriction_request(solver, XR_XIR_UNRESOLVED,
+        (HirEscapeObservation){site->function, site->instruction, site->receiver_value, XIR_STORAGE_BEFORE});
+}
+
 static bool restriction_cell_publications(HirRestrictionSolver *solver) {
     HirEscape *owner = &solver->builder->graph;
     uint32_t count = owner->use_count;
@@ -317,6 +335,8 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
     owner->status = xir_execution_visit_calls(solver->execution, restriction_call_actuals, solver);
     if (owner->status == XR_XIR_OK)
         owner->status = xir_execution_visit_captures(solver->execution, restriction_call_actuals, solver);
+    if (owner->status == XR_XIR_OK)
+        owner->status = xir_execution_visit_callback_entries(solver->execution, restriction_callback_entry, solver);
     if (owner->status == XR_XIR_OK) restriction_cell_publications(solver);
     if (owner->status == XR_XIR_OK && builder->observation_count) {
         qsort(builder->observations, builder->observation_count, sizeof(*builder->observations), restriction_observation_compare);

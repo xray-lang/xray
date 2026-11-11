@@ -146,8 +146,11 @@ XR_FUNC XrXirStatus xir_execution_parameter(const XirExecutionOwner *owner,
         }
         if (call >= roots->calls) return XR_XIR_BAD_STRUCTURE;
         target = roots->node[roots->call[call].target].function;
-    } else if (site->kind == XIR_EXECUTION_PENDING) {
-        if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
+    } else if (site->kind == XIR_EXECUTION_PENDING || site->kind == XIR_EXECUTION_CALLBACK_ENTRY) {
+        if (site->kind == XIR_EXECUTION_CALLBACK_ENTRY && site->reference == UINT32_MAX)
+            return XR_XIR_UNRESOLVED;
+        if (site->kind == XIR_EXECUTION_PENDING && site->index >= roots->pending_count)
+            return XR_XIR_BAD_STRUCTURE;
         if (site->reference != UINT32_MAX) {
             if (site->reference >= roots->calls || roots->call[site->reference].protocol != 1)
                 return XR_XIR_BAD_STRUCTURE;
@@ -218,6 +221,25 @@ XR_FUNC XrXirStatus xir_execution_argument(const XirExecutionOwner *owner,
         const EffectCheckCall *call = &roots->call[index];
         first = call->first; count = call->count;
         caller = roots->node[call->output].function;
+    } else if (site->kind == XIR_EXECUTION_CALLBACK_ENTRY) {
+        if (parameter >= site->argument_count) return XR_XIR_BAD_STRUCTURE;
+        if (site->reference == UINT32_MAX) return XR_XIR_UNRESOLVED;
+        if (site->reference >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+        const EffectCheckCall *capture = &roots->call[site->reference];
+        if (capture->protocol != 1) return XR_XIR_BAD_STRUCTURE;
+        caller = site->caller_instance;
+        if (parameter < capture->count) {
+            first = capture->first; count = capture->count;
+            environment = site->capture_environment;
+        } else {
+            if (site->entry_context == UINT32_MAX) return XR_XIR_UNRESOLVED;
+            if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
+            const EffectCheckPending *pending = &roots->pending[site->index];
+            first = pending->argument_first; count = pending->argument_count;
+            parameter -= capture->count;
+            if (parameter >= count) return XR_XIR_UNRESOLVED;
+            environment = site->entry_context;
+        }
     } else if (site->kind == XIR_EXECUTION_PENDING) {
         if (site->index >= roots->pending_count) return XR_XIR_BAD_STRUCTURE;
         const EffectCheckPending *pending = &roots->pending[site->index];
@@ -263,6 +285,7 @@ XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *
 }
 
 #include "xxir_execution_origins.inc.c"
+#include "xxir_execution_callbacks.inc.c"
 
 XR_FUNC const XrXirTypes *xir_execution_types(const XirExecutionOwner *owner) {
     const EffectCheckedRoots *roots = owner;

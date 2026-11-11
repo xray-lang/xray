@@ -1,0 +1,9 @@
+fn leaf() -> i64 { return 7 }
+fn retain(value: escaping fn()) -> fn() { return value }
+fn probe(exec: fn(fn()), callback: fn() -> i64) {
+    var slot = leaf
+    const reset = fn() { slot = leaf }
+    const saved = retain(reset)
+    const setter = fn() { slot = callback }
+    exec(setter)
+}

@@ -113,18 +113,25 @@ done:
 typedef struct ExecutionOrigin {
     uint32_t function, value, environment;
     bool equation;
+    uint32_t entry_context;
 } ExecutionOrigin;
+
+typedef struct ExecutionEntryIndex {
+    uint32_t *incoming, *next_application;
+    bool indexed;
+} ExecutionEntryIndex;
 typedef struct ExecutionOriginWalk {
     XrXirCompileContext memory;
     ExecutionOrigin *items;
     uint32_t *index;
     uint32_t count, capacity, index_capacity;
+    ExecutionEntryIndex *entries;
     XrXirStatus status;
 } ExecutionOriginWalk;
 
 static uint32_t execution_origin_hash(ExecutionOrigin origin) {
     return xr_hash_int(origin.function) ^ xr_hash_int(origin.value) * 3u ^ xr_hash_int(origin.environment) * 7u ^
-        (origin.equation ? UINT32_C(0x9e3779b9) : 0);
+        (origin.equation ? UINT32_C(0x9e3779b9) : 0) ^ xr_hash_int(origin.entry_context) * 11u;
 }
 
 static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin origin) {
@@ -149,7 +156,8 @@ static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin ori
     while (walk->index[at]) {
         ExecutionOrigin found = walk->items[walk->index[at] - 1];
         if (found.function == origin.function && found.value == origin.value &&
-            found.environment == origin.environment && found.equation == origin.equation) return true;
+            found.environment == origin.environment && found.equation == origin.equation &&
+            found.entry_context == origin.entry_context) return true;
         at = (at + 1) & (walk->index_capacity - 1);
     }
     if (walk->count == walk->capacity) {
@@ -181,14 +189,79 @@ static XirExecutionSite execution_resolved_site(const EffectCheckedRoots *roots,
 
 typedef enum ExecutionOriginQuery {
     EXECUTION_ORIGINS_CALLABLE, EXECUTION_ORIGINS_EFFECTS,
-    EXECUTION_ORIGINS_ENVIRONMENT, EXECUTION_ORIGINS_ENVIRONMENT_INPUTS
+    EXECUTION_ORIGINS_ENVIRONMENT, EXECUTION_ORIGINS_ENVIRONMENT_INPUTS, EXECUTION_ORIGINS_CALLBACK_ENTRY
 } ExecutionOriginQuery;
+
+typedef struct ExecutionOriginRequest {
+    ExecutionOriginQuery kind;
+    ExecutionEntryIndex *entries;
+} ExecutionOriginRequest;
+
+static bool execution_origin_incoming(ExecutionOriginWalk *walk, const EffectCheckedRoots *roots,
+    const XirStorageFlowView *storage, ExecutionOrigin origin) {
+    ExecutionEntryIndex *entries = walk->entries;
+    if (!entries) {walk->status = XR_XIR_BAD_STRUCTURE; return false;}
+    /* All receivers in one observation share this reverse index. Existing
+     * execution applications supply its finite frame identities. */
+    if (!entries->indexed) {
+        entries->incoming = xir_compile_calloc(&walk->memory, roots->functions, sizeof(*entries->incoming), &walk->status);
+        entries->next_application = xir_compile_calloc(&walk->memory, storage->application_count,
+            sizeof(*entries->next_application), &walk->status);
+        if (walk->status != XR_XIR_OK) return false;
+        for (uint32_t f = 0; f < roots->functions; ++f) entries->incoming[f] = UINT32_MAX;
+        for (uint32_t a = 0; a < storage->application_count; ++a) {
+            XirStorageApplication app = storage->applications[a];
+            if (app.kind == XIR_EXECUTION_CALLBACK_ENTRY || app.outcome != XIR_EXECUTION_NORMAL ||
+                (app.protocol != 2 && app.kind != XIR_EXECUTION_CLEANUP_USE)) continue;
+            if (app.target >= roots->functions) {walk->status = XR_XIR_BAD_STRUCTURE; return false;}
+            entries->next_application[a] = entries->incoming[app.target]; entries->incoming[app.target] = a;
+        }
+        entries->indexed = true;
+    }
+    bool found = false;
+    for (uint32_t a = entries->incoming[origin.function]; a != UINT32_MAX; a = entries->next_application[a]) {
+        execution_origin_push(walk, (ExecutionOrigin){origin.function, origin.value, a, false, a});
+        found = true;
+    }
+    return found;
+}
+
+static bool execution_origin_binding(ExecutionOriginWalk *walk, const EffectCheckedRoots *roots,
+    const XirStorageFlowView *storage, ExecutionOrigin origin, uint32_t *unresolved) {
+    if (origin.environment >= XIR_EXECUTION_UNKNOWN_ENVIRONMENT) return false;
+    if (origin.environment >= storage->application_count) {walk->status = XR_XIR_BAD_STRUCTURE; return true;}
+    XirStorageApplication app = storage->applications[origin.environment];
+    if (app.kind == XIR_EXECUTION_CALLBACK_ENTRY) {
+        *unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+        return true;
+    }
+    if (origin.equation || app.declaration != roots->function[origin.function].declaration) return false;
+    if (app.first > storage->binding_count || app.count > storage->binding_count - app.first) {
+        walk->status = XR_XIR_BAD_STRUCTURE; return true;
+    }
+    bool bound = false;
+    for (uint32_t b = 0; b < app.count; ++b) {
+        XirStorageBinding binding = storage->bindings[app.first + b];
+        if (binding.formal_function != app.declaration || binding.formal_value != origin.value) continue;
+        uint32_t environment = binding.actual_environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ?
+            app.environment : binding.actual_environment;
+        uint32_t function = binding.actual_function;
+        if (app.caller_instance < roots->functions &&
+            roots->function[app.caller_instance].declaration == function) function = app.caller_instance;
+        if (environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT) *unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+        else execution_origin_push(walk, (ExecutionOrigin){function, binding.actual_value,
+            environment, false, origin.entry_context});
+        bound = true;
+    }
+    return bound;
+}
 
 static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
     uint32_t function_id, uint32_t value, uint32_t environment, XirExecutionVisitor visit, void *context,
-    bool *complete, uint32_t *remainder, ExecutionOriginQuery query) {
+    bool *complete, uint32_t *remainder, ExecutionOriginRequest request) {
     if (!roots || !visit || !complete || !remainder || function_id >= roots->functions)
         return XR_XIR_BAD_STRUCTURE;
+    ExecutionOriginQuery query = request.kind;
     bool observe_environment = query == EXECUTION_ORIGINS_ENVIRONMENT ||
         query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS;
     XirStorageFlowView storage = {0};
@@ -196,8 +269,9 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         XrXirStatus status = xir_storage_flow_view(roots->storage, &storage);
         if (status != XR_XIR_OK) return status;
     }
-    ExecutionOriginWalk walk = {.memory = {.resources = roots->resources}};
-    execution_origin_push(&walk, (ExecutionOrigin){function_id, value, environment, false});
+    ExecutionOriginWalk walk = {.memory = {.resources = roots->resources}, .entries = request.entries};
+    execution_origin_push(&walk, (ExecutionOrigin){function_id, value, environment, false,
+        query == EXECUTION_ORIGINS_CALLBACK_ENTRY ? UINT32_MAX : 0});
     bool found = false;
     uint32_t unresolved = 0;
     for (uint32_t cursor = 0; cursor < walk.count && walk.status == XR_XIR_OK; ++cursor) {
@@ -208,35 +282,14 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         ExecutionOrigin origin = walk.items[cursor];
         if (origin.function >= roots->functions) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
         EffectCheckFunction function = roots->function[origin.function];
-        bool bound = false;
-        if (origin.environment < XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
-            if (origin.environment >= storage.application_count) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
-            XirStorageApplication app = storage.applications[origin.environment];
-            if (!origin.equation && app.declaration == function.declaration) {
-                if (app.first > storage.binding_count || app.count > storage.binding_count - app.first) {
-                    walk.status = XR_XIR_BAD_STRUCTURE; break;
-                }
-                for (uint32_t b = 0; b < app.count; ++b) {
-                    XirStorageBinding binding = storage.bindings[app.first + b];
-                    if (binding.formal_function != function.declaration || binding.formal_value != origin.value) continue;
-                    uint32_t actual_environment = binding.actual_environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ?
-                        app.environment : binding.actual_environment;
-                    uint32_t actual_function = binding.actual_function;
-                    if (app.caller_instance < roots->functions &&
-                        roots->function[app.caller_instance].declaration == actual_function) actual_function = app.caller_instance;
-                    if (actual_environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT)
-                        unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
-                    else execution_origin_push(&walk, (ExecutionOrigin){actual_function, binding.actual_value, actual_environment, false});
-                    bound = true;
-                }
-            }
-        }
-        if (bound) continue;
+        if (execution_origin_binding(&walk, roots, &storage, origin, &unresolved)) continue;
         bool predecessor = false;
         if (origin.value < function.values || origin.equation) {
             if (origin.value > function.last - function.first) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
             const EffectCheckNode *node = &roots->node[function.first + origin.value];
             if (node->callable_input) {
+                if (query == EXECUTION_ORIGINS_CALLBACK_ENTRY && origin.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+                    execution_origin_incoming(&walk, roots, &storage, origin)) continue;
                 if (observe_environment && origin.value < function.parameters &&
                     (origin.value >= function.capture_count || query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS)) {
                     XirExecutionSiteKind kind = origin.value < function.capture_count ?
@@ -277,6 +330,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 XirExecutionSite capture = execution_call_site(roots, c);
                 capture.environment = origin.environment;
                 capture.capture_environment = origin.environment;
+                capture.entry_context = origin.entry_context;
                 walk.status = visit(context, &capture);
                 predecessor = found = true;
             }
@@ -286,7 +340,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 EffectCheckFunction source_function = roots->function[roots->node[source].function];
                 uint32_t value = source - source_function.first;
                 execution_origin_push(&walk, (ExecutionOrigin){roots->node[source].function,
-                    value, origin.environment, value >= source_function.values});
+                    value, origin.environment, value >= source_function.values, origin.entry_context});
                 predecessor = true;
             }
         }
@@ -318,6 +372,10 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     continue;
                 }
                 if (edge.application != UINT32_MAX) {
+                    /* A target visitor can append guard applications within
+                     * this cursor. Rebind before reading the receiving bank. */
+                    walk.status = xir_storage_flow_view(roots->storage, &storage);
+                    if (walk.status != XR_XIR_OK) break;
                     if (edge.application >= storage.application_count) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
                     XirStorageApplication app = storage.applications[edge.application];
                     if (app.function == function.declaration && app.environment != origin.environment) {
@@ -333,7 +391,8 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 }
                 uint32_t next_environment = edge.application == UINT32_MAX ? origin.environment : edge.application;
                 uint32_t source_function = edge.function == function.declaration ? origin.function : edge.function;
-                execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value, next_environment, false});
+                execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value,
+                    next_environment, false, origin.entry_context});
                 predecessor = true;
             }
         }
@@ -369,7 +428,7 @@ static XrXirStatus execution_visit_value_environment(const XirExecutionOwner *ow
     if (value->value >= count) return XR_XIR_BAD_STRUCTURE;
     uint32_t pending = 0;
     return execution_visit_origins(owner, value->function, value->value, value->environment,
-        visit, context, complete, remainder ? remainder : &pending, query);
+        visit, context, complete, remainder ? remainder : &pending, (ExecutionOriginRequest){.kind = query});
 }
 
 XR_FUNC XrXirStatus xir_execution_visit_value_captures_in(const XirExecutionOwner *owner,
@@ -420,7 +479,7 @@ XR_FUNC XrXirStatus xir_execution_resolve_site(const XirExecutionOwner *owner,
     ExecutionResolveContext resolve = {owner, &request, environment, visit, context};
     return execution_visit_origins(owner, owner->node[pending.receiver].function,
         pending.receiver - receiver->first, environment, execution_resolve_capture, &resolve,
-        complete, remainder, EXECUTION_ORIGINS_CALLABLE);
+        complete, remainder, (ExecutionOriginRequest){.kind = EXECUTION_ORIGINS_CALLABLE});
 }
 
 XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *owner,
@@ -436,5 +495,5 @@ XR_FUNC XrXirStatus xir_execution_resolve_effect_site(const XirExecutionOwner *o
     ExecutionResolveContext resolve = {owner, &request, XIR_EXECUTION_CURRENT_ENVIRONMENT, visit, context};
     return execution_visit_origins(owner, owner->node[pending.receiver].function,
         pending.receiver - receiver->first, XIR_EXECUTION_CURRENT_ENVIRONMENT,
-        execution_resolve_capture, &resolve, complete, remainder, EXECUTION_ORIGINS_EFFECTS);
+        execution_resolve_capture, &resolve, complete, remainder, (ExecutionOriginRequest){.kind = EXECUTION_ORIGINS_EFFECTS});
 }

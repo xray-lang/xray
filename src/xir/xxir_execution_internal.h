@@ -17,7 +17,7 @@
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
     XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL,
-    XIR_EXECUTION_STORABLE, XIR_EXECUTION_CAPTURE_INPUT
+    XIR_EXECUTION_STORABLE, XIR_EXECUTION_CAPTURE_INPUT, XIR_EXECUTION_CALLBACK_ENTRY
 } XirExecutionSiteKind;
 
 typedef enum XirExecutionPort {
@@ -93,10 +93,20 @@ typedef struct XirExecutionSite {
     /* The semantic call-record ID of the original registration, or UINT32_MAX. */
     uint32_t registration;
     uint32_t native_callable, environment, reference, capture_environment, remainder;
+    /* Callback entries retain the opaque receiving call and argument ordinal.
+     * They describe a possible invocation, never an additional CFG write. */
+    XirExecutionSiteKind parent_kind;
+    uint32_t callback_parameter;
+    /* A receiver invocation uses an existing application to substitute its
+     * symbolic receiver. UINT32_MAX denotes an opaque argument entry. */
+    uint32_t entry_context;
     XirExecutionPort port;
     XrXirType signature;
     uint8_t protocol;
     bool unresolved;
+    /* An ordinary storable formal has an invocation-loan contract. Consumers
+     * retain its current footprint independently of its escape permission. */
+    bool invocation_contract;
 } XirExecutionSite;
 
 typedef struct XirExecutionValue { uint32_t function, value, environment; } XirExecutionValue;
@@ -129,6 +139,11 @@ XR_FUNC XrXirStatus xir_execution_site(const XirExecutionOwner *,
 XR_FUNC XrXirStatus xir_execution_visit_calls(const XirExecutionOwner *,
     XirExecutionVisitor, void *);
 XR_FUNC XrXirStatus xir_execution_visit_captures(const XirExecutionOwner *,
+    XirExecutionVisitor, void *);
+/* Opaque and native callees may invoke callable arguments. Known targets use
+ * the same origin relation as ordinary execution. Unresolved targets remain
+ * explicit entries with unresolved=true and no invented argument values. */
+XR_FUNC XrXirStatus xir_execution_visit_callback_entries(const XirExecutionOwner *,
     XirExecutionVisitor, void *);
 
 /* Actuals include the authenticated physical capture prefix. A numeric aux

@@ -1,0 +1,3 @@
+fn invoke(action: fn()) { action() }
+fn forward(action: fn()) { invoke(action) }
+fn probe() { forward(fn() {}) }

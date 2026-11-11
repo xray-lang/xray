@@ -55,6 +55,8 @@ typedef struct XirStorageApplication {
      * Block is a caller-template ordinal. Both environments use application
      * indices or the execution environment sentinels. */
     uint32_t reference, capture_environment;
+    XirExecutionSiteKind parent_kind;
+    uint32_t callback_parameter, entry_context;
     XirExecutionPort port, outcome;
     uint8_t protocol;
     uint32_t first, count;
