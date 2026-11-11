@@ -919,7 +919,9 @@ static void frame_string_cells(void) {
     CHECK(xr_lir_verify(m,NULL)==XR_LIR_VERIFY_ERROR);xr_lir_module_destroy(m);
 }
 
+#include "lir_array_block_cell_cases.h"
 int main(void) {
+    array_block_cells();
     frame_string_cells();
     string_length_types();
     string_sequential_owners();

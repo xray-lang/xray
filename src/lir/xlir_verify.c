@@ -374,7 +374,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
-            if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry)
+            if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_ARRAY_CELL)
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
             bool terminal = xr_lir_internal_terminal(v->op);
@@ -631,15 +631,26 @@ static bool lir_frame_cell_owner(const XrLirFunctionData *f, uint32_t id) {
  * contents through the frame; an incoming parameter borrows an active caller. */
 static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function,
     uint8_t *released, XrLirDiagnostic *d) {
+    memset(released, 0, f->value_count);
+    for (uint32_t b = 0; b < f->block_count; ++b)
+        for (uint32_t i = 0; i < f->blocks[b].instruction_count; ++i) {
+            const XrLirInstructionView *v = &f->blocks[b].instructions[i].view;
+            if (v->op == XR_LIR_ARRAY_CELL_DROP &&
+                f->values[v->operands[0] - 1].block == b + 1)
+                released[v->operands[0] - 1] = 2;
+        }
     for (uint32_t id = 1; id <= f->value_count; ++id) {
         const XrLirValueData *value = &f->values[id - 1];
         if (!lir_managed_cell(value->type)) continue;
         if (!lir_frame_cell_owner(f, id) && (!value->parameter || value->block))
             return xr_lir_internal_error(d, "Managed Cell requires an entry owner or incoming borrow",
                 function, value->block, 0, NULL);
+        if (value->block && value->block != f->entry && !(released[id - 1] & 2))
+            return xr_lir_internal_error(d, "block-local Array Cell requires release in its defining block",
+                function, value->block, 0, NULL);
     }
     for (uint32_t b = 0; b < f->block_count; ++b) {
-        memset(released, 0, f->value_count);
+        for (uint32_t id = 0; id < f->value_count; ++id) released[id] &= 2;
         const XrLirBlockData *block = &f->blocks[b];
         const XrLirInstructionView *term = lir_terminator(f, b);
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
@@ -647,7 +658,11 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 if (!lir_managed_cell(f->values[id - 1].type)) continue;
-                if (released[id - 1])
+                bool local = (released[id - 1] & 2) != 0;
+                if (local && (f->values[id - 1].block != b + 1 || v->op == XR_LIR_CALL))
+                    return xr_lir_internal_error(d, "block-local Array Cell cannot leave its defining block",
+                        function, b+1, i+1, &v->source);
+                if (released[id - 1] & 1)
                     return xr_lir_internal_error(d, "Managed Cell use follows release", function, b+1, i+1, &v->source);
                 if (v->op != XR_LIR_CELL_READ && v->op != XR_LIR_CELL_WRITE &&
                     v->op != XR_LIR_CALL && v->op != XR_LIR_STRING_CELL_DROP &&
@@ -661,10 +676,10 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
                 if (!lir_frame_cell_owner(f, id))
                     return xr_lir_internal_error(d, "incoming Managed Cell borrow cannot be released",
                         function, b+1, i+1, &v->source);
-                if (f->block_count != 1 && term->op != XR_LIR_RET)
+                if (!(released[id - 1] & 2) && f->block_count != 1 && term->op != XR_LIR_RET)
                     return xr_lir_internal_error(d, "frame Managed Cell release requires a normal return",
                         function, b+1, i+1, &v->source);
-                released[id - 1] = 1;
+                released[id - 1] |= 1;
             }
         }
         for (uint32_t e = 0; e < term->edge_count; ++e)
@@ -672,11 +687,14 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
                 if (lir_managed_cell(f->values[term->edges[e].arguments[a] - 1].type))
                     return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, b+1, 0, &term->source);
-        if (term->op == XR_LIR_RET)
-            for (uint32_t id = 1; id <= f->value_count; ++id)
-                if (lir_frame_cell_owner(f, id) && !released[id - 1])
+        for (uint32_t id = 1; id <= f->value_count; ++id)
+            if (lir_frame_cell_owner(f, id) && !(released[id - 1] & 1)) {
+                bool local = (released[id - 1] & 2) != 0;
+                if ((local && f->values[id - 1].block == b + 1) ||
+                    (!local && term->op == XR_LIR_RET))
                     return xr_lir_internal_error(d, "frame Managed Cell requires release on every normal return",
                         function, b+1, 0, &term->source);
+            }
     }
     return XR_LIR_OK;
 }
