@@ -1,0 +1,56 @@
+fn append(values:ref Array<i64>,item:i64){values.push(item)}
+fn append_text(values:ref Array<string>,item:string){values.push(item)}
+fn branch(outer:bool,inner:bool)->i64 {
+    if(outer){
+        var xs=[1]
+        append(ref xs,7)
+        if(inner){append(ref xs,3);return xs[2]}
+        return 9
+    }
+    return 0
+}
+fn rounds(n:i64)->i64 {
+    var i=0
+    var sum=0
+    while(i<n){
+        var xs=[i]
+        append(ref xs,10)
+        if(i%2==0){i=i+1;continue}
+        if(i==3){break}
+        sum=sum+xs[1]
+        i=i+1
+    }
+    return sum
+}
+fn carry(n:i64)->i64 {
+    var xs=[0]
+    var i=0
+    while(i<n){append(ref xs,i);i=i+1}
+    return len(xs)*10+xs[n]
+}
+fn text_rounds(n:i64)->i64 {
+    var total=0
+    var i=0
+    while(i<n){
+        var xs=["one"]
+        append_text(ref xs,"two")
+        if(i%2==0){total=total+len(xs);i=i+1;continue}
+        if(i==3){return total+len(xs[1])}
+        total=total+len(xs[0])
+        i=i+1
+    }
+    return total
+}
+fn text_carry(n:i64)->i64 {
+    var xs=["first"]
+    var i=0
+    while(i<n){append_text(ref xs,"x");i=i+1}
+    return len(xs)*10+len(xs[0])
+}
+print(branch(true,true))
+print(branch(true,false))
+print(branch(false,false))
+print(rounds(6))
+print(carry(4))
+print(text_rounds(5))
+print(text_carry(4))

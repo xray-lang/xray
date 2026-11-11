@@ -42,8 +42,10 @@ typedef struct LowerEdgeOwners {
     uint32_t count;
 } LowerEdgeOwners;
 
-static bool lower_selected_edge(LowerFunction *f, const LowerEdgeOwners *owners, XrLirEdge *edge) {
+static bool lower_selected_edge(LowerFunction *f, uint32_t from, uint32_t ordinal,
+    const LowerEdgeOwners *owners, XrLirInstruction *term) {
     Lower *c = f->owner;
+    XrLirEdge *edge = &term->edges[ordinal];
     uint32_t count = owners->count;
     XrLirType *types = lower_alloc(c, count, sizeof(*types));
     XrLirValue *parameters = lower_alloc(c, count, sizeof(*parameters));
@@ -64,6 +66,7 @@ static bool lower_selected_edge(LowerFunction *f, const LowerEdgeOwners *owners,
             good = lower_build(c, xr_lir_set_array_shape(c->module, parameters[i], &shape));
         }
     }
+    if (good) good = lower_array_cells_release(f, from, term, ordinal, block);
     for (uint32_t a = 0; a < edge->argument_count && good; ++a) {
         arguments[a] = edge->arguments[a];
         uint32_t position = owners->positions[arguments[a].id - 1];
@@ -97,11 +100,13 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
     if (term->edge_count < 2)
         return !term->edge_count || lower_edge_owners(f, f->blocks[b], &term->edges[0]);
     Lower *c = f->owner;
-    bool managed = false;
+    bool managed = false, cells = false;
+    for (uint32_t e = 0; e < term->edge_count; ++e)
+        cells |= lower_array_cells_edge(f, b, e);
     for (uint32_t e = 0; e < term->edge_count; ++e)
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a)
             managed |= lower_managed_type(lower_value_type(f, term->edges[e].arguments[a]));
-    if (!managed) return true;
+    if (!managed && !cells) return true;
     size_t capacity = (size_t)term->edges[0].argument_count + term->edges[1].argument_count;
     if (capacity < term->edges[0].argument_count) {
         lower_error(c, XR_LIR_OUT_OF_MEMORY, "selected edge owner count overflow"); return false;
@@ -124,8 +129,9 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
         }
     bool good = true;
     LowerEdgeOwners map = {owners, positions, count};
-    for (uint32_t e = 0; e < term->edge_count && managed && good; ++e)
-        good = lower_selected_edge(f, &map, &term->edges[e]);
+    for (uint32_t e = 0; e < term->edge_count && good; ++e)
+        if (managed || lower_array_cells_edge(f, b, e))
+            good = lower_selected_edge(f, b, e, &map, term);
     xr_free(positions); xr_free(owners);
     return good;
 }

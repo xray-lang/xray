@@ -47,7 +47,7 @@ def main() -> None:
 
     for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
                  "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
-                 "ref_borrow", "panic_bounds", "panic_unpublished"):
+                 "ref_borrow", "ref_cfg", "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)

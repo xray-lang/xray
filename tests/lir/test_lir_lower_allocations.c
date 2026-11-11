@@ -174,7 +174,22 @@ static void array_flow_failures(void) {
     printf("Array live-out state: %zu allocation failures reclaim selected edges and shapes\n", total);
 }
 
+static void array_cell_cfg_failures(void) {
+    SourceFixture fixture = source_fixture("fn append(xs:ref Array<i64>,n:i64){xs.push(n)}\n"
+        "fn test(n:i64)->i64{var i=0\nvar sum=0\nwhile(i<n){var xs=[i]\nappend(ref xs,7)\n"
+        "if(i%2==0){i=i+1\ncontinue}\nsum=sum+xs[1]\ni=i+1}\nreturn sum}\nprint(test(5))\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 50);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Physical Array Cell CFG: %zu allocation failures reclaim selected-edge owners\n", total);
+}
+
 int main(void) {
+    array_cell_cfg_failures();
     array_flow_failures();
     array_lower_failures();
     storage_source_failures();

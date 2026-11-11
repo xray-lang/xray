@@ -42,6 +42,12 @@ typedef struct Lower {
     bool prints, string_prints, arrays;
     uint8_t clock_kinds;
 } Lower;
+typedef struct LowerArrayCells {
+    XrLirValue *owners;
+    uint32_t *indices;
+    uint8_t *use, *define, *live;
+    uint32_t count;
+} LowerArrayCells;
 typedef struct LowerFunction {
     Lower *owner;
     const XrXirFunction *source;
@@ -56,6 +62,7 @@ typedef struct LowerFunction {
     uint8_t *reachable, *use, *define, *live;
     uint8_t *literal_uses;
     uint32_t value_count, cell_count, ordered, frame_cell_count, retired_value_count;
+    LowerArrayCells array_cells;
 } LowerFunction;
 
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
@@ -902,6 +909,11 @@ static bool lower_declare(Lower *c, uint32_t index) {
 }
 
 static void lower_function_free(LowerFunction *f) {
+    xr_free(f->array_cells.owners);
+    xr_free(f->array_cells.indices);
+    xr_free(f->array_cells.use);
+    xr_free(f->array_cells.define);
+    xr_free(f->array_cells.live);
     xr_free(f->literal_uses);
     xr_free(f->frame_cells);
     xr_free(f->promoted_arrays);
@@ -1576,6 +1588,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
         }
     return true;
 }
+#include "xlir_lower_array_cells.inc.c"
 #include "xlir_lower_array_edges.inc.c"
 static bool lower_managed_copy(LowerFunction *f, uint32_t block, XrLirValue input, XrLirValue *output) {
     XrLirType type = f->owner->module->functions[f->function.id - 1].values[input.id - 1].type;
@@ -1614,29 +1627,20 @@ static bool lower_managed_release_block(LowerFunction *f, uint32_t block, const 
         if (result) {
             XrLirValue value = {f->owner->module, f->function.id, result};
             if (!lower_managed_release(f, block, value, term)) return false;
-            if (function->values[result - 1].type == XR_LIR_ARRAY_CELL &&
-                block_id + 1 != function->entry && !f->cell_retired[result - 1]) {
-                XrLirInstruction drop = {.op = XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
-                    .operands = &value, .operand_count = 1, .source = lower_source(f->owner)};
-                if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, f->blocks[block], &drop)))
-                    return false;
-                f->cell_retired[result - 1] = 1;
-            }
         }
     }
     if (term->op == XR_LIR_RET)
         for (uint32_t i = 0; i < f->frame_cell_count; ++i) {
-            XrLirType type = function->values[f->frame_cells[i].id - 1].type;
-            XrLirInstruction drop = {.op=type == XR_LIR_ARRAY_CELL ? XR_LIR_ARRAY_CELL_DROP : XR_LIR_STRING_CELL_DROP, .type=XR_LIR_UNIT,
+            XrLirInstruction drop = {.op=XR_LIR_STRING_CELL_DROP, .type=XR_LIR_UNIT,
                 .operands=&f->frame_cells[i], .operand_count=1, .source=lower_source(f->owner)};
             if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, f->blocks[block], &drop)))
                 return false;
         }
-    return true;
+    return lower_array_cells_release(f, block, term, UINT32_MAX, f->blocks[block]);
 }
 
-/* Physical Cell contents survive block edges, unlike temporary managed owners.
- * Inventory actual entry constructors; incoming hidden parameters remain borrows. */
+/* Explicit temporary drops remain local. String Cells keep their frame rule;
+ * physical Array Cells retire according to actual successor demand. */
 static bool lower_frame_cells(LowerFunction *f) {
     XrLirFunctionData *function = &f->owner->module->functions[f->function.id - 1];
     const XrLirBlockData *entry = &function->blocks[function->entry - 1];
@@ -1659,11 +1663,10 @@ static bool lower_frame_cells(LowerFunction *f) {
     if (entry->instruction_count && !f->frame_cells) return false;
     for (uint32_t i = 0; i < entry->instruction_count; ++i) {
         const XrLirInstructionView *v = &entry->instructions[i].view;
-        if (v->op == XR_LIR_CELL_NEW &&
-            (v->type == XR_LIR_STRING_CELL || v->type == XR_LIR_ARRAY_CELL) && !released[v->result - 1])
+        if (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL)
             f->frame_cells[f->frame_cell_count++] = (XrLirValue){f->owner->module, f->function.id, v->result};
     }
-    return true;
+    return lower_array_cells_inventory(f);
 }
 static bool lower_terminator(LowerFunction *f, uint32_t b) {
     Lower *c = f->owner;
