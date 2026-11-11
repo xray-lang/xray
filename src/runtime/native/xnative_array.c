@@ -377,6 +377,7 @@ XRAY_API void xrt_array_string_push(XrtArray **array, XrtString *value, uint32_t
     array_mutate(array, 0, (XrXirValue){XR_XIR_STRING, 0, (int64_t)(intptr_t)value}, true, source_id);
 }
 #include "xnative_array_unsigned.inc.c"
+#include "xnative_array_ref.inc.c"
 XR_FUNC void xrt_array_root_drain(XrtValueRoot *root) {
     for (uint32_t i = 0; i < root->array_capacity; ++i) {
         XrtArrayOwner owner = root->arrays[i];

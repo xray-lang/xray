@@ -23,7 +23,7 @@ static void c_array_admit_shapes(LirC *c) {
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         XrLirValue value = {c->request->module, c->function.id, id};
         XrLirType type = c_value_type(c, id);
-        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL) {
+        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
             if (xr_lir_array_shape_view(c->request->module, value, &shape) != XR_LIR_OK ||
                 !c_array_element_supported(shape.element))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "Array value has no native element implementation");
@@ -38,6 +38,7 @@ static void c_array_admit_shapes(LirC *c) {
 static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
     XrLirArrayIntrinsic shape = {0};
     return c_array_intrinsic(c, v, &shape) || v->op == XR_LIR_ARRAY_RETAIN ||
+        v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_ARRAY_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_ARRAY_CELL);
@@ -110,7 +111,26 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
 static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     XrLirArrayIntrinsic shape = {0};
     if (c_array_intrinsic(c, v, &shape)) { c_array_call(c, v, &shape, source); return; }
-    if (v->op == XR_LIR_CELL_NEW) {
+    if (v->op == XR_LIR_ARRAY_BORROW) {
+        XrLirArrayShape reference = {0};
+        XrLirValue result = {c->request->module, c->function.id, v->result};
+        xr_lir_array_shape_view(c->request->module, result, &reference);
+        const char *kind = reference.element == XR_LIR_I64 ? "XRT_MODULE_ARRAY_I64" :
+            reference.element == XR_LIR_STRING ? "XRT_MODULE_ARRAY_STRING" :
+            reference.element == XR_LIR_U8 ? "XRT_MODULE_ARRAY_U8" : "XRT_MODULE_ARRAY_U64";
+        c_format(c, "    v%" PRIu32 " = xrt_array_ref_%s(", v->result,
+            c_value_type(c, v->operands[0]) == XR_LIR_STATE_REF ? "state" : "local");
+        c_value(c, v->operands[0]);
+        c_format(c, ", %s, UINT32_C(%" PRIu32 "));\n", kind, source);
+    } else if (v->op == XR_LIR_ARRAY_REF_READ) {
+        c_format(c, "    v%" PRIu32 " = xrt_array_ref_read(", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+    } else if (v->op == XR_LIR_ARRAY_REF_WRITE) {
+        c_text(c, "    xrt_array_ref_write("); c_value(c, v->operands[0]);
+        c_text(c, ", "); c_value(c, v->operands[1]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+    } else if (v->op == XR_LIR_CELL_NEW) {
         c_format(c, "    XrtArray *xrl_cell%" PRIu32 " = xrt_array_retain(", v->result);
         c_value(c, v->operands[0]);
         c_format(c, ", UINT32_C(%" PRIu32 "));\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n",

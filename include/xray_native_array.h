@@ -9,10 +9,22 @@
 #ifndef XRAY_NATIVE_ARRAY_H
 #define XRAY_NATIVE_ARRAY_H
 #include "xray_native_runtime.h"
+#include "xray_native_state.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct XrtArray XrtArray;
+
+/* A synchronous borrow names the live binding. It owns neither its frame nor
+ * its module state and cannot be retained, stored or returned by guest code. */
+typedef struct XrtArrayRef {
+    XrtArray **cell;
+    XrtModuleAccess state;
+} XrtArrayRef;
+XRAY_API XrtArrayRef xrt_array_ref_local(XrtArray **, XrtModuleTypeKind, uint32_t source_id);
+XRAY_API XrtArrayRef xrt_array_ref_state(XrtModuleRef *, XrtModuleTypeKind, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_ref_read(XrtArrayRef, uint32_t source_id);
+XRAY_API void xrt_array_ref_write(XrtArrayRef, const XrtArray *, uint32_t source_id);
 
 XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, uint32_t source_id);

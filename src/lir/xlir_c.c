@@ -123,7 +123,7 @@ static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
         NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **",
-        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **"};
+        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **", "XrtArrayRef"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -164,7 +164,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
     c->f64 |= type == XR_LIR_F64;
     c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
-    c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL;
+    c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
     c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays;
     return c->status == XR_LIR_C_OK;
 }
@@ -274,6 +274,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
         case XR_LIR_STRING_LEN:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
+        case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
             break;
         case XR_LIR_CALL_INTRINSIC: {
             XrLirArrayIntrinsic shape = {0};

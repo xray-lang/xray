@@ -79,8 +79,9 @@ static void array_reference_owners(void) {
         XrLirCOutput output = {0};
         XrLirCRequest request = {.module=copy, .entry={copy, 1}, .resources=resources,
             .translation_unit="array-ref.c"};
-        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED);
-        CHECK(!output.bytes && !output.length);
+        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
+        CHECK(output.bytes && output.length);
+        xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         XrRbcProgram *program = NULL;
         CHECK(xr_rbc_compile(copy, (XrLirFunction){copy, 1}, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED);
