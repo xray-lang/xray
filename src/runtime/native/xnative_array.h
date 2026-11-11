@@ -19,7 +19,7 @@ XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **, 
 XR_FUNC XrXirType xrt_array_type(XrtArrayElement element);
 XR_FUNC XrXirValueStatus xrt_array_owned_copy(const XrtArray *, const XrXirTypeArena *,
     XrtArrayElement, XrtArray **empty);
-XR_FUNC void xrt_array_owned_drop(XrtArray **);
+XR_FUNC XrtArray *xrt_array_root_take(XrtArray *);
 XR_FUNC void xrt_array_root_drain(XrtValueRoot *);
 XR_FUNC XrXirValueStatus xrt_value_root_share_types(const XrXirTypeArena *);
 #endif // XNATIVE_ARRAY_H

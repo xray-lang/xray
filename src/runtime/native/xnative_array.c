@@ -191,10 +191,18 @@ XR_FUNC XrXirValueStatus xrt_array_owned_copy(const XrtArray *array, const XrXir
     if (status == XR_XIR_VALUE_OK) *output = (XrtArray *)(intptr_t)copy.payload;
     return status;
 }
-XR_FUNC void xrt_array_owned_drop(XrtArray **array) {
+XRAY_API void xrt_array_owned_drop(XrtArray **array) {
     if (!array || !*array) return;
     XrXirValue value = array_value(*array);
     *array = NULL; xr_xir_value_drop(&value);
+}
+XR_FUNC XrtArray *xrt_array_root_take(XrtArray *array) {
+    XrtValueRoot *root = xrt_value_root_current(0);
+    XrtArrayOwner *owner = array_find(root, (int64_t)(intptr_t)array);
+    XR_CHECK(owner && owner->count, "Array result transfer requires an authenticated current guest owner");
+    --root->array_held;
+    if (!--owner->count) array_remove(root, owner);
+    return array;
 }
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *array, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);

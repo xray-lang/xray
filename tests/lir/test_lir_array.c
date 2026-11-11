@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
+#include "lir_array_c_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -76,7 +77,7 @@ static void array_receiving_owners(XrLirType element) {
 }
 
 static void array_corruptions(void) {
-    for (uint32_t scenario = 0; scenario < 11; ++scenario) {
+    for (uint32_t scenario = 0; scenario < 13; ++scenario) {
         XrLirModule *m = NULL;
         OK(array_fixture_create(XR_LIR_I64, &m));
         XrLirFunctionData *root = &m->functions[0];
@@ -91,9 +92,39 @@ static void array_corruptions(void) {
         if (scenario == 8) root->blocks[0].instructions[2].view.op = XR_LIR_CONST;
         if (scenario == 9) root->blocks[0].instructions[6].view.op = XR_LIR_ARRAY_CELL_DROP;
         if (scenario == 10) ((XrLirType *)m->array_intrinsics[2].parameter_elements)[0] = XR_LIR_STRING;
+        if (scenario == 11) m->array_intrinsics[0].operation = XR_LIR_ARRAY_OP_GET;
+        if (scenario == 12) m->array_operations[0][0] = 99;
         CHECK(xr_lir_verify(m, NULL) == XR_LIR_VERIFY_ERROR);
         xr_lir_module_destroy(m);
     }
+}
+
+static void array_catalog(void) {
+    XrLirType scalar = XR_LIR_I64;
+    XrLirIntrinsic extra = {1, &scalar, 1, scalar, true};
+    XrLirRegistry registry = {&extra, 1};
+    XrLirModule *m = NULL;
+    OK(xr_lir_array_module_create(&registry, &m));
+    for (uint32_t family = 0; family < 2; ++family) {
+        XrLirType element = family ? XR_LIR_STRING : XR_LIR_I64;
+        for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
+            uint32_t id = 0;
+            OK(xr_lir_array_operation(m, element, (XrLirArrayOperation)op, &id));
+            CHECK(id && id != extra.id);
+            CHECK(id == m->array_operations[family][op - 1]);
+        }
+    }
+    OK(xr_lir_module_finish(m, NULL));
+    XrLirModule *copy = NULL;
+    OK(xr_lir_rebuild(m, &copy));
+    xr_lir_module_destroy(m);
+    uint32_t id = 99;
+    OK(xr_lir_array_operation(copy, XR_LIR_STRING, XR_LIR_ARRAY_OP_NEW, &id));
+    XrLirArrayIntrinsic shape;
+    OK(xr_lir_array_intrinsic_view(copy, id, &shape));
+    CHECK(shape.variadic && shape.operation == XR_LIR_ARRAY_OP_NEW && shape.result_element == XR_LIR_STRING);
+    CHECK(xr_lir_array_operation(copy, XR_LIR_F64, XR_LIR_ARRAY_OP_NEW, &id) == XR_LIR_INVALID_ARGUMENT && !id);
+    xr_lir_module_destroy(copy);
 }
 
 static void array_missing_release(void) {
@@ -134,7 +165,7 @@ static void array_shape_rejections(void) {
     XrLirRegistry registry = {&entry, 1};
     OK(xr_lir_module_create(&registry, &m));
     XrLirType no_shape = XR_LIR_TYPE_INVALID;
-    XrLirArrayIntrinsic invalid = {17, &no_shape, 1, XR_LIR_TYPE_INVALID, false};
+    XrLirArrayIntrinsic invalid = {17, &no_shape, 1, XR_LIR_TYPE_INVALID, false, XR_LIR_ARRAY_OP_LEN};
     CHECK(xr_lir_set_array_intrinsic(m, &invalid) == XR_LIR_INVALID_ARGUMENT);
     xr_lir_module_destroy(m);
     m = NULL;
@@ -154,8 +185,9 @@ static void array_backend_frontier(const XrLirModule *m, XrLirFunction entry) {
     XrLirCRequest request = {.module=m, .entry=entry, .resources=resources,
         .translation_unit="array-frontier.c"};
     XrLirCOutput output = {0};
-    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED);
-    CHECK(!output.bytes && !output.length);
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
+    CHECK(output.bytes && output.length && strstr(output.bytes, "xrt_array_i64_new(NULL, UINT32_C(0)"));
+    xr_lir_c_output_free(&output);
     xr_compile_resources_release(resources);
 }
 
@@ -285,7 +317,34 @@ static void array_state_shapes(void) {
     xr_lir_module_destroy(inlined);
 }
 
-int main(void) {
+static void array_c_output(const char *name, const char *path) {
+    XrLirModule *m = NULL;
+    XrLirFunction root = {0};
+    array_c_fixture(name, &m, &root);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=m, .entry=root, .resources=resources, .translation_unit=path};
+    XrLirCOutput output = {0};
+    XrLirCDiagnostic diagnostic = {0};
+    XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
+    if (status != XR_LIR_C_OK) fprintf(stderr, "C emission status=%u %s\n", (unsigned)status, diagnostic.message);
+    CHECK(status == XR_LIR_C_OK && output.bytes);
+    if (!strcmp(name, "state-layout")) {
+        CHECK(strstr(output.bytes, "XRT_MODULE_ARRAY_I64") && strstr(output.bytes, "XRT_MODULE_ARRAY_STRING"));
+        XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    }
+    FILE *file = fopen(path, "wb");
+    CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
+    xr_lir_c_output_free(&output);
+    xr_lir_module_destroy(m); xr_compile_resources_release(resources);
+}
+
+int main(int argc, char **argv) {
+    if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
+    CHECK(argc == 1);
+    array_catalog();
     array_receiving_owners(XR_LIR_I64);
     array_receiving_owners(XR_LIR_STRING);
     array_corruptions();

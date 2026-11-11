@@ -20,6 +20,8 @@ XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, 
  * Selected SSA edges and returns transfer their existing owner unchanged. */
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *, uint32_t source_id);
 XRAY_API void xrt_array_drop(XrtArray **);
+/* An independently held result can retire after its execution root ends. */
+XRAY_API void xrt_array_owned_drop(XrtArray **);
 XRAY_API void xrt_array_assign(XrtArray **destination, const XrtArray *, uint32_t source_id);
 XRAY_API int64_t xrt_array_length(const XrtArray *, uint32_t source_id);
 XRAY_API int64_t xrt_array_i64_get(const XrtArray *, int64_t index, uint32_t source_id);

@@ -93,6 +93,12 @@ add_test(NAME test_lir_c_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_D
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --work "${CMAKE_CURRENT_BINARY_DIR}/native" ${lir_c_native_options})
 set_tests_properties(test_lir_c_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)
+add_test(NAME test_lir_array_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_array_native.py"
+    --driver $<TARGET_FILE:test_lir_array> --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work "${CMAKE_CURRENT_BINARY_DIR}/array-native" ${lir_c_native_options})
+set_tests_properties(test_lir_array_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 120)
 add_test(NAME test_lir_c_runtime COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_runtime.py"
     --driver $<TARGET_FILE:lir_c_run> --fixture-driver $<TARGET_FILE:test_lir_c>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

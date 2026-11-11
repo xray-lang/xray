@@ -14,24 +14,34 @@ static bool c_state_point(const XrLirInstructionView *v) {
     return v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE;
 }
 
-static uint32_t c_state_payload(LirC *c, XrLirType type) {
+static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
     switch (type) {
     case XR_LIR_UNIT: return 0;
     case XR_LIR_I1: return 1;
     case XR_LIR_I64: return 2;
     case XR_LIR_F64: return 3;
     case XR_LIR_STRING: return 4;
+    case XR_LIR_ARRAY:
+        if (element == XR_LIR_I64) return 5;
+        if (element == XR_LIR_STRING) return 6;
+        break;
     default:
         c_error(c, XR_LIR_C_UNSUPPORTED, "module storage payload has no native implementation");
         return 0;
     }
+    c_error(c, XR_LIR_C_UNSUPPORTED, "module Array has no closed native element shape");
+    return 0;
 }
 
 static void c_state_layout(LirC *c) {
     const XrLirStateLayout *layout = &c->state_layout;
+    bool arrays = false;
+    for (uint32_t s = 0; s < layout->slot_count; ++s) arrays |= layout->slots[s].payload == XR_LIR_ARRAY;
     c_text(c, "static const XrtModuleTypeSpec xrl_state_types[] = {\n"
         "    {XRT_MODULE_UNIT}, {XRT_MODULE_BOOL}, {XRT_MODULE_I64},\n"
-        "    {XRT_MODULE_F64}, {XRT_MODULE_STRING}\n};\n");
+        "    {XRT_MODULE_F64}, {XRT_MODULE_STRING}");
+    if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING}");
+    c_text(c, "\n};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)
         c_format(c, "    {UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")},\n",
@@ -44,7 +54,7 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "static const XrtModuleSlotSpec xrl_state_slots[] = {\n");
     for (uint32_t i = 0; i < layout->slot_count && c_request_poll(c); ++i) {
         XrLirStateSlot slot = layout->slots[i];
-        uint32_t type = c_state_payload(c, slot.payload);
+        uint32_t type = c_state_payload(c, slot.payload, slot.array_element);
         c_format(c, "    {UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), %s,\n",
             slot.module, type, slot.mutable ? "XRT_MODULE_SLOT_MUTABLE" : "0");
         c_format(c, "     UINT64_C(%" PRIu64 "), UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")},\n",
@@ -52,8 +62,8 @@ static void c_state_layout(LirC *c) {
     }
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
-    c_format(c, "    xrl_state_types, 5, %s, UINT32_C(%" PRIu32 "),\n",
-        layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
+    c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
+        arrays ? 7u : 5u, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);
@@ -85,7 +95,7 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
         c_error(c, XR_LIR_C_INVALID_LIR, "module reference lost its owned shape");
         return;
     }
-    (void)c_state_payload(c, shape.payload);
+    (void)c_state_payload(c, shape.payload, shape.array_element);
     if (v->op == XR_LIR_STATE_WRITE && !shape.mutable) {
         c_error(c, XR_LIR_C_INVALID_LIR, "module reference is immutable");
         return;
@@ -94,11 +104,13 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
         c_format(c, "    v%" PRIu32 " = ", v->result);
-        if (shape.payload == XR_LIR_STRING) c_text(c, "xrt_string_retain(");
+        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
+            c_text(c, shape.payload == XR_LIR_ARRAY ? "xrt_array_retain(" : "xrt_string_retain(");
         c_format(c, "*(%s const *)xrl_access%" PRIu32 ".payload", c_type(shape.payload), reference);
-        if (shape.payload == XR_LIR_STRING) c_format(c, ", UINT32_C(%" PRIu32 "))", source);
+        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
+            c_format(c, ", UINT32_C(%" PRIu32 "))", source);
         c_text(c, ";\n");
-    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_UNIT) {
+    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_UNIT) {
         c_text(c, "    xrt_module_require(xrt_module_replace(");
         c_value(c, reference);
         c_text(c, ", ");
@@ -118,6 +130,14 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
         c_state_access(c, v, source);
         return;
     }
+    if (v->op == XR_LIR_STATE_REFERENCE) {
+        c_text(c, "    xrt_module_require(xrt_module_cache(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu64 "), &xrl_access%" PRIu32 ")", v->bits, v->result);
+        c_state_require_end(c, source);
+        c_format(c, "    v%" PRIu32 " = xrl_access%" PRIu32 ".reference;\n", v->result, v->result);
+        return;
+    }
     const char *operation = NULL;
     switch (v->op) {
     case XR_LIR_MODULE_BEGIN: operation = "xrt_module_begin"; break;
@@ -125,7 +145,6 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
     case XR_LIR_STATE_CONSTRUCT: operation = "xrt_module_construct"; break;
     case XR_LIR_STATE_PUBLISH: operation = "xrt_module_publish"; break;
     case XR_LIR_STATE_INITIALIZE: operation = "xrt_module_initialize"; break;
-    case XR_LIR_STATE_REFERENCE: operation = "xrt_module_reference"; break;
     default: c_error(c, XR_LIR_C_INVALID_LIR, "invalid module state operation"); return;
     }
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_REFERENCE)
@@ -150,11 +169,12 @@ static void c_state_root(LirC *c, XrLirType result) {
     const char *type = c_type(result);
     c_text(c, "static void xrl_invoke(void *context, XrtModuleState *state) {\n");
     if (result == XR_LIR_UNIT) c_text(c, "    (void)context;\n    ");
-    else if (result == XR_LIR_STRING) c_text(c, "    XrtString *owned = ");
+    else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY) c_format(c, "    %s owned = ", type);
     else c_format(c, "    *(%s *)context = ", type);
     c_function_name(c, c->request->entry.id);
     c_text(c, "(state);\n");
     if (result == XR_LIR_STRING) c_text(c, "    *(XrtString **)context = xrt_string_root_take(owned);\n");
+    if (result == XR_LIR_ARRAY) c_text(c, "    *(XrtArray **)context = xrt_array_root_take(owned);\n");
     c_format(c, "}\n\n%s xray_lir_entry(void) {\n", type);
     if (result != XR_LIR_UNIT) c_format(c, "    %s result = {0};\n", type);
     c_format(c, "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, %s, &xrl_state_spec);\n",
