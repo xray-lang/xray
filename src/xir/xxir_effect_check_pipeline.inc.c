@@ -524,6 +524,28 @@ XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext 
     return result;
 }
 
+static XrXirStatus effect_checked_task_transfers(const XrXirCompileContext *memory,
+    const XrXirModule *module, const EffectCheckedRoots *roots, XrCompileRequestControl *control,
+    XrXirDiagnostic *diagnostic) {
+    uint32_t progress=0;
+    for (uint32_t c=0;c<roots->calls;++c) {
+        XrXirStatus status=xir_receive_step(control,&progress);
+        if (status!=XR_XIR_OK) return status;
+        EffectCheckCall call=roots->call[c];
+        uint32_t caller=roots->node[call.output].function;
+        if (call.protocol!=8 || caller>=roots->templates) continue;
+        uint32_t callee=roots->function[roots->node[call.target].function].declaration;
+        status=xir_compile_task_transfer_verified(memory,module,callee);
+        if (status!=XR_XIR_OK) {
+            if (diagnostic) *diagnostic=(XrXirDiagnostic){status,caller,
+                roots->node[call.output].block,call.instruction,
+                status==XR_XIR_BAD_TYPE ? XR_XIR_DIAGNOSTIC_TASK_SENDABLE : XR_XIR_DIAGNOSTIC_NONE};
+            return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *memory,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output,
     XrXirDiagnostic *diagnostic) {
@@ -580,6 +602,8 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         status=refiner->admit(refiner->context,input.module,effects,&location);
         if (status!=XR_XIR_OK && diagnostic) *diagnostic=location;
     }
+    if (status == XR_XIR_OK)
+        status=effect_checked_task_transfers(memory,input.module,effects->checked_roots,input.control,diagnostic);
     if (status == XR_XIR_OK) status = effect_checked_project(memory, effects);
     if (status == XR_XIR_OK && refiner && refiner->update) {
         bool changed = false;

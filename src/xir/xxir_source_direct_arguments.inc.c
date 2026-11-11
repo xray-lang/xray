@@ -62,7 +62,8 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     bool ok = false;
     SourceSubstitution substitution = {types,count};
     SourceCallPlan plan = {.family=SOURCE_CALL_FUNCTION,.prefix=request->prefix,.substitution=substitution,.function_parameters=function.parameters,.requirement_parameters=NULL,
-        .result=function.result,.expected_result=request->expected_result,.values=values,.parameter_offset=offset,.value_offset=offset,.parameter_kinds=ctx->generics[index].parameter_kinds,.argument_contexts=NULL};
+        .result=function.result,.expected_result=request->expected_result,.values=values,.parameter_offset=offset,.value_offset=offset,.parameter_kinds=ctx->generics[index].parameter_kinds,.argument_contexts=NULL,
+        .fixed_arguments=request->fixed_generic_values};
     plan.declaration.function=index;
     if(identity->promises&XR_XIR_FUNCTION_REST) {
         plan.rest_count=function.parameter_count;plan.rest_array=UINT32_MAX;

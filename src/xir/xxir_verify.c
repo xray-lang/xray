@@ -233,7 +233,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     }
     XrXirType result = op->type;
     if (op->op == XR_XIR_GO || op->op==XR_XIR_SCOPED_GO) {
-        generic_status = task_go_shape(module, op, remaining);
+        generic_status = task_go_shape(module, op);
         if (generic_status != XR_XIR_OK) return generic_status;
         result = xr_xir_task_element(module->types, op->type);
         const XrXirTypeNode *task=xr_xir_type_node(module->types,op->type);

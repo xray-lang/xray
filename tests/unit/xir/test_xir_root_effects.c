@@ -736,6 +736,68 @@ static XrXirStatus unresolved_lifetime_case(void) {
     return status;
 }
 
+static XrXirStatus task_transfer_case(bool callable_element) {
+    XrXirType array=XR_XIR_CONSTRUCTED_TYPE_BASE+1,task=array+1;
+    XrXirTypeNode nodes[]={
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=callable_element?XR_XIR_CONSTRUCTED_TYPE_BASE:XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT,.result=XR_XIR_NEVER}
+    };
+    XrXirTypes types={.nodes=nodes,.count=3};
+    XrXirInstruction done={.op=XR_XIR_RETURN};
+    XrXirInstruction entry[]={{.op=XR_XIR_ARRAY_NEW,.type=array},
+        {.op=XR_XIR_GO,.type=task,.args={0,1},.immediate=1},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={2}}};
+    XrXirBlock blocks[]={{.count=1},{.count=1},{.count=4}};
+    uint32_t argument=0;
+    XrXirFunction functions[]={
+        {.name="init",.name_length=4,.instructions=&done,.instruction_count=1,
+            .blocks=blocks,.block_count=1,.error_type=XR_XIR_NEVER},
+        {.name="worker",.name_length=6,.parameters=&array,.parameter_count=1,
+            .instructions=&done,.instruction_count=1,.blocks=blocks+1,.block_count=1,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=4,
+            .blocks=blocks+2,.block_count=1,.operands=&argument,.operand_count=1,.error_type=XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=2};
+    XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,
+        .declarations=&declarations};
+    XrXirConstruction *construction=NULL;
+    XrXirEffects *effects=NULL;
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_module_construction(&effect_context,&module,&construction);
+    XirEffectInput input={&module,construction,NULL};
+    if (status==XR_XIR_OK) status=xir_compile_structure_verify_input(&effect_context,input,&diagnostic);
+    if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY)
+        fprintf(stderr,"Task prefix status %u function %u instruction %u reason %u\n",
+            status,diagnostic.function,diagnostic.instruction,diagnostic.reason);
+    CHECK(status==XR_XIR_OK || status==XR_XIR_OUT_OF_MEMORY);
+    if (status==XR_XIR_OK) status=xir_effects_infer_lifetimes_input(&effect_context,input,&effects,&diagnostic);
+    if (status==XR_XIR_BAD_TYPE) CHECK(callable_element && !effects && diagnostic.function==2 &&
+        diagnostic.instruction==1 && diagnostic.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE);
+    if (status==XR_XIR_OK) CHECK(!callable_element && effects);
+    xr_xir_compile_effects_free(effects);
+    xr_xir_compile_construction_free(construction);
+    return status;
+}
+
+static void task_transfer_ownership(void) {
+    EffectMark baseline=effect_mark();
+    CHECK(task_transfer_case(false)==XR_XIR_OK);
+    effect_mark_check(baseline);
+    attempts=0;
+    CHECK(task_transfer_case(true)==XR_XIR_BAD_TYPE);
+    size_t sites=attempts;
+    effect_mark_check(baseline);
+    for (size_t site=0;site<sites;++site) {
+        attempts=0;injected=false;fail_at=site;
+        CHECK(task_transfer_case(true)==XR_XIR_OUT_OF_MEMORY && injected);
+        fail_at=SIZE_MAX;effect_mark_check(baseline);
+    }
+    printf("Task transfer: raw definition bounds, no publication and %zu allocation failures PASS\n",sites);
+}
+
 static void unresolved_lifetime_ownership(void) {
     EffectMark baseline=effect_mark();
     attempts=0;
@@ -1080,6 +1142,7 @@ static void control_summary_kernel(void) {
     execution_origin_namespaces();
     restriction_owner_relocation();
     unresolved_lifetime_ownership();
+    task_transfer_ownership();
     c_callable_parameter_equations();
     point_request_failure();
     execution_instance_parameters();

@@ -992,6 +992,11 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_GROUP_INIT)
         return origin == (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_MODULE) ||
             cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
+    if (xr_xir_op_is_spawn(op->op)) {
+        cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
+        build->location.reason=XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE;
+        return false;
+    }
     /* Return, aggregate, capture, GO and unsupported retention fail closed. */
     return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
 }

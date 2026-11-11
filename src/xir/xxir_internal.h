@@ -196,6 +196,8 @@ XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *, XrXi
     const XrXirDiagnostic *);
 XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext *,
     const XrXirEffects *, uint32_t, XrXirEffect *);
+XR_FUNC XrXirStatus xir_compile_task_transfer_verified(const XrXirCompileContext *,
+    const XrXirModule *, uint32_t);
 
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);

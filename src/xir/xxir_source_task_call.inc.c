@@ -106,7 +106,7 @@ static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_
     SourceCallSyntax syntax;
     SourceCallPlan plan={.family=SOURCE_CALL_FUNCTION,.prefix=substitution,.substitution=substitution,
         .function_parameters=function.parameters,.result=function.result,.values=storage.values,
-        .parameter_offset=captures};
+        .parameter_offset=captures,.fixed_arguments=true};
     plan.declaration.function=*target;plan.declaration.callable=callee.type;plan.declaration.callee_value=callee.id;
     if (!source_hir_call_prepare(ctx,call,&plan,count)) return false;
     plan.value_offset=captures;

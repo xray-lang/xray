@@ -1,0 +1,4 @@
+{
+  "line": 2,
+  "message": "Task arguments and captures must satisfy Sendable"
+}

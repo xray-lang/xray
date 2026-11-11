@@ -86,6 +86,7 @@ typedef struct SourceCallPlan {
     XrHirBodySignature signature;
     uint32_t rest_count, rest_array;
     XrXirType rest_element;
+    bool fixed_arguments;
 } SourceCallPlan;
 /* Variadic READ recipes repeat one already instantiated caller-pool type. */
 static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
@@ -332,7 +333,7 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     arguments[a].value->expected=expected;
     SourceExpressionPlan *previous_argument = ctx->effect_argument;
     /* Function-value calls keep their declared callback boundary. */
-    bool callback = plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
+    bool callback = !plan->fixed_arguments && plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;

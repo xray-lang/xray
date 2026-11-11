@@ -404,8 +404,22 @@ static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, X
         location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
         "read requires storage initialized on every incoming path" :
         location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
-        "write may overwrite already initialized const storage" : message;
+        "write may overwrite already initialized const storage" :
+        location.reason == XR_XIR_DIAGNOSTIC_TASK_SENDABLE ?
+        "Task arguments and captures must satisfy Sendable" :
+        location.reason == XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE ?
+        "Cell captures cannot cross a Task boundary" : message;
     source_fail(ctx, site, status, cause);
+    bool task_transfer=location.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE ||
+        location.reason==XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE;
+    if (task_transfer && location.function<ctx->function_count &&
+        location.instruction<ctx->functions[location.function].instruction_count &&
+        ctx->bodies[location.function].debug_points) {
+        XrXirSourceRange range=ctx->bodies[location.function].debug_points[location.instruction].range;
+        if (range.line>0) {
+            ctx->diagnostic.module=range.module;ctx->diagnostic.line=range.line;ctx->diagnostic.column=range.column;
+        }
+    }
 }
 
 static XrXirStatus source_semantic_begin(void *context, const XrXirEffects *effects) {
