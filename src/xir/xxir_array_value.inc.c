@@ -433,6 +433,10 @@ XR_FUNC XrXirValueStatus xr_xir_array_i64_read_owned(const XrXirValue *value,
     int64_t index, int64_t *output) {
     if (!value || !value->payload || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirArray *array = (const XirArray *)object_pointer(value);
+#if XR_XIR_PARANOID
+    if (!xr_xir_value_valid(value) || array->object.kind != XR_XIR_TYPE_ARRAY ||
+        array->element != XR_XIR_I64 || array->stride != sizeof(int64_t)) return XR_XIR_VALUE_BAD_ARGUMENT;
+#endif
     XR_DCHECK(array->object.kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_I64 &&
         array->stride == sizeof(int64_t), "registered integer Array keeps its admitted compact shape");
     if (index < 0 || (uint64_t)index >= array->length) return XR_XIR_VALUE_BOUNDS;
@@ -444,6 +448,10 @@ XR_FUNC XrXirValueStatus xr_xir_array_i64_push_owned(XrXirValue *value,
     int64_t element, XrXirDomain *domain) {
     if (!value || !value->payload || !xr_xir_domain_current(domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirArray *array = (XirArray *)object_pointer(value);
+#if XR_XIR_PARANOID
+    if (!xr_xir_value_valid(value) || array->object.kind != XR_XIR_TYPE_ARRAY ||
+        array->element != XR_XIR_I64 || array->stride != sizeof(int64_t)) return XR_XIR_VALUE_BAD_ARGUMENT;
+#endif
     XR_DCHECK(array->object.kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_I64 &&
         array->stride == sizeof(int64_t), "registered integer Array keeps its admitted compact shape");
     /* Root domains have no work budget. Every other owner keeps ordinary
