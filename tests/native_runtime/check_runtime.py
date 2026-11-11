@@ -31,6 +31,7 @@ def header_clients(build, logs, libraries):
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
     shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
+    shutil.copyfile(source / 'include/xray_native_array.h', prefix / 'include/xray_native_array.h')
     shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
     for library in libraries:
         shutil.copyfile(library, prefix / 'lib' / library.name)
@@ -49,6 +50,7 @@ def header_clients(build, logs, libraries):
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-pthread']
     text = ('#include "xray_native_runtime.h"\n'
+            '#include "xray_native_array.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'

@@ -266,8 +266,19 @@ def main() -> None:
     (runtime / "include").mkdir(parents=True)
     for library in args.runtime_library:
         shutil.copy2(library, runtime / library.name)
-    for header in ("xray_native_runtime.h", "xray_export.h"):
+    for header in ("xray_native_runtime.h", "xray_native_state.h", "xray_native_array.h",
+                   "xray_export.h"):
         shutil.copy2(root / "include" / header, runtime / "include" / header)
+    array_header = runtime / "include/xray_native_array.h"
+    hidden_header = array_header.with_suffix(".hidden")
+    array_header.rename(hidden_header)
+    try:
+        absent = run("relocated-missing-array-header",
+                     [relocated, "build", fixtures / "hello.xr", "-o", work / "absent-array.exe"], 1)
+        assert b"native runtime inputs are unavailable" in absent.stderr
+        assert not (work / "absent-array.exe").exists()
+    finally:
+        hidden_header.rename(array_header)
     executable = work / ("relocated.exe" if os.name == "nt" else "relocated")
     run("relocated-build", [relocated, "build", fixtures / "hello.xr", "-o", executable], 0)
     native = run("relocated-run", [executable], 0)
