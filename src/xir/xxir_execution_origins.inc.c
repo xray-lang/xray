@@ -13,6 +13,8 @@ static void execution_origins_clear(EffectCheckOrigins *origins) {
     *origins = (EffectCheckOrigins){0};
 }
 
+#include "xxir_execution_results.inc.c"
+
 /* One receiving index serves all call queries in a linking round. Neither a
  * query nor a graph walk scans complete per-function flow arrays. */
 static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
@@ -38,7 +40,10 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
         if (view->inputs[i].bank == XIR_STORAGE_CONTENTS && ++edges > UINT32_MAX) {
             status = XR_XIR_OVERFLOW; goto done;
         }
-    edges += view->unknown_count;
+    uint32_t results = 0;
+    for (uint32_t c = 0; c < roots->calls; ++c)
+        if (execution_result_call(roots,roots->call[c])) ++results;
+    edges += (uint64_t)view->unknown_count + results;
     if (edges > UINT32_MAX) {status = XR_XIR_OVERFLOW; goto done;}
     if (nodes > SIZE_MAX / sizeof(*next.heads) || edges > SIZE_MAX / sizeof(*next.edges)) {
         status = XR_XIR_OVERFLOW; goto done;
@@ -56,7 +61,7 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
                 status = XR_XIR_BAD_STRUCTURE; goto done;
             }
             uint32_t target = next.offsets[f] + flow.target;
-            next.edges[next.count] = (EffectCheckOriginEdge){f, flow.source, UINT32_MAX, next.heads[target], false};
+            next.edges[next.count] = (EffectCheckOriginEdge){f, flow.source, UINT32_MAX, next.heads[target], false, false};
             next.heads[target] = next.count++;
         }
     }
@@ -71,7 +76,7 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
         }
         uint32_t target = next.offsets[flow.target_function] + flow.target;
         next.edges[next.count] = (EffectCheckOriginEdge){flow.source_function, flow.source,
-            flow.application, next.heads[target], false};
+            flow.application, next.heads[target], false, false};
         next.heads[target] = next.count++;
     }
     for (uint32_t i = 0; i < view->input_count; ++i) {
@@ -85,7 +90,7 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
         }
         uint32_t target = next.offsets[input.function] + input.value;
         next.edges[next.count] = (EffectCheckOriginEdge){input.function, input.handle,
-            UINT32_MAX, next.heads[target], true};
+            UINT32_MAX, next.heads[target], true, false};
         next.heads[target] = next.count++;
     }
     for (uint32_t u = 0; u < view->unknown_count; ++u) {
@@ -99,9 +104,11 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
          * Later opaque writes have different version nodes and remain opaque. */
         if (unknown.application == UINT32_MAX && next.heads[target] != UINT32_MAX &&
             next.edges[next.heads[target]].parameter_contents) continue;
-        next.edges[next.count] = (EffectCheckOriginEdge){UINT32_MAX, 0, unknown.application, next.heads[target], false};
+        next.edges[next.count] = (EffectCheckOriginEdge){UINT32_MAX, 0, unknown.application, next.heads[target], false, false};
         next.heads[target] = next.count++;
     }
+    if (results) status = execution_result_edges(memory,roots,view,&next);
+    if (status != XR_XIR_OK) goto done;
     execution_origins_clear(&roots->storage_origins);
     roots->storage_origins = next;
     return XR_XIR_OK;
@@ -400,6 +407,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
             uint32_t index = origins->offsets[function.declaration] + origin.value;
             for (uint32_t e = origins->heads[index]; e != UINT32_MAX; e = origins->edges[e].next) {
                 EffectCheckOriginEdge edge = origins->edges[e];
+                if (edge.result && (query == EXECUTION_ORIGINS_EFFECTS || query == EXECUTION_ORIGINS_CALLABLE)) continue;
                 if (edge.parameter_contents) {
                     bool input = execution_origin_input(&walk,roots,&storage,origin,edge,&unresolved);
                     if (walk.status != XR_XIR_OK) break;
@@ -414,9 +422,11 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     if (walk.status != XR_XIR_OK) break;
                     if (edge.application >= storage.application_count) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
                     XirStorageApplication app = storage.applications[edge.application];
+                    if (edge.result && app.caller_instance != origin.function) continue;
                     if (app.function == function.declaration && app.environment != origin.environment) {
                         if (app.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT)
-                            unresolved |= XIR_EXECUTION_REMAINDER_STORAGE;
+                            unresolved |= edge.result && origin.storable ?
+                                XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT : XIR_EXECUTION_REMAINDER_STORAGE;
                         continue;
                     }
                 }
@@ -427,9 +437,9 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     continue;
                 }
                 uint32_t next_environment = edge.application == UINT32_MAX ? origin.environment : edge.application;
-                uint32_t source_function = edge.function == function.declaration ? origin.function : edge.function;
+                uint32_t source_function = !edge.result && edge.function == function.declaration ? origin.function : edge.function;
                 execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value,
-                    next_environment, false, origin.entry_context, origin.storable});
+                    next_environment, edge.result, origin.entry_context, origin.storable});
                 predecessor = true;
             }
         }

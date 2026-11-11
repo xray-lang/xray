@@ -95,7 +95,7 @@ typedef struct EffectCheckCleanupUse {
 
 typedef struct EffectCheckOriginEdge {
     uint32_t function, value, application, next;
-    bool parameter_contents;
+    bool parameter_contents, result;
 } EffectCheckOriginEdge;
 
 typedef struct EffectCheckOrigins {
