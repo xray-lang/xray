@@ -1243,7 +1243,9 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
         value->block != f->blocks[f->owner->block].id) {
         uint32_t cell = f->array_values ? f->array_values[id] : UINT32_MAX;
         if (value->type != XR_LIR_ARRAY || cell == UINT32_MAX || !f->current[cell].id)
-            return lower_unsupported(f->owner, "managed alias across blocks without owned parameters");
+            return lower_unsupported(f->owner, value->type == XR_LIR_STRING ?
+                "String alias across blocks without owned parameters" :
+                "managed alias across blocks without owned parameters");
         *out = f->current[cell];
     }
     XR_DCHECK(out->module == f->owner->module && out->function == f->function.id,
