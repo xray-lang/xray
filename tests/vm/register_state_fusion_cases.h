@@ -71,7 +71,7 @@ static void module_state_fused_retain_failure(void) {
                 "the same fused String READ succeeds with ordinary resources");
             xrt_string_owned_drop(&o.result.string);
         }
-        XR_CHECK(xrt_string_root_empty(&o.strings), "the active root drained on either exit");
+        XR_CHECK(xrt_value_root_empty(&o.strings), "the active root drained on either exit");
         const void *payload = NULL;
         XR_CHECK(xrt_module_borrow(initializer, &payload) == 0, "the module owner survives guest failure");
         memcpy(&string, payload, sizeof(string));

@@ -24,7 +24,7 @@ typedef struct XrtExecutionBinding {
     const struct XrtExecutionBinding *previous;
     jmp_buf *target;
     XrtExecutionFailure *failure;
-    XrtStringRoot *strings;
+    XrtValueRoot *strings;
 } XrtExecutionBinding;
 
 static XR_THREAD_LOCAL const XrtExecutionBinding *current_execution;
@@ -40,24 +40,24 @@ XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecutionFailure *failure);
 
-/* Mutable String state belongs to the caller of this setjmp function. */
+/* Mutable managed-value state belongs to the caller of this setjmp function. */
 static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure *failure,
-    XrtSynchronousRoot root, void *context, XrtStringRoot *strings) {
+    XrtSynchronousRoot root, void *context, XrtValueRoot *strings) {
     jmp_buf target;
     const XrtExecutionBinding binding = {.map = *map, .previous = current_execution,
         .target = &target, .failure = failure, .strings = strings};
     current_execution = &binding;
-    const XrtStringBinding previous_strings = xrt_string_root_bind((XrtStringBinding){strings, map->count});
+    const XrtValueBinding previous_strings = xrt_value_root_bind((XrtValueBinding){strings, map->count});
     if (setjmp(target) == 0) {
         root(context);
-        xrt_string_root_drain(strings);
+        xrt_value_root_drain(strings);
         current_execution = binding.previous;
-        (void)xrt_string_root_bind(previous_strings);
+        (void)xrt_value_root_bind(previous_strings);
         return XRT_EXECUTION_COMPLETED;
     }
-    xrt_string_root_drain(strings);
+    xrt_value_root_drain(strings);
     current_execution = binding.previous;
-    (void)xrt_string_root_bind(previous_strings);
+    (void)xrt_value_root_bind(previous_strings);
     return XRT_EXECUTION_FAILURE;
 }
 
@@ -80,7 +80,7 @@ static bool source_map_valid(const XrtSourceMap *map) {
 
 XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot root, void *context) {
     XR_CHECK(root && source_map_valid(map), "A standalone root requires a valid prepared source map");
-    XrtStringRoot strings = {0};
+    XrtValueRoot strings = {0};
     XrtExecutionFailure failure = {0};
     if (run_bound(map, &failure, root, context, &strings) == XRT_EXECUTION_FAILURE)
         native_failure_exit(map, &failure);
@@ -112,7 +112,7 @@ XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousSt
         failure.detail.value.status = (XrXirValueStatus)status;
         native_failure_exit(map, &failure);
     }
-    XrtStringRoot strings = {0};
+    XrtValueRoot strings = {0};
     XrtStateInvocation invocation = {root, context, state};
     XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &strings);
     xrt_module_state_drop(&state);
@@ -121,12 +121,12 @@ XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousSt
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context) {
-    XrtStringRoot strings = {0};
+    XrtValueRoot strings = {0};
     return xrt_run_embedded_owned(locations, failure, root, context, &strings);
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
-    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtStringRoot *strings) {
-    if (!locations || !failure || !root || !strings || !xrt_string_root_empty(strings))
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings) {
+    if (!locations || !failure || !root || !strings || !xrt_value_root_empty(strings))
         return XRT_EXECUTION_INVALID;
     XrtSourceMap map = {xrt_locations_get(locations, 1), xrt_locations_count(locations)};
     return run_bound(&map, failure, root, context, strings);

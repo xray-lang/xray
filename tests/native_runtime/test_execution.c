@@ -337,7 +337,7 @@ static void native_shared_strings(void) {
 
 typedef struct OwnedStringContext {
     XrtLocationOwner *locations;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtExecutionFailure failure;
     XrRbcOutcome *outcome;
     XrtString *borrowed_body;
@@ -440,7 +440,7 @@ static void owned_string_root(void *data) {
 }
 typedef struct NativeFrameCell {
     XrtLocationOwner *locations;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtExecutionFailure failure;
     XrtString *cell;
     unsigned mode,writes,normal_drops,after;
@@ -507,7 +507,7 @@ static void native_frame_cell_recovery(void) {
 
 typedef struct NativeF64Text {
     XrtLocationOwner *locations;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtExecutionFailure failure;
     unsigned after;
     bool output;
@@ -626,7 +626,7 @@ static void native_owned_strings(void) {
 
 typedef struct RootSharing {
     XrtLocationOwner *locations;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtExecutionFailure failure;
     XrtString *outer, *escaped, *literal;
     unsigned after;
@@ -676,7 +676,7 @@ static void native_root_sharing(void) {
         c->after = 0;
         CHECK(xrt_run_embedded_owned(c->locations, &c->failure, root_sharing_root, c, &c->strings) ==
             XRT_EXECUTION_COMPLETED);
-        CHECK(c->after == 1 && xrt_string_root_empty(&c->strings));
+        CHECK(c->after == 1 && xrt_value_root_empty(&c->strings));
         // The transferred literal outlives the root that pinned it.
         owned_string_equal(c->escaped, "lit", 3);
         xrt_string_owned_drop(&c->escaped);

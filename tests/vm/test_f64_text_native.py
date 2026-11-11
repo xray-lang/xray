@@ -210,7 +210,7 @@ def main():
             '#define xrt_string_drop(value) observed_drop(value)\n'
             f'#include "{generated.name}"\n'
             '#undef xrt_string_f64\n#undef xrt_string_drop\n'
-            'typedef struct Observation{XrtStringRoot strings;unsigned visits;} Observation;\n'
+            'typedef struct Observation{XrtValueRoot strings;unsigned visits;} Observation;\n'
             'static void observe(void *data){Observation *o=data;int64_t result=99;xrl_invoke(&result);\n'
             ' if(result || watched || o->strings.held || created!=o->visits+1 || dropped!=created)abort();\n'
             ' ++o->visits;}\n'

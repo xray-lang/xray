@@ -68,7 +68,7 @@ typedef enum XrtExecutionStatus {
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context);
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
-    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtStringRoot *strings);
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings);
 
 // I/O helpers have already restored their OS state before this transfer.
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,

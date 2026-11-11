@@ -95,7 +95,7 @@ def main():
             f' if({predicate})++cell_drops;\n xrt_string_drop(value);\n}}\n'
             '#define xrt_string_drop(value) observed_drop((value),__LINE__)\n'
             f'#include "{generated.name}"\n#undef xrt_string_drop\n'
-            'typedef struct Observation{XrtStringRoot strings;XrtModuleState *state;unsigned visits;} Observation;\n'
+            'typedef struct Observation{XrtValueRoot strings;XrtModuleState *state;unsigned visits;} Observation;\n'
             'static void observe(void *data){Observation *o=data;\n' + invoke + ' ++o->visits;}\n'
             'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n (void)&observed_drop;\n'
             ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'

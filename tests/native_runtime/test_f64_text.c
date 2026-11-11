@@ -39,7 +39,7 @@ static void text_equal(const XrtString *value, const char *expected) {
 }
 typedef struct NativeText {
     unsigned index;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtString *escaped;
     bool take;
 } NativeText;

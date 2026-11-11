@@ -365,7 +365,7 @@ static void spill_growth(bool panic) {
 }
 typedef struct FrameObservation {
     XrRbcExecution *execution;
-    XrtStringRoot strings;
+    XrtValueRoot strings;
     XrtExecutionFailure failure;
     XrRbcRegister result;
     XrRbcStatus status;
