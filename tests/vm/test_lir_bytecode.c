@@ -1435,7 +1435,10 @@ static void test_publication_admission(void) {
     CHECK(strstr(diagnostic.message,"runtime admission"));xr_lir_module_destroy(m);
 }
 
+#include "lir_bytecode_state_cases.h"
+
 int main(void) {
+    test_state_reference_transport();
     test_f64_constant_comparison();
     test_f64_constant_spills_and_phi();
     test_many_spilled_conditions();

@@ -1255,7 +1255,12 @@ static void test_module_capabilities(void) {
     xrt_module_layout_drop(&storage);
 }
 
+#include "register_state_cases.h"
+
 int main(int argc, char **argv) {
+    test_raw_state_spill_transport();
+    test_raw_state_spill_shapes();
+    test_raw_state_bool_bits();
     test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();

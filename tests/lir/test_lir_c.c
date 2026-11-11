@@ -75,6 +75,8 @@ static void conditional(XrLirBlock from, XrLirValue condition, XrLirEdge a, XrLi
         .operands = &condition, .operand_count = 1, .edge_count = 2, .edges = {a, b}};
     OK(xr_lir_set_terminator(module, from, &v));
 }
+#include "lir_c_state_cases.h"
+
 static XrLirBlock root_block(void) {
     root = function("explicit root", NULL, 0, XR_LIR_I64);
     XrLirBlock b = block(root, NULL, 0);
@@ -289,6 +291,8 @@ static void build(const char *name) {
     else if (!strcmp(name, "self")) parallel(false, true);
     else if (!strcmp(name, "same-true")) parallel(true, true);
     else if (!strcmp(name, "same-false")) parallel(true, false);
+    else if (!strcmp(name, "state-ref-even")) c_state_reference_cycle(4);
+    else if (!strcmp(name, "state-ref-odd")) c_state_reference_cycle(5);
     else if (!strcmp(name, "unused")) unused_float();
     else if (!strcmp(name, "unit")) small_result(true);
     else if (!strcmp(name, "bool")) small_result(false);
@@ -440,7 +444,7 @@ int main(int argc, char **argv) {
     const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
         "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
-        "typed-bool", "typed-unit", "typed-root-call"};
+        "typed-bool", "typed-unit", "typed-root-call", "state-ref-even", "state-ref-odd"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
         emit(cases[i], NULL);
     for (unsigned kind = 0; kind < 8; ++kind) {
