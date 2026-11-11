@@ -60,11 +60,11 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
             if (!term) return false;
             for (uint32_t owner = 0; owner < count; ++owner) {
                 size_t at = (size_t)b * count + owner;
-                bool live = cells->use[at] != 0;
+                bool live_in = cells->use[at] != 0;
                 if (!cells->define[at])
                     for (uint32_t e = 0; e < lower_edge_count(term); ++e)
-                        live |= cells->live[(size_t)term->targets[e] * count + owner] != 0;
-                if (live && !cells->live[at]) { cells->live[at] = 1; changed = true; }
+                        live_in |= cells->live[(size_t)term->targets[e] * count + owner] != 0;
+                if (live_in && !cells->live[at]) { cells->live[at] = 1; changed = true; }
             }
         }
     }
