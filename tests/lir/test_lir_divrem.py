@@ -47,6 +47,7 @@ def invoke(root, name, command, status=0, output=None, diagnostic=None):
 
 
 def adapter(generated, result, panic, location):
+    stateful = 'xrt_run_standalone_state(' in generated.read_text(encoding='ascii')
     text = '#define _CRT_SECURE_NO_WARNINGS 1\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n'
     if panic:
         text += '#include "runtime/native/xnative_execution.h"\n'
@@ -55,10 +56,22 @@ def adapter(generated, result, panic, location):
     if panic:
         line, column, end_line, end_column, path = location
         text += 'static void on_exit(void){fputs("EXIT_CALLBACK",stderr);}\n'
+        if stateful:
+            text += ('typedef struct EmbeddedState{int64_t value;XrtModuleState *state;} EmbeddedState;\n'
+                'static void embedded_state(void *data){EmbeddedState *call=data;'
+                'xrl_invoke(&call->value,call->state);}\n')
         text += 'int main(int argc,char **argv){(void)argv;\n'
-        text += 'if(argc>1){XrtLocationOwner *owner=NULL;XrtExecutionFailure failure={0};int64_t value=0;\n'
+        text += 'if(argc>1){XrtLocationOwner *owner=NULL;XrtExecutionFailure failure={0};\n'
         text += 'if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&owner)!=XRT_LOCATION_OK)return 2;\n'
-        text += 'if(xrt_run_embedded(owner,&failure,xrl_invoke,&value)!=XRT_EXECUTION_FAILURE)return 3;\n'
+        if stateful:
+            text += ('EmbeddedState call={0};XrtModuleLayout *layout=NULL;\n'
+                'if(xrt_module_layout_new(&xrl_state_spec,&layout)!=0)return 2;\n'
+                'XrtModuleStatus prepared=xrt_module_state_new(layout,UINT64_MAX,&call.state);\n'
+                'xrt_module_layout_drop(&layout);if(prepared)return 2;\n'
+                'XrtExecutionStatus outcome=xrt_run_embedded(owner,&failure,embedded_state,&call);\n'
+                'xrt_module_state_drop(&call.state);if(outcome!=XRT_EXECUTION_FAILURE)return 3;\n')
+        else:
+            text += 'int64_t value=0;if(xrt_run_embedded(owner,&failure,xrl_invoke,&value)!=XRT_EXECUTION_FAILURE)return 3;\n'
         text += 'if(failure.kind!=XRT_FAILURE_ARITHMETIC_PANIC||failure.detail.panic.code!=' + str(panic) + ')return 4;\n'
         text += 'const XrtSourceLocation *point=xrt_locations_get(owner,failure.detail.panic.source_id);\n'
         if path is None:

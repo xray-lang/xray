@@ -29,6 +29,7 @@ def header_clients(build, logs, libraries):
     prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
+    shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
     shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
     for library in libraries:
         shutil.copyfile(library, prefix / 'lib' / library.name)

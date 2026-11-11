@@ -228,13 +228,17 @@ def main() -> None:
             [binary, "build", fixtures / "invalid.xr", *flag, "-o", path], 1)
         assert path.read_bytes() == sentinel
 
-    for name in ("constant_div_zero", "constant_conversion_range"):
+    for name, diagnostic in (
+        ("constant_div_zero", b"[Uncaught Panic] E0420: division by zero\n"),
+        ("constant_conversion_range", b"[Uncaught Panic] E0422: numeric conversion is out of range\n"),
+    ):
         source = fixtures / (name + ".xr")
         refused = run(name + "-vm", [binary, "run", source], 1)
-        assert not refused.stdout and b"constant scalar initializer" in refused.stderr
+        assert not refused.stdout and refused.stderr == diagnostic
         executable = work / (name + (".exe" if os.name == "nt" else ""))
-        refused = run(name + "-build", [binary, "build", source, "-o", executable], 1)
-        assert not executable.exists() and b"constant scalar initializer" in refused.stderr
+        run(name + "-build", [binary, "build", source, "-o", executable], 0)
+        native = run(name + "-native", [executable], 1)
+        assert (native.stdout, native.stderr) == (refused.stdout, refused.stderr)
 
     verify_effects()
 
