@@ -1,0 +1,12 @@
+fn make(n:i64)->Array<i64>{ return [n,n+1] }
+fn choose(flag:bool,a:Array<i64>,b:Array<i64>)->Array<i64>{return flag ? a : b}
+fn run()->i64 {
+    var xs=choose(false,make(10),make(20))
+    const saved=xs
+    xs.push(30)
+    xs[0]=7
+    return saved[0]*100+xs[0]*10+len(xs)
+}
+print(run())
+const empty:Array<i64>=[]
+print(len(empty))

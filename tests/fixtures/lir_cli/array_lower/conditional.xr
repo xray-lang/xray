@@ -1,0 +1,7 @@
+var values=[1]
+fn update(flag:bool){if(flag){values.push(2)}else{values.push(3)}}
+update(false)
+update(true)
+print(values[0])
+print(values[1])
+print(values[2])

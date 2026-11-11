@@ -1,0 +1,2 @@
+const xs:Array<bool>=[true]
+print(len(xs))

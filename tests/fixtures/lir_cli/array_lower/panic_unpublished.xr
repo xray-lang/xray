@@ -1,0 +1,3 @@
+print(read())
+const xs=[1]
+fn read()->i64{return xs[0]}

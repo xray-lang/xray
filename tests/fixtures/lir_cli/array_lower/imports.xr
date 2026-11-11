@@ -1,0 +1,7 @@
+import "./library" as library
+const saved=library.current()
+library.append(6)
+const now=library.current()
+print(len(saved))
+print(len(now))
+print(now[2])

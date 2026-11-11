@@ -1,0 +1,4 @@
+export const initial:Array<i64>=[4,5]
+var values=initial
+export fn append(value:i64){values.push(value)}
+export fn current()->Array<i64>{return values}

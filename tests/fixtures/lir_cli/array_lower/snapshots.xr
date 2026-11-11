@@ -1,0 +1,14 @@
+var values=[10,20]
+fn index()->i64 { values=[30,40]; return 0 }
+print(values[index()])
+print(values[0])
+values=[10,20]
+fn rhs()->i64 { values=[50,60]; return 7 }
+values[0]=rhs()
+print(values[0])
+print(values[1])
+fn pushed()->i64 { values=[80,90]; return 100 }
+values.push(pushed())
+print(values[0])
+print(values[1])
+print(values[2])

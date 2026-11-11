@@ -1,0 +1,8 @@
+fn loop(n:i64)->i64 {
+    const saved=[7,8]
+    var sum=0
+    var i=0
+    while(i<n){sum=sum+saved[i%2]; i=i+1}
+    return sum
+}
+print(loop(4))

@@ -146,7 +146,22 @@ static void frame_cell_failures(void) {
     puts("physical frame Cell inventory failures reclaim every partial lowering workspace");
 }
 
+static void array_lower_failures(void) {
+    SourceFixture fixture = source_fixture("var values=[1,2]\nfn change(n:i64){if(n>0){values.push(n)}}\n"
+        "change(3)\nconst copy=values\nprint(copy[0])\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture));
+    source_fixture_free(&fixture);
+    printf("Array Lower workspace: %zu allocation failures preserve empty output and reclaim owners\n", total);
+}
+
 int main(void) {
+    array_lower_failures();
     storage_source_failures();
     frame_cell_failures();
     attempts = 0;

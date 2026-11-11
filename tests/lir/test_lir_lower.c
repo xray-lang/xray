@@ -899,8 +899,10 @@ static void offset_sources(void) {
     }
     CHECK(offsets==1);xr_lir_lowered_free(&output);
 }
+#include "lir_lower_array_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
+    array_sources();
     offset_sources();
     imported_time(argv[1]);
     clock_sources(argv[1]);

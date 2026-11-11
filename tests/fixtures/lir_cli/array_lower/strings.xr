@@ -1,0 +1,16 @@
+fn change(input:Array<string>)->Array<string> {
+    var result=input
+    result.push("tail")
+    result[0]="head"
+    return result
+}
+const before=["old"]
+const after=change(before)
+print(before[0])
+print(after[0])
+print(after[1])
+var words:Array<string>=[]
+fn fill(n:i64) { var i=0; while(i<n) { words.push("x${i}"); i=i+1 } }
+fill(3)
+print(words[0])
+print(words[2])
