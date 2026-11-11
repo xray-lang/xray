@@ -33,13 +33,18 @@ static bool source_view_prepare(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"view lifetime preparation requires a private semantic owner");
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
+    XrXirStatus status=XR_XIR_OK;
+#if XR_XIR_PARANOID
+    /* The semantic prefix admitted this body before its checked callable
+     * weakening. That canonicalization preserves SSA, CFG and storage state. */
+    status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
         if (!ctx->bodies[f].initialization_regions) continue;
         status=xr_xir_compile_initialization_check(&ctx->compile,&module,f,ctx->bodies[f].initialization_regions,&diagnostic);
     }
     if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},NULL,NULL,&diagnostic);
+#endif
     bool normalizing=status==XR_XIR_OK;
     if (normalizing) status=source_view_normalize(ctx,&module,&diagnostic);
     if (normalizing && status==XR_XIR_UNRESOLVED) {

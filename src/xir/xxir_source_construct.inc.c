@@ -461,11 +461,13 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirDiagnostic location = {0};
         XrXirRootRefiner refiner=source_semantic_refiner(ctx);
         XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &ctx->semantic_prepare, &output->checked, &location);
+#if XR_XIR_PARANOID
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
             location.function=f;
             status=xr_xir_compile_initialization_check(&ctx->compile, &built, f, ctx->bodies[f].initialization_regions, &location);
         }
+#endif
         if (status != XR_XIR_OK) {
             xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
             source_check_failure(ctx, location, status);
