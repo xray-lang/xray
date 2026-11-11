@@ -1,0 +1,15 @@
+export fn main() -> i64 { return 0 }
+fn leaf() -> i64 { return 7 }
+fn apply(callback: fn() -> i64) -> i64 {
+    var slot = leaf
+    const replace = fn() { slot = callback }
+    replace()
+    return slot()
+}
+fn retain(value: escaping fn()) -> fn() { return value }
+fn probe(exec: fn(fn()), callback: fn() -> i64) {
+    var slot = leaf
+    const reset = fn() { slot = leaf }
+    const saved = retain(reset)
+    const setter = fn() { slot = callback }
+}

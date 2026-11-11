@@ -93,6 +93,12 @@ XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *con
  * The read neither accepts mutable Source nor invokes its producer. */
 XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output);
+/* Source emits only changed conversion metadata to its unpublished equations.
+ * Closing consumes those changes on the same dependency owner. */
+XR_FUNC XrXirStatus xir_effects_construction_weaken(const XrXirCompileContext *,
+    const XrXirEffects *,uint32_t function,uint32_t instruction,uint32_t root_mask,bool may_suspend);
+XR_FUNC XrXirStatus xir_effects_construction_close(const XrXirCompileContext *,
+    const XrXirEffects *,XrCompileRequestControl *);
 /* A ledger identity guard grants no source, type or execution proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t functions);

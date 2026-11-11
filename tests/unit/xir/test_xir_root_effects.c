@@ -51,6 +51,26 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     return checked;
 }
+static void captured_cell_bound_types(void) {
+    EffectMark baseline = effect_mark();
+    XrXirArtifact *artifact = root_source("captured_cell_bounds.xr",XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_compile_verify_effects_v2(&effect_context,module,
+        artifact->construction,artifact->checked_effects,&diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr,"captured Cell full verification status%u f%u b%u i%u\n",
+        status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status == XR_XIR_OK);
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_compile_checked_write(artifact,&packet,&diagnostic) == XR_XIR_OK);
+    XrXirArtifact *received = NULL;
+    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,&diagnostic) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(received);
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(artifact);
+    effect_mark_check(baseline);
+    printf("captured Cell bounds: writers and captured handles pass complete verification\n");
+}
 static void direct_root_equations(void) {
     XrXirTypeNode callable = {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64,
         .element = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
@@ -1251,8 +1271,11 @@ static void root_unbound_contents_causes(void) {
 }
 
 #include "xir_callback_entry_cases.h"
+#include "xir_effect_conversion_cases.h"
 
 static void control_summary_kernel(void) {
+    captured_cell_bound_types();
+    conversion_owner_cases();
     callback_entry_owner_cases();
     callback_receiver_owner_cases();
     root_unbound_contents_causes();

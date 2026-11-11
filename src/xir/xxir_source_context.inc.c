@@ -76,6 +76,7 @@ typedef struct SourceContext {
     SourceGeneratedDebug *generated_debug;
     uint32_t generated_debug_count;
     SourceRootFlow *root_flow;
+    const XrXirEffects *root_refinement;
     XrXirProvenance *effect_evidence;
     SourceManifest *manifests;
     XrXirFunction *functions;

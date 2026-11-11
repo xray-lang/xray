@@ -49,18 +49,21 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
     EffectFinalOutcomes *records = &effects->outcomes_work;
     EffectCheckedRoots *roots = effects->checked_roots;
     XrXirStatus status = XR_XIR_OK;
-    records->root = xir_compile_calloc(memory, effects->count, sizeof(*records->root), &status);
-    records->root_witnesses = xir_compile_calloc(memory, effects->count, sizeof(*records->root_witnesses), &status);
-    records->unresolved_witnesses = xir_compile_calloc(memory, effects->count,
+    if (!records->root) records->root = xir_compile_calloc(memory, effects->count, sizeof(*records->root), &status);
+    if (!records->root_witnesses) records->root_witnesses = xir_compile_calloc(memory, effects->count, sizeof(*records->root_witnesses), &status);
+    if (!records->unresolved_witnesses) records->unresolved_witnesses = xir_compile_calloc(memory, effects->count,
         sizeof(*records->unresolved_witnesses), &status);
-    records->go_safe = xir_compile_calloc(memory, effects->count, sizeof(*records->go_safe), &status);
+    if (!records->go_safe) records->go_safe = xir_compile_calloc(memory, effects->count, sizeof(*records->go_safe), &status);
     if (!records->root || !records->root_witnesses || !records->unresolved_witnesses || !records->go_safe) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {
         uint32_t node = roots->function[f].root;
         uint8_t mask = roots->node[node].closed;
         records->root[f] = (XrXirRootEffects){!!(mask & 1), !!(mask & 2)};
         records->go_safe[f] = mask || roots->node[node].worker_blocked ? XR_XIR_BAD_TYPE : XR_XIR_OK;
+        records->root_witnesses[f] = records->unresolved_witnesses[f] = (XrXirRootEffectWitness){0};
         XrXirRootFormula *formula = &records->contracts[f].formula;
+        xr_compile_resources_free((void *)formula->terms);
+        *formula = (XrXirRootFormula){0};
         status = effect_checked_root_formula(memory, roots, f, false, formula);
         if (status == XR_XIR_UNRESOLVED) {
             /* The owning summary retains the symbolic requirement. Its
@@ -496,6 +499,8 @@ XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects
     const EffectCheckedRoots *roots = xir_effects_prepared_execution(effects);
     return roots ? roots->storage : NULL;
 }
+
+#include "xxir_effect_refinement.inc.c"
 
 XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *memory,
     XrXirEffects *effects, const XrXirDiagnostic *diagnostic) {

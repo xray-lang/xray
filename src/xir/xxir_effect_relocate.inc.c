@@ -240,6 +240,7 @@ static XrXirStatus effect_relocation_nodes(EffectRelocation *relocation) {
                 node.suspend_reason[bit] = effect_relocation_node(relocation, node.suspend_reason[bit]);
                 node.suspend_instruction[bit] = effect_relocation_instruction(relocation, f, node.suspend_instruction[bit]);
                 node.suspend_order[bit] = effect_relocation_instruction(relocation, f, node.suspend_order[bit]);
+                node.suspend_seed_instruction[bit] = effect_relocation_instruction(relocation, f, node.suspend_seed_instruction[bit]);
                 XrXirRootEffectWitness witness = roots->terminals[(size_t)n * 2 + bit];
                 if (witness.cause && (witness.instruction != 0 || old.values != old.parameters))
                     witness.instruction = effect_relocation_instruction(relocation, f, witness.instruction);

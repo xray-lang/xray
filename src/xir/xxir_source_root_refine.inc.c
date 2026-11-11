@@ -108,6 +108,7 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirFunction *body = &ctx->functions[f];
     XrXirInstruction *op = (XrXirInstruction *)body->instructions + i;
     SourceRootValue *flow = &ctx->bodies[f].root_values[i];
+    if (op->op == XR_XIR_CELL_WRITE) return source_root_cell_write(ctx,f,i,changed);
     if (flow->kind == 3 || flow->kind == 4) return true;
     if (!source_root_type(ctx,flow->declared)) return ctx->diagnostic.status == XR_XIR_OK;
     if (op->op == XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLASS_METHOD_REF) return source_root_reference(ctx,f,i,effects,changed);
@@ -254,7 +255,7 @@ static bool source_root_captures(SourceContext *ctx, bool *changed) {
         XrXirType *parameters = (XrXirType *)ctx->functions[target].parameters;
         for (uint32_t p = 0; p < ctx->bodies[target].root_capture_count; ++p) {
             if (!ctx->bodies[target].root_captures[p]) continue;
-            XrXirType common = XR_XIR_UNIT;
+            XrXirType common = xr_xir_type_is_cell(&ctx->types,parameters[p]) ? parameters[p] : XR_XIR_UNIT;
             for (uint32_t e = flow->capture_heads[target]; e != UINT32_MAX; e = flow->captures[e].next) {
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 SourceRootCaptureEdge edge = flow->captures[e];
@@ -293,6 +294,7 @@ static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects,
     uint32_t function = ctx->function, module = ctx->module;
     bool again = true;
     *changed = false;
+    ctx->root_refinement = effects;
     if (!source_root_prepare(ctx)) goto failure;
     while (again) {
         again = false;
@@ -304,13 +306,18 @@ static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects,
                 if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_root_instruction(ctx,f,i,effects,&again)) goto failure;
             if (!source_root_results(ctx,f,&again)) goto failure;
         }
-        if (!source_root_captures(ctx,&again) || !source_root_slots(ctx,&again)) goto failure;
+        if (!source_root_captures(ctx,&again) || !source_root_cell_identities(ctx,effects,&again) ||
+            !source_root_slots(ctx,&again)) goto failure;
+        XrXirStatus status = xir_effects_construction_close(&ctx->compile,effects,ctx->request);
+        if (status != XR_XIR_OK) {source_fail(ctx,NULL,status,"callable conversion equations did not close"); goto failure;}
         if (again) *changed = true;
     }
     if (!source_effect_sync(ctx,effects,changed) || !source_root_query_sync(ctx)) goto failure;
+    ctx->root_refinement = NULL;
     ctx->function = function; ctx->module = module;
     return XR_XIR_OK;
 failure:
+    ctx->root_refinement = NULL;
     ctx->function = function; ctx->module = module;
     return ctx->diagnostic.status == XR_XIR_OK ? XR_XIR_BAD_TYPE : ctx->diagnostic.status;
 }
