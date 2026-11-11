@@ -21,6 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 #include "lir_array_c_fixture.h"
+#include "lir_array_unsigned_frontier_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -115,8 +116,9 @@ static void array_catalog(void) {
     XrLirRegistry registry = {&extra, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_array_module_create(&registry, &m));
-    for (uint32_t family = 0; family < 2; ++family) {
-        XrLirType element = family ? XR_LIR_STRING : XR_LIR_I64;
+    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
+    for (uint32_t family = 0; family < sizeof(elements) / sizeof(*elements); ++family) {
+        XrLirType element = elements[family];
         for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_REPEAT; ++op) {
             uint32_t id = 0;
             OK(xr_lir_array_operation(m, element, (XrLirArrayOperation)op, &id));
@@ -138,8 +140,9 @@ static void array_catalog(void) {
 }
 
 static void array_repeat_owners(void) {
-    for (unsigned family = 0; family < 2; ++family) {
-        XrLirType element = family ? XR_LIR_STRING : XR_LIR_I64;
+    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
+    for (unsigned family = 0; family < sizeof(elements) / sizeof(*elements); ++family) {
+        XrLirType element = elements[family];
         XrLirModule *m = NULL;
         OK(array_repeat_fixture(element, &m));
         uint32_t id = 0;
@@ -311,12 +314,12 @@ static void array_cell_loop(void) {
     xr_lir_module_destroy(copy);
 }
 
-static void array_state_shapes(void) {
+static void array_state_shapes(XrLirType element) {
     XrLirModule *m = NULL;
-    OK(array_fixture_registry(XR_LIR_I64, &m));
+    OK(array_fixture_registry(element, &m));
     XrLirStateModule module = {0};
     XrLirStateSlot slot = {.payload=XR_LIR_ARRAY, .mutable=true, .size=8, .alignment=8,
-        .array_element=XR_LIR_I64};
+        .array_element=element};
     XrLirStateLayout layout = {.modules=&module, .module_count=1, .slots=&slot,
         .slot_count=1, .payload_size=8, .payload_alignment=8};
     OK(xr_lir_set_state_layout(m, &layout));
@@ -327,18 +330,18 @@ static void array_state_shapes(void) {
     OK(xr_lir_declare_function(m, &spec, &f));
     OK(xr_lir_set_state_entry(m, f));
     OK(xr_lir_define_function(m, f));
-    XrLirValue state, selected, number, array, reference, read;
+    XrLirValue state, selected, number, array, reference, read, answer;
     OK(xr_lir_function_parameter(m, f, 0, &state));
     XrLirBlock entry, join;
     OK(xr_lir_add_block(m, f, NULL, 0, &entry));
     OK(xr_lir_add_block(m, f, &ref_type, 1, &join));
     OK(xr_lir_set_entry(m, f, entry));
     OK(xr_lir_block_parameter(m, join, 0, &selected));
-    XrLirStateReference shape = {.payload=XR_LIR_ARRAY, .mutable=true, .array_element=XR_LIR_I64};
+    XrLirStateReference shape = {.payload=XR_LIR_ARRAY, .mutable=true, .array_element=element};
     OK(xr_lir_set_state_reference(m, selected, &shape));
     XrLirInstruction op = {.op=XR_LIR_MODULE_BEGIN, .type=XR_LIR_UNIT, .operands=&state, .operand_count=1};
     OK(xr_lir_emit_effect(m, entry, &op));
-    op = (XrLirInstruction){.op=XR_LIR_CONST, .type=XR_LIR_I64, .bits=9};
+    op = (XrLirInstruction){.op=XR_LIR_CONST, .type=element, .bits=9};
     OK(xr_lir_emit_value(m, entry, &op, &number));
     op = (XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_ARRAY, .intrinsic=11,
         .operands=&number, .operand_count=1};
@@ -362,20 +365,23 @@ static void array_state_shapes(void) {
     OK(xr_lir_emit_effect(m, join, &op));
     op = (XrLirInstruction){.op=XR_LIR_ARRAY_DROP, .type=XR_LIR_UNIT, .operands=&read, .operand_count=1};
     OK(xr_lir_emit_effect(m, join, &op));
-    op = (XrLirInstruction){.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&number, .operand_count=1};
+    op = (XrLirInstruction){.op=XR_LIR_CONST, .type=XR_LIR_I64, .bits=9};
+    OK(xr_lir_emit_value(m, join, &op, &answer));
+    op = (XrLirInstruction){.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&answer, .operand_count=1};
     OK(xr_lir_set_terminator(m, join, &op));
     OK(xr_lir_module_finish(m, NULL));
     XrLirArrayShape array_shape;
     OK(xr_lir_array_shape_view(m, read, &array_shape));
-    CHECK(array_shape.element == XR_LIR_I64);
+    CHECK(array_shape.element == element);
     XrLirModule *copy = NULL, *inlined = NULL;
     OK(xr_lir_rebuild(m, &copy));
     xr_lir_module_destroy(m);
     OK(xr_lir_inline(copy, &inlined));
     xr_lir_module_destroy(copy);
     OK(xr_lir_state_reference_view(inlined, (XrLirValue){inlined, 1, selected.id}, &shape));
-    CHECK(shape.array_element == XR_LIR_I64 && shape.payload == XR_LIR_ARRAY);
-    inlined->functions[0].values[selected.id - 1].state_reference.array_element = XR_LIR_STRING;
+    CHECK(shape.array_element == element && shape.payload == XR_LIR_ARRAY);
+    inlined->functions[0].values[selected.id - 1].state_reference.array_element =
+        element == XR_LIR_U8 ? XR_LIR_U64 : XR_LIR_U8;
     CHECK(xr_lir_verify(inlined, NULL) == XR_LIR_VERIFY_ERROR);
     xr_lir_module_destroy(inlined);
 }
@@ -457,14 +463,20 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     array_catalog();
+    array_unsigned_frontier();
+    array_unsigned_spans();
     array_repeat_owners();
     array_receiving_owners(XR_LIR_I64);
     array_receiving_owners(XR_LIR_STRING);
+    array_receiving_owners(XR_LIR_U8);
+    array_receiving_owners(XR_LIR_U64);
     array_corruptions();
     array_missing_release();
     array_shape_rejections();
     array_cell_loop();
-    array_state_shapes();
+    array_state_shapes(XR_LIR_I64);
+    array_state_shapes(XR_LIR_U8);
+    array_state_shapes(XR_LIR_U64);
     const char *cases[]={"i64","string","large","state-i64","state-string","state-layout",
         "return-i64","return-string","array-spills","array-spills-string","phi-i64","phi-string",
         "state-uninitialized-read","state-uninitialized-write","repeat-i64","repeat-string",

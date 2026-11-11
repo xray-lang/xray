@@ -17,6 +17,8 @@
 #include "xlir_state.h"
 #include "xlir_array.h"
 
+enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
+
 typedef struct XrLirValueData {
     XrLirType type;
     uint32_t block, instruction;
@@ -63,7 +65,7 @@ struct XrLirModule {
     XrLirIntrinsic *intrinsics;
     uint32_t intrinsic_count;
     XrLirArrayIntrinsic *array_intrinsics;
-    uint32_t array_operations[2][XR_LIR_ARRAY_OP_REPEAT];
+    uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_REPEAT];
     XrLirStatus failure;
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;
@@ -91,6 +93,7 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
 }
 XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
+XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
     return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL;
 }

@@ -44,7 +44,8 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType elemen
 
 /* Explicit shapes belong only to function and block parameters. Instruction
  * results derive their shape from the actual producer, callee or intrinsic.
- * The first closed element families are I64 and owned String. */
+ * Closed elements are I64, owned String, U8 and U64. Their shape never implies
+ * that a backend implements that family or its scalar operations. */
 XR_FUNC XrLirStatus xr_lir_set_array_shape(XrLirModule *, XrLirValue,
     const XrLirArrayShape *);
 XR_FUNC XrLirStatus xr_lir_set_array_result(XrLirModule *, XrLirFunction,

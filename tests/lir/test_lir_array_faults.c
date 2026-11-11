@@ -131,8 +131,12 @@ int main(void) {
     array_catalog_sweep();
     array_repeat_sweep(XR_LIR_I64);
     array_repeat_sweep(XR_LIR_STRING);
+    array_repeat_sweep(XR_LIR_U8);
+    array_repeat_sweep(XR_LIR_U64);
     array_construction_sweep(XR_LIR_I64);
     array_construction_sweep(XR_LIR_STRING);
+    array_construction_sweep(XR_LIR_U8);
+    array_construction_sweep(XR_LIR_U64);
     array_transform_sweep(false, false);
     array_transform_sweep(true, false);
     array_transform_sweep(false, true);

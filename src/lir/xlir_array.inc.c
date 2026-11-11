@@ -6,8 +6,16 @@
  *
  * xlir_array.inc.c - Copying closed Array signatures and producer queries
  */
+static const XrLirType lir_array_elements[XR_LIR_ARRAY_FAMILY_COUNT] = {
+    XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64
+};
+XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType type) {
+    for (uint32_t family = 0; family < XR_LIR_ARRAY_FAMILY_COUNT; ++family)
+        if (lir_array_elements[family] == type) return family;
+    return UINT32_MAX;
+}
 XR_FUNC bool xr_lir_internal_array_element(XrLirType type) {
-    return type == XR_LIR_I64 || type == XR_LIR_STRING;
+    return xr_lir_internal_array_family(type) != UINT32_MAX;
 }
 
 static uint32_t lir_array_intrinsic_index(const XrLirModule *m, uint32_t id) {
@@ -98,7 +106,7 @@ XR_FUNC XrLirStatus xr_lir_set_array_intrinsic(XrLirModule *m,
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirType element = m->intrinsics[index].result == XR_LIR_ARRAY ?
         input->result_element : input->parameter_elements[0];
-    uint32_t family = element == XR_LIR_STRING;
+    uint32_t family = xr_lir_internal_array_family(element);
     uint32_t operation = (uint32_t)input->operation - 1;
     if (m->array_operations[family][operation])
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
@@ -122,12 +130,12 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(element) ||
         operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_REPEAT)
         return XR_LIR_INVALID_ARGUMENT;
-    *id = m->array_operations[element == XR_LIR_STRING][(uint32_t)operation - 1];
+    *id = m->array_operations[xr_lir_internal_array_family(element)][(uint32_t)operation - 1];
     return *id ? XR_LIR_OK : XR_LIR_UNSUPPORTED;
 }
 
 XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLirModule **output) {
-    enum { operations = XR_LIR_ARRAY_OP_REPEAT, catalog = 2 * operations };
+    enum { operations = XR_LIR_ARRAY_OP_REPEAT, catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations };
     uint32_t count = extra ? extra->count : 0;
     if (!output || *output || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
         (size_t)count + catalog > SIZE_MAX / sizeof(XrLirIntrinsic))
@@ -146,7 +154,7 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLir
     for (uint32_t i = 0; i < catalog; ++i) {
         while (used[next]) ++next;
         used[next] = 1;
-        XrLirType element = i < operations ? XR_LIR_I64 : XR_LIR_STRING;
+        XrLirType element = lir_array_elements[i / operations];
         XrLirArrayOperation operation = (XrLirArrayOperation)(i % operations + 1);
         uint32_t arity = 1;
         XrLirType result = XR_LIR_UNIT;
