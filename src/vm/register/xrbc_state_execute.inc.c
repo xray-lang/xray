@@ -58,15 +58,15 @@ static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
     if (op == XR_RBC_STATE_REFERENCE) {
         XrRbcStateAccess row = function->state_accesses[word >> 16];
         XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
-        xr_rbc_state_ready(published, source);
         registers[a].state_ref = published;
-        /* An adjacent read observes the same publication. Preserve the reference
-         * producer and the read's source identity while consuming both words. */
+        /* A reference supplies metadata without observing publication. An
+         * adjacent read checks readiness at its own actual source point. */
         if (*pc < function->code_count) {
             uint32_t next = function->code[*pc];
             if ((next & 255) == XR_RBC_STATE_READ && ((next >> 16) & 255) == a) {
                 uint32_t read_source = function->source_ids ? function->source_ids[*pc] : 0;
                 ++*pc;
+                xr_rbc_state_ready(published, read_source);
                 xr_rbc_state_read(published, registers, next, read_source);
             }
         }

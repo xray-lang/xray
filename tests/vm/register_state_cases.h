@@ -18,6 +18,58 @@ typedef struct RawStateTransport {
     uint32_t code[28];
 } RawStateTransport;
 
+static void test_raw_state_deferred_publication(void) {
+    XrtModuleTypeSpec type = {XRT_MODULE_I64};
+    XrtModuleSpec owner = {0};
+    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+        .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
+        .payload_alignment=8, .byte_limit=UINT64_MAX};
+    XrtModuleLayout *storage = NULL;
+    CHECK(xrt_module_layout_new(&layout, &storage) == 0);
+    uint32_t code[7], ids[] = {1, 1, 1, 1, 1, 2, 2};
+    XrRbcStateAccess accesses[] = {{0}, {0, 0, 1}};
+    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF, XR_RBC_STATE_REF};
+    XrRbcFunction function = {.code=code, .code_count=7, .register_count=4,
+        .parameter_count=1, .register_kinds=kinds, .register_kind_count=4,
+        .state_accesses=accesses, .state_access_count=2, .source_ids=ids, .source_id_count=7};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
+    immediate(code, 1, XR_RBC_STATE_REFERENCE, 2, 0);
+    immediate(code, 2, XR_RBC_LOADI, 1, 37);
+    immediate(code, 3, XR_RBC_STATE_CONSTRUCT, 3, 1);
+    emit(code, 4, XR_RBC_STATE_PUBLISH, 3, 0, 0);
+    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_I64);
+    emit(code, 6, XR_RBC_RET, 1, 0, 0);
+    XrtSourceLocation points[] = {{.path="reference.xr", .path_length=12, .line=3, .column=1},
+        {.path="actual-access.xr", .path_length=16, .line=37, .column=9}};
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(points, 2, &locations) == XRT_LOCATION_OK);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    uint64_t result = 0;
+    CHECK(xr_rbc_outcome_bits(outcome, &result) && result == 37);
+    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+    for (unsigned write = 0; write < 2; ++write) {
+        immediate(code, 0, XR_RBC_STATE_REFERENCE, 2, 0);
+        emit(code, 1, write ? XR_RBC_STATE_WRITE : XR_RBC_STATE_READ,
+            write ? 2u : 1u, write ? 1u : 2u, XRT_MODULE_I64);
+        emit(code, 2, XR_RBC_RET, 1, 0, 0);
+        ids[1] = ids[2] = 2;
+        function.code_count = function.source_id_count = 3;
+        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
+        outcome = xr_rbc_execution_run(execution);
+        XrXirValueStatus status = XR_XIR_VALUE_OK;
+        uint32_t source = 0;
+        const XrtLocationOwner *borrowed = NULL;
+        CHECK(xr_rbc_outcome_value_failure(outcome, &status, &source, &borrowed));
+        CHECK(status == XR_XIR_VALUE_BAD_ARGUMENT && source == 2 && borrowed == locations);
+        xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+    }
+    xrt_locations_release(locations); xrt_module_layout_drop(&storage);
+}
+
 static void raw_state_transport(RawStateTransport *f) {
     memset(f, 0, sizeof(*f));
     XrtModuleTypeSpec types[] = {{XRT_MODULE_I64}, {XRT_MODULE_BOOL}, {XRT_MODULE_STRING}};

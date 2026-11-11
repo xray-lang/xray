@@ -1258,6 +1258,7 @@ static void test_module_capabilities(void) {
 #include "register_state_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_state_deferred_publication();
     test_raw_state_spill_transport();
     test_raw_state_spill_shapes();
     test_raw_state_bool_bits();
