@@ -2534,7 +2534,11 @@ static XrXirStatus effect_checked_root_mask(const EffectCheckedRoots *roots, uin
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_checked_first_cause(const EffectCheckedRoots *roots, uint32_t node,
+static XrXirStatus effect_checked_bound_cause(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output);
+
+static XrXirStatus effect_checked_first_cause(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t node,
     const uint32_t *arguments, uint32_t count, bool unresolved, EffectCheckCause *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask = 0;
@@ -2601,7 +2605,8 @@ static XrXirStatus effect_checked_first_cause(const EffectCheckedRoots *roots, u
         *output = result;
         return XR_XIR_OK;
     }
-    return XR_XIR_BAD_STRUCTURE;
+    return arguments ? XR_XIR_BAD_STRUCTURE :
+        effect_checked_bound_cause(memory, roots, node, unresolved, output);
 }
 
 #endif // XXIR_EFFECT_CHECK_IMPLEMENTATION

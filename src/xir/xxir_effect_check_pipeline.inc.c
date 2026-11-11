@@ -68,7 +68,7 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
         for (uint32_t bit = 0; bit < 2; ++bit) {
             if (!(mask & (1u << bit))) continue;
             EffectCheckCause cause = {0};
-            status = effect_checked_first_cause(roots, node, NULL, 0, bit != 0, &cause);
+            status = effect_checked_first_cause(memory, roots, node, NULL, 0, bit != 0, &cause);
             if (status == XR_XIR_UNRESOLVED) {
                 uint32_t instruction = UINT32_MAX;
                 for (uint32_t t = 0; t < formula->term_count; ++t)
@@ -251,6 +251,34 @@ static XrXirStatus effect_checked_trace_next(EffectCheckTraceWalk *walk,
         return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;
+}
+
+/* A hidden capture can obtain its closed bit from an actual outer binding
+ * after its local symbolic Cell term was discharged. Read that same numeric
+ * relation used by full traces without turning it into a constant effect. */
+static XrXirStatus effect_checked_bound_cause(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output) {
+    XrXirStatus status = XR_XIR_OK;
+    EffectCheckTraceWalk walk = {.roots = roots};
+    walk.visited = xir_compile_calloc(memory, roots->nodes, sizeof(*walk.visited), &status);
+    if (!walk.visited) return status;
+    uint32_t function = roots->function[roots->node[node].function].declaration;
+    status = XR_XIR_BAD_STRUCTURE;
+    while (node != UINT32_MAX && node < roots->nodes && !walk.visited[node]) {
+        walk.visited[node] = 1;
+        uint32_t next = UINT32_MAX;
+        XrXirRootEffectWitness witness = {0};
+        status = effect_checked_trace_next(&walk, node, unresolved, &next, &witness);
+        if (status != XR_XIR_OK) break;
+        if (witness.cause) {
+            *output = (EffectCheckCause){.function = function, .witness = witness};
+            break;
+        }
+        node = next;
+        status = XR_XIR_BAD_STRUCTURE;
+    }
+    xr_compile_resources_free(walk.visited);
+    return status;
 }
 
 static XrXirStatus effect_checked_trace_domain(EffectCheckTraceWalk *walk, uint32_t node, uint32_t bit) {
