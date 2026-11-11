@@ -10,7 +10,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:88:4: CLEANUP_REGISTER is not supported by LIR lowering yet"
       }
     },
     {
@@ -22,7 +22,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:88:4: CLEANUP_REGISTER is not supported by LIR lowering yet"
       }
     },
     {
@@ -462,13 +462,9 @@
       "id": "stdlib/compress/compress.xr",
       "path": "stdlib/compress/compress.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slot payload type is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/crypto/crypto.xr",
@@ -1087,13 +1083,9 @@
       "id": "native:stdlib/compress/compress.xr",
       "path": "stdlib/compress/compress.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slot payload type is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/os/os.xr",
