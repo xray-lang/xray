@@ -249,6 +249,48 @@ static void failing_mutation(void *opaque) {
     for (int64_t n = 0; n < 8; ++n) xrt_array_i64_push(&array, n, 1);
     xrt_array_drop(&array);
 }
+
+typedef struct ArrayCacheProbe {
+    uint32_t operation;
+    XrXirDomain *pin;
+    uint64_t baseline;
+} ArrayCacheProbe;
+
+static void cached_shape_failure(void *opaque) {
+    ArrayCacheProbe *probe = opaque;
+    XrtValueRoot *root = xrt_value_root_current(1);
+    probe->pin = xrt_value_root_domain(root, 1);
+    CHECK(xr_xir_domain_retain(probe->pin));
+    probe->baseline = xr_xir_domain_stats(probe->pin).live_bytes;
+    int64_t value = 17;
+    XrtString *text = xrt_string_literal("cache", 5, 1);
+    XrtArray *integers = xrt_array_i64_new(&value, 1, 1);
+    XrtArray *strings = xrt_array_string_new(&text, 1, 1);
+    for (uint32_t i = 0; i < 40; ++i) {
+        if (i & 1) (void)xrt_array_i64_new(&value, 1, 1);
+        else (void)xrt_array_string_new(&text, 1, 1);
+    }
+    CHECK(xrt_array_length(integers, 1) == 1 && xrt_array_length(strings, 1) == 1);
+    CHECK(xrt_array_i64_get(integers, 0, 1) == value);
+    if (probe->operation == 0) (void)xrt_array_string_get(integers, 0, 1);
+    else if (probe->operation == 1) (void)xrt_array_i64_get(strings, 0, 1);
+    else if (probe->operation == 2) xrt_array_i64_push(&strings, value, 1);
+    else xrt_array_string_push(&integers, text, 1);
+    CHECK(false);
+}
+
+static void cached_shape_cases(XrtLocationOwner *locations) {
+    for (uint32_t operation = 0; operation < 4; ++operation) {
+        ArrayCacheProbe probe = {.operation=operation};
+        XrtExecutionFailure failure = {0};
+        XrtValueRoot root = {0};
+        CHECK(xrt_run_embedded_owned(locations, &failure, cached_shape_failure, &probe, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
+            failure.detail.value.source_id == 1 && xrt_value_root_empty(&root));
+        CHECK(xr_xir_domain_stats(probe.pin).live_bytes == probe.baseline);
+        xr_xir_domain_drop(probe.pin);
+    }
+}
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
 static void state_allocation_sweep(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING};
@@ -322,6 +364,7 @@ static void allocation_sweep(XrtLocationOwner *owner, bool string) {
 
 int main(void) {
     XrtLocationOwner *owner = locations();
+    cached_shape_cases(owner);
     bool completed = false;
     XrtExecutionFailure failure = {0};
     CHECK(xrt_run_embedded(owner, &failure, cow_and_rebind, &completed) == XRT_EXECUTION_COMPLETED && completed);

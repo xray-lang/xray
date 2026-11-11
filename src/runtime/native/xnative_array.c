@@ -21,7 +21,9 @@
 
 struct XrtArrayOwner {
     XrXirValue value;
+    const XrXirTypeArena *arena;
     uint32_t count;
+    XrtArrayElement element;
 };
 
 XR_FUNC XrXirType xrt_array_type(XrtArrayElement element) {
@@ -134,14 +136,31 @@ static void array_remove(XrtValueRoot *root, XrtArrayOwner *owner) {
     root->arrays[hole] = (XrtArrayOwner){0};
     --root->array_count;
 }
-static void array_adopt(XrtValueRoot *root, XrXirValue value) {
+static void array_adopt(XrtValueRoot *root, XrXirValue value, XrtArrayElement element) {
     XrtArrayOwner *owner = array_find(root, value.payload);
     if (owner) ++owner->count;
-    else { array_place(root, (XrtArrayOwner){value, 1}); ++root->array_count; }
+    else {
+        array_place(root, (XrtArrayOwner){value, xr_xir_value_arena(&value), 1, element});
+        ++root->array_count;
+    }
     ++root->array_held;
 }
-static XrXirValue array_argument(const XrtArray *array, XrXirValueAdmission *admission,
+static bool array_current_element(const XrtValueRoot *root, const XrtArray *array, XrtArrayElement *element) {
+    XrtArrayOwner *owner = array ? array_find(root, (int64_t)(intptr_t)array) : NULL;
+    if (owner) { *element = owner->element; return true; }
+    XrXirValue value = array_value(array);
+    return array_element(&value, element);
+}
+static XrXirValue array_argument(XrtValueRoot *root, const XrtArray *array, XrXirValueAdmission *admission,
     XrtArrayElement element, uint32_t source_id) {
+    XrtArrayOwner *owner = array ? array_find(root, (int64_t)(intptr_t)array) : NULL;
+    if (owner) {
+        if (owner->element != element) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+        /* Registration admitted the actual closed shape. Its canonical owner
+         * keeps this immutable arena alive through every registered reference. */
+        admission->arena = owner->arena;
+        return owner->value;
+    }
     XrXirValue value = array_value(array);
     if (!array_shape(&value, admission->arena, element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     admission->arena = xr_xir_value_arena(&value);
@@ -169,7 +188,7 @@ static XrtArray *array_new(const void *values, size_t count, XrtArrayElement ele
     if (input) xr_xir_domain_deallocate(root->domain, input, count * sizeof(*input));
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
     XrtArray *array = (XrtArray *)(intptr_t)root->pending.payload;
-    array_adopt(root, root->pending); root->pending = (XrXirValue){0};
+    array_adopt(root, root->pending, element); root->pending = (XrXirValue){0};
     return array;
 }
 XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32_t source_id) {
@@ -206,16 +225,15 @@ XR_FUNC XrtArray *xrt_array_root_take(XrtArray *array) {
 }
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *array, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
-    XrXirValue value = array_value(array);
     XrtArrayElement element = XRT_ARRAY_I64;
-    if (!array_element(&value, &element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+    if (!array_current_element(root, array, &element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrXirValueAdmission admission = array_admission(root, source_id);
-    value = array_argument(array, &admission, element, source_id);
+    XrXirValue value = array_argument(root, array, &admission, element, source_id);
     array_reserve(root, source_id);
     XrXirValue copy = {0};
     XrXirValueStatus status = xr_xir_value_copy(&value, &copy);
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
-    array_adopt(root, copy);
+    array_adopt(root, copy, element);
     return (XrtArray *)(intptr_t)copy.payload;
 }
 XRAY_API void xrt_array_drop(XrtArray **array) {
@@ -242,11 +260,10 @@ XRAY_API void xrt_array_assign(XrtArray **destination, const XrtArray *source, u
 }
 XRAY_API int64_t xrt_array_length(const XrtArray *array, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
-    XrXirValue value = array_value(array);
     XrtArrayElement element = XRT_ARRAY_I64;
-    if (!array_element(&value, &element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+    if (!array_current_element(root, array, &element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrXirValueAdmission admission = array_admission(root, source_id);
-    value = array_argument(array, &admission, element, source_id);
+    XrXirValue value = array_argument(root, array, &admission, element, source_id);
     int64_t length = 0;
     XrXirValueStatus status = xr_xir_array_len(&value, &admission, &length);
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
@@ -256,7 +273,7 @@ static XrtValueRoot *array_get(const XrtArray *array, int64_t index, XrtArrayEle
     XrtValueRoot *root = xrt_value_root_current(source_id);
     XR_CHECK(!root->pending.type && !root->pending.payload, "Array read owns a distinct pending result");
     XrXirValueAdmission admission = array_admission(root, source_id);
-    XrXirValue value = array_argument(array, &admission, element, source_id);
+    XrXirValue value = array_argument(root, array, &admission, element, source_id);
     XrXirFaultDetail fault = {0};
     XrXirValueStatus status = xr_xir_array_get(&value, index, &admission, &root->pending, &fault);
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
@@ -278,7 +295,7 @@ static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, 
     if (!binding || !*binding) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrXirValueAdmission admission = array_admission(root, source_id);
     XrtArrayElement kind = element.type == XR_XIR_I64 ? XRT_ARRAY_I64 : XRT_ARRAY_STRING;
-    XrXirValue value = array_argument(*binding, &admission, kind, source_id);
+    XrXirValue value = array_argument(root, *binding, &admission, kind, source_id);
     int64_t old = value.payload;
     XrtArrayOwner *owner = array_find(root, old);
     XR_CHECK(owner && owner->count, "Array mutation binds an owned current activation slot");
@@ -293,7 +310,7 @@ static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, 
         if (!--owner->count) array_remove(root, owner);
         /* The canonical place already transferred this one real reference. */
         value.type = (uint32_t)((const XirObject *)(intptr_t)value.payload)->type;
-        array_adopt(root, value);
+        array_adopt(root, value, kind);
         *binding = (XrtArray *)(intptr_t)value.payload;
     }
 }
