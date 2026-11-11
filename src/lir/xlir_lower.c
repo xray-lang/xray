@@ -48,7 +48,7 @@ typedef struct LowerFunction {
     XrLirFunction function;
     XrLirBlock *blocks;
     XrLirValue *values, *states, *current, *frame_cells, *snapshots;
-    uint8_t *snapshot_needed;
+    uint8_t *snapshot_needed, *cell_retired;
     XrLirValue state;
     XrLirType *cell_types;
     uint32_t *cell_for, *phis, *order, *stack, *next;
@@ -902,6 +902,7 @@ static void lower_function_free(LowerFunction *f) {
     xr_free(f->frame_cells);
     xr_free(f->snapshots);
     xr_free(f->snapshot_needed);
+    xr_free(f->cell_retired);
     xr_free(f->blocks);
     xr_free(f->values);
     xr_free(f->states);
@@ -1623,6 +1624,14 @@ static bool lower_managed_release_block(LowerFunction *f, uint32_t block, const 
         if (result) {
             XrLirValue value = {f->owner->module, f->function.id, result};
             if (!lower_managed_release(f, block, value, term)) return false;
+            if (function->values[result - 1].type == XR_LIR_ARRAY_CELL &&
+                block_id + 1 != function->entry && !f->cell_retired[result - 1]) {
+                XrLirInstruction drop = {.op = XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
+                    .operands = &value, .operand_count = 1, .source = lower_source(f->owner)};
+                if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, f->blocks[block], &drop)))
+                    return false;
+                f->cell_retired[result - 1] = 1;
+            }
         }
     }
     if (term->op == XR_LIR_RET)
@@ -1642,20 +1651,21 @@ static bool lower_frame_cells(LowerFunction *f) {
     XrLirFunctionData *function = &f->owner->module->functions[f->function.id - 1];
     const XrLirBlockData *entry = &function->blocks[function->entry - 1];
     uint8_t *released = lower_alloc(f->owner, function->value_count, 1);
+    f->cell_retired = released;
     if (function->value_count && !released) return false;
-    for (uint32_t i = 0; i < entry->instruction_count; ++i) {
-        const XrLirInstructionView *v = &entry->instructions[i].view;
-        if (v->op == XR_LIR_ARRAY_CELL_DROP) released[v->operands[0] - 1] = 1;
-    }
+    for (uint32_t b = 0; b < function->block_count; ++b)
+        for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
+            const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
+            if (v->op == XR_LIR_ARRAY_CELL_DROP) released[v->operands[0] - 1] = 1;
+        }
     f->frame_cells = lower_alloc(f->owner, entry->instruction_count, sizeof(*f->frame_cells));
-    if (entry->instruction_count && !f->frame_cells) { xr_free(released); return false; }
+    if (entry->instruction_count && !f->frame_cells) return false;
     for (uint32_t i = 0; i < entry->instruction_count; ++i) {
         const XrLirInstructionView *v = &entry->instructions[i].view;
         if (v->op == XR_LIR_CELL_NEW &&
             (v->type == XR_LIR_STRING_CELL || v->type == XR_LIR_ARRAY_CELL) && !released[v->result - 1])
             f->frame_cells[f->frame_cell_count++] = (XrLirValue){f->owner->module, f->function.id, v->result};
     }
-    xr_free(released);
     return true;
 }
 static bool lower_terminator(LowerFunction *f, uint32_t b) {

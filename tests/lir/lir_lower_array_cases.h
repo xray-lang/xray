@@ -25,6 +25,8 @@ static void array_sources(void) {
         "add(3)\nprint(len(words))\n",
         "fn loop(n:i64)->i64{const xs=[7,8]\nvar sum=0\nvar i=0\n"
         "while(i<n){sum=sum+xs[i%2]\ni=i+1}\nreturn sum}\nprint(loop(4))\n",
+        "fn loop(n:i64)->i64{var sum=0\nvar i=0\nwhile(i<n){var xs=[i]\n"
+        "xs.push(i+1)\nsum=sum+xs[0]+xs[1]\ni=i+1}\nreturn sum}\nprint(loop(3))\n",
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrLirLowered output = lower_text(cases[i]);

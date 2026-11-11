@@ -1,0 +1,24 @@
+fn sum(n:i64)->i64 {
+    var i=0
+    var answer=0
+    while(i<n) {
+        var xs=[i]
+        xs.push(i+1)
+        answer=answer+xs[0]+xs[1]
+        i=i+1
+    }
+    return answer
+}
+fn texts(n:i64)->i64 {
+    var i=0
+    var answer=0
+    while(i<n) {
+        var xs=["x${i}"]
+        xs.push("tail")
+        answer=answer+len(xs[0])+len(xs[1])
+        i=i+1
+    }
+    return answer
+}
+print(sum(3))
+print(texts(3))

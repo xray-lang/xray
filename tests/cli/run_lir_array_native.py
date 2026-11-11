@@ -45,7 +45,7 @@ def main() -> None:
             failures.append((name, status, paths["stderr"].read_text(encoding="utf-8")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
-    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "local_loop",
+    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "local_loop", "loop_temporary",
                  "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
