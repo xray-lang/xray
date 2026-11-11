@@ -399,16 +399,17 @@ static void native_negation(void) {
             }
     unselected_negation(true); unselected_negation(false);
 }
-static XrLirModule *transport(XrLirType type) {
+static XrLirModule *transport(XrLirType type, uint64_t bits) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
     XrLirFunction f = function(m, "transport", NULL, 0, type); XrLirBlock b = block(m, f, NULL, 0);
-    OK(xr_lir_set_entry(m, f, b)); ret(m, b, constant(m, b, type, 0));
+    OK(xr_lir_set_entry(m, f, b));
+    ret(m, b, constant(m, b, type, bits));
     OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL)); return m;
 }
 static void test_frontier(void) {
     const XrLirType native_rejected[] = {XR_LIR_F32};
     for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
-        XrLirModule *m = transport(native_rejected[i]); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
+        XrLirModule *m = transport(native_rejected[i], 0); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
         XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
         XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = "frontier.c", .control = NULL};
         CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED);
@@ -416,12 +417,31 @@ static void test_frontier(void) {
         xr_lir_module_destroy(m); xr_compile_resources_release(resources);
     }
     const XrLirType vm_types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_F32, XR_LIR_PTR, XR_LIR_F64};
+    const uint64_t values[] = {0, UINT64_C(0x8000000000000000), UINT64_MAX};
     for (size_t i = 0; i < sizeof(vm_types) / sizeof(*vm_types); ++i) {
-        XrLirModule *m = transport(vm_types[i]); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
-        XrRbcProgram *program = NULL; XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, NULL);
-        if (vm_types[i] == XR_LIR_F64) CHECK(status == XR_RBC_COMPILE_OK && program);
-        else CHECK(status == XR_RBC_COMPILE_UNSUPPORTED && !program);
-        xr_lir_module_destroy(m); xr_rbc_program_destroy(program);
+        size_t count = vm_types[i] == XR_LIR_U64 ? sizeof(values) / sizeof(*values) : 1;
+        for (size_t n = 0; n < count; ++n) {
+            XrLirModule *m = transport(vm_types[i], values[n]);
+            XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
+            XrRbcProgram *program = NULL;
+            XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, NULL);
+            if (vm_types[i] == XR_LIR_F64 || vm_types[i] == XR_LIR_U64) {
+                CHECK(status == XR_RBC_COMPILE_OK && program);
+                xr_lir_module_destroy(m);
+                XrRbcExecution *execution = NULL;
+                CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+                XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+                xr_rbc_execution_free(&execution);
+                xr_rbc_program_destroy(program);
+                uint64_t bits = 91;
+                CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK &&
+                    xr_rbc_outcome_bits(outcome, &bits) && bits == values[n]);
+                xr_rbc_outcome_free(&outcome);
+            } else {
+                CHECK(status == XR_RBC_COMPILE_UNSUPPORTED && !program);
+                xr_lir_module_destroy(m);
+            }
+        }
     }
 }
 int main(int argc, char **argv) {

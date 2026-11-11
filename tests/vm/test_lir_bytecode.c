@@ -71,17 +71,16 @@ static XrLirValue call(XrLirModule *m, XrLirBlock b, XrLirFunction callee,
 
 #include "lir_bytecode_moves_cases.h"
 
-static void test_i64_identity_cast(void) {
+static void test_integer_identity_cast(XrLirType source, XrLirType target) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
-    XrLirType type = XR_LIR_I64;
-    XrLirFunction f = test_function(m, "identity_cast", &type, 1, type);
+    XrLirFunction f = test_function(m, "identity_cast", &source, 1, target);
     XrLirBlock block = test_block(m, f, NULL, 0);
     OK(xr_lir_set_entry(m, f, block));
     XrLirValue input = parameter(m, f, 0), result;
     char path[] = "identity-cast.xr";
     for (uint32_t n = 0; n < 2; ++n) {
-        XrLirInstruction instruction = {.op = XR_LIR_INTCAST, .type = type,
+        XrLirInstruction instruction = {.op = XR_LIR_INTCAST, .type = target,
             .operands = &input, .operand_count = 1,
             .source = {path, sizeof(path) - 1, 4 + n, 2, 4 + n, 10}};
         OK(xr_lir_emit_value(m, block, &instruction, &result));
@@ -100,6 +99,46 @@ static void test_i64_identity_cast(void) {
     for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n)
         CHECK(run(program, &cases[n], 1) == cases[n]);
     xr_rbc_program_destroy(program);
+}
+
+static void test_u64_arithmetic_and_edges(void) {
+    const XrLirOp operations[] = {XR_LIR_ADD, XR_LIR_SUB, XR_LIR_MUL, XR_LIR_NEG};
+    const uint64_t inputs[][2] = {{0, 1}, {UINT64_MAX, 1}, {0, UINT64_MAX},
+        {UINT64_C(0x8000000000000000), 2}, {UINT64_MAX, UINT64_MAX},
+        {UINT64_C(0xa5a55a5adeadbeef), UINT64_C(0x0102030405060708)}};
+    for (size_t op = 0; op < sizeof(operations) / sizeof(*operations); ++op) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_U64, XR_LIR_U64, XR_LIR_I1}, type = XR_LIR_U64;
+        XrLirFunction f = test_function(m, "unsigned_edges", types, 3, type);
+        XrLirBlock entry = test_block(m, f, NULL, 0), join = test_block(m, f, &type, 1);
+        OK(xr_lir_set_entry(m, f, entry));
+        XrLirValue operands[] = {parameter(m, f, 0), parameter(m, f, 1)}, result;
+        XrLirInstruction arithmetic = {.op = operations[op], .type = type,
+            .operands = operands, .operand_count = operations[op] == XR_LIR_NEG ? 1u : 2u};
+        OK(xr_lir_emit_value(m, entry, &arithmetic, &result));
+        conditional(m, entry, parameter(m, f, 2), (XrLirEdge){join, &result, 1},
+            (XrLirEdge){join, &operands[0], 1});
+        test_return(m, join, block_parameter(m, join, 0));
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        for (size_t n = 0; n < sizeof(inputs) / sizeof(*inputs); ++n) {
+            uint64_t left = inputs[n][0], right = inputs[n][1], expected = 0;
+            switch (operations[op]) {
+            case XR_LIR_ADD: expected = left + right; break;
+            case XR_LIR_SUB: expected = left - right; break;
+            case XR_LIR_MUL: expected = left * right; break;
+            case XR_LIR_NEG: expected = UINT64_C(0) - left; break;
+            default: CHECK(false);
+            }
+            uint64_t arguments[] = {left, right, 0};
+            CHECK(run(program, arguments, 3) == left);
+            arguments[2] = 1;
+            CHECK(run(program, arguments, 3) == expected);
+        }
+        xr_rbc_program_destroy(program);
+    }
 }
 
 static void test_recursive_and_loop(void) {
@@ -809,9 +848,10 @@ static void test_f64_constants_and_refusals(void) {
         {XR_LIR_FCMP, XR_LIR_F32, XR_LIR_I1, 2},
         {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1},
         {XR_LIR_INTCAST, XR_LIR_I8, XR_LIR_I64, 1},
-        {XR_LIR_INTCAST, XR_LIR_U64, XR_LIR_I64, 1},
         {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_I8, 1},
-        {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_U64, 1}
+        {XR_LIR_DIV, XR_LIR_U64, XR_LIR_U64, 2},
+        {XR_LIR_REM, XR_LIR_U64, XR_LIR_U64, 2},
+        {XR_LIR_ICMP, XR_LIR_U64, XR_LIR_I1, 2}
     };
     for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
         XrLirModule *m = NULL;
@@ -822,7 +862,8 @@ static void test_f64_constants_and_refusals(void) {
         XrLirValue a = parameter(m, f, 0), arguments[] = {a, a}, result;
         XrLirInstruction i = {.op = cases[n].op, .type = cases[n].output,
             .operands = arguments, .operand_count = cases[n].arity,
-            .predicate = cases[n].op == XR_LIR_FCMP ? XR_LIR_EQ : XR_LIR_PREDICATE_NONE,
+            .predicate = cases[n].op == XR_LIR_FCMP ? XR_LIR_EQ :
+                cases[n].op == XR_LIR_ICMP ? XR_LIR_LT : XR_LIR_PREDICATE_NONE,
             .source = {"refused.xr", 10, 3, 5, 3, 9}};
         OK(xr_lir_emit_value(m, b, &i, &result));
         test_return(m, b, result);
@@ -1182,8 +1223,18 @@ static void test_literal_ownership(void) {
         root = test_function(m, "opaque_argument", &types[i], 1, XR_LIR_UNIT);
         XrLirBlock b = test_block(m, root, NULL, 0);OK(xr_lir_set_entry(m, root, b));
         test_return(m, b, (XrLirValue){0});OK(xr_lir_module_finish(m, NULL));
-        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-        xr_lir_module_destroy(m);
+        if (types[i] == XR_LIR_U64) {
+            program = compile(m, root);
+            xr_lir_module_destroy(m);
+            const uint64_t arguments[] = {0, UINT64_C(0x8000000000000000), UINT64_MAX};
+            for (size_t n = 0; n < sizeof(arguments) / sizeof(*arguments); ++n)
+                CHECK(run(program, &arguments[n], 1) == 0);
+            xr_rbc_program_destroy(program);
+            program = NULL;
+        } else {
+            CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+            xr_lir_module_destroy(m);
+        }
     }
 }
 
@@ -1455,7 +1506,10 @@ int main(void) {
     test_cell_transport();
     test_edge_moves();
     test_owned_arithmetic_panics();
-    test_i64_identity_cast();
+    test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);
+    test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
+    test_integer_identity_cast(XR_LIR_I64, XR_LIR_U64);
+    test_u64_arithmetic_and_edges();
     test_recursive_and_loop();
     test_immediate_selection();
     test_location_ownership();
