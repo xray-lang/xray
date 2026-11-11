@@ -59,6 +59,9 @@ tests/unit/xir/test_declarations_owner/old_program27.c text eol=lf
 
 # Public output oracles bind LF bytes independently of the checkout host.
 tests/fixtures/public_source_program/root.out text eol=lf
+tests/fixtures/lir_cli/module_state_mixed.out text eol=lf
+tests/fixtures/lir_cli/module_state_branch.out text eol=lf
+tests/fixtures/lir_cli/module_state_initializers.out text eol=lf
 tests/diff/cases/semantics/stdlib/compress_*_direct.xr.expected text eol=lf
 
 # Consumer fixtures and generated censuses are compared with exact original
