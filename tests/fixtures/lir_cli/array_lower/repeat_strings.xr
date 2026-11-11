@@ -5,7 +5,7 @@ fn fill()->string{calls=calls+1;return seed(7)}
 const empty=Array<string>(0,fill())
 print(len(empty))
 print(calls)
-const defaults=Array<string>(3)
+const defaults=Array<string>(3,"")
 print(len(defaults))
 print(len(defaults[0]))
 const original=filled(3,seed(7))
