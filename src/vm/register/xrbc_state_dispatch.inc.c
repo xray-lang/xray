@@ -19,8 +19,10 @@ XR_RBC_CASE(STATE_PUBLISH) {
 XR_RBC_CASE(STATE_REFERENCE)
 XR_RBC_CASE(STATE_READ)
 XR_RBC_CASE(STATE_WRITE) {
+    size_t next_pc = pc;
     XrRbcStatus status = xr_rbc_state_access(function, registers, stack->module_accesses,
-        instruction, XR_RBC_SOURCE(), &pc);
+        instruction, XR_RBC_SOURCE(), &next_pc);
     if (status != XR_RBC_OK) return status;
+    pc = next_pc;
     XR_RBC_NEXT();
 }

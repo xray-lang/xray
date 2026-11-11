@@ -49,7 +49,8 @@ static XR_AINLINE void xr_rbc_state_read(const XrtModuleAccess *access,
 }
 
 /* Accesses borrow stable execution metadata and cannot grow a register bank.
- * Inline them so each scalar load avoids publishing the interpreter's frame. */
+ * Inline them so each scalar load avoids publishing the interpreter's frame.
+ * Callers pass a temporary cursor to keep the dispatch cursor address private. */
 static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
     XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source,
     size_t *pc) {
