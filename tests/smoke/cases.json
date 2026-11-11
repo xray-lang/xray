@@ -10,7 +10,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -22,7 +22,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -34,7 +34,7 @@
       "stdout": "tests/smoke/expected/functions.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:10:1: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/functions.xr:10:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -46,7 +46,7 @@
       "stdout": "tests/smoke/expected/functions.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:10:1: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/functions.xr:10:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -74,7 +74,7 @@
       "stdout": "tests/smoke/expected/quoted_literals.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/quoted_literals.xr:3:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/quoted_literals.xr:3:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -86,7 +86,7 @@
       "stdout": "tests/smoke/expected/quoted_literals.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/quoted_literals.xr:3:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/quoted_literals.xr:3:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -98,7 +98,7 @@
       "stdout": "tests/smoke/expected/tuples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/tuples.xr:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -110,7 +110,7 @@
       "stdout": "tests/smoke/expected/tuples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/tuples.xr:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -122,7 +122,7 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -134,7 +134,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -146,7 +146,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -170,7 +170,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -182,7 +182,7 @@
       "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/03-oop/classes.xr:25:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/03-oop/classes.xr:25:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -194,7 +194,7 @@
       "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/03-oop/classes.xr:25:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/03-oop/classes.xr:25:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -218,7 +218,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -230,7 +230,7 @@
       "stdout": "tests/smoke/expected/atomic.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -243,7 +243,7 @@
       "stdout_channels": "tests/smoke/expected/channels-catalog.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -256,7 +256,7 @@
       "stdout_traces": "tests/smoke/expected/goroutines-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/goroutines.xr:17:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/goroutines.xr:17:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -269,7 +269,7 @@
       "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -282,7 +282,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -306,7 +306,7 @@
       "stdout": "tests/smoke/expected/borrow_span_examples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:97:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:97:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -322,7 +322,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -334,7 +334,7 @@
       "stdout": "tests/smoke/expected/generics.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/generics.xr:25:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/generics.xr:25:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -346,7 +346,7 @@
       "stdout": "tests/smoke/expected/generics.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/generics.xr:25:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/generics.xr:25:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -375,7 +375,7 @@
       "stdout": "tests/smoke/expected/readme-count.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-1:9:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-1:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -387,7 +387,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-2:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -399,7 +399,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-3:1:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -411,7 +411,7 @@
       "stdout": "tests/smoke/expected/readme-count.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-1:9:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-1:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -423,7 +423,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-2:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -435,7 +435,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-3:1:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -467,7 +467,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -479,7 +479,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -510,13 +510,9 @@
       "id": "stdlib/encoding/encoding.xr",
       "path": "stdlib/encoding/encoding.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/http/http.xr",
@@ -738,25 +734,17 @@
       "id": "stdlib/url/url.xr",
       "path": "stdlib/url/url.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/url/url.xr",
       "path": "stdlib/url/url.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/url/url.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/ws/ws.xr",
@@ -851,7 +839,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -863,7 +851,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-2:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -875,7 +863,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-2:8:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -904,7 +892,7 @@
       "stdout": "tests/smoke/expected/readme-count.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-1:9:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-1:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -916,7 +904,7 @@
       "stdout": "tests/smoke/expected/readme-count.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-1:9:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-1:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -936,7 +924,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -948,20 +936,16 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:7:5: module slots other than mutable i64 or String Cells is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:7:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
       "id": "native:stdlib/encoding/encoding.xr",
       "path": "stdlib/encoding/encoding.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:demos/07-advanced/crypto_entropy.xr",
@@ -976,7 +960,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:2:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -988,7 +972,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:2:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1000,7 +984,7 @@
       "stdout": "tests/smoke/expected/borrow_span_examples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:97:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:97:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1012,7 +996,7 @@
       "stdout": "tests/smoke/expected/atomic.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/atomic.xr:8:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1025,7 +1009,7 @@
       "stdout_channels": "tests/smoke/expected/channels-catalog.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/channels.xr:8:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1038,7 +1022,7 @@
       "stdout_traces": "tests/smoke/expected/goroutines-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/goroutines.xr:17:5: imported mutable module slots is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/goroutines.xr:17:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1051,7 +1035,7 @@
       "stdout_traces": "tests/smoke/expected/select_and_scope-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:9:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1064,7 +1048,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1076,7 +1060,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-3:1:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1088,7 +1072,7 @@
       "stdout": "tests/smoke/expected/readme_concurrency.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-3:1:7: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-3:1:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1108,7 +1092,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/compress/compress.xr:2:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1372,7 +1356,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1384,7 +1368,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slots other than immutable scalar constants is not supported by LIR lowering yet"
+        "first_diagnostic": "tests/smoke/inputs/regex_crypto_compress.xr:4:1: module slot payload type is not supported by LIR lowering yet"
       }
     }
   ]
