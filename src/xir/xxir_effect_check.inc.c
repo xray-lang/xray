@@ -2538,11 +2538,10 @@ static XrXirStatus effect_checked_bound_cause(const XrXirCompileContext *memory,
     const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output);
 
 static XrXirStatus effect_checked_first_cause(const XrXirCompileContext *memory,
-    const EffectCheckedRoots *roots, uint32_t node,
-    const uint32_t *arguments, uint32_t count, bool unresolved, EffectCheckCause *output) {
+    const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask = 0;
-    XrXirStatus status = effect_checked_root_mask(roots, node, arguments, count, &mask);
+    XrXirStatus status = effect_checked_root_mask(roots, node, NULL, 0, &mask);
     if (status != XR_XIR_OK && status != XR_XIR_UNRESOLVED) return status;
     const uint64_t *bits = effect_check_bits(roots, node);
     if (status == XR_XIR_UNRESOLVED && (bits[0] & (UINT64_C(1) << unresolved))) {
@@ -2594,8 +2593,7 @@ static XrXirStatus effect_checked_first_cause(const XrXirCompileContext *memory,
         uint32_t source = p >= (uint64_t)function->parameters * 2 ? function->contents + parameter :
             function->first + parameter;
         uint32_t closed = roots->node[source].closed;
-        uint32_t actual = arguments ? arguments[parameter] :
-            ((closed & 1) ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
+        uint32_t actual = ((closed & 1) ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0) |
             ((closed & 2) ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
         if (!(actual & wanted)) continue;
         result.function = function->declaration;
@@ -2605,8 +2603,7 @@ static XrXirStatus effect_checked_first_cause(const XrXirCompileContext *memory,
         *output = result;
         return XR_XIR_OK;
     }
-    return arguments ? XR_XIR_BAD_STRUCTURE :
-        effect_checked_bound_cause(memory, roots, node, unresolved, output);
+    return effect_checked_bound_cause(memory, roots, node, unresolved, output);
 }
 
 #endif // XXIR_EFFECT_CHECK_IMPLEMENTATION

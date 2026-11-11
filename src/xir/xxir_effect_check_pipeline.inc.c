@@ -68,7 +68,7 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
         for (uint32_t bit = 0; bit < 2; ++bit) {
             if (!(mask & (1u << bit))) continue;
             EffectCheckCause cause = {0};
-            status = effect_checked_first_cause(memory, roots, node, NULL, 0, bit != 0, &cause);
+            status = effect_checked_first_cause(memory, roots, node, bit != 0, &cause);
             if (status == XR_XIR_UNRESOLVED) {
                 uint32_t instruction = UINT32_MAX;
                 for (uint32_t t = 0; t < formula->term_count; ++t)
