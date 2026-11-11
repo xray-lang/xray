@@ -7,7 +7,7 @@
  * xlir_array_verify.inc.c - Exact element admission through real SSA producers
  */
 static bool lir_array_function_shape(const XrLirFunctionData *f) {
-    if (f->result == XR_LIR_ARRAY_CELL || (f->result == XR_LIR_ARRAY ?
+    if (f->result == XR_LIR_ARRAY_CELL || f->result == XR_LIR_ARRAY_REF || (f->result == XR_LIR_ARRAY ?
         !xr_lir_internal_array_element(f->array_result) : f->array_result != XR_LIR_TYPE_INVALID))
         return false;
     for (uint32_t v = 0; v < f->value_count; ++v)
@@ -74,6 +74,8 @@ XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *m,
         return v->operand_count == 1 &&
             f->values[v->operands[0] - 1].array_element == f->array_result;
     if (v->op == XR_LIR_CELL_WRITE && f->values[v->operands[0] - 1].type == XR_LIR_ARRAY_CELL)
+        return f->values[v->operands[0] - 1].array_element == f->values[v->operands[1] - 1].array_element;
+    if (v->op == XR_LIR_ARRAY_REF_WRITE)
         return f->values[v->operands[0] - 1].array_element == f->values[v->operands[1] - 1].array_element;
     return true;
 }

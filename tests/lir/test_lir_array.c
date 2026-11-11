@@ -22,6 +22,7 @@
 #define OK(c) CHECK((c) == XR_LIR_OK)
 #include "lir_array_c_fixture.h"
 #include "lir_array_unsigned_frontier_cases.h"
+#include "lir_array_ref_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -468,6 +469,7 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     array_catalog();
+    array_reference_owners();
     array_unsigned_frontier();
     array_unsigned_spans();
     array_unsigned_scalar_boundaries();

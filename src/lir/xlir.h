@@ -48,6 +48,7 @@ typedef enum XrLirType {
     XR_LIR_STATE_REF,
     XR_LIR_ARRAY,
     XR_LIR_ARRAY_CELL,
+    XR_LIR_ARRAY_REF,
     XR_LIR_TYPE_COUNT
 } XrLirType;
 
@@ -58,7 +59,9 @@ typedef enum XrLirType {
  * Loop backedges carry scalars or owned Array values. String temporaries
  * retire before a backedge.
  * RET transfers an owned result. Managed Cells own one independent reference
- * and their storage remains in the defining activation. */
+ * and their storage remains in the defining activation. ARRAY_REF synchronously
+ * borrows one mutable Array binding, either a live Cell or module reference.
+ * It has no owned result, edge, storage or external-argument representation. */
 typedef enum XrLirOp {
     XR_LIR_OP_INVALID,
 #define XR_LIR_OP(name, text, arity) XR_LIR_##name,

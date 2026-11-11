@@ -54,6 +54,7 @@ static void array_free(void *memory) {
 #include "lir/xlir_inline.c"
 #include "lir_array_fixture.h"
 #include "lir_array_repeat_fixture.h"
+#include "lir_array_ref_fixture.h"
 
 static void array_construction_sweep(XrLirType element) {
     XrLirModule *m = NULL;
@@ -86,6 +87,44 @@ static void array_catalog_sweep(void) {
     }
     fail_at = SIZE_MAX;
     printf("Array catalog failure points: %zu\n", count);
+}
+
+static void array_reference_sweep(void) {
+    XrLirModule *m = NULL;
+    attempt = 0; fail_at = SIZE_MAX;
+    OK(array_ref_fixture(XR_LIR_STRING, &m));
+    size_t count = attempt;
+    xr_lir_module_destroy(m);
+    CHECK(!live && !live_bytes);
+    for (size_t point = 0; point < count; ++point) {
+        m = NULL; attempt = 0; fail_at = point;
+        CHECK(array_ref_fixture(XR_LIR_STRING, &m) == XR_LIR_OUT_OF_MEMORY);
+        CHECK(!m && attempt > point && !live && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    printf("Array reference construction failure points: %zu\n", count);
+}
+
+static void array_reference_transform_sweep(bool inlining) {
+    XrLirModule *input = NULL, *output = NULL;
+    OK(array_ref_fixture(XR_LIR_STRING, &input));
+    size_t baseline = live, bytes = live_bytes;
+    attempt = 0;
+    OK(inlining ? xr_lir_inline(input, &output) : xr_lir_rebuild(input, &output));
+    size_t count = attempt;
+    xr_lir_module_destroy(output);
+    CHECK(live == baseline && live_bytes == bytes);
+    for (size_t point = 0; point < count; ++point) {
+        output = NULL; attempt = 0; fail_at = point;
+        XrLirStatus status = inlining ? xr_lir_inline(input, &output) : xr_lir_rebuild(input, &output);
+        CHECK(status == XR_LIR_OUT_OF_MEMORY && !output && attempt > point);
+        CHECK(live == baseline && live_bytes == bytes);
+        OK(xr_lir_verify(input, NULL));
+    }
+    fail_at = SIZE_MAX;
+    xr_lir_module_destroy(input);
+    CHECK(!live && !live_bytes);
+    printf("Array reference %s failure points: %zu\n", inlining ? "inline" : "rebuild", count);
 }
 
 static void array_repeat_sweep(XrLirType element) {
@@ -129,6 +168,9 @@ static void array_transform_sweep(bool inlining, bool repeating) {
 
 int main(void) {
     array_catalog_sweep();
+    array_reference_sweep();
+    array_reference_transform_sweep(false);
+    array_reference_transform_sweep(true);
     array_repeat_sweep(XR_LIR_I64);
     array_repeat_sweep(XR_LIR_STRING);
     array_repeat_sweep(XR_LIR_U8);

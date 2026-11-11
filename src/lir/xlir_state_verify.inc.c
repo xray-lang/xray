@@ -19,6 +19,8 @@ static bool lir_state_signature(const XrLirModule *m, const XrLirFunctionData *f
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         XrLirType type = f->parameter_types[p];
         if (type == XR_LIR_STATE_REF) return false;
+        if (type == XR_LIR_ARRAY_REF && m->state_entry &&
+            f == &m->functions[m->state_entry - 1]) return false;
         if (type == XR_LIR_STATE && (!m->state_layout_set ||
             f->kind != XR_LIR_FUNCTION_DEFINITION || p != f->parameter_count - 1)) return false;
     }

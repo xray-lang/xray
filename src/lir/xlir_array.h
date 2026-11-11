@@ -44,6 +44,11 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType elemen
 
 /* Explicit shapes belong only to function and block parameters. Instruction
  * results derive their shape from the actual producer, callee or intrinsic.
+ * ARRAY_REF function parameters carry the same exact element shape. BORROW
+ * derives it from a live ARRAY_CELL or a mutable Array STATE_REF in this owner.
+ * READ creates an owned Array snapshot. WRITE replaces the referenced binding.
+ * Borrowing reads no payload or readiness flags, and neither owns nor releases
+ * the underlying Cell or state. References cannot cross edges or escape calls.
  * Closed elements are I64, owned String, U8 and U64. Their shape never implies
  * that a backend implements that family or its scalar operations. */
 XR_FUNC XrLirStatus xr_lir_set_array_shape(XrLirModule *, XrLirValue,

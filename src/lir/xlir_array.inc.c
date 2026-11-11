@@ -55,7 +55,8 @@ XR_FUNC XrLirStatus xr_lir_set_array_result(XrLirModule *m, XrLirFunction functi
 XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *entry,
     const XrLirArrayIntrinsic *shape) {
     if (shape->parameter_count != entry->parameter_count ||
-        (shape->parameter_count && !shape->parameter_elements) || entry->result == XR_LIR_ARRAY_CELL)
+        (shape->parameter_count && !shape->parameter_elements) ||
+        entry->result == XR_LIR_ARRAY_CELL || entry->result == XR_LIR_ARRAY_REF)
         return false;
     if (entry->result == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape->result_element) :
         shape->result_element != XR_LIR_TYPE_INVALID) return false;
@@ -65,6 +66,7 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *entry,
     for (uint32_t p = 0; p < entry->parameter_count; ++p) {
         array |= xr_lir_internal_array_type(entry->parameters[p]);
         if (entry->parameters[p] == XR_LIR_STATE || entry->parameters[p] == XR_LIR_STATE_REF ||
+            entry->parameters[p] == XR_LIR_ARRAY_REF ||
             entry->parameters[p] == XR_LIR_STRING_CELL || entry->parameters[p] == XR_LIR_I64_CELL)
             return false;
         if (xr_lir_internal_array_type(entry->parameters[p]) ?
@@ -227,8 +229,11 @@ XR_FUNC XrLirStatus xr_lir_array_intrinsic_view(const XrLirModule *m, uint32_t i
 XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v) {
     if (!xr_lir_internal_array_type(v->type)) return XR_LIR_TYPE_INVALID;
-    if (v->op == XR_LIR_STATE_READ && v->operand_count && v->operands[0] && v->operands[0] <= f->value_count)
-        return f->values[v->operands[0] - 1].state_reference.array_element;
+    const XrLirValueData *input = v->operand_count && v->operands[0] && v->operands[0] <= f->value_count ?
+        &f->values[v->operands[0] - 1] : NULL;
+    if (input && (v->op == XR_LIR_STATE_READ ||
+        (v->op == XR_LIR_ARRAY_BORROW && input->type == XR_LIR_STATE_REF)))
+        return input->state_reference.array_element;
     if (v->op == XR_LIR_CALL && v->callee && v->callee <= m->function_count)
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INTRINSIC) {
@@ -236,9 +241,9 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         return index != UINT32_MAX && m->array_intrinsics ?
             m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
     }
-    if ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_ARRAY_RETAIN) &&
-        v->operand_count && v->operands[0] && v->operands[0] <= f->value_count)
-        return f->values[v->operands[0] - 1].array_element;
+    if (input && (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_ARRAY_RETAIN ||
+        v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ))
+        return input->array_element;
     return XR_LIR_TYPE_INVALID;
 }
 

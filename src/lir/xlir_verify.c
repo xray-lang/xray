@@ -20,7 +20,7 @@
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
-                                             "string", "string_cell", "state", "state_ref", "array", "array_cell"};
+                                             "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -147,6 +147,13 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
         case XR_LIR_ARRAY_RETAIN: return v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY;
         case XR_LIR_ARRAY_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY;
         case XR_LIR_ARRAY_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY_CELL;
+        case XR_LIR_ARRAY_BORROW:
+            return v->type == XR_LIR_ARRAY_REF && (a == XR_LIR_ARRAY_CELL ||
+                (a == XR_LIR_STATE_REF && f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_ARRAY &&
+                 f->values[v->operands[0] - 1].state_reference.mutable));
+        case XR_LIR_ARRAY_REF_READ: return v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY_REF;
+        case XR_LIR_ARRAY_REF_WRITE:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY_REF && b == XR_LIR_ARRAY;
         case XR_LIR_STRING_I64:
             return v->type == XR_LIR_STRING && a == XR_LIR_I64;
         case XR_LIR_STRING_F64:
@@ -690,9 +697,9 @@ static XrLirStatus lir_managed_owners(const XrLirFunctionData *f, uint32_t funct
     for (uint32_t i = 0; i < f->value_count; ++i) {
         managed |= lir_managed_value(f->values[i].type) || lir_managed_cell(f->values[i].type);
         cells |= f->values[i].type == XR_LIR_STRING_CELL;
-        array_cells |= f->values[i].type == XR_LIR_ARRAY_CELL;
+        array_cells |= f->values[i].type == XR_LIR_ARRAY_CELL || f->values[i].type == XR_LIR_ARRAY_REF;
     }
-    if (!managed) return XR_LIR_OK;
+    if (!managed && !array_cells) return XR_LIR_OK;
     if (cells) {
         XrLirStatus status = lir_frame_cells(f, function, owned, d);
         if (status != XR_LIR_OK) return status;

@@ -50,3 +50,7 @@ XR_LIR_OP(STATE_WRITE, "state_write", -1)
 XR_LIR_OP(ARRAY_RETAIN, "array_retain", 1)
 XR_LIR_OP(ARRAY_DROP, "array_drop", 1)
 XR_LIR_OP(ARRAY_CELL_DROP, "array_cell_drop", 1)
+/* Borrowing preserves the actual mutable binding without reading its value. */
+XR_LIR_OP(ARRAY_BORROW, "array_borrow", 1)
+XR_LIR_OP(ARRAY_REF_READ, "array_ref_read", 1)
+XR_LIR_OP(ARRAY_REF_WRITE, "array_ref_write", 2)

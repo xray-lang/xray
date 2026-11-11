@@ -31,7 +31,8 @@ static inline XrLirStatus lir_copy_array_signature(const XrLirModule *input,
     XrLirFunctionView view = {0};
     if (status == XR_LIR_OK) status = xr_lir_function_view(input, source, &view);
     for (uint32_t p = 0; status == XR_LIR_OK && p < view.parameter_count; ++p) {
-        if (view.parameter_types[p] != XR_LIR_ARRAY && view.parameter_types[p] != XR_LIR_ARRAY_CELL) continue;
+        if (view.parameter_types[p] != XR_LIR_ARRAY && view.parameter_types[p] != XR_LIR_ARRAY_CELL &&
+            view.parameter_types[p] != XR_LIR_ARRAY_REF) continue;
         XrLirValue value = {0};
         status = xr_lir_function_parameter((XrLirModule *)target.module, target, p, &value);
         if (status == XR_LIR_OK) status = xr_lir_array_shape_view(input,
@@ -45,7 +46,8 @@ static inline XrLirStatus lir_copy_array_value(const XrLirModule *input,
     XrLirValue source, XrLirValue target) {
     XrLirType type = XR_LIR_TYPE_INVALID;
     XrLirStatus status = xr_lir_value_type(input, source, &type);
-    if (status != XR_LIR_OK || (type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL)) return status;
+    if (status != XR_LIR_OK || (type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL &&
+        type != XR_LIR_ARRAY_REF)) return status;
     XrLirArrayShape shape = {0};
     status = xr_lir_array_shape_view(input, source, &shape);
     if (status == XR_LIR_OK)

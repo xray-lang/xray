@@ -95,7 +95,7 @@ XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
-    return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL;
+    return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
 }
 XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *,
     const XrLirArrayIntrinsic *);

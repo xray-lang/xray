@@ -280,7 +280,8 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
         !lir_types_valid(spec->parameters, spec->parameter_count) ||
         !xr_lir_internal_type_valid(spec->result, true) || spec->result == XR_LIR_I64_CELL ||
         spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
-        spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL)
+        spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
+        spec->result == XR_LIR_ARRAY_REF)
         return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
         if (spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&

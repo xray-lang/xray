@@ -47,13 +47,17 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
         const XrLirInstructionView *v = &body->instructions[i].view;
         for (uint32_t a = 0; a < v->operand_count; ++a) {
             uint32_t id = v->operands[a];
-            if (f->values[id - 1].type != XR_LIR_ARRAY_CELL) continue;
+            XrLirType type = f->values[id - 1].type;
+            if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF) continue;
             uint32_t owner = flow->owners[id - 1];
             if (owner && flow->current[owner - 1] != LIR_ARRAY_CELL_OWNED)
                 return xr_lir_internal_error(d, "Managed Cell use follows release or precedes initialization",
                     function, block + 1, i + 1, &v->source);
-            if (v->op != XR_LIR_CELL_READ && v->op != XR_LIR_CELL_WRITE && v->op != XR_LIR_CALL &&
-                v->op != XR_LIR_CALL_INTRINSIC && v->op != XR_LIR_ARRAY_CELL_DROP)
+            bool allowed = type == XR_LIR_ARRAY_REF ?
+                v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE || v->op == XR_LIR_CALL :
+                v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_CALL ||
+                v->op == XR_LIR_CALL_INTRINSIC || v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_ARRAY_BORROW;
+            if (!allowed)
                 return xr_lir_internal_error(d, "Managed Cell handle cannot escape its activation",
                     function, block + 1, i + 1, &v->source);
             if (v->op == XR_LIR_ARRAY_CELL_DROP) {
@@ -72,7 +76,8 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
         }
         for (uint32_t e = 0; e < v->edge_count; ++e)
             for (uint32_t a = 0; a < v->edges[e].argument_count; ++a)
-                if (f->values[v->edges[e].arguments[a] - 1].type == XR_LIR_ARRAY_CELL)
+                if (f->values[v->edges[e].arguments[a] - 1].type == XR_LIR_ARRAY_CELL ||
+                    f->values[v->edges[e].arguments[a] - 1].type == XR_LIR_ARRAY_REF)
                     return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, block + 1, i + 1, &v->source);
         if (v->op == XR_LIR_RET)
@@ -88,9 +93,11 @@ static XrLirStatus lir_array_cells(const XrLirFunctionData *f, uint32_t function
     const LirGraph *g, XrLirDiagnostic *d) {
     uint32_t count = 0;
     for (uint32_t v = 0; v < f->value_count; ++v) {
-        if (f->values[v].type != XR_LIR_ARRAY_CELL) continue;
+        if (f->values[v].type != XR_LIR_ARRAY_CELL && f->values[v].type != XR_LIR_ARRAY_REF) continue;
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
-        if (definition && definition->op == XR_LIR_CELL_NEW) ++count;
+        if (f->values[v].type == XR_LIR_ARRAY_CELL && definition && definition->op == XR_LIR_CELL_NEW) ++count;
+        else if (f->values[v].type == XR_LIR_ARRAY_REF && definition && definition->op == XR_LIR_ARRAY_BORROW)
+            continue;
         else if (!f->values[v].parameter || f->values[v].block)
             return xr_lir_internal_error(d, "Array Cell requires a real constructor or incoming borrow",
                 function, f->values[v].block, 0, definition ? &definition->source : NULL);
@@ -115,6 +122,11 @@ static XrLirStatus lir_array_cells(const XrLirFunctionData *f, uint32_t function
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
         if (definition && definition->op == XR_LIR_CELL_NEW && definition->type == XR_LIR_ARRAY_CELL)
             flow.owners[v] = ++owner;
+    }
+    for (uint32_t v = 0; v < f->value_count; ++v) {
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
+        if (definition && definition->op == XR_LIR_ARRAY_BORROW)
+            flow.owners[v] = flow.owners[definition->operands[0] - 1];
     }
     XR_DCHECK(owner == count, "each Array Cell constructor has one flow owner");
     bool changed = count != 0;
