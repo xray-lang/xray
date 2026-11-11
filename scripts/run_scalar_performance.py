@@ -232,10 +232,9 @@ def main() -> None:
             for label in result["nativeRatios"]}
         result["nativeSerialRatios"] = {label: row["native"] / row["C"]
                                         for label, row in result["nativeSerialMedians"].items()}
-        result["gates"]["native-fib"] = result["nativeSerialRatios"]["fib(32)"] <= 1.1
-        result["gates"]["native-mandelbrot"] = result["nativeSerialRatios"]["mandelbrot"] <= 1.1
-        result["gates"].update({"native-" + label: ratio <= 1.1
-                               for label, ratio in result["nativeSerialRatios"].items()})
+        for label, ratio in result["nativeSerialRatios"].items():
+            key = "native-fib" if label == "fib(32)" else "native-" + label
+            result["gates"][key] = ratio <= 1.1
         result["state"] = "PASS" if all(result["gates"].values()) else "FAIL"
     except BaseException as error:
         result.update(state="FAIL", error=str(error))
