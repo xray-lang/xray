@@ -51,19 +51,25 @@ static bool xr_rbc_array_move_tail(const XrRbcFunction *function, XrRbcArrayAcce
     return true;
 }
 
-static void xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame,
+static bool xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame,
     const XrRbcFunction *function, const XrRbcArrayAccess *access, XrRbcRegister *binding, uint32_t source) {
     const XrRbcArrayLocation *args = function->array_operands + access->first;
     bool push = access->operation == XR_RBC_ARRAY_PUSH;
     XrRbcRegister *value = xr_rbc_array_location(stack, frame, args[push ? 1 : 2]);
+    if (access->kind == XR_RBC_ARRAY_U8 && value->bits > UINT8_MAX) return false;
     if (push) {
         if (access->kind == XR_RBC_ARRAY_STRING) xrt_array_string_push(&binding->array, value->string, source);
+        else if (access->kind == XR_RBC_ARRAY_U8) xrt_array_u8_push(&binding->array, (uint8_t)value->bits, source);
+        else if (access->kind == XR_RBC_ARRAY_U64) xrt_array_u64_push(&binding->array, value->bits, source);
         else xrt_array_i64_push(&binding->array, xr_rbc_signed(value->bits), source);
     } else {
         int64_t index = xr_rbc_signed(xr_rbc_array_location(stack, frame, args[1])->bits);
         if (access->kind == XR_RBC_ARRAY_STRING) xrt_array_string_set(&binding->array, index, value->string, source);
+        else if (access->kind == XR_RBC_ARRAY_U8) xrt_array_u8_set(&binding->array, index, (uint8_t)value->bits, source);
+        else if (access->kind == XR_RBC_ARRAY_U64) xrt_array_u64_set(&binding->array, index, value->bits, source);
         else xrt_array_i64_set(&binding->array, index, xr_rbc_signed(value->bits), source);
     }
+    return true;
 }
 
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
@@ -84,19 +90,34 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
         for (uint32_t p = 0; p < access.count; ++p) {
             XrRbcRegister *value = xr_rbc_array_location(stack, frame, locations[p]);
             if (string) ((XrtString **)stack->array_arguments)[p] = value->string;
+            else if (access.kind == XR_RBC_ARRAY_U8) {
+                if (value->bits > UINT8_MAX) return XR_RBC_INVALID;
+                ((uint8_t *)stack->array_arguments)[p] = (uint8_t)value->bits;
+            } else if (access.kind == XR_RBC_ARRAY_U64) ((uint64_t *)stack->array_arguments)[p] = value->bits;
             else ((int64_t *)stack->array_arguments)[p] = xr_rbc_signed(value->bits);
         }
         const void *arguments = access.count ? stack->array_arguments : NULL;
-        result->array = string ? xrt_array_string_new(arguments, access.count, source) :
-            xrt_array_i64_new(arguments, access.count, source);
+        switch (access.kind) {
+        case XR_RBC_ARRAY_STRING: result->array = xrt_array_string_new(arguments, access.count, source); break;
+        case XR_RBC_ARRAY_I64: result->array = xrt_array_i64_new(arguments, access.count, source); break;
+        case XR_RBC_ARRAY_U8: result->array = xrt_array_u8_new(arguments, access.count, source); break;
+        case XR_RBC_ARRAY_U64: result->array = xrt_array_u64_new(arguments, access.count, source); break;
+        default: return XR_RBC_INVALID;
+        }
         return XR_RBC_OK;
     }
     XrRbcRegister *first = xr_rbc_array_location(stack, frame, locations[0]);
     XrRbcRegister *second = access.count > 1 ? xr_rbc_array_location(stack, frame, locations[1]) : NULL;
     if (access.operation == XR_RBC_ARRAY_REPEAT) {
         int64_t length = xr_rbc_signed(first->bits);
-        result->array = string ? xrt_array_string_repeat(length, second->string, source) :
-            xrt_array_i64_repeat(length, xr_rbc_signed(second->bits), source);
+        if (access.kind == XR_RBC_ARRAY_U8 && second->bits > UINT8_MAX) return XR_RBC_INVALID;
+        switch (access.kind) {
+        case XR_RBC_ARRAY_STRING: result->array = xrt_array_string_repeat(length, second->string, source); break;
+        case XR_RBC_ARRAY_I64: result->array = xrt_array_i64_repeat(length, xr_rbc_signed(second->bits), source); break;
+        case XR_RBC_ARRAY_U8: result->array = xrt_array_u8_repeat(length, (uint8_t)second->bits, source); break;
+        case XR_RBC_ARRAY_U64: result->array = xrt_array_u64_repeat(length, second->bits, source); break;
+        default: return XR_RBC_INVALID;
+        }
         return XR_RBC_OK;
     }
     bool move = xr_rbc_array_move_pair(function, access, *pc);
@@ -112,7 +133,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
             /* Keep the real Cell alive at a failing mutation. The final read
              * and DROP transfer its reference only after mutation succeeds. */
             uint32_t mutation_source = function->source_ids ? function->source_ids[*pc] : 0;
-            xr_rbc_array_mutate_owned(stack, frame, function, mutation, &stack->cells[cell], mutation_source);
+            if (!xr_rbc_array_mutate_owned(stack, frame, function, mutation, &stack->cells[cell], mutation_source))
+                return XR_RBC_INVALID;
             XrRbcRegister *output = xr_rbc_array_location(stack, frame, read->result);
             output->array = stack->cells[cell].array;
             stack->cells[cell].array = NULL;
@@ -131,17 +153,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
         result->bits = (uint64_t)xrt_array_length(first->array, source); break;
     case XR_RBC_ARRAY_GET:
         if (string) result->string = xrt_array_string_get(first->array, xr_rbc_signed(second->bits), source);
+        else if (access.kind == XR_RBC_ARRAY_U8) result->bits = xrt_array_u8_get(first->array, xr_rbc_signed(second->bits), source);
+        else if (access.kind == XR_RBC_ARRAY_U64) result->bits = xrt_array_u64_get(first->array, xr_rbc_signed(second->bits), source);
         else result->bits = (uint64_t)xrt_array_i64_get(first->array, xr_rbc_signed(second->bits), source);
         break;
-    case XR_RBC_ARRAY_SET: {
-        XrRbcRegister *value = xr_rbc_array_location(stack, frame, locations[2]);
-        if (string) xrt_array_string_set(&binding->array, xr_rbc_signed(second->bits), value->string, source);
-        else xrt_array_i64_set(&binding->array, xr_rbc_signed(second->bits), xr_rbc_signed(value->bits), source);
-        break;
-    }
-    case XR_RBC_ARRAY_PUSH:
-        if (string) xrt_array_string_push(&binding->array, second->string, source);
-        else xrt_array_i64_push(&binding->array, xr_rbc_signed(second->bits), source);
+    case XR_RBC_ARRAY_SET: case XR_RBC_ARRAY_PUSH:
+        if (!xr_rbc_array_mutate_owned(stack, frame, function, &access, binding, source)) return XR_RBC_INVALID;
         break;
     case XR_RBC_ARRAY_RETAIN: case XR_RBC_ARRAY_CELL_READ:
         if (move) {

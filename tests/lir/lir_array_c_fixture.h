@@ -137,10 +137,123 @@ static void ca_repeat(CArrayFixture *c, XrLirBlock entry, const char *name) {
     ca_return(c, entry, total);
 }
 
+static XrLirValue ca_unsigned_number(CArrayFixture *c, XrLirBlock block, XrLirValue value) {
+    return ca_value(c, block, XR_LIR_INTCAST, XR_LIR_I64, &value, 1);
+}
+static void ca_unsigned_cycle(CArrayFixture *c, XrLirFunction root, XrLirBlock *entry, XrLirValue *array,
+    XrLirValue seed) {
+    XrLirType types[] = {XR_LIR_ARRAY, XR_LIR_ARRAY, XR_LIR_I64};
+    XrLirBlock loop = {0}, done = {0};
+    OK(xr_lir_add_block(c->module, root, types, 3, &loop));
+    OK(xr_lir_add_block(c->module, root, types, 2, &done));
+    XrLirValue values[3], outputs[2];
+    XrLirArrayShape shape = {c->element};
+    for (uint32_t p = 0; p < 3; ++p) {
+        OK(xr_lir_block_parameter(c->module, loop, p, &values[p]));
+        if (p < 2) {
+            OK(xr_lir_set_array_shape(c->module, values[p], &shape));
+            OK(xr_lir_block_parameter(c->module, done, p, &outputs[p]));
+            OK(xr_lir_set_array_shape(c->module, outputs[p], &shape));
+        }
+    }
+    XrLirValue initial[] = {*array, ca_intrinsic(c, *entry, XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY, &seed, 1),
+        ca_constant(c, *entry, 0)};
+    XrLirInstruction branch = {.op=XR_LIR_BR, .type=XR_LIR_UNIT, .edge_count=1, .edges={{loop, initial, 3}}};
+    OK(xr_lir_set_terminator(c->module, *entry, &branch));
+    XrLirValue count = ca_binary(c, loop, XR_LIR_ADD, values[2], ca_constant(c, loop, 1));
+    XrLirValue operands[] = {count, ca_constant(c, loop, 4)}, condition = {0};
+    XrLirInstruction compare = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_LT,
+        .operands=operands, .operand_count=2};
+    OK(xr_lir_emit_value(c->module, loop, &compare, &condition));
+    XrLirValue back[] = {values[1], values[0], count};
+    branch = (XrLirInstruction){.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operands=&condition, .operand_count=1,
+        .edge_count=2, .edges={{loop, back, 3}, {done, values, 2}}};
+    OK(xr_lir_set_terminator(c->module, loop, &branch));
+    ca_effect(c, done, XR_LIR_ARRAY_DROP, outputs[1]);
+    *entry = done; *array = outputs[0];
+}
+static void ca_unsigned(CArrayFixture *c, XrLirBlock entry, const char *name, XrLirFunction root) {
+    XrLirValue state = {0}, reference = {0};
+    bool stateful = !strncmp(name, "state-", 6);
+    if (stateful) {
+        OK(xr_lir_function_parameter(c->module, root, 0, &state));
+        ca_effect(c, entry, XR_LIR_MODULE_BEGIN, state);
+        reference = ca_value(c, entry, XR_LIR_STATE_REFERENCE, XR_LIR_STATE_REF, &state, 1);
+    }
+    XrLirValue source = ca_constant(c, entry, -1);
+    XrLirValue seed = ca_value(c, entry, XR_LIR_INTCAST, c->element, &source, 1);
+    if (!strncmp(name, "unsigned-spills", 15)) {
+        XrLirValue arrays[300];
+        for (uint32_t p = 0; p < 300; ++p) {
+            source = ca_constant(c, entry, c->element == XR_LIR_U8 ? (int64_t)p : -1 - (int64_t)p);
+            XrLirValue value = ca_value(c, entry, XR_LIR_INTCAST, c->element, &source, 1);
+            arrays[p] = ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY, &value, 1);
+        }
+        XrLirValue total = ca_constant(c, entry, 0), index = ca_constant(c, entry, 0);
+        for (uint32_t p = 0; p < 300; ++p) {
+            XrLirValue read[] = {arrays[p], index};
+            XrLirValue value = ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_GET, c->element, read, 2);
+            total = ca_binary(c, entry, XR_LIR_ADD, total, ca_unsigned_number(c, entry, value));
+            ca_effect(c, entry, XR_LIR_ARRAY_DROP, arrays[p]);
+        }
+        ca_return(c, entry, total);
+        return;
+    }
+    XrLirFunction helper = ca_helper(c, 3);
+    XrLirValue array = {0};
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_ARRAY, .callee=helper,
+        .operands=&seed, .operand_count=1, .source=ca_source()};
+    OK(xr_lir_emit_value(c->module, entry, &call, &array));
+    if (!strncmp(name, "return-", 7)) { ca_return(c, entry, array); return; }
+    if (stateful) {
+        XrLirValue args[] = {state, array};
+        XrLirValue initial = ca_value(c, entry, XR_LIR_STATE_CONSTRUCT, XR_LIR_STATE_REF, args, 2);
+        ca_effect(c, entry, XR_LIR_STATE_PUBLISH, initial);
+        ca_effect(c, entry, XR_LIR_MODULE_READY, state);
+    }
+    if (!strncmp(name, "phi-", 4)) {
+        ca_unsigned_cycle(c, root, &entry, &array, seed);
+    }
+    XrLirValue saved = ca_value(c, entry, XR_LIR_ARRAY_RETAIN, XR_LIR_ARRAY, &array, 1);
+    source = ca_constant(c, entry, 2);
+    XrLirValue replacement = ca_value(c, entry, XR_LIR_INTCAST, c->element, &source, 1);
+    XrLirValue index = ca_constant(c, entry, 0);
+    XrLirValue cell = ca_value(c, entry, XR_LIR_CELL_NEW, XR_LIR_ARRAY_CELL, &array, 1);
+    ca_effect(c, entry, XR_LIR_ARRAY_DROP, array);
+    XrLirValue args[] = {cell, index, replacement};
+    (void)ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_SET, XR_LIR_UNIT, args, 3);
+    args[1] = seed;
+    (void)ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_PUSH, XR_LIR_UNIT, args, 2);
+    array = ca_value(c, entry, XR_LIR_CELL_READ, XR_LIR_ARRAY, &cell, 1);
+    ca_effect(c, entry, XR_LIR_ARRAY_CELL_DROP, cell);
+    if (stateful) {
+        XrLirValue write[] = {reference, array};
+        XrLirInstruction op = {.op=XR_LIR_STATE_WRITE, .type=XR_LIR_UNIT, .operands=write, .operand_count=2, .source=ca_source()};
+        OK(xr_lir_emit_effect(c->module, entry, &op));
+        XrLirValue loaded = ca_value(c, entry, XR_LIR_STATE_READ, XR_LIR_ARRAY, &reference, 1);
+        ca_effect(c, entry, XR_LIR_ARRAY_DROP, array); array = loaded;
+    }
+    XrLirValue read[] = {saved, index};
+    XrLirValue before = ca_unsigned_number(c, entry, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_GET, c->element, read, 2));
+    read[0] = array;
+    XrLirValue after = ca_unsigned_number(c, entry, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_GET, c->element, read, 2));
+    XrLirValue total = ca_binary(c, entry, XR_LIR_ADD, before, after);
+    total = ca_binary(c, entry, XR_LIR_ADD, total, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_LEN, XR_LIR_I64, &array, 1));
+    read[0] = ca_constant(c, entry, 3); read[1] = seed;
+    XrLirValue repeated = ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_REPEAT, XR_LIR_ARRAY, read, 2);
+    total = ca_binary(c, entry, XR_LIR_ADD, total, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_LEN, XR_LIR_I64, &repeated, 1));
+    ca_effect(c, entry, XR_LIR_ARRAY_DROP, repeated);
+    ca_effect(c, entry, XR_LIR_ARRAY_DROP, saved);
+    ca_effect(c, entry, XR_LIR_ARRAY_DROP, array);
+    ca_return(c, entry, total);
+}
+
 static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunction *root) {
     bool string = strstr(name, "string") != NULL, state = !strncmp(name, "state-", 6);
     bool layout_only = !strcmp(name, "state-layout"), returned = !strncmp(name, "return-", 7);
     CArrayFixture c = {.element=string ? XR_LIR_STRING : XR_LIR_I64};
+    if (strstr(name, "u8")) c.element = XR_LIR_U8;
+    if (strstr(name, "u64")) c.element = XR_LIR_U64;
     OK(xr_lir_array_module_create(NULL, &c.module));
     if (state) ca_module(&c);
     XrLirType state_type = XR_LIR_STATE;
@@ -156,6 +269,10 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
     XrLirBlock entry = {0};
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &entry));
     OK(xr_lir_set_entry(c.module, *root, entry));
+    if (c.element == XR_LIR_U8 || c.element == XR_LIR_U64) {
+        ca_unsigned(&c, entry, name, *root);
+        OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;
+    }
     if (!strncmp(name, "repeat-", 7)) {
         ca_repeat(&c, entry, name);
         OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;

@@ -411,13 +411,17 @@ static void array_c_output(const char *name, const char *path) {
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
 }
 
-typedef struct ArrayVmResult { XrtArray *array; bool string; int64_t value; } ArrayVmResult;
+typedef struct ArrayVmResult { XrtArray *array; bool string; int64_t value; XrLirType element; } ArrayVmResult;
 static void array_vm_result(void *context) {
     ArrayVmResult *result=context;
     result->value=xrt_array_length(result->array,0);
     if(result->string) {
         XrtString *string=xrt_array_string_get(result->array,0,0);
         result->value+=xrt_string_length(string,0);xrt_string_drop(&string);
+    } else if(result->element==XR_LIR_U8)result->value+=xrt_array_u8_get(result->array,0,0);
+    else if(result->element==XR_LIR_U64) {
+        uint64_t bits=xrt_array_u64_get(result->array,0,0);int64_t value;
+        memcpy(&value,&bits,sizeof(value));result->value+=value;
     } else result->value+=xrt_array_i64_get(result->array,0,0);
 }
 static void array_vm_fixture(const char *name,int64_t expected) {
@@ -428,7 +432,7 @@ static void array_vm_fixture(const char *name,int64_t expected) {
     if(status!=XR_RBC_COMPILE_OK)fprintf(stderr,"Array VM %s compile=%u %s\n",name,(unsigned)status,diagnostic.message);
     CHECK(status==XR_RBC_COMPILE_OK && program);
     xr_lir_module_destroy(m);
-    if(!strncmp(name,"array-spills",12)) {
+    if(!strncmp(name,"array-spills",12) || !strncmp(name,"unsigned-spills",15)) {
         const XrRbcModule *view=xr_rbc_program_view(program);
         CHECK(view->functions[0].reference_spill_count && view->functions[0].reference_spill_kinds);
     }
@@ -447,7 +451,8 @@ static void array_vm_fixture(const char *name,int64_t expected) {
         const XrtSourceLocation *point=xrt_locations_get(locations,source);
         CHECK(failure==XR_XIR_VALUE_BAD_ARGUMENT && point && point->line==(!strcmp(name,"state-uninitialized-read")?37u:41u));
     } else if(!strncmp(name,"return-",7)) {
-        ArrayVmResult result={.string=strstr(name,"string")!=NULL};
+        ArrayVmResult result={.string=strstr(name,"string")!=NULL,
+            .element=strstr(name,"u64")?XR_LIR_U64:strstr(name,"u8")?XR_LIR_U8:XR_LIR_I64};
         CHECK(xr_rbc_outcome_take_array(outcome,&result.array));
         xr_rbc_outcome_free(&outcome);
         XrtSourceMap map={0};xrt_run_standalone(&map,array_vm_result,&result);
@@ -465,6 +470,7 @@ int main(int argc, char **argv) {
     array_catalog();
     array_unsigned_frontier();
     array_unsigned_spans();
+    array_unsigned_scalar_boundaries();
     array_repeat_owners();
     array_receiving_owners(XR_LIR_I64);
     array_receiving_owners(XR_LIR_STRING);
@@ -480,8 +486,11 @@ int main(int argc, char **argv) {
     const char *cases[]={"i64","string","large","state-i64","state-string","state-layout",
         "return-i64","return-string","array-spills","array-spills-string","phi-i64","phi-string",
         "state-uninitialized-read","state-uninitialized-write","repeat-i64","repeat-string",
-        "repeat-empty-i64","repeat-empty-string","repeat-negative-i64","repeat-negative-string"};
-    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,19,10,0,0,0,0};
+        "repeat-empty-i64","repeat-empty-string","repeat-negative-i64","repeat-negative-string",
+        "u8","u64","phi-u8","phi-u64","state-u8","state-u64","return-u8","return-u64",
+        "unsigned-spills-u8","unsigned-spills-u64"};
+    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,19,10,0,0,0,0,
+        264,8,262,6,264,8,258,2,33586,-45150};
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c)array_vm_fixture(cases[c],expected[c]);
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");
     return 0;

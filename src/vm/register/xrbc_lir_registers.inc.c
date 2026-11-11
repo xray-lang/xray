@@ -181,7 +181,7 @@ static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget
 static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     for(uint32_t v=1;v<=c->view.value_count;++v)
         c->state_scratch |= rbc_lir_value_type(c,v)==XR_LIR_STATE;
-    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_arrays[0]+c->temporary_arrays[1]+c->temporary_refs+c->temporary_bits+window+
+    uint64_t reserved=(uint64_t)c->temporary_strings+rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+window+
         (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
@@ -227,7 +227,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         }
     }
     c->typed_spills=true;
-    c->scratch_count=c->temporary_strings+c->temporary_arrays[0]+c->temporary_arrays[1]+c->temporary_refs+c->temporary_bits+
+    c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+
         (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
@@ -301,8 +301,8 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (kinds[first] == XR_RBC_STRING) c->string_scratch = true;
         if (kinds[first] == XR_RBC_STATE) c->state_scratch = true;
         if (kinds[first] == XR_RBC_STATE_REF) c->state_ref_scratch = true;
-        if (kinds[first] == XR_RBC_ARRAY_I64) c->array_scratch[0] = true;
-        if (kinds[first] == XR_RBC_ARRAY_STRING) c->array_scratch[1] = true;
+        uint32_t family = xr_rbc_array_family(kinds[first]);
+        if (family < XR_RBC_ARRAY_FAMILY_COUNT) c->array_scratch[family] = true;
         if (emit && !rbc_lir_array_move(c, kinds[first], temporary, source)) return false;
         *scratch = true;
         for (uint32_t p = 0; p < count; ++p)

@@ -16,6 +16,8 @@ static bool rbc_lir_state_payload(XrLirType type, XrLirType element, XrtModuleTy
     case XR_LIR_ARRAY:
         if(element==XR_LIR_I64){*kind=XRT_MODULE_ARRAY_I64;*index=5;return true;}
         if(element==XR_LIR_STRING){*kind=XRT_MODULE_ARRAY_STRING;*index=6;return true;}
+        if(element==XR_LIR_U8){*kind=XRT_MODULE_ARRAY_U8;*index=7;return true;}
+        if(element==XR_LIR_U64){*kind=XRT_MODULE_ARRAY_U64;*index=8;return true;}
         return false;
     default: return false;
     }
@@ -45,10 +47,11 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
     }
     if (status == XR_RBC_COMPILE_OK) {
         static const XrtModuleTypeSpec types[] = {{XRT_MODULE_UNIT}, {XRT_MODULE_BOOL},
-            {XRT_MODULE_I64}, {XRT_MODULE_F64}, {XRT_MODULE_STRING}, {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING}};
+            {XRT_MODULE_I64}, {XRT_MODULE_F64}, {XRT_MODULE_STRING}, {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING},
+            {XRT_MODULE_ARRAY_U8}, {XRT_MODULE_ARRAY_U64}};
         bool arrays=false;
         for(uint32_t n=0;n<layout.slot_count;++n)arrays|=layout.slots[n].payload==XR_LIR_ARRAY;
-        XrtModuleLayoutSpec spec = {types, arrays?7u:5u, modules, layout.module_count, layout.dependencies,
+        XrtModuleLayoutSpec spec = {types, arrays?9u:5u, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
             layout.payload_alignment};
         XrXirValueStatus copied = xrt_module_layout_new(&spec, &program->module.state_layout);

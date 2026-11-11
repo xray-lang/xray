@@ -155,7 +155,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
          function->cell_kind_count != 0) ||
         (function->result_kind != XR_RBC_BITS && !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_ARRAY_STRING_CELL ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_ARRAY_U64_CELL ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF ||

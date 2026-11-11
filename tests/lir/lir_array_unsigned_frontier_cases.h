@@ -50,15 +50,23 @@ static void array_unsigned_frontier(void) {
         OK(xr_lir_set_terminator(m, block, &ret));
         OK(xr_lir_module_finish(m, NULL));
         XrRbcProgram *program = NULL;
-        CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_OK && program);
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        uint64_t result = 91;
+        CHECK(xr_rbc_outcome_bits(outcome, &result) && result == 0);
+        xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
         XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrLirCRequest request = {.module=m, .entry=f, .resources=resources,
             .translation_unit="unsigned-frontier.c"};
         XrLirCOutput output = {0};
-        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED);
-        CHECK(!output.bytes && !output.length && !output.entry_result);
+        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK && output.bytes && output.length);
+        CHECK(strstr(output.bytes, stateful ? (element == XR_LIR_U8 ? "XRT_MODULE_ARRAY_U8" : "XRT_MODULE_ARRAY_U64") :
+            element == XR_LIR_U8 ? "xrt_array_u8_new(NULL" : "xrt_array_u64_new(NULL"));
+        xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);
     }
@@ -107,5 +115,62 @@ static void array_unsigned_spans(void) {
         copy->functions[f.id - 1].blocks[block.id - 1].instructions[0].view.type = other;
         CHECK(xr_lir_verify(copy, NULL) == XR_LIR_VERIFY_ERROR);
         xr_lir_module_destroy(copy);
+    }
+}
+
+static void array_unsigned_scalar_boundaries(void) {
+    const XrLirType parameters[] = {XR_LIR_U8, XR_LIR_U64, XR_LIR_I64};
+    for (uint32_t scenario = 0; scenario < 3; ++scenario) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirFunction f = {0}; XrLirValue parameter = {0}, result = {0}; XrLirBlock block = {0};
+        XrLirFunctionSpec spec = {.name="typed_identity", .name_length=14, .parameters=&parameters[scenario],
+            .parameter_count=1, .result=scenario == 2 ? XR_LIR_U8 : parameters[scenario]};
+        OK(xr_lir_declare_function(m, &spec, &f)); OK(xr_lir_define_function(m, f));
+        OK(xr_lir_function_parameter(m, f, 0, &parameter));
+        OK(xr_lir_add_block(m, f, NULL, 0, &block)); OK(xr_lir_set_entry(m, f, block));
+        result = parameter;
+        if (scenario == 2) {
+            XrLirInstruction cast = {.op=XR_LIR_INTCAST, .type=XR_LIR_U8, .operands=&parameter, .operand_count=1};
+            OK(xr_lir_emit_value(m, block, &cast, &result));
+        }
+        XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+        OK(xr_lir_set_terminator(m, block, &ret)); OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_OK && program);
+        xr_lir_module_destroy(m);
+        const uint64_t inputs[] = {0, 255, 256, 257, UINT64_C(0x8000000000000000), UINT64_MAX};
+        for (uint32_t p = 0; p < sizeof(inputs) / sizeof(*inputs); ++p) {
+            XrRbcExecution *execution = NULL;
+            XrRbcStatus status = xr_rbc_program_prepare(program, &inputs[p], 1, &execution);
+            if (!scenario && inputs[p] > UINT8_MAX) CHECK(status == XR_RBC_INVALID && !execution);
+            else {
+                CHECK(status == XR_RBC_OK && execution);
+                XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+                uint64_t bits = 0;
+                CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == (scenario == 2 ? inputs[p] & 255 : inputs[p]));
+                xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+            }
+        }
+        xr_rbc_program_destroy(program);
+    }
+    for (uint32_t scenario = 0; scenario < 2; ++scenario) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_U64, XR_LIR_U64};
+        XrLirFunction f = {0}; XrLirBlock block = {0}; XrLirValue operands[2], result = {0};
+        XrLirFunctionSpec spec = {.name="unsupported_unsigned", .name_length=20, .parameters=types,
+            .parameter_count=2, .result=scenario ? XR_LIR_I1 : XR_LIR_U64};
+        OK(xr_lir_declare_function(m, &spec, &f)); OK(xr_lir_define_function(m, f));
+        for (uint32_t p = 0; p < 2; ++p) OK(xr_lir_function_parameter(m, f, p, &operands[p]));
+        OK(xr_lir_add_block(m, f, NULL, 0, &block)); OK(xr_lir_set_entry(m, f, block));
+        XrLirInstruction operation = {.op=scenario ? XR_LIR_ICMP : XR_LIR_DIV, .type=spec.result,
+            .operands=operands, .operand_count=2, .predicate=scenario ? XR_LIR_LT : XR_LIR_PREDICATE_NONE};
+        OK(xr_lir_emit_value(m, block, &operation, &result));
+        XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+        OK(xr_lir_set_terminator(m, block, &ret)); OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        xr_lir_module_destroy(m);
     }
 }

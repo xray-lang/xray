@@ -6,6 +6,20 @@
  *
  * xrbc_lir_array.inc.c - Own typed Array roles and real operand-bank spans
  */
+static uint32_t rbc_lir_array_family(XrLirType element) {
+    switch (element) {
+    case XR_LIR_I64: return 0;
+    case XR_LIR_STRING: return 1;
+    case XR_LIR_U8: return 2;
+    case XR_LIR_U64: return 3;
+    default: return XR_RBC_ARRAY_FAMILY_COUNT;
+    }
+}
+static uint64_t rbc_lir_array_temporaries(const RbcLirCompiler *c, uint32_t families) {
+    uint64_t count = 0;
+    for (uint32_t i = 0; i < families; ++i) count += c->temporary_arrays[i];
+    return count;
+}
 static bool rbc_lir_array_point(RbcLirCompiler *c, const XrLirInstructionView *i) {
     if (i->op == XR_LIR_CALL_INTRINSIC) {
         XrLirArrayIntrinsic shape = {0};
@@ -42,7 +56,7 @@ static bool rbc_lir_array_append(RbcLirCompiler *c, XrRbcArrayAccess row, const 
 }
 static bool rbc_lir_array_move(RbcLirCompiler *c, XrRbcRegisterKind kind, uint32_t destination, uint32_t source) {
     if (destination == source) return true;
-    if (kind == XR_RBC_ARRAY_I64 || kind == XR_RBC_ARRAY_STRING) {
+    if (xr_rbc_array_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT) {
         XrRbcArrayLocation operand = {source, false};
         XrRbcArrayAccess row = {.operation=XR_RBC_ARRAY_TAKE, .kind=kind,
             .result={destination, false}, .count=1};
@@ -81,7 +95,10 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unknown Array transport");
         }
     }
-    XrRbcArrayAccess row = {.operation=operation, .kind=shape.element == XR_LIR_I64 ? XR_RBC_ARRAY_I64 : XR_RBC_ARRAY_STRING,
+    uint32_t family = rbc_lir_array_family(shape.element);
+    if (family == XR_RBC_ARRAY_FAMILY_COUNT)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "Array element has no bytecode implementation");
+    XrRbcArrayAccess row = {.operation=operation, .kind=xr_rbc_array_kind_at(family),
         .count=i->operand_count};
     if (i->result) row.result = rbc_lir_array_location(c, i->result);
     if (operation == XR_RBC_ARRAY_CELL_NEW) {

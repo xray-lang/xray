@@ -28,7 +28,7 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     if (access.operation == XR_RBC_ARRAY_NEW) {
         if (!rbc_array_destination(s, access.result)) return false;
         for (uint32_t p = 0; p < access.count; ++p) {
-            if (access.kind == XR_RBC_ARRAY_I64 ? rbc_array_state(s, operands[p]) != RBC_BITS :
+            if (access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, operands[p]) != RBC_BITS :
                 !rbc_array_source(s, operands[p])) return false;
         }
         rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
@@ -36,7 +36,7 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     }
     if (access.operation == XR_RBC_ARRAY_REPEAT) {
         if (!rbc_array_destination(s, access.result) || source != RBC_BITS) return false;
-        if (access.kind == XR_RBC_ARRAY_I64 ? rbc_array_state(s, operands[1]) != RBC_BITS :
+        if (access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, operands[1]) != RBC_BITS :
             !rbc_array_source(s, operands[1])) return false;
         rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
         return true;
@@ -73,12 +73,12 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
         if (rbc_array_state(s, operands[1]) != RBC_BITS) return false;
     if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH) {
         XrRbcArrayLocation value = operands[access.operation == XR_RBC_ARRAY_SET ? 2 : 1];
-        return access.kind == XR_RBC_ARRAY_I64 ? rbc_array_state(s, value) == RBC_BITS : rbc_array_source(s, value);
+        return access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, value) == RBC_BITS : rbc_array_source(s, value);
     }
     if (access.operation == XR_RBC_ARRAY_CELL_WRITE) return rbc_array_source(s, operands[1]);
     if (!rbc_array_destination(s, access.result)) return false;
     rbc_array_define(s, access.result, access.operation == XR_RBC_ARRAY_LEN ||
-        (access.operation == XR_RBC_ARRAY_GET && access.kind == XR_RBC_ARRAY_I64) ? RBC_BITS : RBC_STRING_OWNED, 0);
+        (access.operation == XR_RBC_ARRAY_GET && access.kind != XR_RBC_ARRAY_STRING) ? RBC_BITS : RBC_STRING_OWNED, 0);
     return true;
 }
 

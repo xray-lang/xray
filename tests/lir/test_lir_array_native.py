@@ -19,13 +19,17 @@ def run(command, cwd, expected_exit=0):
 
 
 def adapter(name, generated):
-    prefix = '#include <inttypes.h>\n#include <stdio.h>\n' + f'#include "{generated.name}"\n'
+    prefix = '#include <inttypes.h>\n#include <stdio.h>\n#include <string.h>\n' + f'#include "{generated.name}"\n'
     if not name.startswith('return-'):
         return prefix + 'int main(void) { printf("%" PRId64 "\\n", xray_lir_entry()); return 0; }\n'
     string = name.endswith('string')
     observe = ('XrtString *s = xrt_array_string_get(p->array, 0, 0);\n'
                '    p->value = xrt_string_length(s, 0); xrt_string_drop(&s);\n' if string else
                'p->value = xrt_array_i64_get(p->array, 0, 0);\n')
+    if name.endswith('u8'):
+        observe = 'p->value = xrt_array_u8_get(p->array, 0, 0);\n'
+    if name.endswith('u64'):
+        observe = 'uint64_t bits = xrt_array_u64_get(p->array, 0, 0); memcpy(&p->value, &bits, sizeof(bits));\n'
     return prefix + '''typedef struct Probe { XrtArray *array; int64_t value; } Probe;
 static void probe(void *context) {
     Probe *p = context;
@@ -61,7 +65,9 @@ def main():
                 'phi-i64': 1202, 'phi-string': 511,
                 'state-uninitialized-read': None, 'state-uninitialized-write': None,
                 'repeat-i64': 19, 'repeat-string': 10, 'repeat-empty-i64': 0, 'repeat-empty-string': 0,
-                'repeat-negative-i64': None, 'repeat-negative-string': None}
+                'repeat-negative-i64': None, 'repeat-negative-string': None,
+                'u8': 264, 'u64': 8, 'phi-u8': 262, 'phi-u64': 6, 'state-u8': 264, 'state-u64': 8,
+                'return-u8': 258, 'return-u64': 2, 'unsigned-spills-u8': 33586, 'unsigned-spills-u64': -45150}
     record = {'compiler': str(args.compiler), 'cases': {}, 'libraries': {
         str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in args.library if p.is_file()}}
     for name, answer in expected.items():

@@ -24,6 +24,8 @@ static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
     case XR_LIR_ARRAY:
         if (element == XR_LIR_I64) return 5;
         if (element == XR_LIR_STRING) return 6;
+        if (element == XR_LIR_U8) return 7;
+        if (element == XR_LIR_U64) return 8;
         break;
     default:
         c_error(c, XR_LIR_C_UNSUPPORTED, "module storage payload has no native implementation");
@@ -40,7 +42,8 @@ static void c_state_layout(LirC *c) {
     c_text(c, "static const XrtModuleTypeSpec xrl_state_types[] = {\n"
         "    {XRT_MODULE_UNIT}, {XRT_MODULE_BOOL}, {XRT_MODULE_I64},\n"
         "    {XRT_MODULE_F64}, {XRT_MODULE_STRING}");
-    if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING}");
+    if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING},\n"
+        "    {XRT_MODULE_ARRAY_U8}, {XRT_MODULE_ARRAY_U64}");
     c_text(c, "\n};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)
@@ -63,7 +66,7 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
-        arrays ? 7u : 5u, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
+        arrays ? 9u : 5u, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);

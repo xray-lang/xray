@@ -10,11 +10,14 @@ static bool c_array_intrinsic(LirC *c, const XrLirInstructionView *v, XrLirArray
     return v->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_array_intrinsic_view(c->request->module, v->intrinsic, shape) == XR_LIR_OK && shape->id;
 }
+static bool c_array_element_supported(XrLirType element) {
+    return element == XR_LIR_I64 || element == XR_LIR_STRING || element == XR_LIR_U8 || element == XR_LIR_U64;
+}
 static void c_array_admit_shapes(LirC *c) {
     XrLirArrayShape shape = {0};
     if (c->view.result == XR_LIR_ARRAY) {
         if (xr_lir_array_result_view(c->request->module, c->function, &shape) != XR_LIR_OK ||
-            (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING))
+            !c_array_element_supported(shape.element))
             c_error(c, XR_LIR_C_UNSUPPORTED, "Array result has no native element implementation");
     }
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
@@ -22,13 +25,12 @@ static void c_array_admit_shapes(LirC *c) {
         XrLirType type = c_value_type(c, id);
         if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL) {
             if (xr_lir_array_shape_view(c->request->module, value, &shape) != XR_LIR_OK ||
-                (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING))
+                !c_array_element_supported(shape.element))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "Array value has no native element implementation");
         } else if (type == XR_LIR_STATE_REF) {
             XrLirStateReference reference = {0};
             if (xr_lir_state_reference_view(c->request->module, value, &reference) != XR_LIR_OK ||
-                (reference.payload == XR_LIR_ARRAY && reference.array_element != XR_LIR_I64 &&
-                 reference.array_element != XR_LIR_STRING))
+                (reference.payload == XR_LIR_ARRAY && !c_array_element_supported(reference.array_element)))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "module reference has no native element implementation");
         }
     }
@@ -72,13 +74,21 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         return;
     }
     XrLirType element = v->type == XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
-    const char *family = element == XR_LIR_I64 ? "i64" : "string";
+    const char *family;
+    switch (element) {
+    case XR_LIR_I64: family = "i64"; break;
+    case XR_LIR_STRING: family = "string"; break;
+    case XR_LIR_U8: family = "u8"; break;
+    case XR_LIR_U64: family = "u64"; break;
+    default: c_error(c, XR_LIR_C_UNSUPPORTED, "Array element has no native implementation"); return;
+    }
     c_text(c, "    ");
     if (v->result) c_format(c, "v%" PRIu32 " = ", v->result);
     if (shape->operation == XR_LIR_ARRAY_OP_NEW) {
         c_format(c, "xrt_array_%s_new(", family);
         if (v->operand_count) {
-            c_text(c, element == XR_LIR_I64 ? "(const int64_t[]){" : "(XrtString *const[]){");
+            if (element == XR_LIR_STRING) c_text(c, "(XrtString *const[]){");
+            else c_format(c, "(const %s[]){", c_type(element));
             for (uint32_t p = 0; p < v->operand_count; ++p) {
                 if (p) c_text(c, ", ");
                 c_value(c, v->operands[p]);

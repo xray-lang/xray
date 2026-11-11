@@ -13,12 +13,13 @@
 static bool xr_rbc_state_payload_kind(uint32_t kind) {
     return kind == XRT_MODULE_UNIT || kind == XRT_MODULE_BOOL || kind == XRT_MODULE_I64 ||
         kind == XRT_MODULE_F64 || kind == XRT_MODULE_STRING ||
-        kind == XRT_MODULE_ARRAY_I64 || kind == XRT_MODULE_ARRAY_STRING;
+        xr_rbc_state_array(kind);
 }
 
 static XrRbcRegisterKind rbc_state_register_kind(uint32_t kind) {
     return kind == XRT_MODULE_STRING ? XR_RBC_STRING : kind == XRT_MODULE_ARRAY_I64 ? XR_RBC_ARRAY_I64 :
-        kind == XRT_MODULE_ARRAY_STRING ? XR_RBC_ARRAY_STRING : XR_RBC_BITS;
+        kind == XRT_MODULE_ARRAY_STRING ? XR_RBC_ARRAY_STRING : kind == XRT_MODULE_ARRAY_U8 ? XR_RBC_ARRAY_U8 :
+        kind == XRT_MODULE_ARRAY_U64 ? XR_RBC_ARRAY_U64 : XR_RBC_BITS;
 }
 
 static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
