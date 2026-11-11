@@ -27,57 +27,63 @@ static XrXirValueStatus xr_rbc_state_caches(XrtModuleLayout *layout, XrtModuleSt
     return XR_XIR_VALUE_OK;
 }
 
-static void xr_rbc_state_ready(const XrtModuleAccess *access, uint32_t source) {
+static XR_AINLINE void xr_rbc_state_ready(const XrtModuleAccess *access, uint32_t source) {
     if ((*access->flags & access->required_flags) != access->required_flags)
         xrt_module_uninitialized(source);
 }
 
-/* Keep the module operations out of the scalar dispatch function's register
- * allocation. None of these runtime leaves can grow a VM frame or register bank. */
-static XR_NOINLINE XrRbcStatus xr_rbc_state_step(const XrRbcFunction *function,
+/* Accesses borrow stable execution metadata and cannot grow a register bank.
+ * Inline them so each scalar load avoids publishing the interpreter's frame. */
+static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
     XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source) {
     uint32_t op = word & 255, a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
+    if (op == XR_RBC_STATE_REFERENCE) {
+        XrRbcStateAccess row = function->state_accesses[word >> 16];
+        XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
+        xr_rbc_state_ready(published, source);
+        registers[a].state_ref = published;
+        return XR_RBC_OK;
+    }
+    XrtModuleAccess *access = registers[op == XR_RBC_STATE_READ ? b : a].state_ref;
+    xr_rbc_state_ready(access, source);
+    if (op == XR_RBC_STATE_READ) {
+        if (c == XRT_MODULE_STRING) {
+            XrtString *string;
+            memcpy(&string, access->payload, sizeof(string));
+            registers[a].string = xrt_string_retain(string, source);
+        } else if (c == XRT_MODULE_BOOL) {
+            bool boolean;
+            memcpy(&boolean, access->payload, sizeof(boolean));
+            registers[a].bits = boolean;
+        } else if (c != XRT_MODULE_UNIT)
+            memcpy(&registers[a].bits, access->payload, sizeof(uint64_t));
+    } else if (c == XRT_MODULE_STRING) {
+        XrXirValueStatus status = xrt_module_replace(access->reference, &registers[b].string);
+        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+    } else if (c == XRT_MODULE_BOOL) {
+        if (registers[b].bits > 1) return XR_RBC_INVALID;
+        bool boolean = registers[b].bits != 0;
+        memcpy(access->payload, &boolean, sizeof(boolean));
+    } else if (c != XRT_MODULE_UNIT) {
+        memcpy(access->payload, &registers[b].bits, sizeof(uint64_t));
+    }
+    return XR_RBC_OK;
+}
+
+/* Initialization and publication use runtime ownership leaves. Keep their
+ * calls outside the scalar dispatch function's register allocation. */
+static XR_NOINLINE XrRbcStatus xr_rbc_state_step(const XrRbcFunction *function,
+    XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source) {
+    uint32_t op = word & 255, a = (word >> 8) & 255;
     XrXirValueStatus status;
     if (op == XR_RBC_MODULE_BEGIN || op == XR_RBC_MODULE_READY) {
         status = op == XR_RBC_MODULE_BEGIN ? xrt_module_begin(registers[a].state, word >> 16) :
             xrt_module_ready(registers[a].state, word >> 16);
     } else if (op == XR_RBC_STATE_PUBLISH) {
         status = xrt_module_publish(registers[a].state_ref->reference);
-    } else if (op == XR_RBC_STATE_READ || op == XR_RBC_STATE_WRITE) {
-        XrtModuleAccess *access = registers[op == XR_RBC_STATE_READ ? b : a].state_ref;
-        xr_rbc_state_ready(access, source);
-        if (op == XR_RBC_STATE_READ) {
-            if (c == XRT_MODULE_STRING) {
-                XrtString *string;
-                memcpy(&string, access->payload, sizeof(string));
-                registers[a].string = xrt_string_retain(string, source);
-            } else if (c == XRT_MODULE_BOOL) {
-                bool boolean;
-                memcpy(&boolean, access->payload, sizeof(boolean));
-                registers[a].bits = boolean;
-            } else if (c != XRT_MODULE_UNIT)
-                memcpy(&registers[a].bits, access->payload, sizeof(uint64_t));
-            return XR_RBC_OK;
-        }
-        if (c == XRT_MODULE_STRING) {
-            status = xrt_module_replace(access->reference, &registers[b].string);
-        } else if (c == XRT_MODULE_BOOL) {
-            if (registers[b].bits > 1) return XR_RBC_INVALID;
-            bool boolean = registers[b].bits != 0;
-            memcpy(access->payload, &boolean, sizeof(boolean));
-            return XR_RBC_OK;
-        } else {
-            if (c != XRT_MODULE_UNIT) memcpy(access->payload, &registers[b].bits, sizeof(uint64_t));
-            return XR_RBC_OK;
-        }
     } else {
         XrRbcStateAccess row = function->state_accesses[word >> 16];
         XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
-        if (op == XR_RBC_STATE_REFERENCE) {
-            xr_rbc_state_ready(published, source);
-            registers[a].state_ref = published;
-            return XR_RBC_OK;
-        }
         XrtModuleState *state = registers[op == XR_RBC_STATE_INITIALIZE ? a : row.state].state;
         const void *value = &registers[row.value];
         bool boolean = false;
