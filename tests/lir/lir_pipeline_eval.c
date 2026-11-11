@@ -248,7 +248,8 @@ static void transform(Eval *e, XrLirLowered *current, bool inlining, const char 
     OK(xr_lir_function_at(next, ordinal, &entry));
     XrLirFunctionView view;
     OK(xr_lir_function_view(next, entry, &view));
-    CHECK(view.result == XR_LIR_I64 && !view.parameter_count);
+    CHECK(view.result == XR_LIR_I64 && view.parameter_count <= 1);
+    if (view.parameter_count) CHECK(view.parameter_types[0] == XR_LIR_STATE);
     e->comparisons_ticks += elapsed(start);
     start = clock_ticks();
     xr_lir_lowered_free(current);
@@ -261,8 +262,6 @@ static void transform(Eval *e, XrLirLowered *current, bool inlining, const char 
 static void check_initialization(const XrXirArtifact *closed, const XrLirLowered *lowered) {
     const XrXirModule *input = xr_xir_compile_artifact_module(closed);
     const XrXirDeclarations *d = input->declarations;
-    // Mutable Cells retain their existing activation-owned wrapper contract.
-    for (uint32_t s=0; s<d->slot_count; ++s) if (d->slots[s].mutable) return;
     uint32_t *order = array(d->module_count, sizeof(*order)), count = 0;
     uint8_t *active = array(d->module_count, 1);
     CHECK(xr_xir_compile_declarations_active(xr_xir_compile_artifact_context(closed),
@@ -271,12 +270,23 @@ static void check_initialization(const XrXirArtifact *closed, const XrLirLowered
     XrLirBlockView view;
     OK(xr_lir_block_at(lowered->module, lowered->entry, 0, &block));
     OK(xr_lir_block_view(lowered->module, block, &view));
-    CHECK(view.instruction_count == count + 2);
+    XrLirFunctionView root;
+    OK(xr_lir_function_view(lowered->module, lowered->entry, &root));
+    bool stateful = root.parameter_count == 1;
+    CHECK(view.instruction_count == count * (stateful ? 3u : 1u) + 2);
     for (uint32_t i=0; i<=count; ++i) {
         uint32_t selected = i == count ? d->entry_function : d->modules[order[i]].initializer;
         XrLirInstructionView call;
         XrLirFunctionView callee;
-        OK(xr_lir_instruction_view(lowered->module, block, i, &call));
+        uint32_t point = stateful ? i * 3 + (i < count ? 1u : 0u) : i;
+        if (stateful && i < count) {
+            XrLirInstructionView begin, ready;
+            OK(xr_lir_instruction_view(lowered->module, block, point - 1, &begin));
+            OK(xr_lir_instruction_view(lowered->module, block, point + 1, &ready));
+            CHECK(begin.op == XR_LIR_MODULE_BEGIN && ready.op == XR_LIR_MODULE_READY);
+            CHECK(begin.bits == order[i] && ready.bits == order[i]);
+        }
+        OK(xr_lir_instruction_view(lowered->module, block, point, &call));
         CHECK(call.op == XR_LIR_CALL);
         OK(xr_lir_function_view(lowered->module,
             (XrLirFunction){lowered->module, call.callee}, &callee));
@@ -479,7 +489,8 @@ int main(int argc, char **argv) {
     if (combined) { transform(&e, &lowered, true, "inline_2"); transform(&e, &lowered, false, "sccp_2"); }
     XrLirFunctionView root;
     OK(xr_lir_function_view(lowered.module, lowered.entry, &root));
-    CHECK(root.result == XR_LIR_I64 && !root.parameter_count);
+    CHECK(root.result == XR_LIR_I64 && root.parameter_count <= 1);
+    if (root.parameter_count) CHECK(root.parameter_types[0] == XR_LIR_STATE);
     XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1], NULL};
     XrLirCOutput output = {0}; XrLirCDiagnostic diagnostic = {0};
     uint64_t start = clock_ticks();

@@ -37,11 +37,15 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
             fputs("cannot render uncaught arithmetic panic\n", stderr);
     } else {
         XrtHostClockFailure clock;
+        XrXirValueStatus value_status;
+        uint32_t source_id;
         if (xr_rbc_outcome_host_clock_failure(outcome, &clock, &locations)) {
             const XrtSourceLocation *source = xrt_locations_get(locations, clock.source_id);
             fprintf(stderr, "host clock %u failed at %s:%u:%u\n", clock.kind,
                 source ? source->path : "unknown source", source ? source->line : 0,
                 source ? source->column : 0);
+        } else if (xr_rbc_outcome_value_failure(outcome, &value_status, &source_id, &locations)) {
+            xrt_value_failure_report(value_status, xrt_locations_get(locations, source_id));
         } else fprintf(stderr, "register VM execution failed (%u)\n", (unsigned)status);
     }
     return XR_CLI_EXIT_FAIL;

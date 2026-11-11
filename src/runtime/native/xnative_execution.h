@@ -76,4 +76,5 @@ XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,
 XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failure,
     XrtOutputOperation operation, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
+XR_FUNC void xrt_value_failure_report(XrXirValueStatus, const XrtSourceLocation *);
 #endif // XNATIVE_EXECUTION_H

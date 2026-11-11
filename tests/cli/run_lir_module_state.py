@@ -48,7 +48,7 @@ def main() -> None:
             vm = run(f"{name}-vm-{repeat}", [str(binary), "run", str(source)], expected_exit)
             assert vm.stdout == expected, (name, vm.stdout, expected)
             if negative:
-                assert b"register VM execution failed (6)" in vm.stderr, (name, vm.stderr)
+                assert b"XR_RUN_6002: value operation rejected" in vm.stderr, (name, vm.stderr)
             else:
                 assert not vm.stderr, (name, vm.stderr)
         run(name + "-build", [str(binary), "build", str(source), "-o", str(executable)], 0)
@@ -57,6 +57,7 @@ def main() -> None:
             assert native.stdout == expected, (name, native.stdout, expected)
             if negative:
                 assert b"XR_RUN_6002: value operation rejected" in native.stderr, (name, native.stderr)
+                assert native.stderr == vm.stderr, (name, vm.stderr, native.stderr)
             else:
                 assert not native.stderr, (name, native.stderr)
     print(f"{len(records)} module-state commands passed")

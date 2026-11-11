@@ -136,21 +136,17 @@ def main():
     cases['original-string-parameter-optimized'] = (original_parameter, original_expected)
     identity['originalStringParameter'] = {'path': str(original_parameter), 'bytes': len(original_bytes),
         'sha256': hashlib.sha256(original_bytes).hexdigest(), 'expectedHex': original_expected.hex()}
-    for name, text in {
-        'transitive': 'fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n'
-            'fn top()->i64{return middle()}\nprint(top())\nvar state=7\n',
-        'unselected': 'fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n'
-            'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n',
-        'cycle': 'fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n'
-            'fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n',
-        'local': 'fn leaf()->i64{var local=1\nreturn local}\n'
-            'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n',
-    }.items():
-        path, generated = root / ('refused-closure-' + name + '.xr'), root / ('refused-closure-' + name + '.c')
-        path.write_text(text, encoding='utf-8')
-        refused = subprocess.run([str(args.driver), str(path), str(generated)], capture_output=True, timeout=30)
-        assert refused.returncode == 1 and refused.stdout == b'' and not generated.exists(), (name, refused)
-        assert b'module initialization call before complete publication' in refused.stderr, (name, refused.stderr)
+    cases['early-unselected'] = (
+        'fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n'
+        'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n', b'1\n')
+    cases['early-local'] = ('fn leaf()->i64{var local=1\nreturn local}\n'
+        'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n', b'1\n')
+    fixtures = Path(__file__).resolve().parents[1] / 'fixtures/lir_cli'
+    for dependency in ('module_state_leaf.xr', 'module_state_middle.xr'):
+        (root / dependency).write_bytes((fixtures / dependency).read_bytes())
+    for name in ('module_state_mixed', 'module_state_branch', 'module_state_initializers'):
+        source = fixtures / (name + '.xr')
+        cases[name] = (source, source.with_suffix('.out').read_bytes())
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
                      'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),
@@ -180,7 +176,7 @@ def main():
             run(command, cwd=root)
         text = generated.read_text(encoding='ascii')
         assert text.count('const XrtSourceMap xrt_standalone_source_map =') == 1
-        assert text.count('xrt_run_standalone(') == 1
+        assert text.count('xrt_run_standalone(') + text.count('xrt_run_standalone_state(') == 1
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
         if name.startswith('original-string-parameter'):
             assert re.search(r'xrt_print_string\(bytes, length, UINT32_C\([0-9]+\)\);', text)

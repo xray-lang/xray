@@ -154,10 +154,9 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
             failure->detail.output.operation, failure->detail.output.source_id);
     if (failure->kind == XRT_FAILURE_HOST_CLOCK) xrt_clock_exit(map, failure->detail.clock);
     if (failure->kind == XRT_FAILURE_VALUE) {
-        char text[128];
-        int length = snprintf(text, sizeof(text), "XR_RUN_6002: value operation rejected (status %u, source %u)\n",
-            (unsigned)failure->detail.value.status, failure->detail.value.source_id);
-        if (length > 0 && (size_t)length < sizeof(text)) (void)xrt_io_write(2, text, (size_t)length);
+        uint32_t id = failure->detail.value.source_id;
+        const XrtSourceLocation *source = id && id <= map->count ? &map->locations[id - 1] : NULL;
+        xrt_value_failure_report(failure->detail.value.status, source);
         _Exit(1);
     }
     XR_CHECK(failure->kind == XRT_FAILURE_ARITHMETIC_PANIC, "Native failure has a known physical carrier");

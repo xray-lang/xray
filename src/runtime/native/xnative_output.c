@@ -72,6 +72,15 @@ static void diagnostic_location(const XrtSourceMap *map, uint32_t id) {
     }
 }
 
+XR_FUNC void xrt_value_failure_report(XrXirValueStatus status, const XrtSourceLocation *source) {
+    XrtSourceMap map = {source, source ? 1u : 0u};
+    diagnostic_text("XR_RUN_6002: value operation rejected (status ");
+    diagnostic_number((uint32_t)status);
+    diagnostic_text(") at ");
+    diagnostic_location(&map, source ? 1u : 0u);
+    diagnostic_text("\n");
+}
+
 XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failure,
     XrtOutputOperation operation, uint32_t id) {
     if (!failure.broken_pipe) {

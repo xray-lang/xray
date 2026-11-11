@@ -73,28 +73,36 @@ def main():
     def frame_observer(folder, generated, expected, drops, string_result=False, expected_result=0):
         lines = generated.read_text(encoding='ascii').splitlines()
         sites = [i+1 for i, line in enumerate(lines) if re.fullmatch(r'\s*xrt_string_drop\(v[0-9]+\);', line)]
-        assert sites, folder
-        predicate = ' || '.join('line == ' + str(i) + 'u' for i in sites)
+        assert sites or drops == 0, folder
+        stateful = 'xrt_run_standalone_state(' in generated.read_text(encoding='ascii')
+        predicate = ' || '.join('line == ' + str(i) + 'u' for i in sites) or 'line == UINT_MAX'
         invoke = ('XrtString *result=NULL;xrl_invoke(&result);size_t length=0;\n'
             ' const char *bytes=xrt_string_bytes(result,&length);\n'
             ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7) || o->strings.held)abort();\n'
             ' xrt_string_owned_drop(&result);\n' if string_result else
             f'int64_t result=99;xrl_invoke(&result);\n if(result!={expected_result} || o->strings.held)abort();\n')
+        if stateful:
+            invoke = invoke.replace('xrl_invoke(&result)', 'xrl_invoke(&result,o->state)')
+        setup = ('XrtModuleLayout *layout=NULL;\n'
+            '  if(xrt_module_layout_new(&xrl_state_spec,&layout)!=0)return 4;\n'
+            '  if(xrt_module_state_new(layout,UINT64_MAX,&o.state)!=0)return 5;\n'
+            '  xrt_module_layout_drop(&layout);\n' if stateful else '')
+        cleanup = '  xrt_module_state_drop(&o.state);\n' if stateful else ''
         observer = folder / 'normal-frame-observer.c'
-        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include "xray_native_state.h"\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n'
             'static unsigned cell_drops;\n'
             'static void observed_drop(XrtString **value, unsigned line){\n'
             f' if({predicate})++cell_drops;\n xrt_string_drop(value);\n}}\n'
             '#define xrt_string_drop(value) observed_drop((value),__LINE__)\n'
             f'#include "{generated.name}"\n#undef xrt_string_drop\n'
-            'typedef struct Observation{XrtStringRoot strings;unsigned visits;} Observation;\n'
+            'typedef struct Observation{XrtStringRoot strings;XrtModuleState *state;unsigned visits;} Observation;\n'
             'static void observe(void *data){Observation *o=data;\n' + invoke + ' ++o->visits;}\n'
-            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n'
+            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n (void)&observed_drop;\n'
             ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
-            ' for(unsigned run=0;run<2;++run){\n'
+            ' for(unsigned run=0;run<2;++run){\n' + setup +
             '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
             f'  if(cell_drops!=(run+1)*{drops}u || o.visits!=run+1 || o.strings.held || o.strings.domain)return 3;\n'
-            ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
+            + cleanup + ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
         obj = folder / ('normal-frame-observer.obj' if args.kind == 'msvc' else 'normal-frame-observer.o')
         exe = folder / ('normal-frame-observer.exe' if args.kind == 'msvc' else 'normal-frame-observer')
         if args.kind == 'msvc':
@@ -152,16 +160,16 @@ def main():
     frame_programs = {
         'frame-branches': ('var left="é\\0"\nvar right=""\nvar i=0\n'
             'while(i<4){if(i<2){left=left+"!"}else{right=right+"/"}\ni=i+1}\n'
-            'print(left)\nprint(right)\n', b'\xc3\xa9\0!!\n//\n', 2),
+            'print(left)\nprint(right)\n', b'\xc3\xa9\0!!\n//\n', 0),
         'frame-returns': ('var text="seed"\nfn read(n:i64)->string{if(n<0){return text}\n'
             'if(n>0){text="changed"\nreturn text}\nreturn text}\n'
-            'print(read(-1))\nprint(read(1))\nprint(read(0))\n', b'seed\nchanged\nchanged\n', 1),
+            'print(read(-1))\nprint(read(1))\nprint(read(0))\n', b'seed\nchanged\nchanged\n', 0),
         'frame-growth': ('var text="outer"\nfn frame(n:i64)->i64{var local="frame"\n'
             'const answer=recurse(n)\nreturn answer+len(local)}\n'
             'fn recurse(n:i64)->i64{if(n==0){return len(text)}\nreturn frame(n-1)}\n'
-            'print(recurse(80))\nprint(text)\n', b'405\nouter\n', 81),
+            'print(recurse(80))\nprint(text)\n', b'405\nouter\n', 80),
     }
-    frame_drops = {'original-parameter':3}
+    frame_drops = {'original-parameter':0}
     for name,(text,expected,drops) in frame_programs.items():
         source=root/(name+'.xr');source.write_text(text,encoding='utf-8')
         cases.append((name,source,expected));frame_drops[name]=drops
@@ -316,8 +324,12 @@ def main():
     source.write_text('var n=1\nfn read()->i64{return n}\nvar observed=read()\nprint(observed)\n', encoding='ascii')
     generated = root / 'unpublished.c'
     result = run('unpublished-global-reader', [args.source_driver, source, generated])
-    assert result.returncode == 1 and not result.stdout and not generated.exists()
-    assert result.stderr.splitlines() == [b'lowering: module initialization call before complete publication is not supported by LIR lowering yet']
+    assert (result.returncode, result.stdout, result.stderr) == (0, b'', b''), root
+    main = root / 'published-main.c'
+    main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+        'int main(void){return xray_lir_entry()!=0;}\n', encoding='ascii')
+    for optimization in ('Od', 'O2'):
+        compile_run(root, generated, main, optimization, b'1\n')
     (root / 'result.json').write_text(json.dumps({'state': 'PASS', 'cases': records,
         'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
         'systemLibraries': args.runtime_system_libraries}, indent=2) + '\n')
