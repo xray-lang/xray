@@ -89,7 +89,7 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
     }
     XrRbcArrayLocation small[3], *operands = small;
     if (row.count > 3) {
-        if ((size_t)row.count > SIZE_MAX / sizeof(*operands))
+        if (sizeof(*operands) > SIZE_MAX / row.count)
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "Array operand span exceeds address space");
         operands = xr_malloc((size_t)row.count * sizeof(*operands));
         if (!operands) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate Array operand span");

@@ -219,12 +219,15 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         case XR_RBC_MOV: case XR_RBC_STRING_LITERAL: case XR_RBC_STRING_I64: case XR_RBC_STRING_F64:
         case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_CONCAT: case XR_RBC_STRING_TAKE:
         case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_LEN:
-            if (!rbc_strings_value(s, v)) return false; break;
+            if (!rbc_strings_value(s, v)) return false;
+            break;
         case XR_RBC_CELL_NEW: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
         case XR_RBC_STRING_CELL_NEW: case XR_RBC_STRING_CELL_DROP:
-            if (!rbc_strings_cell(s, v)) return false; break;
+            if (!rbc_strings_cell(s, v)) return false;
+            break;
         case XR_RBC_CALL: case XR_RBC_CALLN:
-            if (!rbc_strings_call(s, v)) return false; break;
+            if (!rbc_strings_call(s, v)) return false;
+            break;
         case XR_RBC_RET: case XR_RBC_RET0:
             if (rbc_managed_kind(f->result_kind)) {
                 if (v.op != XR_RBC_RET || s->state[v.a] != RBC_STRING_OWNED ||
