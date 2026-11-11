@@ -920,8 +920,10 @@ static void frame_string_cells(void) {
 }
 
 #include "lir_array_block_cell_cases.h"
+#include "lir_array_loop_owner_cases.h"
 int main(void) {
     array_block_cells();
+    array_loop_owners();
     frame_string_cells();
     string_length_types();
     string_sequential_owners();

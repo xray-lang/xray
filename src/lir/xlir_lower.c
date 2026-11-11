@@ -1583,7 +1583,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
     if (f->next[target] <= f->next[from])
         for (uint32_t a = 0; a < count; ++a) {
             XrLirType type = c->module->functions[f->function.id - 1].values[arguments[a].id - 1].type;
-            if (lower_managed_type(type) || type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL)
+            if (type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL)
                 return lower_unsupported(c, "loop-carried managed String transfer");
         }
     return true;

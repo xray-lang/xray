@@ -55,7 +55,8 @@ typedef enum XrLirType {
  * through that call; a language binding explicitly retains its parameter.
  * Selected edges transfer each managed argument into an owned block parameter.
  * One reference cannot fill two parameters without an explicit retain.
- * Loop backedges carry scalars after all managed temporaries have retired.
+ * Loop backedges carry scalars or owned Array values. String temporaries
+ * retire before a backedge.
  * RET transfers an owned result. Managed Cells own one independent reference
  * and their storage remains in the defining activation. */
 typedef enum XrLirOp {

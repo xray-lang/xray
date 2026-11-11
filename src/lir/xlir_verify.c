@@ -701,9 +701,9 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
     return XR_LIR_OK;
 }
 
-/* Each block owns its managed parameters and instruction results.
- * Backedges cannot transport managed owners or parameter borrows.
- * Only explicit selected-edge or result transfers may leave that block. */
+/* Each block owns its managed parameters and instruction results. Array
+ * owners use the same selected-edge rule on a loop backedge. String owners
+ * and Cell handles retain their narrower transport boundary. */
 static XrLirStatus lir_managed_owners(const XrLirFunctionData *f, uint32_t function,
     const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
     bool managed = false, cells = false;
@@ -725,7 +725,7 @@ static XrLirStatus lir_managed_owners(const XrLirFunctionData *f, uint32_t funct
                         return xr_lir_internal_error(d, "String parameter cannot cross a loop", function, b + 1, 0, &term->source);
                 for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
                     XrLirType type = f->values[term->edges[e].arguments[a] - 1].type;
-                    if (lir_managed_value(type) || lir_managed_cell(type))
+                    if (type == XR_LIR_STRING || lir_managed_cell(type))
                         return xr_lir_internal_error(d, "loop-carried managed transfer is not supported", function, b + 1, 0, &term->source);
                 }
             }
