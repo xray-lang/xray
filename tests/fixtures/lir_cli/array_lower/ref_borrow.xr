@@ -1,0 +1,12 @@
+fn append(values: ref Array<i64>, item:i64){var other=[item];other.push(9);values.push(other[0])}
+fn append_text(values: ref Array<string>, item:string){var other=[item];other.push("x");values.push(other[0])}
+fn local(flag:bool)->i64 {
+    if(flag){var xs=[1]; const saved=xs; append(ref xs,7); return len(saved)*100+xs[1]}
+    return 0
+}
+fn local_text(flag:bool)->i64 {
+    if(flag){var xs=["one"]; const saved=xs; append_text(ref xs,"two"); return len(saved)*10+len(xs)}
+    return 0
+}
+print(local(true))
+print(local_text(true))

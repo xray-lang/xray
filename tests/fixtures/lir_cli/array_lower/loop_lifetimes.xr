@@ -1,0 +1,15 @@
+fn weave(n:i64)->i64 {
+    var sum=0
+    var i=0
+    while(i<n) {
+        var xs=[i,10]
+        const saved=xs
+        if(i%2==0){xs.push(20)}else{xs[0]=5}
+        if(i==1){i=i+1;continue}
+        sum=sum+saved[0]*100+xs[0]*10+len(xs)
+        if(i==2){break}
+        i=i+1
+    }
+    return sum
+}
+print(weave(5))

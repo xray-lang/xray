@@ -1,0 +1,11 @@
+fn nested(outer:bool,inner:bool)->i64 {
+    if(outer) {
+        const saved=[7,8]
+        if(inner){return saved[0]}
+        return 0
+    }
+    return 1
+}
+print(nested(true,true))
+print(nested(true,false))
+print(nested(false,false))

@@ -160,7 +160,22 @@ static void array_lower_failures(void) {
     printf("Array Lower workspace: %zu allocation failures preserve empty output and reclaim owners\n", total);
 }
 
+static void array_flow_failures(void) {
+    SourceFixture fixture = source_fixture("fn fold(n:i64)->i64{var sum=0\nvar i=0\n"
+        "while(i<n){var xs=[i]\nconst saved=xs\nif(i%2==0){xs.push(2)}else{xs[0]=3}\n"
+        "if(i==1){i=i+1\ncontinue}\nsum=sum+saved[0]+xs[0]\ni=i+1}\nreturn sum}\nprint(fold(4))\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 50);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Array live-out state: %zu allocation failures reclaim selected edges and shapes\n", total);
+}
+
 int main(void) {
+    array_flow_failures();
     array_lower_failures();
     storage_source_failures();
     frame_cell_failures();

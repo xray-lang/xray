@@ -37,6 +37,9 @@ static void array_sources(void) {
         OK(xr_lir_verify(copy, NULL));
         xr_lir_module_destroy(copy);
     }
+    XrLirLowered flow = lower_text("fn nested(a:bool,b:bool)->i64{if(a){var xs=[7,8]\n"
+        "const saved=xs\nif(b){xs.push(9)}else{xs[0]=2}\nreturn saved[0]*10+xs[0]}\nreturn 0}\nprint(nested(true,false))\n");
+    xr_lir_lowered_free(&flow);
     char large[8192];
     size_t used = (size_t)snprintf(large, sizeof(large), "const xs=[");
     for (unsigned i = 0; i < 300; ++i) {

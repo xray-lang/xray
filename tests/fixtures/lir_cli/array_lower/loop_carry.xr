@@ -1,0 +1,18 @@
+fn grow(n:i64)->Array<i64> {
+    var values:Array<i64>=[]
+    var i=0
+    while(i<n){values.push(i);i=i+1}
+    return values
+}
+fn texts(n:i64)->Array<string> {
+    var values:Array<string>=[]
+    var i=0
+    while(i<n){values.push("x${i}");i=i+1}
+    return values
+}
+const values=grow(5000)
+print(len(values))
+print(values[4999])
+const words=texts(30)
+print(words[0])
+print(words[29])

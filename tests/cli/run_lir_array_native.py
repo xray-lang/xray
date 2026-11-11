@@ -45,7 +45,7 @@ def main() -> None:
             failures.append((name, status, paths["stderr"].read_text(encoding="utf-8")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
-    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "local_loop", "loop_temporary",
+    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string", "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry", "ref_borrow",
                  "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
@@ -56,7 +56,7 @@ def main() -> None:
         if status:
             continue
         assert "({" not in generated.read_text(encoding="utf-8")
-        if name == "large":
+        if name in ("large", "large_string"):
             assert "UINT32_C(300)" in generated.read_text(encoding="utf-8")
         for ordinal, compiler in enumerate(args.compiler or [None]):
             executable = work / (name + f"-{ordinal}" + (".exe" if os.name == "nt" else ""))

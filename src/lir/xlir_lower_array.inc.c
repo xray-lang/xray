@@ -32,10 +32,19 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     const XrXirInstruction *op = &f->source->instructions[i];
     uint32_t result = f->source->parameter_count + i;
     *handled = true;
+    if (op->op == XR_XIR_CELL_PLACE && f->array_places && f->array_places[result] != UINT32_MAX)
+        return true;
     if (op->op == XR_XIR_CELL_PLACE)
         return lower_value(f, op->args[0], &f->values[result]);
     if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrLirValue args[2] = {{0}};
+        uint32_t cell = f->array_places ? f->array_places[op->args[0]] : UINT32_MAX;
+        if (cell != UINT32_MAX) {
+            if (op->op == XR_XIR_PLACE_READ)
+                return lower_managed_copy(f, b, f->current[cell], &f->values[result]);
+            if (!lower_value(f, op->args[1], &args[1])) return false;
+            return lower_managed_copy(f, b, args[1], &f->current[cell]);
+        }
         if (!lower_value(f, op->args[0], &args[0])) return false;
         bool read = op->op == XR_XIR_PLACE_READ;
         XrLirType type = lower_value_type(f, args[0]);
@@ -61,8 +70,13 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     bool good = true;
-    for (uint32_t a = 0; a < count && good; ++a)
-        good = lower_value(f, grouped ? f->source->operands[op->args[0] + a] : op->args[a], &args[a]);
+    uint32_t receiver = operation == XR_LIR_ARRAY_OP_NEW ? UINT32_MAX :
+        grouped ? f->source->operands[op->args[0]] : op->args[0];
+    uint32_t cell = f->array_places && receiver != UINT32_MAX ? f->array_places[receiver] : UINT32_MAX;
+    for (uint32_t a = 0; a < count && good; ++a) {
+        if (!a && cell != UINT32_MAX) args[a] = f->current[cell];
+        else good = lower_value(f, grouped ? f->source->operands[op->args[0] + a] : op->args[a], &args[a]);
+    }
     XrXirType array = op->type;
     if (operation != XR_LIR_ARRAY_OP_NEW)
         array = xr_xir_operand_type(f->source, grouped ? f->source->operands[op->args[0]] : op->args[0]);
@@ -74,13 +88,18 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     if (good && operation != XR_LIR_ARRAY_OP_NEW) {
         XrLirType type = lower_value_type(f, args[0]);
         if (!mutation) good = lower_array_read(f, b, args[0], &args[0]);
-        else if (type == XR_LIR_STATE_REF) {
-            reference = args[0];
-            good = lower_array_read(f, b, reference, &temporary);
-            XrLirInstruction cell = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_ARRAY_CELL,
+        else if (type == XR_LIR_STATE_REF || cell != UINT32_MAX) {
+            if (type == XR_LIR_STATE_REF) reference = args[0];
+            good = lower_array_read(f, b, args[0], &temporary);
+            XrLirInstruction construct = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_ARRAY_CELL,
                 .operands = &temporary, .operand_count = 1, .source = lower_source(c)};
             args[0] = (XrLirValue){0};
-            if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &cell, &args[0]));
+            if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &construct, &args[0]));
+            if (good && type == XR_LIR_ARRAY) {
+                XrLirInstruction drop = {.op = XR_LIR_ARRAY_DROP, .type = XR_LIR_UNIT,
+                    .operands = &temporary, .operand_count = 1, .source = lower_source(c)};
+                good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &drop));
+            }
         } else if (type != XR_LIR_ARRAY_CELL) good = lower_unsupported(c, "Array mutation without a mutable binding");
     }
     XrLirInstruction call = {.op = XR_LIR_CALL_INTRINSIC, .type = lower_type(c, op->type),
@@ -88,13 +107,16 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     if (good) good = lower_build(c, call.type == XR_LIR_UNIT
         ? xr_lir_emit_effect(c->module, f->blocks[b], &call)
         : xr_lir_emit_value(c->module, f->blocks[b], &call, &f->values[result]));
-    if (good && reference.id) {
+    if (good && mutation && (reference.id || cell != UINT32_MAX)) {
         XrLirValue updated = {0};
         good = lower_array_read(f, b, args[0], &updated);
-        XrLirValue write_args[2] = {reference, updated};
-        XrLirInstruction write = {.op = XR_LIR_STATE_WRITE, .type = XR_LIR_UNIT,
-            .operands = write_args, .operand_count = 2, .source = lower_source(c)};
-        if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &write));
+        if (cell != UINT32_MAX) f->current[cell] = updated;
+        else {
+            XrLirValue write_args[2] = {reference, updated};
+            XrLirInstruction write = {.op = XR_LIR_STATE_WRITE, .type = XR_LIR_UNIT,
+                .operands = write_args, .operand_count = 2, .source = lower_source(c)};
+            if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &write));
+        }
         XrLirInstruction drop = {.op = XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
             .operands = args, .operand_count = 1, .source = lower_source(c)};
         if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &drop));

@@ -47,14 +47,15 @@ typedef struct LowerFunction {
     const XrXirFunction *source;
     XrLirFunction function;
     XrLirBlock *blocks;
-    XrLirValue *values, *states, *current, *frame_cells, *snapshots;
-    uint8_t *snapshot_needed, *cell_retired;
+    XrLirValue *values, *states, *current, *frame_cells;
+    uint8_t *cell_retired, *promoted_arrays, *retired_values;
+    uint32_t *array_values, *array_places, *value_blocks;
     XrLirValue state;
-    XrLirType *cell_types;
+    XrLirType *cell_types, *cell_elements;
     uint32_t *cell_for, *phis, *order, *stack, *next;
     uint8_t *reachable, *use, *define, *live;
     uint8_t *literal_uses;
-    uint32_t value_count, cell_count, ordered, frame_cell_count;
+    uint32_t value_count, cell_count, ordered, frame_cell_count, retired_value_count;
 } LowerFunction;
 
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
@@ -584,8 +585,11 @@ static bool lower_promoted_string(const Lower *c, const XrXirFunction *f,
         f->instructions[id - f->parameter_count].op == XR_XIR_CELL_NEW &&
         lower_module_cell(c, c->function, id) == UINT32_MAX;
 }
-static bool lower_managed_storage(const Lower *c, const XrXirFunction *f,
-    const XrXirInstruction *op) {
+static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruction *op) {
+    const Lower *c = lower->owner;
+    const XrXirFunction *f = lower->source;
+    uint32_t id = op->op == XR_XIR_CELL_NEW ? f->parameter_count + (uint32_t)(op - f->instructions) : op->args[0];
+    if (lower->promoted_arrays && id < lower->value_count && lower->promoted_arrays[id]) return false;
     XrXirType type;
     if (op->op == XR_XIR_CELL_NEW) type = op->type;
     else if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE)
@@ -900,9 +904,13 @@ static bool lower_declare(Lower *c, uint32_t index) {
 static void lower_function_free(LowerFunction *f) {
     xr_free(f->literal_uses);
     xr_free(f->frame_cells);
-    xr_free(f->snapshots);
-    xr_free(f->snapshot_needed);
+    xr_free(f->promoted_arrays);
+    xr_free(f->array_values);
+    xr_free(f->array_places);
+    xr_free(f->value_blocks);
+    xr_free(f->cell_elements);
     xr_free(f->cell_retired);
+    xr_free(f->retired_values);
     xr_free(f->blocks);
     xr_free(f->values);
     xr_free(f->states);
@@ -966,40 +974,7 @@ static bool lower_order(LowerFunction *f) {
     return true;
 }
 
-static bool lower_snapshot_inventory(LowerFunction *f) {
-    Lower *c = f->owner;
-    if (!c->arrays) return true;
-    const XrXirFunction *source = f->source;
-    f->snapshot_needed = lower_alloc(c, f->value_count, 1);
-    f->snapshots = lower_alloc(c, f->value_count, sizeof(*f->snapshots));
-    if (f->value_count && (!f->snapshot_needed || !f->snapshots)) return false;
-    static const uint8_t arity[] = {0,
-#define XR_XIR_OP(name, stages, rule, operands, edges, terminal) operands,
-#include "../xir/xxir_ops.def"
-#undef XR_XIR_OP
-    };
-    const XrXirBlock *entry = &source->blocks[0];
-    for (uint32_t b = 1; b < source->block_count; ++b) if (f->reachable[b]) {
-        const XrXirBlock *block = &source->blocks[b];
-        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
-            const XrXirInstruction *op = &source->instructions[i];
-            if (op->op == XR_XIR_PHI) continue;
-            bool grouped = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
-                op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT;
-            uint32_t count = grouped ? op->args[1] : op->op == XR_XIR_RETURN ?
-                source->result != XR_XIR_UNIT : arity[op->op];
-            for (uint32_t a = 0; a < count; ++a) {
-                uint32_t value = grouped ? source->operands[op->args[0] + a] : op->args[a];
-                if (value < source->parameter_count || value - source->parameter_count < entry->first ||
-                    value - source->parameter_count >= entry->first + entry->count) continue;
-                const XrXirInstruction *definition = &source->instructions[value - source->parameter_count];
-                if (lower_array_element(c, definition->type) && definition->op != XR_XIR_CELL_PLACE &&
-                    definition->op != XR_XIR_SLOT_PLACE) f->snapshot_needed[value] = 1;
-            }
-        }
-    }
-    return true;
-}
+#include "xlir_lower_array_flow.inc.c"
 
 static bool lower_cell_inventory(LowerFunction *f) {
     Lower *c = f->owner;
@@ -1013,17 +988,19 @@ static bool lower_cell_inventory(LowerFunction *f) {
     f->values = lower_alloc(c, f->value_count, sizeof(*f->values));
     f->cell_for = lower_alloc(c, f->value_count, sizeof(*f->cell_for));
     f->cell_types = lower_alloc(c, source->instruction_count, sizeof(*f->cell_types));
-    if ((f->value_count && (!f->values || !f->cell_for)) || !f->cell_types)
+    f->cell_elements = lower_alloc(c, source->instruction_count, sizeof(*f->cell_elements));
+    if ((f->value_count && (!f->values || !f->cell_for)) || !f->cell_types || !f->cell_elements)
         return false;
     for (uint32_t v = 0; v < f->value_count; ++v)
         f->cell_for[v] = UINT32_MAX;
+    if (!lower_array_flow_inventory(f)) return false;
     for (uint32_t b = 0; b < source->block_count; ++b)
         if (f->reachable[b]) {
             const XrXirBlock *block = &source->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
                 if (lower_state_new(op->op) &&
-                    !lower_managed_storage(c, source, op) &&
+                    !lower_managed_storage(f, op) &&
                     lower_module_cell(c, c->function, source->parameter_count + i) == UINT32_MAX) {
                     XR_DCHECK(f->cell_count < source->instruction_count,
                               "each state has one defining instruction");
@@ -1032,11 +1009,12 @@ static bool lower_cell_inventory(LowerFunction *f) {
                     XrXirType element = op->op == XR_XIR_CELL_NEW
                                             ? xr_xir_cell_element(c->source->types, op->type)
                                             : op->type;
+                    f->cell_elements[f->cell_count] = lower_array_element(c, element);
                     f->cell_types[f->cell_count++] = lower_type(c, element);
                 }
             }
         }
-    return lower_snapshot_inventory(f);
+    return lower_array_flow_values(f);
 }
 static bool lower_cell_index(LowerFunction *f, uint32_t value, uint32_t *index) {
     if (value >= f->value_count || f->cell_for[value] == UINT32_MAX)
@@ -1068,7 +1046,8 @@ static bool lower_liveness(LowerFunction *f) {
             const XrXirBlock *block = &source->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
-                if (lower_managed_storage(c, source, op)) continue;
+                lower_array_flow_liveness(f, b, i);
+                if (lower_managed_storage(f, op)) continue;
                 if (lower_module_cell(c, c->function, lower_state_new(op->op)
                         ? source->parameter_count + i : op->args[0]) != UINT32_MAX) continue;
                 if (!lower_state_new(op->op) && !lower_state_read(op->op) &&
@@ -1159,6 +1138,17 @@ static bool lower_blocks(LowerFunction *f) {
                     if (!lower_build(c, xr_lir_set_array_shape(c->module, *value, &shape))) return false;
                 }
             }
+            position = phis;
+            for (uint32_t cell = 0; cell < f->cell_count; ++cell)
+                if (f->live[(size_t)b * f->cell_count + cell]) {
+                    if (f->cell_types[cell] == XR_LIR_ARRAY) {
+                        XrLirValue parameter = {0};
+                        XrLirArrayShape shape = {f->cell_elements[cell]};
+                        if (!lower_build(c, xr_lir_block_parameter(c->module, f->blocks[b], position, &parameter)) ||
+                            !lower_build(c, xr_lir_set_array_shape(c->module, parameter, &shape))) return false;
+                    }
+                    ++position;
+                }
         }
     return lower_build(c, xr_lir_set_entry(c->module, f->function, f->blocks[0]));
 }
@@ -1238,12 +1228,10 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
     const XrLirValueData *value = &f->owner->module->functions[f->function.id - 1].values[out->id - 1];
     if (lower_managed_type(value->type) && value->block &&
         value->block != f->blocks[f->owner->block].id) {
-        if (value->type != XR_LIR_ARRAY || !f->snapshots || !f->snapshots[id].id)
+        uint32_t cell = f->array_values ? f->array_values[id] : UINT32_MAX;
+        if (value->type != XR_LIR_ARRAY || cell == UINT32_MAX || !f->current[cell].id)
             return lower_unsupported(f->owner, "managed alias across blocks without owned parameters");
-        XrLirInstruction read = {.op = XR_LIR_CELL_READ, .type = XR_LIR_ARRAY,
-            .operands = &f->snapshots[id], .operand_count = 1, .source = lower_source(f->owner)};
-        return lower_build(f->owner, xr_lir_emit_value(f->owner->module,
-            f->blocks[f->owner->block], &read, out));
+        *out = f->current[cell];
     }
     XR_DCHECK(out->module == f->owner->module && out->function == f->function.id,
               "SSA values remain in their defining output function");
@@ -1439,7 +1427,7 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
     bool create = op->op == XR_XIR_CELL_NEW;
     if (!create && op->op != XR_XIR_CELL_READ && op->op != XR_XIR_CELL_WRITE) return true;
     uint32_t slot = lower_module_cell(c, c->function, create ? result : op->args[0]);
-    bool managed = lower_managed_storage(c, f->source, op);
+    bool managed = lower_managed_storage(f, op);
     if (slot == UINT32_MAX && !managed) return true;
     *handled = true;
     XrLirValue args[2] = {{0}};
@@ -1493,6 +1481,11 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             !lower_build(
                 c, xr_lir_block_parameter(c->module, f->blocks[b], position++, &f->current[cell])))
             return false;
+    for (uint32_t p = 0; p < f->phis[b]; ++p) {
+        uint32_t value = f->source->parameter_count + block->first + p;
+        if (f->array_values && f->array_values[value] != UINT32_MAX)
+            f->current[f->array_values[value]] = f->values[value];
+    }
     for (uint32_t i = block->first + f->phis[b]; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
         const XrXirInstruction *op = &f->source->instructions[i];
@@ -1509,21 +1502,22 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
                     lower_error(c, XR_LIR_VERIFY_ERROR, "Cell read has no SSA state");
                     return false;
                 }
-                if (f->cell_types[cell] == XR_LIR_STRING) {
+                if (lower_managed_type(f->cell_types[cell])) {
                     if (!lower_managed_copy(f, b, f->current[cell], &f->values[result])) return false;
                 } else f->values[result] = f->current[cell];
-            } else if (!lower_value(f, op->args[lower_state_new(op->op) ? 0 : 1],
-                                    &f->current[cell]))
-                return false;
+            } else {
+                XrLirValue input = {0};
+                if (!lower_value(f, op->args[lower_state_new(op->op) ? 0 : 1], &input)) return false;
+                if (f->cell_types[cell] == XR_LIR_ARRAY) {
+                    if (!lower_managed_copy(f, b, input, &f->current[cell])) return false;
+                } else f->current[cell] = input;
+            }
         } else if (!handled && (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT)) {
             if (!lower_call(f, b, i)) return false;
         } else if (!handled && !lower_emit_scalar(f, b, i)) return false;
-        if (f->snapshot_needed && f->snapshot_needed[result]) {
-            XR_DCHECK(b == 0 && f->values[result].id, "snapshot owners stay at their entry definition");
-            XrLirInstruction save = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_ARRAY_CELL,
-                .operands = &f->values[result], .operand_count = 1, .source = lower_source(c)};
-            if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &save, &f->snapshots[result])))
-                return false;
+        if (f->array_values && f->array_values[result] != UINT32_MAX) {
+            uint32_t cell = f->array_values[result];
+            f->current[cell] = f->values[result];
         }
     }
     if (f->cell_count)
@@ -1555,12 +1549,6 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
             if (f->source->operands[phi->args[0] + a] == from) {
                 if (!lower_value(f, f->source->operands[phi->args[0] + a + 1], &arguments[p]))
                     return false;
-                const XrLirValueData *value = &c->module->functions[f->function.id - 1].values[arguments[p].id - 1];
-                if (value->type == XR_LIR_ARRAY && value->parameter && !value->block) {
-                    XrLirValue retained = {0};
-                    if (!lower_managed_copy(f, from, arguments[p], &retained)) return false;
-                    arguments[p] = retained;
-                }
                 found = true;
                 break;
             }
@@ -1588,6 +1576,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
         }
     return true;
 }
+#include "xlir_lower_array_edges.inc.c"
 static bool lower_managed_copy(LowerFunction *f, uint32_t block, XrLirValue input, XrLirValue *output) {
     XrLirType type = f->owner->module->functions[f->function.id - 1].values[input.id - 1].type;
     XrLirInstruction copy = {.op=type == XR_LIR_ARRAY ? XR_LIR_ARRAY_RETAIN : XR_LIR_STRING_RETAIN, .type=type,
@@ -1604,7 +1593,8 @@ static bool lower_managed_kept(const XrLirInstruction *term, uint32_t id) {
 static bool lower_managed_release(LowerFunction *f, uint32_t block,
     XrLirValue value, const XrLirInstruction *term) {
     XrLirType type = f->owner->module->functions[f->function.id - 1].values[value.id - 1].type;
-    if (!lower_managed_type(type) || lower_managed_kept(term, value.id))
+    if (!lower_managed_type(type) || lower_managed_kept(term, value.id) ||
+        (value.id <= f->retired_value_count && f->retired_values && f->retired_values[value.id - 1]))
         return true;
     XrLirInstruction drop = {.op=type == XR_LIR_ARRAY ? XR_LIR_ARRAY_DROP : XR_LIR_STRING_DROP,
         .type=XR_LIR_UNIT, .operands=&value, .operand_count=1, .source=lower_source(f->owner)};
@@ -1653,10 +1643,17 @@ static bool lower_frame_cells(LowerFunction *f) {
     uint8_t *released = lower_alloc(f->owner, function->value_count, 1);
     f->cell_retired = released;
     if (function->value_count && !released) return false;
+    if (f->array_values) {
+        f->retired_value_count = function->value_count;
+        f->retired_values = lower_alloc(f->owner, f->retired_value_count, 1);
+        if (f->retired_value_count && !f->retired_values) return false;
+    }
     for (uint32_t b = 0; b < function->block_count; ++b)
         for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
             const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
             if (v->op == XR_LIR_ARRAY_CELL_DROP) released[v->operands[0] - 1] = 1;
+            if (f->retired_values && (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_STRING_DROP))
+                f->retired_values[v->operands[0] - 1] = 1;
         }
     f->frame_cells = lower_alloc(f->owner, entry->instruction_count, sizeof(*f->frame_cells));
     if (entry->instruction_count && !f->frame_cells) return false;
@@ -1672,6 +1669,9 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     Lower *c = f->owner;
     const XrXirBlock *block = &f->source->blocks[b];
     c->block = b;
+    if (f->cell_count)
+        memcpy(f->current, &f->states[(size_t)b * f->cell_count],
+            (size_t)f->cell_count * sizeof(*f->current));
     c->instruction = block->first + block->count - 1;
     const XrXirInstruction *term = lower_term(c, f->source, b);
     if (!term)
@@ -1704,6 +1704,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
         for (uint32_t e = 0; e < instruction.edge_count && good; ++e)
             good = lower_edge(f, b, term->targets[e], &instruction.edges[e]);
     }
+    if (good) good = lower_selected_edges(f, b, &instruction);
     if (good) good = lower_managed_release_block(f, b, &instruction);
     if (good)
         good = lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &instruction));
