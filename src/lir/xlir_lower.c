@@ -205,6 +205,7 @@ static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         case XR_XIR_ARRAY_NEW:
+        case XR_XIR_ARRAY_REPEAT:
         case XR_XIR_ARRAY_LEN:
         case XR_XIR_ARRAY_GET:
         case XR_XIR_ARRAY_SET:

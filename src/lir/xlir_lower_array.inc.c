@@ -59,6 +59,7 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     XrLirArrayOperation operation;
     switch (op->op) {
         case XR_XIR_ARRAY_NEW: operation = XR_LIR_ARRAY_OP_NEW; break;
+        case XR_XIR_ARRAY_REPEAT: operation = XR_LIR_ARRAY_OP_REPEAT; break;
         case XR_XIR_ARRAY_LEN: operation = XR_LIR_ARRAY_OP_LEN; break;
         case XR_XIR_ARRAY_GET: operation = XR_LIR_ARRAY_OP_GET; break;
         case XR_XIR_ARRAY_SET: operation = XR_LIR_ARRAY_OP_SET; break;
@@ -70,7 +71,8 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     bool good = true;
-    uint32_t receiver = operation == XR_LIR_ARRAY_OP_NEW ? UINT32_MAX :
+    bool constructor = operation == XR_LIR_ARRAY_OP_NEW || operation == XR_LIR_ARRAY_OP_REPEAT;
+    uint32_t receiver = constructor ? UINT32_MAX :
         grouped ? f->source->operands[op->args[0]] : op->args[0];
     uint32_t cell = f->array_places && receiver != UINT32_MAX ? f->array_places[receiver] : UINT32_MAX;
     for (uint32_t a = 0; a < count && good; ++a) {
@@ -78,14 +80,14 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         else good = lower_value(f, grouped ? f->source->operands[op->args[0] + a] : op->args[a], &args[a]);
     }
     XrXirType array = op->type;
-    if (operation != XR_LIR_ARRAY_OP_NEW)
+    if (!constructor)
         array = xr_xir_operand_type(f->source, grouped ? f->source->operands[op->args[0]] : op->args[0]);
     uint32_t intrinsic = 0;
     if (good) good = lower_build(c, xr_lir_array_operation(c->module,
         lower_array_element(c, array), operation, &intrinsic));
     bool mutation = operation == XR_LIR_ARRAY_OP_SET || operation == XR_LIR_ARRAY_OP_PUSH;
     XrLirValue reference = {0}, temporary = {0};
-    if (good && operation != XR_LIR_ARRAY_OP_NEW) {
+    if (good && !constructor) {
         XrLirType type = lower_value_type(f, args[0]);
         if (!mutation) good = lower_array_read(f, b, args[0], &args[0]);
         else if (type == XR_LIR_STATE_REF || cell != UINT32_MAX) {

@@ -27,6 +27,8 @@ static void array_sources(void) {
         "while(i<n){sum=sum+xs[i%2]\ni=i+1}\nreturn sum}\nprint(loop(4))\n",
         "fn loop(n:i64)->i64{var sum=0\nvar i=0\nwhile(i<n){var xs=[i]\n"
         "xs.push(i+1)\nsum=sum+xs[0]+xs[1]\ni=i+1}\nreturn sum}\nprint(loop(3))\n",
+        "fn fill(n:i64,value:i64)->Array<i64>{return Array<i64>(n,value)}\nprint(len(fill(16,7)))\n",
+        "fn fill(n:i64,value:string)->Array<string>{return Array<string>(n,value)}\nprint(len(fill(3,\"seed\")))\n",
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrLirLowered output = lower_text(cases[i]);

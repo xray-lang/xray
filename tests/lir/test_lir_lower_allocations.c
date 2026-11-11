@@ -188,7 +188,21 @@ static void array_cell_cfg_failures(void) {
     printf("Physical Array Cell CFG: %zu allocation failures reclaim selected-edge owners\n", total);
 }
 
+static void array_repeat_failures(void) {
+    SourceFixture fixture = source_fixture("fn fill(n:i64,value:string)->Array<string>{return Array<string>(n,value)}\n"
+        "const values=fill(3,\"seed\")\nprint(values[1])\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 30);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Array repeat Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    array_repeat_failures();
     array_cell_cfg_failures();
     array_flow_failures();
     array_lower_failures();
