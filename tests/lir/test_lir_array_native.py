@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import tempfile
 
@@ -82,6 +83,7 @@ def main():
         else:
             command = [args.compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-pedantic',
                        '-I' + str(args.include), client, *args.library, '-lm', '-pthread', '-o', binary]
+            command += ['-Wl,-dead_strip' if platform.system() == 'Darwin' else '-Wl,--gc-sections']
             if args.asan: command += ['-fsanitize=address,undefined', '-g']
         run(command, work)
         result = run([binary], work, 1 if answer is None else 0)
