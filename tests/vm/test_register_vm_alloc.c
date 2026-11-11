@@ -17,7 +17,7 @@ static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
-    ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE } fault;
+    ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE } fault;
 static size_t spill_state_failure_entries=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
@@ -92,6 +92,10 @@ static void *execution_malloc(size_t size) {
     return real_malloc(size);
 }
 static void *execution_calloc(size_t count, size_t size) {
+    if (fault == STATE_CACHE_FAILURE && count == 2 && size == sizeof(XrtModuleAccess)) {
+        fault = NO_FAILURE;
+        return NULL;
+    }
     if (fault == STRING_JOIN_FAILURE) { fault = NO_FAILURE; return NULL; }
     if (fault == OUTCOME_FAILURE && size == sizeof(XrRbcOutcome)) {
         fault = NO_FAILURE;
@@ -480,7 +484,53 @@ static void spill_cycle_admission_oom(void) {
     for(unsigned i=0;i<4;++i)XR_CHECK(!blocks[i].pointer && !blocks[i].size,"cycle banks reclaimed");
 }
 
+static void module_state_cache_failure(void) {
+    XrtModuleTypeSpec type = {XRT_MODULE_I64};
+    XrtModuleSpec owner = {0, 0};
+    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+        .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
+        .payload_alignment=8, .byte_limit=UINT64_MAX};
+    XrtModuleLayout *storage = NULL;
+    XR_CHECK(xrt_module_layout_new(&layout, &storage) == 0, "owned module layout");
+    uint32_t code[7];
+    immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
+    immediate(code, 1, XR_RBC_LOADI, 1, 42);
+    immediate(code, 2, XR_RBC_STATE_CONSTRUCT, 2, 0);
+    emit(code, 3, XR_RBC_STATE_PUBLISH, 2, 0, 0);
+    immediate(code, 4, XR_RBC_MODULE_READY, 0, 0);
+    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_I64);
+    emit(code, 6, XR_RBC_RET, 1, 0, 0);
+    XrRbcStateAccess access = {0, 0, 1};
+    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
+    XrRbcFunction function = {.code=code, .code_count=7, .register_count=3,
+        .parameter_count=1, .register_kinds=kinds, .register_kind_count=3,
+        .state_accesses=&access, .state_access_count=1};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    XrtLocationOwner *locations = NULL;
+    XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "empty image owner");
+    XrRbcExecution *execution = NULL;
+    fault = STATE_CACHE_FAILURE;
+    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OUT_OF_MEMORY,
+        "cache allocation failure is reported before publication");
+    XR_CHECK(fault == NO_FAILURE && !execution, "the actual cache allocation was reached");
+    for (unsigned run = 0; run < 2; ++run) {
+        XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK,
+            "preparation recovers after a cache allocation failure");
+        if (!run) {
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            uint64_t result = 0;
+            XR_CHECK(xr_rbc_outcome_bits(outcome, &result) && result == 42, "cached reference reads");
+            xr_rbc_outcome_free(&outcome);
+        }
+        xr_rbc_execution_free(&execution);
+    }
+    xrt_locations_release(locations);
+    xrt_module_layout_drop(&storage);
+}
+
 int main(void) {
+    module_state_cache_failure();
     entry_initialization();
     spill_cycle_admission_oom();
     frame_cell_growth(NO_FAILURE,false);

@@ -41,7 +41,7 @@ typedef union {
     uint64_t bits;
     XrtString *string;
     XrtModuleState *state;
-    XrtModuleRef *state_ref;
+    XrtModuleAccess *state_ref;
 } XrRbcRegister;
 
 #include "xrbc_entry.inc.c"
@@ -63,6 +63,7 @@ typedef struct {
     size_t cell_capacity, cell_count;
     XrRbcRegister *spills;
     size_t spill_capacity, spill_count;
+    XrtModuleAccess *module_accesses;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -343,6 +344,8 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
     return NULL;
 }
 
+#include "xrbc_state_execute.inc.c"
+
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
     const XrRbcFunction *function;
@@ -394,6 +397,9 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->pending->result_kind = function->result_kind;
     if (inject_state) {
         XrXirValueStatus status = xrt_module_state_new(module->state_layout, UINT64_MAX, &execution->state);
+        if (status == XR_XIR_VALUE_OK)
+            status = xr_rbc_state_caches(module->state_layout, execution->state,
+                &execution->stack.module_accesses);
         if (status != XR_XIR_VALUE_OK) {
             xr_rbc_execution_free(&execution);
             return status == XR_XIR_VALUE_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
@@ -426,6 +432,7 @@ static void xr_rbc_stack_free(XrRbcStack *stack) {
     xr_free(stack->cells);
     xr_free(stack->frames);
     xr_free(stack->slots);
+    xr_free(stack->module_accesses);
     *stack = (XrRbcStack) {0};
 }
 
