@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -135,8 +136,9 @@ def main():
                     command += ['/clang:-fsanitize=undefined']
                 command += ['/link', '/INCREMENTAL:NO']
         else:
+            strip = '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, *args.library, '-pthread', '-o', executable]
+                       '-I' + str(args.include), adapter, *args.library, strip, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         invoke(folder, 'compile-c', command)
