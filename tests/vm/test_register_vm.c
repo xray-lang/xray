@@ -1267,6 +1267,7 @@ int main(int argc, char **argv) {
     test_raw_array_backedges();
     test_raw_array_cell_identity();
     test_raw_array_cell_moves();
+    test_raw_array_cell_mutation_failure();
     test_raw_array_cell_move_entry();
     test_raw_state_deferred_publication();
     test_raw_state_spill_transport();

@@ -399,15 +399,15 @@ static void test_raw_array_cell_moves(void) {
         if (string) emit(f.code, f.function.code_count++, XR_RBC_STRING_DROP, 0, 0, 0);
         args[0].index = 2;
         access(&f, raw_array_op(XR_RBC_ARRAY_RETAIN, 3, 1), args);
-        access(&f, raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4, 1), args);
-        access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
         immediate(f.code, f.function.code_count++, string ? XR_RBC_STRING_LITERAL : XR_RBC_LOADI, 0, string ? 1 : 9);
         immediate(f.code, f.function.code_count++, XR_RBC_LOADI, 1, 0);
+        access(&f, raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4, 1), args);
+        access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
         args[0].index = 4;
         access(&f, raw_array_op(XR_RBC_ARRAY_SET, 0, 3), args);
-        if (string) emit(f.code, f.function.code_count++, XR_RBC_STRING_DROP, 0, 0, 0);
         access(&f, raw_array_op(XR_RBC_ARRAY_CELL_READ, 5, 1), args);
         access(&f, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), args);
+        if (string) emit(f.code, f.function.code_count++, XR_RBC_STRING_DROP, 0, 0, 0);
         args[0].index = 3;
         access(&f, raw_array_op(XR_RBC_ARRAY_GET, string ? 0 : 6, 2), args);
         if (string) {
@@ -445,6 +445,8 @@ static void test_raw_array_cell_move_entry(void) {
     size_t drop = f.function.code_count;
     raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), &arg);
     arg.index = 4;
+    XrRbcArrayLocation push_args[] = {{4, false}, {1, false}};
+    raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_PUSH, 0, 2), push_args);
     raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_CELL_READ, 5, 1), &arg);
     raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), &arg);
     arg.index = 5;
@@ -459,7 +461,63 @@ static void test_raw_array_cell_move_entry(void) {
     CHECK(xr_rbc_jump(f.code + back, back, drop, f.function.code_count));
     for (uint64_t choose = 0; choose < 2; ++choose) {
         uint64_t result = 0;
-        CHECK(execute(&f.module, 0, &choose, 1, &result) == XR_RBC_OK && result == 1);
+        CHECK(execute(&f.module, 0, &choose, 1, &result) == XR_RBC_OK && result == 2);
+    }
+}
+
+static void test_raw_array_cell_mutation_failure(void) {
+    for (unsigned string = 0; string < 2; ++string) {
+        RawArray f;
+        raw_array_init(&f);
+        XrRbcLiteral literal = {"value", 5};
+        void (*access)(RawArray *, XrRbcArrayAccess, const XrRbcArrayLocation *) =
+            string ? raw_string_access : raw_array_access;
+        if (string) {
+            f.kinds[0] = XR_RBC_STRING;
+            f.kinds[2] = f.kinds[5] = XR_RBC_ARRAY_STRING;
+            f.kinds[4] = XR_RBC_ARRAY_STRING_CELL;
+            f.cells[0] = XR_RBC_ARRAY_STRING;
+            f.module.literals = &literal;
+            f.module.literal_count = 1;
+        }
+        immediate(f.code, f.function.code_count++, string ? XR_RBC_STRING_LITERAL : XR_RBC_LOADI, 0, 0);
+        immediate(f.code, f.function.code_count++, XR_RBC_LOADI, 1, -1);
+        XrRbcArrayLocation args[] = {{0, false}, {1, false}, {0, false}};
+        access(&f, raw_array_op(XR_RBC_ARRAY_NEW, 2, 1), args);
+        args[0].index = 2;
+        access(&f, raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4, 1), args);
+        access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
+        size_t mutation = f.function.code_count;
+        args[0].index = 4;
+        access(&f, raw_array_op(XR_RBC_ARRAY_SET, 0, 3), args);
+        access(&f, raw_array_op(XR_RBC_ARRAY_CELL_READ, 5, 1), args);
+        access(&f, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), args);
+        args[0].index = 5;
+        access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
+        if (string) emit(f.code, f.function.code_count++, XR_RBC_STRING_DROP, 0, 0, 0);
+        emit(f.code, f.function.code_count++, XR_RBC_RET, 1, 0, 0);
+        uint32_t ids[64];
+        for (size_t i = 0; i < f.function.code_count; ++i) ids[i] = 1;
+        ids[mutation] = 2;
+        f.function.source_ids = ids;
+        f.function.source_id_count = f.function.code_count;
+        const XrtSourceLocation points[] = {
+            {.path="create.xr", .path_length=9, .line=3, .column=1},
+            {.path="mutate.xr", .path_length=9, .line=17, .column=4}
+        };
+        XrtLocationOwner *locations = NULL;
+        CHECK(xrt_locations_create(points, 2, &locations) == XRT_LOCATION_OK);
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&f.module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        XrXirValueStatus status = XR_XIR_VALUE_OK;
+        uint32_t source = 0;
+        const XrtLocationOwner *borrowed = NULL;
+        CHECK(xr_rbc_outcome_value_failure(outcome, &status, &source, &borrowed));
+        CHECK(status == XR_XIR_VALUE_BOUNDS && source == 2 && borrowed == locations);
+        xr_rbc_outcome_free(&outcome);
+        xr_rbc_execution_free(&execution);
+        xrt_locations_release(locations);
     }
 }
 #endif // REGISTER_ARRAY_CASES_H

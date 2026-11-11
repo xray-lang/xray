@@ -26,6 +26,46 @@ static bool xr_rbc_array_move_pair(const XrRbcFunction *function, XrRbcArrayAcce
     return from.index == next.index && from.spill == next.spill;
 }
 
+static const XrRbcArrayAccess *xr_rbc_array_at(const XrRbcFunction *function, size_t pc) {
+    if (pc >= function->code_count || (function->code[pc] & 255) != XR_RBC_ARRAY_ACCESS) return NULL;
+    uint32_t index = function->code[pc] >> 16;
+    return index < function->array_access_count ? &function->array_accesses[index] : NULL;
+}
+
+static bool xr_rbc_array_move_tail(const XrRbcFunction *function, XrRbcArrayAccess create, size_t pc,
+    const XrRbcArrayAccess **mutation, const XrRbcArrayAccess **read) {
+    if (pc >= function->code_count || function->code_count - pc < 3) return false;
+    const XrRbcArrayAccess *mutate = xr_rbc_array_at(function, pc);
+    const XrRbcArrayAccess *observe = xr_rbc_array_at(function, pc + 1);
+    const XrRbcArrayAccess *drop = xr_rbc_array_at(function, pc + 2);
+    if (!mutate || !observe || !drop || (mutate->operation != XR_RBC_ARRAY_PUSH && mutate->operation != XR_RBC_ARRAY_SET) ||
+        observe->operation != XR_RBC_ARRAY_CELL_READ || drop->operation != XR_RBC_ARRAY_CELL_DROP ||
+        mutate->kind != create.kind || observe->kind != create.kind || drop->kind != create.kind) return false;
+    const XrRbcArrayAccess *uses[] = {mutate, observe, drop};
+    for (uint32_t i = 0; i < 3; ++i) {
+        XrRbcArrayLocation source = function->array_operands[uses[i]->first];
+        if (source.index != create.result.index || source.spill != create.result.spill) return false;
+    }
+    *mutation = mutate;
+    *read = observe;
+    return true;
+}
+
+static void xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame,
+    const XrRbcFunction *function, const XrRbcArrayAccess *access, XrRbcRegister *binding, uint32_t source) {
+    const XrRbcArrayLocation *args = function->array_operands + access->first;
+    bool push = access->operation == XR_RBC_ARRAY_PUSH;
+    XrRbcRegister *value = xr_rbc_array_location(stack, frame, args[push ? 1 : 2]);
+    if (push) {
+        if (access->kind == XR_RBC_ARRAY_STRING) xrt_array_string_push(&binding->array, value->string, source);
+        else xrt_array_i64_push(&binding->array, xr_rbc_signed(value->bits), source);
+    } else {
+        int64_t index = xr_rbc_signed(xr_rbc_array_location(stack, frame, args[1])->bits);
+        if (access->kind == XR_RBC_ARRAY_STRING) xrt_array_string_set(&binding->array, index, value->string, source);
+        else xrt_array_i64_set(&binding->array, index, xr_rbc_signed(value->bits), source);
+    }
+}
+
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source, size_t *pc) {
     XrRbcArrayAccess access = function->array_accesses[index];
@@ -61,6 +101,18 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
         if (move) { first->array = NULL; ++*pc; }
         if (active->initialized_cells <= access.cell) active->initialized_cells = access.cell + 1;
         result->bits = (uint64_t)cell + 1;
+        const XrRbcArrayAccess *mutation, *read;
+        if (move && xr_rbc_array_move_tail(function, access, *pc, &mutation, &read)) {
+            /* Keep the real Cell alive at a failing mutation. The final read
+             * and DROP transfer its reference only after mutation succeeds. */
+            uint32_t mutation_source = function->source_ids ? function->source_ids[*pc] : 0;
+            xr_rbc_array_mutate_owned(stack, frame, function, mutation, &stack->cells[cell], mutation_source);
+            XrRbcRegister *output = xr_rbc_array_location(stack, frame, read->result);
+            output->array = stack->cells[cell].array;
+            stack->cells[cell].array = NULL;
+            result->bits = 0;
+            *pc += 3;
+        }
         return XR_RBC_OK;
     }
     bool cell = access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||
