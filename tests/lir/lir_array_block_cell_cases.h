@@ -81,9 +81,9 @@ static void array_block_cells(void) {
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
         CHECK(status == (scenario && scenario != 6 ? XR_LIR_VERIFY_ERROR : XR_LIR_OK));
-        if (scenario == 1) CHECK(strstr(diagnostic.message, "release in its defining block"));
+        if (scenario == 1) CHECK(strstr(diagnostic.message, "release on each normal exit"));
         if (scenario == 2 || scenario == 3 || scenario == 5) CHECK(strstr(diagnostic.message, "use follows release"));
-        if (scenario == 4) CHECK(strstr(diagnostic.message, "cannot leave its defining block"));
+        if (scenario == 4) CHECK(strstr(diagnostic.message, "use follows release"));
         if (scenario == 7) CHECK(strstr(diagnostic.message, "borrow cannot be released"));
         xr_lir_module_destroy(module);
     }
