@@ -16,6 +16,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
+_Static_assert(XR_LIR_STATE == 17 && XR_LIR_STATE_REF == 18,
+    "Capability types preserve the preceding scalar ABI ordinals");
 
 typedef struct StateFixture {
     XrLirModule *module;
@@ -110,7 +112,6 @@ static void state_rejections(void) {
 }
 
 int main(void) {
-    CHECK(XR_LIR_STATE == 17 && XR_LIR_STATE_REF == 18);
     state_ownership(); state_rejections();
     puts("State layout ownership and capability rejection passed");
     return 0;
