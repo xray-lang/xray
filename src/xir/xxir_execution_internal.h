@@ -30,7 +30,10 @@ typedef enum XirExecutionPort {
 enum {
     XIR_EXECUTION_REMAINDER_STORAGE = 1u,
     XIR_EXECUTION_REMAINDER_PARAMETER = 2u,
-    XIR_EXECUTION_REMAINDER_OPAQUE = 4u
+    XIR_EXECUTION_REMAINDER_OPAQUE = 4u,
+    /* The value crossed a checked storage boundary. Its unknown environment
+     * remains a conservative footprint independently of callable effects. */
+    XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT = 8u
 };
 
 typedef struct XirRestrictionFormula {
@@ -173,6 +176,10 @@ XR_FUNC XrXirStatus xir_execution_visit_value_environment_in(const XirExecutionO
  * terminal carries a binding variable, not an empty or immutable environment.
  * Consumers must validate its actual environment before accepting a footprint. */
 XR_FUNC XrXirStatus xir_execution_visit_value_environment_inputs_in(const XirExecutionOwner *,
+    const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
+/* Stored-value branches retain an explicit opaque environment remainder for
+ * the independent footprint property. Other unresolved branches stay pending. */
+XR_FUNC XrXirStatus xir_execution_visit_value_footprint_in(const XirExecutionOwner *,
     const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
 /* Construction rebinds this receiving index once after each storage round. */
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);

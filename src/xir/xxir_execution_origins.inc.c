@@ -114,6 +114,7 @@ typedef struct ExecutionOrigin {
     uint32_t function, value, environment;
     bool equation;
     uint32_t entry_context;
+    bool storable;
 } ExecutionOrigin;
 
 typedef struct ExecutionEntryIndex {
@@ -126,12 +127,16 @@ typedef struct ExecutionOriginWalk {
     uint32_t *index;
     uint32_t count, capacity, index_capacity;
     ExecutionEntryIndex *entries;
+    XirExecutionVisitor visit;
+    void *context;
+    bool observe_environment, footprint;
     XrXirStatus status;
 } ExecutionOriginWalk;
 
 static uint32_t execution_origin_hash(ExecutionOrigin origin) {
     return xr_hash_int(origin.function) ^ xr_hash_int(origin.value) * 3u ^ xr_hash_int(origin.environment) * 7u ^
-        (origin.equation ? UINT32_C(0x9e3779b9) : 0) ^ xr_hash_int(origin.entry_context) * 11u;
+        (origin.equation ? UINT32_C(0x9e3779b9) : 0) ^ xr_hash_int(origin.entry_context) * 11u ^
+        (origin.storable ? UINT32_C(0x85ebca6b) : 0);
 }
 
 static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin origin) {
@@ -157,7 +162,7 @@ static bool execution_origin_push(ExecutionOriginWalk *walk, ExecutionOrigin ori
         ExecutionOrigin found = walk->items[walk->index[at] - 1];
         if (found.function == origin.function && found.value == origin.value &&
             found.environment == origin.environment && found.equation == origin.equation &&
-            found.entry_context == origin.entry_context) return true;
+            found.entry_context == origin.entry_context && found.storable == origin.storable) return true;
         at = (at + 1) & (walk->index_capacity - 1);
     }
     if (walk->count == walk->capacity) {
@@ -189,7 +194,8 @@ static XirExecutionSite execution_resolved_site(const EffectCheckedRoots *roots,
 
 typedef enum ExecutionOriginQuery {
     EXECUTION_ORIGINS_CALLABLE, EXECUTION_ORIGINS_EFFECTS,
-    EXECUTION_ORIGINS_ENVIRONMENT, EXECUTION_ORIGINS_ENVIRONMENT_INPUTS, EXECUTION_ORIGINS_CALLBACK_ENTRY
+    EXECUTION_ORIGINS_ENVIRONMENT, EXECUTION_ORIGINS_ENVIRONMENT_INPUTS, EXECUTION_ORIGINS_CALLBACK_ENTRY,
+    EXECUTION_ORIGINS_FOOTPRINT
 } ExecutionOriginQuery;
 
 typedef struct ExecutionOriginRequest {
@@ -220,7 +226,7 @@ static bool execution_origin_incoming(ExecutionOriginWalk *walk, const EffectChe
     }
     bool found = false;
     for (uint32_t a = entries->incoming[origin.function]; a != UINT32_MAX; a = entries->next_application[a]) {
-        execution_origin_push(walk, (ExecutionOrigin){origin.function, origin.value, a, false, a});
+        execution_origin_push(walk, (ExecutionOrigin){origin.function, origin.value, a, false, a, origin.storable});
         found = true;
     }
     return found;
@@ -250,10 +256,34 @@ static bool execution_origin_binding(ExecutionOriginWalk *walk, const EffectChec
             roots->function[app.caller_instance].declaration == function) function = app.caller_instance;
         if (environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT) *unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
         else execution_origin_push(walk, (ExecutionOrigin){function, binding.actual_value,
-            environment, false, origin.entry_context});
+            environment, false, origin.entry_context, origin.storable});
         bound = true;
     }
     return bound;
+}
+
+static bool execution_origin_input(ExecutionOriginWalk *walk, const EffectCheckedRoots *roots,
+    ExecutionOrigin origin, EffectCheckOriginEdge edge, uint32_t *unresolved) {
+    EffectCheckFunction function = roots->function[origin.function];
+    if (edge.function != function.declaration || edge.value >= function.parameters) {
+        walk->status = XR_XIR_BAD_STRUCTURE; return false;
+    }
+    XrXirType payload = xr_xir_cell_element(xir_execution_types(roots),roots->node[function.first+edge.value].type);
+    if (walk->observe_environment && edge.value >= function.capture_count &&
+        xr_xir_type_is_callable(xir_execution_types(roots),payload)) {
+        XirExecutionSite stored = {.kind=XIR_EXECUTION_STORABLE,.index=origin.value,
+            .function=function.declaration,.instruction=UINT32_MAX,.block=UINT32_MAX,
+            .caller_instance=origin.function,.target=UINT32_MAX,.declaration=UINT32_MAX,
+            .output_function=UINT32_MAX,.output_value=UINT32_MAX,
+            .receiver_function=function.declaration,.receiver_value=origin.value,
+            .registration=UINT32_MAX,.reference=UINT32_MAX,.environment=origin.environment,
+            .capture_environment=origin.environment,.signature=payload};
+        walk->status = walk->visit(walk->context,&stored);
+        if (walk->footprint) *unresolved |= XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT;
+        return true;
+    }
+    *unresolved |= origin.storable ? XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT : XIR_EXECUTION_REMAINDER_OPAQUE;
+    return false;
 }
 
 static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
@@ -263,15 +293,16 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
         return XR_XIR_BAD_STRUCTURE;
     ExecutionOriginQuery query = request.kind;
     bool observe_environment = query == EXECUTION_ORIGINS_ENVIRONMENT ||
-        query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS;
+        query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS || query == EXECUTION_ORIGINS_FOOTPRINT;
     XirStorageFlowView storage = {0};
     if (roots->storage) {
         XrXirStatus status = xir_storage_flow_view(roots->storage, &storage);
         if (status != XR_XIR_OK) return status;
     }
-    ExecutionOriginWalk walk = {.memory = {.resources = roots->resources}, .entries = request.entries};
+    ExecutionOriginWalk walk = {.memory = {.resources = roots->resources},.entries=request.entries,
+        .visit=visit,.context=context,.observe_environment=observe_environment,.footprint=query==EXECUTION_ORIGINS_FOOTPRINT};
     execution_origin_push(&walk, (ExecutionOrigin){function_id, value, environment, false,
-        query == EXECUTION_ORIGINS_CALLBACK_ENTRY ? UINT32_MAX : 0});
+        query == EXECUTION_ORIGINS_CALLBACK_ENTRY ? UINT32_MAX : 0, false});
     bool found = false;
     uint32_t unresolved = 0;
     for (uint32_t cursor = 0; cursor < walk.count && walk.status == XR_XIR_OK; ++cursor) {
@@ -291,7 +322,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 if (query == EXECUTION_ORIGINS_CALLBACK_ENTRY && origin.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT &&
                     execution_origin_incoming(&walk, roots, &storage, origin)) continue;
                 if (observe_environment && origin.value < function.parameters &&
-                    (origin.value >= function.capture_count || query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS)) {
+                    (origin.value >= function.capture_count || query == EXECUTION_ORIGINS_ENVIRONMENT_INPUTS || walk.footprint)) {
                     XirExecutionSiteKind kind = origin.value < function.capture_count ?
                         XIR_EXECUTION_CAPTURE_INPUT : XIR_EXECUTION_FORMAL;
                     XirExecutionSite formal = {.kind = kind, .index = origin.value,
@@ -304,7 +335,8 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                         .capture_environment = origin.environment, .signature = node->type};
                     walk.status = visit(context, &formal);
                     found = true;
-                } else unresolved |= XIR_EXECUTION_REMAINDER_PARAMETER;
+                } else unresolved |= origin.storable ? XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT :
+                    XIR_EXECUTION_REMAINDER_PARAMETER;
                 continue;
             }
             if (query == EXECUTION_ORIGINS_EFFECTS && node->erased && !node->restricted && !function.default_callback) {
@@ -322,8 +354,11 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     .registration = UINT32_MAX, .reference = UINT32_MAX, .environment = origin.environment,
                     .capture_environment = origin.environment, .signature = node->type};
                 walk.status = visit(context, &stored);
-                predecessor = found = true;
-            } else if (node->callable_opaque) unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+                found = true;
+                if (walk.footprint) origin.storable = true;
+                else predecessor = true;
+            } else if (node->callable_opaque) unresolved |= origin.storable ?
+                XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT : XIR_EXECUTION_REMAINDER_OPAQUE;
             for (uint32_t c = node->calls; c != UINT32_MAX && walk.status == XR_XIR_OK; c = roots->call[c].next) {
                 EffectCheckCall call = roots->call[c];
                 if (call.protocol != 1) continue;
@@ -340,7 +375,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 EffectCheckFunction source_function = roots->function[roots->node[source].function];
                 uint32_t value = source - source_function.first;
                 execution_origin_push(&walk, (ExecutionOrigin){roots->node[source].function,
-                    value, origin.environment, value >= source_function.values, origin.entry_context});
+                    value, origin.environment, value >= source_function.values, origin.entry_context, origin.storable});
                 predecessor = true;
             }
         }
@@ -351,23 +386,9 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
             for (uint32_t e = origins->heads[index]; e != UINT32_MAX; e = origins->edges[e].next) {
                 EffectCheckOriginEdge edge = origins->edges[e];
                 if (edge.parameter_contents) {
-                    if (edge.function != function.declaration || edge.value >= function.parameters) {
-                        walk.status = XR_XIR_BAD_STRUCTURE; break;
-                    }
-                    XrXirType payload = xr_xir_cell_element(xir_execution_types(roots),
-                        roots->node[function.first + edge.value].type);
-                    if (observe_environment && edge.value >= function.capture_count &&
-                        xr_xir_type_is_callable(xir_execution_types(roots), payload)) {
-                        XirExecutionSite stored = {.kind = XIR_EXECUTION_STORABLE, .index = origin.value,
-                            .function = function.declaration, .instruction = UINT32_MAX, .block = UINT32_MAX,
-                            .caller_instance = origin.function, .target = UINT32_MAX, .declaration = UINT32_MAX,
-                            .output_function = UINT32_MAX, .output_value = UINT32_MAX,
-                            .receiver_function = function.declaration, .receiver_value = origin.value,
-                            .registration = UINT32_MAX, .reference = UINT32_MAX, .environment = origin.environment,
-                            .capture_environment = origin.environment, .signature = payload};
-                        walk.status = visit(context, &stored);
-                        found = true;
-                    } else unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+                    bool input = execution_origin_input(&walk,roots,origin,edge,&unresolved);
+                    if (walk.status != XR_XIR_OK) break;
+                    found |= input;
                     predecessor = true;
                     continue;
                 }
@@ -385,18 +406,20 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     }
                 }
                 if (edge.function == UINT32_MAX) {
-                    unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
+                    unresolved |= origin.storable ? XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT :
+                        XIR_EXECUTION_REMAINDER_OPAQUE;
                     predecessor = true;
                     continue;
                 }
                 uint32_t next_environment = edge.application == UINT32_MAX ? origin.environment : edge.application;
                 uint32_t source_function = edge.function == function.declaration ? origin.function : edge.function;
                 execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value,
-                    next_environment, false, origin.entry_context});
+                    next_environment, false, origin.entry_context, origin.storable});
                 predecessor = true;
             }
         }
-        if (!predecessor) unresolved |= XIR_EXECUTION_REMAINDER_STORAGE;
+        if (!predecessor) unresolved |= origin.storable ? XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT :
+            XIR_EXECUTION_REMAINDER_STORAGE;
     }
     if (!found && !unresolved) unresolved = XIR_EXECUTION_REMAINDER_STORAGE;
     if (walk.status == XR_XIR_OK) {*complete = found && !unresolved; *remainder = unresolved;}
@@ -445,6 +468,11 @@ XR_FUNC XrXirStatus xir_execution_visit_value_environment_inputs_in(const XirExe
     const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete, uint32_t *remainder) {
     return execution_visit_value_environment(owner, value, visit, context, complete, remainder,
         EXECUTION_ORIGINS_ENVIRONMENT_INPUTS);
+}
+
+XR_FUNC XrXirStatus xir_execution_visit_value_footprint_in(const XirExecutionOwner *owner,
+    const XirExecutionValue *value, XirExecutionVisitor visit, void *context, bool *complete, uint32_t *remainder) {
+    return execution_visit_value_environment(owner,value,visit,context,complete,remainder,EXECUTION_ORIGINS_FOOTPRINT);
 }
 
 typedef struct ExecutionResolveContext {

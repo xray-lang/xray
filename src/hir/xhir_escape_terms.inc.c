@@ -184,6 +184,10 @@ static XrXirStatus restriction_capture(void *context, const XirStorageCapture *c
         XrXirType type = owner->nodes[owner->offsets[f] + p].type;
         if (!xr_xir_callable_signature(owner->module->types, type) || xr_xir_type_is_c_callable(owner->module->types, type))
             return XR_XIR_BAD_STRUCTURE;
+    } else if (capture->kind == XIR_STORAGE_CAPTURE_OPAQUE_FN) {
+        if (capture->exposure != UINT32_MAX || capture->identity.function != capture->function ||
+            capture->identity.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+            capture->contents != capture->identity.value) return XR_XIR_BAD_STRUCTURE;
     } else if (capture->kind != XIR_STORAGE_CAPTURE_CELL) return XR_XIR_BAD_STRUCTURE;
     if (solver->carrier_count == solver->carrier_capacity) {
         HirRestrictionCarrier *grown = xir_compile_array_grow(owner->memory, solver->carriers,

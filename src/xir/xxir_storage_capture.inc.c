@@ -47,7 +47,7 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_reference(XirStorageFlow *flow,
 
 typedef enum StorageCarrierKind {
     STORAGE_CARRIER_FN, STORAGE_CARRIER_CELL, STORAGE_CARRIER_FORMAL, STORAGE_CARRIER_STORABLE,
-    STORAGE_CARRIER_HIDDEN
+    STORAGE_CARRIER_HIDDEN, STORAGE_CARRIER_OPAQUE
 } StorageCarrierKind;
 typedef struct StorageCaptureItem {
     XirStorageReference reference;
@@ -176,7 +176,7 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
     for (uint32_t n = 0; n < walk->count && storage_step(flow); ++n) {
         StorageCaptureItem item = walk->items[n];
         if (item.kind == STORAGE_CARRIER_FORMAL || item.kind == STORAGE_CARRIER_HIDDEN ||
-            item.kind == STORAGE_CARRIER_STORABLE) continue;
+            item.kind == STORAGE_CARRIER_STORABLE || item.kind == STORAGE_CARRIER_OPAQUE) continue;
         if (item.kind == STORAGE_CARRIER_CELL) {
             XirStorageReference local;
             XrXirStatus status = storage_current_reference(flow, point->function, item.reference, &local);
@@ -200,9 +200,19 @@ static XrXirStatus storage_capture_collect(StorageCaptureWalk *walk, const XirSt
         XrXirStatus status = xir_storage_flow_point_value(flow, &use, &proxy);
         if (status != XR_XIR_OK) return status;
         walk->current_proxy = proxy;
-        status = xir_execution_visit_value_environment_inputs_in(flow->execution, &proxy,
+        status = xir_execution_visit_value_footprint_in(flow->execution, &proxy,
             storage_capture_arguments, walk, &complete, &remainder);
         if (status != XR_XIR_OK) return status;
+        if (remainder & XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT) {
+            /* The stored-value contract covers unknown environment branches.
+             * Known captures continue through the ordinary identity queries. */
+            status = storage_storable_footprint(flow,point,proxy);
+            if (status != XR_XIR_OK) return status;
+            if (!storage_capture_push(walk,(StorageCaptureItem){.reference=proxy,.kind=STORAGE_CARRIER_OPAQUE}))
+                return flow->status;
+            remainder &= ~XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT;
+            complete = !remainder;
+        }
         walk->remainder |= remainder;
         walk->complete &= complete;
     }
@@ -234,6 +244,12 @@ XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, 
     flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
         if (walk.items[n].kind == STORAGE_CARRIER_FN) continue;
+        if (walk.items[n].kind == STORAGE_CARRIER_OPAQUE) {
+            XirStorageCapture opaque = {.identity=walk.items[n].reference,.function=point->function,
+                .contents=walk.items[n].reference.value,.exposure=UINT32_MAX,.kind=XIR_STORAGE_CAPTURE_OPAQUE_FN};
+            status = visit(context,&opaque);
+            continue;
+        }
         if (walk.items[n].kind == STORAGE_CARRIER_STORABLE) {
             XirStorageCapture stored = {.identity=walk.items[n].reference, .function=point->function,
                 .contents=UINT32_MAX, .exposure=UINT32_MAX, .kind=XIR_STORAGE_CAPTURE_STORABLE_FN};

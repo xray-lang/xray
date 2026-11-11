@@ -192,3 +192,20 @@ static XrXirStatus storage_formal_footprint(XirStorageFlow *flow, const XirStora
     ++flow->revision;
     return XR_XIR_OK;
 }
+
+/* A stored value keeps an external environment loan independently of its
+ * restriction bound. Callable ROOT and suspension uppers stay on the value. */
+static XrXirStatus storage_storable_footprint(XirStorageFlow *flow,
+    const XirStorageValuePoint *point, XirStorageReference proxy) {
+    XirStorageValuePoint key = *point;
+    key.reference = proxy;
+    uint32_t index = storage_existing_point(flow,key);
+    if (index == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    if (flow->view.point_values[index].footprint_input != UINT32_MAX) return XR_XIR_OK;
+    if (flow->exposure_started) return XR_XIR_BAD_STRUCTURE;
+    uint32_t value = storage_aux(flow,point->function);
+    if (value == UINT32_MAX || !storage_unknown(flow,point->function,value,XR_XIR_UNIT) ||
+        !storage_relation_bank(flow,point->function,value,proxy.value,XIR_STORAGE_FOOTPRINT)) return flow->status;
+    ((XirStoragePointValue *)flow->view.point_values)[index].footprint_input = value;
+    return XR_XIR_OK;
+}

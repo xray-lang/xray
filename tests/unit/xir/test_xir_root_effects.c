@@ -71,6 +71,96 @@ static void captured_cell_bound_types(void) {
     effect_mark_check(baseline);
     printf("captured Cell bounds: writers and captured handles pass complete verification\n");
 }
+static XrXirStatus stored_environment_case(const XrXirArtifact *artifact, bool relocate) {
+    XrXirEffects *effects = NULL;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xir_effects_infer_lifetimes_input(&effect_context,
+        (XirEffectInput){module,artifact->construction,NULL},&effects,&diagnostic);
+    XirStorageFlowView view = {0};
+    if (status == XR_XIR_OK) status = xir_storage_flow_view(effects->checked_roots->storage,&view);
+    uint32_t opaque = 0;
+    XirStoragePointValue observed = {0};
+    for (uint32_t p = 0; status == XR_XIR_OK && p < view.point_value_count; ++p) {
+        XirStoragePointValue point = view.point_values[p];
+        if (point.footprint_input == UINT32_MAX) continue;
+        bool external = false;
+        for (uint32_t u = 0; u < view.unknown_count; ++u) {
+            XirStorageUnknown unknown = view.unknowns[u];
+            external |= unknown.function == point.function && unknown.value == point.footprint_input;
+        }
+        if (!external) continue;
+        bool edge = false;
+        XirStorageFlowFunction row = view.functions[point.function];
+        for (uint32_t e = 0; e < row.footprint_flow_count; ++e)
+            edge |= row.footprint_flows[e].source == point.footprint_input && row.footprint_flows[e].target == point.value;
+        CHECK(edge);
+        for (uint32_t e = 0; e < row.flow_count; ++e)
+            CHECK(row.flows[e].source != point.footprint_input || row.flows[e].target != point.value);
+        ++opaque;
+        observed = point;
+    }
+    if (status == XR_XIR_OK) {
+        CHECK(opaque);
+        XrXirEffectFacts facts = xr_xir_effects_read(effects,root_find(module,"transport"));
+        CHECK(facts.status == XR_XIR_OK && facts.root.unresolved);
+    }
+    uint32_t *values = NULL,*instructions = NULL;
+    if (status == XR_XIR_OK && relocate) {
+        const XrXirFunction *body = &module->functions[observed.function];
+        uint32_t count = body->parameter_count+body->instruction_count;
+        values = xir_compile_alloc(&effect_context,(size_t)count*sizeof(*values),&status);
+        if (status == XR_XIR_OK) instructions = xir_compile_alloc(&effect_context,
+            (size_t)body->instruction_count*sizeof(*instructions),&status);
+        if (status == XR_XIR_OK) {
+            for (uint32_t v = 0; v < count; ++v) values[v] = v < body->parameter_count ? v : v+1;
+            for (uint32_t i = 0; i < body->instruction_count; ++i) instructions[i] = i+1;
+            const XirStorageFlowFunction *before = view.functions;
+            XirStorageRelocation map = {observed.function,count+1,body->instruction_count+1,values,instructions};
+            status = xir_storage_flow_relocate(effects->checked_roots->storage,&map,1,NULL);
+            CHECK(xir_storage_flow_view(effects->checked_roots->storage,&view) == XR_XIR_OK);
+            if (status != XR_XIR_OK) CHECK(view.functions == before);
+            else {
+                bool moved = false;
+                for (uint32_t p = 0; p < view.point_value_count; ++p) {
+                    XirStoragePointValue point = view.point_values[p];
+                    moved |= point.function == observed.function && point.value == observed.value+1 &&
+                        point.footprint_input == observed.footprint_input+1 && point.instruction == observed.instruction+1;
+                }
+                CHECK(moved);
+            }
+        }
+    }
+    xr_compile_resources_free(values); xr_compile_resources_free(instructions);
+    xr_xir_compile_effects_free(effects);
+    return status;
+}
+static void stored_environment_ownership(void) {
+    EffectMark baseline = effect_mark();
+    XrXirArtifact *artifact = root_source("stored_opaque_transport.xr",XR_XIR_OK);
+    EffectMark retained = effect_mark();
+    size_t sites[2] = {0};
+    for (uint32_t relocated = 0; relocated < 2; ++relocated) {
+        attempts = 0; injected = false;
+        CHECK(stored_environment_case(artifact,relocated != 0) == XR_XIR_OK);
+        sites[relocated] = attempts;
+        effect_mark_check(retained);
+        for (size_t site = 0; site < sites[relocated]; ++site) {
+            attempts = 0; injected = false; fail_at = site;
+            CHECK(stored_environment_case(artifact,relocated != 0) == XR_XIR_OUT_OF_MEMORY && injected);
+            fail_at = SIZE_MAX; effect_mark_check(retained);
+        }
+    }
+    XrXirCheckedPacket packet = {0};
+    XrXirDiagnostic diagnostic = {0};
+    CHECK(xr_xir_compile_checked_write(artifact,&packet,&diagnostic) == XR_XIR_OK);
+    XrXirArtifact *received = NULL;
+    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,&diagnostic) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(received); xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(artifact); effect_mark_check(baseline);
+    printf("stored callable environments: opaque loan leaves, ROOT upper and %zu/%zu allocation failures with relocation PASS\n",
+        sites[0],sites[1]);
+}
 static void direct_root_equations(void) {
     XrXirTypeNode callable = {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64,
         .element = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
@@ -1056,13 +1146,16 @@ static void execution_storable_boundaries(void) {
     uint32_t operand = 0, escaping = 0;
     XrXirInstruction caller[] = {
         {.op = XR_XIR_CALL, .type = fn, .args = {0, 1}, .immediate = 1},
-        {.op = XR_XIR_FUNCTION_WEAKEN, .type = fn, .args = {0}}, {.op = XR_XIR_RETURN, .args = {1}}
+        {.op = XR_XIR_FUNCTION_WEAKEN, .type = fn, .args = {0}},
+        {.op = XR_XIR_COPY, .type = fn, .args = {1}},
+        {.op = XR_XIR_FUNCTION_WEAKEN, .type = fn, .args = {1}},
+        {.op = XR_XIR_RETURN, .args = {1}}
     };
     XrXirInstruction returned = {.op = XR_XIR_RETURN};
-    XrXirBlock blocks[] = {{.count = 3}, {.count = 1}};
+    XrXirBlock blocks[] = {{.count = 5}, {.count = 1}};
     XrXirFunction functions[] = {
         {.parameters = &fn, .parameter_count = 1, .result = fn, .blocks = blocks, .block_count = 1,
-            .instructions = caller, .instruction_count = 3, .operands = &operand, .operand_count = 1,
+            .instructions = caller, .instruction_count = 5, .operands = &operand, .operand_count = 1,
             .error_type = XR_XIR_NEVER, .escaping_parameters = &escaping, .escaping_parameter_count = 1},
         {.parameters = &fn, .parameter_count = 1, .result = fn, .blocks = blocks + 1, .block_count = 1,
             .instructions = &returned, .instruction_count = 1, .error_type = XR_XIR_NEVER,
@@ -1081,7 +1174,14 @@ static void execution_storable_boundaries(void) {
     CHECK(xir_execution_visit_value_captures_in(roots, &value, execution_kind_oracle,
         &probe, &complete, &remainder) == XR_XIR_OK && !complete &&
         (remainder & XIR_EXECUTION_REMAINDER_OPAQUE) && !probe.count);
-    value.value = 2; probe.kind = XIR_EXECUTION_FORMAL;
+    uint32_t stored_values[] = {1,3,4};
+    for (uint32_t v = 0; v < 3; ++v) {
+        value.value = stored_values[v]; probe.count = 0;
+        CHECK(xir_execution_visit_value_footprint_in(roots,&value,execution_kind_oracle,
+            &probe,&complete,&remainder) == XR_XIR_OK && !complete &&
+            remainder == XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT && probe.count == 1);
+    }
+    value.value = 2; probe.kind = XIR_EXECUTION_FORMAL; probe.count = 0;
     CHECK(xir_execution_visit_value_environment_in(roots, &value, execution_kind_oracle,
         &probe, &complete, &remainder) == XR_XIR_OK && complete && !remainder && probe.count == 1);
     effect_checked_roots_free(roots);
@@ -1282,6 +1382,7 @@ static void root_unbound_contents_causes(void) {
 
 static void control_summary_kernel(void) {
     captured_cell_bound_types();
+    stored_environment_ownership();
     conversion_owner_cases();
     callback_entry_owner_cases();
     callback_receiver_owner_cases();

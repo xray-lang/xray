@@ -116,14 +116,15 @@ typedef struct XirStoragePointValue {
 } XirStoragePointValue;
 typedef enum XirStorageCaptureKind {
     XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN,
-    XIR_STORAGE_CAPTURE_HIDDEN_FN
+    XIR_STORAGE_CAPTURE_HIDDEN_FN, XIR_STORAGE_CAPTURE_OPAQUE_FN
 } XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;
     uint32_t function, contents, exposure;
     /* A formal carrier transports its independent restriction and loan facts.
      * A storable terminal has no contents or exposure value. Known environment
-     * Cells remain separate captures. */
+     * Cells remain separate captures. An opaque carrier keeps its external
+     * footprint leaf through contents and has no exposure coordinate. */
     XirStorageCaptureKind kind;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
