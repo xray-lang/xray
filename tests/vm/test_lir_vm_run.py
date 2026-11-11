@@ -78,12 +78,12 @@ def main():
             assert result.returncode == 0 and not result.stderr, (options, result.stderr)
             assert result.stdout == b'23\n' * (2 if '--twice' in options else 1)
         (root / 'effect.xr').write_text('const owned="unsupported"\n', encoding='utf-8')
-        run('unsupported-initializer', 'import "./effect" as effect\nprint(1)\n', 1, b'module slots')
+        run('owned-initializer', 'import "./effect" as effect\nprint(1)\n', stdout=b'1\n')
         (root / 'invalid.xr').write_text('export fn unused()->i64{return "wrong"}\n', encoding='utf-8')
         run('unselected-check-error', 'import "./invalid" as invalid\nprint(1)\n', 1, b'source',
             diagnostic_path=root / 'invalid.xr')
         run('early-reader', 'print(read())\nconst n=7\nfn read()->i64{return n}\n',
-            1, b'before complete publication')
+            1, b'XR_RUN_6002: value operation rejected', located=False)
         closures = {
             'chain': ('fn leaf(n:i64)->i64{return n+1}\n'
                 'fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n'
@@ -109,14 +109,14 @@ def main():
                 assert result.stdout == expected * (2 if '--twice' in options else 1), (name, options, result.stdout)
         run('closure-transitive-storage', 'fn leaf()->i64{return state}\n'
             'fn middle()->i64{return leaf()}\nfn top()->i64{return middle()}\n'
-            'print(top())\nvar state=7\n', 1, b'before complete publication')
+            'print(top())\nvar state=7\n', 1, b'XR_RUN_6002: value operation rejected', located=False)
         run('closure-unselected-storage', 'fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n'
-            'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n', 1, b'before complete publication')
+            'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n', stdout=b'1\n')
         run('closure-storage-cycle', 'fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n'
             'fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n',
-            1, b'before complete publication')
+            1, b'XR_RUN_6002: value operation rejected', located=False)
         run('closure-local-storage', 'fn leaf()->i64{var local=1\nreturn local}\n'
-            'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n', 1, b'before complete publication')
+            'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n', stdout=b'1\n')
         original = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/string_owning_parameter.xr'
         original_bytes = original.read_bytes()
         assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
