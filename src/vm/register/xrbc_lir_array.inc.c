@@ -72,6 +72,12 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         XrLirArrayIntrinsic intrinsic = {0};
         if (xr_lir_array_intrinsic_view(c->input, i->intrinsic, &intrinsic) != XR_LIR_OK || !intrinsic.id)
             return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "intrinsic has no owned Array role");
+        if (intrinsic.operation == XR_LIR_ARRAY_OP_SET || intrinsic.operation == XR_LIR_ARRAY_OP_PUSH) {
+            XrLirType receiver = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[0]}, &receiver);
+            if (receiver != XR_LIR_ARRAY_CELL)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "Array mutator receiver has no bytecode implementation");
+        }
         shape.element = i->type == XR_LIR_ARRAY ? intrinsic.result_element : intrinsic.parameter_elements[0];
         switch (intrinsic.operation) {
         case XR_LIR_ARRAY_OP_NEW: operation = XR_RBC_ARRAY_NEW; break;

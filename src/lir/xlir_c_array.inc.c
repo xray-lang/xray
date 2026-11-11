@@ -74,6 +74,11 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
         return;
     }
+    if ((shape->operation == XR_LIR_ARRAY_OP_SET || shape->operation == XR_LIR_ARRAY_OP_PUSH) &&
+        c_value_type(c, v->operands[0]) != XR_LIR_ARRAY_CELL) {
+        c_error(c, XR_LIR_C_UNSUPPORTED, "Array mutator receiver has no native implementation");
+        return;
+    }
     XrLirType element = v->type == XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
     const char *family;
     switch (element) {
