@@ -95,7 +95,14 @@ static XrXirValueStatus module_array_copy(const XrtModuleType *type, const void 
     const XrtArray *array = NULL;
     memcpy(&array, source, sizeof(array));
     XrtArray *owned = NULL;
-    XrtArrayElement element = type->kind == XRT_MODULE_ARRAY_I64 ? XRT_ARRAY_I64 : XRT_ARRAY_STRING;
+    XrtArrayElement element;
+    switch (type->kind) {
+    case XRT_MODULE_ARRAY_I64: element = XRT_ARRAY_I64; break;
+    case XRT_MODULE_ARRAY_STRING: element = XRT_ARRAY_STRING; break;
+    case XRT_MODULE_ARRAY_U8: element = XRT_ARRAY_U8; break;
+    case XRT_MODULE_ARRAY_U64: element = XRT_ARRAY_U64; break;
+    default: return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     XrXirValueStatus status = xrt_array_owned_copy(array, type->arena, element, &owned);
     if (status == XR_XIR_VALUE_OK) memcpy(empty, &owned, sizeof(owned));
     return status;
@@ -123,6 +130,7 @@ static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
         type->size = sizeof(XrtString *); type->alignment = _Alignof(XrtString *);
         type->copy = module_string_copy; type->drop = module_string_drop; return true;
     case XRT_MODULE_ARRAY_I64: case XRT_MODULE_ARRAY_STRING:
+    case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
         type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
         type->copy = module_array_copy; type->drop = module_array_drop; return true;
     default: return false;

@@ -32,7 +32,7 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_I8, XRT_MODULE_I16, XRT_MODULE_I32, XRT_MODULE_I64,
     XRT_MODULE_U8, XRT_MODULE_U16, XRT_MODULE_U32, XRT_MODULE_U64,
     XRT_MODULE_F32, XRT_MODULE_F64, XRT_MODULE_STRING,
-    XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING
+    XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64
 } XrtModuleTypeKind;
 typedef struct XrtModuleTypeSpec { XrtModuleTypeKind kind; } XrtModuleTypeSpec;
 typedef struct XrtModuleSpec { uint32_t first_dependency, dependency_count; } XrtModuleSpec;

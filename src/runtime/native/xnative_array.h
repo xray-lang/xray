@@ -11,7 +11,9 @@
 #include "xray_native_array.h"
 #include "xnative_value.h"
 #include "xir/xxir_type_arena.h"
-typedef enum XrtArrayElement { XRT_ARRAY_I64, XRT_ARRAY_STRING } XrtArrayElement;
+typedef enum XrtArrayElement {
+    XRT_ARRAY_I64, XRT_ARRAY_STRING, XRT_ARRAY_U8, XRT_ARRAY_U64, XRT_ARRAY_ELEMENT_COUNT
+} XrtArrayElement;
 
 /* The same independently owned closed context serves a layout and its root.
  * Its two structural descriptors never borrow Source or generated-C memory. */

@@ -18,6 +18,10 @@ XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32
 XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_i64_repeat(int64_t length, int64_t fill, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_string_repeat(int64_t length, XrtString *fill, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_u8_new(const uint8_t *values, size_t count, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_u64_new(const uint64_t *values, size_t count, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_u8_repeat(int64_t length, uint8_t fill, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_u64_repeat(int64_t length, uint64_t fill, uint32_t source_id);
 /* A retain creates one independent logical owner and one real canonical ref.
  * Selected SSA edges and returns transfer their existing owner unchanged. */
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *, uint32_t source_id);
@@ -28,12 +32,18 @@ XRAY_API void xrt_array_assign(XrtArray **destination, const XrtArray *, uint32_
 XRAY_API int64_t xrt_array_length(const XrtArray *, uint32_t source_id);
 XRAY_API int64_t xrt_array_i64_get(const XrtArray *, int64_t index, uint32_t source_id);
 XRAY_API XrtString *xrt_array_string_get(const XrtArray *, int64_t index, uint32_t source_id);
+XRAY_API uint8_t xrt_array_u8_get(const XrtArray *, int64_t index, uint32_t source_id);
+XRAY_API uint64_t xrt_array_u64_get(const XrtArray *, int64_t index, uint32_t source_id);
 /* The binding is loaded after all arguments have been evaluated. A failure
  * preserves that current binding; RHS effects already performed remain. */
 XRAY_API void xrt_array_i64_set(XrtArray **, int64_t index, int64_t value, uint32_t source_id);
 XRAY_API void xrt_array_string_set(XrtArray **, int64_t index, XrtString *, uint32_t source_id);
 XRAY_API void xrt_array_i64_push(XrtArray **, int64_t value, uint32_t source_id);
 XRAY_API void xrt_array_string_push(XrtArray **, XrtString *, uint32_t source_id);
+XRAY_API void xrt_array_u8_set(XrtArray **, int64_t index, uint8_t value, uint32_t source_id);
+XRAY_API void xrt_array_u64_set(XrtArray **, int64_t index, uint64_t value, uint32_t source_id);
+XRAY_API void xrt_array_u8_push(XrtArray **, uint8_t value, uint32_t source_id);
+XRAY_API void xrt_array_u64_push(XrtArray **, uint64_t value, uint32_t source_id);
 #ifdef __cplusplus
 }
 #endif

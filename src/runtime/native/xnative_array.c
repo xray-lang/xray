@@ -26,8 +26,20 @@ struct XrtArrayOwner {
     XrtArrayElement element;
 };
 
+static XrXirType array_payload_type(XrtArrayElement element) {
+    static const XrXirType types[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
+    return (unsigned)element < XRT_ARRAY_ELEMENT_COUNT ? types[element] : XR_XIR_UNIT;
+}
+static bool array_payload_element(XrXirType type, XrtArrayElement *element) {
+    for (uint32_t i = 0; i < XRT_ARRAY_ELEMENT_COUNT; ++i) {
+        if (array_payload_type((XrtArrayElement)i) == type) { *element = (XrtArrayElement)i; return true; }
+    }
+    return false;
+}
+
 XR_FUNC XrXirType xrt_array_type(XrtArrayElement element) {
-    return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + (uint32_t)element);
+    return (unsigned)element < XRT_ARRAY_ELEMENT_COUNT ?
+        (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + (uint32_t)element) : XR_XIR_UNIT;
 }
 
 XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **output, uint64_t *bytes) {
@@ -38,9 +50,10 @@ XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **ou
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &context.resources);
     if (resource != XR_COMPILE_RESOURCE_OK)
         return resource == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_VALUE_MEMORY_LIMIT : XR_XIR_VALUE_OOM;
-    XrXirTypeNode nodes[] = {{.kind=XR_XIR_TYPE_ARRAY, .element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_ARRAY, .element=XR_XIR_STRING}};
-    XrXirTypes types = {nodes, 2, NULL, NULL};
+    XrXirTypeNode nodes[XRT_ARRAY_ELEMENT_COUNT];
+    for (uint32_t i = 0; i < XRT_ARRAY_ELEMENT_COUNT; ++i)
+        nodes[i] = (XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY, .element=array_payload_type((XrtArrayElement)i)};
+    XrXirTypes types = {nodes, XRT_ARRAY_ELEMENT_COUNT, NULL, NULL};
     XrXirValueStatus status = xr_xir_compile_type_arena_new(&context, &types, output);
     XrCompileResourceStats stats = {0};
     if (status == XR_XIR_VALUE_OK) {
@@ -62,20 +75,17 @@ static bool array_element(const XrXirValue *value, XrtArrayElement *element) {
     if (!value->payload || !xr_xir_value_valid(value)) return false;
     const XrXirTypeArena *arena = xr_xir_value_arena(value);
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), (XrXirType)value->type);
-    if (!node || node->kind != XR_XIR_TYPE_ARRAY ||
-        (node->element != XR_XIR_I64 && node->element != XR_XIR_STRING)) return false;
-    *element = node->element == XR_XIR_I64 ? XRT_ARRAY_I64 : XRT_ARRAY_STRING;
-    return true;
+    return node && node->kind == XR_XIR_TYPE_ARRAY && array_payload_element(node->element, element);
 }
-/* These two closed builtin element families have structural runtime meaning.
+/* These closed builtin element families have structural runtime meaning.
  * Other constructed values retain the canonical arena's identity rules. The
  * actual Array keeps its original type ID, arena and allocation domain. */
 static bool array_shape(const XrXirValue *value, const XrXirTypeArena *receiver, XrtArrayElement expected) {
     XrtArrayElement actual = XRT_ARRAY_I64;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(receiver), xrt_array_type(expected));
-    return (unsigned)expected <= XRT_ARRAY_STRING && array_element(value, &actual) && actual == expected &&
+    return (unsigned)expected < XRT_ARRAY_ELEMENT_COUNT && array_element(value, &actual) && actual == expected &&
         node && node->kind == XR_XIR_TYPE_ARRAY &&
-        node->element == (expected == XRT_ARRAY_I64 ? XR_XIR_I64 : XR_XIR_STRING);
+        node->element == array_payload_type(expected);
 }
 static XrXirValueAdmission array_admission(XrtValueRoot *root, uint32_t source_id) {
     if (!root->types) {
@@ -169,6 +179,14 @@ static XrXirValue array_argument(XrtValueRoot *root, const XrtArray *array, XrXi
     return value;
 }
 
+static XrXirValue array_input(const void *values, size_t i, XrtArrayElement element) {
+    XrXirValue value = {.type=(uint32_t)array_payload_type(element)};
+    if (element == XRT_ARRAY_U64) memcpy(&value.payload, &((const uint64_t *)values)[i], sizeof(value.payload));
+    else if (element == XRT_ARRAY_U8) value.payload = ((const uint8_t *)values)[i];
+    else if (element == XRT_ARRAY_I64) value.payload = ((const int64_t *)values)[i];
+    else value.payload = (int64_t)(intptr_t)((XrtString *const *)values)[i];
+    return value;
+}
 static XrtArray *array_new(const void *values, size_t count, XrtArrayElement element, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
     if (count && !values)
@@ -181,9 +199,7 @@ static XrtArray *array_new(const void *values, size_t count, XrtArrayElement ele
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     XrXirValue *input = count ? xr_xir_domain_allocate(root->domain, count * sizeof(*input), &status) : NULL;
     if (count && !input) xrt_value_failure(status, source_id);
-    for (size_t i = 0; i < count; ++i)
-        input[i] = element == XRT_ARRAY_I64 ? (XrXirValue){XR_XIR_I64, 0, ((const int64_t *)values)[i]} :
-            (XrXirValue){XR_XIR_STRING, 0, (int64_t)(intptr_t)((XrtString *const *)values)[i]};
+    for (size_t i = 0; i < count; ++i) input[i] = array_input(values, i, element);
     status = xr_xir_array_new(xrt_array_type(element), input, count, &admission, &root->pending);
     if (input) xr_xir_domain_deallocate(root->domain, input, count * sizeof(*input));
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
@@ -199,7 +215,8 @@ XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, 
 }
 static XrtArray *array_repeat(int64_t length, XrXirValue fill, XrtArrayElement element, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
-    size_t stride = element == XRT_ARRAY_I64 ? sizeof(int64_t) : sizeof(void *);
+    size_t stride = element == XRT_ARRAY_U8 ? sizeof(uint8_t) :
+        element == XRT_ARRAY_STRING ? sizeof(void *) : sizeof(uint64_t);
     if (length >= 0 && (uint64_t)length > SIZE_MAX / stride) xrt_value_failure(XR_XIR_VALUE_LIMIT, source_id);
     XR_CHECK(!root->pending.type && !root->pending.payload, "Array repeat starts with an empty pending owner");
     XrXirValueAdmission admission = array_admission(root, source_id);
@@ -219,7 +236,7 @@ XRAY_API XrtArray *xrt_array_string_repeat(int64_t length, XrtString *fill, uint
 }
 XR_FUNC XrXirValueStatus xrt_array_owned_copy(const XrtArray *array, const XrXirTypeArena *types,
     XrtArrayElement element, XrtArray **output) {
-    if (!array || !types || !output || *output || (unsigned)element > XRT_ARRAY_STRING)
+    if (!array || !types || !output || *output || (unsigned)element >= XRT_ARRAY_ELEMENT_COUNT)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = array_value(array), copy = {0};
     if (!array_shape(&value, types, element)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -324,7 +341,8 @@ static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, 
     XrtValueRoot *root = xrt_value_root_current(source_id);
     if (!binding || !*binding) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrXirValueAdmission admission = array_admission(root, source_id);
-    XrtArrayElement kind = element.type == XR_XIR_I64 ? XRT_ARRAY_I64 : XRT_ARRAY_STRING;
+    XrtArrayElement kind = XRT_ARRAY_I64;
+    if (!array_payload_element((XrXirType)element.type, &kind)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrXirValue value = array_argument(root, *binding, &admission, kind, source_id);
     int64_t old = value.payload;
     XrtArrayOwner *owner = array_find(root, old);
@@ -358,6 +376,7 @@ XRAY_API void xrt_array_i64_push(XrtArray **array, int64_t value, uint32_t sourc
 XRAY_API void xrt_array_string_push(XrtArray **array, XrtString *value, uint32_t source_id) {
     array_mutate(array, 0, (XrXirValue){XR_XIR_STRING, 0, (int64_t)(intptr_t)value}, true, source_id);
 }
+#include "xnative_array_unsigned.inc.c"
 XR_FUNC void xrt_array_root_drain(XrtValueRoot *root) {
     for (uint32_t i = 0; i < root->array_capacity; ++i) {
         XrtArrayOwner owner = root->arrays[i];
