@@ -39,6 +39,10 @@ static XR_AINLINE void xr_rbc_state_read(const XrtModuleAccess *access,
         XrtString *string;
         memcpy(&string, access->payload, sizeof(string));
         registers[destination].string = xrt_string_retain(string, source);
+    } else if (kind == XRT_MODULE_ARRAY_I64 || kind == XRT_MODULE_ARRAY_STRING) {
+        XrtArray *array;
+        memcpy(&array, access->payload, sizeof(array));
+        registers[destination].array = xrt_array_retain(array, source);
     } else if (kind == XRT_MODULE_BOOL) {
         bool boolean;
         memcpy(&boolean, access->payload, sizeof(boolean));
@@ -76,8 +80,8 @@ static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
     xr_rbc_state_ready(access, source);
     if (op == XR_RBC_STATE_READ) {
         xr_rbc_state_read(access, registers, word, source);
-    } else if (c == XRT_MODULE_STRING) {
-        XrXirValueStatus status = xrt_module_replace(access->reference, &registers[b].string);
+    } else if (c == XRT_MODULE_STRING || c == XRT_MODULE_ARRAY_I64 || c == XRT_MODULE_ARRAY_STRING) {
+        XrXirValueStatus status = xrt_module_replace(access->reference, &registers[b]);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
     } else if (c == XRT_MODULE_BOOL) {
         if (registers[b].bits > 1) return XR_RBC_INVALID;

@@ -12,7 +12,13 @@
  */
 static bool xr_rbc_state_payload_kind(uint32_t kind) {
     return kind == XRT_MODULE_UNIT || kind == XRT_MODULE_BOOL || kind == XRT_MODULE_I64 ||
-        kind == XRT_MODULE_F64 || kind == XRT_MODULE_STRING;
+        kind == XRT_MODULE_F64 || kind == XRT_MODULE_STRING ||
+        kind == XRT_MODULE_ARRAY_I64 || kind == XRT_MODULE_ARRAY_STRING;
+}
+
+static XrRbcRegisterKind rbc_state_register_kind(uint32_t kind) {
+    return kind == XRT_MODULE_STRING ? XR_RBC_STRING : kind == XRT_MODULE_ARRAY_I64 ? XR_RBC_ARRAY_I64 :
+        kind == XRT_MODULE_ARRAY_STRING ? XR_RBC_ARRAY_STRING : XR_RBC_BITS;
 }
 
 static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
@@ -58,7 +64,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
         return !b && !c && rbc_register_kind(function, a) == XR_RBC_STATE_REF;
     if (op == XR_RBC_STATE_READ || op == XR_RBC_STATE_WRITE) {
         if (b >= function->register_count || !xr_rbc_state_payload_kind(c)) return false;
-        XrRbcRegisterKind payload = c == XRT_MODULE_STRING ? XR_RBC_STRING : XR_RBC_BITS;
+        XrRbcRegisterKind payload = rbc_state_register_kind(c);
         if (op == XR_RBC_STATE_READ)
             return rbc_register_kind(function, b) == XR_RBC_STATE_REF &&
                 (c == XRT_MODULE_UNIT ? !a : rbc_register_kind(function, a) == payload);
@@ -68,7 +74,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     if (index >= function->state_access_count) return false;
     XrRbcStateAccess access = function->state_accesses[index];
     XrtModuleTypeKind kind = layout.types[layout.slots[access.slot].type].kind;
-    XrRbcRegisterKind payload = kind == XRT_MODULE_STRING ? XR_RBC_STRING : XR_RBC_BITS;
+    XrRbcRegisterKind payload = rbc_state_register_kind(kind);
     if (op == XR_RBC_STATE_INITIALIZE)
         return !(layout.slots[access.slot].flags & XRT_MODULE_SLOT_MUTABLE) &&
             !access.state && rbc_register_kind(function, a) == XR_RBC_STATE &&

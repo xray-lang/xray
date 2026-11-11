@@ -17,7 +17,8 @@ static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
-    ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE } fault;
+    ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE,
+    ARRAY_ARGUMENT_FAILURE } fault;
 static size_t spill_state_failure_entries=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
@@ -85,6 +86,7 @@ static void moving_free(void *pointer) {
 #undef xrt_string_drop
 
 static void *execution_malloc(size_t size) {
+    if (fault == ARRAY_ARGUMENT_FAILURE && size == 2 * sizeof(XrRbcRegister)) { fault = NO_FAILURE; return NULL; }
     if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
         (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
     if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_entries * sizeof(RbcSpillState)) { fault=NO_FAILURE;return NULL; }
@@ -531,7 +533,42 @@ static void module_state_cache_failure(void) {
 
 #include "register_state_fusion_cases.h"
 
+static void array_argument_failures(void) {
+    uint32_t code[4];
+    immediate(code, 0, XR_RBC_LOADI, 0, 7);
+    immediate(code, 1, XR_RBC_LOADI, 1, 9);
+    immediate(code, 2, XR_RBC_ARRAY_ACCESS, 0, 0);
+    emit(code, 3, XR_RBC_RET, 2, 0, 0);
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS, XR_RBC_ARRAY_I64};
+    XrRbcArrayLocation arguments[] = {{0, false}, {1, false}};
+    XrRbcArrayAccess access = {.operation=XR_RBC_ARRAY_NEW, .kind=XR_RBC_ARRAY_I64,
+        .result={2, false}, .count=2};
+    XrRbcFunction function = {.code=code, .code_count=4, .register_count=3,
+        .register_kinds=kinds, .register_kind_count=3, .result_kind=XR_RBC_ARRAY_I64,
+        .array_accesses=&access, .array_access_count=1, .array_operands=arguments, .array_operand_count=2};
+    XrRbcModule module = {.functions=&function, .function_count=1};
+    XrtLocationOwner *locations = NULL;
+    XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "Array fault location owner");
+    XrRbcExecution *execution = NULL;
+    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK, "Array fault prepared");
+    fault = ARRAY_ARGUMENT_FAILURE;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    XR_CHECK(fault == NO_FAILURE && xr_rbc_outcome_status(outcome) == XR_RBC_OUT_OF_MEMORY,
+        "real variadic gather allocation failure publishes no Array");
+    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+    FrameObservation o = {0};
+    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &o.execution) == XR_RBC_OK, "Array native failure prepared");
+    o.strings.byte_limit = 1;
+    XR_CHECK(xrt_run_embedded_owned(locations, &o.failure, observe_frame_root, &o, &o.strings) == XRT_EXECUTION_FAILURE &&
+        o.failure.kind == XRT_FAILURE_VALUE && o.failure.detail.value.status == XR_XIR_VALUE_LIMIT,
+        "real canonical Array failure crosses the shared longjmp boundary");
+    XR_CHECK(xrt_value_root_empty(&o.strings), "Array native failure drains the sole value root");
+    xr_rbc_execution_free(&o.execution); xrt_locations_release(locations);
+    for (size_t i = 0; i < 4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all Array fault stack banks retired");
+}
+
 int main(void) {
+    array_argument_failures();
     module_state_fused_retain_failure();
     module_state_cache_failure();
     entry_initialization();

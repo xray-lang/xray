@@ -20,6 +20,7 @@
 #include "base/xdefs.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
+#include "xray_native_array.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -98,7 +99,8 @@
     X(STATE_INITIALIZE, ABX)                                                                       \
     X(STATE_REFERENCE, ABX)                                                                        \
     X(STATE_READ, ABK8)                                                                            \
-    X(STATE_WRITE, ABK8)
+    X(STATE_WRITE, ABK8)                                                                            \
+    X(ARRAY_ACCESS, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -115,8 +117,25 @@ typedef struct {
 
 typedef enum XrRbcRegisterKind {
     XR_RBC_BITS, XR_RBC_STRING, XR_RBC_STRING_CELL, XR_RBC_CALL_WINDOW,
-    XR_RBC_STATE, XR_RBC_STATE_REF
+    XR_RBC_STATE, XR_RBC_STATE_REF,
+    XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_STRING_CELL
 } XrRbcRegisterKind;
+
+typedef enum XrRbcArrayOperation {
+    XR_RBC_ARRAY_NEW, XR_RBC_ARRAY_LEN, XR_RBC_ARRAY_GET, XR_RBC_ARRAY_SET, XR_RBC_ARRAY_PUSH,
+    XR_RBC_ARRAY_RETAIN, XR_RBC_ARRAY_DROP, XR_RBC_ARRAY_TAKE,
+    XR_RBC_ARRAY_CELL_NEW, XR_RBC_ARRAY_CELL_READ, XR_RBC_ARRAY_CELL_WRITE, XR_RBC_ARRAY_CELL_DROP
+} XrRbcArrayOperation;
+
+/* A location names one activation-owned bank. Variadic operands remain real
+ * locations, so a constructor need not fit all payloads in a call window. */
+typedef struct XrRbcArrayLocation { uint32_t index; bool spill; } XrRbcArrayLocation;
+typedef struct XrRbcArrayAccess {
+    XrRbcArrayOperation operation;
+    XrRbcRegisterKind kind;
+    XrRbcArrayLocation result;
+    uint32_t first, count, cell;
+} XrRbcArrayAccess;
 
 // Slot metadata supplies the immutable payload type and mutability. A compact
 // instruction indexes this row without narrowing the slot's numeric identity.
@@ -145,11 +164,19 @@ typedef struct {
     const XrRbcRegisterKind *cell_kinds;
     size_t cell_kind_count;
     XrRbcRegisterKind result_kind;
-    // Spills are activation-owned indexed storage. The String prefix is the
-    // immutable reference bitmap; the remaining slots contain scalar bits.
+    // Spills are activation-owned indexed storage. The managed prefix owns
+    // references; the remaining slots contain scalar bits or capabilities.
     uint32_t spill_count, reference_spill_count;
     const XrRbcStateAccess *state_accesses;
     size_t state_access_count;
+    /* NULL retains the String-only reference prefix. Otherwise every prefix
+     * slot has an immutable exact String or closed Array kind. */
+    const XrRbcRegisterKind *reference_spill_kinds;
+    size_t reference_spill_kind_count;
+    const XrRbcArrayAccess *array_accesses;
+    size_t array_access_count;
+    const XrRbcArrayLocation *array_operands;
+    size_t array_operand_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -237,6 +264,8 @@ XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
+XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtArray **empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,

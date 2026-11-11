@@ -1256,8 +1256,14 @@ static void test_module_capabilities(void) {
 }
 
 #include "register_state_cases.h"
+#include "register_array_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_arrays();
+    test_raw_array_spills();
+    test_raw_array_wide_return();
+    test_raw_array_local_cells();
+    test_raw_array_string_state();
     test_raw_state_deferred_publication();
     test_raw_state_spill_transport();
     test_raw_state_spill_shapes();

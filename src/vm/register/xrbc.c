@@ -15,6 +15,7 @@
 #include "xrbc_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
+#include "runtime/native/xnative_array.h"
 #include <float.h>
 #include <limits.h>
 #include <string.h>
@@ -42,6 +43,7 @@ typedef union {
     XrtString *string;
     XrtModuleState *state;
     XrtModuleAccess *state_ref;
+    XrtArray *array;
 } XrRbcRegister;
 
 #include "xrbc_entry.inc.c"
@@ -64,6 +66,8 @@ typedef struct {
     XrRbcRegister *spills;
     size_t spill_capacity, spill_count;
     XrtModuleAccess *module_accesses;
+    void *array_arguments;
+    size_t array_argument_capacity;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -132,6 +136,8 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
     return function->register_kinds ? function->register_kinds[slot] : XR_RBC_BITS;
 }
 
+#include "xrbc_array_admission.inc.c"
+
 #include "xrbc_state_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
@@ -147,16 +153,16 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
          function->register_kind_count != 0) ||
         (function->cell_kinds ? function->cell_kind_count != function->cell_count :
          function->cell_kind_count != 0) ||
-        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_STRING)) return false;
+        (function->result_kind != XR_RBC_BITS && !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_STATE_REF ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_ARRAY_STRING_CELL ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF ||
                  (function->register_kinds[i] == XR_RBC_STATE && i + 1 != function->parameter_count)))) return false;
     for (uint32_t i = 0; function->cell_kinds && i < function->cell_count; ++i)
-        if (function->cell_kinds[i] != XR_RBC_BITS && function->cell_kinds[i] != XR_RBC_STRING) return false;
-    return true;
+        if (function->cell_kinds[i] != XR_RBC_BITS && !rbc_managed_kind(function->cell_kinds[i])) return false;
+    return rbc_array_metadata_valid(function);
 }
 
 static bool xr_rbc_instruction_valid(const XrRbcModule *module,
@@ -168,6 +174,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
+    case XR_RBC_ARRAY_ACCESS:
+        if (a || index >= function->array_access_count) return false;
+        break;
     case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
     case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
     case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE:
@@ -330,8 +339,9 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
     uint64_t handle, XrRbcRegisterKind expected) {
     if (!handle || handle > stack->cell_count) return NULL;
     size_t index = (size_t)handle - 1;
-    // Reserved capacity does not establish a cell's lifetime. Only an active
-    // owner's initialized prefix can authorize a read or write.
+    // Reserved capacity does not establish a cell's lifetime. Array-local
+    // slots may leave holes below the active owner's high-water mark; their
+    // typed handles additionally require the prepared CFG capability proof.
     for (size_t depth = stack->depth; depth; --depth) {
         const XrRbcFrame *frame = &stack->frames[depth - 1];
         if (index >= frame->cell_base && index - frame->cell_base < frame->initialized_cells) {
@@ -345,6 +355,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 }
 
 #include "xrbc_state_execute.inc.c"
+#include "xrbc_array_execute.inc.c"
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
@@ -425,9 +436,12 @@ static void xr_rbc_root(void *context) {
         execution->pending->locations, &execution->pending->value, execution->entries);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_STRING)
         execution->pending->value.string = xrt_string_root_take(execution->pending->value.string);
+    if (execution->pending->status == XR_RBC_OK && rbc_array_kind(execution->pending->result_kind))
+        execution->pending->value.array = xrt_array_root_take(execution->pending->value.array);
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_free(stack->array_arguments);
     xr_free(stack->spills);
     xr_free(stack->cells);
     xr_free(stack->frames);
@@ -479,7 +493,7 @@ XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome) {
 }
 
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output) {
-    if (!outcome || outcome->status != XR_RBC_OK || !output || outcome->result_kind == XR_RBC_STRING) return false;
+    if (!outcome || outcome->status != XR_RBC_OK || !output || outcome->result_kind != XR_RBC_BITS) return false;
     *output = outcome->value.bits;
     return true;
 }
@@ -494,6 +508,18 @@ XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **outpu
         !outcome->value.string || !output || *output) return false;
     *output = outcome->value.string;
     outcome->value.string = NULL;
+    return true;
+}
+XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *outcome, const XrtArray **borrowed) {
+    if (!outcome || outcome->status != XR_RBC_OK || !rbc_array_kind(outcome->result_kind) ||
+        !outcome->value.array || !borrowed) return false;
+    *borrowed = outcome->value.array;
+    return true;
+}
+XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *outcome, XrtArray **output) {
+    if (!outcome || outcome->status != XR_RBC_OK || !rbc_array_kind(outcome->result_kind) ||
+        !outcome->value.array || !output || *output) return false;
+    *output = outcome->value.array; outcome->value.array = NULL;
     return true;
 }
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
@@ -537,6 +563,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     XrRbcOutcome *owned = *outcome;
     *outcome = NULL;
     if (owned->result_kind == XR_RBC_STRING) xrt_string_owned_drop(&owned->value.string);
+    if (rbc_array_kind(owned->result_kind)) xrt_array_owned_drop(&owned->value.array);
     xrt_locations_release(owned->locations);
     xr_free(owned);
 }
