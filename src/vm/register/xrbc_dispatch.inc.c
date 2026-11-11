@@ -430,7 +430,7 @@ XR_RBC_CASE(RET0) {
 default:
     if (op >= XR_RBC_MODULE_BEGIN && op <= XR_RBC_STATE_WRITE) {
         XrRbcStatus status = op >= XR_RBC_STATE_REFERENCE ?
-            xr_rbc_state_access(function, registers, stack->module_accesses, instruction, XR_RBC_SOURCE()) :
+            xr_rbc_state_access(function, registers, stack->module_accesses, instruction, XR_RBC_SOURCE(), &pc) :
             xr_rbc_state_step(function, registers, stack->module_accesses, instruction, XR_RBC_SOURCE());
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();

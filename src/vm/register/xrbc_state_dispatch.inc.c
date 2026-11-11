@@ -20,7 +20,7 @@ XR_RBC_CASE(STATE_REFERENCE)
 XR_RBC_CASE(STATE_READ)
 XR_RBC_CASE(STATE_WRITE) {
     XrRbcStatus status = xr_rbc_state_access(function, registers, stack->module_accesses,
-        instruction, XR_RBC_SOURCE());
+        instruction, XR_RBC_SOURCE(), &pc);
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }

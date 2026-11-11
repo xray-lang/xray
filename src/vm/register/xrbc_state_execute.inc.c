@@ -32,31 +32,49 @@ static XR_AINLINE void xr_rbc_state_ready(const XrtModuleAccess *access, uint32_
         xrt_module_uninitialized(source);
 }
 
+static XR_AINLINE void xr_rbc_state_read(const XrtModuleAccess *access,
+    XrRbcRegister *registers, uint32_t word, uint32_t source) {
+    uint32_t destination = (word >> 8) & 255, kind = word >> 24;
+    if (kind == XRT_MODULE_STRING) {
+        XrtString *string;
+        memcpy(&string, access->payload, sizeof(string));
+        registers[destination].string = xrt_string_retain(string, source);
+    } else if (kind == XRT_MODULE_BOOL) {
+        bool boolean;
+        memcpy(&boolean, access->payload, sizeof(boolean));
+        registers[destination].bits = boolean;
+    } else if (kind != XRT_MODULE_UNIT) {
+        memcpy(&registers[destination].bits, access->payload, sizeof(uint64_t));
+    }
+}
+
 /* Accesses borrow stable execution metadata and cannot grow a register bank.
  * Inline them so each scalar load avoids publishing the interpreter's frame. */
 static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
-    XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source) {
+    XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source,
+    size_t *pc) {
     uint32_t op = word & 255, a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     if (op == XR_RBC_STATE_REFERENCE) {
         XrRbcStateAccess row = function->state_accesses[word >> 16];
         XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
         xr_rbc_state_ready(published, source);
         registers[a].state_ref = published;
+        /* An adjacent read observes the same publication. Preserve the reference
+         * producer and the read's source identity while consuming both words. */
+        if (*pc < function->code_count) {
+            uint32_t next = function->code[*pc];
+            if ((next & 255) == XR_RBC_STATE_READ && ((next >> 16) & 255) == a) {
+                uint32_t read_source = function->source_ids ? function->source_ids[*pc] : 0;
+                ++*pc;
+                xr_rbc_state_read(published, registers, next, read_source);
+            }
+        }
         return XR_RBC_OK;
     }
     XrtModuleAccess *access = registers[op == XR_RBC_STATE_READ ? b : a].state_ref;
     xr_rbc_state_ready(access, source);
     if (op == XR_RBC_STATE_READ) {
-        if (c == XRT_MODULE_STRING) {
-            XrtString *string;
-            memcpy(&string, access->payload, sizeof(string));
-            registers[a].string = xrt_string_retain(string, source);
-        } else if (c == XRT_MODULE_BOOL) {
-            bool boolean;
-            memcpy(&boolean, access->payload, sizeof(boolean));
-            registers[a].bits = boolean;
-        } else if (c != XRT_MODULE_UNIT)
-            memcpy(&registers[a].bits, access->payload, sizeof(uint64_t));
+        xr_rbc_state_read(access, registers, word, source);
     } else if (c == XRT_MODULE_STRING) {
         XrXirValueStatus status = xrt_module_replace(access->reference, &registers[b].string);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
