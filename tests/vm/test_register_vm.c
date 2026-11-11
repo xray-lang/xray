@@ -1261,6 +1261,7 @@ int main(int argc, char **argv) {
     test_raw_state_spill_transport();
     test_raw_state_spill_shapes();
     test_raw_state_bool_bits();
+    test_raw_state_fused_read_entries();
     test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();

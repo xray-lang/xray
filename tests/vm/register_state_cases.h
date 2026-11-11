@@ -145,4 +145,34 @@ static void test_raw_state_bool_bits(void) {
     xrt_module_layout_drop(&f.layout);
 }
 
+static void test_raw_state_fused_read_entries(void) {
+    RawStateTransport f;
+    raw_state_transport(&f);
+    f.function.code_count = 25;
+    immediate(f.code, 14, XR_RBC_STATE_REFERENCE, 4, 3);
+    immediate(f.code, 15, XR_RBC_EQI, 0, 0);
+    CHECK(xr_rbc_jump(f.code + 16, 16, 20, 25));
+    immediate(f.code, 17, XR_RBC_LOADI, 5, 33);
+    emit(f.code, 18, XR_RBC_STATE_WRITE, 4, 5, XRT_MODULE_I64);
+    immediate(f.code, 19, XR_RBC_STATE_REFERENCE, 4, 3);
+    emit(f.code, 20, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_I64);
+    emit(f.code, 21, XR_RBC_STATE_READ, 2, 4, XRT_MODULE_I64);
+    CHECK(xr_rbc_encode(f.code + 22, (XrRbcOperands){XR_RBC_MULI, 5, 5, 0, 100}));
+    emit(f.code, 23, XR_RBC_ADD, 5, 5, 2);
+    emit(f.code, 24, XR_RBC_RET, 5, 0, 0);
+    /* One path enters READ directly with the original contents. The other
+     * writes first and must keep the fused producer's Ref for the next READ. */
+    for (uint64_t choice = 0; choice < 2; ++choice) {
+        uint64_t result = 0;
+        CHECK(execute(&f.module, 0, &choice, 1, &result) == XR_RBC_OK);
+        CHECK(result == (choice ? 3333u : 1111u));
+    }
+    uint64_t choice = 0;
+    f.function.code_count = 20;
+    reject_prepare(&f.module, 0, &choice, 1);
+    f.function.code_count = 21;
+    reject_prepare(&f.module, 0, &choice, 1);
+    xrt_module_layout_drop(&f.layout);
+}
+
 #endif // REGISTER_STATE_CASES_H

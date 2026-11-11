@@ -529,7 +529,10 @@ static void module_state_cache_failure(void) {
     xrt_module_layout_drop(&storage);
 }
 
+#include "register_state_fusion_cases.h"
+
 int main(void) {
+    module_state_fused_retain_failure();
     module_state_cache_failure();
     entry_initialization();
     spill_cycle_admission_oom();
