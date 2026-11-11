@@ -68,6 +68,8 @@ def main():
         'typed-bool': (None, b'5\n'),
         'typed-unit': (None, b'5\n'),
         'typed-root-call': (None, b'5\n'),
+        'state-ref-even': (None, b''),
+        'state-ref-odd': (None, b''),
     }
     for name, case in MODULE_CALL_CLOSURES.items():
         cases[name] = case
@@ -150,7 +152,9 @@ def main():
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
                      'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),
-                     'typed-root-call': ('int64_t', 'INT64_C(9)')}
+                     'typed-root-call': ('int64_t', 'INT64_C(9)'),
+                     'state-ref-even': ('int64_t', 'INT64_C(3322)'),
+                     'state-ref-odd': ('int64_t', 'INT64_C(3311)')}
     executables = {}
     for name, (program, expected) in cases.items():
         source = root / (name + '.xr')
@@ -180,6 +184,8 @@ def main():
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
         if name.startswith('original-string-parameter'):
             assert re.search(r'xrt_print_string\(bytes, length, UINT32_C\([0-9]+\)\);', text)
+        elif name.startswith('state-ref-'):
+            assert 'xrt_run_standalone_state(' in text and 'xrt_module_' in text
         else:
             assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
         if name.startswith('literal-terminator') or name == 'literal-utf8-nul':
