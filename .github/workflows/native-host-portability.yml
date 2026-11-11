@@ -71,13 +71,13 @@ jobs:
         run: |
           echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$CCACHE_BASEDIR" >> "$GITHUB_ENV"
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            brew install ccache
+          if command -v ccache >/dev/null 2>&1; then
+            ccache --max-size=2G
+          elif command -v sccache >/dev/null 2>&1; then
+            sccache --version
           else
-            sudo apt-get update
-            sudo apt-get install -y ccache
+            echo "Compiler cache unavailable. Compiling directly."
           fi
-          ccache --max-size=2G
       - name: Configure Windows Ninja Release
         if: runner.os == 'Windows'
         shell: cmd
