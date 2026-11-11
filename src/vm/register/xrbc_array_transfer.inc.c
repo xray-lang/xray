@@ -27,7 +27,8 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     const XrRbcArrayLocation *operands = access.count ? s->function->array_operands + access.first : NULL;
     uint8_t source = access.count ? rbc_array_state(s, operands[0]) : RBC_EMPTY;
     if (access.operation == XR_RBC_ARRAY_BORROW || access.operation == XR_RBC_ARRAY_REF_READ ||
-        access.operation == XR_RBC_ARRAY_REF_WRITE) return rbc_array_ref_transfer(s, access, operands);
+        access.operation == XR_RBC_ARRAY_REF_WRITE || access.operation == XR_RBC_ARRAY_REF_SET ||
+        access.operation == XR_RBC_ARRAY_REF_PUSH) return rbc_array_ref_transfer(s, access, operands);
     if (access.operation == XR_RBC_ARRAY_NEW) {
         if (!rbc_array_destination(s, access.result)) return false;
         for (uint32_t p = 0; p < access.count; ++p) {

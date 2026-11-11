@@ -355,7 +355,6 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 }
 
 #include "xrbc_state_execute.inc.c"
-#include "xrbc_array_ref_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,

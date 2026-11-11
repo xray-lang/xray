@@ -45,11 +45,11 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         XrRbcArrayAccess access = f->array_accesses[i];
         if (!rbc_array_kind(access.kind) || access.first > f->array_operand_count ||
             access.count > f->array_operand_count - access.first ||
-            (unsigned)access.operation > XR_RBC_ARRAY_REF_WRITE) return false;
+            (unsigned)access.operation > XR_RBC_ARRAY_REF_PUSH) return false;
         uint32_t count = access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_PUSH ||
             access.operation == XR_RBC_ARRAY_CELL_WRITE || access.operation == XR_RBC_ARRAY_REPEAT ||
-            access.operation == XR_RBC_ARRAY_REF_WRITE ? 2u :
-            access.operation == XR_RBC_ARRAY_SET ? 3u : 1u;
+            access.operation == XR_RBC_ARRAY_REF_WRITE || access.operation == XR_RBC_ARRAY_REF_PUSH ? 2u :
+            access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_REF_SET ? 3u : 1u;
         if (access.operation != XR_RBC_ARRAY_NEW && access.count != count) return false;
         bool result = access.operation == XR_RBC_ARRAY_NEW || access.operation == XR_RBC_ARRAY_REPEAT || access.operation == XR_RBC_ARRAY_LEN ||
             access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_RETAIN ||
@@ -74,7 +74,8 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
             else if (access.operation == XR_RBC_ARRAY_REPEAT) expected = p ? element : XR_RBC_BITS;
             else if (p) expected = access.operation == XR_RBC_ARRAY_CELL_WRITE ||
                 access.operation == XR_RBC_ARRAY_REF_WRITE ? access.kind :
-                access.operation == XR_RBC_ARRAY_GET || (access.operation == XR_RBC_ARRAY_SET && p == 1) ? XR_RBC_BITS : element;
+                access.operation == XR_RBC_ARRAY_GET ||
+                ((access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_REF_SET) && p == 1) ? XR_RBC_BITS : element;
             else if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||
                 access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_CELL_WRITE ||
                 access.operation == XR_RBC_ARRAY_CELL_DROP)
@@ -85,7 +86,8 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
                 if (kind != XR_RBC_STATE_REF && kind != xr_rbc_array_cell_at(xr_rbc_array_family(access.kind))) return false;
                 continue;
             }
-            if (!p && (access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_REF_WRITE))
+            if (!p && (access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_REF_WRITE ||
+                access.operation == XR_RBC_ARRAY_REF_SET || access.operation == XR_RBC_ARRAY_REF_PUSH))
                 expected = xr_rbc_array_ref_at(xr_rbc_array_family(access.kind));
             if (kind != expected && !(access.operation == XR_RBC_ARRAY_TAKE && kind == XR_RBC_CALL_WINDOW)) return false;
             if (access.operation == XR_RBC_ARRAY_TAKE && location.index == access.result.index &&

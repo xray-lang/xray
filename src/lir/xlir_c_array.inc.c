@@ -74,8 +74,9 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
         return;
     }
-    if ((shape->operation == XR_LIR_ARRAY_OP_SET || shape->operation == XR_LIR_ARRAY_OP_PUSH) &&
-        c_value_type(c, v->operands[0]) != XR_LIR_ARRAY_CELL) {
+    bool mutator = shape->operation == XR_LIR_ARRAY_OP_SET || shape->operation == XR_LIR_ARRAY_OP_PUSH;
+    XrLirType receiver = mutator ? c_value_type(c, v->operands[0]) : XR_LIR_TYPE_INVALID;
+    if (mutator && receiver != XR_LIR_ARRAY_CELL && receiver != XR_LIR_ARRAY_REF) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "Array mutator receiver has no native implementation");
         return;
     }
@@ -105,7 +106,8 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         return;
     }
     if (shape->operation == XR_LIR_ARRAY_OP_LEN) c_text(c, "xrt_array_length(");
-    else c_format(c, "xrt_array_%s_%s(", family, shape->operation == XR_LIR_ARRAY_OP_GET ? "get" :
+    else c_format(c, "xrt_array_%s%s_%s(", receiver == XR_LIR_ARRAY_REF ? "ref_" : "", family,
+        shape->operation == XR_LIR_ARRAY_OP_GET ? "get" :
         shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : shape->operation == XR_LIR_ARRAY_OP_PUSH ? "push" : "repeat");
     for (uint32_t p = 0; p < v->operand_count; ++p) {
         if (p) c_text(c, ", ");

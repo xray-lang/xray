@@ -43,6 +43,12 @@ static bool rbc_array_ref_transfer(RbcStringAdmission *s, XrRbcArrayAccess acces
     }
     if (!rbc_array_ref_state(state) || rbc_array_ref_payload(s, state, origin) != access.kind) return false;
     if (access.operation == XR_RBC_ARRAY_REF_WRITE) return rbc_array_source(s, operands[1]);
+    if (access.operation == XR_RBC_ARRAY_REF_SET || access.operation == XR_RBC_ARRAY_REF_PUSH) {
+        bool set = access.operation == XR_RBC_ARRAY_REF_SET;
+        if (set && rbc_array_state(s, operands[1]) != RBC_BITS) return false;
+        return access.kind == XR_RBC_ARRAY_STRING ? rbc_array_source(s, operands[set ? 2 : 1]) :
+            rbc_array_state(s, operands[set ? 2 : 1]) == RBC_BITS;
+    }
     if (!rbc_array_destination(s, access.result)) return false;
     rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
     return true;

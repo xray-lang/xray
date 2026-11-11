@@ -161,4 +161,39 @@ static void test_raw_array_reference_publication(void) {
         xrt_module_layout_drop(&storage);
     }
 }
+static void test_raw_array_reference_byte_bits(void) {
+    for (unsigned set = 0; set < 2; ++set) {
+        RawArray f;
+        raw_array_init(&f);
+        raw_unsigned_kinds(&f, false);
+        f.kinds[7] = XR_RBC_ARRAY_U8_REF;
+        f.function.register_count = f.function.register_kind_count = 8;
+        f.function.parameter_count = 1;
+        immediate(f.code, f.function.code_count++, XR_RBC_LOADI, 1, 0);
+        XrRbcArrayLocation args[] = {{1, false}, {0, false}, {0, false}};
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_NEW, 2, 1), args);
+        args[0].index = 2;
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4, 1), args);
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
+        args[0].index = 4;
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_BORROW, 7, 1), args);
+        args[0].index = 7; args[1].index = set ? 1 : 0;
+        raw_unsigned_access(&f, raw_array_op(set ? XR_RBC_ARRAY_REF_SET : XR_RBC_ARRAY_REF_PUSH,
+            0, set ? 3 : 2), args);
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_REF_READ, 5, 1), args);
+        args[0].index = 5;
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_LEN, 6, 1), args);
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
+        args[0].index = 4;
+        raw_unsigned_access(&f, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), args);
+        emit(f.code, f.function.code_count++, XR_RBC_RET, 6, 0, 0);
+        uint64_t value = 255, result = 0;
+        CHECK(execute(&f.module, 0, &value, 1, &result) == XR_RBC_OK && result == (set ? 1u : 2u));
+        const uint64_t invalid[] = {256, 257, UINT64_MAX};
+        for (uint32_t i = 0; i < 3; ++i) {
+            result = 91;
+            CHECK(execute(&f.module, 0, &invalid[i], 1, &result) == XR_RBC_INVALID && result == 91);
+        }
+    }
+}
 #endif // REGISTER_ARRAY_REF_CASES_H

@@ -11,6 +11,7 @@ static XrRbcRegister *xr_rbc_array_location(XrRbcStack *stack, const XrRbcFrame 
     return location.spill ? &stack->spills[frame->spill_base + location.index] :
         &stack->slots[frame->base + location.index];
 }
+#include "xrbc_array_ref_execute.inc.c"
 
 static bool xr_rbc_array_move_pair(const XrRbcFunction *function, XrRbcArrayAccess access, size_t pc) {
     if ((access.operation != XR_RBC_ARRAY_CELL_NEW && access.operation != XR_RBC_ARRAY_CELL_READ) ||
@@ -75,6 +76,8 @@ static bool xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source, size_t *pc) {
     XrRbcArrayAccess access = function->array_accesses[index];
+    if (access.operation >= XR_RBC_ARRAY_BORROW)
+        return xr_rbc_array_reference_step(module, stack, frame, function, access, source);
     const XrRbcArrayLocation *locations = access.count ? function->array_operands + access.first : NULL;
     XrRbcRegister *result = xr_rbc_array_location(stack, frame, access.result);
     bool string = access.kind == XR_RBC_ARRAY_STRING;
@@ -108,20 +111,6 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
     }
     XrRbcRegister *first = xr_rbc_array_location(stack, frame, locations[0]);
     XrRbcRegister *second = access.count > 1 ? xr_rbc_array_location(stack, frame, locations[1]) : NULL;
-    if (access.operation == XR_RBC_ARRAY_BORROW) {
-        XrRbcRegisterKind kind = function->register_kinds[locations[0].index];
-        bool valid = kind == XR_RBC_STATE_REF ? xr_rbc_array_ref_encode_state(first->state_ref, &result->bits) :
-            xr_rbc_array_ref_encode_cell(first->bits, &result->bits);
-        return valid ? XR_RBC_OK : XR_RBC_INVALID;
-    }
-    if (access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_REF_WRITE) {
-        XrtArrayRef reference = {0};
-        if (!xr_rbc_array_ref_decode(stack, module, first->bits, access.kind, source, &reference))
-            return XR_RBC_INVALID;
-        if (access.operation == XR_RBC_ARRAY_REF_READ) result->array = xrt_array_ref_read(reference, source);
-        else xrt_array_ref_write(reference, second->array, source);
-        return XR_RBC_OK;
-    }
     if (access.operation == XR_RBC_ARRAY_REPEAT) {
         int64_t length = xr_rbc_signed(first->bits);
         if (access.kind == XR_RBC_ARRAY_U8 && second->bits > UINT8_MAX) return XR_RBC_INVALID;

@@ -75,7 +75,7 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         if (intrinsic.operation == XR_LIR_ARRAY_OP_SET || intrinsic.operation == XR_LIR_ARRAY_OP_PUSH) {
             XrLirType receiver = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[0]}, &receiver);
-            if (receiver != XR_LIR_ARRAY_CELL)
+            if (receiver != XR_LIR_ARRAY_CELL && receiver != XR_LIR_ARRAY_REF)
                 return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "Array mutator receiver has no bytecode implementation");
         }
         shape.element = i->type == XR_LIR_ARRAY ? intrinsic.result_element : intrinsic.parameter_elements[0];
@@ -87,6 +87,12 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         case XR_LIR_ARRAY_OP_PUSH: operation = XR_RBC_ARRAY_PUSH; break;
         case XR_LIR_ARRAY_OP_REPEAT: operation = XR_RBC_ARRAY_REPEAT; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unknown Array role");
+        }
+        if (operation == XR_RBC_ARRAY_SET || operation == XR_RBC_ARRAY_PUSH) {
+            XrLirType receiver = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[0]}, &receiver);
+            if (receiver == XR_LIR_ARRAY_REF)
+                operation = operation == XR_RBC_ARRAY_SET ? XR_RBC_ARRAY_REF_SET : XR_RBC_ARRAY_REF_PUSH;
         }
     } else {
         uint32_t shaped = i->result ? i->result : i->operands[0];

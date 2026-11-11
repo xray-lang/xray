@@ -1267,6 +1267,7 @@ int main(int argc, char **argv) {
     test_raw_array_reference_lifetime();
     test_raw_array_reference_growth();
     test_raw_array_reference_publication();
+    test_raw_array_reference_byte_bits();
     test_raw_array_spills();
     test_raw_array_wide_return();
     test_raw_array_local_cells();
