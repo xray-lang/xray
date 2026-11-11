@@ -429,6 +429,45 @@ XR_FUNC XrXirValueStatus xr_xir_array_push(const XrXirValuePlace *place,
     return storage_admission_end(admission,&local,graph_outcome);
 }
 
+XR_FUNC XrXirValueStatus xr_xir_array_i64_read_owned(const XrXirValue *value,
+    int64_t index, int64_t *output) {
+    if (!value || !value->payload || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirArray *array = (const XirArray *)object_pointer(value);
+    XR_DCHECK(array->object.kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_I64 &&
+        array->stride == sizeof(int64_t), "registered integer Array keeps its admitted compact shape");
+    if (index < 0 || (uint64_t)index >= array->length) return XR_XIR_VALUE_BOUNDS;
+    memcpy(output, array_slot(array, (size_t)index), sizeof(*output));
+    return XR_XIR_VALUE_OK;
+}
+
+XR_FUNC XrXirValueStatus xr_xir_array_i64_push_owned(XrXirValue *value,
+    int64_t element, XrXirDomain *domain) {
+    if (!value || !value->payload || !xr_xir_domain_current(domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirArray *array = (XirArray *)object_pointer(value);
+    XR_DCHECK(array->object.kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_I64 &&
+        array->stride == sizeof(int64_t), "registered integer Array keeps its admitted compact shape");
+    /* Root domains have no work budget. Every other owner keeps ordinary
+     * admission and COW, including a root borrowing a foreign allocation. */
+    if (!domain->root || array->object.domain != domain ||
+        atomic_load_explicit(&array->object.references, memory_order_acquire) != 1) {
+        XrXirValueAdmission admission = {array->object.arena, domain, NULL, NULL, UINT64_MAX, UINT64_MAX};
+        XrXirValuePlace place = {(XrXirType)value->type, &value->payload};
+        XrXirValue item = {XR_XIR_I64, 0, element};
+        return xr_xir_array_push(&place, &item, &admission);
+    }
+    if (array->length == (uint64_t)INT64_MAX) return XR_XIR_VALUE_LIMIT;
+    size_t length = array->length + 1;
+    if (length > array->capacity) {
+        size_t capacity = 0;
+        if (!array_capacity(length, array->stride, &capacity)) return XR_XIR_VALUE_LIMIT;
+        XrXirValueStatus status = array_grow(array, capacity);
+        if (status != XR_XIR_VALUE_OK) return status;
+    }
+    memcpy(array_slot(array, array->length), &element, sizeof(element));
+    array->length = length;
+    return XR_XIR_VALUE_OK;
+}
+
 static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t index,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault,bool receiving) {
     if (fault) *fault=(XrXirFaultDetail){0};

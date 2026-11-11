@@ -22,6 +22,14 @@ XR_FUNC XrXirValueStatus xr_xir_array_repeat(XrXirType array_type, int64_t lengt
     const XrXirValue *fill, XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_array_len(const XrXirValue *array,
     XrXirValueAdmission *admission, int64_t *output);
+/* The receiving execution owns a previously admitted canonical Array<i64>.
+ * Its actual arena and closed element remain pinned by that reference. These
+ * leaves preserve bounds, COW and domain allocation failure without admitting
+ * another external value. Unregistered inputs use the ordinary public path. */
+XR_FUNC XrXirValueStatus xr_xir_array_i64_read_owned(const XrXirValue *array,
+    int64_t index, int64_t *output);
+XR_FUNC XrXirValueStatus xr_xir_array_i64_push_owned(XrXirValue *array,
+    int64_t element, XrXirDomain *domain);
 XR_FUNC XrXirValueStatus xr_xir_array_capacity(const XrXirValue *array,
     XrXirValueAdmission *admission, int64_t *output);
 /* A nonnegative absolute capacity constructs no element and publishes only on success. */

@@ -275,17 +275,19 @@ static void cached_shape_failure(void *opaque) {
     if (probe->operation == 0) (void)xrt_array_string_get(integers, 0, 1);
     else if (probe->operation == 1) (void)xrt_array_i64_get(strings, 0, 1);
     else if (probe->operation == 2) xrt_array_i64_push(&strings, value, 1);
-    else xrt_array_string_push(&integers, text, 1);
+    else if (probe->operation == 3) xrt_array_string_push(&integers, text, 1);
+    else (void)xrt_array_i64_get(integers, probe->operation == 4 ? -1 : 1, 1);
     CHECK(false);
 }
 
 static void cached_shape_cases(XrtLocationOwner *locations) {
-    for (uint32_t operation = 0; operation < 4; ++operation) {
+    for (uint32_t operation = 0; operation < 6; ++operation) {
         ArrayCacheProbe probe = {.operation=operation};
         XrtExecutionFailure failure = {0};
         XrtValueRoot root = {0};
         CHECK(xrt_run_embedded_owned(locations, &failure, cached_shape_failure, &probe, &root) == XRT_EXECUTION_FAILURE);
-        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status ==
+            (operation < 4 ? XR_XIR_VALUE_BAD_ARGUMENT : XR_XIR_VALUE_BOUNDS) &&
             failure.detail.value.source_id == 1 && xrt_value_root_empty(&root));
         CHECK(xr_xir_domain_stats(probe.pin).live_bytes == probe.baseline);
         xr_xir_domain_drop(probe.pin);

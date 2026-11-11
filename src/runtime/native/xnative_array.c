@@ -280,6 +280,16 @@ static XrtValueRoot *array_get(const XrtArray *array, int64_t index, XrtArrayEle
     return root;
 }
 XRAY_API int64_t xrt_array_i64_get(const XrtArray *array, int64_t index, uint32_t source_id) {
+    XrtValueRoot *active = xrt_value_root_current(source_id);
+    XrtArrayOwner *owner = array ? array_find(active, (int64_t)(intptr_t)array) : NULL;
+    if (owner) {
+        if (owner->element != XRT_ARRAY_I64) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+        XR_CHECK(!active->pending.type && !active->pending.payload, "Array read owns a distinct pending result");
+        int64_t value = 0;
+        XrXirValueStatus status = xr_xir_array_i64_read_owned(&owner->value, index, &value);
+        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+        return value;
+    }
     XrtValueRoot *root = array_get(array, index, XRT_ARRAY_I64, source_id);
     int64_t value = root->pending.payload;
     xr_xir_value_drop(&root->pending);
@@ -301,8 +311,10 @@ static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, 
     XR_CHECK(owner && owner->count, "Array mutation binds an owned current activation slot");
     XrXirValuePlace place = {(XrXirType)value.type, &value.payload};
     XrXirFaultDetail fault = {0};
-    XrXirValueStatus status = push ? xr_xir_array_push(&place, &element, &admission) :
-        xr_xir_array_set(&place, index, &element, &admission, &fault);
+    XrXirValueStatus status = push && kind == XRT_ARRAY_I64 ?
+        xr_xir_array_i64_push_owned(&value, element.payload, admission.domain) :
+        push ? xr_xir_array_push(&place, &element, &admission) :
+            xr_xir_array_set(&place, index, &element, &admission, &fault);
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
     if (value.payload != old) {
         owner = array_find(root, old);
