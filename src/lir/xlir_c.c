@@ -964,6 +964,11 @@ static void c_emit(LirC *c, XrLirType root_result) {
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 c->instruction = i + 1;
                 c->source = v.source;
+                if (i + 1 < view.instruction_count) {
+                    XrLirInstructionView next;
+                    xr_lir_instruction_view(c->request->module, block, i + 1, &next);
+                    if (c_array_move_pair(c, &v, &next)) { ++i; continue; }
+                }
                 c_instruction(c, &v);
             }
         }

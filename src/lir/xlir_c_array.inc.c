@@ -17,6 +17,28 @@ static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_ARRAY_CELL);
 }
+static bool c_array_move_pair(LirC *c, const XrLirInstructionView *v,
+    const XrLirInstructionView *next) {
+    if (v->operand_count != 1 || next->operand_count != 1 || v->operands[0] != next->operands[0])
+        return false;
+    bool create = v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_ARRAY_CELL && next->op == XR_LIR_ARRAY_DROP;
+    bool read = v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY && next->op == XR_LIR_ARRAY_CELL_DROP;
+    if (!create && !read) return false;
+    if (!c_request_poll(c)) return true;
+    if (c_located(&v->source)) ++c->location_cursor;
+    /* The adjacent verified DROP consumes that actual owner. Transfer its one
+     * canonical reference into or out of the Cell without creating a copy. */
+    if (create) {
+        c_format(c, "    XrtArray *xrl_cell%" PRIu32 " = ", v->result);
+        c_value(c, v->operands[0]);
+        c_text(c, ";\n    "); c_value(c, v->operands[0]);
+        c_format(c, " = NULL;\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n", v->result, v->result);
+    } else {
+        c_format(c, "    v%" PRIu32 " = *", v->result); c_value(c, v->operands[0]);
+        c_text(c, ";\n    *"); c_value(c, v->operands[0]); c_text(c, " = NULL;\n");
+    }
+    return true;
+}
 static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
     XrLirType element = shape->operation == XR_LIR_ARRAY_OP_NEW ? shape->result_element : shape->parameter_elements[0];

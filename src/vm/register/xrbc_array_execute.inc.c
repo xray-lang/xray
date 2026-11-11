@@ -12,8 +12,22 @@ static XrRbcRegister *xr_rbc_array_location(XrRbcStack *stack, const XrRbcFrame 
         &stack->slots[frame->base + location.index];
 }
 
+static bool xr_rbc_array_move_pair(const XrRbcFunction *function, XrRbcArrayAccess access, size_t pc) {
+    if ((access.operation != XR_RBC_ARRAY_CELL_NEW && access.operation != XR_RBC_ARRAY_CELL_READ) ||
+        pc >= function->code_count || (function->code[pc] & 255) != XR_RBC_ARRAY_ACCESS) return false;
+    uint32_t index = function->code[pc] >> 16;
+    if (index >= function->array_access_count) return false;
+    const XrRbcArrayAccess *drop = &function->array_accesses[index];
+    XrRbcArrayOperation expected = access.operation == XR_RBC_ARRAY_CELL_NEW ?
+        XR_RBC_ARRAY_DROP : XR_RBC_ARRAY_CELL_DROP;
+    if (drop->operation != expected || drop->kind != access.kind || drop->count != 1 || access.count != 1)
+        return false;
+    XrRbcArrayLocation from = function->array_operands[access.first], next = function->array_operands[drop->first];
+    return from.index == next.index && from.spill == next.spill;
+}
+
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
-    const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source) {
+    const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source, size_t *pc) {
     XrRbcArrayAccess access = function->array_accesses[index];
     const XrRbcArrayLocation *locations = access.count ? function->array_operands + access.first : NULL;
     XrRbcRegister *result = xr_rbc_array_location(stack, frame, access.result);
@@ -39,10 +53,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
     }
     XrRbcRegister *first = xr_rbc_array_location(stack, frame, locations[0]);
     XrRbcRegister *second = access.count > 1 ? xr_rbc_array_location(stack, frame, locations[1]) : NULL;
+    bool move = xr_rbc_array_move_pair(function, access, *pc);
     if (access.operation == XR_RBC_ARRAY_CELL_NEW) {
         XrRbcFrame *active = &stack->frames[stack->depth - 1];
         size_t cell = active->cell_base + access.cell;
-        stack->cells[cell].array = xrt_array_retain(first->array, source);
+        stack->cells[cell].array = move ? first->array : xrt_array_retain(first->array, source);
+        if (move) { first->array = NULL; ++*pc; }
         if (active->initialized_cells <= access.cell) active->initialized_cells = access.cell + 1;
         result->bits = (uint64_t)cell + 1;
         return XR_RBC_OK;
@@ -70,7 +86,13 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
         else xrt_array_i64_push(&binding->array, xr_rbc_signed(second->bits), source);
         break;
     case XR_RBC_ARRAY_RETAIN: case XR_RBC_ARRAY_CELL_READ:
-        result->array = xrt_array_retain(binding->array, source); break;
+        if (move) {
+            result->array = binding->array;
+            binding->array = NULL;
+            first->bits = 0;
+            ++*pc;
+        } else result->array = xrt_array_retain(binding->array, source);
+        break;
     case XR_RBC_ARRAY_DROP: case XR_RBC_ARRAY_CELL_DROP:
         xrt_array_drop(&binding->array);
         if (cell) first->bits = 0;
