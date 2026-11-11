@@ -14,7 +14,7 @@ typedef struct ArrayRefProbe {
     XrXirDomain *pin;
     uint64_t baseline;
     unsigned failure;
-    bool completed;
+    bool completed, retire_state_first;
 } ArrayRefProbe;
 
 static XrtArray *reference_array(XrtModuleTypeKind kind, int64_t seed) {
@@ -30,17 +30,40 @@ static XrtArray *reference_array(XrtModuleTypeKind kind, int64_t seed) {
     }
     }
 }
-static void reference_value(const XrtArray *array, XrtModuleTypeKind kind, int64_t expected) {
-    CHECK(xrt_array_length(array, 1) == 1);
+static void reference_element(const XrtArray *array, XrtModuleTypeKind kind, int64_t index, int64_t expected) {
     if (kind == XRT_MODULE_ARRAY_STRING) {
-        XrtString *text = xrt_array_string_get(array, 0, 1);
+        XrtString *text = xrt_array_string_get(array, index, 1);
         CHECK(xrt_string_length(text, 1) == 1);
         size_t count = 0;
         CHECK(xrt_string_bytes(text, &count)[0] == '0' + expected && count == 1);
         xrt_string_drop(&text);
-    } else if (kind == XRT_MODULE_ARRAY_U8) CHECK(xrt_array_u8_get(array, 0, 1) == expected);
-    else if (kind == XRT_MODULE_ARRAY_U64) CHECK(xrt_array_u64_get(array, 0, 1) == (uint64_t)expected);
-    else CHECK(xrt_array_i64_get(array, 0, 1) == expected);
+    } else if (kind == XRT_MODULE_ARRAY_U8) CHECK(xrt_array_u8_get(array, index, 1) == expected);
+    else if (kind == XRT_MODULE_ARRAY_U64) CHECK(xrt_array_u64_get(array, index, 1) == (uint64_t)expected);
+    else CHECK(xrt_array_i64_get(array, index, 1) == expected);
+}
+static void reference_value(const XrtArray *array, XrtModuleTypeKind kind, int64_t expected) {
+    CHECK(xrt_array_length(array, 1) == 1);
+    reference_element(array, kind, 0, expected);
+}
+static void reference_push(XrtModuleTypeKind kind, XrtArrayRef reference, int64_t seed, uint32_t source) {
+    if (kind == XRT_MODULE_ARRAY_I64) xrt_array_ref_i64_push(reference, seed, source);
+    else if (kind == XRT_MODULE_ARRAY_U8) xrt_array_ref_u8_push(reference, (uint8_t)seed, source);
+    else if (kind == XRT_MODULE_ARRAY_U64) xrt_array_ref_u64_push(reference, (uint64_t)seed, source);
+    else {
+        XrtString *text = xrt_string_i64(seed, source);
+        xrt_array_ref_string_push(reference, text, source);
+        xrt_string_drop(&text);
+    }
+}
+static void reference_set(XrtModuleTypeKind kind, XrtArrayRef reference, int64_t index, int64_t seed) {
+    if (kind == XRT_MODULE_ARRAY_I64) xrt_array_ref_i64_set(reference, index, seed, 1);
+    else if (kind == XRT_MODULE_ARRAY_U8) xrt_array_ref_u8_set(reference, index, (uint8_t)seed, 1);
+    else if (kind == XRT_MODULE_ARRAY_U64) xrt_array_ref_u64_set(reference, index, (uint64_t)seed, 1);
+    else {
+        XrtString *text = xrt_string_i64(seed, 1);
+        xrt_array_ref_string_set(reference, index, text, 1);
+        xrt_string_drop(&text);
+    }
 }
 static void reference_state_new(ArrayRefProbe *probe) {
     XrtModuleTypeSpec type = {probe->kind};
@@ -67,6 +90,7 @@ static void reference_root(void *opaque) {
         xrt_array_ref_write(state, unpublished, 2);
         return;
     }
+    if (probe->failure == 6) { reference_push(probe->kind, state, 7, 2); return; }
     XrtValueRoot *root = xrt_value_root_current(1);
     probe->pin = xrt_value_root_domain(root, 1);
     CHECK(xr_xir_domain_retain(probe->pin));
@@ -110,10 +134,109 @@ static void reference_root(void *opaque) {
     memcpy(&actual, payload, sizeof(actual));
     reference_value(actual, probe->kind, 4);
     reference_value(original_value, probe->kind, 4);
+    reference_push(probe->kind, cell, 5, 1);
+    CHECK(xrt_array_length(local, 1) == 2);
+    reference_element(local, probe->kind, 1, 5);
+    reference_value(next, probe->kind, 9);
+    reference_push(probe->kind, state, 7, 1);
+    read = xrt_array_ref_read(state, 1);
+    CHECK(xrt_array_length(read, 1) == 2);
+    reference_element(read, probe->kind, 0, 4);
+    reference_set(probe->kind, state, 0, 8);
+    OK(xrt_module_borrow(slot, &payload));
+    memcpy(&actual, payload, sizeof(actual));
+    reference_element(actual, probe->kind, 0, 8);
+    reference_element(actual, probe->kind, 1, 7);
+    reference_element(read, probe->kind, 0, 4);
+    xrt_array_drop(&read);
+    reference_value(original_value, probe->kind, 4);
+    if (probe->retire_state_first) {
+        read = xrt_array_ref_read(state, 1);
+        xrt_module_state_drop(&probe->state);
+        XrtArrayRef surviving = xrt_array_ref_local(&read, probe->kind, 1);
+        reference_push(probe->kind, surviving, 9, 1);
+        CHECK(xrt_array_length(read, 1) == 3);
+        reference_element(read, probe->kind, 0, 8);
+        reference_element(read, probe->kind, 2, 9);
+        xrt_array_drop(&read);
+    }
     xrt_array_drop(&next); xrt_array_drop(&local); xrt_array_drop(&original_value);
     probe->completed = true;
 }
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
+typedef struct ArrayRefMutationProbe {
+    ArrayRefProbe fixture;
+    XrtArray *saved;
+    bool push;
+} ArrayRefMutationProbe;
+static void reference_hold_root(void *opaque) {
+    ArrayRefMutationProbe *probe = opaque;
+    XrtModuleAccess cache = {0};
+    OK(xrt_module_cache(probe->fixture.state, 0, &cache));
+    XrtArrayRef reference = xrt_array_ref_state(cache.reference, probe->fixture.kind, 1);
+    probe->saved = xrt_array_root_take(xrt_array_ref_read(reference, 1));
+}
+static void reference_mutation_root(void *opaque) {
+    ArrayRefMutationProbe *probe = opaque;
+    XrtModuleAccess cache = {0};
+    OK(xrt_module_cache(probe->fixture.state, 0, &cache));
+    XrtArrayRef reference = xrt_array_ref_state(cache.reference, probe->fixture.kind, 1);
+    if (probe->push) reference_push(probe->fixture.kind, reference, 9, 1);
+    else reference_set(probe->fixture.kind, reference, 0, 9);
+}
+static void reference_check_saved(void *opaque) {
+    ArrayRefMutationProbe *probe = opaque;
+    CHECK(xrt_array_length(probe->saved, 1) == 2);
+    reference_element(probe->saved, probe->fixture.kind, 0, 8);
+    reference_element(probe->saved, probe->fixture.kind, 1, 7);
+}
+static void reference_mutation_setup(ArrayRefMutationProbe *probe, XrtLocationOwner *owner) {
+    reference_state_new(&probe->fixture);
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(owner, &failure, reference_root, &probe->fixture) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_run_embedded(owner, &failure, reference_hold_root, probe) == XRT_EXECUTION_COMPLETED);
+}
+static void reference_mutation_dispose(ArrayRefMutationProbe *probe) {
+    xrt_module_state_drop(&probe->fixture.state);
+    xrt_array_owned_drop(&probe->saved);
+    CHECK(xr_xir_domain_stats(probe->fixture.pin).live_bytes == probe->fixture.baseline);
+    xr_xir_domain_drop(probe->fixture.pin);
+    CHECK(!native_array_live && !native_array_bytes);
+}
+static void reference_mutation_sweep(XrtLocationOwner *owner, XrtModuleTypeKind kind, bool push) {
+    ArrayRefMutationProbe probe = {.fixture={.kind=kind}, .push=push};
+    reference_mutation_setup(&probe, owner);
+    native_array_calls = 0;
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(owner, &failure, reference_mutation_root, &probe) == XRT_EXECUTION_COMPLETED);
+    size_t points = native_array_calls;
+    CHECK(xrt_run_embedded(owner, &failure, reference_check_saved, &probe) == XRT_EXECUTION_COMPLETED);
+    reference_mutation_dispose(&probe);
+    CHECK(points > 0);
+    for (size_t point = 0; point < points; ++point) {
+        probe = (ArrayRefMutationProbe){.fixture={.kind=kind}, .push=push};
+        reference_mutation_setup(&probe, owner);
+        native_array_calls = 0; native_array_fail_at = point; native_array_injected = false;
+        XrtValueRoot root = {0};
+        CHECK(xrt_run_embedded_owned(owner, &failure, reference_mutation_root, &probe, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(native_array_injected && failure.kind == XRT_FAILURE_VALUE &&
+            failure.detail.value.status == XR_XIR_VALUE_OOM && xrt_value_root_empty(&root));
+        native_array_fail_at = SIZE_MAX;
+        XrtModuleAccess cache = {0};
+        OK(xrt_module_cache(probe.fixture.state, 0, &cache));
+        const void *payload = NULL;
+        OK(xrt_module_borrow(cache.reference, &payload));
+        XrtArray *unchanged = NULL;
+        memcpy(&unchanged, payload, sizeof(unchanged));
+        CHECK(unchanged == probe.saved);
+        CHECK(xrt_run_embedded(owner, &failure, reference_check_saved, &probe) == XRT_EXECUTION_COMPLETED);
+        xrt_module_state_drop(&probe.fixture.state);
+        CHECK(xrt_run_embedded(owner, &failure, reference_check_saved, &probe) == XRT_EXECUTION_COMPLETED);
+        reference_mutation_dispose(&probe);
+    }
+    printf("Array Ref %s %s mutation failure points: %zu\n",
+        kind == XRT_MODULE_ARRAY_STRING ? "String" : "i64", push ? "push" : "set", points);
+}
 static void reference_allocation_sweep(XrtLocationOwner *owner, XrtModuleTypeKind kind) {
     ArrayRefProbe probe = {.kind=kind};
     reference_state_new(&probe);
@@ -148,15 +271,16 @@ static void array_reference_cases(void) {
     const XrtModuleTypeKind kinds[] = {XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING,
         XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64};
     for (uint32_t family = 0; family < 4; ++family) {
-        for (unsigned mode = 0; mode <= 5; ++mode) {
-            ArrayRefProbe probe = {.kind=kinds[family], .failure=mode};
+        for (unsigned mode = 0; mode <= 7; ++mode) {
+            unsigned failure_mode = mode == 7 ? 0 : mode;
+            ArrayRefProbe probe = {.kind=kinds[family], .failure=failure_mode, .retire_state_first=mode == 7};
             reference_state_new(&probe);
             XrtExecutionFailure failure = {0};
             XrtValueRoot root = {0};
             XrtExecutionStatus status = xrt_run_embedded_owned(owner, &failure, reference_root, &probe, &root);
-            CHECK(status == (mode ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
-            CHECK(probe.completed == !mode && xrt_value_root_empty(&root));
-            if (mode) CHECK(failure.kind == XRT_FAILURE_VALUE &&
+            CHECK(status == (failure_mode ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
+            CHECK(probe.completed == !failure_mode && xrt_value_root_empty(&root));
+            if (failure_mode) CHECK(failure.kind == XRT_FAILURE_VALUE &&
                 failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
                 failure.detail.value.source_id == (mode == 2 ? 1u : 2u));
             xrt_module_state_drop(&probe.state);
@@ -169,6 +293,10 @@ static void array_reference_cases(void) {
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
     reference_allocation_sweep(owner, XRT_MODULE_ARRAY_I64);
     reference_allocation_sweep(owner, XRT_MODULE_ARRAY_STRING);
+    reference_mutation_sweep(owner, XRT_MODULE_ARRAY_I64, false);
+    reference_mutation_sweep(owner, XRT_MODULE_ARRAY_I64, true);
+    reference_mutation_sweep(owner, XRT_MODULE_ARRAY_STRING, false);
+    reference_mutation_sweep(owner, XRT_MODULE_ARRAY_STRING, true);
 #endif
     xrt_locations_release(owner);
 }

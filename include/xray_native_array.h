@@ -25,6 +25,14 @@ XRAY_API XrtArrayRef xrt_array_ref_local(XrtArray **, XrtModuleTypeKind, uint32_
 XRAY_API XrtArrayRef xrt_array_ref_state(XrtModuleRef *, XrtModuleTypeKind, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_ref_read(XrtArrayRef, uint32_t source_id);
 XRAY_API void xrt_array_ref_write(XrtArrayRef, const XrtArray *, uint32_t source_id);
+XRAY_API void xrt_array_ref_i64_set(XrtArrayRef, int64_t index, int64_t value, uint32_t source_id);
+XRAY_API void xrt_array_ref_string_set(XrtArrayRef, int64_t index, XrtString *, uint32_t source_id);
+XRAY_API void xrt_array_ref_u8_set(XrtArrayRef, int64_t index, uint8_t value, uint32_t source_id);
+XRAY_API void xrt_array_ref_u64_set(XrtArrayRef, int64_t index, uint64_t value, uint32_t source_id);
+XRAY_API void xrt_array_ref_i64_push(XrtArrayRef, int64_t value, uint32_t source_id);
+XRAY_API void xrt_array_ref_string_push(XrtArrayRef, XrtString *, uint32_t source_id);
+XRAY_API void xrt_array_ref_u8_push(XrtArrayRef, uint8_t value, uint32_t source_id);
+XRAY_API void xrt_array_ref_u64_push(XrtArrayRef, uint64_t value, uint32_t source_id);
 
 XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, uint32_t source_id);
