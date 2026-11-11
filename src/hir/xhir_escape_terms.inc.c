@@ -211,6 +211,16 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
         XrXirType type = formal.cell ? formal.type : actual.type;
         if (xr_xir_type_is_cell(types, type)) type = xr_xir_cell_element(types, type);
         if (!xr_xir_callable_signature(types, type) || xr_xir_type_is_c_callable(types, type)) continue;
+        if (actual.function >= owner->module->function_count ||
+            actual.value >= owner->functions[actual.function].physical_values) return XR_XIR_BAD_STRUCTURE;
+        XrXirType declared = owner->nodes[owner->offsets[actual.function] + actual.value].type;
+        if (cell && xr_xir_type_is_cell(owner->module->types, declared))
+            declared = xr_xir_cell_element(owner->module->types, declared);
+        /* Closed ROOT instances retain physical template coordinates. A value
+         * declared as T already has its storable input contract; its caller's
+         * concrete callable sink is checked in that caller's namespace. */
+        if ((uint32_t)declared >= XR_XIR_TYPE_PARAMETER_BASE &&
+            (uint32_t)declared < XR_XIR_TYPE_PARAMETER_LIMIT) continue;
         XirStorageReference reference = {actual.function, actual.value, actual.environment};
         uint32_t value = UINT32_MAX;
         const char *reason = "a generic or stored value parameter";
