@@ -14,6 +14,9 @@ import subprocess
 import time
 from types import SimpleNamespace
 
+if os.name == "posix":
+    import resource
+
 import new_path_baseline as baseline
 
 
@@ -75,6 +78,7 @@ def main() -> None:
 
     def run(name: str, command: list) -> tuple[bytes, float]:
         argv = list(map(str, command))
+        usage_before = resource.getrusage(resource.RUSAGE_CHILDREN) if os.name == "posix" else None
         start = time.perf_counter()
         try:
             child = subprocess.run(argv, env=env, capture_output=True, timeout=30)
@@ -83,6 +87,10 @@ def main() -> None:
                                     stderr=error.stderr or b"")
         seconds = time.perf_counter() - start
         row = {"name": name, "command": argv, "exit": child.returncode, "seconds": seconds}
+        if usage_before is not None:
+            usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+            row["childUserSeconds"] = usage_after.ru_utime - usage_before.ru_utime
+            row["childSystemSeconds"] = usage_after.ru_stime - usage_before.ru_stime
         for stream, data in (("stdout", child.stdout), ("stderr", child.stderr)):
             path = args.work / (name + "." + stream)
             path.write_bytes(data)
@@ -195,6 +203,10 @@ def main() -> None:
                   "import regex; print(1)": 2.0}
         result["gates"] = {label: result["medians"][label]["Xray VM"] <= limit
                            for label, limit in limits.items()}
+        result["vmLuaRatios"] = {label: row["Xray VM"] / row["Lua"]
+                                 for label, row in result["medians"].items() if "Lua" in row}
+        result["gates"].update({"vm-" + label: ratio <= 1
+                               for label, ratio in result["vmLuaRatios"].items()})
         result["nativeRatios"] = {label: row["native"] / row["C"]
                                   for label, row in result["medians"].items() if "C" in row}
         result["initialNativeGates"] = {label: result["nativeRatios"][label] <= 1.1
@@ -222,6 +234,8 @@ def main() -> None:
                                         for label, row in result["nativeSerialMedians"].items()}
         result["gates"]["native-fib"] = result["nativeSerialRatios"]["fib(32)"] <= 1.1
         result["gates"]["native-mandelbrot"] = result["nativeSerialRatios"]["mandelbrot"] <= 1.1
+        result["gates"].update({"native-" + label: ratio <= 1.1
+                               for label, ratio in result["nativeSerialRatios"].items()})
         result["state"] = "PASS" if all(result["gates"].values()) else "FAIL"
     except BaseException as error:
         result.update(state="FAIL", error=str(error))
