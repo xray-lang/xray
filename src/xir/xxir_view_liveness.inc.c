@@ -32,6 +32,7 @@ typedef struct ViewLive {
     const XirViewLoanFacts *loans;
     XirViewLoanTransport *loan_transport;
     uint64_t frame_bytes;
+    bool pending_loans;
 } ViewLive;
 static bool view_live_type(const ViewLive *a,XrXirType type) {
     return xr_xir_type_node(a->module->types,type) &&
@@ -114,7 +115,9 @@ static XrXirStatus view_live_callable_loans(ViewLive *a,uint32_t instruction,uin
         return XR_XIR_OK;
     XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
         .frame_bytes=a->frame_bytes,.physical=view_live_loan_physical,.context=a};
-    return xir_view_loan_transport_use(a->loan_transport,&use);
+    XrXirStatus status=xir_view_loan_transport_use(a->loan_transport,&use);
+    if (status==XR_XIR_UNRESOLVED) {a->pending_loans=true;return XR_XIR_OK;}
+    return status;
 }
 static void view_live_enqueue(ViewLive *a,uint32_t block) {
     if (a->queued[block]) return;
@@ -291,6 +294,7 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK || !flags) return status;
     XirViewLoanTransport *transport=NULL;
     if (loans) status=xir_view_loan_transport_new(context,module,loans,flags,request->control,&transport);
+    bool pending=false;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
         if (module->declarations && module->declarations->functions[f].native_callable) {
@@ -303,12 +307,14 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
         if (status==XR_XIR_OK && a.count) status=view_live_graph(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_solve(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_visit(&a);
+        pending|=a.pending_loans;
         if (request->diagnostic && status!=XR_XIR_OK) {
             *request->diagnostic=a.location;request->diagnostic->status=status;
         }
         view_live_free(&a);
     }
-    xir_view_loan_transport_free(transport);xr_compile_resources_free(flags);return status;
+    xir_view_loan_transport_free(transport);xr_compile_resources_free(flags);
+    return status==XR_XIR_OK && pending ? XR_XIR_UNRESOLVED : status;
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {

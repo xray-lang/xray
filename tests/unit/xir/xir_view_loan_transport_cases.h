@@ -63,7 +63,7 @@ static void view_loan_transport_fixture(ViewLoanTransportFixture *f) {
     f->input=(XirStorageInput){1,2,0,XIR_STORAGE_FOOTPRINT};
     f->unknown=(XirStorageUnknown){0,4,callable,UINT32_MAX};
     f->facts=(XirViewLoanFacts){
-        .restrictions={f->restrictions,2,f->formulas,11,NULL,0,NULL,0},
+        .restrictions={f->restrictions,2,f->formulas,11,NULL,0,NULL,0,{0}},
         .storage={.functions=f->storage,.function_count=2,.crossflows=f->crossflows,.crossflow_count=2,
             .applications=f->applications,.application_count=2,.bindings=f->bindings,.binding_count=2,
             .inputs=&f->input,.input_count=1,.unknowns=&f->unknown}};
@@ -162,7 +162,7 @@ static void view_loan_affine_availability(ViewLoanAffineCase kind) {
     uint32_t hidden_values = functions[1].parameter_count + 1;
     XirRestrictionFunction rows[] = {{5,6,intrinsic,flows,2}, {hidden_values,hidden_values,intrinsic+6,NULL,0}};
     XirRestrictionPoint point = {.function=0, .instruction=2, .value=1, .formula=5, .carrier=5};
-    XirRestrictionView view = {rows,2,formulas,6+hidden_values,NULL,0,no_points ? NULL : &point,no_points ? 0u : 1u};
+    XirRestrictionView view = {rows,2,formulas,6+hidden_values,NULL,0,no_points ? NULL : &point,no_points ? 0u : 1u,{0}};
     CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_OK);
     XrXirEffects effects = {.resources=effect_context.resources, .count=2, .checked_roots=roots};
     XrXirDiagnostic diagnostic = {0};
@@ -181,6 +181,13 @@ static void view_loan_affine_availability(ViewLoanAffineCase kind) {
                 &diagnostic) == XR_XIR_OUT_OF_MEMORY && injected);
             fail_at=SIZE_MAX; effect_mark_check(retained);
         }
+        ((XirRestrictionFormulaRow *)roots->restrictions.view.formulas)[5].incomplete=true;
+        CHECK(xir_compile_view_affine_loans_verified(&effect_context,&module,&effects,NULL,
+            &diagnostic)==XR_XIR_UNRESOLVED);
+        instructions[1]=(XrXirInstruction){.op=XR_XIR_VIEW_END};
+        CHECK(xir_compile_view_affine_loans_verified(&effect_context,&module,&effects,NULL,
+            &diagnostic)==XR_XIR_BAD_VALUE);
+        CHECK(diagnostic.function==0 && diagnostic.instruction==2);
     }
     effect_checked_roots_free(roots);
     effect_mark_check(baseline);

@@ -13,6 +13,7 @@
 #include "xxir_view_loan_internal.h"
 #include "xxir_view_liveness_internal.h"
 #include "xxir_view_types_internal.h"
+#include "xxir_view_access_internal.h"
 
 static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     XirEffectInput input, XrXirEffects *effects) {
@@ -414,7 +415,7 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
 
 XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
     uint32_t function, XirSuspendCauseVisitor visit, void *context) {
-    if (!effects || !effect_final_outcomes(effects) || function >= effects->count || !visit)
+    if (!effects || !effect_roots_read(effects)->control_summary || function >= effects->count || !visit)
         return XR_XIR_BAD_STRUCTURE;
     const EffectCheckedRoots *roots = effects->checked_roots;
     uint32_t node = roots->function[function].root;
@@ -496,6 +497,33 @@ XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects
     return roots ? roots->storage : NULL;
 }
 
+XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *memory,
+    XrXirEffects *effects, const XrXirDiagnostic *diagnostic) {
+    if (!diagnostic || diagnostic->status != XR_XIR_UNRESOLVED ||
+        !xir_effects_prepared_execution(effects) ||
+        !xir_effects_context_matches(memory, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic *pending = &effects->checked_roots->restrictions.view.pending;
+    if (pending->status == XR_XIR_OK) *pending = *diagnostic;
+    return XR_XIR_OK;
+}
+
+/* Declaration diagnostics borrow the sole closed constructor before its final
+ * ownership move. Public queries still require successful publication. */
+XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext *memory,
+    const XrXirEffects *effects, uint32_t function, XrXirEffect *task_creation) {
+    XrXirEffectFacts result = {.status=XR_XIR_BAD_STRUCTURE};
+    if (!effects || !xir_effects_context_matches(memory,effects,effects->count) || function>=effects->count)
+        return result;
+    const EffectFinalOutcomes *records=effect_roots_read(effects);
+    if (!records->control_summary || !records->root || !records->witnesses || !records->root_witnesses ||
+        !records->unresolved_witnesses || !records->task_creation) return result;
+    result.status=XR_XIR_OK; result.control=records->functions[function]; result.root=records->root[function];
+    result.suspend_witness=records->witnesses[function]; result.root_witness=records->root_witnesses[function];
+    result.unresolved_witness=records->unresolved_witnesses[function];
+    if (task_creation) *task_creation=records->task_creation[function];
+    return result;
+}
+
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *memory,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output,
     XrXirDiagnostic *diagnostic) {
@@ -519,18 +547,34 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
     }
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
-    if (status == XR_XIR_OK) status = xir_compile_view_affine_loans_verified(memory,
-        input.module, effects, input.control, diagnostic);
+    if (status == XR_XIR_OK) {
+        status = xir_compile_view_affine_loans_verified(memory,input.module,effects,input.control,diagnostic);
+        if (status == XR_XIR_UNRESOLVED) {
+            XrXirDiagnostic location=diagnostic ? *diagnostic :
+                (XrXirDiagnostic){XR_XIR_UNRESOLVED,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            location.status=XR_XIR_UNRESOLVED;
+            status=xir_effects_defer_lifetime(memory,effects,&location);
+        }
+    }
     if (status == XR_XIR_OK && !effects->checked_roots->liveness_checked) {
         XirViewLiveRequest request={.diagnostic=diagnostic,.control=input.control};
         status=xir_compile_view_liveness_loans_verified(memory,input.module,effects,&request);
         if (status==XR_XIR_OK) effects->checked_roots->liveness_checked=true;
+        if (status==XR_XIR_UNRESOLVED) {
+            XrXirDiagnostic location=diagnostic ? *diagnostic :
+                (XrXirDiagnostic){XR_XIR_UNRESOLVED,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            location.status=XR_XIR_UNRESOLVED;
+            status=xir_effects_defer_lifetime(memory,effects,&location);
+        }
     }
     EffectCheckBuild build = {.memory = memory, .module = input.module,
         .roots = effects->checked_roots, .control = input.control};
     if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
+    if (status==XR_XIR_OK && (!refiner || !refiner->admit) &&
+        effects->checked_roots->restrictions.view.pending.status!=XR_XIR_OK)
+        status=xir_compile_view_cell_access_verified_input(memory,input,effects,diagnostic);
     if (status == XR_XIR_OK && refiner && refiner->admit) {
         XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
         status=refiner->admit(refiner->context,input.module,effects,&location);
@@ -554,6 +598,15 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         records->witnesses = records->control_summary->causes;
         records->task_creation = records->control_summary->task_creation;
         status = xir_compile_local_errors_verify(memory, input.module, NULL);
+        if (status==XR_XIR_OK) effects->local_errors_checked=true;
+    }
+    if (status == XR_XIR_OK && effects->checked_roots->restrictions.view.pending.status != XR_XIR_OK) {
+        XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=xir_compile_check_effect_declarations(memory,input,effects,&location);
+        if (status==XR_XIR_BAD_TYPE && refiner && refiner->explain)
+            refiner->explain(refiner->context,input.module,effects,&location);
+        if (status==XR_XIR_OK) {status=XR_XIR_UNRESOLVED; location=effects->checked_roots->restrictions.view.pending;}
+        if (diagnostic) *diagnostic=location;
     }
     if (status == XR_XIR_OK) status = effect_outcomes_publish(memory, input.module, effects);
     if (status != XR_XIR_OK) {

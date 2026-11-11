@@ -394,7 +394,11 @@ source_failure:
 static XrXirStatus source_view_admit(void *owner,const XrXirModule *module,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
     SourceContext *ctx=owner;
-    if (!ctx->view_normalized) return XR_XIR_OK;
+    if (!ctx->view_normalized) {
+        bool needed=false;
+        if (!source_view_preparation_needed(ctx,&needed)) return ctx->diagnostic.status;
+        if (!needed) return XR_XIR_OK;
+    }
     XrXirStatus status=xir_compile_view_cell_access_verified_input(&ctx->compile,
         (XirEffectInput){module,ctx->construction,ctx->request},effects,diagnostic);
     if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,module,diagnostic,status);

@@ -41,6 +41,7 @@ typedef struct AffineCheck {
     uint64_t frame_bytes;
     XrCompileRequestControl *control;
     uint32_t progress;
+    bool pending_loans;
 } AffineCheck;
 
 static uint32_t affine_flags(const AffineCheck *a,XrXirType type) {
@@ -164,7 +165,9 @@ static XrXirStatus affine_callable_loans(AffineCheck *a,uint32_t instruction,uin
     if (!a->loans || !xr_xir_type_is_callable(types,type) || xr_xir_type_is_c_callable(types,type)) return XR_XIR_OK;
     XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
         .frame_bytes=a->frame_bytes,.physical=affine_loan_physical,.context=a};
-    return xir_view_loan_transport_use(a->loans,&use);
+    XrXirStatus status=xir_view_loan_transport_use(a->loans,&use);
+    if (status==XR_XIR_UNRESOLVED) {a->pending_loans=true;return XR_XIR_OK;}
+    return status;
 }
 static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
     XrXirStatus poll=xir_receive_step(a->control,&a->progress);
@@ -307,6 +310,7 @@ static XrXirStatus affine_module(const XrXirCompileContext *context,
     XirViewLoanTransport *transport=NULL;
     if (facts && facts->restrictions.point_count)
         status=xir_view_loan_transport_new(&remaining,module,facts,types,control,&transport);
+    bool pending=false;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
         if (module->declarations && module->declarations->functions[f].native_callable) {
@@ -315,10 +319,12 @@ static XrXirStatus affine_module(const XrXirCompileContext *context,
         AffineCheck a={.context=&remaining,.module=module,.function=&module->functions[f],.types=types,.loans=transport,.control=control,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=affine_function(&a);
+        pending|=a.pending_loans;
         if (diagnostic && status!=XR_XIR_OK) {*diagnostic=a.location;diagnostic->status=status;}
         affine_free(&a);
     }
-    xir_view_loan_transport_free(transport);xr_compile_resources_free(types);return status;
+    xir_view_loan_transport_free(transport);xr_compile_resources_free(types);
+    return status==XR_XIR_OK && pending ? XR_XIR_UNRESOLVED : status;
 }
 XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {

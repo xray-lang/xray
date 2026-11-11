@@ -130,6 +130,9 @@ static XrXirStatus effect_relocation_restrictions(const XrXirCompileContext *mem
         point->value = effect_relocation_value(relocation, point->function, point->value);
         point->carrier = effect_relocation_value(relocation, point->function, point->carrier);
     }
+    if (owner->view.pending.status == XR_XIR_UNRESOLVED)
+        owner->view.pending.instruction = effect_relocation_instruction(relocation,
+            owner->view.pending.function, owner->view.pending.instruction);
     xr_compile_resources_free(owner->intrinsic);
     xr_compile_resources_free((void *)owner->view.formulas);
     xr_compile_resources_free(owner->owners);
@@ -385,7 +388,7 @@ XR_FUNC XrXirStatus xir_effects_accept_view_normalization(const XrXirCompileCont
     XrXirEffects *effects,const XrXirModule *module,const XirViewNormalization *normalization,
     XrCompileRequestControl *control) {
     if (!effects || !effects->checked_roots || effects->final_outcomes || effects->input_facts ||
-        !module || !xir_effects_context_matches(context,effects,module->function_count)) return XR_XIR_BAD_STRUCTURE;
+        !module || !module->functions || !xir_effects_context_matches(context,effects,module->function_count)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<module->function_count;++f)
         if (effects->checked_roots->function[f].values!=(uint64_t)module->functions[f].parameter_count+
             module->functions[f].instruction_count) return XR_XIR_BAD_STRUCTURE;

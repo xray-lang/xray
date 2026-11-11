@@ -10,7 +10,6 @@
 #include "xxir_view_liveness_internal.h"
 #include "xxir_view_roots_internal.h"
 #include "xxir_view_access_internal.h"
-#include "xxir_source_view_normalize.inc.c"
 
 static bool source_view_preparation_needed(SourceContext *ctx,bool *needed) {
     *needed=false;
@@ -21,6 +20,7 @@ static bool source_view_preparation_needed(SourceContext *ctx,bool *needed) {
     }
     return true;
 }
+#include "xxir_source_view_normalize.inc.c"
 /* Construction precedes numeric collection and is replaced after relocation. */
 static bool source_construction_ready(SourceContext *ctx) {
     return ctx->construction || source_construction_prepare(ctx);
@@ -42,6 +42,10 @@ static bool source_view_prepare(SourceContext *ctx) {
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},NULL,NULL,&diagnostic);
     bool normalizing=status==XR_XIR_OK;
     if (normalizing) status=source_view_normalize(ctx,&module,&diagnostic);
+    if (normalizing && status==XR_XIR_UNRESOLVED) {
+        diagnostic.status=status;
+        status=xir_effects_defer_lifetime(&ctx->compile,ctx->semantic_prepare,&diagnostic);
+    }
     if (status==XR_XIR_OK) return true;
     AstNode *site=NULL;
     if (diagnostic.function<ctx->function_count) {

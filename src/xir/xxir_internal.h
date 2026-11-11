@@ -192,6 +192,10 @@ XR_FUNC XrXirStatus xir_effects_accept_view_normalization(const XrXirCompileCont
     XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
 XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *);
 XR_FUNC struct XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *);
+XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *, XrXirEffects *,
+    const XrXirDiagnostic *);
+XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext *,
+    const XrXirEffects *, uint32_t, XrXirEffect *);
 
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);

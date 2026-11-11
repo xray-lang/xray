@@ -38,6 +38,10 @@ static XrXirStatus effect_check_restrictions_copy(const XrXirCompileContext *mem
     if (!view || view->function_count != roots->templates || !view->functions ||
         (view->formula_count && !view->formulas) || (view->input_count && !view->inputs) ||
         (view->point_count && !view->points)) return XR_XIR_BAD_STRUCTURE;
+    if (view->pending.status != XR_XIR_OK && (view->pending.status != XR_XIR_UNRESOLVED ||
+        view->pending.function >= roots->templates || view->pending.instruction >=
+            roots->function[view->pending.function].values - roots->function[view->pending.function].parameters))
+        return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = XR_XIR_OK;
     uint64_t values = 0, flows = 0, inputs = 0;
     for (uint32_t f = 0; f < view->function_count; ++f) {
@@ -130,13 +134,15 @@ static XrXirStatus effect_check_restrictions_receive(void *context, const XirRes
         EffectCheckFunction function = roots->function[f];
         XirRestrictionFunction row = next.view.functions[function.declaration];
         for (uint32_t v = 0; v < function.values; ++v)
-            roots->node[function.first + v].restricted = next.view.formulas[row.intrinsic[v]].constant;
+            roots->node[function.first + v].restricted = next.view.formulas[row.intrinsic[v]].constant &&
+                !next.view.formulas[row.intrinsic[v]].incomplete;
     }
     for (uint32_t p = 0; p < next.view.point_count; ++p) {
         XirRestrictionPoint point = next.view.points[p];
         const EffectCheckFunction *function = &roots->function[point.function];
         EffectCheckNode *instruction = &roots->node[function->first + function->parameters + point.instruction];
-        if (instruction->weaken) instruction->restricted = next.view.formulas[point.formula].constant;
+        if (instruction->weaken) instruction->restricted = next.view.formulas[point.formula].constant &&
+            !next.view.formulas[point.formula].incomplete;
     }
     return XR_XIR_OK;
 }

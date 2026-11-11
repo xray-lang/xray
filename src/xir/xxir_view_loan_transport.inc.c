@@ -457,5 +457,10 @@ XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *a, const X
         point.carrier >= view->functions[use->function].value_count) return XR_XIR_UNRESOLVED;
     XirViewLoanDemand demand = {.function=use->function, .carrier=point.carrier,
         .frame_bytes=use->frame_bytes, .physical=use->physical, .context=use->context};
-    return xir_view_loan_transport_demand(a, &demand);
+    XrXirStatus status = xir_view_loan_transport_demand(a, &demand);
+    /* A failed demand carries no proof. Retrying another demand still checks
+     * every known physical loan before the module's unresolved obligation. */
+    if (status == XR_XIR_UNRESOLVED) a->status = XR_XIR_OK;
+    if (status == XR_XIR_OK && view->formulas[point.formula].incomplete) status = XR_XIR_UNRESOLVED;
+    return status;
 }

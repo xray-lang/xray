@@ -13,7 +13,7 @@
 typedef struct HirRestrictionNode {
     uint32_t *inputs, count, capacity;
     uint32_t head, parameter, borrowed, version;
-    bool constant, queued, allocated;
+    bool constant, queued, allocated, incomplete;
 } HirRestrictionNode;
 typedef struct HirRestrictionEdge {
     uint32_t source, target, next, application, seen;
@@ -35,7 +35,9 @@ typedef struct HirRestrictionSolver {
     uint32_t check_count, check_capacity, queue_first, queue_count;
     uint32_t observation;
     HirEscapeObservation *base_observations;
+    HirEscapeObservation *pending;
     uint32_t base_observation_count, base_use_count;
+    uint32_t pending_count, pending_capacity;
     uint32_t remainder;
     bool ready, final;
 } HirRestrictionSolver;
@@ -49,6 +51,23 @@ static XrXirStatus restriction_storage_status(HirRestrictionSolver *solver, XrXi
     return status;
 }
 
+/* Unknown environments remain obligations, never empty capture proofs. The
+ * known restriction equations still diagnose proven escapes immediately. */
+static XrXirStatus restriction_request(HirRestrictionSolver *solver, XrXirStatus status,
+    HirEscapeObservation point) {
+    if (status != XR_XIR_UNRESOLVED) return status;
+    HirEscape *owner = &solver->builder->graph;
+    owner->status = XR_XIR_OK;
+    if (solver->pending_count == solver->pending_capacity) {
+        HirEscapeObservation *grown = xir_compile_array_grow(owner->memory, solver->pending,
+            solver->pending_count, sizeof(*grown), &solver->pending_capacity, &owner->status);
+        if (!grown) return owner->status;
+        solver->pending = grown;
+    }
+    solver->pending[solver->pending_count++] = point;
+    return owner->status;
+}
+
 static void restriction_free(HirRestrictionSolver *solver) {
     for (uint32_t n = 0; n < solver->count; ++n)
         xr_compile_resources_free(solver->nodes ? solver->nodes[n].inputs : NULL);
@@ -58,6 +77,7 @@ static void restriction_free(HirRestrictionSolver *solver) {
     xr_compile_resources_free(solver->point_values);
     xr_compile_resources_free(solver->queue);
     xr_compile_resources_free(solver->base_observations);
+    xr_compile_resources_free(solver->pending);
 }
 
 static void escape_points_free(XrHirEscapeBuilder *builder) {
@@ -110,6 +130,7 @@ static bool restriction_merge(HirRestrictionSolver *solver, uint32_t target,
     const HirRestrictionNode *source) {
     HirRestrictionNode *node = &solver->nodes[target];
     bool changed = false;
+    if (source->incomplete && !node->incomplete) {node->incomplete = true; changed = true;}
     if (source->constant && !node->constant) {
         node->constant = true; node->parameter = source->parameter; node->borrowed = source->borrowed;
         changed = true;
@@ -241,6 +262,12 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
                 value = proxy.value;
             }
         }
+        if (status == XR_XIR_UNRESOLVED) {
+            status = restriction_request(solver, status,
+                (HirEscapeObservation){site->function, site->instruction, actual.value, XIR_STORAGE_BEFORE});
+            if (status != XR_XIR_OK) return status;
+            continue;
+        }
         if (status != XR_XIR_OK) return status;
         status = escape_use(owner, site->function, site->instruction, value, UINT32_MAX, reason);
         if (status != XR_XIR_OK || !restriction_append_observation(solver->builder,
@@ -271,6 +298,11 @@ static bool restriction_cell_publications(HirRestrictionSolver *solver) {
         uint32_t contents = UINT32_MAX;
         owner->status = restriction_storage_status(solver,
             xir_storage_flow_reference(solver->storage, &observation, &contents, NULL));
+        if (owner->status == XR_XIR_UNRESOLVED) {
+            owner->status = restriction_request(solver, owner->status,
+                (HirEscapeObservation){use.function, use.instruction, use.value, use.point});
+            continue;
+        }
         if (owner->status != XR_XIR_OK) return false;
         owner->status = escape_use(owner, use.function, use.instruction, contents, UINT32_MAX, use.reason);
         if (owner->status != XR_XIR_OK || !restriction_append_observation(solver->builder,
@@ -305,6 +337,8 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
                 {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}};
             owner->status = restriction_storage_status(solver,
                 xir_storage_flow_expose_reference(solver->storage, &publication));
+            owner->status = restriction_request(solver, owner->status,
+                (HirEscapeObservation){use.function, use.instruction, use.value, use.point});
             continue;
         }
         XirStorageValuePoint point = {use.function, use.instruction,
@@ -319,6 +353,8 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
             owner->status = restriction_storage_status(solver,
                 xir_storage_flow_expose_value_when(solver->storage, &point, &condition));
         }
+        owner->status = restriction_request(solver, owner->status,
+            (HirEscapeObservation){use.function, use.instruction, use.value, use.point});
     }
     for (uint32_t p = 0; p < builder->observation_count && escape_poll(owner); ++p) {
         HirEscapeObservation row = builder->observations[p];
@@ -327,6 +363,7 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
         solver->observation = p;
         owner->status = restriction_storage_status(solver, xir_storage_flow_visit_value_captures(solver->storage, &point,
             final ? XIR_STORAGE_QUERY_ALL : XIR_STORAGE_QUERY_CONTENTS, restriction_capture, solver));
+        owner->status = restriction_request(solver, owner->status, row);
     }
     for (uint32_t u = 0; final && u < owner->use_count && escape_poll(owner); ++u) {
         HirEscapeUse use = owner->uses[u];
@@ -336,6 +373,11 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
             uint32_t handle = use.storage - owner->offsets[use.function];
             owner->status = restriction_storage_status(solver, xir_storage_flow_exposure_at(solver->storage, use.function,
                 use.instruction, handle, XIR_STORAGE_BEFORE, &exposure));
+            if (owner->status == XR_XIR_UNRESOLVED) {
+                owner->status = restriction_request(solver, owner->status,
+                    (HirEscapeObservation){use.function, use.instruction, use.value, use.point});
+                continue;
+            }
             if (owner->status != XR_XIR_OK) break;
         }
         if (solver->check_count == solver->check_capacity) {
@@ -477,6 +519,14 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
     for (uint32_t p = 0; p < solver->builder->observation_count && escape_poll(owner); ++p) {
         HirEscapeObservation point = solver->builder->observations[p];
         if (!restriction_local_edge(solver, point.function, point.value, solver->point_values[p], false)) return false;
+        uint32_t first = 0, end = solver->pending_count;
+        while (first < end) {
+            uint32_t middle = first + (end - first) / 2;
+            if (restriction_observation_compare(solver->pending + middle, &point) < 0) first = middle + 1;
+            else end = middle;
+        }
+        if (first < solver->pending_count && !restriction_observation_compare(&point, solver->pending + first))
+            solver->nodes[restriction_node(solver, point.function, solver->point_values[p], false)].incomplete = true;
     }
     for (uint32_t c = 0; c < solver->carrier_count && escape_poll(owner); ++c) {
         HirRestrictionCarrier carrier = solver->carriers[c];
@@ -534,6 +584,7 @@ static bool restriction_substitute(HirRestrictionSolver *solver, HirRestrictionE
     HirRestrictionNode *source = &solver->nodes[edge.source];
     XirStorageApplication app = solver->view.applications[edge.application];
     if (source->constant) {restriction_merge(solver, edge.target, source); return true;}
+    if (source->incomplete) restriction_merge(solver,edge.target,&(HirRestrictionNode){.incomplete=true});
     bool exposure = edge.source >= solver->offsets[solver->view.function_count];
     uint32_t local = exposure ? edge.source - solver->offsets[solver->view.function_count] : edge.source;
     if (source->count && (local < solver->offsets[app.declaration] || local >= solver->offsets[app.declaration + 1])) {
@@ -562,7 +613,7 @@ static bool restriction_substitute(HirRestrictionSolver *solver, HirRestrictionE
 static bool restriction_close(HirRestrictionSolver *solver) {
     HirEscape *owner = &solver->builder->graph;
     for (uint32_t n = 0; n < solver->count; ++n)
-        if (!restriction_empty(&solver->nodes[n])) restriction_enqueue(solver, n);
+        if (!restriction_empty(&solver->nodes[n]) || solver->nodes[n].incomplete) restriction_enqueue(solver, n);
     while (solver->queue_count && escape_poll(owner)) {
         uint32_t index = solver->queue[solver->queue_first];
         solver->queue_first = (solver->queue_first + 1) % solver->count;
@@ -620,13 +671,19 @@ static bool restriction_publish(HirRestrictionSolver *solver, XrHirEscapeFacts *
         (size_t)terms, sizeof(*inputs), &owner->status) : NULL;
     XirRestrictionPoint *points = xir_compile_calloc(owner->memory, solver->builder->observation_count,
         sizeof(*points), &owner->status);
-    facts->view = (XirRestrictionView){rows, functions, formulas, total, inputs, (uint32_t)terms,
-        points, solver->builder->observation_count};
+    facts->view = (XirRestrictionView){.functions=rows, .function_count=functions, .formulas=formulas,
+        .formula_count=total, .inputs=inputs, .input_count=(uint32_t)terms, .points=points,
+        .point_count=solver->builder->observation_count};
+    if (solver->pending_count) {
+        HirEscapeObservation pending = solver->pending[0];
+        facts->view.pending = (XrXirDiagnostic){XR_XIR_UNRESOLVED, pending.function,
+            UINT32_MAX, pending.instruction, XR_XIR_DIAGNOSTIC_NONE};
+    }
     uint32_t cursor = 0;
     for (uint32_t n = 0; n < total && escape_poll(owner); ++n) {
         HirRestrictionNode node = solver->nodes[n];
         uint32_t count = node.constant ? 0 : node.count;
-        formulas[n] = (XirRestrictionFormulaRow){cursor, count, node.constant};
+        formulas[n] = (XirRestrictionFormulaRow){cursor, count, node.constant, node.incomplete};
         if (count) memcpy(inputs + cursor, node.inputs, (size_t)count * sizeof(*inputs));
         cursor += count;
     }
@@ -693,8 +750,10 @@ XR_FUNC XrXirStatus xr_hir_escape_builder_prepare_points(XrHirEscapeBuilder *bui
     builder->observation_count = solver->base_observation_count;
     if (builder->observation_count) memcpy(builder->observations, solver->base_observations,
         (size_t)builder->observation_count * sizeof(*builder->observations));
-    solver->carrier_count = 0; solver->check_count = 0; solver->remainder = 0;
+    solver->carrier_count = 0; solver->check_count = 0; solver->remainder = 0; solver->pending_count = 0;
     bool complete = restriction_observe_storage(solver, final);
+    if (owner->status == XR_XIR_OK && solver->pending_count)
+        qsort(solver->pending, solver->pending_count, sizeof(*solver->pending), restriction_observation_compare);
     solver->view = (XirStorageFlowView){0};
     if (!complete && owner->status == XR_XIR_UNRESOLVED && solver->remainder == XIR_EXECUTION_REMAINDER_STORAGE) {
         owner->status = XR_XIR_OK; solver->ready = false; *ready = false;

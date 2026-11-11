@@ -41,7 +41,7 @@ typedef struct XirRestrictionFormula {
 
 typedef struct XirRestrictionFormulaRow {
     uint32_t first, count;
-    bool constant;
+    bool constant, incomplete;
 } XirRestrictionFormulaRow;
 
 typedef struct XirRestrictionFunction {
@@ -59,7 +59,8 @@ typedef struct XirRestrictionPoint {
  * namespace. Intrinsic has value_count formula IDs. Point rows are ordered by
  * function/instruction/value and name the current transport carrier, including
  * mutable capture contents. Formula IDs belong to exactly one function. A true
- * formula retains its independent loan flows. */
+ * formula retains its independent loan flows. Incomplete formulas authorize
+ * no callable refinement; execution consumes the declared type upper bound. */
 typedef struct XirRestrictionView {
     const XirRestrictionFunction *functions;
     uint32_t function_count;
@@ -69,6 +70,9 @@ typedef struct XirRestrictionView {
     uint32_t input_count;
     const XirRestrictionPoint *points;
     uint32_t point_count;
+    /* Unresolved permissions belong to this exact numeric generation. They
+     * forbid publication even when declaration obligations have no error. */
+    XrXirDiagnostic pending;
 } XirRestrictionView;
 
 /* Accept copies the complete numeric view synchronously. The producer releases

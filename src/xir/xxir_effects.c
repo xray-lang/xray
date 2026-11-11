@@ -102,6 +102,7 @@ struct XrXirEffects {
     EffectFinalOutcomes *outcomes_owner;
     EffectFinalOutcomes *final_outcomes;
     EffectCheckedRoots *checked_roots;
+    bool local_errors_checked;
 
 };
 
@@ -323,7 +324,8 @@ XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *
 static XrXirStatus effect_local_errors_current(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
     (void)diagnostic;
-    if (!module || !effect_final_outcomes(effects) ||
+    if (!module || !effects || (!effect_final_outcomes(effects) &&
+        (!effects->outcomes_owner || !effects->local_errors_checked)) ||
         !xir_effects_context_matches(context,effects,module->function_count)) return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_PARANOID ? xir_compile_local_errors_verify(context,module,diagnostic) : XR_XIR_OK;
 }

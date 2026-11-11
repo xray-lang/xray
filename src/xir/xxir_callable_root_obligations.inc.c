@@ -53,7 +53,7 @@ static XrXirStatus declaration_callable_root_read(DeclarationCallableRootCheck *
             const XrXirInterfaceMethod *method =
                 &interfaces->declarations[binding->requirement.declaration].methods[binding->member];
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, method->signature);
-            XrXirEffectFacts actual_read=xr_xir_effects_read(effects, binding->function);
+            XrXirEffectFacts actual_read=xir_effects_declaration_read(remaining,effects,binding->function,NULL);
             const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);
             if (!signature || !actual) return XR_XIR_BAD_STRUCTURE;
             if (!xr_xir_callable_root_accepts(actual->requires_root, actual->unresolved, signature->flags)) {

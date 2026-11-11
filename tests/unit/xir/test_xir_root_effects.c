@@ -603,10 +603,11 @@ static void restriction_owner_relocation(void) {
     XrXirModule module = {.functions = &body, .function_count = 1};
     uint32_t intrinsic[] = {0, 1, 2, 3}, inputs[] = {3};
     XrXirValueFlow flow = {1, 3};
-    XirRestrictionFormulaRow formulas[] = {{0}, {0}, {.constant = true}, {.count = 1}};
+    XirRestrictionFormulaRow formulas[] = {{0}, {0}, {.constant = true, .incomplete = true}, {.count = 1}};
     XirRestrictionFunction row = {3, 4, intrinsic, &flow, 1};
     XirRestrictionPoint point = {0, 1, 1, 3, 3};
-    XirRestrictionView view = {&row, 1, formulas, 4, inputs, 1, &point, 1};
+    XirRestrictionView view = {&row, 1, formulas, 4, inputs, 1, &point, 1, {0}};
+    view.pending=(XrXirDiagnostic){XR_XIR_UNRESOLVED,0,UINT32_MAX,1,XR_XIR_DIAGNOSTIC_NONE};
     EffectMark baseline = effect_mark();
     EffectCheckedRoots *roots = NULL;
     CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
@@ -626,6 +627,7 @@ static void restriction_owner_relocation(void) {
         effect_mark_check(held);
     }
     CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_OK);
+    CHECK(!roots->node[roots->function[0].first+2].restricted);
     CHECK(roots->restrictions.view.inputs != inputs && roots->restrictions.view.points != &point);
     CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_BAD_STRUCTURE);
     XirStorageFlowView storage = {0};
@@ -652,9 +654,12 @@ static void restriction_owner_relocation(void) {
     CHECK(owned->inputs[0] == 4 && owned->functions[0].flows[0].source == 2 &&
         owned->functions[0].flows[0].target == 4);
     CHECK(owned->points[0].instruction == 2 && owned->points[0].value == 2 && owned->points[0].carrier == 4);
+    CHECK(owned->pending.status==XR_XIR_UNRESOLVED && owned->pending.instruction==2);
+    memset(&view.pending,0xCE,sizeof(view.pending));
     memset(intrinsic, 0xCE, sizeof(intrinsic)); memset(inputs, 0xCE, sizeof(inputs));
     memset(formulas, 0xCE, sizeof(formulas)); memset(&point, 0xCE, sizeof(point));
-    CHECK(owned->inputs[0] == 4 && owned->formulas[2].constant);
+    CHECK(owned->inputs[0] == 4 && owned->formulas[2].constant && owned->formulas[2].incomplete);
+    CHECK(owned->pending.status==XR_XIR_UNRESOLVED && owned->pending.function==0);
     effect_checked_roots_free(roots);
     effect_mark_check(baseline);
     printf("restriction receiver: detached formulas, %zu allocation failures and numeric relocation PASS\n", sites);
@@ -686,6 +691,63 @@ static void c_callable_parameter_equations(void) {
     }
     effect_checked_roots_free(roots);
     effect_mark_check(baseline);
+}
+
+static XrXirStatus unresolved_lifetime_case(void) {
+    XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
+        .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED|XR_XIR_CALLABLE_NO_SUSPEND};
+    XrXirTypes types={.nodes=&node,.count=1};
+    XrXirInstruction done={.op=XR_XIR_RETURN};
+    XrXirInstruction capture[]={{.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2,.args={0,1}},
+        {.op=XR_XIR_RETURN,.args={1}}};
+    XrXirInstruction invoke[]={{.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0},
+        {.op=XR_XIR_RETURN,.args={1}}};
+    XrXirInstruction entry[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}};
+    XrXirBlock blocks[]={{.count=1},{.count=2},{.count=2},{.count=2}};
+    uint32_t zero=0;
+    XrXirFunction functions[]={
+        {.name="init",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=blocks,.block_count=1,.error_type=XR_XIR_NEVER},
+        {.name="keep",.name_length=4,.parameters=&callable,.parameter_count=1,.result=callable,.instructions=capture,.instruction_count=2,
+            .blocks=blocks+1,.block_count=1,.operands=&zero,.operand_count=1,.error_type=XR_XIR_NEVER,
+            .escaping_parameters=&zero,.escaping_parameter_count=1},
+        {.name="invoke",.name_length=6,.parameters=&callable,.parameter_count=1,.result=XR_XIR_I64,.instructions=invoke,.instruction_count=2,
+            .blocks=blocks+2,.block_count=1,.error_type=XR_XIR_NEVER},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.instructions=entry,.instruction_count=2,.blocks=blocks+3,
+            .block_count=1,.error_type=XR_XIR_NEVER}
+    };
+    XrXirFunctionIdentity identities[4]={{0},{0},{.capture_owner=2,.capture_count=1,
+        .promises=XR_XIR_FUNCTION_NO_SUSPEND},{0}};
+    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=3};
+    XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=4,
+        .declarations=&declarations};
+    XrXirConstruction *construction=NULL;
+    XrXirEffects *effects=NULL;
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_module_construction(&effect_context,&module,&construction);
+    XirEffectInput input={&module,construction,NULL};
+    if (status==XR_XIR_OK) status=xir_compile_structure_verify_input(&effect_context,input,&diagnostic);
+    if (status==XR_XIR_OK) status=xir_effects_infer_lifetimes_input(&effect_context,input,&effects,&diagnostic);
+    if (status!=XR_XIR_UNRESOLVED && fail_at==SIZE_MAX)
+        fprintf(stderr,"unresolved fixture status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction);
+    CHECK(!effects);
+    xr_xir_compile_construction_free(construction);
+    return status;
+}
+
+static void unresolved_lifetime_ownership(void) {
+    EffectMark baseline=effect_mark();
+    attempts=0;
+    CHECK(unresolved_lifetime_case()==XR_XIR_UNRESOLVED);
+    size_t sites=attempts;
+    effect_mark_check(baseline);
+    for (size_t site=0;site<sites;++site) {
+        attempts=0;injected=false;fail_at=site;
+        CHECK(unresolved_lifetime_case()==XR_XIR_OUT_OF_MEMORY && injected);
+        fail_at=SIZE_MAX;effect_mark_check(baseline);
+    }
+    printf("unresolved lifetime: publication refused and %zu allocation failures PASS\n",sites);
 }
 
 static XrXirStatus failing_point_request(void *context, const XirExecutionOwner *execution,
@@ -1017,6 +1079,7 @@ static void control_summary_kernel(void) {
     execution_cleanup_order();
     execution_origin_namespaces();
     restriction_owner_relocation();
+    unresolved_lifetime_ownership();
     c_callable_parameter_equations();
     point_request_failure();
     execution_instance_parameters();
