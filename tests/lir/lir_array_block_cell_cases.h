@@ -9,7 +9,7 @@
 #include "lir/xlir_array.h"
 
 static void array_block_cells(void) {
-    for (unsigned scenario = 0; scenario < 6; ++scenario) {
+    for (unsigned scenario = 0; scenario < 8; ++scenario) {
         XrLirModule *module = NULL;
         OK(xr_lir_array_module_create(NULL, &module));
         XrLirFunction function = {0};
@@ -37,7 +37,7 @@ static void array_block_cells(void) {
         OK(xr_lir_emit_effect(module, body, &drop));
         drop.op = XR_LIR_ARRAY_CELL_DROP;
         drop.operands = &cell;
-        if (scenario != 1) OK(xr_lir_emit_effect(module, body, &drop));
+        if (scenario != 1 && scenario < 6) OK(xr_lir_emit_effect(module, body, &drop));
         if (scenario == 2) OK(xr_lir_emit_effect(module, body, &drop));
         if (scenario == 3 || scenario == 4) {
             XrLirValue read = {0};
@@ -49,7 +49,7 @@ static void array_block_cells(void) {
                 .operands = &read, .operand_count = 1};
             OK(xr_lir_emit_effect(module, selected, &use));
         }
-        if (scenario == 5) {
+        if (scenario >= 5) {
             XrLirType parameter = XR_LIR_ARRAY_CELL;
             XrLirFunction leaf = {0};
             spec = (XrLirFunctionSpec){.name = "borrow", .name_length = 6, .result = XR_LIR_UNIT,
@@ -63,10 +63,16 @@ static void array_block_cells(void) {
             OK(xr_lir_add_block(module, leaf, NULL, 0, &leaf_body));
             OK(xr_lir_set_entry(module, leaf, leaf_body));
             XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT};
+            if (scenario == 7) {
+                XrLirInstruction invalid_drop = {.op = XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
+                    .operands = &input, .operand_count = 1};
+                OK(xr_lir_emit_effect(module, leaf_body, &invalid_drop));
+            }
             OK(xr_lir_set_terminator(module, leaf_body, &ret));
             XrLirInstruction call = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = leaf,
                 .operands = &cell, .operand_count = 1};
             OK(xr_lir_emit_effect(module, body, &call));
+            if (scenario >= 6) OK(xr_lir_emit_effect(module, body, &drop));
         }
         branch.edges[0].target = leave;
         OK(xr_lir_set_terminator(module, body, &branch));
@@ -74,10 +80,11 @@ static void array_block_cells(void) {
         OK(xr_lir_set_terminator(module, leave, &ret));
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
-        CHECK(status == (scenario ? XR_LIR_VERIFY_ERROR : XR_LIR_OK));
+        CHECK(status == (scenario && scenario != 6 ? XR_LIR_VERIFY_ERROR : XR_LIR_OK));
         if (scenario == 1) CHECK(strstr(diagnostic.message, "release in its defining block"));
-        if (scenario == 2 || scenario == 3) CHECK(strstr(diagnostic.message, "use follows release"));
-        if (scenario == 4 || scenario == 5) CHECK(strstr(diagnostic.message, "cannot leave its defining block"));
+        if (scenario == 2 || scenario == 3 || scenario == 5) CHECK(strstr(diagnostic.message, "use follows release"));
+        if (scenario == 4) CHECK(strstr(diagnostic.message, "cannot leave its defining block"));
+        if (scenario == 7) CHECK(strstr(diagnostic.message, "borrow cannot be released"));
         xr_lir_module_destroy(module);
     }
 }

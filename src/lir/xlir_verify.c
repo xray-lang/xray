@@ -661,7 +661,7 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
                 uint32_t id = v->operands[a];
                 if (!lir_managed_cell(f->values[id - 1].type)) continue;
                 bool local = (released[id - 1] & 2) != 0;
-                if (local && (f->values[id - 1].block != b + 1 || v->op == XR_LIR_CALL))
+                if (local && f->values[id - 1].block != b + 1)
                     return xr_lir_internal_error(d, "block-local Array Cell cannot leave its defining block",
                         function, b+1, i+1, &v->source);
                 if (released[id - 1] & 1)
