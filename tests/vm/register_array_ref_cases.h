@@ -196,4 +196,96 @@ static void test_raw_array_reference_byte_bits(void) {
         }
     }
 }
+typedef struct RawArrayRefJoin {
+    RawArray root;
+    XrRbcFunction functions[2];
+    XrRbcRegisterKind kinds[11], helper_kinds[3];
+    uint32_t helper_code[5];
+    XrRbcArrayAccess helper_accesses[3];
+    XrRbcArrayLocation helper_operands[4];
+} RawArrayRefJoin;
+static void raw_array_reference_join(RawArrayRefJoin *f, bool drop_second) {
+    memset(f, 0, sizeof(*f));
+    RawArray *r = &f->root;
+    raw_array_init(r);
+    const XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS, XR_RBC_ARRAY_I64, XR_RBC_ARRAY_I64,
+        XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_I64_REF,
+        XR_RBC_BITS, XR_RBC_CALL_WINDOW, XR_RBC_CALL_WINDOW};
+    memcpy(f->kinds, kinds, sizeof(kinds));
+    r->function.register_kinds = f->kinds;
+    r->function.register_count = r->function.register_kind_count = 11;
+    r->function.parameter_count = 1;
+    r->cells[1] = XR_RBC_ARRAY_I64;
+    r->function.cell_count = r->function.cell_kind_count = 2;
+    for (uint32_t owner = 0; owner < 2; ++owner) {
+        immediate(r->code, r->function.code_count++, XR_RBC_LOADI, 1, owner ? 9 : 7);
+        XrRbcArrayLocation from = {1, false};
+        raw_array_access(r, raw_array_op(XR_RBC_ARRAY_NEW, 2 + owner, 1), &from);
+        from.index = 2 + owner;
+        XrRbcArrayAccess create = raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4 + owner, 1);
+        create.cell = owner;
+        raw_array_access(r, create, &from);
+    }
+    for (uint32_t owner = 0; owner < 2; ++owner) {
+        XrRbcArrayLocation from = {4 + owner, false};
+        raw_array_access(r, raw_array_op(XR_RBC_ARRAY_BORROW, 6 + owner, 1), &from);
+    }
+    immediate(r->code, r->function.code_count++, XR_RBC_EQI, 0, 0);
+    size_t select_first = r->function.code_count++;
+    emit(r->code, r->function.code_count++, XR_RBC_MOV, 10, 7, 0);
+    size_t join_jump = r->function.code_count++;
+    size_t first_block = r->function.code_count;
+    emit(r->code, r->function.code_count++, XR_RBC_MOV, 10, 6, 0);
+    size_t join = r->function.code_count;
+    uint32_t owner = drop_second ? 1u : 0u;
+    XrRbcArrayLocation from = {4 + owner, false};
+    raw_array_access(r, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), &from);
+    from.index = 2 + owner;
+    raw_array_access(r, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), &from);
+    immediate(r->code, r->function.code_count++, XR_RBC_LOADI, 1, 99);
+    from.index = 1;
+    raw_array_access(r, raw_array_op(XR_RBC_ARRAY_NEW, 2 + owner, 1), &from);
+    from.index = 2 + owner;
+    XrRbcArrayAccess create = raw_array_op(XR_RBC_ARRAY_CELL_NEW, 4 + owner, 1);
+    create.cell = owner;
+    raw_array_access(r, create, &from);
+    immediate(r->code, r->function.code_count++, XR_RBC_CALL, 9, 1);
+    emit(r->code, r->function.code_count++, XR_RBC_MOV, 8, 9, 0);
+    for (uint32_t cell = 0; cell < 2; ++cell) {
+        from.index = 4 + cell;
+        raw_array_access(r, raw_array_op(XR_RBC_ARRAY_CELL_DROP, 0, 1), &from);
+        from.index = 2 + cell;
+        raw_array_access(r, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), &from);
+    }
+    emit(r->code, r->function.code_count++, XR_RBC_RET, 8, 0, 0);
+    CHECK(xr_rbc_jump(&r->code[select_first], select_first, first_block, r->function.code_count));
+    CHECK(xr_rbc_jump(&r->code[join_jump], join_jump, join, r->function.code_count));
+    f->helper_kinds[0] = XR_RBC_ARRAY_I64_REF; f->helper_kinds[1] = XR_RBC_ARRAY_I64;
+    f->helper_accesses[0] = raw_array_op(XR_RBC_ARRAY_REF_READ, 1, 1);
+    f->helper_accesses[1] = raw_array_op(XR_RBC_ARRAY_GET, 2, 2);
+    f->helper_accesses[1].first = 1;
+    f->helper_accesses[2] = raw_array_op(XR_RBC_ARRAY_DROP, 0, 1);
+    f->helper_accesses[2].first = 3;
+    const XrRbcArrayLocation operands[] = {{0, false}, {1, false}, {2, false}, {1, false}};
+    memcpy(f->helper_operands, operands, sizeof(operands));
+    immediate(f->helper_code, 0, XR_RBC_ARRAY_ACCESS, 0, 0);
+    immediate(f->helper_code, 1, XR_RBC_LOADI, 2, 0);
+    immediate(f->helper_code, 2, XR_RBC_ARRAY_ACCESS, 0, 1);
+    immediate(f->helper_code, 3, XR_RBC_ARRAY_ACCESS, 0, 2);
+    emit(f->helper_code, 4, XR_RBC_RET, 2, 0, 0);
+    f->functions[0] = r->function;
+    f->functions[1] = (XrRbcFunction){.code=f->helper_code, .code_count=5, .register_count=3,
+        .parameter_count=1, .register_kinds=f->helper_kinds, .register_kind_count=3,
+        .array_accesses=f->helper_accesses, .array_access_count=3,
+        .array_operands=f->helper_operands, .array_operand_count=4};
+    r->module.functions = f->functions; r->module.function_count = 2;
+}
+static void test_raw_array_reference_join(void) {
+    for (unsigned dropped = 0; dropped < 2; ++dropped) {
+        RawArrayRefJoin fixture;
+        raw_array_reference_join(&fixture, dropped != 0);
+        for (uint64_t branch = 0; branch < 2; ++branch)
+            reject_prepare(&fixture.root.module, 0, &branch, 1);
+    }
+}
 #endif // REGISTER_ARRAY_REF_CASES_H

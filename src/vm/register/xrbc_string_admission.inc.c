@@ -311,7 +311,7 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
             }
         }
         if ((to->state[r] == RBC_STRING_BORROWED || rbc_cell_state(to->state[r]) ||
-             to->state[r] == RBC_STATE_REFERENCE) &&
+             to->state[r] == RBC_STATE_REFERENCE || rbc_array_ref_state(to->state[r])) &&
             to->origin[r] != from->origin[r]) return false;
     }
     for (uint32_t i=0; i<from->function->spill_count; ++i) {
