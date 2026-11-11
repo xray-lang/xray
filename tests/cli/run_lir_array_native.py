@@ -1,4 +1,4 @@
-"""Compile authentic Array sources and execute their ordinary C projections."""
+"""Execute authentic Array sources through the VM and ordinary C projections."""
 from __future__ import annotations
 
 import argparse
@@ -45,12 +45,26 @@ def main() -> None:
             failures.append((name, status, paths["stderr"].read_text(encoding="utf-8")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
-    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string", "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry", "ref_borrow",
-                 "panic_bounds", "panic_unpublished"):
+    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
+                 "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
+                 "ref_borrow", "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
+        panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
         if status:
             continue
+        reference = None
+        for repeat in range(2):
+            result = run(name + f"-vm-{repeat}", [binary, "run", source], 1 if panic else 0)
+            _, out, err = result
+            if panic:
+                if out or b"XR_RUN_6002: value operation rejected" not in err or source.name.encode() not in err:
+                    failures.append((name, "VM runtime diagnostic", out, err))
+            elif out != source.with_suffix(".out").read_bytes() or err:
+                failures.append((name, "VM output", out, err))
+            if reference is not None and reference != result:
+                failures.append((name, "VM repeat", reference, result))
+            reference = result
         generated = work / (name + ".c")
         status, _, _ = run(name + "-c", [binary, "build", "-c", source, "-o", generated], 0)
         if status:
@@ -66,22 +80,27 @@ def main() -> None:
             status, _, _ = run(name + f"-build-{ordinal}", command, 0)
             if status:
                 continue
-            panic = name.startswith("panic_")
             for repeat in range(2):
-                _, out, err = run(name + f"-native-{ordinal}-{repeat}", [executable], 1 if panic else 0)
+                result = run(name + f"-native-{ordinal}-{repeat}", [executable], 1 if panic else 0)
+                _, out, err = result
                 if panic:
                     if out or b"XR_RUN_6002: value operation rejected" not in err or source.name.encode() not in err:
                         failures.append((name, "runtime diagnostic", out, err))
                 elif out != source.with_suffix(".out").read_bytes() or err:
                     failures.append((name, "output", out, err))
+                if result != reference:
+                    failures.append((name, "VM/native byte comparison", reference, result))
     for name in ("reject_bool", "reject_nested"):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
         if out or b"module slot payload type is not supported" not in err:
             failures.append((name, "unsupported payload", out, err))
+        _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
+        if vm_out != out or vm_err != err:
+            failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
     assert not failures, failures
-    print(f"{len(records)} Array Source/native commands passed")
+    print(f"{len(records)} Array Source/VM/native commands passed")
 
 
 if __name__ == "__main__":
