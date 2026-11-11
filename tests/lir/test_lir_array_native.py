@@ -59,7 +59,9 @@ def main():
                 'state-string': 511, 'state-layout': 9, 'return-i64': 13, 'return-string': 7,
                 'array-spills': 44850, 'array-spills-string': 1500,
                 'phi-i64': 1202, 'phi-string': 511,
-                'state-uninitialized-read': None, 'state-uninitialized-write': None}
+                'state-uninitialized-read': None, 'state-uninitialized-write': None,
+                'repeat-i64': 19, 'repeat-string': 10, 'repeat-empty-i64': 0, 'repeat-empty-string': 0,
+                'repeat-negative-i64': None, 'repeat-negative-string': None}
     record = {'compiler': str(args.compiler), 'cases': {}, 'libraries': {
         str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in args.library if p.is_file()}}
     for name, answer in expected.items():
@@ -90,7 +92,8 @@ def main():
         run(command, work)
         result = run([binary], work, 1 if answer is None else 0)
         if answer is None:
-            position = b'array-c.xr:37:9' if name.endswith('read') else b'array-c.xr:41:7'
+            position = (b'array-c.xr:3:1' if name.startswith('repeat-negative') else
+                        b'array-c.xr:37:9' if name.endswith('read') else b'array-c.xr:41:7')
             assert not result.stdout and position in result.stderr, (name, result.stdout, result.stderr)
         else:
             expected_stdout = (str(answer) + os.linesep).encode()

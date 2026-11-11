@@ -41,11 +41,12 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         XrRbcArrayAccess access = f->array_accesses[i];
         if (!rbc_array_kind(access.kind) || access.first > f->array_operand_count ||
             access.count > f->array_operand_count - access.first ||
-            (unsigned)access.operation > XR_RBC_ARRAY_CELL_DROP) return false;
+            (unsigned)access.operation > XR_RBC_ARRAY_REPEAT) return false;
         uint32_t count = access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_PUSH ||
-            access.operation == XR_RBC_ARRAY_CELL_WRITE ? 2u : access.operation == XR_RBC_ARRAY_SET ? 3u : 1u;
+            access.operation == XR_RBC_ARRAY_CELL_WRITE || access.operation == XR_RBC_ARRAY_REPEAT ? 2u :
+            access.operation == XR_RBC_ARRAY_SET ? 3u : 1u;
         if (access.operation != XR_RBC_ARRAY_NEW && access.count != count) return false;
-        bool result = access.operation == XR_RBC_ARRAY_NEW || access.operation == XR_RBC_ARRAY_LEN ||
+        bool result = access.operation == XR_RBC_ARRAY_NEW || access.operation == XR_RBC_ARRAY_REPEAT || access.operation == XR_RBC_ARRAY_LEN ||
             access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_RETAIN ||
             access.operation == XR_RBC_ARRAY_TAKE || access.operation == XR_RBC_ARRAY_CELL_NEW ||
             access.operation == XR_RBC_ARRAY_CELL_READ;
@@ -63,6 +64,7 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         for (uint32_t p = 0; p < access.count; ++p) {
             XrRbcRegisterKind expected = access.kind;
             if (access.operation == XR_RBC_ARRAY_NEW) expected = element;
+            else if (access.operation == XR_RBC_ARRAY_REPEAT) expected = p ? element : XR_RBC_BITS;
             else if (p) expected = access.operation == XR_RBC_ARRAY_CELL_WRITE ? access.kind :
                 access.operation == XR_RBC_ARRAY_GET || (access.operation == XR_RBC_ARRAY_SET && p == 1) ? XR_RBC_BITS : element;
             else if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||

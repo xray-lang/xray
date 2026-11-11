@@ -16,6 +16,8 @@ typedef struct XrtArray XrtArray;
 
 XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32_t source_id);
 XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_i64_repeat(int64_t length, int64_t fill, uint32_t source_id);
+XRAY_API XrtArray *xrt_array_string_repeat(int64_t length, XrtString *fill, uint32_t source_id);
 /* A retain creates one independent logical owner and one real canonical ref.
  * Selected SSA edges and returns transfer their existing owner unchanged. */
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *, uint32_t source_id);

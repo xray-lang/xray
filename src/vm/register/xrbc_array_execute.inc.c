@@ -93,6 +93,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
     }
     XrRbcRegister *first = xr_rbc_array_location(stack, frame, locations[0]);
     XrRbcRegister *second = access.count > 1 ? xr_rbc_array_location(stack, frame, locations[1]) : NULL;
+    if (access.operation == XR_RBC_ARRAY_REPEAT) {
+        int64_t length = xr_rbc_signed(first->bits);
+        result->array = string ? xrt_array_string_repeat(length, second->string, source) :
+            xrt_array_i64_repeat(length, xr_rbc_signed(second->bits), source);
+        return XR_RBC_OK;
+    }
     bool move = xr_rbc_array_move_pair(function, access, *pc);
     if (access.operation == XR_RBC_ARRAY_CELL_NEW) {
         XrRbcFrame *active = &stack->frames[stack->depth - 1];

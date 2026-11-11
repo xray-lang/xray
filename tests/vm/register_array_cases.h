@@ -94,6 +94,35 @@ static void test_raw_arrays(void) {
     f.accesses[3].result.index = 3;
     reject_prepare(&f.module, 0, NULL, 0);
 }
+static void test_raw_array_repeat(void) {
+    RawArray f;
+    raw_array_init(&f);
+    immediate(f.code, f.function.code_count++, XR_RBC_LOADI, 0, 3);
+    immediate(f.code, f.function.code_count++, XR_RBC_LOADI, 1, 7);
+    XrRbcArrayLocation args[] = {{0, false}, {1, false}};
+    raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_REPEAT, 2, 2), args);
+    args[0].index = 2;
+    raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_LEN, 6, 1), args);
+    raw_array_access(&f, raw_array_op(XR_RBC_ARRAY_DROP, 0, 1), args);
+    emit(f.code, f.function.code_count++, XR_RBC_RET, 6, 0, 0);
+    uint64_t result = 0;
+    CHECK(execute(&f.module, 0, NULL, 0, &result) == XR_RBC_OK && result == 3);
+    XrRbcArrayAccess valid = f.accesses[0];
+    f.accesses[0].count = 1;
+    reject_prepare(&f.module, 0, NULL, 0);
+    f.accesses[0] = valid;
+    f.accesses[0].kind = XR_RBC_ARRAY_STRING;
+    reject_prepare(&f.module, 0, NULL, 0);
+    f.accesses[0] = valid;
+    f.accesses[0].result.index = 0;
+    reject_prepare(&f.module, 0, NULL, 0);
+    f.accesses[0] = valid;
+    f.operands[0].index = 2;
+    reject_prepare(&f.module, 0, NULL, 0);
+    f.operands[0].index = 0;
+    f.operands[1].index = 2;
+    reject_prepare(&f.module, 0, NULL, 0);
+}
 static void test_raw_array_spills(void) {
     RawArray f;
     raw_array_init(&f);

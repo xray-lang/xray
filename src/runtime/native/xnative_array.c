@@ -197,6 +197,26 @@ XRAY_API XrtArray *xrt_array_i64_new(const int64_t *values, size_t count, uint32
 XRAY_API XrtArray *xrt_array_string_new(XrtString *const *values, size_t count, uint32_t source_id) {
     return array_new(values, count, XRT_ARRAY_STRING, source_id);
 }
+static XrtArray *array_repeat(int64_t length, XrXirValue fill, XrtArrayElement element, uint32_t source_id) {
+    XrtValueRoot *root = xrt_value_root_current(source_id);
+    size_t stride = element == XRT_ARRAY_I64 ? sizeof(int64_t) : sizeof(void *);
+    if (length >= 0 && (uint64_t)length > SIZE_MAX / stride) xrt_value_failure(XR_XIR_VALUE_LIMIT, source_id);
+    XR_CHECK(!root->pending.type && !root->pending.payload, "Array repeat starts with an empty pending owner");
+    XrXirValueAdmission admission = array_admission(root, source_id);
+    array_reserve(root, source_id);
+    XrXirValueStatus status = xr_xir_array_repeat(xrt_array_type(element), length, &fill, &admission, &root->pending);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+    XrtArray *array = (XrtArray *)(intptr_t)root->pending.payload;
+    array_adopt(root, root->pending, element);
+    root->pending = (XrXirValue){0};
+    return array;
+}
+XRAY_API XrtArray *xrt_array_i64_repeat(int64_t length, int64_t fill, uint32_t source_id) {
+    return array_repeat(length, (XrXirValue){XR_XIR_I64, 0, fill}, XRT_ARRAY_I64, source_id);
+}
+XRAY_API XrtArray *xrt_array_string_repeat(int64_t length, XrtString *fill, uint32_t source_id) {
+    return array_repeat(length, (XrXirValue){XR_XIR_STRING, 0, (int64_t)(intptr_t)fill}, XRT_ARRAY_STRING, source_id);
+}
 XR_FUNC XrXirValueStatus xrt_array_owned_copy(const XrtArray *array, const XrXirTypeArena *types,
     XrtArrayElement element, XrtArray **output) {
     if (!array || !types || !output || *output || (unsigned)element > XRT_ARRAY_STRING)

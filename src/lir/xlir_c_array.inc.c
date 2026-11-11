@@ -43,12 +43,12 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
     switch (shape->operation) {
     case XR_LIR_ARRAY_OP_NEW: case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_GET:
-    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: break;
+    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: case XR_LIR_ARRAY_OP_REPEAT: break;
     default:
         c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
         return;
     }
-    XrLirType element = shape->operation == XR_LIR_ARRAY_OP_NEW ? shape->result_element : shape->parameter_elements[0];
+    XrLirType element = v->type == XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
     const char *family = element == XR_LIR_I64 ? "i64" : "string";
     c_text(c, "    ");
     if (v->result) c_format(c, "v%" PRIu32 " = ", v->result);
@@ -67,7 +67,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     }
     if (shape->operation == XR_LIR_ARRAY_OP_LEN) c_text(c, "xrt_array_length(");
     else c_format(c, "xrt_array_%s_%s(", family, shape->operation == XR_LIR_ARRAY_OP_GET ? "get" :
-        shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : "push");
+        shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : shape->operation == XR_LIR_ARRAY_OP_PUSH ? "push" : "repeat");
     for (uint32_t p = 0; p < v->operand_count; ++p) {
         if (p) c_text(c, ", ");
         c_value(c, v->operands[p]);

@@ -1260,6 +1260,7 @@ static void test_module_capabilities(void) {
 
 int main(int argc, char **argv) {
     test_raw_arrays();
+    test_raw_array_repeat();
     test_raw_array_spills();
     test_raw_array_wide_return();
     test_raw_array_local_cells();

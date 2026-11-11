@@ -108,6 +108,35 @@ static XrLirFunction ca_array_copy(CArrayFixture *c) {
     return function;
 }
 
+static void ca_repeat(CArrayFixture *c, XrLirBlock entry, const char *name) {
+    int64_t length = strstr(name, "empty") ? 0 : strstr(name, "negative") ? -1 : 3;
+    XrLirValue fill = c->element == XR_LIR_I64 ? ca_constant(c, entry, 7) : ca_text(c, entry, "old!", 4);
+    XrLirValue args[] = {ca_constant(c, entry, length), fill};
+    XrLirValue array = ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_REPEAT, XR_LIR_ARRAY, args, 2);
+    if (c->element == XR_LIR_STRING) ca_effect(c, entry, XR_LIR_STRING_DROP, fill);
+    XrLirValue total = ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_LEN, XR_LIR_I64, &array, 1);
+    if (length > 0) {
+        XrLirValue saved = ca_value(c, entry, XR_LIR_ARRAY_RETAIN, XR_LIR_ARRAY, &array, 1);
+        XrLirValue replacement = c->element == XR_LIR_I64 ? ca_constant(c, entry, 9) : ca_text(c, entry, "new", 3);
+        XrLirValue index = ca_constant(c, entry, 0);
+        XrLirValue cell = ca_value(c, entry, XR_LIR_CELL_NEW, XR_LIR_ARRAY_CELL, &array, 1);
+        ca_effect(c, entry, XR_LIR_ARRAY_DROP, array);
+        XrLirValue write[] = {cell, index, replacement};
+        (void)ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_SET, XR_LIR_UNIT, write, 3);
+        if (c->element == XR_LIR_STRING) ca_effect(c, entry, XR_LIR_STRING_DROP, replacement);
+        array = ca_value(c, entry, XR_LIR_CELL_READ, XR_LIR_ARRAY, &cell, 1);
+        ca_effect(c, entry, XR_LIR_ARRAY_CELL_DROP, cell);
+        XrLirValue read[] = {saved, index};
+        XrLirValue before = ca_number(c, entry, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_GET, c->element, read, 2));
+        read[0] = array;
+        XrLirValue after = ca_number(c, entry, ca_intrinsic(c, entry, XR_LIR_ARRAY_OP_GET, c->element, read, 2));
+        total = ca_binary(c, entry, XR_LIR_ADD, total, ca_binary(c, entry, XR_LIR_ADD, before, after));
+        ca_effect(c, entry, XR_LIR_ARRAY_DROP, saved);
+    }
+    ca_effect(c, entry, XR_LIR_ARRAY_DROP, array);
+    ca_return(c, entry, total);
+}
+
 static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunction *root) {
     bool string = strstr(name, "string") != NULL, state = !strncmp(name, "state-", 6);
     bool layout_only = !strcmp(name, "state-layout"), returned = !strncmp(name, "return-", 7);
@@ -127,6 +156,10 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
     XrLirBlock entry = {0};
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &entry));
     OK(xr_lir_set_entry(c.module, *root, entry));
+    if (!strncmp(name, "repeat-", 7)) {
+        ca_repeat(&c, entry, name);
+        OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;
+    }
     if (layout_only) {
         ca_return(&c, entry, ca_constant(&c, entry, 9));
         OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;

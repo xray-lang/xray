@@ -430,7 +430,12 @@ static void array_vm_fixture(const char *name,int64_t expected) {
     CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
     XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution);xr_rbc_program_destroy(program);
-    if(!strncmp(name,"state-uninitialized",19)) {
+    if(!strncmp(name,"repeat-negative",15)) {
+        XrXirValueStatus failure=XR_XIR_VALUE_OK;uint32_t source=0;const XrtLocationOwner *locations=NULL;
+        CHECK(xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations));
+        const XrtSourceLocation *point=xrt_locations_get(locations,source);
+        CHECK(failure==XR_XIR_VALUE_BAD_ARGUMENT && point && point->line==3 && point->column==1);
+    } else if(!strncmp(name,"state-uninitialized",19)) {
         XrXirValueStatus failure=XR_XIR_VALUE_OK;uint32_t source=0;const XrtLocationOwner *locations=NULL;
         CHECK(xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations));
         const XrtSourceLocation *point=xrt_locations_get(locations,source);
@@ -462,8 +467,9 @@ int main(int argc, char **argv) {
     array_state_shapes();
     const char *cases[]={"i64","string","large","state-i64","state-string","state-layout",
         "return-i64","return-string","array-spills","array-spills-string","phi-i64","phi-string",
-        "state-uninitialized-read","state-uninitialized-write"};
-    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0};
+        "state-uninitialized-read","state-uninitialized-write","repeat-i64","repeat-string",
+        "repeat-empty-i64","repeat-empty-string","repeat-negative-i64","repeat-negative-string"};
+    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,19,10,0,0,0,0};
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c)array_vm_fixture(cases[c],expected[c]);
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");
     return 0;

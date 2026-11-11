@@ -34,6 +34,13 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
         rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
         return true;
     }
+    if (access.operation == XR_RBC_ARRAY_REPEAT) {
+        if (!rbc_array_destination(s, access.result) || source != RBC_BITS) return false;
+        if (access.kind == XR_RBC_ARRAY_I64 ? rbc_array_state(s, operands[1]) != RBC_BITS :
+            !rbc_array_source(s, operands[1])) return false;
+        rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
+        return true;
+    }
     bool cell = access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||
         access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_CELL_WRITE ||
         access.operation == XR_RBC_ARRAY_CELL_DROP;
