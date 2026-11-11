@@ -17,6 +17,7 @@
 
 typedef struct XrtStringOwner XrtStringOwner;
 typedef struct XrtStringLiteral XrtStringLiteral;
+typedef struct XrtArrayOwner XrtArrayOwner;
 
 typedef struct XrtValueRoot {
     XrXirDomain *domain;
@@ -25,6 +26,11 @@ typedef struct XrtValueRoot {
     uint64_t held;
     uint32_t table_capacity, table_count, literal_capacity, literal_count;
     uint64_t byte_limit; // Zero selects the ordinary unbounded runtime policy.
+    XrXirTypeArena *types;
+    XrtArrayOwner *arrays;
+    uint32_t array_capacity, array_count;
+    uint64_t array_held;
+    XrXirValue pending;
 } XrtValueRoot;
 
 typedef struct XrtValueBinding {
@@ -37,8 +43,13 @@ typedef struct XrtValueBinding {
 XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding);
 XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id);
 XR_FUNC void xrt_value_root_drain(XrtValueRoot *root);
+XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id);
+XR_FUNC XrtValueRoot *xrt_value_root_active(void);
+XR_FUNC XrXirDomain *xrt_value_root_domain(XrtValueRoot *, uint32_t source_id);
 static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
     return !root->domain && !root->table && !root->literals && !root->held &&
-        !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count;
+        !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
+        !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
+        !root->array_held && !root->pending.type && !root->pending.reserved && !root->pending.payload;
 }
 #endif // XNATIVE_VALUE_H

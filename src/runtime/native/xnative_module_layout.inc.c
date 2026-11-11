@@ -103,6 +103,7 @@ XRAY_API void xrt_module_layout_drop(XrtModuleLayout **owner) {
     if (previous != 1) return;
     xr_free((void *)layout->view.types); xr_free((void *)layout->view.modules);
     xr_free((void *)layout->view.dependencies); xr_free((void *)layout->view.slots);
+    xr_xir_compile_type_arena_drop(layout->array_types);
     xr_free(layout->types); xr_free(layout->slot_counts); xr_free(layout);
 }
 
@@ -126,14 +127,27 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         (spec->dependency_count && !layout->view.dependencies) || (spec->slot_count && !layout->view.slots) ||
         !layout->slot_counts) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
     for (uint32_t t = 0; t < spec->type_count; ++t) {
+        if ((spec->types[t].kind == XRT_MODULE_ARRAY_I64 || spec->types[t].kind == XRT_MODULE_ARRAY_STRING) &&
+            !layout->array_types) {
+            uint64_t arena_bytes = 0;
+            status = xrt_array_types_new(spec->byte_limit - layout->bytes, &layout->array_types, &arena_bytes);
+            if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
+                status = XR_XIR_VALUE_OVERFLOW;
+            if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
+        }
         bool valid = module_type(layout->view.types[t].kind, &layout->types[t]);
         XR_DCHECK(valid, "Every owned type was validated before callback selection");
         (void)valid;
     }
+    for (uint32_t t = 0; t < spec->type_count; ++t) layout->types[t].arena = layout->array_types;
     for (uint32_t s = 0; s < spec->slot_count; ++s) {
         const XrtModuleSlotSpec *slot = &layout->view.slots[s];
         ++layout->slot_counts[slot->module];
         if (slot->size > layout->scratch_size) layout->scratch_size = slot->size;
+    }
+    uint64_t peak = layout->bytes;
+    if (!module_charge(&peak, spec->module_count, 1 + 2 * sizeof(uint32_t)) || peak > spec->byte_limit) {
+        xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT;
     }
     status = module_layout_dependencies(layout);
     if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }

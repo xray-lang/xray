@@ -12,6 +12,7 @@
  */
 #include "xnative_module_state.h"
 #include "xnative_string.h"
+#include "xnative_array.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include <stdatomic.h>
@@ -25,6 +26,7 @@ struct XrtModuleType {
     uint32_t size, alignment;
     XrtModuleCopy copy;
     XrtModuleDrop drop;
+    const XrXirTypeArena *arena;
 };
 struct XrtModuleLayout {
     atomic_size_t references;
@@ -33,6 +35,7 @@ struct XrtModuleLayout {
     uint32_t *slot_counts;
     uint64_t bytes;
     uint32_t scratch_size;
+    XrXirTypeArena *array_types;
 };
 enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
 enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
@@ -87,6 +90,24 @@ static void module_string_drop(const XrtModuleType *type, void *value) {
     xrt_string_owned_drop(&owned);
 }
 
+static XrXirValueStatus module_array_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtArray *array = NULL;
+    memcpy(&array, source, sizeof(array));
+    XrtArray *owned = NULL;
+    XrtArrayElement element = type->kind == XRT_MODULE_ARRAY_I64 ? XRT_ARRAY_I64 : XRT_ARRAY_STRING;
+    XrXirValueStatus status = xrt_array_owned_copy(array, type->arena, element, &owned);
+    if (status == XR_XIR_VALUE_OK) memcpy(empty, &owned, sizeof(owned));
+    return status;
+}
+static void module_array_drop(const XrtModuleType *type, void *value) {
+    (void)type;
+    XrtArray *array = NULL;
+    memcpy(&array, value, sizeof(array));
+    memset(value, 0, sizeof(array));
+    xrt_array_owned_drop(&array);
+}
+
 static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
@@ -101,6 +122,9 @@ static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
     case XRT_MODULE_STRING:
         type->size = sizeof(XrtString *); type->alignment = _Alignof(XrtString *);
         type->copy = module_string_copy; type->drop = module_string_drop; return true;
+    case XRT_MODULE_ARRAY_I64: case XRT_MODULE_ARRAY_STRING:
+        type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
+        type->copy = module_array_copy; type->drop = module_array_drop; return true;
     default: return false;
     }
 }
@@ -231,6 +255,8 @@ XRAY_API XrtModuleStatus xrt_module_begin(XrtModuleState *state, uint32_t module
     for (uint32_t d = 0; d < spec.dependency_count; ++d)
         if (state->modules[state->layout->view.dependencies[spec.first_dependency + d]] != MODULE_READY)
             return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus shared = xrt_value_root_share_types(state->layout->array_types);
+    if (shared != XR_XIR_VALUE_OK) return shared;
     state->modules[module] = MODULE_INITIALIZING;
     return XR_XIR_VALUE_OK;
 }

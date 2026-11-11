@@ -216,6 +216,75 @@ static void array_cell_loop(void) {
     xr_lir_module_destroy(copy);
 }
 
+static void array_state_shapes(void) {
+    XrLirModule *m = NULL;
+    OK(array_fixture_registry(XR_LIR_I64, &m));
+    XrLirStateModule module = {0};
+    XrLirStateSlot slot = {.payload=XR_LIR_ARRAY, .mutable=true, .size=8, .alignment=8,
+        .array_element=XR_LIR_I64};
+    XrLirStateLayout layout = {.modules=&module, .module_count=1, .slots=&slot,
+        .slot_count=1, .payload_size=8, .payload_alignment=8};
+    OK(xr_lir_set_state_layout(m, &layout));
+    XrLirType state_type = XR_LIR_STATE, ref_type = XR_LIR_STATE_REF;
+    XrLirFunction f;
+    XrLirFunctionSpec spec = {.name="state", .name_length=5, .parameters=&state_type,
+        .parameter_count=1, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(m, &spec, &f));
+    OK(xr_lir_set_state_entry(m, f));
+    OK(xr_lir_define_function(m, f));
+    XrLirValue state, selected, number, array, reference, read;
+    OK(xr_lir_function_parameter(m, f, 0, &state));
+    XrLirBlock entry, join;
+    OK(xr_lir_add_block(m, f, NULL, 0, &entry));
+    OK(xr_lir_add_block(m, f, &ref_type, 1, &join));
+    OK(xr_lir_set_entry(m, f, entry));
+    OK(xr_lir_block_parameter(m, join, 0, &selected));
+    XrLirStateReference shape = {.payload=XR_LIR_ARRAY, .mutable=true, .array_element=XR_LIR_I64};
+    OK(xr_lir_set_state_reference(m, selected, &shape));
+    XrLirInstruction op = {.op=XR_LIR_MODULE_BEGIN, .type=XR_LIR_UNIT, .operands=&state, .operand_count=1};
+    OK(xr_lir_emit_effect(m, entry, &op));
+    op = (XrLirInstruction){.op=XR_LIR_CONST, .type=XR_LIR_I64, .bits=9};
+    OK(xr_lir_emit_value(m, entry, &op, &number));
+    op = (XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_ARRAY, .intrinsic=11,
+        .operands=&number, .operand_count=1};
+    OK(xr_lir_emit_value(m, entry, &op, &array));
+    XrLirValue arguments[] = {state, array};
+    op = (XrLirInstruction){.op=XR_LIR_STATE_CONSTRUCT, .type=XR_LIR_STATE_REF,
+        .operands=arguments, .operand_count=2};
+    OK(xr_lir_emit_value(m, entry, &op, &reference));
+    op = (XrLirInstruction){.op=XR_LIR_ARRAY_DROP, .type=XR_LIR_UNIT, .operands=&array, .operand_count=1};
+    OK(xr_lir_emit_effect(m, entry, &op));
+    op = (XrLirInstruction){.op=XR_LIR_STATE_PUBLISH, .type=XR_LIR_UNIT, .operands=&reference, .operand_count=1};
+    OK(xr_lir_emit_effect(m, entry, &op));
+    op = (XrLirInstruction){.op=XR_LIR_MODULE_READY, .type=XR_LIR_UNIT, .operands=&state, .operand_count=1};
+    OK(xr_lir_emit_effect(m, entry, &op));
+    op = (XrLirInstruction){.op=XR_LIR_BR, .type=XR_LIR_UNIT, .edge_count=1, .edges={{join, &reference, 1}}};
+    OK(xr_lir_set_terminator(m, entry, &op));
+    op = (XrLirInstruction){.op=XR_LIR_STATE_READ, .type=XR_LIR_ARRAY, .operands=&selected, .operand_count=1};
+    OK(xr_lir_emit_value(m, join, &op, &read));
+    arguments[0] = selected; arguments[1] = read;
+    op = (XrLirInstruction){.op=XR_LIR_STATE_WRITE, .type=XR_LIR_UNIT, .operands=arguments, .operand_count=2};
+    OK(xr_lir_emit_effect(m, join, &op));
+    op = (XrLirInstruction){.op=XR_LIR_ARRAY_DROP, .type=XR_LIR_UNIT, .operands=&read, .operand_count=1};
+    OK(xr_lir_emit_effect(m, join, &op));
+    op = (XrLirInstruction){.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&number, .operand_count=1};
+    OK(xr_lir_set_terminator(m, join, &op));
+    OK(xr_lir_module_finish(m, NULL));
+    XrLirArrayShape array_shape;
+    OK(xr_lir_array_shape_view(m, read, &array_shape));
+    CHECK(array_shape.element == XR_LIR_I64);
+    XrLirModule *copy = NULL, *inlined = NULL;
+    OK(xr_lir_rebuild(m, &copy));
+    xr_lir_module_destroy(m);
+    OK(xr_lir_inline(copy, &inlined));
+    xr_lir_module_destroy(copy);
+    OK(xr_lir_state_reference_view(inlined, (XrLirValue){inlined, 1, selected.id}, &shape));
+    CHECK(shape.array_element == XR_LIR_I64 && shape.payload == XR_LIR_ARRAY);
+    inlined->functions[0].values[selected.id - 1].state_reference.array_element = XR_LIR_STRING;
+    CHECK(xr_lir_verify(inlined, NULL) == XR_LIR_VERIFY_ERROR);
+    xr_lir_module_destroy(inlined);
+}
+
 int main(void) {
     array_receiving_owners(XR_LIR_I64);
     array_receiving_owners(XR_LIR_STRING);
@@ -223,6 +292,7 @@ int main(void) {
     array_missing_release();
     array_shape_rejections();
     array_cell_loop();
+    array_state_shapes();
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");
     return 0;
 }

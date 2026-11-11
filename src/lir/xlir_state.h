@@ -25,6 +25,7 @@ typedef struct XrLirStateSlot {
     bool mutable;
     uint64_t offset;
     uint32_t size, alignment;
+    XrLirType array_element;
 } XrLirStateSlot;
 
 typedef struct XrLirStateLayout {
@@ -41,6 +42,7 @@ typedef struct XrLirStateLayout {
 typedef struct XrLirStateReference {
     XrLirType payload;
     bool mutable;
+    XrLirType array_element;
 } XrLirStateReference;
 
 /* The builder copies every array. Module and slot ordinals are zero-based.

@@ -122,6 +122,8 @@ XR_FUNC XrLirStatus xr_lir_array_intrinsic_view(const XrLirModule *m, uint32_t i
 XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v) {
     if (!xr_lir_internal_array_type(v->type)) return XR_LIR_TYPE_INVALID;
+    if (v->op == XR_LIR_STATE_READ && v->operand_count && v->operands[0] && v->operands[0] <= f->value_count)
+        return f->values[v->operands[0] - 1].state_reference.array_element;
     if (v->op == XR_LIR_CALL && v->callee && v->callee <= m->function_count)
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INTRINSIC) {

@@ -20,4 +20,7 @@ XR_FUNC XrtString *xrt_string_root_take(XrtString *string);
 /* Produce a real independently lived reference without changing guest counts.
  * A root-private String is escaped through the shared value copy operation. */
 XR_FUNC XrXirValueStatus xrt_string_owned_copy(const XrtString *, XrtString **);
+/* Adopt the active root's pending owned result. A publication failure leaves
+ * that pending reference visible to the common longjmp drain. */
+XR_FUNC XrtString *xrt_string_publish_pending(uint32_t source_id);
 #endif // XNATIVE_STRING_H

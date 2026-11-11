@@ -604,7 +604,7 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE) {
             const XrLirStateSlot *slot = &m->state_layout.slots[input->bits];
             f->values[f->value_count - 1].state_reference =
-                (XrLirStateReference){slot->payload, slot->mutable};
+                (XrLirStateReference){slot->payload, slot->mutable, slot->array_element};
         }
         *output = (XrLirValue) {m, handle.function, f->value_count};
     }

@@ -16,6 +16,7 @@
  *   one pinned object per root, lent to the guest without a count.
  */
 #include "xnative_string.h"
+#include "xnative_array.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_float.h"
 #include "base/xchecks.h"
@@ -43,11 +44,13 @@ XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding) {
     string_binding = binding;
     return previous;
 }
-static XrtValueRoot *string_root(uint32_t source_id) {
+XR_FUNC XrtValueRoot *xrt_value_root_active(void) { return string_binding.root; }
+XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id) {
     const XrtValueBinding *binding = &string_binding;
-    XR_CHECK(binding->root && source_id <= binding->sources, "String operations require an active root and source id");
+    XR_CHECK(binding->root && source_id <= binding->sources, "Value operations require an active root and source id");
     return binding->root;
 }
+static XrtValueRoot *string_root(uint32_t source_id) { return xrt_value_root_current(source_id); }
 static size_t root_slot(const void *key, uint32_t capacity) {
     uint64_t hash = (uint64_t)(uintptr_t)key * UINT64_C(0x9e3779b97f4a7c15);
     return (size_t)(hash >> 32) & (capacity - 1);
@@ -73,13 +76,16 @@ static XrtStringOwner *owner_find(const XrtValueRoot *root, const XrtString *str
 static void root_borrow(const XrtValueRoot *root, const XrtString *string) {
     if (!string || !root || !owner_find(root, string)) string_check(string);
 }
-static XrXirDomain *root_domain(XrtValueRoot *root, uint32_t source_id) {
+XR_FUNC XrXirDomain *xrt_value_root_domain(XrtValueRoot *root, uint32_t source_id) {
     if (!root->domain) {
         XrXirValueStatus status = xr_xir_root_domain_new(root->byte_limit ? root->byte_limit : UINT64_MAX,
             &root->domain);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
     }
     return root->domain;
+}
+static XrXirDomain *root_domain(XrtValueRoot *root, uint32_t source_id) {
+    return xrt_value_root_domain(root, source_id);
 }
 static uint32_t root_grown(uint32_t capacity, uint32_t source_id) {
     if (capacity > UINT32_MAX / 4) xrt_value_failure(XR_XIR_VALUE_LIMIT, source_id);
@@ -291,6 +297,8 @@ XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id) 
     return (int64_t)string->runes;
 }
 XR_FUNC void xrt_value_root_drain(XrtValueRoot *root) {
+    xr_xir_value_drop(&root->pending);
+    xrt_array_root_drain(root);
     for (uint32_t i = 0; i < root->table_capacity; ++i)
         if (root->table[i].string) xr_xir_string_release(root->table[i].string);
     if (root->table)
@@ -301,4 +309,21 @@ XR_FUNC void xrt_value_root_drain(XrtValueRoot *root) {
     XrXirDomain *domain = root->domain;
     *root = (XrtValueRoot){.byte_limit = root->byte_limit};
     xr_xir_root_domain_release(domain);
+}
+
+XR_FUNC XrtString *xrt_string_publish_pending(uint32_t source_id) {
+    XrtValueRoot *root = string_root(source_id);
+    XR_CHECK(root->pending.type == XR_XIR_STRING && xr_xir_value_valid(&root->pending),
+        "String publication consumes the active root's owned pending result");
+    XrtString *string = (XrtString *)(intptr_t)root->pending.payload;
+    XrtStringOwner *owner = owner_find(root, string);
+    if (owner) {
+        root_count(root, owner, source_id);
+        xr_xir_value_drop(&root->pending);
+    } else {
+        root_reserve(root, source_id);
+        root_adopt(root, string, false);
+        root->pending = (XrXirValue){0};
+    }
+    return string;
 }

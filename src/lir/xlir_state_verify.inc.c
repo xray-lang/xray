@@ -11,7 +11,7 @@
  *   exact reference shape and a grounded producer must agree.
  */
 static bool lir_state_shape_equal(XrLirStateReference a, XrLirStateReference b) {
-    return a.payload == b.payload && a.mutable == b.mutable;
+    return a.payload == b.payload && a.mutable == b.mutable && a.array_element == b.array_element;
 }
 
 static bool lir_state_signature(const XrLirModule *m, const XrLirFunctionData *f) {
@@ -83,18 +83,23 @@ static bool lir_state_instruction_types(const XrLirModule *m, const XrLirFunctio
         } else {
             if (v->type != XR_LIR_STATE_REF || (v->op == XR_LIR_STATE_CONSTRUCT && !slot->mutable)) return false;
             if (v->result > f->value_count || (v->result && !lir_state_shape_equal(f->values[v->result - 1].state_reference,
-                (XrLirStateReference){slot->payload, slot->mutable}))) return false;
+                (XrLirStateReference){slot->payload, slot->mutable, slot->array_element}))) return false;
         }
+        if (v->op != XR_LIR_STATE_REFERENCE && slot->payload == XR_LIR_ARRAY &&
+            f->values[v->operands[1] - 1].array_element != slot->array_element) return false;
         return v->op == XR_LIR_STATE_REFERENCE || slot->payload == XR_LIR_UNIT ||
             f->values[v->operands[1] - 1].type == slot->payload;
     }
     if (a != XR_LIR_STATE_REF || v->bits) return false;
     XrLirStateReference shape = f->values[v->operands[0] - 1].state_reference;
     if (shape.payload == XR_LIR_TYPE_INVALID) return false;
+    if (shape.payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape.array_element) :
+        shape.array_element != XR_LIR_TYPE_INVALID) return false;
     if (v->op == XR_LIR_STATE_READ) return v->type == shape.payload;
     if (v->op == XR_LIR_STATE_PUBLISH) return v->type == XR_LIR_UNIT && shape.mutable;
     return v->op == XR_LIR_STATE_WRITE && v->type == XR_LIR_UNIT && shape.mutable &&
         v->operand_count == (shape.payload == XR_LIR_UNIT ? 1u : 2u) &&
+        (shape.payload != XR_LIR_ARRAY || f->values[v->operands[1] - 1].array_element == shape.array_element) &&
         (shape.payload == XR_LIR_UNIT || f->values[v->operands[1] - 1].type == shape.payload);
 }
 

@@ -17,7 +17,8 @@ XR_FUNC bool xr_lir_internal_state_payload(XrLirType type, uint32_t *size, uint3
     case XR_LIR_I16: case XR_LIR_U16: *size = 2; *alignment = 2; return true;
     case XR_LIR_I32: case XR_LIR_U32: case XR_LIR_F32: *size = 4; *alignment = 4; return true;
     case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: *size = 8; *alignment = 8; return true;
-    case XR_LIR_STRING: *size = sizeof(void *); *alignment = _Alignof(void *); return true;
+    case XR_LIR_STRING: case XR_LIR_ARRAY:
+        *size = sizeof(void *); *alignment = _Alignof(void *); return true;
     default: return false;
     }
 }
@@ -53,6 +54,8 @@ static bool lir_state_layout_shape(const XrLirStateLayout *layout) {
         const XrLirStateSlot *slot = &layout->slots[s];
         uint32_t size, alignment;
         if (slot->module >= layout->module_count ||
+            (slot->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(slot->array_element) :
+                slot->array_element != XR_LIR_TYPE_INVALID) ||
             !xr_lir_internal_state_payload(slot->payload, &size, &alignment) ||
             slot->size != size || slot->alignment != alignment ||
             alignment > layout->payload_alignment || slot->offset % alignment ||
@@ -105,6 +108,8 @@ XR_FUNC XrLirStatus xr_lir_set_state_reference(XrLirModule *m, XrLirValue value,
     XrLirFunctionData *f = lir_function(m, (XrLirFunction){value.module, value.function});
     uint32_t size, alignment;
     if (!f || !value.id || value.id > f->value_count || !shape ||
+        (shape->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape->array_element) :
+            shape->array_element != XR_LIR_TYPE_INVALID) ||
         !xr_lir_internal_state_payload(shape->payload, &size, &alignment))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirValueData *v = &f->values[value.id - 1];

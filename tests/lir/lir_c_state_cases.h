@@ -47,7 +47,7 @@ static void c_state_reference_cycle(uint64_t rounds) {
     XrLirValue carried[3];
     for (uint32_t p = 0; p < 3; ++p)
         OK(xr_lir_block_parameter(module, loop, p, &carried[p]));
-    XrLirStateReference shape = {XR_LIR_I64, true};
+    XrLirStateReference shape = {.payload=XR_LIR_I64, .mutable=true};
     OK(xr_lir_set_state_reference(module, carried[0], &shape));
     OK(xr_lir_set_state_reference(module, carried[1], &shape));
     XrLirValue initial[] = {references[0], references[1], constant(entry, XR_LIR_I64, rounds)};
