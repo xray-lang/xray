@@ -20,7 +20,7 @@
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
-                                             "string", "string_cell", "state", "state_ref"};
+                                             "string", "string_cell", "state", "state_ref", "array", "array_cell"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -123,6 +123,7 @@ static bool lir_signature_matches(const XrLirFunctionData *f, const XrLirInstruc
 
 static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uint32_t);
 #include "xlir_state_verify.inc.c"
+#include "xlir_array_verify.inc.c"
 
 static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
@@ -133,13 +134,19 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
             return lir_constant_valid(v->type, v->bits);
         case XR_LIR_CELL_NEW:
             return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
-                (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING);
+                (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING) ||
+                (v->type == XR_LIR_ARRAY_CELL && a == XR_LIR_ARRAY);
         case XR_LIR_CELL_READ:
             return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
-                (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL);
+                (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL) ||
+                (v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY_CELL);
         case XR_LIR_CELL_WRITE:
             return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
-                (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING));
+                (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING) ||
+                (a == XR_LIR_ARRAY_CELL && b == XR_LIR_ARRAY));
+        case XR_LIR_ARRAY_RETAIN: return v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY;
+        case XR_LIR_ARRAY_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY;
+        case XR_LIR_ARRAY_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY_CELL;
         case XR_LIR_STRING_I64:
             return v->type == XR_LIR_STRING && a == XR_LIR_I64;
         case XR_LIR_STRING_F64:
@@ -211,6 +218,8 @@ static bool lir_edges_valid(const XrLirFunctionData *f, const XrLirInstructionVi
             if (!id || id > f->value_count || !parameter || parameter > f->value_count ||
                 f->values[id - 1].type != f->values[parameter - 1].type)
                 return false;
+            if (xr_lir_internal_array_type(f->values[id - 1].type) &&
+                f->values[id - 1].array_element != f->values[parameter - 1].array_element) return false;
         }
     }
     return true;
@@ -292,6 +301,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             goto invalid;
         if (callee->kind == XR_LIR_FUNCTION_EXTERNAL && callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING &&
             !lir_literal_call(m, f, v)) goto invalid;
+        if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_CALL_INTRINSIC) {
@@ -299,6 +309,12 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
+            const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
+            if (shape) {
+                if (!lir_array_intrinsic_signature(f, v, entry, shape) ||
+                    !xr_lir_internal_array_instruction(m, f, v)) goto invalid;
+                return XR_LIR_OK;
+            }
             bool cell = entry->result >= XR_LIR_I64_CELL;
             for (uint32_t p = 0; p < entry->parameter_count; ++p)
                 cell |= entry->parameters[p] >= XR_LIR_I64_CELL;
@@ -313,9 +329,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             d->status = XR_LIR_UNSUPPORTED;
         return XR_LIR_UNSUPPORTED;
     }
-    if (v->op >= XR_LIR_MODULE_BEGIN ? !lir_state_instruction_types(m, f, v) :
+    if (v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE ? !lir_state_instruction_types(m, f, v) :
         !lir_scalar_instruction_types(f, v))
         goto invalid;
+    if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;
     return XR_LIR_OK;
 invalid:
     return xr_lir_internal_error(d, message, function, 0, 0, &v->source);
@@ -598,9 +615,16 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
+static bool lir_managed_value(XrLirType type) {
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY;
+}
+static bool lir_managed_cell(XrLirType type) {
+    return type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL;
+}
+
 static bool lir_frame_cell_owner(const XrLirFunctionData *f, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
-    return definition && definition->op == XR_LIR_CELL_NEW && definition->type == XR_LIR_STRING_CELL;
+    return definition && definition->op == XR_LIR_CELL_NEW && lir_managed_cell(definition->type);
 }
 
 /* A Cell handle never transfers along an edge. An entry constructor owns its
@@ -609,9 +633,9 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
     uint8_t *released, XrLirDiagnostic *d) {
     for (uint32_t id = 1; id <= f->value_count; ++id) {
         const XrLirValueData *value = &f->values[id - 1];
-        if (value->type != XR_LIR_STRING_CELL) continue;
+        if (!lir_managed_cell(value->type)) continue;
         if (!lir_frame_cell_owner(f, id) && (!value->parameter || value->block))
-            return xr_lir_internal_error(d, "String Cell requires an entry owner or incoming borrow",
+            return xr_lir_internal_error(d, "Managed Cell requires an entry owner or incoming borrow",
                 function, value->block, 0, NULL);
     }
     for (uint32_t b = 0; b < f->block_count; ++b) {
@@ -622,48 +646,50 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
             const XrLirInstructionView *v = &block->instructions[i].view;
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
-                if (f->values[id - 1].type != XR_LIR_STRING_CELL) continue;
+                if (!lir_managed_cell(f->values[id - 1].type)) continue;
                 if (released[id - 1])
-                    return xr_lir_internal_error(d, "String Cell use follows release", function, b+1, i+1, &v->source);
+                    return xr_lir_internal_error(d, "Managed Cell use follows release", function, b+1, i+1, &v->source);
                 if (v->op != XR_LIR_CELL_READ && v->op != XR_LIR_CELL_WRITE &&
-                    v->op != XR_LIR_CALL && v->op != XR_LIR_STRING_CELL_DROP)
-                    return xr_lir_internal_error(d, "String Cell handle cannot escape its frame",
+                    v->op != XR_LIR_CALL && v->op != XR_LIR_STRING_CELL_DROP &&
+                    v->op != XR_LIR_ARRAY_CELL_DROP &&
+                    !(v->op == XR_LIR_CALL_INTRINSIC && f->values[id - 1].type == XR_LIR_ARRAY_CELL))
+                    return xr_lir_internal_error(d, "Managed Cell handle cannot escape its frame",
                         function, b+1, i+1, &v->source);
             }
-            if (v->op == XR_LIR_STRING_CELL_DROP) {
+            if (v->op == XR_LIR_STRING_CELL_DROP || v->op == XR_LIR_ARRAY_CELL_DROP) {
                 uint32_t id = v->operands[0];
                 if (!lir_frame_cell_owner(f, id))
-                    return xr_lir_internal_error(d, "incoming String Cell borrow cannot be released",
+                    return xr_lir_internal_error(d, "incoming Managed Cell borrow cannot be released",
                         function, b+1, i+1, &v->source);
                 if (f->block_count != 1 && term->op != XR_LIR_RET)
-                    return xr_lir_internal_error(d, "frame String Cell release requires a normal return",
+                    return xr_lir_internal_error(d, "frame Managed Cell release requires a normal return",
                         function, b+1, i+1, &v->source);
                 released[id - 1] = 1;
             }
         }
         for (uint32_t e = 0; e < term->edge_count; ++e)
             for (uint32_t a = 0; a < term->edges[e].argument_count; ++a)
-                if (f->values[term->edges[e].arguments[a] - 1].type == XR_LIR_STRING_CELL)
-                    return xr_lir_internal_error(d, "String Cell handle cannot transfer on an edge",
+                if (lir_managed_cell(f->values[term->edges[e].arguments[a] - 1].type))
+                    return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, b+1, 0, &term->source);
         if (term->op == XR_LIR_RET)
             for (uint32_t id = 1; id <= f->value_count; ++id)
                 if (lir_frame_cell_owner(f, id) && !released[id - 1])
-                    return xr_lir_internal_error(d, "frame String Cell requires release on every normal return",
+                    return xr_lir_internal_error(d, "frame Managed Cell requires release on every normal return",
                         function, b+1, 0, &term->source);
     }
     return XR_LIR_OK;
 }
 
-/* Each block owns its String parameters and instruction results.
+/* Each block owns its managed parameters and instruction results.
  * Backedges cannot transport managed owners or parameter borrows.
  * Only explicit selected-edge or result transfers may leave that block. */
-static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t function,
+static XrLirStatus lir_managed_owners(const XrLirFunctionData *f, uint32_t function,
     const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
     bool managed = false, cells = false;
     for (uint32_t i = 0; i < f->value_count; ++i) {
-        managed |= f->values[i].type == XR_LIR_STRING || f->values[i].type == XR_LIR_STRING_CELL;
-        cells |= f->values[i].type == XR_LIR_STRING_CELL;
+        managed |= lir_managed_value(f->values[i].type) || lir_managed_cell(f->values[i].type);
+        cells |= lir_managed_cell(f->values[i].type);
     }
     if (!managed) return XR_LIR_OK;
     if (cells) {
@@ -679,8 +705,8 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
                         return xr_lir_internal_error(d, "String parameter cannot cross a loop", function, b + 1, 0, &term->source);
                 for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
                     XrLirType type = f->values[term->edges[e].arguments[a] - 1].type;
-                    if (type == XR_LIR_STRING || type == XR_LIR_STRING_CELL)
-                        return xr_lir_internal_error(d, "loop-carried managed String transfer is not supported", function, b + 1, 0, &term->source);
+                    if (lir_managed_value(type) || lir_managed_cell(type))
+                        return xr_lir_internal_error(d, "loop-carried managed transfer is not supported", function, b + 1, 0, &term->source);
                 }
             }
     }
@@ -688,25 +714,25 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];
         for (uint32_t p = 0; p < block->parameter_count; ++p)
-            if (f->values[block->parameters[p] - 1].type == XR_LIR_STRING)
+            if (lir_managed_value(f->values[block->parameters[p] - 1].type))
                 owned[block->parameters[p] - 1] = 1;
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 const XrLirValueData *value = &f->values[id - 1];
-                if (value->type == XR_LIR_STRING &&
+                if (lir_managed_value(value->type) &&
                     (!value->parameter || value->block) && !owned[id - 1])
-                    return xr_lir_internal_error(d, "String use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
+                    return xr_lir_internal_error(d, "Managed use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
             }
-            if (v->op == XR_LIR_STRING_DROP ||
-                (v->op == XR_LIR_RET && v->operand_count && f->result == XR_LIR_STRING)) {
+            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
+                (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(f->result))) {
                 uint32_t id = v->operands[0];
                 if (!owned[id - 1])
-                    return xr_lir_internal_error(d, "String transfer requires an owned reference", function, b + 1, i + 1, &v->source);
+                    return xr_lir_internal_error(d, "Managed transfer requires an owned reference", function, b + 1, i + 1, &v->source);
                 owned[id - 1] = 0;
             }
-            if (v->result && v->type == XR_LIR_STRING)
+            if (v->result && lir_managed_value(v->type))
                 owned[v->result - 1] = 1;
         }
         const XrLirInstructionView *term = lir_terminator(f, b);
@@ -714,12 +740,12 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
             const XrLirEdgeView *edge = &term->edges[e];
             for (uint32_t a = 0; a < edge->argument_count; ++a) {
                 uint32_t id = edge->arguments[a];
-                if (f->values[id - 1].type != XR_LIR_STRING) continue;
+                if (!lir_managed_value(f->values[id - 1].type)) continue;
                 if (!owned[id - 1])
-                    return xr_lir_internal_error(d, "String edge requires a distinct owned reference", function, b + 1, 0, &term->source);
+                    return xr_lir_internal_error(d, "Managed edge requires a distinct owned reference", function, b + 1, 0, &term->source);
                 for (uint32_t p = 0; p < a; ++p)
                     if (edge->arguments[p] == id)
-                        return xr_lir_internal_error(d, "String edge duplicates one owned reference", function, b + 1, 0, &term->source);
+                        return xr_lir_internal_error(d, "Managed edge duplicates one owned reference", function, b + 1, 0, &term->source);
             }
             for (uint32_t id = 1; id <= f->value_count; ++id) {
                 if (!owned[id - 1]) continue;
@@ -727,13 +753,13 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
                 for (uint32_t a = 0; a < edge->argument_count; ++a)
                     transferred |= edge->arguments[a] == id;
                 if (!transferred)
-                    return xr_lir_internal_error(d, "String owner is not released or transferred on every edge", function, b + 1, 0, &term->source);
+                    return xr_lir_internal_error(d, "Managed owner is not released or transferred on every edge", function, b + 1, 0, &term->source);
             }
         }
         if (!term->edge_count)
             for (uint32_t id = 0; id < f->value_count; ++id)
                 if (owned[id])
-                    return xr_lir_internal_error(d, "String owner requires release or result transfer", function, b + 1, 0, NULL);
+                    return xr_lir_internal_error(d, "Managed owner requires release or result transfer", function, b + 1, 0, NULL);
     }
     return XR_LIR_OK;
 }
@@ -746,6 +772,22 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid LIR module");
     if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
+    for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
+        const XrLirIntrinsic *entry = &m->intrinsics[i];
+        bool array = xr_lir_internal_array_type(entry->result);
+        for (uint32_t p = 0; p < entry->parameter_count; ++p)
+            array |= xr_lir_internal_array_type(entry->parameters[p]);
+        if (!m->array_intrinsics) {
+            if (array) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is missing");
+            continue;
+        }
+        const XrLirArrayIntrinsic *shape = &m->array_intrinsics[i];
+        bool empty = !shape->id && !shape->parameter_elements && !shape->parameter_count &&
+            !shape->result_element && !shape->variadic;
+        if ((array && empty) || (!empty && (shape->id != entry->id ||
+            !xr_lir_internal_array_intrinsic_valid(entry, shape))))
+            return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is invalid");
+    }
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");
@@ -757,7 +799,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(f) || !lir_state_signature(m, f))
+        if (!lir_function_shape(f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||
@@ -782,7 +824,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
-            status = lir_string_owners(f, index + 1, &graph, seen, d);
+            status = lir_managed_owners(f, index + 1, &graph, seen, d);
         xr_free(seen);
         if (status == XR_LIR_OK) {
             lir_graph_dominators(&graph);

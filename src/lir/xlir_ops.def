@@ -46,3 +46,7 @@ XR_LIR_OP(STATE_INITIALIZE, "state_initialize", -1)
 XR_LIR_OP(STATE_REFERENCE, "state_reference", 1)
 XR_LIR_OP(STATE_READ, "state_read", 1)
 XR_LIR_OP(STATE_WRITE, "state_write", -1)
+/* Array owners use the canonical value kernel; Cells stay in their activation. */
+XR_LIR_OP(ARRAY_RETAIN, "array_retain", 1)
+XR_LIR_OP(ARRAY_DROP, "array_drop", 1)
+XR_LIR_OP(ARRAY_CELL_DROP, "array_cell_drop", 1)

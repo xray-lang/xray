@@ -14,6 +14,7 @@
 #include "xlir_builder.h"
 #include "xlir_verify.h"
 #include "xlir_state.h"
+#include "xlir_array_copy.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -22,7 +23,7 @@ typedef struct {
     size_t first, count;
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
-    bool active, self, returns, eligible, cell_storage, string_owners;
+    bool active, self, returns, eligible, cell_storage, managed_owners;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -89,7 +90,8 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
         for (uint32_t v = 1; v <= info->view.value_count; ++v) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input, f + 1, v}, &type);
-            info->string_owners |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL;
+            info->managed_owners |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL ||
+                type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL;
         }
         info->first = c->edge_count;
         for (uint32_t b = 0; b < info->view.block_count; ++b) {
@@ -171,7 +173,7 @@ static void inline_components(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
-            !info->self && !info->cell_storage && !info->string_owners &&
+            !info->self && !info->cell_storage && !info->managed_owners &&
             c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
             info->instructions <= 256 && info->scratch <= 256;
@@ -185,6 +187,7 @@ static XrLirStatus inline_registry(Inliner *c) {
     XrLirRegistry registry = {entries, count};
     XrLirStatus status = xr_lir_module_create(&registry, &c->output);
     xr_free(entries);
+    if (status == XR_LIR_OK) status = lir_copy_array_registry(c->input, c->output);
     if (status == XR_LIR_OK) {
         XrLirStateLayout layout;
         status = xr_lir_state_layout_view(c->input, &layout);
@@ -205,6 +208,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
             .parameters = v->parameter_types, .parameter_count = v->parameter_count,
             .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
+        if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
+            (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
         if (status != XR_LIR_OK) return status;
     }
     XrLirFunction entry;
@@ -229,7 +234,7 @@ static XrLirStatus inline_plan(InlineBody *b) {
             const InlineFunction *callee = &b->owner->info[v.callee];
             // Continuations cannot relocate physical storage or introduce String transfers.
             const InlineFunction *caller = &b->owner->info[b->source];
-            if (!callee->eligible || caller->string_owners || caller->cell_storage) continue;
+            if (!callee->eligible || caller->managed_owners || caller->cell_storage) continue;
             if (callee->view.value_count < callee->view.parameter_count) return XR_LIR_VERIFY_ERROR;
             uint64_t blocks = (uint64_t)callee->view.block_count + 1;
             uint64_t values = callee->view.value_count - callee->view.parameter_count;
@@ -275,6 +280,8 @@ static XrLirStatus inline_blocks(InlineBody *b) {
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             status = xr_lir_block_parameter(b->owner->output, b->blocks[block + 1].entry,
                 p, &b->values[view.parameters[p]]);
+            if (status == XR_LIR_OK) status = lir_copy_array_value(b->owner->input,
+                (XrLirValue){b->owner->input, b->source, view.parameters[p]}, b->values[view.parameters[p]]);
             if (status != XR_LIR_OK) return status;
             if (b->types[p] == XR_LIR_STATE_REF) {
                 XrLirStateReference shape;
@@ -394,8 +401,9 @@ static XrLirStatus inline_definition(Inliner *c, uint32_t id) {
         .view = c->info[id].view, .scratch = c->info[id].scratch};
     XrLirStatus status = inline_body_storage(&body, true);
     if (status == XR_LIR_OK) status = xr_lir_define_function(c->output, body.destination);
-    for (uint32_t p = 0; p < body.view.parameter_count && status == XR_LIR_OK; ++p)
+    for (uint32_t p = 0; p < body.view.parameter_count && status == XR_LIR_OK; ++p) {
         status = xr_lir_function_parameter(c->output, body.destination, p, &body.values[body.view.parameters[p]]);
+    }
     if (status == XR_LIR_OK) status = inline_blocks(&body);
     if (status == XR_LIR_OK)
         status = xr_lir_set_entry(c->output, body.destination, body.blocks[body.view.entry].entry);

@@ -16,6 +16,7 @@
 #include "xlir_builder.h"
 #include "xlir_verify.h"
 #include "xlir_state.h"
+#include "xlir_array_copy.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -53,6 +54,7 @@ static XrLirStatus rebuild_registry(Rebuild *c) {
     }
     // module_create copied parameter slices while their source was still live.
     xr_free(entries);
+    if (status == XR_LIR_OK) status = lir_copy_array_registry(c->input, c->output);
     if (status == XR_LIR_OK) {
         XrLirStateLayout layout;
         status = xr_lir_state_layout_view(c->input, &layout);
@@ -81,6 +83,8 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
             .parameters = view.parameter_types, .parameter_count = view.parameter_count,
             .result = view.result, .kind = view.kind, .extern_kind = view.extern_kind};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
+        if (status == XR_LIR_OK)
+            status = lir_copy_array_signature(c->input, function, c->functions[function.id]);
         if (status != XR_LIR_OK) return status;
     }
     XrLirFunction entry;
@@ -150,6 +154,8 @@ static XrLirStatus rebuild_parameters(Rebuild *c) {
         if (status != XR_LIR_OK) return status;
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             status = xr_lir_block_parameter(c->output, *target, p, &c->values[view.parameters[p]]);
+            if (status == XR_LIR_OK) status = lir_copy_array_value(c->input,
+                (XrLirValue){c->input, c->source.id, view.parameters[p]}, c->values[view.parameters[p]]);
             if (status != XR_LIR_OK) return status;
             if (c->types[p] == XR_LIR_STATE_REF) {
                 XrLirStateReference shape;

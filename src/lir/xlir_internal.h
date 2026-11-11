@@ -15,12 +15,14 @@
 #define XLIR_INTERNAL_H
 #include "xlir_builder.h"
 #include "xlir_state.h"
+#include "xlir_array.h"
 
 typedef struct XrLirValueData {
     XrLirType type;
     uint32_t block, instruction;
     bool parameter;
     XrLirStateReference state_reference;
+    XrLirType array_element;
 } XrLirValueData;
 typedef struct XrLirInstructionData {
     XrLirInstructionView view;
@@ -39,6 +41,7 @@ typedef struct XrLirFunctionData {
     uint32_t *parameters;
     uint32_t parameter_count;
     XrLirType result;
+    XrLirType array_result;
     XrLirFunctionKind kind;
     XrLirExternKind extern_kind;
     bool defined;
@@ -59,6 +62,7 @@ struct XrLirModule {
     uint32_t function_count, function_capacity;
     XrLirIntrinsic *intrinsics;
     uint32_t intrinsic_count;
+    XrLirArrayIntrinsic *array_intrinsics;
     XrLirStatus failure;
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;
@@ -85,6 +89,17 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
     return definition->result == id ? definition : NULL;
 }
 XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
+XR_FUNC bool xr_lir_internal_array_element(XrLirType);
+static inline bool xr_lir_internal_array_type(XrLirType type) {
+    return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL;
+}
+XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *,
+    const XrLirArrayIntrinsic *);
+XR_FUNC const XrLirArrayIntrinsic *xr_lir_internal_array_intrinsic(const XrLirModule *, uint32_t);
+XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *,
+    const XrLirFunctionData *, const XrLirInstructionView *);
+XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *,
+    const XrLirFunctionData *, const XrLirInstructionView *);
 XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirStateLayout *);
 XR_FUNC bool xr_lir_internal_state_payload(XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);

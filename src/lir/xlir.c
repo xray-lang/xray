@@ -130,6 +130,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
 }
 
 #include "xlir_state.inc.c"
+#include "xlir_array.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
     xr_free((void *) instruction->view.operands);
@@ -160,6 +161,9 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
         lir_function_free(&m->functions[i]);
     for (uint32_t i = 0; i < m->intrinsic_count; ++i)
         xr_free((void *) m->intrinsics[i].parameters);
+    for (uint32_t i = 0; m->array_intrinsics && i < m->intrinsic_count; ++i)
+        xr_free((void *) m->array_intrinsics[i].parameter_elements);
+    xr_free(m->array_intrinsics);
     for (uint32_t i = 0; i < m->literal_count; ++i) xr_free(m->literals[i].bytes);
     xr_free(m->literals);
     xr_free(m->functions);
@@ -276,7 +280,7 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
         !lir_types_valid(spec->parameters, spec->parameter_count) ||
         !xr_lir_internal_type_valid(spec->result, true) || spec->result == XR_LIR_I64_CELL ||
         spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
-        spec->result == XR_LIR_STATE_REF)
+        spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL)
         return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
         if (spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&
@@ -595,6 +599,8 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         f->values[f->value_count] =
             (XrLirValueData) {.type=input->type, .block=handle.id, .instruction=block->instruction_count};
         instruction.view.result = ++f->value_count;
+        f->values[f->value_count - 1].array_element =
+            xr_lir_internal_array_result(m, f, &instruction.view);
         if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE) {
             const XrLirStateSlot *slot = &m->state_layout.slots[input->bits];
             f->values[f->value_count - 1].state_reference =

@@ -46,15 +46,17 @@ typedef enum XrLirType {
     XR_LIR_STRING_CELL,
     XR_LIR_STATE,
     XR_LIR_STATE_REF,
+    XR_LIR_ARRAY,
+    XR_LIR_ARRAY_CELL,
     XR_LIR_TYPE_COUNT
 } XrLirType;
 
-/* String instruction results own references. Ordinary call parameters borrow
+/* String and Array instruction results own references. Ordinary call parameters borrow
  * through that call; a language binding explicitly retains its parameter.
- * Selected edges transfer each String argument into an owned block parameter.
+ * Selected edges transfer each managed argument into an owned block parameter.
  * One reference cannot fill two parameters without an explicit retain.
- * Loop backedges carry scalars after all String temporaries have retired.
- * RET transfers an owned result. String Cells own one independent reference
+ * Loop backedges carry scalars after all managed temporaries have retired.
+ * RET transfers an owned result. Managed Cells own one independent reference
  * and their storage remains in the defining activation. */
 typedef enum XrLirOp {
     XR_LIR_OP_INVALID,
