@@ -201,7 +201,23 @@ static void array_repeat_failures(void) {
     printf("Array repeat Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void array_unsigned_failures(void) {
+    SourceFixture fixture = source_fixture("fn bytes(n:i64)->Array<u8>{return Array<u8>(n,255)}\n"
+        "fn words(value:u64)->Array<u64>{return [value,value]}\n"
+        "const a=bytes(3)\nconst b=words(18446744073709551615)\n"
+        "print(a[0] as i64)\nprint(b[0] as i64)\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 30);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Unsigned Array Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    array_unsigned_failures();
     array_repeat_failures();
     array_cell_cfg_failures();
     array_flow_failures();

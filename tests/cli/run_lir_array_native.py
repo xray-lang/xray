@@ -48,7 +48,8 @@ def main() -> None:
     for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
                  "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
                  "ref_borrow", "ref_cfg", "repeat_values", "repeat_strings", "panic_repeat_negative",
-                 "panic_repeat_string_negative", "panic_bounds", "panic_unpublished"):
+                 "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
+                 "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
@@ -100,19 +101,24 @@ def main() -> None:
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
         if vm_out != out or vm_err != err:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
-    name = "reject_repeat_string_default"
-    source = fixtures / (name + ".xr")
-    _, out, err = run(name + "-check", [binary, "check", source], 1)
-    if out or b"type has no admitted default initializer" not in err:
-        failures.append((name, "missing default initializer", out, err))
-    for stage, command in (
-        ("run", [binary, "run", source]),
-        ("build-c", [binary, "build", "-c", source, "-o", work / (name + ".c")]),
-        ("build", [binary, "build", source, "-o", work / name]),
-    ):
-        _, actual_out, actual_err = run(name + "-" + stage, command, 1)
-        if actual_out != out or actual_err != err:
-            failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
+    rejected_sources = {
+        "reject_repeat_string_default": b"type has no admitted default initializer",
+        "reject_unsigned_family": b"expression cannot satisfy its declared type",
+        "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
+    }
+    for name, diagnostic in rejected_sources.items():
+        source = fixtures / (name + ".xr")
+        _, out, err = run(name + "-check", [binary, "check", source], 1)
+        if out or diagnostic not in err:
+            failures.append((name, "Source diagnostic", out, err))
+        for stage, command in (
+            ("run", [binary, "run", source]),
+            ("build-c", [binary, "build", "-c", source, "-o", work / (name + ".c")]),
+            ("build", [binary, "build", source, "-o", work / name]),
+        ):
+            _, actual_out, actual_err = run(name + "-" + stage, command, 1)
+            if actual_out != out or actual_err != err:
+                failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
     assert not failures, failures
     print(f"{len(records)} Array Source/VM/native commands passed")
 

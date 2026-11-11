@@ -69,7 +69,8 @@ static XrLirType lower_array_element(const Lower *c, XrXirType type) {
     if (!xr_xir_type_is_array(c->source->types, type)) return XR_LIR_TYPE_INVALID;
     XrXirType element = xr_xir_array_element(c->source->types, type);
     return element == XR_XIR_I64 ? XR_LIR_I64 :
-        element == XR_XIR_STRING ? XR_LIR_STRING : XR_LIR_TYPE_INVALID;
+        element == XR_XIR_STRING ? XR_LIR_STRING :
+        element == XR_XIR_U8 ? XR_LIR_U8 : element == XR_XIR_U64 ? XR_LIR_U64 : XR_LIR_TYPE_INVALID;
 }
 static bool lower_managed_type(XrLirType type) {
     return type == XR_LIR_STRING || type == XR_LIR_ARRAY;
@@ -83,6 +84,10 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         return XR_LIR_UNIT;
     if (type == XR_XIR_I64)
         return XR_LIR_I64;
+    if (type == XR_XIR_U8)
+        return XR_LIR_U8;
+    if (type == XR_XIR_U64)
+        return XR_LIR_U64;
     if (type == XR_XIR_BOOL)
         return XR_LIR_I1;
     if (type == XR_XIR_F64)
@@ -716,6 +721,15 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_F64 &&
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_STRING)
         return lower_unsupported(c, "String conversion other than i64, f64 or String");
+    if (op->op == XR_XIR_CONVERT_NUMBER) {
+        XrLirType from = lower_type(c, xr_xir_operand_type(f, op->args[0]));
+        XrLirType to = lower_type(c, op->type);
+        bool from_integer = from >= XR_LIR_I8 && from <= XR_LIR_U64;
+        bool to_integer = to >= XR_LIR_I8 && to <= XR_LIR_U64;
+        if (!(from_integer && to_integer) &&
+            !((from == XR_LIR_I64 || from == XR_LIR_F64) && (to == XR_LIR_I64 || to == XR_LIR_F64)))
+            return lower_unsupported(c, "numeric conversion between these exact types");
+    }
     if (op->op == XR_XIR_CLOCK_NANOS) {
         if (op->immediate < 1 || op->immediate > 3)
             return lower_unsupported(c, "clock kind");
@@ -1218,12 +1232,15 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
             return XR_LIR_FDIV;
         case XR_XIR_NEG_FLOAT:
             return XR_LIR_FNEG;
-        case XR_XIR_CONVERT_NUMBER:
-            if (xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 && op->type == XR_XIR_I64)
-                return XR_LIR_FTOI;
-            return xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_I64
-                       ? (op->type == XR_XIR_I64 ? XR_LIR_INTCAST : XR_LIR_ITOF)
-                       : XR_LIR_FCAST;
+        case XR_XIR_CONVERT_NUMBER: {
+            XrLirType from = lower_type(f->owner, xr_xir_operand_type(f->source, op->args[0]));
+            XrLirType to = lower_type(f->owner, op->type);
+            if (from >= XR_LIR_I8 && from <= XR_LIR_U64 && to >= XR_LIR_I8 && to <= XR_LIR_U64)
+                return XR_LIR_INTCAST;
+            if (from == XR_LIR_F64 && to == XR_LIR_I64) return XR_LIR_FTOI;
+            if (from == XR_LIR_I64 && to == XR_LIR_F64) return XR_LIR_ITOF;
+            return XR_LIR_FCAST;
+        }
         default:
             if (lower_predicate(op))
                 return xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 ? XR_LIR_FCMP

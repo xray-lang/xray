@@ -29,6 +29,10 @@ static void array_sources(void) {
         "xs.push(i+1)\nsum=sum+xs[0]+xs[1]\ni=i+1}\nreturn sum}\nprint(loop(3))\n",
         "fn fill(n:i64,value:i64)->Array<i64>{return Array<i64>(n,value)}\nprint(len(fill(16,7)))\n",
         "fn fill(n:i64,value:string)->Array<string>{return Array<string>(n,value)}\nprint(len(fill(3,\"seed\")))\n",
+        "fn narrow(n:i64)->u8{return n as u8}\nconst bytes:Array<u8>=[narrow(257),255]\n"
+        "print(bytes[0] as i64)\n",
+        "fn words(value:u64)->Array<u64>{return [value,value]}\n"
+        "const values=words(18446744073709551615)\nprint(values[1] as i64)\n",
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrLirLowered output = lower_text(cases[i]);
