@@ -1,0 +1,29 @@
+fn narrow(n:i64)->u8{return n as u8}
+fn wide(n:i64)->u64{return n as u64}
+fn append_byte(values:ref Array<u8>,value:u8){values.push(value)}
+fn append_word(values:ref Array<u64>,value:u64){values.push(value)}
+fn choose(flag:bool,a:Array<u64>,b:Array<u64>)->Array<u64>{return flag?a:b}
+var bytes:Array<u8>=[0,255]
+var words:Array<u64>=[9223372036854775808,18446744073709551615]
+const old_bytes=bytes
+const old_words=words
+bytes[0]=narrow(257)
+append_byte(ref bytes,narrow(511))
+words[0]=wide(-1)
+append_word(ref words,9223372036854775808)
+print(bytes[0] as i64)
+print(bytes[2] as i64)
+print(old_bytes[0] as i64)
+print(words[0] as i64)
+print(words[2] as i64)
+print(old_words[0] as i64)
+print(len(Array<u8>()))
+print(len(Array<u64>()))
+const byte_fill=Array<u8>(3,narrow(-1))
+const word_fill=Array<u64>(3,wide(-1))
+print(byte_fill[2] as i64)
+print(word_fill[2] as i64)
+print(narrow(256) as i64)
+print(narrow(-256) as i64)
+const selected=choose(false,words,old_words)
+print(selected[0] as i64)

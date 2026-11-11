@@ -1,0 +1,2 @@
+fn take(values:Array<u8>)->i64{return len(values)}
+print(take(Array<u64>()))

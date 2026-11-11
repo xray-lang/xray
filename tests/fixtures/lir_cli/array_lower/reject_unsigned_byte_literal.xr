@@ -1,0 +1,2 @@
+const bytes:Array<u8>=[256]
+print(len(bytes))
