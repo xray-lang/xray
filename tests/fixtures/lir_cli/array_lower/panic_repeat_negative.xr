@@ -1,0 +1,2 @@
+fn filled(n:i64)->Array<i64>{return Array<i64>(n,7)}
+print(len(filled(-1)))

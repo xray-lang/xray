@@ -1,0 +1,19 @@
+fn filled(n:i64,seed:string)->Array<string>{return Array<string>(n,seed)}
+fn seed(n:i64)->string{return "seed${n}"}
+var calls=0
+fn fill()->string{calls=calls+1;return seed(7)}
+const empty=Array<string>(0,fill())
+print(len(empty))
+print(calls)
+const defaults=Array<string>(3)
+print(len(defaults))
+print(len(defaults[0]))
+const original=filled(3,seed(7))
+var changed=original
+changed[0]="changed"
+changed.push("tail")
+print(original[0])
+print(original[2])
+print(changed[0])
+print(len(original))
+print(len(changed))

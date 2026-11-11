@@ -1,0 +1,21 @@
+fn filled(n:i64,seed:i64)->Array<i64>{return Array<i64>(n,seed)}
+fn zeroes(n:i64)->i64 {
+    const values=Array<i64>(n)
+    return values[0]+values[n-1]+len(values)
+}
+var calls=0
+fn fill()->i64{calls=calls+1;return 42}
+const empty=Array<i64>(0,fill())
+print(len(empty))
+print(calls)
+print(zeroes(16))
+print(zeroes(80))
+print(zeroes(64))
+var values=filled(4,7)
+const saved=values
+values[0]=9
+values.push(5)
+print(saved[0])
+print(values[0])
+print(len(saved))
+print(len(values))

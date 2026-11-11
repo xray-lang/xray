@@ -1,0 +1,2 @@
+fn filled(n:i64)->Array<string>{return Array<string>(n,"seed")}
+print(len(filled(-1)))
