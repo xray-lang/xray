@@ -300,4 +300,54 @@ static void test_raw_array_string_state(void) {
     CHECK(probe.sum == 8);
     xrt_array_owned_drop(&probe.array);
 }
+static void test_raw_array_backedges(void) {
+    for(unsigned spill=0;spill<2;++spill) {
+        RawArray f;raw_array_init(&f);f.function.parameter_count=1;
+        XrRbcArrayLocation arg={0,false};
+        raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_NEW,2,1),&arg);
+        arg.index=2;
+        if(spill) {
+            f.function.spill_count=f.function.reference_spill_count=1;
+            f.spill_kinds[0]=XR_RBC_ARRAY_I64;
+            f.function.reference_spill_kinds=f.spill_kinds;f.function.reference_spill_kind_count=1;
+            immediate(f.code,f.function.code_count++,XR_RBC_SPILL,2,0);arg=(XrRbcArrayLocation){0,true};
+        }
+        size_t body=f.function.code_count;
+        raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_LEN,6,1),&arg);
+        CHECK(xr_rbc_encode(f.code+f.function.code_count++,(XrRbcOperands){XR_RBC_ADDI,0,0,0,1}));
+        immediate(f.code,f.function.code_count++,XR_RBC_LTI,0,3);
+        size_t jump=f.function.code_count++;
+        size_t drop=f.function.code_count;
+        raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_DROP,0,1),&arg);
+        emit(f.code,f.function.code_count++,XR_RBC_RET,6,0,0);
+        CHECK(xr_rbc_jump(f.code+jump,jump,body,f.function.code_count));
+        uint64_t initial=0,result=0;
+        CHECK(execute(&f.module,0,&initial,1,&result)==XR_RBC_OK && result==1);
+        uint32_t saved=f.code[0];immediate(f.code,0,XR_RBC_LOADI,6,0);
+        reject_prepare(&f.module,0,&initial,1);f.code[0]=saved;
+        saved=f.code[drop];immediate(f.code,drop,XR_RBC_LOADI,6,1);
+        reject_prepare(&f.module,0,&initial,1);f.code[drop]=saved;
+        CHECK(xr_rbc_jump(f.code+jump,jump,0,f.function.code_count));
+        reject_prepare(&f.module,0,&initial,1);
+    }
+    RawArray f;raw_array_init(&f);
+    f.function.register_count=f.function.register_kind_count=5;
+    f.kinds[3]=f.kinds[4]=XR_RBC_CALL_WINDOW;
+    immediate(f.code,f.function.code_count++,XR_RBC_LOADI,0,7);
+    XrRbcArrayLocation arg={0,false};raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_NEW,2,1),&arg);
+    emit(f.code,f.function.code_count++,XR_RBC_MOV,4,2,0);
+    immediate(f.code,f.function.code_count++,XR_RBC_CALL,3,1);
+    arg.index=2;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_DROP,0,1),&arg);
+    emit(f.code,f.function.code_count++,XR_RBC_RET,3,0,0);
+    uint32_t code[6];immediate(code,0,XR_RBC_LOADI,1,0);immediate(code,1,XR_RBC_ARRAY_ACCESS,0,0);
+    CHECK(xr_rbc_encode(code+2,(XrRbcOperands){XR_RBC_ADDI,1,1,0,1}));
+    immediate(code,3,XR_RBC_LTI,1,3);CHECK(xr_rbc_jump(code+4,4,1,6));emit(code,5,XR_RBC_RET,2,0,0);
+    XrRbcRegisterKind kinds[]={XR_RBC_ARRAY_I64,XR_RBC_BITS,XR_RBC_BITS};
+    XrRbcArrayAccess length=raw_array_op(XR_RBC_ARRAY_LEN,2,1);arg.index=0;
+    XrRbcFunction functions[]={f.function,{.code=code,.code_count=6,.register_count=3,.parameter_count=1,
+        .register_kinds=kinds,.register_kind_count=3,.array_accesses=&length,.array_access_count=1,
+        .array_operands=&arg,.array_operand_count=1}};
+    f.module.functions=functions;f.module.function_count=2;
+    uint64_t result=0;CHECK(execute(&f.module,0,NULL,0,&result)==XR_RBC_OK && result==1);
+}
 #endif // REGISTER_ARRAY_CASES_H

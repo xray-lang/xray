@@ -343,22 +343,28 @@ static bool rbc_string_jump(const XrRbcFunction *f, size_t pc, size_t *target) {
     }
     return true;
 }
-/* A frame Cell may survive a loop only with the same live symbolic identity.
- * Ordinary Strings and staged borrows retain their empty-entry obligations. */
+/* Array owners may cross a backedge only through the same exact IN-state
+ * merge as every other predecessor. The virtual entry cannot manufacture an
+ * owner. Ordinary Strings and call-window borrows retain empty obligations. */
 static bool rbc_string_backedge(const RbcStringAdmission *from) {
     for (uint32_t r = 0; r < from->function->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(from->function, r);
         uint8_t now = from->state[r];
         if (kind == XR_RBC_STRING_CELL || rbc_array_cell_kind(kind)) {
             if (now != RBC_EMPTY && (!rbc_cell_state(now) || !from->origin[r])) return false;
-        } else if (rbc_managed_kind(kind)) {
+        } else if (rbc_array_kind(kind)) {
+            if (now != RBC_EMPTY && now != RBC_STRING_OWNED &&
+                !(r < from->function->parameter_count && now == RBC_STRING_BORROWED)) return false;
+        } else if (kind == XR_RBC_STRING) {
             if (now != RBC_EMPTY) return false;
         } else if (kind == XR_RBC_CALL_WINDOW) {
             if (now != RBC_EMPTY && now != RBC_BITS) return false;
         }
     }
     for (uint32_t i = 0; i < from->function->reference_spill_count; ++i)
-        if (from->spills[i].state != RBC_EMPTY) return false;
+        if (from->spills[i].state != RBC_EMPTY &&
+            (!rbc_array_kind(rbc_reference_spill_kind(from->function,i)) ||
+             from->spills[i].state != RBC_STRING_OWNED)) return false;
     return true;
 }
 static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
