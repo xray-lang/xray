@@ -589,8 +589,11 @@ static bool effect_check_call_record(EffectCheckBuild *build, uint32_t output, E
     roots->node[output].last_call = index;
     EffectCheckFunction callee = roots->function[roots->node[call.target].function];
     uint8_t use = call.protocol == 8 ? 2 : call.protocol;
+    /* Invoking a closure supplies its existing capture prefix. Those Cells
+     * retain the capture role instead of acquiring a second ref-call role. */
     for (uint32_t p = 0; p < call.count; ++p)
-        roots->node[callee.first + p].cell_use |= use;
+        roots->node[callee.first + p].cell_use |=
+            use == 2 && p < callee.capture_count ? 1u : use;
     if (call.protocol == 1) for (uint32_t p = call.count; p < callee.parameters; ++p)
         roots->node[callee.first + p].cell_use |= 2;
     if (!effect_check_dependency(build, call.target, output)) return false;
@@ -654,13 +657,6 @@ static bool effect_check_call(EffectCheckBuild *build, uint32_t output,
                 XR_XIR_EFFECT_PARAMETER_FIXED))
             effect_check_array_bound(build, caller, operand, xr_xir_operand_type(function, operand), instruction);
         if (!effect_check_argument(build, value)) return false;
-        if (xr_xir_type_is_cell(build->module->types, build->module->functions[target].parameters[p]))
-            roots->node[roots->function[target].first + p].cell_use |= protocol;
-    }
-    if (protocol == 1) {
-        for (uint32_t p = argument_count; p < roots->function[target].parameters; ++p)
-            if (xr_xir_type_is_cell(build->module->types, build->module->functions[target].parameters[p]))
-                roots->node[roots->function[target].first + p].cell_use |= 2u;
     }
     uint32_t callee = result == EFFECT_CHECK_OUTPUT_CONTENTS ? roots->function[target].result_contents :
         result == EFFECT_CHECK_OUTPUT_VALUE ? roots->function[target].result : roots->function[target].root;
