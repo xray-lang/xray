@@ -275,6 +275,8 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
     bool okay = native_arg(command, object) && native_arg(command, "-o") && native_arg(command, output);
 #if XR_OS_MACOS
     if (okay) okay = native_arg(command, "-Wl,-dead_strip");
+#else
+    if (okay) okay = native_arg(command, "-Wl,--gc-sections");
 #endif
     if (okay && host->posix.sysroot)
         okay = native_arg(command, "-isysroot") && native_arg(command, host->posix.sysroot);
