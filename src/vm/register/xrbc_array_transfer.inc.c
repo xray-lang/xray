@@ -21,10 +21,13 @@ static bool rbc_array_destination(const RbcStringAdmission *s, XrRbcArrayLocatio
 static bool rbc_array_source(const RbcStringAdmission *s, XrRbcArrayLocation location) {
     return rbc_string_state(rbc_array_state(s, location));
 }
+#include "xrbc_array_ref_transfer.inc.c"
 static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcArrayAccess access = s->function->array_accesses[index];
     const XrRbcArrayLocation *operands = access.count ? s->function->array_operands + access.first : NULL;
     uint8_t source = access.count ? rbc_array_state(s, operands[0]) : RBC_EMPTY;
+    if (access.operation == XR_RBC_ARRAY_BORROW || access.operation == XR_RBC_ARRAY_REF_READ ||
+        access.operation == XR_RBC_ARRAY_REF_WRITE) return rbc_array_ref_transfer(s, access, operands);
     if (access.operation == XR_RBC_ARRAY_NEW) {
         if (!rbc_array_destination(s, access.result)) return false;
         for (uint32_t p = 0; p < access.count; ++p) {
@@ -65,7 +68,8 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
         rbc_array_define(s, operands[0], RBC_EMPTY, 0);
         if (cell) {
             for (uint32_t r = 0; r < s->function->register_count; ++r)
-                if (rbc_cell_state(s->state[r]) && s->origin[r] == origin) s->state[r] = RBC_EMPTY;
+                if ((rbc_cell_state(s->state[r]) || s->state[r] == RBC_ARRAY_REF_CELL) &&
+                    s->origin[r] == origin) s->state[r] = RBC_EMPTY;
         } else if (!operands[0].spill) rbc_string_forget_borrows(s, operands[0].index);
         return true;
     }
@@ -84,6 +88,10 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
 
 static bool rbc_call_parameter_matches(const RbcStringAdmission *s, uint32_t actual, XrRbcRegisterKind formal) {
     uint8_t state = s->state[actual];
+    uint32_t reference = xr_rbc_array_ref_family(formal);
+    if (reference < XR_RBC_ARRAY_FAMILY_COUNT)
+        return rbc_array_ref_state(state) &&
+            rbc_array_ref_payload(s, state, s->origin[actual]) == xr_rbc_array_kind_at(reference);
     if (rbc_managed_kind(formal)) {
         uint32_t source = s->origin[actual];
         return state == RBC_STRING_BORROWED && source && source <= s->function->register_count &&

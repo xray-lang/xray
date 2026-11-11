@@ -29,6 +29,16 @@ static inline uint32_t xr_rbc_array_family(XrRbcRegisterKind kind) {
 static inline bool xr_rbc_state_array(uint32_t kind) {
     return kind >= XRT_MODULE_ARRAY_I64 && kind <= XRT_MODULE_ARRAY_U64;
 }
+static inline XrRbcRegisterKind xr_rbc_array_ref_at(uint32_t family) {
+    static const XrRbcRegisterKind kinds[] = {
+        XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF};
+    return family < XR_RBC_ARRAY_FAMILY_COUNT ? kinds[family] : XR_RBC_BITS;
+}
+static inline uint32_t xr_rbc_array_ref_family(XrRbcRegisterKind kind) {
+    for (uint32_t i = 0; i < XR_RBC_ARRAY_FAMILY_COUNT; ++i)
+        if (kind == xr_rbc_array_ref_at(i)) return i;
+    return XR_RBC_ARRAY_FAMILY_COUNT;
+}
 
 /* Both compiler publication and preparation use this complete receiver.
  * It does not allocate an execution or retain the borrowed module/locations. */

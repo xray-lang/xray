@@ -84,8 +84,20 @@ static void array_reference_owners(void) {
         xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         XrRbcProgram *program = NULL;
-        CHECK(xr_rbc_compile(copy, (XrLirFunction){copy, 1}, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED);
-        CHECK(!program);
+        XrRbcCompileDiagnostic compile_diagnostic = {0};
+        XrRbcCompileStatus compiled = xr_rbc_compile(copy, (XrLirFunction){copy, 1}, &program, &compile_diagnostic);
+        if (compiled != XR_RBC_COMPILE_OK) fprintf(stderr, "Array Ref bytecode: %s (%u/%u/%u)\n",
+            compile_diagnostic.message, compile_diagnostic.function, compile_diagnostic.block, compile_diagnostic.instruction);
+        CHECK(compiled == XR_RBC_COMPILE_OK);
+        CHECK(program);
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        uint64_t result = UINT64_MAX;
+        CHECK(xr_rbc_outcome_bits(outcome, &result) && result == 0);
+        xr_rbc_outcome_free(&outcome);
+        xr_rbc_execution_free(&execution);
+        xr_rbc_program_destroy(program);
         xr_lir_module_destroy(copy);
         xr_lir_module_destroy(inlined);
     }

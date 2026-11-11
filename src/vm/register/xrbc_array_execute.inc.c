@@ -108,6 +108,20 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
     }
     XrRbcRegister *first = xr_rbc_array_location(stack, frame, locations[0]);
     XrRbcRegister *second = access.count > 1 ? xr_rbc_array_location(stack, frame, locations[1]) : NULL;
+    if (access.operation == XR_RBC_ARRAY_BORROW) {
+        XrRbcRegisterKind kind = function->register_kinds[locations[0].index];
+        bool valid = kind == XR_RBC_STATE_REF ? xr_rbc_array_ref_encode_state(first->state_ref, &result->bits) :
+            xr_rbc_array_ref_encode_cell(first->bits, &result->bits);
+        return valid ? XR_RBC_OK : XR_RBC_INVALID;
+    }
+    if (access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_REF_WRITE) {
+        XrtArrayRef reference = {0};
+        if (!xr_rbc_array_ref_decode(stack, module, first->bits, access.kind, source, &reference))
+            return XR_RBC_INVALID;
+        if (access.operation == XR_RBC_ARRAY_REF_READ) result->array = xrt_array_ref_read(reference, source);
+        else xrt_array_ref_write(reference, second->array, source);
+        return XR_RBC_OK;
+    }
     if (access.operation == XR_RBC_ARRAY_REPEAT) {
         int64_t length = xr_rbc_signed(first->bits);
         if (access.kind == XR_RBC_ARRAY_U8 && second->bits > UINT8_MAX) return XR_RBC_INVALID;

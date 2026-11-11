@@ -204,12 +204,14 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                 for (uint32_t a=0; a<i.edges[e].argument_count; ++a)
                     if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
+            if (i.op == XR_LIR_ARRAY_BORROW && !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
         }
     }
     for(uint32_t v=1;v<=c->view.value_count;++v) {
         XrLirType type=rbc_lir_value_type(c,v);
         if(c->slots[v]!=UINT32_MAX ||
-            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE))continue;
+            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF &&
+             type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {

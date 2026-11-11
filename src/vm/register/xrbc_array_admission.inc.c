@@ -45,21 +45,24 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         XrRbcArrayAccess access = f->array_accesses[i];
         if (!rbc_array_kind(access.kind) || access.first > f->array_operand_count ||
             access.count > f->array_operand_count - access.first ||
-            (unsigned)access.operation > XR_RBC_ARRAY_REPEAT) return false;
+            (unsigned)access.operation > XR_RBC_ARRAY_REF_WRITE) return false;
         uint32_t count = access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_PUSH ||
-            access.operation == XR_RBC_ARRAY_CELL_WRITE || access.operation == XR_RBC_ARRAY_REPEAT ? 2u :
+            access.operation == XR_RBC_ARRAY_CELL_WRITE || access.operation == XR_RBC_ARRAY_REPEAT ||
+            access.operation == XR_RBC_ARRAY_REF_WRITE ? 2u :
             access.operation == XR_RBC_ARRAY_SET ? 3u : 1u;
         if (access.operation != XR_RBC_ARRAY_NEW && access.count != count) return false;
         bool result = access.operation == XR_RBC_ARRAY_NEW || access.operation == XR_RBC_ARRAY_REPEAT || access.operation == XR_RBC_ARRAY_LEN ||
             access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_RETAIN ||
             access.operation == XR_RBC_ARRAY_TAKE || access.operation == XR_RBC_ARRAY_CELL_NEW ||
-            access.operation == XR_RBC_ARRAY_CELL_READ;
+            access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_BORROW ||
+            access.operation == XR_RBC_ARRAY_REF_READ;
         XrRbcRegisterKind element = access.kind == XR_RBC_ARRAY_STRING ? XR_RBC_STRING : XR_RBC_BITS;
         if (result) {
             if (!rbc_array_location_valid(f, access.result)) return false;
             XrRbcRegisterKind expected = access.operation == XR_RBC_ARRAY_LEN ? XR_RBC_BITS :
                 access.operation == XR_RBC_ARRAY_GET ? element : access.operation == XR_RBC_ARRAY_CELL_NEW ?
-                xr_rbc_array_cell_at(xr_rbc_array_family(access.kind)) : access.kind;
+                xr_rbc_array_cell_at(xr_rbc_array_family(access.kind)) : access.operation == XR_RBC_ARRAY_BORROW ?
+                xr_rbc_array_ref_at(xr_rbc_array_family(access.kind)) : access.kind;
             if (rbc_array_location_kind(f, access.result) != expected) return false;
         } else if (access.result.index || access.result.spill) return false;
         if (access.operation == XR_RBC_ARRAY_CELL_NEW) {
@@ -69,7 +72,8 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
             XrRbcRegisterKind expected = access.kind;
             if (access.operation == XR_RBC_ARRAY_NEW) expected = element;
             else if (access.operation == XR_RBC_ARRAY_REPEAT) expected = p ? element : XR_RBC_BITS;
-            else if (p) expected = access.operation == XR_RBC_ARRAY_CELL_WRITE ? access.kind :
+            else if (p) expected = access.operation == XR_RBC_ARRAY_CELL_WRITE ||
+                access.operation == XR_RBC_ARRAY_REF_WRITE ? access.kind :
                 access.operation == XR_RBC_ARRAY_GET || (access.operation == XR_RBC_ARRAY_SET && p == 1) ? XR_RBC_BITS : element;
             else if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||
                 access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_CELL_WRITE ||
@@ -77,6 +81,12 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
                 expected = xr_rbc_array_cell_at(xr_rbc_array_family(access.kind));
             XrRbcArrayLocation location = f->array_operands[access.first + p];
             XrRbcRegisterKind kind = rbc_array_location_kind(f, location);
+            if (!p && access.operation == XR_RBC_ARRAY_BORROW) {
+                if (kind != XR_RBC_STATE_REF && kind != xr_rbc_array_cell_at(xr_rbc_array_family(access.kind))) return false;
+                continue;
+            }
+            if (!p && (access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_REF_WRITE))
+                expected = xr_rbc_array_ref_at(xr_rbc_array_family(access.kind));
             if (kind != expected && !(access.operation == XR_RBC_ARRAY_TAKE && kind == XR_RBC_CALL_WINDOW)) return false;
             if (access.operation == XR_RBC_ARRAY_TAKE && location.index == access.result.index &&
                 location.spill == access.result.spill) return false;

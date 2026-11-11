@@ -26,6 +26,7 @@ static bool rbc_lir_array_point(RbcLirCompiler *c, const XrLirInstructionView *i
         return xr_lir_array_intrinsic_view(c->input, i->intrinsic, &shape) == XR_LIR_OK && shape.id;
     }
     if (i->op == XR_LIR_ARRAY_RETAIN || i->op == XR_LIR_ARRAY_DROP || i->op == XR_LIR_ARRAY_CELL_DROP ||
+        i->op == XR_LIR_ARRAY_BORROW || i->op == XR_LIR_ARRAY_REF_READ || i->op == XR_LIR_ARRAY_REF_WRITE ||
         ((i->op == XR_LIR_CELL_NEW || i->op == XR_LIR_CELL_READ) &&
          (i->type == XR_LIR_ARRAY || i->type == XR_LIR_ARRAY_CELL))) return true;
     XrLirType type = XR_LIR_TYPE_INVALID;
@@ -92,6 +93,9 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         case XR_LIR_CELL_NEW: operation = XR_RBC_ARRAY_CELL_NEW; break;
         case XR_LIR_CELL_READ: operation = XR_RBC_ARRAY_CELL_READ; break;
         case XR_LIR_CELL_WRITE: operation = XR_RBC_ARRAY_CELL_WRITE; break;
+        case XR_LIR_ARRAY_BORROW: operation = XR_RBC_ARRAY_BORROW; break;
+        case XR_LIR_ARRAY_REF_READ: operation = XR_RBC_ARRAY_REF_READ; break;
+        case XR_LIR_ARRAY_REF_WRITE: operation = XR_RBC_ARRAY_REF_WRITE; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unknown Array transport");
         }
     }
