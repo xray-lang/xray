@@ -52,6 +52,15 @@ static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_instruction_view(m, (XrLirBlock){m, 1, 1}, 2, &constructor));
     CHECK(constructor.op == XR_LIR_CALL_INTRINSIC && constructor.intrinsic == 11);
     CHECK(constructor.operand_count == 2 && constructor.operands[0] == 1 && constructor.operands[1] == 1);
+    if(element==XR_LIR_I64) {
+        XrRbcProgram *program=NULL;
+        CHECK(xr_rbc_compile(m,(XrLirFunction){m,1},&program,NULL)==XR_RBC_COMPILE_OK);
+        uint64_t argument=7,result=0;XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_program_prepare(program,&argument,1,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+        CHECK(xr_rbc_outcome_bits(outcome,&result) && result==3);
+        xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);xr_rbc_program_destroy(program);
+    }
 }
 
 static void array_receiving_owners(XrLirType element) {
@@ -177,8 +186,13 @@ static void array_shape_rejections(void) {
 
 static void array_backend_frontier(const XrLirModule *m, XrLirFunction entry) {
     XrRbcProgram *program = NULL;
-    CHECK(xr_rbc_compile(m, entry, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program);
+    CHECK(xr_rbc_compile(m, entry, &program, NULL) == XR_RBC_COMPILE_OK && program);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    uint64_t result=0;
+    CHECK(xr_rbc_outcome_bits(outcome,&result) && result==3);
+    xr_rbc_outcome_free(&outcome);xr_rbc_execution_free(&execution);xr_rbc_program_destroy(program);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
@@ -333,12 +347,56 @@ static void array_c_output(const char *name, const char *path) {
     if (!strcmp(name, "state-layout")) {
         CHECK(strstr(output.bytes, "XRT_MODULE_ARRAY_I64") && strstr(output.bytes, "XRT_MODULE_ARRAY_STRING"));
         XrRbcProgram *program = NULL;
-        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
+        xr_rbc_program_destroy(program);
     }
     FILE *file = fopen(path, "wb");
     CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
     xr_lir_c_output_free(&output);
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
+}
+
+typedef struct ArrayVmResult { XrtArray *array; bool string; int64_t value; } ArrayVmResult;
+static void array_vm_result(void *context) {
+    ArrayVmResult *result=context;
+    result->value=xrt_array_length(result->array,0);
+    if(result->string) {
+        XrtString *string=xrt_array_string_get(result->array,0,0);
+        result->value+=xrt_string_length(string,0);xrt_string_drop(&string);
+    } else result->value+=xrt_array_i64_get(result->array,0,0);
+}
+static void array_vm_fixture(const char *name,int64_t expected) {
+    XrLirModule *m=NULL;XrLirFunction root={0};
+    array_c_fixture(name,&m,&root);
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
+    XrRbcCompileStatus status=xr_rbc_compile(m,root,&program,&diagnostic);
+    if(status!=XR_RBC_COMPILE_OK)fprintf(stderr,"Array VM %s compile=%u %s\n",name,(unsigned)status,diagnostic.message);
+    CHECK(status==XR_RBC_COMPILE_OK && program);
+    xr_lir_module_destroy(m);
+    if(!strncmp(name,"array-spills",12)) {
+        const XrRbcModule *view=xr_rbc_program_view(program);
+        CHECK(view->functions[0].reference_spill_count && view->functions[0].reference_spill_kinds);
+    }
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);xr_rbc_program_destroy(program);
+    if(!strncmp(name,"state-uninitialized",19)) {
+        XrXirValueStatus failure=XR_XIR_VALUE_OK;uint32_t source=0;const XrtLocationOwner *locations=NULL;
+        CHECK(xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations));
+        const XrtSourceLocation *point=xrt_locations_get(locations,source);
+        CHECK(failure==XR_XIR_VALUE_BAD_ARGUMENT && point && point->line==(!strcmp(name,"state-uninitialized-read")?37u:41u));
+    } else if(!strncmp(name,"return-",7)) {
+        ArrayVmResult result={.string=strstr(name,"string")!=NULL};
+        CHECK(xr_rbc_outcome_take_array(outcome,&result.array));
+        xr_rbc_outcome_free(&outcome);
+        XrtSourceMap map={0};xrt_run_standalone(&map,array_vm_result,&result);
+        CHECK(result.value==expected);xrt_array_owned_drop(&result.array);
+    } else {
+        uint64_t result=0;
+        CHECK(xr_rbc_outcome_bits(outcome,&result) && result==(uint64_t)expected);
+    }
+    xr_rbc_outcome_free(&outcome);
 }
 
 int main(int argc, char **argv) {
@@ -352,6 +410,11 @@ int main(int argc, char **argv) {
     array_shape_rejections();
     array_cell_loop();
     array_state_shapes();
+    const char *cases[]={"i64","string","large","state-i64","state-string","state-layout",
+        "return-i64","return-string","array-spills","array-spills-string","phi-i64","phi-string",
+        "state-uninitialized-read","state-uninitialized-write"};
+    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0};
+    for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c)array_vm_fixture(cases[c],expected[c]);
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");
     return 0;
 }

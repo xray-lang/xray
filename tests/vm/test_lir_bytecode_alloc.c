@@ -119,6 +119,29 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #define xr_rbc_module_admit compile_admission
 #include "vm/register/xrbc_lir.c"
 #undef xr_rbc_module_admit
+#include "../lir/lir_array_c_fixture.h"
+#include "lir_array_copy_cases.h"
+
+static void array_compiler_failures(const char *name,uint64_t expected) {
+    XrLirModule *m=NULL;XrLirFunction root={0};
+    array_c_fixture(name,&m,&root);
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
+    attempts=0;fail_at=SIZE_MAX;
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    size_t total=attempts;
+    CHECK(total>10);xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    for(size_t point=1;point<=total;++point) {
+        attempts=0;fail_at=point;
+        CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status==XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at=SIZE_MAX;
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(m);
+    uint64_t result=0;CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==expected);
+    xr_rbc_program_destroy(program);CHECK(!live_allocations);
+    printf("Array %s compiler failure points: %zu\n",name,total);
+}
 
 static void source_map_failures(void) {
     for (unsigned grown = 0; grown < 2; ++grown) {
@@ -582,6 +605,10 @@ static void compiled_float_constants(void) {
 }
 
 int main(void) {
+    physical_array_copy_cycle();
+    array_compiler_failures("string",511);
+    array_compiler_failures("large",1500);
+    array_compiler_failures("array-spills-string",1500);
     compiled_float_constants();
     jump_threading();
     jump_compaction();

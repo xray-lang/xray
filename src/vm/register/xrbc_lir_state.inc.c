@@ -6,13 +6,17 @@
  *
  * xrbc_lir_state.inc.c - Receive owned LIR state layouts and reference shapes
  */
-static bool rbc_lir_state_payload(XrLirType type, XrtModuleTypeKind *kind, uint32_t *index) {
+static bool rbc_lir_state_payload(XrLirType type, XrLirType element, XrtModuleTypeKind *kind, uint32_t *index) {
     switch (type) {
     case XR_LIR_UNIT: *kind = XRT_MODULE_UNIT; *index = 0; return true;
     case XR_LIR_I1: *kind = XRT_MODULE_BOOL; *index = 1; return true;
     case XR_LIR_I64: *kind = XRT_MODULE_I64; *index = 2; return true;
     case XR_LIR_F64: *kind = XRT_MODULE_F64; *index = 3; return true;
     case XR_LIR_STRING: *kind = XRT_MODULE_STRING; *index = 4; return true;
+    case XR_LIR_ARRAY:
+        if(element==XR_LIR_I64){*kind=XRT_MODULE_ARRAY_I64;*index=5;return true;}
+        if(element==XR_LIR_STRING){*kind=XRT_MODULE_ARRAY_STRING;*index=6;return true;}
+        return false;
     default: return false;
     }
 }
@@ -35,14 +39,16 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         XrLirStateSlot source = layout.slots[n];
         XrtModuleTypeKind kind;
         uint32_t type;
-        if (!rbc_lir_state_payload(source.payload, &kind, &type)) {status = XR_RBC_COMPILE_UNSUPPORTED; break;}
+        if (!rbc_lir_state_payload(source.payload, source.array_element, &kind, &type)) {status = XR_RBC_COMPILE_UNSUPPORTED; break;}
         slots[n] = (XrtModuleSlotSpec){source.module, type,
             source.mutable ? XRT_MODULE_SLOT_MUTABLE : 0, source.offset, source.size, source.alignment};
     }
     if (status == XR_RBC_COMPILE_OK) {
         static const XrtModuleTypeSpec types[] = {{XRT_MODULE_UNIT}, {XRT_MODULE_BOOL},
-            {XRT_MODULE_I64}, {XRT_MODULE_F64}, {XRT_MODULE_STRING}};
-        XrtModuleLayoutSpec spec = {types, 5, modules, layout.module_count, layout.dependencies,
+            {XRT_MODULE_I64}, {XRT_MODULE_F64}, {XRT_MODULE_STRING}, {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING}};
+        bool arrays=false;
+        for(uint32_t n=0;n<layout.slot_count;++n)arrays|=layout.slots[n].payload==XR_LIR_ARRAY;
+        XrtModuleLayoutSpec spec = {types, arrays?7u:5u, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
             layout.payload_alignment};
         XrXirValueStatus copied = xrt_module_layout_new(&spec, &program->module.state_layout);
@@ -66,7 +72,7 @@ static bool rbc_lir_state_instruction(RbcLirCompiler *c, const XrLirInstructionV
         uint32_t unused;
         if (xr_lir_state_reference_view(c->input,
             (XrLirValue){c->input, c->function.id, i->operands[0]}, &shape) != XR_LIR_OK ||
-            !rbc_lir_state_payload(shape.payload, &kind, &unused))
+            !rbc_lir_state_payload(shape.payload, shape.array_element, &kind, &unused))
             return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "module reference payload is not admitted");
         return i->op == XR_LIR_STATE_READ ? rbc_lir_emit(c, XR_RBC_STATE_READ, result, first, kind, 0) :
             rbc_lir_emit(c, XR_RBC_STATE_WRITE, first, i->operand_count == 2 ? c->slots[i->operands[1]] : 0, kind, 0);

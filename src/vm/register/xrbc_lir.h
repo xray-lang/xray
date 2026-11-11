@@ -47,6 +47,13 @@ typedef struct {
 // Verified literal-address/length pairs used only by direct String output are
 // compile-time operands, not general PTR/U64 values or register contents.
 // The Program owns the selected immutable bytes independently of its input.
+// Closed I64/String Array roles use the common canonical runtime. Array values
+// preserve exact element kinds through calls, selected edges and typed spills.
+// Literal operands are copied as real register/spill locations, including an
+// empty or larger-than-register-bank constructor. Language copies require an
+// explicit ARRAY_RETAIN; SSA edges and returns transfer the existing owner.
+// Array cells remain activation-bound. Block-local cells retire at their real
+// CFG point, while module payloads use the same Array carrier and layout owner.
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);

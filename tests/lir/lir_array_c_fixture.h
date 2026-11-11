@@ -95,6 +95,19 @@ static void ca_module(CArrayFixture *c) {
     OK(xr_lir_set_state_layout(c->module, &layout));
 }
 
+static XrLirFunction ca_array_copy(CArrayFixture *c) {
+    XrLirType array=XR_LIR_ARRAY;XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="array_copy",.name_length=10,.parameters=&array,.parameter_count=1,.result=XR_LIR_ARRAY};
+    OK(xr_lir_declare_function(c->module,&spec,&function));
+    XrLirArrayShape shape={c->element};OK(xr_lir_set_array_result(c->module,function,&shape));
+    XrLirValue parameter={0};OK(xr_lir_function_parameter(c->module,function,0,&parameter));
+    OK(xr_lir_set_array_shape(c->module,parameter,&shape));
+    OK(xr_lir_define_function(c->module,function));XrLirBlock block={0};
+    OK(xr_lir_add_block(c->module,function,NULL,0,&block));OK(xr_lir_set_entry(c->module,function,block));
+    ca_return(c,block,ca_value(c,block,XR_LIR_ARRAY_RETAIN,XR_LIR_ARRAY,&parameter,1));
+    return function;
+}
+
 static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunction *root) {
     bool string = strstr(name, "string") != NULL, state = !strncmp(name, "state-", 6);
     bool layout_only = !strcmp(name, "state-layout"), returned = !strncmp(name, "return-", 7);
@@ -118,6 +131,24 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
         ca_return(&c, entry, ca_constant(&c, entry, 9));
         OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;
     }
+    if (!strncmp(name,"array-spills",12)) {
+        XrLirValue arrays[300];
+        XrLirValue shared=string?ca_text(&c,entry,"value",5):(XrLirValue){0};
+        for(uint32_t p=0;p<300;++p) {
+            XrLirValue seed=string?shared:ca_constant(&c,entry,p);
+            arrays[p]=ca_intrinsic(&c,entry,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,&seed,1);
+        }
+        if(string)ca_effect(&c,entry,XR_LIR_STRING_DROP,shared);
+        XrLirValue index=ca_constant(&c,entry,0),total=ca_constant(&c,entry,0);
+        for(uint32_t p=0;p<300;++p) {
+            XrLirValue args[]={arrays[p],index};
+            XrLirValue value=ca_number(&c,entry,ca_intrinsic(&c,entry,XR_LIR_ARRAY_OP_GET,c.element,args,2));
+            total=ca_binary(&c,entry,XR_LIR_ADD,total,value);
+            ca_effect(&c,entry,XR_LIR_ARRAY_DROP,arrays[p]);
+        }
+        ca_return(&c,entry,total);
+        OK(xr_lir_module_finish(c.module,NULL));*output=c.module;return;
+    }
     XrLirValue state_value = {0}, reference = {0};
     if (state) {
         OK(xr_lir_function_parameter(c.module, *root, 0, &state_value));
@@ -138,6 +169,21 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
         .operands=&seed, .operand_count=1, .source=ca_source()};
     OK(xr_lir_emit_value(c.module, entry, &call, &array));
     if (string) ca_effect(&c, entry, XR_LIR_STRING_DROP, seed);
+    XrLirFunction copy=ca_array_copy(&c);XrLirValue copied={0};
+    call=(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_ARRAY,.callee=copy,
+        .operands=&array,.operand_count=1,.source=ca_source()};
+    OK(xr_lir_emit_value(c.module,entry,&call,&copied));ca_effect(&c,entry,XR_LIR_ARRAY_DROP,array);array=copied;
+    if(!strncmp(name,"phi-",4)) {
+        XrLirBlock join={0};XrLirType type=XR_LIR_ARRAY;XrLirValue selected={0},condition={0};
+        OK(xr_lir_add_block(c.module,*root,&type,1,&join));
+        OK(xr_lir_block_parameter(c.module,join,0,&selected));
+        XrLirArrayShape shape={c.element};OK(xr_lir_set_array_shape(c.module,selected,&shape));
+        XrLirInstruction op={.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1};
+        OK(xr_lir_emit_value(c.module,entry,&op,&condition));
+        op=(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+            .edge_count=2,.edges={{join,&array,1},{join,&array,1}}};
+        OK(xr_lir_set_terminator(c.module,entry,&op));entry=join;array=selected;
+    }
     if (returned) {
         ca_return(&c, entry, array);
         OK(xr_lir_module_finish(c.module, NULL)); *output = c.module; return;

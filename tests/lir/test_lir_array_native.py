@@ -57,6 +57,8 @@ def main():
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
     expected = {'i64': 1202, 'string': 511, 'large': 1500, 'state-i64': 1202,
                 'state-string': 511, 'state-layout': 9, 'return-i64': 13, 'return-string': 7,
+                'array-spills': 44850, 'array-spills-string': 1500,
+                'phi-i64': 1202, 'phi-string': 511,
                 'state-uninitialized-read': None, 'state-uninitialized-write': None}
     record = {'compiler': str(args.compiler), 'cases': {}, 'libraries': {
         str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in args.library if p.is_file()}}
