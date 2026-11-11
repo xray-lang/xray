@@ -16,6 +16,7 @@
 #include "xxir_receive_control.h"
 #include "xxir_operand_roles.h"
 #include "xxir_declarations.h"
+#include "../base/xchecks.h"
 #include "../base/xhash.h"
 
 typedef struct StoragePredecessor {
@@ -28,6 +29,15 @@ typedef struct StorageState { uint32_t point, handle, value, kind, order, genera
 typedef struct StorageWork { uint32_t function, state; } StorageWork;
 typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityLink;
 typedef struct StorageFootprintLink { uint32_t input, next; } StorageFootprintLink;
+typedef struct StorageIdentitySupport {
+    XirStorageReference reference;
+    uint32_t instance, remainder;
+} StorageIdentitySupport;
+typedef struct StorageIdentitySupportCache {
+    StorageIdentitySupport *values;
+    uint32_t *index;
+    uint32_t count, capacity, index_capacity, sites, identities, applications;
+} StorageIdentitySupportCache;
 typedef struct StorageOperation { XrXirOp op; uint32_t source, destination, receiver; } StorageOperation;
 typedef struct StorageRead {
     uint32_t source, target, point;
@@ -110,6 +120,7 @@ struct XirStorageFlow {
     uint32_t *target_heads, target_head_count, target_head_capacity;
     uint32_t progress, request_remainder;
     uint64_t revision;
+    StorageIdentitySupportCache identity_support;
     XrXirStatus status;
     bool sealed, sealing, local_finished, exposure_started;
 };
@@ -983,6 +994,8 @@ static bool storage_reindex_sites(XirStorageFlow *flow) {
         uint32_t point = site.instruction == UINT32_MAX ? row->body->instruction_count + site.block : site.instruction;
         flow->sites[s].next = row->site_heads[point]; row->site_heads[point] = s;
     }
+    /* Equal site counts can still describe a different active binding set. */
+    flow->identity_support.sites = UINT32_MAX;
     return flow->status == XR_XIR_OK;
 }
 
@@ -1388,6 +1401,9 @@ static void storage_retire_construction(XirStorageFlow *flow) {
     xr_compile_resources_free(flow->cross_index); flow->cross_index = NULL;
     xr_compile_resources_free(flow->unknown_index); flow->unknown_index = NULL;
     xr_compile_resources_free(flow->exposure_seed_index); flow->exposure_seed_index = NULL;
+    xr_compile_resources_free(flow->identity_support.values);
+    xr_compile_resources_free(flow->identity_support.index);
+    flow->identity_support = (StorageIdentitySupportCache){0};
     flow->site_count = 0; flow->work_count = 0; flow->work_first = 0;
     flow->stage_count = 0; flow->stage_first = 0;
     flow->module = NULL; flow->execution = NULL; flow->control = NULL;
@@ -1623,6 +1639,7 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
 
 #include "xxir_storage_point.inc.c"
 #include "xxir_storage_environment.inc.c"
+#include "xxir_storage_identity_inputs.inc.c"
 #include "xxir_storage_capture.inc.c"
 
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorageFlowView *output) {

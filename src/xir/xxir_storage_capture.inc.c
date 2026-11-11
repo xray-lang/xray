@@ -75,34 +75,7 @@ static uint32_t storage_capture_hash(StorageCaptureItem item) {
  * sites supply the current contents and environment through their bindings. */
 static bool storage_environment_entry(XirStorageFlow *flow, const XirExecutionSite *input,
     const XirStorageValuePoint *point) {
-    if (!storage_entry_environment(flow, point) || input->caller_instance >= flow->target_head_count) return false;
-    uint32_t head = flow->target_heads[input->caller_instance];
-    bool found = false;
-    for (uint32_t s = head; s != UINT32_MAX && storage_step(flow); s = flow->sites[s].binding_next) {
-        XirExecutionSite site = flow->sites[s].site;
-        if (site.kind == XIR_EXECUTION_CALLBACK_ENTRY || site.declaration != input->receiver_function) continue;
-        /* A same-site Cell across a backedge or a foreign activation still
-         * needs its identity age. This projection admits only the current
-         * caller frame and retains every other context as an obligation. */
-        if (flow->rows[site.function].cyclic || site.capture_environment != XIR_EXECUTION_CURRENT_ENVIRONMENT)
-            return false;
-        XirExecutionArgument actual;
-        XrXirStatus status = xir_execution_argument(flow->execution,&site,input->index,&actual);
-        if (status == XR_XIR_UNRESOLVED) return false;
-        if (status != XR_XIR_OK) {flow->status=status; return false;}
-        if (!actual.cell || actual.function != site.function || actual.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
-            actual.caller_handle != actual.value) return false;
-        StorageAddress address;
-        if (!storage_address(flow,site.function,actual.value,&address)) return false;
-        if (address.count != 1) return false;
-        const StorageFunction *caller = &flow->rows[site.function];
-        uint32_t root = caller->address_values[address.first];
-        if (root < caller->body->parameter_count) return false;
-        XrXirOp allocation = caller->operations[root-caller->body->parameter_count].op;
-        if (allocation != XR_XIR_CELL_NEW && allocation != XR_XIR_CELL_NEW_TAKE) return false;
-        found = true;
-    }
-    return found;
+    return storage_entry_environment(flow,point) && storage_identity_input(flow,input);
 }
 
 static bool storage_capture_push(StorageCaptureWalk *walk, StorageCaptureItem item) {

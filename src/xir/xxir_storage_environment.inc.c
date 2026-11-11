@@ -21,7 +21,7 @@ typedef enum StorageEnvironmentKind {
 
 typedef struct StorageEnvironmentNode {
     XirStorageReference reference;
-    uint32_t target, head, pending;
+    uint32_t target, head, pending, remainder;
     StorageEnvironmentKind kind;
 } StorageEnvironmentNode;
 
