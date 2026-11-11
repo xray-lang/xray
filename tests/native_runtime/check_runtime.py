@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import shutil
 import tempfile
 
@@ -44,7 +45,9 @@ def header_clients(build, logs, libraries):
         link = ['/link', '/INCREMENTAL:NO'] if sanitizer else []
     else:
         flags = ['-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', *sanitizer]
-        link = ['-pthread']
+        link = [
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-pthread']
     text = ('#include "xray_native_runtime.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'

@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -62,7 +63,9 @@ def main():
             assert compiled.returncode == 0, folder
             objects.append(obj)
         command = [args.compiler, *flags, *objects, *args.library]
-        command += ['/Fe:' + str(executable)] if args.kind == 'msvc' else ['-pthread', '-o', executable]
+        command += ['/Fe:' + str(executable)] if args.kind == 'msvc' else [
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-pthread', '-o', executable]
         if args.kind == 'msvc' and args.asan:
             command += ['/link', '/INCREMENTAL:NO']
         linked = run('link-' + optimization, command, folder)
@@ -120,7 +123,9 @@ def main():
                      '-I'+str(args.include),'-I'+str(args.source_root/'src')]
             if args.asan: flags += ['-fsanitize=address,undefined']
             command = [args.compiler,*flags,'-c',observer,'-o',obj]
-            link = [args.compiler,*flags,obj,*args.library,'-pthread','-o',exe]
+            link = [args.compiler,*flags,obj,*args.library,
+                ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+                '-pthread','-o',exe]
         result = run('normal-frame-compile',command,folder);assert result.returncode==0,folder
         result = run('normal-frame-link',link,folder);assert result.returncode==0,folder
         result = run('normal-frame-run',[exe],folder)

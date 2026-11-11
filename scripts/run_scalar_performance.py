@@ -158,6 +158,8 @@ def main() -> None:
                     command += ["/Fe" + str(executable), "/link", "/INCREMENTAL:NO", "/OPT:REF"] if msvc else ["-o", executable]
                     if platform.system() == "Darwin":
                         command += ["-Wl,-dead_strip"]
+                    elif not msvc:
+                        command += ["-Wl,--gc-sections"]
                     run(f"link-{index}-{engine}", command)
                     row[engine] = [executable]
                     result["products"][label][engine] = {

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from test_lir_c_native import run
 from test_lir_carriers_native import _f64_profile, _f64_reject
@@ -243,7 +244,9 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, *args.library, '-pthread', '-o', executable]
+                       '-I' + str(args.include), adapter, *args.library,
+                           ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+                           '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         if name in ('f64-source', 'f64-fneg-source', 'f64-fadd-source'):

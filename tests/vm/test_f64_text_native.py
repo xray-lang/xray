@@ -192,7 +192,9 @@ def main():
         executable = work / (name + ('.exe' if args.kind == 'msvc' else ''))
         link_flags = [flag for flag in flags if flag != '/EHsc']
         command = [compiler, *link_flags, *objects, *args.library]
-        command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm', '-pthread', '-o', executable]
+        command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else [
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-lm', '-pthread', '-o', executable]
         run('link-' + name, command)
         assert run('run-' + name, [executable]) == expected_stdout
 

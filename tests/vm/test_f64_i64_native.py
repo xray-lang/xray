@@ -189,7 +189,9 @@ def main():
         options = [flag for flag in flags(cpp) if flag != '/EHsc']
         compiler = args.cxx_compiler if cpp else args.compiler
         command = [compiler,*options,*objects,*args.library]
-        command += ['/Fe:'+str(executable),'/link','/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm','-pthread','-o',executable]
+        command += ['/Fe:'+str(executable),'/link','/INCREMENTAL:NO'] if args.kind == 'msvc' else [
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-lm','-pthread','-o',executable]
         run('link-'+name,command,stdout=None)
         products.append(dict(name=name,files=[dict(path=str(p),sha256=hashlib.sha256(p.read_bytes()).hexdigest())
             for p in [*sources,*objects,executable]]))

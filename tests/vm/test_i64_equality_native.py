@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -76,7 +77,9 @@ int main(void) {
         for source, obj in zip(('gateway.c', 'adapter.c'), objects):
             run('compile-' + source, [args.compiler, *flags, '-c', work / source, '-o', obj])
         executable = work / 'native'
-        run('link', [args.compiler, *flags, *objects, *args.library, '-lm', '-o', executable])
+        run('link', [args.compiler, *flags, *objects, *args.library,
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-lm', '-o', executable])
     assert run('native', [executable]) == b'2\n'
     files = [work / 'generated.c', *objects, executable]
     (work / 'result.json').write_text(json.dumps({'state': 'PASS', 'observation': observation,
