@@ -21,6 +21,9 @@ REQUIRED = (
     "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke", "test_lir_cli_effects",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
+    # Exercise Array ownership, failure cleanup and complete Source/native parity.
+    "test_native_array", "test_native_array_allocations", "test_lir_array",
+    "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
 )
 
 
