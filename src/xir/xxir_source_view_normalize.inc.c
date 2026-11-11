@@ -358,19 +358,24 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     if (!source_view_effects(ctx,n,bodies,&effect_evidence)) goto source_failure;
     XrXirModule replacement=*module;replacement.functions=functions;replacement.provenance=effect_evidence;
     if (!source_view_construction(ctx,n,&construction)) goto source_failure;
+#if XR_XIR_PARANOID
     status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
         if (bodies[f].initialization_regions)
             status=xr_xir_compile_initialization_check(&ctx->compile,&replacement,f,bodies[f].initialization_regions,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&replacement,diagnostic);
+#endif
     if (status==XR_XIR_OK) status=xir_effects_relocate_prepared(&ctx->compile,
         ctx->semantic_prepare,&replacement,n,ctx->request);
+    if (status==XR_XIR_OK) status=xir_effects_accept_view_normalization(&ctx->compile,
+        ctx->semantic_prepare,&replacement,n,ctx->request);
+#if XR_XIR_PARANOID
     if (status==XR_XIR_OK) {
         XirViewLiveRequest request={.diagnostic=diagnostic,.control=ctx->request};
         status=xir_compile_view_liveness_loans_verified(&ctx->compile,&replacement,ctx->semantic_prepare,&request);
     }
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
+#endif
     if (status==XR_XIR_OK) {
         xr_xir_compile_construction_free(ctx->construction);
         ctx->view_normalized=true;

@@ -54,7 +54,7 @@ XR_FUNC XrXirStatus xir_effects_infer_lifetimes_input(const XrXirCompileContext 
     if (status == XR_XIR_OK) {
         XrXirRootRefiner refiner = {.context = &prepare, .observe = effect_lifetime_observe,
             .points = effect_lifetime_points, .prepare = effect_lifetime_finish};
-        status = effect_infer(context, input, &refiner, output);
+        status = effect_infer(context, input, &refiner, output, diagnostic);
     }
     xr_hir_escape_builder_free(prepare.builder);
     return status;

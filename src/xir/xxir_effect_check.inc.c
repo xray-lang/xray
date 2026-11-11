@@ -154,6 +154,7 @@ typedef struct EffectCheckedRoots {
     XirStorageFlow *storage;
     EffectCheckOrigins storage_origins;
     EffectCheckRestrictions restrictions;
+    bool liveness_checked;
 } EffectCheckedRoots;
 
 typedef struct EffectCheckBuild {

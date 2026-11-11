@@ -299,10 +299,10 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 /* The constructor has retired its graph before the only public ownership
  * move. Its staging can be observed only by private construction consumers. */
 static XrXirStatus effect_infer(const XrXirCompileContext *context,
-    XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
+    XirEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=effect_checked_construct(context,input,refiner,&effects);
+    XrXirStatus status=effect_checked_construct(context,input,refiner,&effects,diagnostic);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(effects);return status; }
     *output=effects;return XR_XIR_OK;
 }

@@ -313,6 +313,7 @@ XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *mem
         !effects->outcomes_owner || effects->final_outcomes || normalization->module.function_count != effects->count)
         return XR_XIR_BAD_STRUCTURE;
     EffectCheckedRoots *roots = effects->checked_roots;
+    roots->liveness_checked = false;
     EffectRelocation relocation = {.source = roots, .normalization = normalization, .control = control};
     XrXirStatus status = effect_relocation_allocate(memory, &relocation, module);
     if (status == XR_XIR_OK) status = effect_relocation_nodes(&relocation);
@@ -377,5 +378,18 @@ XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *mem
     xr_compile_resources_free(instructions);
     xr_compile_resources_free(identity_values);
     effect_relocation_clear(&relocation);
+    return status;
+}
+
+XR_FUNC XrXirStatus xir_effects_accept_view_normalization(const XrXirCompileContext *context,
+    XrXirEffects *effects,const XrXirModule *module,const XirViewNormalization *normalization,
+    XrCompileRequestControl *control) {
+    if (!effects || !effects->checked_roots || effects->final_outcomes || effects->input_facts ||
+        !module || !xir_effects_context_matches(context,effects,module->function_count)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (effects->checked_roots->function[f].values!=(uint64_t)module->functions[f].parameter_count+
+            module->functions[f].instruction_count) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xir_compile_view_normalization_matches(context,normalization,module,control);
+    if (status==XR_XIR_OK) effects->checked_roots->liveness_checked=true;
     return status;
 }

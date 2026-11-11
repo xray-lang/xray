@@ -524,11 +524,13 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
         !refiner->update || !refiner->context ? XR_XIR_BAD_STRUCTURE : lower_control_poll(control);
     if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
+#if XR_XIR_PARANOID
     if (status == XR_XIR_OK)
         status = xir_compile_structure_verify_input(context,(XirEffectInput){built,construction,control},diagnostic);
+#endif
     XrXirEffects *effects = NULL;
     if (status == XR_XIR_OK) status = xir_effects_finish_prepared_input(context,
-        (XirEffectInput){built,construction,control},refiner,&prepared,&effects);
+        (XirEffectInput){built,construction,control},refiner,&prepared,&effects,diagnostic);
     xr_xir_compile_effects_free(prepared);
     if (status == XR_XIR_OK) {
 #if XR_XIR_PARANOID

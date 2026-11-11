@@ -11,6 +11,8 @@
  *   No native frame or scheduling plan participates in semantic acceptance.
  */
 #include "xxir_view_loan_internal.h"
+#include "xxir_view_liveness_internal.h"
+#include "xxir_view_types_internal.h"
 
 static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     XirEffectInput input, XrXirEffects *effects) {
@@ -462,7 +464,8 @@ XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects
 }
 
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *memory,
-    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output) {
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output,
+    XrXirDiagnostic *diagnostic) {
     if (!pending || !*pending) return XR_XIR_BAD_STRUCTURE;
     bool aliased = pending == output;
     XrXirEffects *effects = *pending;
@@ -483,14 +486,22 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
     }
     if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
+    if (status == XR_XIR_OK) status = xir_compile_view_affine_loans_verified(memory,
+        input.module, effects, input.control, diagnostic);
+    if (status == XR_XIR_OK && !effects->checked_roots->liveness_checked) {
+        XirViewLiveRequest request={.diagnostic=diagnostic,.control=input.control};
+        status=xir_compile_view_liveness_loans_verified(memory,input.module,effects,&request);
+        if (status==XR_XIR_OK) effects->checked_roots->liveness_checked=true;
+    }
     EffectCheckBuild build = {.memory = memory, .module = input.module,
         .roots = effects->checked_roots, .control = input.control};
     if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
     if (status == XR_XIR_OK && refiner && refiner->admit) {
-        XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-        status=refiner->admit(refiner->context,input.module,effects,&diagnostic);
+        XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=refiner->admit(refiner->context,input.module,effects,&location);
+        if (status!=XR_XIR_OK && diagnostic) *diagnostic=location;
     }
     if (status == XR_XIR_OK) status = effect_checked_project(memory, effects);
     if (status == XR_XIR_OK && refiner && refiner->update) {
@@ -522,12 +533,12 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
 }
 
 static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
-    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output, XrXirDiagnostic *diagnostic) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *pending = NULL;
     XrXirStatus status = xir_effects_prepare_verified_input(memory, input, refiner, &pending);
     if (status == XR_XIR_OK)
-        status = xir_effects_finish_prepared_input(memory, input, refiner, &pending, output);
+        status = xir_effects_finish_prepared_input(memory, input, refiner, &pending, output, diagnostic);
     xr_xir_compile_effects_free(pending);
     return status;
 }

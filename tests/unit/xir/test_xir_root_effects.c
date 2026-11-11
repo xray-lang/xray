@@ -642,6 +642,9 @@ static void restriction_owner_relocation(void) {
     XrXirEffects effects = {.resources = effect_context.resources, .count = 1,
         .outcomes_owner = &outcomes, .checked_roots = roots};
     CHECK(xir_effects_relocate_prepared(&effect_context, &effects, &next, &normalization, NULL) == XR_XIR_OK);
+    CHECK(!roots->liveness_checked);
+    CHECK(xir_effects_accept_view_normalization(&effect_context, &effects, &next, &normalization, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!roots->liveness_checked);
     const XirRestrictionView *owned = &roots->restrictions.view;
     CHECK(owned->functions[0].physical_values == 4 && owned->functions[0].value_count == 5);
     CHECK(owned->functions[0].intrinsic[2] == 1 && owned->functions[0].intrinsic[4] == 3);

@@ -185,8 +185,10 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
 /* A finish consumes its private owner on every outcome. All Source callbacks
  * finish before a successful independent result becomes visible. */
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *,
-    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **, XrXirEffects **);
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **, XrXirEffects **, XrXirDiagnostic *);
 XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *,
+    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
+XR_FUNC XrXirStatus xir_effects_accept_view_normalization(const XrXirCompileContext *,
     XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
 XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *);
 XR_FUNC struct XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *);

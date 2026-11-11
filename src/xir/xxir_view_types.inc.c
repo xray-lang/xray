@@ -181,8 +181,6 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
     XrXirStatus status=view_flags_build_mode(context,module->types,&flags,true);
     if (status!=XR_XIR_OK || !flags) return status;
     status=view_origins_verify(context,module,input.construction,flags,diagnostic,input.control);
-    if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,module,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,NULL,NULL,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,(XirEffectInput){module,input.construction,input.control},NULL,NULL,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];

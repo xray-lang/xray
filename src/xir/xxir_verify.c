@@ -1589,10 +1589,6 @@ XR_FUNC XrXirStatus xir_compile_view_cell_access_verified_input(const XrXirCompi
     const XrXirConstruction *construction=input.construction;
     if(!construction)return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
-    if (effects) {
-        XrXirStatus status=xir_compile_view_affine_loans_verified(context,module,effects,input.control,diagnostic);
-        if (status!=XR_XIR_OK) return status;
-    }
     ViewCellAccessOperation held={.module=module,.diagnostic=diagnostic};
     uint64_t fixed=sizeof(held)+12u*sizeof(uint64_t);
     if (context->limits.frame_bytes<fixed) return XR_XIR_BUDGET;
