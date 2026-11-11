@@ -645,9 +645,11 @@ static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function
         if (!lir_frame_cell_owner(f, id) && (!value->parameter || value->block))
             return xr_lir_internal_error(d, "Managed Cell requires an entry owner or incoming borrow",
                 function, value->block, 0, NULL);
-        if (value->block && value->block != f->entry && !(released[id - 1] & 2))
+        if (value->block && value->block != f->entry && !(released[id - 1] & 2)) {
+            const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
             return xr_lir_internal_error(d, "block-local Array Cell requires release in its defining block",
-                function, value->block, 0, NULL);
+                function, value->block, 0, &definition->source);
+        }
     }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         for (uint32_t id = 0; id < f->value_count; ++id) released[id] &= 2;
