@@ -241,7 +241,9 @@ XR_RBC_CASE(FLEK) {
     XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) <= xr_rbc_float(constants[c]);
     goto xr_rbc_float_compare;
 }
+#if defined(__clang__) || defined(__GNUC__)
 #include "xrbc_state_dispatch.inc.c"
+#endif
 XR_RBC_CASE(FGT) {
     XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) > xr_rbc_float(XR_RBC_REG(c));
     goto xr_rbc_float_compare;
@@ -425,6 +427,13 @@ XR_RBC_CASE(RET0) {
     XR_RBC_NEXT();
 }
 #if !defined(__clang__) && !defined(__GNUC__)
+default:
+    if (op >= XR_RBC_MODULE_BEGIN && op <= XR_RBC_STATE_WRITE) {
+        XrRbcStatus status = xr_rbc_state_step(function, registers, stack->module_accesses,
+            instruction, XR_RBC_SOURCE());
+        if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
 }
 return XR_RBC_INVALID;
 #endif
