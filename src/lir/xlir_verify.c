@@ -772,6 +772,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid LIR module");
     if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
+    uint32_t array_operations[2][5] = {{0}};
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
         const XrLirIntrinsic *entry = &m->intrinsics[i];
         bool array = xr_lir_internal_array_type(entry->result);
@@ -783,11 +784,20 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         }
         const XrLirArrayIntrinsic *shape = &m->array_intrinsics[i];
         bool empty = !shape->id && !shape->parameter_elements && !shape->parameter_count &&
-            !shape->result_element && !shape->variadic;
+            !shape->result_element && !shape->variadic && !shape->operation;
         if ((array && empty) || (!empty && (shape->id != entry->id ||
             !xr_lir_internal_array_intrinsic_valid(entry, shape))))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is invalid");
+        if (!empty) {
+            XrLirType element = shape->operation == XR_LIR_ARRAY_OP_NEW ?
+                shape->result_element : shape->parameter_elements[0];
+            uint32_t *id = &array_operations[element == XR_LIR_STRING][(uint32_t)shape->operation - 1];
+            if (*id) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation is duplicated");
+            *id = entry->id;
+        }
     }
+    if (memcmp(array_operations, m->array_operations, sizeof(array_operations)))
+        return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation index is invalid");
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");

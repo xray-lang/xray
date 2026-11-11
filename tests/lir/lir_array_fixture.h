@@ -16,17 +16,23 @@
 static XrLirStatus array_fixture_registry(XrLirType element, XrLirModule **output) {
     XrLirType constructor[] = {element}, length[] = {XR_LIR_ARRAY};
     XrLirType append[] = {XR_LIR_ARRAY_CELL, element};
+    XrLirType get[] = {XR_LIR_ARRAY, XR_LIR_I64}, set[] = {XR_LIR_ARRAY_CELL, XR_LIR_I64, element};
     XrLirIntrinsic entries[] = {{11, constructor, 1, XR_LIR_ARRAY, true},
-        {12, length, 1, XR_LIR_I64, true}, {13, append, 2, XR_LIR_UNIT, true}};
-    XrLirRegistry registry = {entries, 3};
+        {12, length, 1, XR_LIR_I64, true}, {13, append, 2, XR_LIR_UNIT, true},
+        {14, get, 2, element, true}, {15, set, 3, XR_LIR_UNIT, true}};
+    XrLirRegistry registry = {entries, 5};
     XrLirStatus status = xr_lir_module_create(&registry, output);
     if (status != XR_LIR_OK) return status;
     XrLirType constructor_shape[] = {XR_LIR_TYPE_INVALID}, length_shape[] = {element};
     XrLirType append_shape[] = {element, XR_LIR_TYPE_INVALID};
-    XrLirArrayIntrinsic shapes[] = {{11, constructor_shape, 1, element, true},
-        {12, length_shape, 1, XR_LIR_TYPE_INVALID, false},
-        {13, append_shape, 2, XR_LIR_TYPE_INVALID, false}};
-    for (uint32_t i = 0; i < 3; ++i) {
+    XrLirType get_shape[] = {element, XR_LIR_TYPE_INVALID};
+    XrLirType set_shape[] = {element, XR_LIR_TYPE_INVALID, XR_LIR_TYPE_INVALID};
+    XrLirArrayIntrinsic shapes[] = {{11, constructor_shape, 1, element, true, XR_LIR_ARRAY_OP_NEW},
+        {12, length_shape, 1, XR_LIR_TYPE_INVALID, false, XR_LIR_ARRAY_OP_LEN},
+        {13, append_shape, 2, XR_LIR_TYPE_INVALID, false, XR_LIR_ARRAY_OP_PUSH},
+        {14, get_shape, 2, XR_LIR_TYPE_INVALID, false, XR_LIR_ARRAY_OP_GET},
+        {15, set_shape, 3, XR_LIR_TYPE_INVALID, false, XR_LIR_ARRAY_OP_SET}};
+    for (uint32_t i = 0; i < 5; ++i) {
         status = xr_lir_set_array_intrinsic(*output, &shapes[i]);
         if (status != XR_LIR_OK) return status;
     }

@@ -63,6 +63,7 @@ struct XrLirModule {
     XrLirIntrinsic *intrinsics;
     uint32_t intrinsic_count;
     XrLirArrayIntrinsic *array_intrinsics;
+    uint32_t array_operations[2][5];
     XrLirStatus failure;
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;

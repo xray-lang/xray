@@ -12,11 +12,17 @@
  */
 #ifndef XLIR_ARRAY_H
 #define XLIR_ARRAY_H
-#include "xlir.h"
+#include "xlir_builder.h"
 
 typedef struct XrLirArrayShape {
     XrLirType element;
 } XrLirArrayShape;
+
+typedef enum XrLirArrayOperation {
+    XR_LIR_ARRAY_OP_INVALID,
+    XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY_OP_LEN, XR_LIR_ARRAY_OP_GET,
+    XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH
+} XrLirArrayOperation;
 
 typedef struct XrLirArrayIntrinsic {
     uint32_t id;
@@ -26,7 +32,15 @@ typedef struct XrLirArrayIntrinsic {
     /* The sole scalar/String parameter repeats, including zero operands.
      * Only an Array constructor may request this typed variadic shape. */
     bool variadic;
+    XrLirArrayOperation operation;
 } XrLirArrayIntrinsic;
+
+/* Creation owns both closed element families and copies any extra registry.
+ * Operation IDs are module-local. Query them before emitting calls instead of
+ * assigning numeric meanings in a lowering or backend. Output must be empty. */
+XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *, XrLirModule **);
+XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType element,
+    XrLirArrayOperation, uint32_t *id);
 
 /* Explicit shapes belong only to function and block parameters. Instruction
  * results derive their shape from the actual producer, callee or intrinsic.

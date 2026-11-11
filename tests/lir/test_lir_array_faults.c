@@ -70,6 +70,23 @@ static void array_construction_sweep(XrLirType element) {
     printf("Array element %u construction failure points: %zu\n", (unsigned)element, count);
 }
 
+static void array_catalog_sweep(void) {
+    XrLirModule *m = NULL;
+    attempt = 0; fail_at = SIZE_MAX;
+    OK(xr_lir_array_module_create(NULL, &m));
+    size_t count = attempt;
+    OK(xr_lir_module_finish(m, NULL));
+    xr_lir_module_destroy(m);
+    CHECK(!live && !live_bytes);
+    for (size_t point = 0; point < count; ++point) {
+        m = NULL; attempt = 0; fail_at = point;
+        CHECK(xr_lir_array_module_create(NULL, &m) == XR_LIR_OUT_OF_MEMORY);
+        CHECK(!m && attempt > point && !live && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    printf("Array catalog failure points: %zu\n", count);
+}
+
 static void array_transform_sweep(bool inlining) {
     XrLirModule *input = NULL, *output = NULL;
     OK(array_fixture_create(XR_LIR_STRING, &input));
@@ -94,6 +111,7 @@ static void array_transform_sweep(bool inlining) {
 }
 
 int main(void) {
+    array_catalog_sweep();
     array_construction_sweep(XR_LIR_I64);
     array_construction_sweep(XR_LIR_STRING);
     array_transform_sweep(false);
