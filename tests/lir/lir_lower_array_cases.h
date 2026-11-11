@@ -33,6 +33,13 @@ static void array_sources(void) {
         "print(bytes[0] as i64)\n",
         "fn words(value:u64)->Array<u64>{return [value,value]}\n"
         "const values=words(18446744073709551615)\nprint(values[1] as i64)\n",
+        "fn append(values:ref Array<u8>,value:u8){values.push(value)}\n"
+        "var values:Array<u8>=[1]\nappend(ref values,2)\n"
+        "fn local(){var values:Array<u8>=[3]\nappend(ref values,4)}\nlocal()\n",
+        "var values:Array<u64>=[18446744073709551615]\n"
+        "fn inspect(){values=[9223372036854775808]}\n"
+        "fn update(other:ref Array<u64>){other.push(7)\ninspect()\nother.push(9)}\n"
+        "update(ref values)\nprint(values[1] as i64)\n",
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrLirLowered output = lower_text(cases[i]);

@@ -36,6 +36,11 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
             cells->indices[v] = ++count;
         }
     XR_DCHECK(count == cells->count, "physical Cell inventory keeps one owner per constructor");
+    for (uint32_t v = 0; v < function->value_count; ++v) {
+        const XrLirInstructionView *op = xr_lir_internal_value_definition(function, v + 1);
+        if (op && op->op == XR_LIR_ARRAY_BORROW)
+            cells->indices[v] = cells->indices[op->operands[0] - 1];
+    }
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
         const XrLirBlockData *block = &function->blocks[f->blocks[b].id - 1];
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
@@ -48,7 +53,8 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
                 }
             }
             uint32_t owner = op->result ? cells->indices[op->result - 1] : 0;
-            if (owner) cells->define[(size_t)b * count + owner - 1] = 1;
+            if (owner && op->op == XR_LIR_CELL_NEW)
+                cells->define[(size_t)b * count + owner - 1] = 1;
         }
     }
     bool changed = true;

@@ -47,7 +47,7 @@ def main() -> None:
 
     for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
                  "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
-                 "ref_borrow", "ref_cfg", "repeat_values", "repeat_strings", "panic_repeat_negative",
+                 "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
                  "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
                  "panic_bounds", "panic_unpublished"):
         source = fixtures / (name + ".xr")
@@ -105,6 +105,7 @@ def main() -> None:
         "reject_repeat_string_default": b"type has no admitted default initializer",
         "reject_unsigned_family": b"expression cannot satisfy its declared type",
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
+        "reject_ref_alias": b"ref arguments of one call must not alias",
     }
     for name, diagnostic in rejected_sources.items():
         source = fixtures / (name + ".xr")

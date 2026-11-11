@@ -18,9 +18,10 @@ static bool lower_array_read(LowerFunction *f, uint32_t b, XrLirValue receiver,
     XrLirValue *output) {
     XrLirType type = lower_value_type(f, receiver);
     if (type == XR_LIR_ARRAY) { *output = receiver; return true; }
-    if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_STATE_REF)
+    if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_STATE_REF && type != XR_LIR_ARRAY_REF)
         return lower_unsupported(f->owner, "Array receiver without a typed binding");
-    XrLirInstruction read = {.op = type == XR_LIR_ARRAY_CELL ? XR_LIR_CELL_READ : XR_LIR_STATE_READ,
+    XrLirInstruction read = {.op = type == XR_LIR_ARRAY_CELL ? XR_LIR_CELL_READ :
+        type == XR_LIR_ARRAY_REF ? XR_LIR_ARRAY_REF_READ : XR_LIR_STATE_READ,
         .type = XR_LIR_ARRAY, .operands = &receiver, .operand_count = 1,
         .source = lower_source(f->owner)};
     *output = (XrLirValue){0};
@@ -48,11 +49,12 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         if (!lower_value(f, op->args[0], &args[0])) return false;
         bool read = op->op == XR_XIR_PLACE_READ;
         XrLirType type = lower_value_type(f, args[0]);
-        if (type != XR_LIR_STATE_REF && type != XR_LIR_ARRAY_CELL)
+        if (type != XR_LIR_STATE_REF && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF)
             return lower_unsupported(c, "Array place without a typed binding");
         if (read) return lower_array_read(f, b, args[0], &f->values[result]);
         if (!lower_value(f, op->args[1], &args[1])) return false;
-        XrLirInstruction write = {.op = type == XR_LIR_STATE_REF ? XR_LIR_STATE_WRITE : XR_LIR_CELL_WRITE,
+        XrLirInstruction write = {.op = type == XR_LIR_STATE_REF ? XR_LIR_STATE_WRITE :
+            type == XR_LIR_ARRAY_REF ? XR_LIR_ARRAY_REF_WRITE : XR_LIR_CELL_WRITE,
             .type = XR_LIR_UNIT, .operands = args, .operand_count = 2, .source = lower_source(c)};
         return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &write));
     }
@@ -90,8 +92,8 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     if (good && !constructor) {
         XrLirType type = lower_value_type(f, args[0]);
         if (!mutation) good = lower_array_read(f, b, args[0], &args[0]);
-        else if (type == XR_LIR_STATE_REF || cell != UINT32_MAX) {
-            if (type == XR_LIR_STATE_REF) reference = args[0];
+        else if (type == XR_LIR_STATE_REF || type == XR_LIR_ARRAY_REF || cell != UINT32_MAX) {
+            if (type == XR_LIR_STATE_REF || type == XR_LIR_ARRAY_REF) reference = args[0];
             good = lower_array_read(f, b, args[0], &temporary);
             XrLirInstruction construct = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_ARRAY_CELL,
                 .operands = &temporary, .operand_count = 1, .source = lower_source(c)};
@@ -115,7 +117,8 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         if (cell != UINT32_MAX) f->current[cell] = updated;
         else {
             XrLirValue write_args[2] = {reference, updated};
-            XrLirInstruction write = {.op = XR_LIR_STATE_WRITE, .type = XR_LIR_UNIT,
+            XrLirInstruction write = {.op = lower_value_type(f, reference) == XR_LIR_ARRAY_REF ?
+                XR_LIR_ARRAY_REF_WRITE : XR_LIR_STATE_WRITE, .type = XR_LIR_UNIT,
                 .operands = write_args, .operand_count = 2, .source = lower_source(c)};
             if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &write));
         }

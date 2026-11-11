@@ -216,8 +216,26 @@ static void array_unsigned_failures(void) {
     printf("Unsigned Array Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void array_reference_failures(void) {
+    SourceFixture fixture = source_fixture("var shared:Array<u8>=[1]\n"
+        "fn append(values:ref Array<u8>,value:u8){values.push(value)}\n"
+        "fn forward(values:ref Array<u8>){append(ref values,2)}\n"
+        "fn local(){var values:Array<u8>=[3]\nvar i=0\n"
+        "while(i<3){forward(ref values)\ni=i+1}\nprint(values[3] as i64)}\n"
+        "forward(ref shared)\nlocal()\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 30);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Borrowed Array binding Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
     array_unsigned_failures();
+    array_reference_failures();
     array_repeat_failures();
     array_cell_cfg_failures();
     array_flow_failures();

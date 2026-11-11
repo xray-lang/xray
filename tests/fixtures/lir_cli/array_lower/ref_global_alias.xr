@@ -1,0 +1,7 @@
+var shared:Array<u8>=[1]
+const saved=shared
+fn inspect(){print(len(shared));shared=[8,9]}
+fn update(values:ref Array<u8>){values.push(2);inspect();print(values[0] as i64);values.push(10)}
+update(ref shared)
+print(shared[2] as i64)
+print(saved[0] as i64)

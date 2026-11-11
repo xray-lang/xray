@@ -1,0 +1,6 @@
+fn append(values:ref Array<u8>,value:u8){values.push(value)}
+var shared:Array<u8>=[1]
+fn local(){var values:Array<u8>=[3];append(ref values,4);print(values[1] as i64)}
+append(ref shared,2)
+local()
+print(shared[1] as i64)

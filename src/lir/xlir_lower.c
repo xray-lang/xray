@@ -895,8 +895,10 @@ static bool lower_declare(Lower *c, uint32_t index) {
         return false;
     }
     memcpy(name + prefix, f->name, f->name_length);
-    for (uint32_t p = 0; p < f->parameter_count; ++p)
+    for (uint32_t p = 0; p < f->parameter_count; ++p) {
         parameters[p] = lower_type(c, f->parameters[p]);
+        if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
+    }
     if (hidden) parameters[f->parameter_count] = XR_LIR_STATE;
     XrLirFunctionSpec spec = {.name = name,
                               .name_length = (size_t) prefix + f->name_length,
@@ -1337,6 +1339,18 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         c, xr_lir_emit_value(c->module, f->blocks[b], &instruction, &f->values[result]));
 }
 
+static bool lower_array_borrow(LowerFunction *f, uint32_t b, XrLirValue *value) {
+    Lower *c = f->owner;
+    XrLirType type = c->module->functions[f->function.id - 1].values[value->id - 1].type;
+    if (type == XR_LIR_ARRAY_REF) return true;
+    XrLirInstruction borrow = {.op=XR_LIR_ARRAY_BORROW, .type=XR_LIR_ARRAY_REF,
+        .operands=value, .operand_count=1, .source=lower_source(c)};
+    XrLirValue output = {0};
+    if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &borrow, &output))) return false;
+    *value = output;
+    return true;
+}
+
 static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -1391,6 +1405,12 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
             good = false;
             break;
         }
+    if (good && op->op == XR_XIR_CALL) {
+        const XrLirFunctionData *callee = &c->module->functions[c->functions[(uint32_t)op->immediate].id - 1];
+        for (uint32_t a = 0; a < op->args[1] && good; ++a)
+            if (callee->parameter_types[a] == XR_LIR_ARRAY_REF)
+                good = lower_array_borrow(f, b, &arguments[a]);
+    }
     if (hidden && good) {
         arguments[op->args[1]] = f->state;
         if (!f->state.id) {
@@ -1491,6 +1511,8 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
             xr_xir_cell_element(c->source->types, op->type)) ? XR_LIR_ARRAY_CELL : XR_LIR_STRING_CELL;
         if (!lower_value(f, op->args[0], &args[0]) ||
             (op->op == XR_XIR_CELL_WRITE && !lower_value(f, op->args[1], &args[1]))) return false;
+        if (!create && c->module->functions[f->function.id - 1].values[args[0].id - 1].type == XR_LIR_ARRAY_REF)
+            instruction.op = op->op == XR_XIR_CELL_READ ? XR_LIR_ARRAY_REF_READ : XR_LIR_ARRAY_REF_WRITE;
     }
     return lower_build(c, instruction.type == XR_LIR_UNIT
         ? xr_lir_emit_effect(c->module, f->blocks[b], &instruction)
