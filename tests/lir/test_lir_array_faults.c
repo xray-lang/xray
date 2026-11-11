@@ -53,6 +53,7 @@ static void array_free(void *memory) {
 #include "lir/xlir_rebuild.c"
 #include "lir/xlir_inline.c"
 #include "lir_array_fixture.h"
+#include "lir_array_repeat_fixture.h"
 
 static void array_construction_sweep(XrLirType element) {
     XrLirModule *m = NULL;
@@ -87,9 +88,25 @@ static void array_catalog_sweep(void) {
     printf("Array catalog failure points: %zu\n", count);
 }
 
-static void array_transform_sweep(bool inlining) {
+static void array_repeat_sweep(XrLirType element) {
+    XrLirModule *m = NULL;
+    attempt = 0; fail_at = SIZE_MAX;
+    OK(array_repeat_fixture(element, &m));
+    size_t count = attempt;
+    xr_lir_module_destroy(m);
+    CHECK(!live && !live_bytes);
+    for (size_t point = 0; point < count; ++point) {
+        m = NULL; attempt = 0; fail_at = point;
+        CHECK(array_repeat_fixture(element, &m) == XR_LIR_OUT_OF_MEMORY);
+        CHECK(!m && attempt > point && !live && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    printf("Array repeat element %u failure points: %zu\n", (unsigned)element, count);
+}
+
+static void array_transform_sweep(bool inlining, bool repeating) {
     XrLirModule *input = NULL, *output = NULL;
-    OK(array_fixture_create(XR_LIR_STRING, &input));
+    OK(repeating ? array_repeat_fixture(XR_LIR_STRING, &input) : array_fixture_create(XR_LIR_STRING, &input));
     size_t baseline = live, bytes = live_bytes;
     attempt = 0;
     OK(inlining ? xr_lir_inline(input, &output) : xr_lir_rebuild(input, &output));
@@ -107,15 +124,19 @@ static void array_transform_sweep(bool inlining) {
     fail_at = SIZE_MAX;
     xr_lir_module_destroy(input);
     CHECK(!live && !live_bytes);
-    printf("Array %s failure points: %zu\n", inlining ? "inline" : "rebuild", count);
+    printf("Array %s%s failure points: %zu\n", repeating ? "repeat " : "", inlining ? "inline" : "rebuild", count);
 }
 
 int main(void) {
     array_catalog_sweep();
+    array_repeat_sweep(XR_LIR_I64);
+    array_repeat_sweep(XR_LIR_STRING);
     array_construction_sweep(XR_LIR_I64);
     array_construction_sweep(XR_LIR_STRING);
-    array_transform_sweep(false);
-    array_transform_sweep(true);
+    array_transform_sweep(false, false);
+    array_transform_sweep(true, false);
+    array_transform_sweep(false, true);
+    array_transform_sweep(true, true);
     puts("Array metadata construction and transform allocation sweeps passed");
     return 0;
 }

@@ -21,7 +21,7 @@ typedef struct XrLirArrayShape {
 typedef enum XrLirArrayOperation {
     XR_LIR_ARRAY_OP_INVALID,
     XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY_OP_LEN, XR_LIR_ARRAY_OP_GET,
-    XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH
+    XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH, XR_LIR_ARRAY_OP_REPEAT
 } XrLirArrayOperation;
 
 typedef struct XrLirArrayIntrinsic {
@@ -29,8 +29,8 @@ typedef struct XrLirArrayIntrinsic {
     const XrLirType *parameter_elements;
     uint32_t parameter_count;
     XrLirType result_element;
-    /* The sole scalar/String parameter repeats, including zero operands.
-     * Only an Array constructor may request this typed variadic shape. */
+    /* NEW takes a typed variadic list, including zero operands. REPEAT takes
+     * exactly length:I64 and a borrowed fill of the result's element type. */
     bool variadic;
     XrLirArrayOperation operation;
 } XrLirArrayIntrinsic;

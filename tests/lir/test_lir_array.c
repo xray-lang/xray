@@ -15,6 +15,7 @@
 #include "vm/register/xrbc_lir.h"
 #include "base/xmalloc.h"
 #include "lir_array_fixture.h"
+#include "lir_array_repeat_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
@@ -116,7 +117,7 @@ static void array_catalog(void) {
     OK(xr_lir_array_module_create(&registry, &m));
     for (uint32_t family = 0; family < 2; ++family) {
         XrLirType element = family ? XR_LIR_STRING : XR_LIR_I64;
-        for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
+        for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_REPEAT; ++op) {
             uint32_t id = 0;
             OK(xr_lir_array_operation(m, element, (XrLirArrayOperation)op, &id));
             CHECK(id && id != extra.id);
@@ -134,6 +135,54 @@ static void array_catalog(void) {
     CHECK(shape.variadic && shape.operation == XR_LIR_ARRAY_OP_NEW && shape.result_element == XR_LIR_STRING);
     CHECK(xr_lir_array_operation(copy, XR_LIR_F64, XR_LIR_ARRAY_OP_NEW, &id) == XR_LIR_INVALID_ARGUMENT && !id);
     xr_lir_module_destroy(copy);
+}
+
+static void array_repeat_owners(void) {
+    for (unsigned family = 0; family < 2; ++family) {
+        XrLirType element = family ? XR_LIR_STRING : XR_LIR_I64;
+        XrLirModule *m = NULL;
+        OK(array_repeat_fixture(element, &m));
+        uint32_t id = 0;
+        OK(xr_lir_array_operation(m, element, XR_LIR_ARRAY_OP_REPEAT, &id));
+        XrLirArrayIntrinsic before = {0};
+        OK(xr_lir_array_intrinsic_view(m, id, &before));
+        CHECK(!before.variadic && before.parameter_count == 2 && before.result_element == element);
+        CHECK(!before.parameter_elements[0] && !before.parameter_elements[1]);
+        XrLirModule *copy = NULL;
+        OK(xr_lir_rebuild(m, &copy));
+        XrLirArrayIntrinsic after = {0};
+        OK(xr_lir_array_intrinsic_view(copy, id, &after));
+        CHECK(before.parameter_elements != after.parameter_elements);
+        xr_lir_module_destroy(m);
+        m = NULL;
+        OK(xr_lir_inline(copy, &m));
+        xr_lir_module_destroy(copy);
+        copy = NULL;
+        OK(xr_lir_sccp(m, &copy));
+        xr_lir_module_destroy(m);
+        OK(xr_lir_verify(copy, NULL));
+        XrLirArrayShape shape = {0};
+        OK(xr_lir_array_result_view(copy, (XrLirFunction){copy, 1}, &shape));
+        CHECK(shape.element == element);
+        xr_lir_module_destroy(copy);
+    }
+    for (unsigned scenario = 0; scenario < 6; ++scenario) {
+        XrLirModule *m = NULL;
+        OK(array_repeat_fixture(XR_LIR_STRING, &m));
+        uint32_t id = 0;
+        OK(xr_lir_array_operation(m, XR_LIR_STRING, XR_LIR_ARRAY_OP_REPEAT, &id));
+        uint32_t index = 0;
+        while (index < m->intrinsic_count && m->intrinsics[index].id != id) ++index;
+        CHECK(index < m->intrinsic_count);
+        if (scenario == 0) m->array_intrinsics[index].variadic = true;
+        if (scenario == 1) m->array_intrinsics[index].result_element = XR_LIR_I64;
+        if (scenario == 2) ((XrLirType *)m->array_intrinsics[index].parameter_elements)[0] = XR_LIR_I64;
+        if (scenario == 3) ((XrLirType *)m->intrinsics[index].parameters)[0] = XR_LIR_STRING;
+        if (scenario == 4) m->functions[0].blocks[0].instructions[0].view.operand_count = 1;
+        if (scenario == 5) m->array_intrinsics[index].operation = XR_LIR_ARRAY_OP_NEW;
+        CHECK(xr_lir_verify(m, NULL) == XR_LIR_VERIFY_ERROR);
+        xr_lir_module_destroy(m);
+    }
 }
 
 static void array_missing_release(void) {
@@ -403,6 +452,7 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     array_catalog();
+    array_repeat_owners();
     array_receiving_owners(XR_LIR_I64);
     array_receiving_owners(XR_LIR_STRING);
     array_corruptions();

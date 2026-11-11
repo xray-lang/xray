@@ -67,6 +67,9 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *entry,
     if (shape->operation == XR_LIR_ARRAY_OP_NEW)
         return shape->variadic && entry->result == XR_LIR_ARRAY && entry->parameter_count == 1 &&
             entry->parameters[0] == shape->result_element;
+    if (shape->operation == XR_LIR_ARRAY_OP_REPEAT)
+        return !shape->variadic && entry->result == XR_LIR_ARRAY && entry->parameter_count == 2 &&
+            entry->parameters[0] == XR_LIR_I64 && entry->parameters[1] == shape->result_element;
     if (shape->variadic || !entry->parameter_count) return false;
     XrLirType element = shape->parameter_elements[0];
     switch (shape->operation) {
@@ -93,7 +96,7 @@ XR_FUNC XrLirStatus xr_lir_set_array_intrinsic(XrLirModule *m,
     if (index == UINT32_MAX || !xr_lir_internal_array_intrinsic_valid(&m->intrinsics[index], input) ||
         (m->array_intrinsics && m->array_intrinsics[index].id))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-    XrLirType element = input->operation == XR_LIR_ARRAY_OP_NEW ?
+    XrLirType element = m->intrinsics[index].result == XR_LIR_ARRAY ?
         input->result_element : input->parameter_elements[0];
     uint32_t family = element == XR_LIR_STRING;
     uint32_t operation = (uint32_t)input->operation - 1;
@@ -117,18 +120,19 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     XrLirArrayOperation operation, uint32_t *id) {
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(element) ||
-        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_PUSH)
+        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_REPEAT)
         return XR_LIR_INVALID_ARGUMENT;
     *id = m->array_operations[element == XR_LIR_STRING][(uint32_t)operation - 1];
     return *id ? XR_LIR_OK : XR_LIR_UNSUPPORTED;
 }
 
 XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLirModule **output) {
+    enum { operations = XR_LIR_ARRAY_OP_REPEAT, catalog = 2 * operations };
     uint32_t count = extra ? extra->count : 0;
-    if (!output || *output || (count && !extra->entries) || count > UINT32_MAX - 11 ||
-        (size_t)count + 10 > SIZE_MAX / sizeof(XrLirIntrinsic))
+    if (!output || *output || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
+        (size_t)count + catalog > SIZE_MAX / sizeof(XrLirIntrinsic))
         return XR_LIR_INVALID_ARGUMENT;
-    uint32_t total = count + 10;
+    uint32_t total = count + catalog;
     XrLirIntrinsic *entries = xr_malloc((size_t)total * sizeof(*entries));
     uint8_t *used = xr_malloc((size_t)total + 1);
     if (!entries || !used) { xr_free(entries); xr_free(used); return XR_LIR_OUT_OF_MEMORY; }
@@ -136,14 +140,14 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLir
     memset(used, 0, (size_t)total + 1);
     for (uint32_t i = 0; i < count; ++i)
         if (entries[i].id <= total) used[entries[i].id] = 1;
-    XrLirType parameters[10][3] = {{0}}, shapes[10][3] = {{0}};
-    XrLirArrayIntrinsic descriptors[10] = {{0}};
+    XrLirType parameters[catalog][3] = {{0}}, shapes[catalog][3] = {{0}};
+    XrLirArrayIntrinsic descriptors[catalog] = {{0}};
     uint32_t next = 1;
-    for (uint32_t i = 0; i < 10; ++i) {
+    for (uint32_t i = 0; i < catalog; ++i) {
         while (used[next]) ++next;
         used[next] = 1;
-        XrLirType element = i < 5 ? XR_LIR_I64 : XR_LIR_STRING;
-        XrLirArrayOperation operation = (XrLirArrayOperation)(i % 5 + 1);
+        XrLirType element = i < operations ? XR_LIR_I64 : XR_LIR_STRING;
+        XrLirArrayOperation operation = (XrLirArrayOperation)(i % operations + 1);
         uint32_t arity = 1;
         XrLirType result = XR_LIR_UNIT;
         parameters[i][0] = XR_LIR_ARRAY;
@@ -160,17 +164,20 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLir
             parameters[i][1] = XR_LIR_I64; parameters[i][2] = element; break;
         case XR_LIR_ARRAY_OP_PUSH:
             arity = 2; parameters[i][0] = XR_LIR_ARRAY_CELL; parameters[i][1] = element; break;
+        case XR_LIR_ARRAY_OP_REPEAT:
+            arity = 2; parameters[i][0] = XR_LIR_I64; parameters[i][1] = element;
+            shapes[i][0] = XR_LIR_TYPE_INVALID; result = XR_LIR_ARRAY; break;
         default: break;
         }
         entries[count + i] = (XrLirIntrinsic){next, parameters[i], arity, result, true};
         descriptors[i] = (XrLirArrayIntrinsic){next, shapes[i], arity,
-            operation == XR_LIR_ARRAY_OP_NEW ? element : XR_LIR_TYPE_INVALID,
+            result == XR_LIR_ARRAY ? element : XR_LIR_TYPE_INVALID,
             operation == XR_LIR_ARRAY_OP_NEW, operation};
     }
     XrLirRegistry registry = {entries, total};
     XrLirModule *m = NULL;
     XrLirStatus status = xr_lir_module_create(&registry, &m);
-    for (uint32_t i = 0; status == XR_LIR_OK && i < 10; ++i)
+    for (uint32_t i = 0; status == XR_LIR_OK && i < catalog; ++i)
         status = xr_lir_set_array_intrinsic(m, &descriptors[i]);
     xr_free(entries); xr_free(used);
     if (status != XR_LIR_OK) { xr_lir_module_destroy(m); return status; }
