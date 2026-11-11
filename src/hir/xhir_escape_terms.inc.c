@@ -184,6 +184,15 @@ static XrXirStatus restriction_capture(void *context, const XirStorageCapture *c
         XrXirType type = owner->nodes[owner->offsets[f] + p].type;
         if (!xr_xir_callable_signature(owner->module->types, type) || xr_xir_type_is_c_callable(owner->module->types, type))
             return XR_XIR_BAD_STRUCTURE;
+    } else if (capture->kind == XIR_STORAGE_CAPTURE_CONTENTS_FN) {
+        uint32_t f = capture->identity.function, p = capture->identity.value;
+        if (capture->exposure != UINT32_MAX || f != capture->function ||
+            capture->identity.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+            f >= owner->module->function_count || p >= owner->functions[f].captures)
+            return XR_XIR_BAD_STRUCTURE;
+        XrXirType type = owner->nodes[owner->offsets[f] + p].type;
+        if (!xr_xir_type_is_cell(owner->module->types, type) || !xr_xir_callable_signature(owner->module->types,
+            xr_xir_cell_element(owner->module->types, type))) return XR_XIR_BAD_STRUCTURE;
     } else if (capture->kind == XIR_STORAGE_CAPTURE_OPAQUE_FN) {
         if (capture->exposure != UINT32_MAX || capture->identity.function != capture->function ||
             capture->identity.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
@@ -509,17 +518,27 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
         uint32_t index = restriction_node(solver, input.function, input.value, input.bank == XIR_STORAGE_EXPOSURE);
         if (owner->status != XR_XIR_OK) return false;
         bool hidden = input.handle < owner->functions[input.function].captures;
+        if (input.entry_environment && (input.bank != XIR_STORAGE_FOOTPRINT || !hidden ||
+            !xr_xir_type_is_cell(owner->module->types,
+                owner->nodes[owner->offsets[input.function] + input.handle].type))) {
+            owner->status = XR_XIR_BAD_STRUCTURE; return false;
+        }
         if (input.bank == XIR_STORAGE_FOOTPRINT) {
             XrXirType type = owner->nodes[owner->offsets[input.function] + input.handle].type;
+            if (hidden && xr_xir_type_is_cell(owner->module->types, type)) {
+                if (!input.entry_environment) {owner->status=XR_XIR_BAD_STRUCTURE; return false;}
+                type = xr_xir_cell_element(owner->module->types, type);
+            }
             if (input.value < owner->functions[input.function].physical_values ||
                 !xr_xir_callable_signature(owner->module->types, type) ||
                 xr_xir_type_is_c_callable(owner->module->types, type)) {
                 owner->status = XR_XIR_BAD_STRUCTURE; return false;
             }
-            /* Formal escape permission determines restriction independently
-             * of the environment loan. Hidden formals reach this leaf only
-             * after bounded transport has excluded mutable captures. */
+            /* The physical value retains its declaration restriction. The
+             * hidden current environment is independently substituted at
+             * execution entry, including its reachable Cell restrictions. */
             if (!restriction_local_edge(solver,input.function,input.handle,input.value,false)) return false;
+            if (input.entry_environment) restriction_input(solver, index, input.value);
         } else if (input.bank == XIR_STORAGE_EXPOSURE) {
             if (hidden) restriction_input(solver, index, input.value);
             else solver->nodes[index].constant = true;

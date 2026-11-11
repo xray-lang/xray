@@ -263,12 +263,27 @@ static bool execution_origin_binding(ExecutionOriginWalk *walk, const EffectChec
 }
 
 static bool execution_origin_input(ExecutionOriginWalk *walk, const EffectCheckedRoots *roots,
-    ExecutionOrigin origin, EffectCheckOriginEdge edge, uint32_t *unresolved) {
+    const XirStorageFlowView *storage, ExecutionOrigin origin, EffectCheckOriginEdge edge, uint32_t *unresolved) {
     EffectCheckFunction function = roots->function[origin.function];
     if (edge.function != function.declaration || edge.value >= function.parameters) {
         walk->status = XR_XIR_BAD_STRUCTURE; return false;
     }
     XrXirType payload = xr_xir_cell_element(xir_execution_types(roots),roots->node[function.first+edge.value].type);
+    if (walk->entries && origin.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+        execution_origin_incoming(walk, roots, storage, origin)) return false;
+    if (walk->footprint && edge.value < function.capture_count &&
+        xr_xir_type_is_callable(xir_execution_types(roots), payload)) {
+        XirExecutionSite input = {.kind=XIR_EXECUTION_CONTENTS_INPUT, .index=edge.value,
+            .function=function.declaration, .instruction=UINT32_MAX, .block=UINT32_MAX,
+            .caller_instance=origin.function, .target=UINT32_MAX, .declaration=function.declaration,
+            .argument_count=1, .capture_count=function.capture_count,
+            .output_function=UINT32_MAX, .output_value=UINT32_MAX,
+            .receiver_function=function.declaration, .receiver_value=origin.value,
+            .registration=UINT32_MAX, .reference=UINT32_MAX, .environment=origin.environment,
+            .capture_environment=origin.environment, .signature=payload};
+        walk->status = walk->visit(walk->context, &input);
+        return true;
+    }
     if (walk->observe_environment && edge.value >= function.capture_count &&
         xr_xir_type_is_callable(xir_execution_types(roots),payload)) {
         XirExecutionSite stored = {.kind=XIR_EXECUTION_STORABLE,.index=origin.value,
@@ -386,7 +401,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
             for (uint32_t e = origins->heads[index]; e != UINT32_MAX; e = origins->edges[e].next) {
                 EffectCheckOriginEdge edge = origins->edges[e];
                 if (edge.parameter_contents) {
-                    bool input = execution_origin_input(&walk,roots,origin,edge,&unresolved);
+                    bool input = execution_origin_input(&walk,roots,&storage,origin,edge,&unresolved);
                     if (walk.status != XR_XIR_OK) break;
                     found |= input;
                     predecessor = true;

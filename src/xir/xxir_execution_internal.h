@@ -17,8 +17,11 @@
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
     XIR_EXECUTION_CALL, XIR_EXECUTION_PENDING, XIR_EXECUTION_CLEANUP_USE, XIR_EXECUTION_FORMAL,
-    XIR_EXECUTION_STORABLE, XIR_EXECUTION_CAPTURE_INPUT, XIR_EXECUTION_CALLBACK_ENTRY
+    XIR_EXECUTION_STORABLE, XIR_EXECUTION_CAPTURE_INPUT, XIR_EXECUTION_CALLBACK_ENTRY,
+    XIR_EXECUTION_CONTENTS_INPUT
 } XirExecutionSiteKind;
+/* CONTENTS_INPUT is an environment-only terminal. Its index names the hidden
+ * physical Cell parameter, while receiver_value names its owned contents leaf. */
 
 typedef enum XirExecutionPort {
     XIR_EXECUTION_NORMAL, XIR_EXECUTION_ERROR, XIR_EXECUTION_PANIC

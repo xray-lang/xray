@@ -169,10 +169,10 @@ XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *flow, const Xir
 }
 
 static XrXirStatus storage_formal_footprint(XirStorageFlow *flow, const XirStorageValuePoint *point,
-    uint32_t parameter, XirStorageReference *output) {
+    uint32_t parameter, uint32_t source, bool entry, XirStorageReference *output) {
     if (parameter >= flow->rows[point->function].body->parameter_count) return XR_XIR_BAD_STRUCTURE;
     XirStorageValuePoint formal = *point;
-    formal.reference = (XirStorageReference){point->function, parameter, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+    formal.reference = (XirStorageReference){point->function, source, XIR_EXECUTION_CURRENT_ENVIRONMENT};
     XrXirStatus status = xir_storage_flow_point_value(flow, &formal, output);
     if (status != XR_XIR_OK) return status;
     uint32_t index = storage_existing_point(flow, formal);
@@ -185,12 +185,23 @@ static XrXirStatus storage_formal_footprint(XirStorageFlow *flow, const XirStora
     uint32_t value = storage_aux(flow, point->function), input = flow->view.input_count;
     if (value == UINT32_MAX || !storage_input(flow, point->function, value, parameter, XIR_STORAGE_FOOTPRINT) ||
         !storage_relation_bank(flow, point->function, value, output->value, XIR_STORAGE_FOOTPRINT)) return flow->status;
+    ((XirStorageInput *)flow->view.inputs)[input].entry_environment = entry;
+    if (source != parameter && !storage_relation_bank(flow, point->function,
+        parameter, output->value, XIR_STORAGE_FOOTPRINT)) return flow->status;
     uint32_t link = row->footprint_input_count++;
     row->footprint_inputs[link] = (StorageFootprintLink){input, row->footprint_heads[parameter]};
     row->footprint_heads[parameter] = link;
     ((XirStoragePointValue *)flow->view.point_values)[index].footprint_input = value;
     ++flow->revision;
     return XR_XIR_OK;
+}
+
+static bool storage_entry_environment(const XirStorageFlow *flow, const XirStorageValuePoint *point) {
+    const StorageFunction *row = &flow->rows[point->function];
+    if (row->blocks[point->instruction] || row->body->blocks[0].first ||
+        row->predecessors[0] != UINT32_MAX) return false;
+    if (point->point == XIR_STORAGE_BEFORE) return point->instruction <= row->first_environment_effect;
+    return point->point == XIR_STORAGE_NORMAL && point->instruction < row->first_environment_effect;
 }
 
 /* A stored value keeps an external environment loan independently of its

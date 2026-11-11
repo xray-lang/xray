@@ -161,6 +161,7 @@ static void stored_environment_ownership(void) {
     printf("stored callable environments: opaque loan leaves, ROOT upper and %zu/%zu allocation failures with relocation PASS\n",
         sites[0],sites[1]);
 }
+#include "xir_entry_footprint_cases.h"
 static void direct_root_equations(void) {
     XrXirTypeNode callable = {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64,
         .element = XR_XIR_NEVER, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
@@ -1383,6 +1384,7 @@ static void root_unbound_contents_causes(void) {
 static void control_summary_kernel(void) {
     captured_cell_bound_types();
     stored_environment_ownership();
+    entry_footprint_ownership();
     conversion_owner_cases();
     callback_entry_owner_cases();
     callback_receiver_owner_cases();

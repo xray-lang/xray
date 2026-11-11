@@ -85,7 +85,7 @@ static bool lifetime_extents(HirLifetimeConstraints *run) {
         XirStorageInput input = solver->view.inputs[i];
         uint32_t value = restriction_node(solver, input.function, input.value, false);
         if (graph->status != XR_XIR_OK) return false;
-        if (input.bank == XIR_STORAGE_CONTENTS) run->entry_inputs[value] |= 1u;
+        if (input.bank == XIR_STORAGE_CONTENTS || input.bank == XIR_STORAGE_FOOTPRINT) run->entry_inputs[value] |= 1u;
         if (input.bank == XIR_STORAGE_EXPOSURE) run->entry_inputs[value] |= 2u;
     }
     for (uint32_t v = 0; v < values; ++v) run->extents[v].head = UINT32_MAX;

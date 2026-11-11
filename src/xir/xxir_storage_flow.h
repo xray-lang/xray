@@ -75,12 +75,16 @@ typedef struct XirStorageAllocation { uint32_t function, value; } XirStorageAllo
  * A FOOTPRINT input names a separate callable-environment leaf. Its PointValue
  * records the use point, while handle is the physical parameter ordinal.
  * The leaf denotes a caller-held loan for this invocation. Ordinary formals
- * retain that loan independently of their escape permission. Hidden formals
- * require the storage producer's complete environment transport proof. Neither denotes
- * an empty environment. Applications must substitute their actual footprint. */
+ * retain that loan independently of their escape permission. Hidden callable
+ * values require bounded transport. A hidden Cell contents environment can be
+ * substituted before any mutation in its entry prefix. Neither denotes an
+ * empty environment. Applications must substitute their actual footprint. */
 typedef struct XirStorageInput {
     uint32_t function, value, handle;
     XirStorageFlowBank bank;
+    /* True when the use depends on the full environment at execution entry,
+     * independently of the physical parameter's intrinsic restriction. */
+    bool entry_environment;
 } XirStorageInput;
 
 typedef struct XirStorageUnknown {
@@ -116,7 +120,7 @@ typedef struct XirStoragePointValue {
 } XirStoragePointValue;
 typedef enum XirStorageCaptureKind {
     XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN,
-    XIR_STORAGE_CAPTURE_HIDDEN_FN, XIR_STORAGE_CAPTURE_OPAQUE_FN
+    XIR_STORAGE_CAPTURE_HIDDEN_FN, XIR_STORAGE_CAPTURE_OPAQUE_FN, XIR_STORAGE_CAPTURE_CONTENTS_FN
 } XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;
@@ -124,7 +128,8 @@ typedef struct XirStorageCapture {
     /* A formal carrier transports its independent restriction and loan facts.
      * A storable terminal has no contents or exposure value. Known environment
      * Cells remain separate captures. An opaque carrier keeps its external
-     * footprint leaf through contents and has no exposure coordinate. */
+     * footprint leaf through contents and has no exposure coordinate. A
+     * contents carrier names a hidden Cell's entry environment input. */
     XirStorageCaptureKind kind;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);

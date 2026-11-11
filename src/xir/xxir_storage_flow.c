@@ -55,7 +55,7 @@ typedef struct StorageFunction {
     uint8_t *handles;
     StorageOperation *operations;
     StorageRead *reads;
-    uint32_t read_count, read_capacity, observed, current_block;
+    uint32_t read_count, read_capacity, observed, current_block, first_environment_effect;
     StorageWrite *writes;
     uint32_t write_count, write_capacity;
     uint32_t *write_offsets, *write_points, *calls, *content_inputs;
@@ -67,7 +67,7 @@ typedef struct StorageFunction {
     StoragePublication *publications;
     uint32_t *publication_index, publication_index_capacity;
     uint32_t publication_count, publication_capacity, exposure_capacity;
-    bool events_ready;
+    bool events_ready, cyclic;
     uint32_t *blocks, *predecessors;
     StoragePredecessor *edges;
     uint32_t edge_count, edge_capacity, flow_capacity, footprint_capacity;
@@ -165,7 +165,8 @@ static bool storage_input(XirStorageFlow *flow, uint32_t function, uint32_t valu
     if (!storage_reserve(flow, &values, flow->view.input_count, &flow->input_capacity,
         sizeof(*flow->view.inputs))) return false;
     flow->view.inputs = values;
-    ((XirStorageInput *)values)[flow->view.input_count++] = (XirStorageInput){function, value, handle, bank};
+    ((XirStorageInput *)values)[flow->view.input_count++] = (XirStorageInput){
+        .function=function, .value=value, .handle=handle, .bank=bank};
     return true;
 }
 
@@ -341,6 +342,7 @@ static bool storage_predecessor(XirStorageFlow *flow, uint32_t function, uint32_
     uint32_t index = row->edge_count++;
     row->edges[index] = (StoragePredecessor){source, row->predecessors[target], ordinal, kind};
     row->predecessors[target] = index;
+    if (target <= source) row->cyclic = true;
     return true;
 }
 
@@ -1301,6 +1303,7 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
         flow->status = XR_XIR_BAD_STRUCTURE; return false;
     }
     row->header = *body;
+    row->first_environment_effect = body->instruction_count;
     row->header.name = NULL; row->header.name_length = 0; row->header.instructions = NULL;
     row->header.consume_parameters = NULL; row->header.consume_parameter_count = 0;
     row->header.escaping_parameters = NULL; row->header.escaping_parameter_count = 0;
@@ -1431,6 +1434,21 @@ XR_FUNC XrXirStatus xir_storage_flow_new(const XrXirCompileContext *memory, cons
     return XR_XIR_OK;
 }
 
+/* An entry footprint is valid only before any operation that can mutate an
+ * existing environment. The observer records this bound without another walk. */
+static bool storage_preserves_entry_environment(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_FUNCTION_REF:
+    case XR_XIR_CELL_READ: case XR_XIR_PLACE_READ:
+    case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
+    case XR_XIR_RETURN:
+        return true;
+    default:
+        return false;
+    }
+}
+
 XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *flow, uint32_t function,
     uint32_t instruction, const XrXirInstruction *op) {
     if (!flow || flow->sealed || flow->local_finished || !op || function >= flow->view.function_count)
@@ -1456,6 +1474,8 @@ XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *flow, uint32_t func
         record.receiver = (uint32_t)op->immediate;
     }
     row->operations[instruction] = record; row->blocks[instruction] = row->current_block;
+    if (row->first_environment_effect == body->instruction_count && !storage_preserves_entry_environment(op->op))
+        row->first_environment_effect = instruction;
     if (record.destination != UINT32_MAX && !storage_record_write(flow, function, instruction, record.destination))
         return flow->status;
     if (storage_execution(op->op) && !storage_record_call(flow, function, instruction)) return flow->status;
