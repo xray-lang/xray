@@ -1,0 +1,2 @@
+const xs=Array<string>(3)
+print(len(xs))

@@ -99,6 +99,19 @@ def main() -> None:
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
         if vm_out != out or vm_err != err:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
+    name = "reject_repeat_string_default"
+    source = fixtures / (name + ".xr")
+    _, out, err = run(name + "-check", [binary, "check", source], 1)
+    if out or b"type has no admitted default initializer" not in err:
+        failures.append((name, "missing default initializer", out, err))
+    for stage, command in (
+        ("run", [binary, "run", source]),
+        ("build-c", [binary, "build", "-c", source, "-o", work / (name + ".c")]),
+        ("build", [binary, "build", source, "-o", work / name]),
+    ):
+        _, actual_out, actual_err = run(name + "-" + stage, command, 1)
+        if actual_out != out or actual_err != err:
+            failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
     assert not failures, failures
     print(f"{len(records)} Array Source/VM/native commands passed")
 
