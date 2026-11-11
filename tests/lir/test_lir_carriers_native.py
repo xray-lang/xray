@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -230,7 +231,9 @@ def _f64_cases(args, root, results):
                         commands = [[args.compiler, *flags, '-c', path, '-o', obj]
                                     for path, obj in zip((gateway, host), objects)]
                         executable = work / 'run'
-                        link = [args.compiler, *flags, *objects, *(args.library if output else []), '-lm', '-o', executable]
+                        link = [args.compiler, *flags, *objects, *(args.library if output else []),
+                            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+                            '-lm', '-o', executable]
                     if fp not in profiles:
                         profiles[fp] = _f64_profile(args.compiler, args.kind, flags, work)
                     profile = profiles[fp]
@@ -376,7 +379,9 @@ def _fneg_commands(args, work, output, fp):
         objects = [work / 'gateway.o', work / 'adapter.o']
         compiles = [[args.compiler, *flags, '-c', source, '-o', obj] for source, obj in zip(sources, objects)]
         executable = work / 'run'
-        link = [args.compiler, *flags, *objects, *(args.library if output else []), '-lm', '-o', executable]
+        link = [args.compiler, *flags, *objects, *(args.library if output else []),
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-lm', '-o', executable]
     return flags, objects, compiles, link, executable
 
 
@@ -559,7 +564,9 @@ def main():
                             for source, obj in zip((gateway, host), objects)]
                 link = [args.compiler, *flags, *objects]
                 if output:
-                    link += [*args.library, '-pthread']
+                    link += [*args.library,
+                        ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+                        '-pthread']
                 link += ['-o', executable]
             compiled = [run(command, work) for command in compiles]
             linked = run(link, work)

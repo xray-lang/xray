@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -125,7 +126,9 @@ def compile_command(args, source, executable):
     else:
         command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
                    '-O2', '-fno-lto', '-I' + str(args.include),
-                   '-I' + str(args.source_root / 'src'), source, *args.library, '-pthread', '-o', executable]
+                   '-I' + str(args.source_root / 'src'), source, *args.library,
+                       ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+                       '-pthread', '-o', executable]
         if args.asan:
             command += ['-fsanitize=address,undefined', '-g']
     return command

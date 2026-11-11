@@ -210,7 +210,9 @@ def main():
             run('compile-' + src.name, compile_command(compiler, options, src, obj), folder)
         executable = folder / ('native.exe' if args.kind == 'msvc' else 'native')
         command = [compiler, *[option for option in options if option != '/EHsc'], *objects, *libraries]
-        command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm', '-o', executable]
+        command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else [
+            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
+            '-lm', '-o', executable]
         run('link', command, folder);assert run('native', [executable], folder) == expected
         artifacts.append({'mode': folder.name, 'cpp': cpp, 'arithmeticRows': 0 if folder.name == 'relations' else 3216,
             'comparisonPairs': 0 if folder.name == 'arithmetic' else 676, 'roundingModes': 1,
