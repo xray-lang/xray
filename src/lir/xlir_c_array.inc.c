@@ -10,6 +10,29 @@ static bool c_array_intrinsic(LirC *c, const XrLirInstructionView *v, XrLirArray
     return v->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_array_intrinsic_view(c->request->module, v->intrinsic, shape) == XR_LIR_OK && shape->id;
 }
+static void c_array_admit_shapes(LirC *c) {
+    XrLirArrayShape shape = {0};
+    if (c->view.result == XR_LIR_ARRAY) {
+        if (xr_lir_array_result_view(c->request->module, c->function, &shape) != XR_LIR_OK ||
+            (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING))
+            c_error(c, XR_LIR_C_UNSUPPORTED, "Array result has no native element implementation");
+    }
+    for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
+        XrLirValue value = {c->request->module, c->function.id, id};
+        XrLirType type = c_value_type(c, id);
+        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL) {
+            if (xr_lir_array_shape_view(c->request->module, value, &shape) != XR_LIR_OK ||
+                (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING))
+                c_error(c, XR_LIR_C_UNSUPPORTED, "Array value has no native element implementation");
+        } else if (type == XR_LIR_STATE_REF) {
+            XrLirStateReference reference = {0};
+            if (xr_lir_state_reference_view(c->request->module, value, &reference) != XR_LIR_OK ||
+                (reference.payload == XR_LIR_ARRAY && reference.array_element != XR_LIR_I64 &&
+                 reference.array_element != XR_LIR_STRING))
+                c_error(c, XR_LIR_C_UNSUPPORTED, "module reference has no native element implementation");
+        }
+    }
+}
 static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
     XrLirArrayIntrinsic shape = {0};
     return c_array_intrinsic(c, v, &shape) || v->op == XR_LIR_ARRAY_RETAIN ||

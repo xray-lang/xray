@@ -368,6 +368,7 @@ static void c_admit(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         if (!c_request_poll(c))
             return;
+        c_array_admit_shapes(c);
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
             c->runtime = true;
             continue;

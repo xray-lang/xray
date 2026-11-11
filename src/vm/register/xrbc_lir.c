@@ -350,6 +350,14 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         return false;
     }
     if (!rbc_lir_output_values(input, f, v, output,d)) return false;
+    if (v->result == XR_LIR_ARRAY) {
+        XrLirArrayShape shape = {0};
+        if (xr_lir_array_result_view(input, f, &shape) != XR_LIR_OK ||
+            (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING)) {
+            rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "Array result has no bytecode element implementation", (XrLirSource){0});
+            return false;
+        }
+    }
     for (uint32_t value = 1; value <= v->value_count; ++value) {
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
@@ -362,6 +370,21 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
                 "value type is not an admitted scalar",
                 rbc_lir_value_source(input, f, v, value, d));
             return false;
+        }
+        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL) {
+            XrLirArrayShape shape = {0};
+            if (xr_lir_array_shape_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
+                (shape.element != XR_LIR_I64 && shape.element != XR_LIR_STRING)) {
+                rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "Array value has no bytecode element implementation", (XrLirSource){0});
+                return false;
+            }
+        } else if (type == XR_LIR_STATE_REF) {
+            XrLirStateReference shape = {0};
+            if (xr_lir_state_reference_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
+                (shape.payload == XR_LIR_ARRAY && shape.array_element != XR_LIR_I64 && shape.array_element != XR_LIR_STRING)) {
+                rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "module reference has no bytecode element implementation", (XrLirSource){0});
+                return false;
+            }
         }
     }
     return true;
