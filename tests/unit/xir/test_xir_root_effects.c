@@ -1232,31 +1232,38 @@ static void execution_callable_result_upper(void) {
 #include "xir_view_loan_transport_cases.h"
 
 static void root_unbound_contents_causes(void) {
-    uint64_t callee_bits[7] = {0}, caller_bits[5] = {0};
+    uint64_t callee_bits[7] = {0}, caller_bits[5] = {0}, other_bits[7] = {0};
     EffectCheckFunction functions[] = {
         {.first=0, .values=2, .contents=2, .parameters=1, .words=1,
             .result_contents=4, .root=5, .result=6, .last=6, .declaration=0, .bits=callee_bits},
         {.first=7, .values=1, .contents=8, .words=1,
-            .result_contents=9, .root=10, .result=11, .last=11, .declaration=1, .bits=caller_bits}
+            .result_contents=9, .root=10, .result=11, .last=11, .declaration=1, .bits=caller_bits},
+        {.first=12, .values=2, .contents=14, .parameters=1, .words=1,
+            .result_contents=16, .root=17, .result=18, .last=18, .declaration=2, .bits=other_bits}
     };
-    EffectCheckNode nodes[12] = {0};
-    XrXirRootEffectWitness terminals[24] = {0};
-    for (uint32_t n = 0; n < 12; ++n) {
-        nodes[n].function = n < 7 ? 0 : 1;
+    EffectCheckNode nodes[19] = {0};
+    XrXirRootEffectWitness terminals[38] = {0};
+    for (uint32_t n = 0; n < 19; ++n) {
+        nodes[n].function = n < 7 ? 0 : n < 12 ? 1 : 2;
         nodes[n].aliases = nodes[n].calls = nodes[n].bindings = UINT32_MAX;
         nodes[n].reason[0] = nodes[n].reason[1] = UINT32_MAX;
     }
-    EffectCheckedRoots roots = {.resources=effect_context.resources, .functions=2, .nodes=12,
+    EffectCheckedRoots roots = {.resources=effect_context.resources, .functions=3, .nodes=19,
         .function=functions, .node=nodes, .terminals=terminals};
     const EffectCheckFunction *callee = &functions[0], *caller = &functions[1];
     EffectCheckCall call = {.target=callee->root, .protocol=1, .instruction=0};
     effect_check_bits(&roots, callee->root)[0] = UINT64_C(1) << (2u + 2u * callee->parameters);
+    EffectCheckCall other = {.target=functions[2].root, .protocol=1, .instruction=0};
+    effect_check_bits(&roots, other.target)[0] = UINT64_C(1) << (2u + 2u * functions[2].parameters);
     for (uint32_t bound = 1; bound <= 3; ++bound) {
         nodes[callee->contents].bound = (uint8_t)bound;
+        nodes[functions[2].contents].bound = (uint8_t)bound;
         nodes[caller->root].closed = 0;
         nodes[caller->root].reason[0] = nodes[caller->root].reason[1] = UINT32_MAX;
         effect_check_bits(&roots, caller->root)[0] = 0;
         CHECK(effect_check_apply(&roots, caller->root, &call));
+        CHECK(!effect_check_apply(&roots, caller->root, &other));
+        CHECK(!nodes[caller->root].root_seed);
         CHECK(effect_check_evaluate(&roots, caller->root));
         CHECK(nodes[caller->root].closed == bound);
         for (uint32_t bit = 0; bit < 2; ++bit) {

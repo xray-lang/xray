@@ -354,6 +354,16 @@ static void effect_check_seed(EffectCheckedRoots *roots, uint32_t node,
     roots->node[node].root_seed |= (uint8_t)mask;
 }
 
+static void effect_check_derived_seed(EffectCheckedRoots *roots, uint32_t node,
+    uint32_t mask, XrXirRootEffectWitness witness) {
+    effect_check_bits(roots,node)[0] |= mask;
+    for (uint32_t bit = 0; bit < 2; ++bit) {
+        if (!(mask & (1u << bit)) || roots->node[node].reason[bit] != UINT32_MAX) continue;
+        roots->node[node].reason[bit] = node;
+        roots->terminals[(size_t)node*2+bit] = witness;
+    }
+}
+
 static uint32_t effect_check_type_mask(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *callable = xr_xir_callable_signature(types, type);
     if (!callable) return 0;
@@ -2035,12 +2045,10 @@ static bool effect_check_apply(EffectCheckedRoots *roots, uint32_t output, const
                         roots->node[callee->contents + parameter].bound;
                     if (!mask) continue;
                     changed |= (to[0] | mask) != to[0];
-                    uint8_t seeds = roots->node[output].root_seed;
-                    effect_check_seed(roots, output, (uint32_t)mask, (XrXirRootEffectWitness){
+                    effect_check_derived_seed(roots, output, (uint32_t)mask, (XrXirRootEffectWitness){
                         bit < callee->parameters ? XR_XIR_ROOT_CAUSE_PARAMETER :
                             bit < (uint64_t)callee->parameters * 2 ? XR_XIR_ROOT_CAUSE_CELL_PARAMETER : XR_XIR_ROOT_CAUSE_INDIRECT,
                         call->instruction, callee->declaration, parameter, 0});
-                    roots->node[output].root_seed = seeds;
                 }
                 continue;
             }
