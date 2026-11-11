@@ -63,8 +63,8 @@ static void mem_library_case(const XrXirCompileContext *context,const char *stdl
         xr_xir_compile_source_check(&request,&producer,&diagnostic,NULL);
     CHECK(status==XR_XIR_OK);const XrXirModule *module=xr_xir_compile_artifact_module(producer.checked);
     CHECK(module->declarations->module_count==2);
-    XrXirLibraryModuleInput bindings[2]={{{assertions?XR_MODULE_IDENTITY_SCRIPT:XR_MODULE_IDENTITY_STDLIB,
-        assertions?NULL:"mem",root},assertions?"assertions.xr":"mem/mem.xr"},{0}};
+    XrXirLibraryModuleInput bindings[2]={{.authority={assertions?XR_MODULE_IDENTITY_SCRIPT:XR_MODULE_IDENTITY_STDLIB,
+        assertions?NULL:"mem",root},.logical_path=assertions?"assertions.xr":"mem/mem.xr"}};
     const XrXirSourceModule *internal=&module->declarations->modules[1];
     static const char prefix[]="memory-module-v1:id=";size_t at=sizeof(prefix)-1,length=0;
     CHECK(internal->name_length>at&&!memcmp(internal->name,prefix,at));

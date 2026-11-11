@@ -59,8 +59,12 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
     if(status==XR_XIR_OK){facts(owner,mode);XlspSourceImports *occupied=owner;size_t before=runtime_attempts;
         CHECK(xlsp_source_imports_build(r,&document,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==owner&&runtime_attempts==before);}
     else CHECK(!owner);
-    if(stats)*stats=sdk_stats(r);xr_compile_resources_release(r);
-    if(status==XR_XIR_OK)facts(owner,mode);xlsp_source_imports_free(owner);CHECK(!runtime_live&&!runtime_bytes);return status;
+    if(stats)*stats=sdk_stats(r);
+    xr_compile_resources_release(r);
+    if(status==XR_XIR_OK)facts(owner,mode);
+    xlsp_source_imports_free(owner);
+    CHECK(!runtime_live&&!runtime_bytes);
+    return status;
 }
 static void rejected(void) {
     XrCompileResources *r=sdk_ledger(&limits);XlspSourceImports *owner=NULL;

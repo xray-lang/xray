@@ -768,7 +768,8 @@ static void string_loop_owners(void) {
         XrLirValue one=test_constant(m,body,XR_LIR_I64,1),next=test_binary(m,body,XR_LIR_ADD,iteration,one,XR_LIR_PREDICATE_NONE);
         test_branch(m,body,header,&next,1);test_return(m,done,iteration);
         CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
-        if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
+        if(!attack)OK(xr_lir_module_finish(m,NULL));
+        xr_lir_module_destroy(m);
     }
 }
 static void string_sequential_owners(void) {
@@ -800,7 +801,8 @@ static void string_sequential_owners(void) {
             current=join;OK(xr_lir_block_parameter(m,join,0,&value));
         }
         test_return(m,current,value);CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
-        if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
+        if(!attack)OK(xr_lir_module_finish(m,NULL));
+        xr_lir_module_destroy(m);
     }
 }
 static void string_length_types(void) {

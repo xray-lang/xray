@@ -8,12 +8,16 @@
 typedef struct StoreAllocation {void *pointer;size_t bytes;} StoreAllocation;
 static StoreAllocation blocks[128];static size_t calls,fail_at=SIZE_MAX,live,store_live_bytes,releases;
 static void *store_calloc(size_t count,size_t size) {
-    if(calls++==fail_at)return NULL;CHECK(!count||size<=SIZE_MAX/count);
+    if(calls++==fail_at)return NULL;
+    CHECK(!count||size<=SIZE_MAX/count);
     void *pointer=xr_calloc(count,size);if(!pointer)return NULL;
     size_t i=0;while(i<128&&blocks[i].pointer)++i;CHECK(i<128);blocks[i]=(StoreAllocation){pointer,count*size};++live;store_live_bytes+=count*size;return pointer;
 }
 static void store_free(void *pointer) {
-    if(!pointer)return;size_t i=0;while(i<128&&blocks[i].pointer!=pointer)++i;CHECK(i<128);
+    if(!pointer)return;
+    size_t i=0;
+    while(i<128&&blocks[i].pointer!=pointer)++i;
+    CHECK(i<128);
     --live;store_live_bytes-=blocks[i].bytes;blocks[i]=(StoreAllocation){0};xr_free(pointer);
 }
 #pragma push_macro("xr_calloc")

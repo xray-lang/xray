@@ -13,12 +13,16 @@ static XrXirStatus format_end(const XlspSourceBuffer *buffer,XrLspPosition *out)
         XrUtf8Step step=xr_utf8_core_decode_step((const uint8_t *)text+i,length-i);
         if(step.error!=XR_UTF8_OK||!step.scalar)return XR_XIR_BAD_STRUCTURE;
         uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;
-        if(column>INT32_MAX-width)return XR_XIR_BAD_STRUCTURE;column+=width;i+=step.consumed;
+        if(column>INT32_MAX-width)return XR_XIR_BAD_STRUCTURE;
+        column+=width;
+        i+=step.consumed;
     }
     *out=(XrLspPosition){(uint32_t)(count-1),column};return XR_XIR_OK;
 }
 static bool format_member(XrJsonValue *object,const char *key,XrJsonValue *value) {
-    if(!value)return false;int before=object->as.object.count;xjson_object_set_new(object,key,value);
+    if(!value)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,value);
     if(object->as.object.count==before){xjson_free(value);return false;}
     if(object->as.object.count!=before+1)return false;
     XrJsonMember *member=&object->as.object.members[before];

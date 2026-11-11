@@ -19,7 +19,9 @@ static XrXirStatus rename_fact_length(RenameWork *w,const char *text,size_t *out
 }
 static bool rename_absent(XrXirSourceRange r){return !r.line&&!r.column&&!r.end_line&&!r.end_column;}
 static XrXirStatus rename_text_document(RenameWork *w,const XlspSourceBindings *queries,const XrXirSourceView *view,uint32_t module,size_t *out) {
-    if(module>=view->module_count)return XR_XIR_BAD_STRUCTURE;const char *path=view->modules[module].path;size_t length=0;
+    if(module>=view->module_count)return XR_XIR_BAD_STRUCTURE;
+    const char *path=view->modules[module].path;
+    size_t length=0;
     XrXirStatus status=rename_fact_length(w,path,&length);if(status!=XR_XIR_OK)return status;
     for(size_t i=0;i<w->count;++i){const char *candidate=xlsp_source_bindings_path(queries,i);size_t candidate_length=0;
         status=rename_fact_length(w,candidate,&candidate_length);if(status!=XR_XIR_OK)return status;bool same=false;
@@ -38,12 +40,18 @@ static XrXirStatus rename_fact_range(RenameWork *w,const XlspSourceBindings *que
         if(length!=(size_t)(range.end_column-range.column))return XR_XIR_UNSUPPORTED;
         size_t offset=0;int line=1;
         while(offset<d->length&&line<range.line){status=rename_poll(w);if(status!=XR_XIR_OK)return status;if(d->text[offset++]=='\n')++line;}
-        if(line!=range.line||(size_t)(range.column-1)>d->length-offset)return XR_XIR_UNSUPPORTED;offset+=(size_t)(range.column-1);
-        if(length>d->length-offset)return XR_XIR_UNSUPPORTED;bool same=false;status=rename_equal(w,d->text+offset,length,name,length,&same);if(status!=XR_XIR_OK)return status;if(!same)return XR_XIR_UNSUPPORTED;
+        if(line!=range.line||(size_t)(range.column-1)>d->length-offset)return XR_XIR_UNSUPPORTED;
+        offset+=(size_t)(range.column-1);
+        if(length>d->length-offset)return XR_XIR_UNSUPPORTED;
+        bool same=false;
+        status=rename_equal(w,d->text+offset,length,name,length,&same);
+        if(status!=XR_XIR_OK)return status;
+        if(!same)return XR_XIR_UNSUPPORTED;
     }
     XrLspRange result={0};status=xlsp_source_position(w->resources,d->text,d->length,range.line,range.column,&result.start);
     if(status==XR_XIR_OK)status=xlsp_source_position(w->resources,d->text,d->length,range.end_line,range.end_column,&result.end);
-    if(status==XR_XIR_OK)*out=(RenameEdit){.document=document,.range=result};return status;
+    if(status==XR_XIR_OK)*out=(RenameEdit){.document=document,.range=result};
+    return status;
 }
 #include "xlsp_source_rename_imports.h"
 static XrXirStatus rename_symbol(RenameWork *w,const XlspSourceBindings *queries,const XlspSourceDocument *documents,
@@ -58,7 +66,8 @@ static XrXirStatus rename_symbol(RenameWork *w,const XlspSourceBindings *queries
         rename_fact_range(w,queries,documents,view,(RenameSpelling){fact->name,d->name},&symbol.declared);if(status!=XR_XIR_OK)return status;
     symbol.kind=d->kind;symbol.name=d->name;symbol.identity=view->modules[fact->name.module].identity;
     status=rename_fact_length(w,symbol.name,&symbol.name_length);if(status==XR_XIR_OK)status=rename_fact_length(w,symbol.identity,&symbol.identity_length);
-    if(status==XR_XIR_OK)*out=symbol;return status;
+    if(status==XR_XIR_OK)*out=symbol;
+    return status;
 }
 static XrXirStatus rename_symbol_same(RenameWork *w,RenameSymbol a,RenameSymbol b,bool *out) {
     *out=false;if(a.kind!=b.kind||a.declared.document!=b.declared.document||!rename_same(a.declared.range,b.declared.range))return XR_XIR_OK;
@@ -81,7 +90,8 @@ static XrXirStatus rename_choose(RenameWork *w,const XlspSourceBindings *queries
     size_t root,uint32_t id,RenameSymbol *chosen) {
     RenameSymbol symbol={0};XrXirStatus status=rename_symbol(w,queries,documents,root,id,&symbol);if(status!=XR_XIR_OK)return status;
     if(chosen->name){bool same=false;status=rename_symbol_same(w,*chosen,symbol,&same);if(status!=XR_XIR_OK)return status;if(!same)return XR_XIR_UNSUPPORTED;}
-    else *chosen=symbol;return XR_XIR_OK;
+    else *chosen=symbol;
+    return XR_XIR_OK;
 }
 static XrXirStatus rename_pattern_edit(RenameWork *w,const XrXirSourceView *view,const XrXirSourceSyntaxView *syntax,
     XrXirSourceRange span,uint32_t selected,RenameEdit *edit) {
@@ -125,7 +135,9 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             }
         }
     }
-    if(!chosen.name)return XR_XIR_UNRESOLVED;*out=chosen;return XR_XIR_OK;
+    if(!chosen.name)return XR_XIR_UNRESOLVED;
+    *out=chosen;
+    return XR_XIR_OK;
 }
 static XrXirStatus rename_edit_append(RenameWork *w,RenameEdit edit,RenameEdit **items,size_t *count,size_t *capacity) {
     for(size_t i=0;i<*count;++i){XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;if((*items)[i].document==edit.document&&rename_same((*items)[i].range,edit.range))return XR_XIR_OK;}

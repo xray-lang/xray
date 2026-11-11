@@ -78,5 +78,6 @@ int main(int argc,char **argv) {
         CHECK(xr_compile_resources_stats(resources,&final)==XR_COMPILE_RESOURCE_OK && final.held_bytes==initial.held_bytes);
         xr_compile_resources_release(resources);
     }
-    if(!normalize)printf("CLASS_RECEIVERS invalid%u\n",total);return inventory || normalize || !total?0:1;
+    if(!normalize)printf("CLASS_RECEIVERS invalid%u\n",total);
+    return inventory || normalize || !total?0:1;
 }

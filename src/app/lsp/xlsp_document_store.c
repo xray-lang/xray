@@ -29,7 +29,10 @@ XrLspDocument *xlsp_document_store_get(const XrLspDocTable *t,const char *uri) {
     return NULL;
 }
 void xlsp_document_store_abort(XlspDocumentInsertion *p) {
-    if(!p)return;xr_free(p->buckets);xr_free(p->bucket);*p=(XlspDocumentInsertion){0};
+    if(!p)return;
+    xr_free(p->buckets);
+    xr_free(p->bucket);
+    *p=(XlspDocumentInsertion){0};
 }
 bool xlsp_document_store_prepare(XrLspDocTable *t,const char *uri,XrLspDocument *doc,XlspDocumentInsertion *out) {
     if(!t||!uri||!doc||!out||out->table||out->bucket||out->buckets||out->bucket_count||out->generation||

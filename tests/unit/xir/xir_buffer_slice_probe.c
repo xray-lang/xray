@@ -24,7 +24,8 @@ static void *slice_calloc(size_t count,size_t bytes) {
 static void *slice_realloc(void *memory,size_t bytes) {
     if (slice_attempt++==slice_fail_at) return NULL;
     bool empty=memory==NULL;void *replacement=xr_realloc(memory,bytes);
-    if (replacement && empty) ++slice_physical;return replacement;
+    if (replacement && empty) ++slice_physical;
+    return replacement;
 }
 static void slice_free(void *memory) {
     if (memory) {if (!slice_physical) abort();--slice_physical;}xr_free(memory);

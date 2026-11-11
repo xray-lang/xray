@@ -57,7 +57,10 @@ static bool buffer_position(BufferReader *reader,const XrJsonValue *v,XrLspPosit
     return v&&v->type==XR_JSON_OBJECT&&buffer_uinteger(buffer_field(reader,v,"line"),&out->line)&&buffer_uinteger(buffer_field(reader,v,"character"),&out->character);
 }
 void xlsp_source_buffer_free(XlspSourceBuffer *b) {
-    if(!b)return;xr_compile_resources_free(b->text);xr_compile_resources_free(b->lines);xr_compile_resources_free(b);
+    if(!b)return;
+    xr_compile_resources_free(b->text);
+    xr_compile_resources_free(b->lines);
+    xr_compile_resources_free(b);
 }
 const char *xlsp_source_buffer_text(const XlspSourceBuffer *b){return b?b->text:NULL;}
 size_t xlsp_source_buffer_length(const XlspSourceBuffer *b){return b?b->length:0;}
@@ -70,7 +73,8 @@ static XrXirStatus buffer_index(XlspSourceBuffer *b) {
             if(b->text[i]=='\r'&&i+1<b->length) {
                 if(b->text[i+1]=='\n')++i;
             }
-            if(count==INT_MAX)return XR_XIR_BUDGET;++count;
+            if(count==INT_MAX)return XR_XIR_BUDGET;
+            ++count;
         }
     }
     if(count>SIZE_MAX/sizeof(*b->lines))return XR_XIR_BUDGET;

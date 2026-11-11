@@ -29,14 +29,16 @@ static XrXirStatus ignore_name(const XlspConfig *config,const char *name,bool di
     if(name[0]=='.'){*out=true;return XR_XIR_OK;}
     for(int i=0;i<config->ignore_pattern_count;++i) {
         const XlspIgnorePattern *p=&config->ignore_patterns[i];if(!p->pattern)return XR_XIR_BAD_STRUCTURE;
-        if(p->is_dir_only&&!directory)continue;bool match=false;
+        if(p->is_dir_only&&!directory)continue;
+        bool match=false;
         XrXirStatus s=ignore_match(p->pattern,name,p->is_glob,&match);if(s!=XR_XIR_OK)return s;
         if(match){*out=true;return XR_XIR_OK;}
     }
     *out=false;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xlsp_source_ignore(XrCompileResources *r,const XlspConfig *config,const char *name,bool directory,bool *out) {
-    if(!r)return XR_XIR_BAD_STRUCTURE;return ignore_name(config,name,directory,out);
+    if(!r)return XR_XIR_BAD_STRUCTURE;
+    return ignore_name(config,name,directory,out);
 }
 XR_FUNC bool xlsp_config_should_ignore(XlspConfig *config,const char *name,bool directory) {
     bool ignored=false;return ignore_name(config,name,directory,&ignored)==XR_XIR_OK&&ignored;

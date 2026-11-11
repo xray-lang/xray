@@ -39,7 +39,9 @@ static XrXirStatus parameter_json_equal(const XlspSourceParameterHints *a,
     return XR_XIR_OK;
 }
 static bool parameter_json_member(XrJsonValue *object,const char *key,XrJsonValue *value) {
-    if(!value)return false;int before=object->as.object.count;xjson_object_set_new(object,key,value);
+    if(!value)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,value);
     if(object->as.object.count==before){xjson_free(value);return false;}
     if(object->as.object.count!=before+1)return false;
     const XrJsonMember *member=&object->as.object.members[before];
@@ -90,7 +92,8 @@ XR_FUNC XrXirStatus xlsp_source_parameter_hints_many_json(const XlspSourceParame
     for(size_t i=0;i<request->count;++i) {
         if(!xlsp_source_snapshot_uses_resources(request->snapshots[i],request->resources)){status=XR_XIR_BAD_STRUCTURE;goto done;}
         bool contains=false;status=xlsp_source_snapshot_contains(request->snapshots[i],input->uri,input->uri_length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         status=xlsp_source_parameter_hints(request->snapshots[i],request->arguments,request->range,&current);
         if(status!=XR_XIR_OK)goto done;
         if(selected) {

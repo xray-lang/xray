@@ -10,7 +10,8 @@ XrXirStatus xlsp_source_hover_many_json(XrCompileResources *resources,
         if(!xlsp_source_snapshot_uses_resources(snapshots[i],resources))return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<count;++i) {
         bool contains=false;status=xlsp_source_snapshot_contains(snapshots[i],uri,length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         status=xlsp_source_hover(snapshots[i],uri,length,position,&current);if(status!=XR_XIR_OK)goto done;
         if(found) {
             bool equal=false;status=xlsp_source_same_symbol(accepted_snapshot,snapshots[i],uri,length,position,&equal);if(status!=XR_XIR_OK)goto done;

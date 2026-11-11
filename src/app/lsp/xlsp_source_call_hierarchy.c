@@ -59,13 +59,17 @@ static bool call_field(CallWork *w,const XrJsonValue *object,const char *key,con
     for(int i=0;i<object->as.object.count;++i){if(!call_poll(w))return false;
         const XrJsonMember *m=&object->as.object.members[i];if(m->key_len!=length)continue;
         if(!m->key||!call_poll(w))return call_fail(w,XR_XIR_BAD_STRUCTURE);
-        if(memcmp(m->key,key,length))continue;if(*out)return call_fail(w,XR_XIR_BAD_STRUCTURE);*out=m->value;}
+        if(memcmp(m->key,key,length))continue;
+        if(*out)return call_fail(w,XR_XIR_BAD_STRUCTURE);
+        *out=m->value;
+    }
     return *out!=NULL||call_fail(w,XR_XIR_BAD_STRUCTURE);
 }
 static bool call_json_text(CallWork *w,const XrJsonValue *value,const char *text,size_t length) {
     if(!value||value->type!=XR_JSON_STRING||!value->as.string)return call_fail(w,XR_XIR_BAD_STRUCTURE);
     if(value->string_len!=length)return call_fail(w,XR_XIR_UNRESOLVED);
-    if(!call_poll(w))return false;return !memcmp(value->as.string,text,length)||call_fail(w,XR_XIR_UNRESOLVED);
+    if(!call_poll(w))return false;
+    return !memcmp(value->as.string,text,length)||call_fail(w,XR_XIR_UNRESOLVED);
 }
 static bool call_protocol_position(CallWork *w,const XrJsonValue *object,XrLspPosition *out) {
     const XrJsonValue *line=NULL,*column=NULL;
@@ -77,19 +81,24 @@ static bool call_protocol_position(CallWork *w,const XrJsonValue *object,XrLspPo
 static bool call_position_same(XrLspPosition a,XrLspPosition b){return a.line==b.line&&a.character==b.character;}
 static bool call_range_same(XrLspRange a,XrLspRange b){return call_position_same(a.start,b.start)&&call_position_same(a.end,b.end);}
 static int call_position_compare(XrLspPosition a,XrLspPosition b) {
-    if(a.line!=b.line)return a.line<b.line?-1:1;if(a.character!=b.character)return a.character<b.character?-1:1;return 0;
+    if(a.line!=b.line)return a.line<b.line?-1:1;
+    if(a.character!=b.character)return a.character<b.character?-1:1;
+    return 0;
 }
 static bool call_contains(XrLspRange range,XrLspPosition p) {
     return call_position_compare(p,range.start)>=0&&(call_position_compare(p,range.end)<0||
         (call_position_same(range.start,range.end)&&call_position_same(p,range.start)));
 }
 static int call_cursor_read(void *context,const uint8_t *address,uint8_t *out) {
-    if(!call_poll(context))return 0;*out=*address;return 1;
+    if(!call_poll(context))return 0;
+    *out=*address;
+    return 1;
 }
 static bool call_cursor(CallWork *w,XrLspPosition position) {
     const XlspSourceDocument *d=&w->request->documents[w->request->entry];uint32_t line=0,column=0;
     for(size_t offset=0;;){if(line==position.line&&column==position.character)return true;
-        if(offset==d->length)return call_fail(w,XR_XIR_BAD_STRUCTURE);XrUtf8Step step;
+        if(offset==d->length)return call_fail(w,XR_XIR_BAD_STRUCTURE);
+        XrUtf8Step step;
         if(!xr_utf8_core_decode_step_read((const uint8_t *)d->text+offset,d->length-offset,call_cursor_read,w,&step))return false;
         if(step.error!=XR_UTF8_OK||!step.scalar)return call_fail(w,XR_XIR_BAD_STRUCTURE);
         if(step.scalar=='\r'||step.scalar=='\n'){
@@ -97,7 +106,8 @@ static bool call_cursor(CallWork *w,XrLspPosition position) {
             if(step.scalar=='\r'&&offset+1<d->length){if(!call_poll(w))return false;if(d->text[offset+1]=='\n')++step.consumed;}
             ++line;column=0;
         }else{uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;
-            if(column>INT32_MAX-width)return call_fail(w,XR_XIR_BAD_STRUCTURE);column+=width;
+            if(column>INT32_MAX-width)return call_fail(w,XR_XIR_BAD_STRUCTURE);
+            column+=width;
             if(line==position.line&&column>position.character)return call_fail(w,XR_XIR_BAD_STRUCTURE);}
         offset+=step.consumed;
     }
@@ -132,7 +142,7 @@ static bool call_symbol(CallWork *w,size_t root,uint32_t id,CallSymbol *out) {
     if(!call_poll(w))return false;
     const XrXirSourceDeclaration *d=&view->declarations[id-1];const XrXirSourceDeclarationSyntax *name=&syntax->declarations[id-1];
     if(!call_callable(d,name)||!calls->functions[id-1].known)return call_fail(w,XR_XIR_UNSUPPORTED);
-    CallSymbol symbol={root,0,id,d->range.module,false,{0},{0}};
+    CallSymbol symbol={.root=root,.declaration=id,.module=d->range.module};
     if(!call_document(w,view,symbol.module,&symbol.document)||!call_span(w,symbol.document,calls->functions[id-1].range,&symbol.range))return false;
     if(name->role==XR_XIR_SOURCE_SYNTAX_CLOSURE)symbol.selection=(XrLspRange){symbol.range.start,symbol.range.start};
     else if((name->role!=XR_XIR_SOURCE_SYNTAX_NAME&&name->role!=XR_XIR_SOURCE_SYNTAX_METHOD)||
@@ -140,7 +150,7 @@ static bool call_symbol(CallWork *w,size_t root,uint32_t id,CallSymbol *out) {
     *out=symbol;return true;
 }
 static bool call_module_symbol(CallWork *w,size_t root,uint32_t module,CallSymbol *out) {
-    const XrXirSourceView *view=call_view(w,root);CallSymbol symbol={root,0,0,module,true,{0},{0}};
+    const XrXirSourceView *view=call_view(w,root);CallSymbol symbol={.root=root,.module=module,.initializer=true};
     if(!call_document(w,view,module,&symbol.document))return false;
     const XlspSourceDocument *d=&w->request->documents[symbol.document];int line=1,column=1;
     for(size_t i=0;i<d->length;++i){if(!call_poll(w))return false;

@@ -41,14 +41,20 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;
     if(status==XR_XIR_OK)status=xlsp_source_selection_json(resources,text,length,input,&result);
     if(stats&&status!=XR_XIR_OK)fprintf(stderr,"Selection diagnostic mode=%u status=%u count=%d capacity=%d\n",mode,(unsigned)status,input->as.array.count,input->as.array.capacity);
-    if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;memset(text,'?',sizeof(text));
+    if(injected)*injected=lsp_json_injected;
+    lsp_json_fail=SIZE_MAX;
+    lsp_json_injected=false;
+    memset(text,'?',sizeof(text));
     if(status==XR_XIR_OK) {
         facts(result,mode);XrJsonValue *occupied=result;size_t before=runtime_attempts,json_before=lsp_json_calls;
         CHECK(xlsp_source_selection_json(resources,text,length,input,&occupied)==XR_XIR_BAD_STRUCTURE&&occupied==result&&runtime_attempts==before&&lsp_json_calls==json_before);
     } else CHECK(!result);
     if(stats)*stats=sdk_stats(resources);
     xr_compile_resources_release(resources);xjson_free(input);CHECK(!runtime_live&&!runtime_bytes);
-    if(status==XR_XIR_OK)facts(result,mode);xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
+    if(status==XR_XIR_OK)facts(result,mode);
+    xjson_free(result);
+    CHECK(!lsp_json_live&&!lsp_json_bytes);
+    return status;
 }
 static void invalid_inputs(void) {
     static const char *const invalid[]={"[{\"line\":0,\"character\":2}]","[{\"line\":0,\"character\":8}]",

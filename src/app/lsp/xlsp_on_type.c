@@ -17,7 +17,9 @@
 #include "xlsp_hierarchy_request.h"
 #include <string.h>
 XR_FUNC XrJsonValue *xlsp_on_type_handle(XrLspServer *server,XrJsonValue *params) {
-    if(!server)return NULL;server->source_failure.stage=16;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    if(!server)return NULL;
+    server->source_failure.stage=16;
+    server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
     XrJsonValue *position=xjson_get_object(params,"position"),*line=xjson_get(position,"line"),*column=xjson_get(position,"character");
     XrJsonValue *options=xjson_get_object(params,"options"),*tabs=xjson_get(options,"tabSize"),*spaces=xjson_get(options,"insertSpaces"),*trigger=xjson_get(params,"ch");

@@ -11,7 +11,11 @@ static void type_identity_text(LspHoverBuilder *b,const char *text) {
     if(!text){type_identity_number(b,UINT64_MAX);return;}
     size_t length=0;
     while(b->status==XR_XIR_OK) {
-        if(!text[length])break;if(length==SIZE_MAX-1){b->status=XR_XIR_BUDGET;return;}++length;
+        if(!text[length])break;
+        if(length==SIZE_MAX-1){b->status=XR_XIR_BUDGET;
+            return;
+        }
+        ++length;
     }
     type_identity_bytes(b,text,length);
 }
@@ -59,7 +63,8 @@ static void type_identity_nominal(LspHoverBuilder *b,const XrXirSourceView *view
         const char *name=view->modules[i].identity;size_t length=0;
         if(!name){b->status=XR_XIR_BAD_STRUCTURE;break;}
         while(b->status==XR_XIR_OK) {
-            if(!name[length])break;++length;
+            if(!name[length])break;
+            ++length;
         }
         if(length!=declaration->module.length)continue;
         if(memcmp(name,declaration->module.bytes,length))continue;
@@ -84,7 +89,9 @@ static bool type_identity_child(const XrXirTypeNode *node,uint64_t index,XrXirTy
     *mode=0;
     switch(node->kind) {
     case XR_XIR_TYPE_ARRAY:case XR_XIR_TYPE_CELL:case XR_XIR_TYPE_NULLABLE:case XR_XIR_TYPE_ATOMIC:case XR_XIR_TYPE_TASK:
-        if(index)return false;*type=node->element;return true;
+        if(index)return false;
+        *type=node->element;
+        return true;
     case XR_XIR_TYPE_CALLABLE:case XR_XIR_TYPE_TUPLE:
         if(index<node->parameter_count){*type=node->parameters[index].type;*mode=node->parameters[index].mode;return true;}
         if(index==node->parameter_count&&node->kind==XR_XIR_TYPE_CALLABLE){*type=node->result;return true;}return false;
@@ -109,7 +116,8 @@ static void type_identity_graph(LspHoverBuilder *b,const XrXirSourceView *view,X
                 size_t cap=capacity?capacity*2:8;
                 if(cap<capacity||cap>SIZE_MAX/sizeof(*stack)){b->status=XR_XIR_BUDGET;break;}
                 b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
-                if(b->status!=XR_XIR_OK)break;capacity=cap;
+                if(b->status!=XR_XIR_OK)break;
+                capacity=cap;
             }
             stack[count++]=(TypeIdentityFrame){next,0,false};
         }
@@ -125,7 +133,8 @@ static void type_identity_graph(LspHoverBuilder *b,const XrXirSourceView *view,X
             type_identity_number(b,2);type_identity_number(b,node->kind);type_identity_number(b,node->flags);
             type_identity_number(b,node->parameter_span);type_identity_number(b,node->parameter_count);
             type_identity_number(b,node->nominal.argument_count);type_identity_number(b,node->nominal.field_count);
-            if(node->kind==XR_XIR_TYPE_NOMINAL)type_identity_nominal(b,view,node);frame->started=true;
+            if(node->kind==XR_XIR_TYPE_NOMINAL)type_identity_nominal(b,view,node);
+            frame->started=true;
         }
         XrXirType child=XR_XIR_UNIT;uint32_t mode=0;
         if(type_identity_child(node,frame->index,&child,&mode)) {

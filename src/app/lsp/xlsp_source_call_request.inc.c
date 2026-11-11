@@ -36,8 +36,11 @@ static bool call_request_select(CallWork *w) {
     if(!request->mode){if(!call_field(w,request->params,"position",&position)||!call_protocol_position(w,position,&at))return false;}
     else {const XrJsonValue *selection=NULL;if(!call_field(w,object,"selectionRange",&selection)||!call_field(w,selection,"start",&position)||
         !call_protocol_position(w,position,&at)||!call_field(w,object,"data",&data)||!call_field(w,data,"moduleInitializer",&initializer))return false;
-        if(initializer->type!=XR_JSON_BOOL)return call_fail(w,XR_XIR_BAD_STRUCTURE);module=initializer->as.boolean;}
-    if(!call_cursor(w,at)||!call_pick(w,at,module))return false;return !request->mode||call_check_item(w,object);
+        if(initializer->type!=XR_JSON_BOOL)return call_fail(w,XR_XIR_BAD_STRUCTURE);
+        module=initializer->as.boolean;
+    }
+    if(!call_cursor(w,at)||!call_pick(w,at,module))return false;
+    return !request->mode||call_check_item(w,object);
 }
 XR_FUNC XrXirStatus xlsp_source_call_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!request||!request->context||!request->context->resources||!request->documents||!request->known_versions||

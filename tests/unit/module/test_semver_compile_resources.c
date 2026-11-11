@@ -146,11 +146,13 @@ static void constraints(void) {
         CHECK(xr_constraint_matches_owned(&policy, &version, &constraint, &matches) == XR_OS_IO_OK && matches == cases[i].matches);
         xr_semver_free_owned(&version); xr_constraint_free_owned(&constraint);
     }
-    XrSemVer versions[3] = {{0}}; XrVersionConstraint constraint = {0}; int index = 99;
+    XrSemVer versions[3] = {0}; XrVersionConstraint constraint = {0}; int index = 99;
     for (int i = 0; i < 3; ++i) { char text[] = "1.2.3"; text[4] = (char)('3' + i); CHECK(xr_semver_parse_owned(&policy, text, &versions[i]) == XR_OS_IO_OK); }
     CHECK(xr_constraint_parse_owned(&policy, "~1.2.3", &constraint) == XR_OS_IO_OK);
     CHECK(xr_semver_select_best_owned(&policy, versions, 3, &constraint, &index) == XR_OS_IO_OK && index == 2);
-    for (int i = 0; i < 3; ++i) xr_semver_free_owned(&versions[i]); xr_constraint_free_owned(&constraint); release(resources);
+    for (int i = 0; i < 3; ++i) xr_semver_free_owned(&versions[i]);
+    xr_constraint_free_owned(&constraint);
+    release(resources);
 }
 static XrOsIoStatus operation(unsigned op, const XrOsIoPolicy *policy) {
     if (op == 0) {

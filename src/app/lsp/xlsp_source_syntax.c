@@ -200,12 +200,14 @@ XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonVa
 #define PUSH(n) do {if(status==XR_XIR_OK)status=syntax_push(s,&stack,&count,&capacity,(n));} while(0)
         switch(node->type) {
         case AST_PROGRAM:
-            for(int i=node->as.program.count;i>0&&status==XR_XIR_OK;--i)PUSH(node->as.program.statements[i-1]);break;
+            for(int i=node->as.program.count;i>0&&status==XR_XIR_OK;--i)PUSH(node->as.program.statements[i-1]);
+            break;
         case AST_FUNCTION_DECL:fold=node->as.function_decl.body!=NULL;PUSH(node->as.function_decl.body);break;
         case AST_CLASS_DECL:case AST_STRUCT_DECL:case AST_UNION_DECL:
             fold=true;for(int i=node->as.class_decl.method_count;i>0&&status==XR_XIR_OK;--i)PUSH(node->as.class_decl.methods[i-1]);break;
         case AST_BLOCK:
-            for(int i=node->as.block.count;i>0&&status==XR_XIR_OK;--i)PUSH(node->as.block.statements[i-1]);break;
+            for(int i=node->as.block.count;i>0&&status==XR_XIR_OK;--i)PUSH(node->as.block.statements[i-1]);
+            break;
         case AST_IF_STMT:fold=true;PUSH(node->as.if_stmt.else_branch);PUSH(node->as.if_stmt.then_branch);break;
         case AST_WHILE_STMT:fold=true;PUSH(node->as.while_stmt.body);break;
         case AST_FOR_STMT:fold=true;PUSH(node->as.for_stmt.body);break;

@@ -22,7 +22,8 @@ static XrXirStatus scan_length(const char *text,size_t *out) {
 }
 static XrXirStatus scan_join(XrCompileResources *resources,const char *parent,const char *name,char **out) {
     size_t a=0,b=0;XrXirStatus s=scan_length(parent,&a);if(s==XR_XIR_OK&&name)s=scan_length(name,&b);
-    if(s!=XR_XIR_OK)return s;size_t separator=name?1:0;
+    if(s!=XR_XIR_OK)return s;
+    size_t separator=name?1:0;
     if(b>SIZE_MAX-separator-1||a>SIZE_MAX-b-separator-1)return XR_XIR_BUDGET;
     char *path=NULL;s=xir_compile_resource_status(xr_compile_resources_alloc(resources,a+b+separator+1,(void **)&path));
     if(s==XR_XIR_OK){memcpy(path,parent,a);if(name){path[a++]='/';memcpy(path+a,name,b);}path[a+b]=0;*out=path;}return s;
@@ -32,11 +33,14 @@ static XrXirStatus scan_push(XrCompileResources *resources,XlspIndexPaths *list,
     if(list->count==list->capacity){size_t next=list->capacity?list->capacity*2:16;
         if(next<list->capacity||next>SIZE_MAX/sizeof(*list->values))return XR_XIR_BUDGET;
         s=xir_compile_resource_status(xr_compile_resources_resize(resources,(void **)&list->values,next*sizeof(*list->values)));
-        if(s!=XR_XIR_OK)return s;list->capacity=next;}
+        if(s!=XR_XIR_OK)return s;
+        list->capacity=next;
+    }
     list->values[list->count++]=*path;*path=NULL;return XR_XIR_OK;
 }
 XR_FUNC void xlsp_index_paths_free(XlspIndexPaths *paths) {
-    if(!paths)return;for(size_t i=0;i<paths->count;++i)xr_compile_resources_free(paths->values[i]);
+    if(!paths)return;
+    for(size_t i=0;i<paths->count;++i)xr_compile_resources_free(paths->values[i]);
     xr_compile_resources_free(paths->values);*paths=(XlspIndexPaths){0};
 }
 static XrXirStatus scan_directory(const XlspIndexScanOptions *options,const char *path,XlspIndexPaths *stack,XlspIndexPaths *files) {
@@ -60,7 +64,9 @@ XR_FUNC XrXirStatus xlsp_index_scan(const XlspIndexScanOptions *options,XlspInde
     XlspIndexPaths stack={0},files={0};XrXirStatus status=XR_XIR_OK;
     for(size_t i=0;i<options->root_count&&status==XR_XIR_OK;++i){char *path=NULL;
         status=scan_join(options->resources,options->roots[i],NULL,&path);
-        if(status==XR_XIR_OK)status=scan_push(options->resources,&stack,&path);xr_compile_resources_free(path);}
+        if(status==XR_XIR_OK)status=scan_push(options->resources,&stack,&path);
+        xr_compile_resources_free(path);
+    }
     while(stack.count&&status==XR_XIR_OK){char *path=stack.values[--stack.count];
         status=scan_directory(options,path,&stack,&files);xr_compile_resources_free(path);}
     xlsp_index_paths_free(&stack);if(status==XR_XIR_OK){*out=files;files=(XlspIndexPaths){0};}xlsp_index_paths_free(&files);return status;

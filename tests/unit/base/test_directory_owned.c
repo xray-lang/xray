@@ -28,8 +28,13 @@ static XrOsIoStatus test_directory_allocate(void *context,size_t bytes,void **ou
  block->bytes=bytes;++memory->live;memory->held+=bytes;*output=block+1;return XR_OS_IO_OK;
 }
 static void test_directory_free(void *context,void *pointer){
- if(!pointer)return;DirectoryMemory *memory=context;DirectoryBlock *block=(DirectoryBlock *)pointer-1;
- if(!memory->live||block->bytes>memory->held)abort();--memory->live;memory->held-=block->bytes;xr_free(block);
+ if(!pointer)return;
+ DirectoryMemory *memory=context;
+ DirectoryBlock *block=(DirectoryBlock *)pointer-1;
+ if(!memory->live||block->bytes>memory->held)abort();
+ --memory->live;
+ memory->held-=block->bytes;
+ xr_free(block);
 }
 static bool test_directory_current(void *context){
  TestDirectoryQuery *query=context;if(!query||!query->active)abort();return !query->cancelled;

@@ -34,7 +34,8 @@ static bool type_request_select(TypeWork *w) {
     const XlspSourceDocument *d=&request->documents[request->entry];if(!type_json_text(w,uri,d->uri,d->uri_length))return false;
     if(!request->mode){if(!type_field(w,request->params,"position",&position)||!type_protocol_position(w,position,&at))return false;}
     else{const XrJsonValue *selection=NULL;if(!type_field(w,object,"selectionRange",&selection)||!type_field(w,selection,"start",&position)||!type_protocol_position(w,position,&at))return false;}
-    if(!type_cursor(w,at)||!type_pick(w,at))return false;return !request->mode||type_check_item(w,object);
+    if(!type_cursor(w,at)||!type_pick(w,at))return false;
+    return !request->mode||type_check_item(w,object);
 }
 XR_FUNC XrXirStatus xlsp_source_type_hierarchy_json(const XlspSourceHierarchyRequest *request,XrJsonValue **out,XrCompileRequestControl *control) {
     if(!request||!request->context||!request->context->resources||!request->documents||!request->known_versions||

@@ -66,7 +66,8 @@ static bool envelope_tree(const XrJsonValue *root) {
             if(!member->key||member->key_len==SIZE_MAX||!xr_utf8_validate(member->key,member->key_len))return false;
             child=member->value;
         }
-        if(count==XJSON_MAX_DEPTH)return false;stack[count++]=(EnvelopeFrame){child,0};
+        if(count==XJSON_MAX_DEPTH)return false;
+        stack[count++]=(EnvelopeFrame){child,0};
     }
     return true;
 }
@@ -81,7 +82,9 @@ static bool envelope_empty(const XlspProtocolEnvelope *out) {
         !out->params&&!out->response_id&&!out->result&&!out->error;
 }
 XR_FUNC void xlsp_protocol_envelope_clear(XlspProtocolEnvelope *envelope) {
-    if(!envelope)return;xlsp_request_id_free(&envelope->id);*envelope=(XlspProtocolEnvelope){0};
+    if(!envelope)return;
+    xlsp_request_id_free(&envelope->id);
+    *envelope=(XlspProtocolEnvelope){0};
 }
 XR_FUNC XlspProtocolStatus xlsp_protocol_envelope_decode(XrJsonValue *input,XlspProtocolEnvelope *out) {
     if(!envelope_empty(out))return XLSP_PROTOCOL_BAD_ARGUMENT;

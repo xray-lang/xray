@@ -16,7 +16,7 @@ static bool call_declaration_same(CallWork *w,size_t a,uint32_t ai,size_t b,uint
     const XrXirSourceDeclaration *da=&va->declarations[ai-1],*db=&vb->declarations[bi-1];
     const XrXirSourceSyntaxView *sa=xlsp_source_bindings_syntax(w->bindings,a),*sb=xlsp_source_bindings_syntax(w->bindings,b);
     if(da->kind!=db->kind||sa->declarations[ai-1].role!=sb->declarations[bi-1].role||!call_raw_range_same(da->range,db->range))return true;
-    CallSymbol key={b,0,bi,db->range.module,false,{0},{0}};
+    CallSymbol key={.root=b,.declaration=bi,.module=db->range.module};
     if(!call_module_same(w,a,da->range.module,key,out)||!*out)return w->status==XR_XIR_OK;
     if(sa->declarations[ai-1].role==XR_XIR_SOURCE_SYNTAX_CLOSURE)return true;
     return call_equal(w,da->name,db->name,false,out);
@@ -46,13 +46,19 @@ static bool call_pick_declarations(CallWork *w,size_t root,XrLspPosition positio
     const XrXirSourceCalls *calls=xlsp_source_bindings_calls(w->bindings,root);
     for(uint32_t i=0;i<view->declaration_count;++i){if(!call_poll(w))return false;
         const XrXirSourceDeclaration *d=&view->declarations[i];const XrXirSourceDeclarationSyntax *name=&syntax->declarations[i];
-        if(!call_callable(d,name))continue;bool entry=false;if(!call_entry_module(w,view,d->range.module,&entry))return false;if(!entry)continue;
+        if(!call_callable(d,name))continue;
+        bool entry=false;
+        if(!call_entry_module(w,view,d->range.module,&entry))return false;
+        if(!entry)continue;
         XrLspRange selection={0};
         if(name->role==XR_XIR_SOURCE_SYNTAX_CLOSURE){if(!calls->functions[i].known)continue;
-            if(!call_span(w,w->request->entry,calls->functions[i].range,&selection))return false;selection.end=selection.start;}
+            if(!call_span(w,w->request->entry,calls->functions[i].range,&selection))return false;
+            selection.end=selection.start;
+        }
         else if(name->role==XR_XIR_SOURCE_SYNTAX_NAME||name->role==XR_XIR_SOURCE_SYNTAX_METHOD){if(!call_span(w,w->request->entry,name->name,&selection))return false;}
         else continue;
-        if(!call_contains(selection,position))continue;CallSymbol symbol;
+        if(!call_contains(selection,position))continue;
+        CallSymbol symbol;
         if(!call_resolve_symbol(w,root,i+1,&symbol)||!call_select(w,symbol))return false;
     }
     return true;
@@ -69,8 +75,10 @@ static bool call_pick_references(CallWork *w,size_t root,XrLspPosition position)
     }
     const XrXirSourceCalls *calls=xlsp_source_bindings_calls(w->bindings,root);
     for(uint32_t i=0;i<calls->count;++i){if(!call_poll(w))return false;const XrXirSourceCall *call=&calls->items[i];
-        if(call->reference!=UINT32_MAX||!call->selection_known)continue;bool entry=false;
-        if(!call_entry_module(w,view,call->range.module,&entry))return false;if(!entry)continue;
+        if(call->reference!=UINT32_MAX||!call->selection_known)continue;
+        bool entry=false;
+        if(!call_entry_module(w,view,call->range.module,&entry))return false;
+        if(!entry)continue;
         XrLspRange span;if(!call_span(w,w->request->entry,call->range,&span))return false;if(call_contains(span,position))return call_fail(w,XR_XIR_UNSUPPORTED);}
     return true;
 }
@@ -80,7 +88,8 @@ static bool call_pick(CallWork *w,XrLspPosition position,bool initializer) {
         const XrXirSourceView *view=call_view(w,root);const XrXirSourceCalls *calls=xlsp_source_bindings_calls(w->bindings,root);
         for(uint32_t i=0;i<calls->count;++i){if(!call_poll(w))return false;
             const XrXirSourceCall *call=&calls->items[i];if(!call->module_initializer)continue;bool entry=false;
-            if(!call_entry_module(w,view,call->range.module,&entry))return false;if(!entry)continue;
+            if(!call_entry_module(w,view,call->range.module,&entry))return false;
+            if(!entry)continue;
             CallSymbol symbol;if(!call_module_symbol(w,root,call->range.module,&symbol)||!call_select(w,symbol))return false;}}
     return w->selected_ready||call_fail(w,XR_XIR_UNRESOLVED);
 }

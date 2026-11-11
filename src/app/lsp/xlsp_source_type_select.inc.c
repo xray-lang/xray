@@ -15,7 +15,8 @@ static bool type_symbol(TypeWork *w,size_t root,uint32_t id,TypeSymbol *out) {
     if(fact->kind==XR_XIR_SOURCE_TYPE_NONE||!fact->range_known)return type_fail(w,XR_XIR_UNSUPPORTED);
     const XrXirSourceDeclaration *d=&view->declarations[id-1];const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(w->bindings,root);
     if(d->kind!=XR_XIR_SOURCE_TYPE||syntax->declarations[id-1].role!=XR_XIR_SOURCE_SYNTAX_NAME)return type_fail(w,XR_XIR_BAD_STRUCTURE);
-    TypeSymbol symbol={root,0,id,d->range.module,fact->kind,fact->table_index,{0},{0}};
+    TypeSymbol symbol={.root=root,.declaration=id,.module=d->range.module,
+        .kind=fact->kind,.table=fact->table_index};
     if(!type_document(w,view,symbol.module,&symbol.document)||!type_span(w,symbol.document,fact->range,&symbol.range)||
         !type_span(w,symbol.document,syntax->declarations[id-1].name,&symbol.selection))return false;
     *out=symbol;return true;
@@ -47,11 +48,15 @@ static bool type_pick(TypeWork *w,XrLspPosition at) {
             XrLspRange span;if(!type_span(w,w->request->entry,syntax->declarations[i].name,&span))return false;if(!type_contains(span,at))continue;
             TypeSymbol symbol;if(!type_symbol(w,root,i+1,&symbol)||!type_select(w,symbol))return false;}
         for(uint32_t i=0;i<view->reference_count;++i){if(!type_poll(w))return false;
-            if(view->references[i].access!=XR_XIR_SOURCE_TYPE_USE)continue;XrXirSourceRange raw=syntax->references[i];bool entry=false;
-            if(!type_entry_module(w,view,raw.module,&entry))return false;if(!entry||raw.line<=0||raw.column<=0||raw.end_line!=raw.line||raw.end_column<=raw.column)continue;
+            if(view->references[i].access!=XR_XIR_SOURCE_TYPE_USE)continue;
+            XrXirSourceRange raw=syntax->references[i];
+            bool entry=false;
+            if(!type_entry_module(w,view,raw.module,&entry))return false;
+            if(!entry||raw.line<=0||raw.column<=0||raw.end_line!=raw.line||raw.end_column<=raw.column)continue;
             XrLspRange span;if(!type_span(w,w->request->entry,raw,&span))return false;if(!type_contains(span,at))continue;
             uint32_t id=view->references[i].target;if(!type_target(w,view,&id))return false;
-            if(view->declarations[id-1].kind!=XR_XIR_SOURCE_TYPE)continue;TypeSymbol symbol;
+            if(view->declarations[id-1].kind!=XR_XIR_SOURCE_TYPE)continue;
+            TypeSymbol symbol;
             if(!type_symbol(w,root,id,&symbol)||!type_select(w,symbol))return false;}}
     return w->selected_ready||type_fail(w,XR_XIR_UNRESOLVED);
 }

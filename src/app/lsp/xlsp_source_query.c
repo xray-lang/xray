@@ -324,7 +324,8 @@ static XrXirStatus lsp_name_selection(const LspSourceText *text,
     size_t length=0;
     for(;;) {
         if(!name[length])break;
-        if(length==SIZE_MAX-1)return XR_XIR_BUDGET;++length;
+        if(length==SIZE_MAX-1)return XR_XIR_BUDGET;
+        ++length;
     }
     if(length!=(size_t)(range.end_column-range.column))return XR_XIR_UNSUPPORTED;
     XrLspPosition ignored={0};size_t begin=0,end=0;int line=range.line,column=range.column;
@@ -460,7 +461,9 @@ XR_FUNC XrXirStatus xlsp_source_declaration_kind(const XlspSourceSnapshot *s,con
         if(found&&kind!=decl->kind)return XR_XIR_BAD_STRUCTURE;
         kind=decl->kind;found=true;
     }
-    if(!found)return XR_XIR_UNRESOLVED;*out=kind;return XR_XIR_OK;
+    if(!found)return XR_XIR_UNRESOLVED;
+    *out=kind;
+    return XR_XIR_OK;
 }
 XrXirStatus xlsp_source_definition(const XlspSourceSnapshot *s, const char *uri,
     size_t length, XrLspPosition position, XlspSourceLocation *output) {

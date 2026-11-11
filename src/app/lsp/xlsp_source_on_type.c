@@ -79,7 +79,8 @@ static XrXirStatus on_type_lex(OnTypeWork *w) {
     for(;;) {
         Token token=xr_scanner_scan(&scanner);status=xir_compile_resource_status(xr_compile_state_status(state));if(status!=XR_XIR_OK)goto done;
         status=on_type_poll(w);if(status!=XR_XIR_OK)goto done;
-        if(token.type==TK_ERROR)goto done;if(token.type==TK_EOF)break;
+        if(token.type==TK_ERROR)goto done;
+        if(token.type==TK_EOF)break;
         if(token.start<prefix||token.start>prefix+w->prefix||token.length<0||(size_t)token.length>(size_t)(prefix+w->prefix-token.start)){status=XR_XIR_BAD_STRUCTURE;goto done;}
         last=token;last_start=(size_t)(token.start-prefix);
         if(token.type==TK_LBRACE||token.type==TK_EMPTY_MAP_START){if(depth==INT32_MAX){status=XR_XIR_BUDGET;goto done;}++depth;}
@@ -96,7 +97,9 @@ done:
     xr_arena_destroy(&arena);xr_compile_session_free(session);xr_compile_resources_free(prefix);return status;
 }
 static bool on_type_member(XrJsonValue *object,const char *key,XrJsonValue *child) {
-    if(!child)return false;int before=object->as.object.count;xjson_object_set_new(object,key,child);
+    if(!child)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,child);
     if(object->as.object.count==before){xjson_free(child);return false;}if(object->as.object.count!=before+1)return false;
     XrJsonMember *m=&object->as.object.members[before];return m->key&&m->value==child&&m->key_len==strlen(key)&&!memcmp(m->key,key,m->key_len);
 }

@@ -263,7 +263,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
     case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
-        XrXirType type;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);
+        XrXirType type=XR_XIR_UNIT;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);
         if (status!=XR_XIR_OK) return status;
         if (xr_xir_cell_is_unit(flow->module->types,type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_STORE);

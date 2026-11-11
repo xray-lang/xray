@@ -61,7 +61,8 @@ static XrXirStatus rename_copy(RenameWork *w,const char *text,size_t length,char
 }
 static XrXirStatus rename_equal(RenameWork *w,const char *a,size_t na,const char *b,size_t nb,bool *out) {
     *out=false;if(na!=nb)return XR_XIR_OK;XrXirStatus status=rename_poll(w);
-    if(status==XR_XIR_OK)*out=!memcmp(a,b,na);return status;
+    if(status==XR_XIR_OK)*out=!memcmp(a,b,na);
+    return status;
 }
 static void rename_release_sources(RenameWork *w) {
     for(size_t i=0;i<w->edit_count;++i)w->edits[i].preserved=NULL;
@@ -104,7 +105,9 @@ static XrXirStatus rename_offset(RenameWork *w,size_t document,XrLspPosition pos
     const char *text=w->documents[document].text;size_t begin=lines[position.line];
     size_t end=position.line+1<(uint32_t)count?lines[position.line+1]:w->documents[document].length;
     while(end>begin) {XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;
-        if(text[end-1]!='\r'&&text[end-1]!='\n')break;--end;}
+        if(text[end-1]!='\r'&&text[end-1]!='\n')break;
+        --end;
+    }
     uint32_t column=0;
     for(size_t i=begin;;) {
         if(column==position.character){*out=i;return XR_XIR_OK;}if(i==end)return XR_XIR_BAD_STRUCTURE;
@@ -145,7 +148,8 @@ static bool rename_same(XrLspRange a,XrLspRange b) {
 static int rename_order(RenameEdit a,RenameEdit b) {
     if(a.document!=b.document)return a.document<b.document?-1:1;
     if(a.range.start.line!=b.range.start.line)return a.range.start.line>b.range.start.line?-1:1;
-    if(a.range.start.character!=b.range.start.character)return a.range.start.character>b.range.start.character?-1:1;return 0;
+    if(a.range.start.character!=b.range.start.character)return a.range.start.character>b.range.start.character?-1:1;
+    return 0;
 }
 #include "xlsp_source_rename_facts.h"
 static XrXirStatus rename_replacements(RenameWork *w) {
@@ -169,7 +173,9 @@ static XrXirStatus rename_replacements(RenameWork *w) {
     return XR_XIR_OK;
 }
 static bool rename_member(XrJsonValue *object,const char *key,XrJsonValue *child) {
-    if(!child)return false;int before=object->as.object.count;xjson_object_set_new(object,key,child);
+    if(!child)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,child);
     if(object->as.object.count==before){xjson_free(child);return false;}if(object->as.object.count!=before+1)return false;
     XrJsonMember *m=&object->as.object.members[before];return m->key&&m->value==child&&m->key_len==strlen(key)&&!memcmp(m->key,key,m->key_len);
 }
@@ -181,7 +187,10 @@ static XrJsonValue *rename_json_range(XrLspRange range) {
     XrJsonValue *v=xjson_new_object();if(v&&(!rename_member(v,"start",rename_json_position(range.start))||!rename_member(v,"end",rename_json_position(range.end)))){xjson_free(v);v=NULL;}return v;
 }
 static bool rename_push(XrJsonValue *array,XrJsonValue *child) {
-    if(!child)return false;if(array->as.array.count==array->as.array.capacity&&array->as.array.capacity>INT_MAX/2){xjson_free(child);return false;}
+    if(!child)return false;
+    if(array->as.array.count==array->as.array.capacity&&array->as.array.capacity>INT_MAX/2){xjson_free(child);
+        return false;
+    }
     int before=array->as.array.count;xjson_array_push(array,child);if(array->as.array.count!=before+1){xjson_free(child);return false;}return true;
 }
 static XrJsonValue *rename_json_edits(RenameWork *w,size_t document,const char *key) {
@@ -240,7 +249,10 @@ static XrXirStatus rename_check(RenameWork *w,const XrXirCompileContext *context
     if(!same||symbol.kind!=w->symbol.kind||symbol.declared.document!=declared.document||!rename_same(symbol.declared.range,expected))return XR_XIR_BAD_TYPE;
     status=rename_equal(w,symbol.name,symbol.name_length,w->new_name,w->new_length,&same);if(status!=XR_XIR_OK)return status;if(!same)return XR_XIR_BAD_TYPE;
     RenameEdit *actual=NULL;size_t count=0;status=rename_collect(w,w->candidate,w->candidate_documents,&symbol,&actual,&count);
-    if(status!=XR_XIR_OK)goto done;if(count!=w->edit_count){status=XR_XIR_BAD_TYPE;goto done;}
+    if(status!=XR_XIR_OK)goto done;
+    if(count!=w->edit_count){status=XR_XIR_BAD_TYPE;
+        goto done;
+    }
     for(size_t i=0;i<w->edit_count;++i) {
         status=rename_mapped(w,w->edits[i],&expected);if(status!=XR_XIR_OK)goto done;bool found=false;
         for(size_t j=0;j<count;++j){status=rename_poll(w);if(status!=XR_XIR_OK)goto done;

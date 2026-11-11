@@ -16,21 +16,25 @@ XR_FUNC void xlsp_source_imports_free(XlspSourceImports *owner) {
     xr_compile_resources_free(owner->items);xr_compile_resources_free(owner);
 }
 XR_FUNC const XlspSourceImport *xlsp_source_imports_items(const XlspSourceImports *owner,size_t *count) {
-    if(count)*count=owner?owner->count:0;return owner?owner->items:NULL;
+    if(count)*count=owner?owner->count:0;
+    return owner?owner->items:NULL;
 }
 static XrXirStatus imports_copy(XrCompileResources *r,const char *text,char **out) {
     size_t length=0;
     for(;;++length) {
-        if(!text[length])break;if(length==SIZE_MAX-1)return XR_XIR_OVERFLOW;
+        if(!text[length])break;
+        if(length==SIZE_MAX-1)return XR_XIR_OVERFLOW;
     }
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_alloc(r,length+1,(void **)out));
-    if(status==XR_XIR_OK)memcpy(*out,text,length+1);return status;
+    if(status==XR_XIR_OK)memcpy(*out,text,length+1);
+    return status;
 }
 static XrXirStatus imports_position(const XlspSourceBuffer *buffer,size_t offset,XrLspPosition *out) {
     size_t length=xlsp_source_buffer_length(buffer);if(offset>length)return XR_XIR_BAD_STRUCTURE;
     int count=0;const uint32_t *lines=xlsp_source_buffer_lines(buffer,&count);int line=0;
     while(line+1<count) {
-        if(lines[line+1]>offset)break;++line;
+        if(lines[line+1]>offset)break;
+        ++line;
     }
     const char *text=xlsp_source_buffer_text(buffer);uint32_t column=0;
     for(size_t i=lines[line];i<offset;) {

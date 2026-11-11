@@ -57,7 +57,8 @@ XR_FUNC XrXirStatus xlsp_source_index_store_replace(XlspSourceIndexStore *store,
         size_t next=store->capacity?store->capacity*2:8;
         if(next<store->capacity||next>SIZE_MAX/sizeof(*store->files))return XR_XIR_OVERFLOW;
         status=xir_compile_resource_status(xr_compile_resources_resize(store->resources,(void **)&store->files,next*sizeof(*store->files)));
-        if(status!=XR_XIR_OK)return status;store->capacity=next;
+        if(status!=XR_XIR_OK)return status;
+        store->capacity=next;
     }
     XlspSourceIndex *retired=slot<store->count?store->files[slot].owner:NULL;
     store->files[slot]=(StoredIndex){owner,length,symbols};
@@ -82,7 +83,8 @@ static bool store_prefix_match(StoredIndex file,const char *prefix,size_t length
 XR_FUNC XrXirStatus xlsp_source_index_store_remove_prefix(XlspSourceIndexStore *store,const char *prefix) {
     if(!store||!prefix)return XR_XIR_BAD_STRUCTURE;
     size_t length=0;XrXirStatus status=store_length(prefix,&length);if(status!=XR_XIR_OK)return status;
-    if(!length)return XR_XIR_BAD_STRUCTURE;if(!store->count)return XR_XIR_OK;
+    if(!length)return XR_XIR_BAD_STRUCTURE;
+    if(!store->count)return XR_XIR_OK;
     bool *remove=NULL;status=xir_compile_resource_status(xr_compile_resources_calloc(store->resources,store->count,sizeof(*remove),(void **)&remove));
     if(status!=XR_XIR_OK)return status;
     for(size_t i=0;i<store->count;++i)remove[i]=store_prefix_match(store->files[i],prefix,length);
@@ -107,7 +109,9 @@ XR_FUNC XrXirStatus xlsp_source_index_store_find(XlspSourceIndexStore *store,con
             if(items[j].exported){*out=found;return XR_XIR_OK;}if(!fallback.symbol)fallback=found;
         }
     }
-    if(!fallback.symbol)return XR_XIR_UNRESOLVED;*out=fallback;return XR_XIR_OK;
+    if(!fallback.symbol)return XR_XIR_UNRESOLVED;
+    *out=fallback;
+    return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xlsp_source_index_store_visit(const XlspSourceIndexStore *store,XlspIndexVisitor visitor,void *context) {
     if(!store||!visitor)return XR_XIR_BAD_STRUCTURE;
