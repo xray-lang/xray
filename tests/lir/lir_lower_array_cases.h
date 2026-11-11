@@ -9,7 +9,42 @@
 #include "lir/xlir_array.h"
 #include "lir/xlir_rebuild.h"
 
+static void array_reference_mutator_transport(void) {
+    XrLirLowered output = lower_text("fn update(values:ref Array<u64>,value:u64){values[0]=value\n"
+        "values.push(value)}\nvar values:Array<u64>=[0]\nupdate(ref values,18446744073709551615)\n");
+    uint32_t mutators = 0;
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function = {0};
+        XrLirFunctionView view = {0};
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        if (!view.parameter_count || view.parameter_types[0] != XR_LIR_ARRAY_REF) continue;
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block = {0};
+            XrLirBlockView body = {0};
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView op = {0};
+                OK(xr_lir_instruction_view(output.module, block, i, &op));
+                CHECK(op.op != XR_LIR_ARRAY_REF_READ && op.op != XR_LIR_ARRAY_REF_WRITE && op.op != XR_LIR_CELL_NEW);
+                if (op.op != XR_LIR_CALL_INTRINSIC) continue;
+                XrLirArrayIntrinsic shape = {0};
+                OK(xr_lir_array_intrinsic_view(output.module, op.intrinsic, &shape));
+                CHECK(shape.id && (shape.operation == XR_LIR_ARRAY_OP_SET || shape.operation == XR_LIR_ARRAY_OP_PUSH));
+                XrLirType receiver = XR_LIR_TYPE_INVALID;
+                OK(xr_lir_value_type(output.module, (XrLirValue){output.module, function.id, op.operands[0]}, &receiver));
+                CHECK(receiver == XR_LIR_ARRAY_REF);
+                ++mutators;
+            }
+        }
+    }
+    CHECK(mutators == 2);
+    xr_lir_lowered_free(&output);
+}
+
 static void array_sources(void) {
+    array_reference_mutator_transport();
     static const char *cases[] = {
         "fn count(xs:Array<i64>)->i64{return len(xs)}\nprint(count([]))\n",
         "fn choose(flag:bool,a:Array<i64>,b:Array<i64>)->Array<i64>{return flag?a:b}\n"

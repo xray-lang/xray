@@ -35,7 +35,7 @@ typedef struct XrLirArrayIntrinsic {
     XrLirArrayOperation operation;
 } XrLirArrayIntrinsic;
 
-/* Creation owns both closed element families and copies any extra registry.
+/* Creation owns the closed element catalog and copies any extra registry.
  * Operation IDs are module-local. Query them before emitting calls instead of
  * assigning numeric meanings in a lowering or backend. Output must be empty. */
 XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *, XrLirModule **);
