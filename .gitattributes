@@ -119,3 +119,6 @@ tests/smoke/expected/quoted_literals.txt text eol=lf
 
 # Class output is compared with the independent six-line byte oracle.
 tests/fixtures/xir_class_inheritance/classes.expected.txt text eol=lf
+
+# Array Source and stdout witnesses keep their authored bytes across checkouts.
+tests/fixtures/lir_cli/array_lower/* text eol=lf
