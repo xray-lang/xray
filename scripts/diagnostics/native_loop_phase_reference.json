@@ -1,0 +1,297 @@
+{
+  "schema": 1,
+  "product_ref": "01a05d49706906273bdc6dcb34f1b7908049d23a",
+  "darwin": {
+    "64": {
+      "compiler_version_sha256": "6c263f4a0b378193483e8853193204a89db0eacf407199d789fb7e3125b8148b",
+      "source_artifact": {
+        "name": "13864571986.zip",
+        "sha256": "9dff53d63b033460b81e7be0a05f9765265a52176a5fd30a64c062e309e966a5",
+        "run": 43038767342
+      },
+      "loop 10M": {
+        "sha256": "d85be3074517f6c285c1733ef4e44160c50c3a7387104d629bc00181aa1d1be8",
+        "artifact_member": "scalar-performance/bench/loop_10M.native.o"
+      },
+      "loop 100M": {
+        "sha256": "bfc4f9a362fab89f64184a4872fb4d76ed11041e736c72ee226641a57e00f3f2",
+        "artifact_member": "scalar-performance/bench/loop_100M.native.o"
+      },
+      "historical_library_sha256": {
+        "libxray_native_runtime.a": "5fe34a22f005a4601d6be689e03ee226888c8afcdb18f4c648e2a018bd794016",
+        "libxray_xir_scalar.a": "b2fb55dfd735e64f336ccae7499e9620f6c6058f37b32d181dd2e245af145a5d",
+        "libxray_xir_declarations.a": "ced32723ec2bbaeef25fd4b92cf2a38e46c8df680d61883818db46f7663beee2",
+        "libxray_xir_admission.a": "f9bb4464645441d847aa64ae3890ad1b633a62153966f29cdc835e335c2327d0",
+        "libxray_compile_resources.a": "806777198a91013806b288b1d3fc816996832d28aa38b748d5ead33545780276"
+      },
+      "library_names": [
+        "libxray_compile_resources.a",
+        "libxray_native_runtime.a",
+        "libxray_xir_admission.a",
+        "libxray_xir_declarations.a",
+        "libxray_xir_scalar.a"
+      ],
+      "native_compiler_flags": [
+        "-std=c11",
+        "-O2",
+        "-DNDEBUG",
+        "-ffp-contract=off",
+        "-falign-functions=64"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-falign-functions=64",
+        "CMAKE_C_FLAGS_RELEASE": "-O2 -DNDEBUG",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "/usr/bin/clang"
+      }
+    },
+    "16": {
+      "compiler_version_sha256": "6c263f4a0b378193483e8853193204a89db0eacf407199d789fb7e3125b8148b",
+      "source_artifact": {
+        "name": "13864247757.zip",
+        "sha256": "b60fc4699a0dfbd4f8a7f95f1b66fd0d474f00cba5a375e68cb614d6e84a5919",
+        "run": 43038767342
+      },
+      "loop 10M": {
+        "sha256": "cdc928a40a1248eb901efded1bbf56a32f4b87a5e5a07ae6fbb737c5bed07d3c",
+        "artifact_member": "scalar-performance/bench/loop_10M.native.o"
+      },
+      "loop 100M": {
+        "sha256": "0a158daa9160bf6f91d79e17dc76a73e45fa38249d407b2b8fdcf03c0d067192",
+        "artifact_member": "scalar-performance/bench/loop_100M.native.o"
+      },
+      "historical_library_sha256": {
+        "libxray_native_runtime.a": "65d0cf041ec8aa956727824826b470014d6bccdbe172cbcaec802e4b94a056f1",
+        "libxray_xir_scalar.a": "9e01fd04c4faf6cf715d83db6e04b785dff916383ddd84e67052939dcd500192",
+        "libxray_xir_declarations.a": "59a81a07d30dd35c428c6e3eae1caf2fc00d81df6995aa85d5212215f6ef726f",
+        "libxray_xir_admission.a": "31d45374880d0e52874a0a8fb57ce3163a7fc6eaa87690e55f8848de007c5690",
+        "libxray_compile_resources.a": "0801c554e2ec38be45567458d84fe7d8364b3f300b08a017dded30df93fbc45b"
+      },
+      "library_names": [
+        "libxray_compile_resources.a",
+        "libxray_native_runtime.a",
+        "libxray_xir_admission.a",
+        "libxray_xir_declarations.a",
+        "libxray_xir_scalar.a"
+      ],
+      "native_compiler_flags": [
+        "-std=c11",
+        "-O2",
+        "-DNDEBUG",
+        "-ffp-contract=off",
+        "-falign-functions=16"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-falign-functions=16",
+        "CMAKE_C_FLAGS_RELEASE": "-O2 -DNDEBUG",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "/usr/bin/clang"
+      }
+    },
+    "32": {
+      "compiler_version_sha256": "6c263f4a0b378193483e8853193204a89db0eacf407199d789fb7e3125b8148b",
+      "source_artifact": {
+        "name": "13864017946.zip",
+        "sha256": "9ada87397ea8d5917655b33ff84f9e679af5140eb708c1c84a5bd91a4c3cbecf",
+        "run": 43038767342
+      },
+      "loop 10M": {
+        "sha256": "d9492009b5ff7eca013c4ce7992da096ee21f0daab02a89978f0713e923416bc",
+        "artifact_member": "scalar-performance/bench/loop_10M.native.o"
+      },
+      "loop 100M": {
+        "sha256": "44c53286ee8f40172a39467d6fb3e24c072edb0e0fb20fb20de019017e90bae5",
+        "artifact_member": "scalar-performance/bench/loop_100M.native.o"
+      },
+      "historical_library_sha256": {
+        "libxray_native_runtime.a": "abcb53fdf069841bcb9c9f216e4ace5a6cb529c870ad61d4110039d509735420",
+        "libxray_xir_scalar.a": "96a4ba2347b1596f2fa13efc7969cb7f1be05ea6ea81e67b8e34bcd5400419ab",
+        "libxray_xir_declarations.a": "0b603868fa652af3b4a417e77d9e1adc6d13bfee5b5839029b4bd57a5d374c2c",
+        "libxray_xir_admission.a": "47259ce611d70d5e13a6848e7ba8de93ac684046c6d330dc160c28026d4a6a5f",
+        "libxray_compile_resources.a": "a893ee930419f2534c5c6f05e36a7af59d525ef755d6c88e7e11662d862a8aa4"
+      },
+      "library_names": [
+        "libxray_compile_resources.a",
+        "libxray_native_runtime.a",
+        "libxray_xir_admission.a",
+        "libxray_xir_declarations.a",
+        "libxray_xir_scalar.a"
+      ],
+      "native_compiler_flags": [
+        "-std=c11",
+        "-O2",
+        "-DNDEBUG",
+        "-ffp-contract=off",
+        "-falign-functions=32"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-falign-functions=32",
+        "CMAKE_C_FLAGS_RELEASE": "-O2 -DNDEBUG",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "/usr/bin/clang"
+      }
+    }
+  },
+  "win32": {
+    "16": {
+      "compiler_version_sha256": "af10fa8230ec750ef97a58251ff307b83992508ca88a3cd081895ac21513532a",
+      "source_artifact": {
+        "kind": "Windows Clang fixed01a formal scalar archive",
+        "alignment": 16,
+        "result_sha256": "c7bf6fa605f0f9423a984b6445b686544734f29317534e5b3699699da059e177"
+      },
+      "loop 10M": {
+        "sha256": "e342eb7511c1dfbd9462dfc9d2ed47e76d843ee42961d386d38fec87c1b075a1",
+        "artifact_member": "bench/loop_10M.native.obj"
+      },
+      "loop 100M": {
+        "sha256": "63ce8cf4fc5ec31a1dac69dc4ab21bc9c575da76c86d3efc3f9aa151930ecf9b",
+        "artifact_member": "bench/loop_100M.native.obj"
+      },
+      "historical_library_sha256": {
+        "xray_native_runtime.lib": "3f7e96c2b627f62c097279e92fcc085eb5da5394b34eabf04e84e45eb8b11a78",
+        "xray_xir_scalar.lib": "eb23d4c716a0ab2ab7918f4930c7dd528f23965efd1667bb0015c82860db5898",
+        "xray_xir_declarations.lib": "b9442c2209a333e3cd3a8928d2772fa82627aab32e80e4435fea5499e54512a1",
+        "xray_xir_admission.lib": "5b963a0ce8ce0d2b1a80b38fc251bba1c73c25634e26a9b0db657222527639db",
+        "xray_compile_resources.lib": "3b74666725e2dd2a58f86ee1ff94a04f9b6ceef00433cfbca7cd74bc7a76e1ad"
+      },
+      "library_names": [
+        "xray_compile_resources.lib",
+        "xray_native_runtime.lib",
+        "xray_xir_admission.lib",
+        "xray_xir_declarations.lib",
+        "xray_xir_scalar.lib"
+      ],
+      "native_compiler_flags": [
+        "/nologo",
+        "/std:c11",
+        "/O2",
+        "/Ob2",
+        "/DNDEBUG",
+        "/MT",
+        "/clang:-ffp-contract=off",
+        "/clang:-falign-functions=16"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "/DWIN32 /D_WINDOWS /clang:-ffp-contract=off /clang:-falign-functions=16",
+        "CMAKE_C_FLAGS_RELEASE": "/O2 /Ob2 /DNDEBUG",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
+      }
+    },
+    "32": {
+      "compiler_version_sha256": "af10fa8230ec750ef97a58251ff307b83992508ca88a3cd081895ac21513532a",
+      "source_artifact": {
+        "kind": "Windows Clang fixed01a formal scalar archive",
+        "alignment": 32,
+        "result_sha256": "9040dcd877a68f923c2df598f61243dac243cf7f9403933ed3fb174da25300c3"
+      },
+      "loop 10M": {
+        "sha256": "d591f2507844a36751357a96fa62841c22a306750a31f1390fcf3e81c3cd956d",
+        "artifact_member": "bench/loop_10M.native.obj"
+      },
+      "loop 100M": {
+        "sha256": "633eab342dfce45b05bd0b9fbbbfdec3a3de80ef7e11a6deb3cba54c668739a6",
+        "artifact_member": "bench/loop_100M.native.obj"
+      },
+      "historical_library_sha256": {
+        "xray_native_runtime.lib": "3c6f749d0333b1d5e1081fec315caa698f67c9e82808806db4f01653ae3e7592",
+        "xray_xir_scalar.lib": "0b5c0035aabd264a1e5c1d11ad6ac4ffa4f63b915a97b05087df32ffc02d47fd",
+        "xray_xir_declarations.lib": "ecac1b9bd74eb6c92488a2fd9e813b3045346e73e2b6f24d5c6cd80fa26e7849",
+        "xray_xir_admission.lib": "6712e31f5cd38ceb54d0578841f063b9f29439504141f8a8d7372c93e6d5e388",
+        "xray_compile_resources.lib": "7c6f9718bbab50e0b49175fe94248c37c5fc38d433756cba5591f77e23497791"
+      },
+      "library_names": [
+        "xray_compile_resources.lib",
+        "xray_native_runtime.lib",
+        "xray_xir_admission.lib",
+        "xray_xir_declarations.lib",
+        "xray_xir_scalar.lib"
+      ],
+      "native_compiler_flags": [
+        "/nologo",
+        "/std:c11",
+        "/O2",
+        "/Ob2",
+        "/DNDEBUG",
+        "/MT",
+        "/clang:-ffp-contract=off",
+        "/clang:-falign-functions=32"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "/DWIN32 /D_WINDOWS /clang:-ffp-contract=off /clang:-falign-functions=32",
+        "CMAKE_C_FLAGS_RELEASE": "/O2 /Ob2 /DNDEBUG",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
+      }
+    },
+    "64": {
+      "compiler_version_sha256": "af10fa8230ec750ef97a58251ff307b83992508ca88a3cd081895ac21513532a",
+      "source_artifact": {
+        "kind": "Windows Clang fixed01a formal scalar archive",
+        "alignment": 64,
+        "result_sha256": "b2b7a20cfccf29f8a2de6665e45287c5cb3859127bfe209645c5228ba8eb7ac1"
+      },
+      "loop 10M": {
+        "sha256": "bc758c1a64ee16bd0d4318e4f08892052931410da93057586da12a6f0f56844a",
+        "artifact_member": "bench/loop_10M.native.obj"
+      },
+      "loop 100M": {
+        "sha256": "4036635acce502e646944d135308001bcc6602af7b354c1d8195ce8d088a8d55",
+        "artifact_member": "bench/loop_100M.native.obj"
+      },
+      "historical_library_sha256": {
+        "xray_native_runtime.lib": "97960d8a5607c49209556308cc3ce189ff6a3e287ca7778bb6f0b1c89ae0c517",
+        "xray_xir_scalar.lib": "1d297f2c41ac2817a8863b1ea13701cffd87a0a3eee38cac2f71d53f0fe49976",
+        "xray_xir_declarations.lib": "2d7486e9dcf7f4aab07172007e65d902fa173a598147ebe9fc05e917bbe44fde",
+        "xray_xir_admission.lib": "cb88be2b7f6a4c9dafdd94123677889f8899521958cac617ec1e0bcbc25202d1",
+        "xray_compile_resources.lib": "02ec3e3a0c5f75c3367bc390ca766fc87e22118be4202bbbb22f55351b828fa0"
+      },
+      "library_names": [
+        "xray_compile_resources.lib",
+        "xray_native_runtime.lib",
+        "xray_xir_admission.lib",
+        "xray_xir_declarations.lib",
+        "xray_xir_scalar.lib"
+      ],
+      "native_compiler_flags": [
+        "/nologo",
+        "/std:c11",
+        "/O2",
+        "/Ob2",
+        "/DNDEBUG",
+        "/MT",
+        "/clang:-ffp-contract=off",
+        "/clang:-falign-functions=64"
+      ],
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "/DWIN32 /D_WINDOWS /clang:-ffp-contract=off /clang:-falign-functions=64",
+        "CMAKE_C_FLAGS_RELEASE": "/O2 /Ob2 /DNDEBUG",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "ENABLE_ASAN": "OFF",
+        "ENABLE_UBSAN": "OFF",
+        "XR_XIR_PARANOID": "OFF",
+        "CMAKE_C_COMPILER": "C:\\Program Files\\LLVM\\bin\\clang-cl.exe"
+      }
+    }
+  },
+  "library_raw_hash_policy": "Historical raw archive hashes are retained for provenance only. Validate the five current libraries against the current baseline before and after linking. Cross-run archive byte differences remain unattributed."
+}
