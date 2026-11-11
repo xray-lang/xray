@@ -42,9 +42,13 @@ static void source_escape_failure(SourceContext *ctx, XrXirStatus status, XrHirE
         diagnostic.instruction < ctx->functions[diagnostic.function].instruction_count &&
         ctx->bodies[diagnostic.function].debug_points) {
         XrXirSourceRange range = ctx->bodies[diagnostic.function].debug_points[diagnostic.instruction].range;
-        ctx->diagnostic.module = range.module;
-        ctx->diagnostic.line = range.line;
-        ctx->diagnostic.column = range.column;
+        /* Generated factory instructions retain their declaration fallback
+         * when they have no distinct source range. */
+        if (range.line > 0) {
+            ctx->diagnostic.module = range.module;
+            ctx->diagnostic.line = range.line;
+            ctx->diagnostic.column = range.column;
+        }
     }
     if (diagnostic.code && ctx->graph && ctx->diagnostic.module < (uint32_t)ctx->graph->spec_count) {
         const XrModuleSpec *source = &ctx->graph->specs[ctx->diagnostic.module];
