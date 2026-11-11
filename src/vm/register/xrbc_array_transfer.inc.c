@@ -40,6 +40,8 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     if (cell ? !rbc_cell_state(source) : !rbc_array_source(s, operands[0])) return false;
     if (access.operation == XR_RBC_ARRAY_CELL_NEW) {
         if (!rbc_array_destination(s, access.result)) return false;
+        for (uint32_t r=0;r<s->function->register_count;++r)
+            if (rbc_cell_state(s->state[r]) && s->origin[r]==access.cell+1) return false;
         rbc_array_define(s, access.result, RBC_CELL_OWNED, access.cell + 1);
         return true;
     }

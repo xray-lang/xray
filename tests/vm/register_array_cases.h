@@ -350,4 +350,32 @@ static void test_raw_array_backedges(void) {
     f.module.functions=functions;f.module.function_count=2;
     uint64_t result=0;CHECK(execute(&f.module,0,NULL,0,&result)==XR_RBC_OK && result==1);
 }
+static void test_raw_array_cell_identity(void) {
+    for(unsigned retire=0;retire<2;++retire) {
+        RawArray f;raw_array_init(&f);
+        f.kinds[5]=XR_RBC_ARRAY_I64_CELL;f.kinds[6]=XR_RBC_ARRAY_I64;
+        immediate(f.code,f.function.code_count++,XR_RBC_LOADI,0,10);
+        immediate(f.code,f.function.code_count++,XR_RBC_LOADI,1,20);
+        XrRbcArrayLocation args[]={{0,false},{1,false}};
+        raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_NEW,2,1),args);
+        args[0].index=1;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_NEW,3,1),args);
+        args[0].index=2;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_CELL_NEW,4,1),args);
+        if(retire) {
+            args[0].index=4;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_CELL_DROP,0,1),args);
+        }
+        args[0].index=3;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_CELL_NEW,5,1),args);
+        args[0].index=retire?5u:4u;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_CELL_READ,6,1),args);
+        immediate(f.code,f.function.code_count++,XR_RBC_LOADI,1,0);
+        args[0].index=6;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_GET,0,2),args);
+        const uint32_t arrays[]={2,3,6};
+        for(size_t a=0;a<sizeof(arrays)/sizeof(*arrays);++a) {
+            args[0].index=arrays[a];raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_DROP,0,1),args);
+        }
+        args[0].index=retire?5u:4u;raw_array_access(&f,raw_array_op(XR_RBC_ARRAY_CELL_DROP,0,1),args);
+        emit(f.code,f.function.code_count++,XR_RBC_RET,0,0,0);
+        if(retire) {
+            uint64_t result=0;CHECK(execute(&f.module,0,NULL,0,&result)==XR_RBC_OK && result==20);
+        } else reject_prepare(&f.module,0,NULL,0);
+    }
+}
 #endif // REGISTER_ARRAY_CASES_H
