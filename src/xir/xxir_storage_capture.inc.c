@@ -71,15 +71,16 @@ static uint32_t storage_capture_hash(StorageCaptureItem item) {
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
-static bool storage_real_environment_entry(XirStorageFlow *flow, const XirExecutionSite *input,
+/* Capture sites provide identities for the symbolic definition. Execution
+ * sites supply the current contents and environment through their bindings. */
+static bool storage_environment_entry(XirStorageFlow *flow, const XirExecutionSite *input,
     const XirStorageValuePoint *point) {
     if (!storage_entry_environment(flow, point) || input->caller_instance >= flow->target_head_count) return false;
     uint32_t head = flow->target_heads[input->caller_instance];
     bool found = false;
     for (uint32_t s = head; s != UINT32_MAX && storage_step(flow); s = flow->sites[s].binding_next) {
         XirExecutionSite site = flow->sites[s].site;
-        if (site.kind == XIR_EXECUTION_CALLBACK_ENTRY || storage_environment_site(&site) ||
-            site.declaration != input->receiver_function) continue;
+        if (site.kind == XIR_EXECUTION_CALLBACK_ENTRY || site.declaration != input->receiver_function) continue;
         /* A same-site Cell across a backedge or a foreign activation still
          * needs its identity age. This projection admits only the current
          * caller frame and retains every other context as an obligation. */
@@ -176,7 +177,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
         if (!formal.cell || formal.function != walk->point.function ||
             formal.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT)
             return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-        bool entry = storage_real_environment_entry(flow, capture, &walk->point);
+        bool entry = storage_environment_entry(flow, capture, &walk->point);
         if (flow->status != XR_XIR_OK) return flow->status;
         if (!entry) return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
         XirStorageReference proxy;

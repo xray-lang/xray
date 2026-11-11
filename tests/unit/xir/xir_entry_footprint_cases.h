@@ -22,6 +22,7 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
     if (status == XR_XIR_OK) status = xir_effects_view_loan_facts(&effect_context,effects,&facts);
     XirStorageInput observed = {0};
     uint32_t found = 0;
+    bool unused = false;
     for (uint32_t i = 0; status == XR_XIR_OK && i < facts.storage.input_count; ++i) {
         XirStorageInput input = facts.storage.inputs[i];
         if (!input.entry_environment) continue;
@@ -36,9 +37,20 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
         for (uint32_t t = 0; t < formula.count; ++t)
             own |= facts.restrictions.inputs[formula.first + t] == input.value;
         CHECK(!formula.constant && own);
+        bool called = false, captured = false;
+        for (uint32_t a = 0; a < facts.storage.application_count; ++a) {
+            XirStorageApplication app = facts.storage.applications[a];
+            if (app.declaration != input.function) continue;
+            bool creation = app.kind == XIR_EXECUTION_CALL && (app.protocol == 1 || app.protocol == 4);
+            captured |= creation;
+            called |= !creation;
+            if (creation) for (uint32_t b = 0; b < app.count; ++b)
+                CHECK(facts.storage.bindings[app.first+b].formal_value != input.value);
+        }
+        unused |= captured && !called;
         observed = input; ++found;
     }
-    if (status == XR_XIR_OK) CHECK(found);
+    if (status == XR_XIR_OK) CHECK(found && unused);
     uint32_t *values = NULL, *instructions = NULL;
     if (status == XR_XIR_OK && relocate) {
         const XrXirFunction *body = &module->functions[observed.function];

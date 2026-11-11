@@ -8,3 +8,14 @@ fn local(callback: fn() -> i64) -> i64 {
     second = callback
     return first()
 }
+fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn overwrite(callback: fn() -> i64) {
+    var first = leaf
+    var second = leaf
+    const readFirst = fn() -> i64 { return first() }
+    const readSecond = fn() -> i64 { return second() }
+    first = readSecond
+    first = leaf
+    const saved = retain(readFirst)
+    second = callback
+}
