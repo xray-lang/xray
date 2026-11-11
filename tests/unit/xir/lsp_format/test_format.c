@@ -29,7 +29,8 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
     const char *literal=mode<3?emoji_source:mode==3?"fn value()->i64{\r\nreturn 1\r\n}\r\n":mode==4?expected[0]:mode==5?"":mode==7?"fn value()->i64{\rreturn 1\r}\r":"fn broken(";
     char text[256],uri[]="file:///format.xr";size_t length=strlen(literal);CHECK(length<sizeof(text));memcpy(text,literal,length+1);
     XlspSourceDocument input={uri,text,sizeof(uri)-1,length,7};XrFmtConfig config=xfmt_default_config;
-    if(mode==1)config.indent_size=2;if(mode==2)config.use_tabs=1;
+    if(mode==1)config.indent_size=2;
+    if(mode==2)config.use_tabs=1;
     lsp_json_calls=0;lsp_json_fail=fault;lsp_json_injected=false;
     XrXirStatus status=xlsp_source_format_json(resources,&input,&config,&result,NULL);if(stats&&status!=XR_XIR_OK)fprintf(stderr,"Formatting diagnostic mode=%u status=%u\n",mode,(unsigned)status);memset(text,'?',sizeof(text));memset(uri,'?',sizeof(uri));
     if(status==XR_XIR_OK) {
@@ -42,9 +43,17 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
             if(status==XR_XIR_OK)CHECK(again&&again->as.array.count==0);else CHECK(!again);
         }
     } else CHECK(!result);
-    if(injected)*injected=lsp_json_injected;lsp_json_fail=SIZE_MAX;lsp_json_injected=false;
-    if(stats)*stats=sdk_stats(resources);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
-    if(status==XR_XIR_OK)facts(result,mode);xjson_free(result);xjson_free(again);CHECK(!lsp_json_live&&!lsp_json_bytes);return status;
+    if(injected)*injected=lsp_json_injected;
+    lsp_json_fail=SIZE_MAX;
+    lsp_json_injected=false;
+    if(stats)*stats=sdk_stats(resources);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live&&!runtime_bytes);
+    if(status==XR_XIR_OK)facts(result,mode);
+    xjson_free(result);
+    xjson_free(again);
+    CHECK(!lsp_json_live&&!lsp_json_bytes);
+    return status;
 }
 static void invalid_inputs(void) {
     XrCompileResources *resources=sdk_ledger(&limits);XrJsonValue *result=NULL;XrFmtConfig config=xfmt_default_config;

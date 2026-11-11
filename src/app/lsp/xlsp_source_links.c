@@ -101,7 +101,9 @@ done:
     links_inputs_free(&inputs);xlsp_source_imports_free(imports);xlsp_source_links_free(owner);return status;
 }
 static bool links_member(XrJsonValue *object,const char *key,XrJsonValue *child) {
-    if(!child)return false;int before=object->as.object.count;xjson_object_set_new(object,key,child);
+    if(!child)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,child);
     if(object->as.object.count==before){xjson_free(child);return false;}
     if(object->as.object.count!=before+1)return false;
     XrJsonMember *member=&object->as.object.members[before];

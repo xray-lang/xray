@@ -1,23 +1,31 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 static XrJsonValue *type_json_object(TypeWork *w,bool array) {
-    if(!type_poll(w))return NULL;XrJsonValue *value=array?xjson_new_array():xjson_new_object();
-    if(!value)type_fail(w,XR_XIR_OUT_OF_MEMORY);return value;
+    if(!type_poll(w))return NULL;
+    XrJsonValue *value=array?xjson_new_array():xjson_new_object();
+    if(!value)type_fail(w,XR_XIR_OUT_OF_MEMORY);
+    return value;
 }
 static XrJsonValue *type_json_string(TypeWork *w,const char *text,size_t length) {
-    if(!type_poll(w))return NULL;XrJsonValue *value=xjson_new_string_n(text,length);
-    if(!value)type_fail(w,XR_XIR_OUT_OF_MEMORY);return value;
+    if(!type_poll(w))return NULL;
+    XrJsonValue *value=xjson_new_string_n(text,length);
+    if(!value)type_fail(w,XR_XIR_OUT_OF_MEMORY);
+    return value;
 }
 static XrJsonValue *type_json_literal(TypeWork *w,const char *text) {
     size_t length=0;return type_length(w,text,&length)?type_json_string(w,text,length):NULL;
 }
 static XrJsonValue *type_json_integer(TypeWork *w,uint32_t integer) {
-    if(!type_poll(w))return NULL;XrJsonValue *value=xjson_new_number(0);
+    if(!type_poll(w))return NULL;
+    XrJsonValue *value=xjson_new_number(0);
     if(!value){type_fail(w,XR_XIR_OUT_OF_MEMORY);return NULL;}
     value->is_integer=true;value->as.integer=integer;return value;
 }
 /* Both helpers consume value, including an append failure. */
 static bool type_member(TypeWork *w,XrJsonValue *object,const char *key,XrJsonValue *value) {
-    if(!value)return false;if(!type_poll(w)){xjson_free(value);return false;}
+    if(!value)return false;
+    if(!type_poll(w)){xjson_free(value);
+        return false;
+    }
     int before=object->as.object.count;xjson_object_set_new(object,key,value);
     if(object->as.object.count==before){xjson_free(value);return type_fail(w,XR_XIR_OUT_OF_MEMORY);}
     if(object->as.object.count!=before+1)return type_fail(w,XR_XIR_BAD_STRUCTURE);
@@ -27,7 +35,10 @@ static bool type_member(TypeWork *w,XrJsonValue *object,const char *key,XrJsonVa
     return (member->value==value&&member->key_len==length&&!memcmp(member->key,key,length))||type_fail(w,XR_XIR_BAD_STRUCTURE);
 }
 static bool type_push(TypeWork *w,XrJsonValue *array,XrJsonValue *value) {
-    if(!value)return false;if(!type_poll(w)||array->as.array.count==INT_MAX){xjson_free(value);return type_fail(w,XR_XIR_BUDGET);}
+    if(!value)return false;
+    if(!type_poll(w)||array->as.array.count==INT_MAX){xjson_free(value);
+        return type_fail(w,XR_XIR_BUDGET);
+    }
     int before=array->as.array.count;xjson_array_push(array,value);
     if(array->as.array.count==before){xjson_free(value);return type_fail(w,XR_XIR_OUT_OF_MEMORY);}
     return array->as.array.count==before+1||type_fail(w,XR_XIR_BAD_STRUCTURE);
@@ -50,10 +61,12 @@ static bool type_fingerprint(TypeWork *w,TypeSymbol symbol,char *out) {
     out[XR_FINGERPRINT_BYTES*2]=0;return true;
 }
 static bool type_revision(TypeWork *w,char *out) {
-    if(!type_poll(w))return false;return snprintf(out,17,"%016llx",(unsigned long long)w->request->revision)==16||type_fail(w,XR_XIR_BAD_STRUCTURE);
+    if(!type_poll(w))return false;
+    return snprintf(out,17,"%016llx",(unsigned long long)w->request->revision)==16||type_fail(w,XR_XIR_BAD_STRUCTURE);
 }
 static bool type_version(TypeWork *w,TypeSymbol symbol,char *out) {
-    if(!type_poll(w))return false;int n=snprintf(out,32,"%lld",(long long)w->request->documents[symbol.document].version);
+    if(!type_poll(w))return false;
+    int n=snprintf(out,32,"%lld",(long long)w->request->documents[symbol.document].version);
     return (n>0&&n<32)||type_fail(w,XR_XIR_BAD_STRUCTURE);
 }
 static const char *type_symbol_name(TypeWork *w,TypeSymbol symbol) {

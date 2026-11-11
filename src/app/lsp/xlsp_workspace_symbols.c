@@ -43,7 +43,10 @@ static XrXirStatus workspace_string(XlspWorkspaceSymbolRequest *request,const ch
     if(!input)return XR_XIR_BAD_STRUCTURE;
     size_t length=0;
     for(;;){
-        if(!input[length])break;if(length==SIZE_MAX-1)return XR_XIR_OVERFLOW;++length;}
+        if(!input[length])break;
+        if(length==SIZE_MAX-1)return XR_XIR_OVERFLOW;
+        ++length;
+    }
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_alloc(request->resources,length+1,(void **)out));
     if(status==XR_XIR_OK){memcpy(*out,input,length+1);*size=length;}return status;
 }
@@ -86,7 +89,9 @@ XR_FUNC XrXirStatus xlsp_workspace_symbols_capture(XrLspServer *server,const XrJ
     XrCompileResources *resources=NULL;XlspWorkspaceSymbolRequest *request=NULL;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_new(&limits,&resources));if(status!=XR_XIR_OK)goto done;
     status=xir_compile_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*request),(void **)&request));
-    if(status!=XR_XIR_OK)goto done;request->resources=resources;resources=NULL;
+    if(status!=XR_XIR_OK)goto done;
+    request->resources=resources;
+    resources=NULL;
     status=workspace_query(request,params);
     WorkspaceCapture capture={request,server};
     if(status==XR_XIR_OK)status=xlsp_source_index_store_visit(server->source_index,workspace_capture_symbol,&capture);
@@ -113,7 +118,8 @@ static XrXirStatus workspace_symbols_json(XlspWorkspaceSymbolRequest *request,Xr
         if(control){status=xir_compile_resource_status(xr_compile_request_control_poll(control));if(status!=XR_XIR_OK)goto done;}
         if(!node->kind||array->as.array.count>=WORKSPACE_SYMBOL_LIMIT)continue;
         bool matches=false;status=index_json_contains(node->name,request->query->as.string,request->query->string_len,&matches);
-        if(status!=XR_XIR_OK)goto done;if(!matches)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!matches)continue;
         XrJsonValue *symbol=workspace_symbol_json(node);if(!symbol){status=XR_XIR_OUT_OF_MEMORY;goto done;}
         int count=array->as.array.count;xjson_array_push(array,symbol);
         if(array->as.array.count!=count+1){xjson_free(symbol);status=XR_XIR_OUT_OF_MEMORY;goto done;}
@@ -150,7 +156,8 @@ XR_FUNC XrJsonValue *xlsp_workspace_symbols_handle(XrLspServer *server,const XrJ
     uint64_t revision=server->source_revision,generation=server->doc_table?server->doc_table->generation:0;
     XlspWorkspaceSymbolRequest *request=NULL;XlspSourceRequestResult result={0};
     XrXirStatus status=xlsp_workspace_symbols_capture(server,params,&request);
-    if(status==XR_XIR_OK)status=xlsp_workspace_symbols_run(request,NULL,&result);if(status==XR_XIR_OK)status=result.status;
+    if(status==XR_XIR_OK)status=xlsp_workspace_symbols_run(request,NULL,&result);
+    if(status==XR_XIR_OK)status=result.status;
     xlsp_workspace_symbols_free(request);
     if(status==XR_XIR_OK&&(server->shutdown_received||server->exit_received||server->source_revision!=revision||
         (server->doc_table?server->doc_table->generation:0)!=generation))status=XR_XIR_UNRESOLVED;

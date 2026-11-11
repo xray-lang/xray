@@ -98,7 +98,8 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
     for(size_t i=0;i<request->count;++i) {
         status=xir_compile_resource_status(xr_compile_session_poll(request->session));if(status!=XR_XIR_OK)goto done;
         bool contains=false;status=xlsp_source_snapshot_contains(request->snapshots[i],request->uri,request->uri_length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         XlspSourceDocument input={0};
         status=xlsp_source_snapshot_document(request->snapshots[i],request->uri,request->uri_length,&input);
         if(status!=XR_XIR_OK)goto done;
@@ -120,7 +121,8 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
             }
             status=xlsp_source_syntax_call(syntax,request->position,&selection.call);
             if(status==XR_XIR_UNRESOLVED){*out=xjson_new_null();status=*out?XR_XIR_OK:XR_XIR_OUT_OF_MEMORY;goto done;}
-            if(status!=XR_XIR_OK)goto done;selected=true;
+            if(status!=XR_XIR_OK)goto done;
+            selected=true;
         } else {
             status=signature_document_equal(&document,&input);if(status!=XR_XIR_OK)goto done;
         }

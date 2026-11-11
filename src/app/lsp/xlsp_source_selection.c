@@ -32,7 +32,8 @@ static XrXirStatus selection_line(const XlspSourceBuffer *buffer,
     const char *text=xlsp_source_buffer_text(buffer);size_t begin=lines[cursor.line];
     size_t end=cursor.line+1<(uint32_t)count?lines[cursor.line+1]:xlsp_source_buffer_length(buffer);
     while(end>begin) {
-        if(text[end-1]!='\r'&&text[end-1]!='\n')break;--end;
+        if(text[end-1]!='\r'&&text[end-1]!='\n')break;
+        --end;
     }
     bool boundary=false,inside=false;uint32_t column=0,word_begin=cursor.character,word_end=cursor.character,run_begin=0;
     for(size_t i=begin;i<end;) {
@@ -42,7 +43,8 @@ static XrXirStatus selection_line(const XlspSourceBuffer *buffer,
         uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;
         if(column>INT32_MAX-width)return XR_XIR_BAD_STRUCTURE;
         if(XR_IS_IDENT(text[i])) {
-            if(!inside)run_begin=column;inside=true;
+            if(!inside)run_begin=column;
+            inside=true;
             if(cursor.character>=run_begin&&cursor.character<=column+width){word_begin=run_begin;word_end=column+width;}
         } else inside=false;
         column+=width;i+=step.consumed;
@@ -57,7 +59,9 @@ static bool selection_equal(XrLspRange a,XrLspRange b) {
         a.end.line==b.end.line&&a.end.character==b.end.character;
 }
 static bool selection_member(XrJsonValue *object,const char *key,XrJsonValue *value) {
-    if(!value)return false;int before=object->as.object.count;xjson_object_set_new(object,key,value);
+    if(!value)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,value);
     if(object->as.object.count==before){xjson_free(value);return false;}
     if(object->as.object.count!=before+1)return false;
     XrJsonMember *member=&object->as.object.members[before];

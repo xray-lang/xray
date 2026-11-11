@@ -60,7 +60,7 @@ static void storage_cache_cases(void) {
 static void storage_cache_shared_graph(void) {
     enum { COUNT = 160 };
     XrXirNominalFieldIdentity fields[] = {{{"a", 1}, 0}, {{"b", 1}, 0}};
-    XrXirNominalIdentity identities[COUNT] = {{0}}; char names[COUNT][16];
+    XrXirNominalIdentity identities[COUNT] = {0}; char names[COUNT][16];
     XrXirNominalTable table = {NULL, COUNT, identities};
     XrXirType inner[COUNT + 1]; XrXirTypeNode nodes[COUNT] = {{0}};
     for (uint32_t i = 0; i < COUNT; ++i) {

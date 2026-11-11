@@ -985,7 +985,7 @@ static bool lower_liveness(LowerFunction *f) {
                     continue;
                 c->block = b;
                 c->instruction = i;
-                uint32_t cell;
+                uint32_t cell = 0;
                 if (!lower_cell_index(
                         f, lower_state_new(op->op) ? source->parameter_count + i : op->args[0],
                         &cell))
@@ -1395,7 +1395,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (!lower_module_operation(f, b, i, &handled)) return false;
         if (handled) continue;
         if (lower_state_new(op->op) || lower_state_read(op->op) || lower_state_write(op->op)) {
-            uint32_t cell;
+            uint32_t cell = 0;
             if (!lower_cell_index(f, lower_state_new(op->op) ? result : op->args[0], &cell))
                 return false;
             if (lower_state_read(op->op)) {

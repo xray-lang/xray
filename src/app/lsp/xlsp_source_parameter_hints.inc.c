@@ -35,7 +35,8 @@ static XrXirStatus parameter_hint_same_variable(ParameterHintsContext *ctx,const
     XlspSourceCursor first={0},last={0};const XlspSourceSnapshot *s=ctx->snapshot;
     XrXirStatus status=xlsp_source_cursor(s->resources,ctx->text->text,ctx->text->length,argument->variable.start,&first);
     if(status==XR_XIR_OK)status=xlsp_source_cursor(s->resources,ctx->text->text,ctx->text->length,argument->variable.end,&last);
-    if(status!=XR_XIR_OK)return status;if(first.offset>=last.offset)return XR_XIR_BAD_STRUCTURE;
+    if(status!=XR_XIR_OK)return status;
+    if(first.offset>=last.offset)return XR_XIR_BAD_STRUCTURE;
     size_t length=0;if(!name)return XR_XIR_BAD_STRUCTURE;
     while(name[length]){++length;}
     if(length!=last.offset-first.offset)return XR_XIR_OK;
@@ -61,7 +62,8 @@ static XrXirStatus parameter_hint_emit(ParameterHintsContext *ctx,const XrXirSou
         size_t capacity=ctx->capacity?ctx->capacity*2:8;
         if(capacity<ctx->capacity||capacity>SIZE_MAX/sizeof(*ctx->hints.items)){status=XR_XIR_BUDGET;goto hint_done;}
         status=xir_compile_resource_status(xr_compile_resources_resize(s->resources,(void **)&ctx->hints.items,capacity*sizeof(*ctx->hints.items)));
-        if(status!=XR_XIR_OK)goto hint_done;ctx->capacity=capacity;
+        if(status!=XR_XIR_OK)goto hint_done;
+        ctx->capacity=capacity;
     }
     ctx->hints.items[ctx->hints.count++]=hint;hint=(XlspSourceParameterHint){0};
 hint_done:
@@ -107,7 +109,8 @@ static XrXirStatus parameter_hint_call(ParameterHintsContext *ctx,const XlspSour
         XrLspPosition position=call->arguments[i].range.start;
         if(!type_hint_position_before(position,ctx->range.start)&&type_hint_position_before(position,ctx->range.end))selected=true;
     }
-    if(!selected)return XR_XIR_OK;if(!call->call.has_callee)return XR_XIR_UNSUPPORTED;
+    if(!selected)return XR_XIR_OK;
+    if(!call->call.has_callee)return XR_XIR_UNSUPPORTED;
     XlspSourceSignatureSelection selection={ctx->snapshot->resources,ctx->text->uri,ctx->text->uri_length,call->call};
     uint32_t target=0;XrXirStatus status=lsp_symbol(ctx->snapshot,selection.uri,selection.uri_length,call->call.callee.start,&target);
     if(status!=XR_XIR_OK)return status;

@@ -56,6 +56,7 @@ static size_t envelope_mutations(void) {
 int main(int argc,char **argv) {
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--resources")));bool failures=argc==2;
     size_t count=envelope_cases_run();envelope_lifetimes(failures);size_t mutations=envelope_mutations();
-    if(failures)CHECK(!protocol_existing_main());envelope_zero();
+    if(failures)CHECK(!protocol_existing_main());
+    envelope_zero();
     printf("Envelope cases=%zu mutations=%zu id_sites=1 full_FI=%u id_owner_dead=1 borrowed_DOM_contract=1 JSON0/0 id0/0\n",count,mutations,failures?1u:0u);return 0;
 }

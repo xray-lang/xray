@@ -46,7 +46,8 @@ XR_FUNC XrXirStatus xlsp_source_type_hints(const XlspSourceSnapshot *s,const cha
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
         if(!(fact->flags&XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING))continue;
         bool matches=false;status=lsp_text_has_module(text,fact->name.module,&matches);
-        if(status!=XR_XIR_OK)goto done;if(!matches)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!matches)continue;
         const XrXirSourceDeclaration *declaration=&view->declarations[i];
         if(declaration->kind!=XR_XIR_SOURCE_BINDING||fact->role!=XR_XIR_SOURCE_SYNTAX_NAME){status=XR_XIR_BAD_STRUCTURE;goto done;}
         status=lsp_name_selection(text,fact->name,declaration->name);if(status!=XR_XIR_OK)goto done;

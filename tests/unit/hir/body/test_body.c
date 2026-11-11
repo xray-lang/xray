@@ -27,7 +27,8 @@ static void *body_allocate(size_t bytes) {
     p->data.bytes=bytes;++physical_live;physical_bytes+=bytes;return p+1;
 }
 static void body_release(void *pointer) {
-    if(!pointer)return;BodyAllocation *p=(BodyAllocation *)pointer-1;
+    if(!pointer)return;
+    BodyAllocation *p=(BodyAllocation *)pointer-1;
     CHECK(physical_live&&physical_bytes>=p->data.bytes);--physical_live;physical_bytes-=p->data.bytes;xr_free(p);
 }
 #undef xr_malloc

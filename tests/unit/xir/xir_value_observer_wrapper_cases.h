@@ -87,7 +87,9 @@ static void value_observer_wrapper_cases(XrXirDomain *domain) {
     }
     xr_xir_domain_drop(observer);
     for (uint32_t i=0;i<3;++i) {class_value_count(&retained[i],11);xr_xir_value_drop(&retained[i]);}
-    for (uint32_t i=0;i<5;++i) xr_xir_value_drop(&values[i]);xr_xir_value_drop(&box);xr_xir_compile_type_arena_drop(arena);
+    for (uint32_t i=0;i<5;++i) xr_xir_value_drop(&values[i]);
+    xr_xir_value_drop(&box);
+    xr_xir_compile_type_arena_drop(arena);
     puts("Immutable wrapper observation: exact Class identity/observer work/no allocations/empty and malformed rejection/no value mutation/owner lifetime PASS");
 }
 #endif // XIR_VALUE_OBSERVER_WRAPPER_CASES_H

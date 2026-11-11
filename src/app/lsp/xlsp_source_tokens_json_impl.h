@@ -37,11 +37,13 @@ XrXirStatus xlsp_source_tokens_json(XrCompileResources *resources,const XlspSour
         size_t prefix=0,suffix=0;bool equal=false;
         while(prefix<count&&prefix<old_count) {
             status=tokens_equal_encoded(items,prefix,old,prefix,&equal);if(status!=XR_XIR_OK)goto done;
-            if(!equal)break;++prefix;
+            if(!equal)break;
+            ++prefix;
         }
         while(suffix<count-prefix&&suffix<old_count-prefix) {
             status=tokens_equal_encoded(items,count-suffix-1,old,old_count-suffix-1,&equal);if(status!=XR_XIR_OK)goto done;
-            if(!equal)break;++suffix;
+            if(!equal)break;
+            ++suffix;
         }
         if(prefix+suffix<count||prefix+suffix<old_count) {
             edit=xjson_new_object();if(!edit){status=XR_XIR_OUT_OF_MEMORY;goto done;}

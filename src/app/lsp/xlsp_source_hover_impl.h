@@ -19,7 +19,8 @@ static void hover_bytes(LspHoverBuilder *b,const char *text,size_t length) {
             if(next>SIZE_MAX/2){next=needed;break;}next*=2;
         }
         b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&b->text,next));
-        if(b->status!=XR_XIR_OK)return;b->capacity=next;
+        if(b->status!=XR_XIR_OK)return;
+        b->capacity=next;
     }
     if(b->status==XR_XIR_OK){memcpy(b->text+b->length,text,length);b->length+=length;b->text[b->length]=0;}
 }
@@ -70,7 +71,8 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
                 size_t cap=capacity?capacity*2:8;
                 if(cap<capacity||cap>SIZE_MAX/sizeof(*stack)){b->status=XR_XIR_BUDGET;break;}
                 b->status=xir_compile_resource_status(xr_compile_resources_resize(b->snapshot->resources,(void **)&stack,cap*sizeof(*stack)));
-                if(b->status!=XR_XIR_OK)break;capacity=cap;
+                if(b->status!=XR_XIR_OK)break;
+                capacity=cap;
             }
             stack[count++]=(LspHoverTypeFrame){next,0,0};push=false;
         }
@@ -111,7 +113,9 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
             if(!f->stage){hover_bytes(b,(const char *)d->name.bytes,d->name.length);f->stage=1;if(n->nominal.argument_count)hover_text(b,"<");}
             if(f->index<n->nominal.argument_count) {
                 if(!n->nominal.arguments){b->status=XR_XIR_BAD_TYPE;break;}
-                if(f->index)hover_text(b,", ");next=n->nominal.arguments[f->index++];push=true;
+                if(f->index)hover_text(b,", ");
+                next=n->nominal.arguments[f->index++];
+                push=true;
             } else {if(n->nominal.argument_count)hover_text(b,">");--count;}
             continue;
         }
@@ -211,7 +215,8 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
             }
             ++index;
             if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
-            if(shown++)hover_text(b,", ");if(p->mutable)hover_text(b,"ref ");
+            if(shown++)hover_text(b,", ");
+            if(p->mutable)hover_text(b,"ref ");
             hover_text(b,p->name);hover_text(b,": ");hover_type(b,v,p->type);
         }
         if(b->status==XR_XIR_OK&&index!=d->parameter_count)b->status=XR_XIR_UNSUPPORTED;
@@ -225,7 +230,8 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
         bool own=false;
         if(nominal) {
             size_t length=0;for(;;) {
-                if(!d->name[length])break;++length;
+                if(!d->name[length])break;
+                ++length;
             }
             if(length==nominal->name.length){b->status=lsp_equal(d->name,nominal->name.bytes,length,&own);if(b->status!=XR_XIR_OK)return;}
             if(own) {

@@ -63,7 +63,8 @@ static void syntax_facts(const XlspSyntaxSnapshot *syntax,const AliasCase *c) {
     CHECK(xlsp_source_syntax_status(syntax)==(c->recovered?XR_PARSE_RECOVERED:XR_PARSE_OK));
     const AstNode *root=xlsp_source_syntax_ast(syntax);CHECK(root&&root->type==AST_PROGRAM);unsigned found=0;
     for(int i=0;i<root->as.program.count;++i){const AstNode *node=root->as.program.statements[i];
-        if(!node||node->type!=AST_TYPE_ALIAS)continue;++found;
+        if(!node||node->type!=AST_TYPE_ALIAS)continue;
+        ++found;
         CHECK(!strcmp(node->as.type_alias.name,c->name)&&node->line==c->line&&node->column==c->column);
         CHECK(node->end_line==c->end_line&&node->end_column==c->end_column&&node->is_exported==c->exported);
         CHECK(node->as.type_alias.resolved_type&&node->as.type_alias.type_param_count==(c->generic?1:0));
@@ -129,7 +130,9 @@ static XrXirStatus rejected_once(unsigned mode,XrCompileResourceLimits bounds,Xr
     if(s==XR_XIR_OK){XlspSourceDocument input={alias_uri,texts[mode],sizeof(alias_uri)-1,strlen(texts[mode]),19};
         XrParseStatus parsed=xlsp_source_syntax_build(session,&input,&syntax);s=parse_status(parsed);
         if(s==XR_XIR_OK)CHECK(parsed==XR_PARSE_RECOVERED);}
-    if(stats)*stats=r?sdk_stats(r):(XrCompileResourceStats){0};xr_compile_session_free(session);xr_compile_resources_release(r);
+    if(stats)*stats=r?sdk_stats(r):(XrCompileResourceStats){0};
+    xr_compile_session_free(session);
+    xr_compile_resources_release(r);
     if(s==XR_XIR_OK){bool found=false;
         for(const XlspSyntaxDiagnostic *d=xlsp_source_syntax_diagnostics(syntax);d;d=d->next)if(strstr(d->message,messages[mode]))found=true;
         CHECK(found);

@@ -19,7 +19,8 @@ static XrXirStatus rename_import_binding(RenameWork *w,const XrXirSourceSyntaxVi
         XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING||!xlsp_source_pattern_range(marker->range,range))continue;
-        if(*out)return XR_XIR_BAD_STRUCTURE;*out=marker->declaration;
+        if(*out)return XR_XIR_BAD_STRUCTURE;
+        *out=marker->declaration;
     }
     return XR_XIR_OK;
 }
@@ -32,7 +33,9 @@ static XrXirStatus rename_import_insertion(RenameWork *w,const XlspSourceBinding
         XrXirStatus status=rename_poll(w);if(status!=XR_XIR_OK)return status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(marker->declaration!=id||marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT)continue;
-        if(found)return XR_XIR_BAD_STRUCTURE;point=marker->range;found=true;
+        if(found)return XR_XIR_BAD_STRUCTURE;
+        point=marker->range;
+        found=true;
     }
     if(!found)return XR_XIR_UNSUPPORTED;
     if(point.line<=0||point.column<=0||point.end_line!=point.line||point.end_column!=point.column)return XR_XIR_BAD_STRUCTURE;

@@ -117,7 +117,9 @@ XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *w,const char *
 }
 
 void xlsp_source_workspace_failure_free(XlspSourceWorkspaceFailure *failure) {
-    if(!failure)return;xr_xir_compile_source_failure_free(&failure->source);*failure=(XlspSourceWorkspaceFailure){0};
+    if(!failure)return;
+    xr_xir_compile_source_failure_free(&failure->source);
+    *failure=(XlspSourceWorkspaceFailure){0};
 }
 
 XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *w,const char *uri,size_t length,
@@ -126,7 +128,8 @@ XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *w,const char *uri,
     XlspSourceTokens *accepted=NULL,*current=NULL;XrXirStatus status=XR_XIR_OK;
     for(size_t i=0;i<w->count;++i) {
         bool contains=false;status=xlsp_source_snapshot_contains(w->snapshots[i],uri,length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         if(range){status=xlsp_source_semantic_range(w->snapshots[i],uri,length,*range);if(status!=XR_XIR_OK)goto done;}
         status=xlsp_source_semantic_tokens(w->snapshots[i],uri,length,&current);if(status!=XR_XIR_OK)goto done;
         if(accepted) {

@@ -16,12 +16,15 @@ XR_FUNC XrXirStatus xlsp_source_workspace_declaration_kind(XlspSourceWorkspace *
     bool found=false;XrXirSourceDeclarationKind accepted=XR_XIR_SOURCE_FUNCTION;
     for(size_t i=0;i<w->count;++i) {
         bool contains=false;XrXirStatus status=xlsp_source_snapshot_contains(w->snapshots[i],uri,length,&contains);
-        if(status!=XR_XIR_OK)return status;if(!contains)continue;
+        if(status!=XR_XIR_OK)return status;
+        if(!contains)continue;
         XrXirSourceDeclarationKind current=XR_XIR_SOURCE_FUNCTION;
         status=xlsp_source_declaration_kind(w->snapshots[i],uri,length,position,&current);
         if(status!=XR_XIR_OK)return status;
         if(found&&accepted!=current)return XR_XIR_BAD_STRUCTURE;
         accepted=current;found=true;
     }
-    if(!found)return XR_XIR_UNRESOLVED;*out=accepted;return XR_XIR_OK;
+    if(!found)return XR_XIR_UNRESOLVED;
+    *out=accepted;
+    return XR_XIR_OK;
 }

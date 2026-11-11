@@ -46,12 +46,18 @@ static unsigned char pool_separator(unsigned char c) {
 
 
 XR_FUNC void xlsp_index_result_free(XrLspIndexResult *n) {
-    if(!n)return;xlsp_source_index_free(n->index);xr_compile_resources_free(n->path);xr_compile_resources_free(n->uri);xr_compile_resources_free(n);
+    if(!n)return;
+    xlsp_source_index_free(n->index);
+    xr_compile_resources_free(n->path);
+    xr_compile_resources_free(n->uri);
+    xr_compile_resources_free(n);
 }
 XR_FUNC void xlsp_index_result_free_list(XrLspIndexResult *n){while(n){XrLspIndexResult *next=n->next;xlsp_index_result_free(n);n=next;}}
 static XrXirStatus pool_capture(XrLspIndexPool *p,const char *path,const char *uri,uint64_t revision,XrLspIndexResult **out) {
     XrLspIndexResult *n=NULL;XrXirStatus s=xir_compile_resource_status(xr_compile_resources_calloc(p->resources,1,sizeof(*n),(void **)&n));
-    if(s!=XR_XIR_OK)return s;atomic_init(&n->cancel_requested,false);n->revision=revision;
+    if(s!=XR_XIR_OK)return s;
+    atomic_init(&n->cancel_requested,false);
+    n->revision=revision;
     s=pool_copy(p->resources,path,&n->path);
     if(s==XR_XIR_OK)s=uri?pool_copy(p->resources,uri,&n->uri):xlsp_index_file_uri(p->resources,path,&n->uri);
     char *decoded=NULL;size_t length=0;
@@ -95,18 +101,26 @@ XR_FUNC void xlsp_index_pool_cancel_all(XrLspIndexPool *p){if(!p)return;xr_mutex
 static void pool_cancel_file(XrLspIndexResult *node,const char *path) {
     if(!node)return;
     for(size_t i=0;;++i){unsigned char a=pool_separator((unsigned char)node->path[i]),b=pool_separator((unsigned char)path[i]);
-        if(a!=b)return;if(!a)break;}
+        if(a!=b)return;
+        if(!a)break;
+    }
     atomic_store(&node->cancel_requested,true);
 }
 XR_FUNC void xlsp_index_pool_cancel_file(XrLspIndexPool *p,const char *path) {
-    if(!p||!path)return;xr_mutex_lock(&p->mutex);
+    if(!p||!path)return;
+    xr_mutex_lock(&p->mutex);
     for(XrLspIndexResult *n=p->head;n;n=n->next)pool_cancel_file(n,path);
     for(XrLspIndexResult *n=p->results;n;n=n->next)pool_cancel_file(n,path);
     for(unsigned i=0;i<p->worker_count;++i)pool_cancel_file(p->workers[i].current,path);
     xr_mutex_unlock(&p->mutex);
 }
 XR_FUNC void xlsp_index_pool_free(XrLspIndexPool *p) {
-    if(!p)return;xr_mutex_lock(&p->mutex);p->running=false;pool_cancel_locked(p);xr_cond_broadcast(&p->condition);xr_mutex_unlock(&p->mutex);
+    if(!p)return;
+    xr_mutex_lock(&p->mutex);
+    p->running=false;
+    pool_cancel_locked(p);
+    xr_cond_broadcast(&p->condition);
+    xr_mutex_unlock(&p->mutex);
     for(unsigned i=0;i<p->worker_count;++i)XR_CHECK(xr_thread_join(p->workers[i].thread,NULL)==0,"Index worker must join before owner release");
     xlsp_index_result_free_list(p->head);xlsp_index_result_free_list(p->results);xr_cond_destroy(&p->condition);xr_mutex_destroy(&p->mutex);xr_compile_resources_free(p);
 }
@@ -125,23 +139,42 @@ static XrXirStatus pool_publish(XrLspIndexPool *p,XrLspIndexResult *head,XrLspIn
     xr_mutex_unlock(&p->mutex);return s;
 }
 XR_FUNC XrXirStatus xlsp_index_pool_submit(XrLspIndexPool *p,const char *path,const char *uri,uint64_t revision) {
-    if(!p||!path)return XR_XIR_BAD_STRUCTURE;XrLspIndexResult *n=NULL;XrXirStatus s=pool_capture(p,path,uri,revision,&n);
-    if(s==XR_XIR_OK)s=pool_publish(p,n,n,1);if(s!=XR_XIR_OK)xlsp_index_result_free(n);return s;
+    if(!p||!path)return XR_XIR_BAD_STRUCTURE;
+    XrLspIndexResult *n=NULL;
+    XrXirStatus s=pool_capture(p,path,uri,revision,&n);
+    if(s==XR_XIR_OK)s=pool_publish(p,n,n,1);
+    if(s!=XR_XIR_OK)xlsp_index_result_free(n);
+    return s;
 }
 XR_FUNC XrXirStatus xlsp_index_pool_submit_batch(XrLspIndexPool *p,char *const *paths,size_t count,uint64_t revision) {
-    if(!p||(!paths&&count))return XR_XIR_BAD_STRUCTURE;if(!count)return XR_XIR_OK;if(count>SIZE_MAX/sizeof(*paths))return XR_XIR_BUDGET;
+    if(!p||(!paths&&count))return XR_XIR_BAD_STRUCTURE;
+    if(!count)return XR_XIR_OK;
+    if(count>SIZE_MAX/sizeof(*paths))return XR_XIR_BUDGET;
     XrLspIndexResult *head=NULL,*tail=NULL;XrXirStatus s=XR_XIR_OK;
     for(size_t i=0;i<count&&s==XR_XIR_OK;++i){
         XrLspIndexResult *n=NULL;s=pool_capture(p,paths[i],NULL,revision,&n);if(s!=XR_XIR_OK)break;if(tail)tail->next=n;else head=n;tail=n;}
-    if(s==XR_XIR_OK)s=pool_publish(p,head,tail,count);if(s!=XR_XIR_OK)xlsp_index_result_free_list(head);return s;
+    if(s==XR_XIR_OK)s=pool_publish(p,head,tail,count);
+    if(s!=XR_XIR_OK)xlsp_index_result_free_list(head);
+    return s;
 }
 XR_FUNC XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *p) {
-    if(!p)return NULL;xr_mutex_lock(&p->mutex);XrLspIndexResult *out=p->results;p->results=p->result_tail=NULL;xr_mutex_unlock(&p->mutex);return out;
+    if(!p)return NULL;
+    xr_mutex_lock(&p->mutex);
+    XrLspIndexResult *out=p->results;
+    p->results=p->result_tail=NULL;
+    xr_mutex_unlock(&p->mutex);
+    return out;
 }
 XR_FUNC bool xlsp_index_pool_is_idle(XrLspIndexPool *p) {
-    if(!p)return true;xr_mutex_lock(&p->mutex);bool idle=!p->queued&&!p->active;xr_mutex_unlock(&p->mutex);return idle;
+    if(!p)return true;
+    xr_mutex_lock(&p->mutex);
+    bool idle=!p->queued&&!p->active;
+    xr_mutex_unlock(&p->mutex);
+    return idle;
 }
 XR_FUNC void xlsp_index_pool_get_progress(XrLspIndexPool *p,uint64_t *submitted,uint64_t *completed) {
     if(!p){if(submitted)*submitted=0;if(completed)*completed=0;return;}xr_mutex_lock(&p->mutex);
-    if(submitted)*submitted=p->submitted;if(completed)*completed=p->completed;xr_mutex_unlock(&p->mutex);
+    if(submitted)*submitted=p->submitted;
+    if(completed)*completed=p->completed;
+    xr_mutex_unlock(&p->mutex);
 }

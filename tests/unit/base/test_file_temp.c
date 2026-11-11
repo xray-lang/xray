@@ -235,6 +235,7 @@ int main(void) {
     int passed=xr_os_io_temp_file(&request,&owner,&created)==XR_OS_IO_UNSUPPORTED&&created&&!owner.state&&
         xr_os_io_temp_directory(&request,&owner,&created)==XR_OS_IO_UNSUPPORTED&&created&&!owner.state&&
         xr_os_io_temp_finish(&policy,&owner,false)==XR_OS_IO_OK&&!temp_prepared&&!metadata_memory.live&&!metadata_memory.held;
-    if(passed)puts("file temp: Unix unsupported boundary only; no creation qualification");return passed?0:1;
+    if(passed)puts("file temp: Unix unsupported boundary only; no creation qualification");
+    return passed?0:1;
 }
 #endif

@@ -64,7 +64,8 @@ static XrXirStatus scope_equal(const char *a,const char *b,bool *out) {
         if(x!=y||!x){*out=x==y;return XR_XIR_OK;}}
 }
 static XrXirStatus scope_grow(XrCompileResources *r,void **items,size_t *capacity,size_t count,size_t unit) {
-    if(count<*capacity)return XR_XIR_OK;size_t next=*capacity?*capacity*2:16;
+    if(count<*capacity)return XR_XIR_OK;
+    size_t next=*capacity?*capacity*2:16;
     if(next<*capacity||next>SIZE_MAX/unit)return XR_XIR_BUDGET;
     XrXirStatus s=xir_compile_resource_status(xr_compile_resources_resize(r,items,next*unit));if(s==XR_XIR_OK)*capacity=next;return s;
 }
@@ -72,7 +73,8 @@ static void scope_entry_free(ScopeEntry *entry) {
     xr_compile_resources_free((char *)entry->document.uri);xlsp_source_buffer_free(entry->buffer);xr_compile_resources_free(entry->path);*entry=(ScopeEntry){0};
 }
 XR_FUNC void xlsp_source_scope_free(XlspSourceScope *owner) {
-    if(!owner)return;for(size_t i=0;i<owner->count;++i)scope_entry_free(&owner->entries[i]);
+    if(!owner)return;
+    for(size_t i=0;i<owner->count;++i)scope_entry_free(&owner->entries[i]);
     xr_compile_resources_free(owner->entries);xr_compile_resources_free(owner->documents);xr_compile_resources_free(owner->known);xr_compile_resources_free(owner);
 }
 XR_FUNC size_t xlsp_source_scope_count(const XlspSourceScope *owner){return owner?owner->count:0;}
@@ -115,7 +117,8 @@ static XrXirStatus scope_authority(const XlspSourceScopeOptions *options,const X
 }
 static XrXirStatus scope_open(XlspSourceScope *owner,const XlspSourceScopeOptions *options,size_t index,XlspIndexPaths *roots) {
     const XlspSourceDocument *input=&options->documents[index];ScopeEntry entry={0};char *decoded=NULL,*root=NULL,*uri=NULL;
-    if(input->version<INT32_MIN||input->version>INT32_MAX)return XR_XIR_BAD_STRUCTURE;if(input->length>options->maximum_file_bytes)return XR_XIR_BUDGET;
+    if(input->version<INT32_MIN||input->version>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
+    if(input->length>options->maximum_file_bytes)return XR_XIR_BUDGET;
     XrXirStatus s=xlsp_source_buffer_new(owner->resources,input->text,input->length,(int)input->version,&entry.buffer);if(s!=XR_XIR_OK)goto done;
     s=xlsp_source_uri_path(owner->resources,input->uri,input->uri_length,&decoded);if(s!=XR_XIR_OK)goto done;
     XrSourceEntryInput text={XR_SOURCE_ENTRY_TEXT,decoded,xlsp_source_buffer_text(entry.buffer),input->length};
@@ -158,15 +161,20 @@ static XrXirStatus scope_explicit_roots(const XlspSourceScopeOptions *options,Xl
 #endif
         if(!absolute)return XR_XIR_BAD_STRUCTURE;
         XrFsStat info={0};s=scope_io(xr_os_io_stat(&policy,root,&info));if(s!=XR_XIR_OK)return s;
-        if(info.kind!=XR_FS_DIR)return XR_XIR_UNSUPPORTED;char *canonical=NULL;s=scope_io(xr_realpath_owned(&policy,options->roots[i],&canonical));
-        if(s==XR_XIR_OK)s=scope_root(r,roots,&canonical);xr_compile_resources_free(canonical);if(s!=XR_XIR_OK)return s;
+        if(info.kind!=XR_FS_DIR)return XR_XIR_UNSUPPORTED;
+        char *canonical=NULL;
+        s=scope_io(xr_realpath_owned(&policy,options->roots[i],&canonical));
+        if(s==XR_XIR_OK)s=scope_root(r,roots,&canonical);
+        xr_compile_resources_free(canonical);
+        if(s!=XR_XIR_OK)return s;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus scope_publish(XlspSourceScope *owner) {
     if(!owner->count)return XR_XIR_OK;
     XrXirStatus s=xir_compile_resource_status(xr_compile_resources_calloc(owner->resources,owner->count,sizeof(*owner->documents),(void **)&owner->documents));
-    if(s==XR_XIR_OK)s=xir_compile_resource_status(xr_compile_resources_calloc(owner->resources,owner->count,sizeof(*owner->known),(void **)&owner->known));if(s!=XR_XIR_OK)return s;
+    if(s==XR_XIR_OK)s=xir_compile_resource_status(xr_compile_resources_calloc(owner->resources,owner->count,sizeof(*owner->known),(void **)&owner->known));
+    if(s!=XR_XIR_OK)return s;
     for(size_t i=0;i<owner->count;++i){owner->documents[i]=owner->entries[i].document;owner->known[i]=owner->entries[i].known;}
     return XR_XIR_OK;
 }
@@ -180,7 +188,8 @@ XR_FUNC XrXirStatus xlsp_source_scope_capture(const XlspSourceScopeOptions *opti
     for(size_t i=0;i<options->count&&s==XR_XIR_OK;++i)s=scope_open(owner,options,i,&roots);
     if(s==XR_XIR_OK)s=scope_explicit_roots(options,&roots);
     ScopeScan scan={r,options->configuration,XR_XIR_OK};XlspIndexScanOptions discover={r,(const char *const *)roots.values,roots.count,scope_ignore,&scan};
-    if(s==XR_XIR_OK)s=xlsp_index_scan(&discover,&files);if(s==XR_XIR_OK)s=scan.status;
+    if(s==XR_XIR_OK)s=xlsp_index_scan(&discover,&files);
+    if(s==XR_XIR_OK)s=scan.status;
     for(size_t i=0;i<files.count&&s==XR_XIR_OK;++i)s=scope_disk(owner,options,files.values[i]);
     if(s==XR_XIR_OK)s=scope_publish(owner);
     if(s==XR_XIR_OK){*out=owner;owner=NULL;}

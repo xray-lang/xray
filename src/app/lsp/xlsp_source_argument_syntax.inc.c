@@ -21,7 +21,9 @@ static XrXirStatus syntax_arguments_copy(const XlspSyntaxSnapshot *s,XlspSourceC
     }
     XlspSourceArgumentCall *calls=NULL;
     XrXirStatus status=count?xir_compile_resource_status(xr_compile_resources_calloc(owner->view.resources,count,sizeof(*calls),(void **)&calls)):XR_XIR_OK;
-    if(status!=XR_XIR_OK)return status;owner->view.calls=calls;owner->view.count=count;
+    if(status!=XR_XIR_OK)return status;
+    owner->view.calls=calls;
+    owner->view.count=count;
     status=arguments?xir_compile_resource_status(xr_compile_resources_calloc(owner->view.resources,arguments,sizeof(*owner->arguments),(void **)&owner->arguments)):XR_XIR_OK;
     if(status!=XR_XIR_OK)return status;
     size_t at=0,index=0;
@@ -51,7 +53,8 @@ XR_FUNC XrXirStatus xlsp_source_syntax_arguments(const XlspSyntaxSnapshot *s,Xls
     if(status!=XR_XIR_OK)return status;
     owner->view.resources=resources;owner->view.uri_length=s->uri_length;owner->view.source_length=s->length;owner->view.version=s->version;
     char *uri=NULL;status=xir_compile_resource_status(xr_compile_resources_alloc(resources,s->uri_length+1,(void **)&uri));
-    if(status!=XR_XIR_OK)goto done;owner->view.uri=uri;
+    if(status!=XR_XIR_OK)goto done;
+    owner->view.uri=uri;
     memcpy(uri,s->uri,s->uri_length+1);
     xr_module_source_fingerprint(s->text,&owner->view.fingerprint);
     status=syntax_arguments_copy(s,owner);

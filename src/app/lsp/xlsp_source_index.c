@@ -26,7 +26,8 @@ XR_FUNC void xlsp_source_index_free(XlspSourceIndex *index) {
     xr_compile_resources_free(index->items);xr_compile_resources_free(index->uri);xr_compile_resources_free(index);
 }
 XR_FUNC const XlspSourceIndexSymbol *xlsp_source_index_symbols(const XlspSourceIndex *index,size_t *count) {
-    if(count)*count=index?index->count:0;return index?index->items:NULL;
+    if(count)*count=index?index->count:0;
+    return index?index->items:NULL;
 }
 XR_FUNC const char *xlsp_source_index_uri(const XlspSourceIndex *index){return index?index->uri:NULL;}
 XR_FUNC int64_t xlsp_source_index_version(const XlspSourceIndex *index){return index?index->version:0;}
@@ -38,7 +39,8 @@ static XrXirStatus index_push(XlspSourceIndex *index,IndexFrame **stack,size_t *
         size_t next=*capacity?*capacity*2:16;
         if(next<*capacity||next>SIZE_MAX/sizeof(**stack))return XR_XIR_BUDGET;
         status=xir_compile_resource_status(xr_compile_resources_resize(index->resources,(void **)stack,next*sizeof(**stack)));
-        if(status!=XR_XIR_OK)return status;*capacity=next;
+        if(status!=XR_XIR_OK)return status;
+        *capacity=next;
     }
     (*stack)[(*count)++]=(IndexFrame){node,exported};return XR_XIR_OK;
 }
@@ -60,7 +62,9 @@ static XrXirStatus index_append(XlspSourceIndex *index,const XlspSourceDocument 
     XrLspSymbolKind kind=0;const char *name=index_name(frame.node,&kind);if(!name)return XR_XIR_OK;
     size_t length=0;
     for(;;) {
-        if(!name[length])break;if(length==SIZE_MAX-1)return XR_XIR_BUDGET;++length;
+        if(!name[length])break;
+        if(length==SIZE_MAX-1)return XR_XIR_BUDGET;
+        ++length;
     }
     if(!length||frame.node->line<=0||frame.node->column<=0||length>(size_t)(INT_MAX-frame.node->column))return XR_XIR_BAD_STRUCTURE;
     XlspSourceIndexSymbol symbol={0};symbol.kind=kind;symbol.exported=frame.allow_export&&frame.node->is_exported;
@@ -71,7 +75,8 @@ static XrXirStatus index_append(XlspSourceIndex *index,const XlspSourceDocument 
     if(index->count==index->capacity) {
         size_t next=index->capacity?index->capacity*2:16;if(next<index->capacity||next>SIZE_MAX/sizeof(*index->items))return XR_XIR_BUDGET;
         status=xir_compile_resource_status(xr_compile_resources_resize(index->resources,(void **)&index->items,next*sizeof(*index->items)));
-        if(status!=XR_XIR_OK)return status;index->capacity=next;
+        if(status!=XR_XIR_OK)return status;
+        index->capacity=next;
     }
     char *copy=NULL;status=index_copy(index,name,length,&copy);if(status!=XR_XIR_OK)return status;
     symbol.name=copy;index->items[index->count++]=symbol;return XR_XIR_OK;

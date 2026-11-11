@@ -9,7 +9,8 @@ void xlsp_source_tokens_free(XlspSourceTokens *tokens) {
     if(tokens){xr_compile_resources_free(tokens->items);xr_compile_resources_free(tokens);}
 }
 const XlspSourceToken *xlsp_source_tokens_items(const XlspSourceTokens *tokens,size_t *count) {
-    if(count)*count=tokens?tokens->count:0;return tokens?tokens->items:NULL;
+    if(count)*count=tokens?tokens->count:0;
+    return tokens?tokens->items:NULL;
 }
 XR_FUNC XrXirStatus xlsp_source_tokens_clone(XrCompileResources *resources,const XlspSourceTokens *input,XlspSourceTokens **out) {
     if(!resources||!input||!out||*out||input->count>input->capacity||(input->count&&!input->items))return XR_XIR_BAD_STRUCTURE;
@@ -31,7 +32,8 @@ static XrXirStatus semantic_append(const XlspSourceSnapshot *s,XlspSourceTokens 
         size_t next=out->capacity?out->capacity*2:32;
         if(next<out->capacity||next>SIZE_MAX/sizeof(*out->items))return XR_XIR_BUDGET;
         XrXirStatus status=xir_compile_resource_status(xr_compile_resources_resize(s->resources,(void **)&out->items,next*sizeof(*out->items)));
-        if(status!=XR_XIR_OK)return status;out->capacity=next;
+        if(status!=XR_XIR_OK)return status;
+        out->capacity=next;
     }
     out->items[out->count++]=token;return XR_XIR_OK;
 }
@@ -48,9 +50,13 @@ static XrXirStatus semantic_interface(const XrXirSourceView *v,const XrXirSource
     const XrXirInterfaceTable *table=v->types->interfaces;
     for(uint32_t i=0;i<table->count;++i) {
         bool same=false;XrXirStatus status=semantic_literal_equal(d->name,table->declarations[i].name,&same);
-        if(status!=XR_XIR_OK)return status;if(!same)continue;
+        if(status!=XR_XIR_OK)return status;
+        if(!same)continue;
         status=semantic_literal_equal(v->modules[d->range.module].identity,table->declarations[i].module,&same);
-        if(status!=XR_XIR_OK)return status;if(same){*matched=true;return XR_XIR_OK;}
+        if(status!=XR_XIR_OK)return status;
+        if(same){*matched=true;
+            return XR_XIR_OK;
+        }
     }
     return XR_XIR_OK;
 }
@@ -85,7 +91,11 @@ static XrXirStatus semantic_kind(const XlspSourceSnapshot *s,const XrXirSourceVi
         }
         if(d->type.known||d->native_identity){*kind=1;return XR_XIR_OK;}
         bool matched_interface=false;XrXirStatus status=semantic_interface(v,d,&matched_interface);
-        if(status!=XR_XIR_OK)return status;if(matched_interface){*kind=4;return XR_XIR_OK;}return XR_XIR_UNSUPPORTED;
+        if(status!=XR_XIR_OK)return status;
+        if(matched_interface){*kind=4;
+            return XR_XIR_OK;
+        }
+        return XR_XIR_UNSUPPORTED;
     }
     case XR_XIR_SOURCE_MEMBER: {
         if(!d->parent||d->parent>v->declaration_count)return XR_XIR_BAD_STRUCTURE;
@@ -94,12 +104,17 @@ static XrXirStatus semantic_kind(const XlspSourceSnapshot *s,const XrXirSourceVi
         if(parent->kind==XR_XIR_SOURCE_TYPE) {
             if(!n||n->kind!=XR_XIR_TYPE_NOMINAL||!v->types->nominals||!v->types->nominals->declarations||n->nominal.declaration>=v->types->nominals->count) {
                 bool matched_interface=false;XrXirStatus status=semantic_interface(v,parent,&matched_interface);
-                if(status!=XR_XIR_OK)return status;if(matched_interface){*kind=13;return XR_XIR_OK;}return XR_XIR_UNSUPPORTED;
+                if(status!=XR_XIR_OK)return status;
+                if(matched_interface){*kind=13;
+                    return XR_XIR_OK;
+                }
+                return XR_XIR_UNSUPPORTED;
             }
             *kind=v->types->nominals->declarations[n->nominal.declaration].kind==XR_XIR_NOMINAL_ENUM?10:9;
         } else if(parent->kind==XR_XIR_SOURCE_MEMBER)*kind=9;
         else return XR_XIR_UNSUPPORTED;
-        if(!d->mutable)*modifiers|=4;return XR_XIR_OK;
+        if(!d->mutable)*modifiers|=4;
+        return XR_XIR_OK;
     }
     case XR_XIR_SOURCE_INTRINSIC:
         if(d->signature&&*d->signature){*kind=d->parent?13:12;return XR_XIR_OK;}
@@ -120,7 +135,8 @@ static XrXirStatus semantic_range(const XlspSourceSnapshot *s,const LspSourceTex
 static int semantic_compare(XlspSourceToken a,XlspSourceToken b) {
     if(a.line!=b.line)return a.line<b.line?-1:1;
     if(a.column!=b.column)return a.column<b.column?-1:1;
-    if(a.length!=b.length)return a.length<b.length?-1:1;return 0;
+    if(a.length!=b.length)return a.length<b.length?-1:1;
+    return 0;
 }
 static XrXirStatus semantic_sort(const XlspSourceSnapshot *s,XlspSourceTokens *tokens) {
     if(tokens->count<2)return XR_XIR_OK;
@@ -137,7 +153,8 @@ static XrXirStatus semantic_sort(const XlspSourceSnapshot *s,XlspSourceTokens *t
             begin=end;
         }
         XlspSourceToken *swap=input;input=output;output=swap;
-        if(width>tokens->count/2)break;width*=2;
+        if(width>tokens->count/2)break;
+        width*=2;
     }
     if(input!=tokens->items)memcpy(tokens->items,input,tokens->count*sizeof(*scratch));
     xr_compile_resources_free(scratch);
@@ -261,7 +278,8 @@ XrXirStatus xlsp_source_semantic_range(const XlspSourceSnapshot *s,const char *u
         XrXirStatus status;if(s->texts[i].uri_length!=length)continue;
         bool equal=false;status=lsp_equal(s->texts[i].uri,uri,length,&equal);if(status!=XR_XIR_OK)return status;if(!equal)continue;
         int line=0,column=0;status=lsp_position(&s->texts[i],true,&range.start,&line,&column);
-        if(status==XR_XIR_OK)status=lsp_position(&s->texts[i],true,&range.end,&line,&column);return status;
+        if(status==XR_XIR_OK)status=lsp_position(&s->texts[i],true,&range.end,&line,&column);
+        return status;
     }
     return XR_XIR_UNRESOLVED;
 }

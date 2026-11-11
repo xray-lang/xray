@@ -11,7 +11,8 @@ void xlsp_source_outline_free(XlspSourceOutline *outline) {
     xr_compile_resources_free(outline->items);xr_compile_resources_free(outline);
 }
 const XlspSourceSymbol *xlsp_source_outline_symbols(const XlspSourceOutline *outline,size_t *count) {
-    if(count)*count=outline?outline->count:0;return outline?outline->items:NULL;
+    if(count)*count=outline?outline->count:0;
+    return outline?outline->items:NULL;
 }
 static bool outline_position_le(XrLspPosition a,XrLspPosition b) {
     return a.line<b.line||(a.line==b.line&&a.character<=b.character);
@@ -21,7 +22,9 @@ static XrXirStatus outline_append(const XlspSyntaxSnapshot *s,XlspSourceOutline 
     if(!name||!kind||!node||node->line<=0||node->column<=0||node->end_line<=0||node->end_column<=0)return XR_XIR_UNRESOLVED;
     size_t length=0;XrXirStatus status=XR_XIR_OK;
     for(;;) {
-        if(!name[length])break;if(length==SIZE_MAX-1)return XR_XIR_BUDGET;++length;
+        if(!name[length])break;
+        if(length==SIZE_MAX-1)return XR_XIR_BUDGET;
+        ++length;
     }
     if(!length||length>(size_t)(INT_MAX-node->column))return XR_XIR_BAD_STRUCTURE;
     XlspSourceSymbol symbol={0};symbol.kind=kind;symbol.parent=parent;
@@ -42,7 +45,8 @@ static XrXirStatus outline_append(const XlspSyntaxSnapshot *s,XlspSourceOutline 
         size_t capacity=o->capacity?o->capacity*2:16;
         if(capacity<o->capacity||capacity>SIZE_MAX/sizeof(*o->items))return XR_XIR_BUDGET;
         status=xir_compile_resource_status(xr_compile_resources_resize(o->resources,(void **)&o->items,capacity*sizeof(*o->items)));
-        if(status!=XR_XIR_OK)return status;o->capacity=capacity;
+        if(status!=XR_XIR_OK)return status;
+        o->capacity=capacity;
     }
     char *copy=NULL;status=xir_compile_resource_status(xr_compile_resources_alloc(o->resources,length+1,(void **)&copy));
     if(status!=XR_XIR_OK)return status;
@@ -54,7 +58,8 @@ static XrXirStatus outline_push(const XlspSyntaxSnapshot *s,OutlineFrame **stack
         size_t next=*capacity?*capacity*2:16;
         if(next<*capacity||next>SIZE_MAX/sizeof(**stack))return XR_XIR_BUDGET;
         XrXirStatus status=xir_compile_resource_status(xr_compile_state_resize(s->state,(void **)stack,next*sizeof(**stack)));
-        if(status!=XR_XIR_OK)return status;*capacity=next;
+        if(status!=XR_XIR_OK)return status;
+        *capacity=next;
     }
     (*stack)[(*count)++]=(OutlineFrame){node,parent};return XR_XIR_OK;
 }
@@ -64,7 +69,8 @@ XrXirStatus xlsp_source_syntax_outline(const XlspSyntaxSnapshot *s,XlspSourceOut
     XrXirStatus status=xir_compile_resource_status(xr_compile_state_status(s->state));
     if(status!=XR_XIR_OK)return status;
     status=xir_compile_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*o),(void **)&o));
-    if(status!=XR_XIR_OK)return status;o->resources=resources;
+    if(status!=XR_XIR_OK)return status;
+    o->resources=resources;
     OutlineFrame *stack=NULL;size_t count=0,capacity=0;
     status=outline_push(s,&stack,&count,&capacity,s->ast,UINT32_MAX);
     while(count&&status==XR_XIR_OK) {

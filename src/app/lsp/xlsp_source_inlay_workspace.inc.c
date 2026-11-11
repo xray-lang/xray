@@ -7,7 +7,8 @@ static bool workspace_hint_before(XrJsonValue *a,XrJsonValue *b) {
 }
 static XrXirStatus workspace_hint_sort(XrCompileResources *resources,XrJsonValue *array) {
     size_t count=(size_t)array->as.array.count;XrJsonValue **scratch=NULL;
-    if(count<2)return XR_XIR_OK;if(count>SIZE_MAX/sizeof(*scratch))return XR_XIR_BUDGET;
+    if(count<2)return XR_XIR_OK;
+    if(count>SIZE_MAX/sizeof(*scratch))return XR_XIR_BUDGET;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_alloc(resources,count*sizeof(*scratch),(void **)&scratch));
     if(status!=XR_XIR_OK)return status;
     for(size_t width=1;width<count;) {
@@ -29,7 +30,8 @@ static XrXirStatus workspace_hint_join(XrCompileResources *resources,XrJsonValue
     for(int i=0;i<parameters->as.array.count;++i) {
         if(types->as.array.count==types->as.array.capacity&&types->as.array.capacity>INT_MAX/2)return XR_XIR_BUDGET;
         int before=types->as.array.count;xjson_array_push(types,parameters->as.array.items[i]);
-        if(types->as.array.count!=before+1)return XR_XIR_OUT_OF_MEMORY;parameters->as.array.items[i]=NULL;
+        if(types->as.array.count!=before+1)return XR_XIR_OUT_OF_MEMORY;
+        parameters->as.array.items[i]=NULL;
     }
     return workspace_hint_sort(resources,types);
 }
@@ -40,7 +42,8 @@ XR_FUNC XrXirStatus xlsp_source_workspace_inlay_bindings(XlspSourceWorkspace *wo
     XrXirStatus status=XR_XIR_UNRESOLVED;
     for(size_t i=0;i<workspace->count;++i) {
         bool contains=false;status=xlsp_source_snapshot_contains(workspace->snapshots[i],uri,length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         status=xlsp_source_semantic_range(workspace->snapshots[i],uri,length,options->range);if(status!=XR_XIR_OK)goto done;
         XlspSourceDocument document={0};status=xlsp_source_snapshot_document(workspace->snapshots[i],uri,length,&document);
         if(status!=XR_XIR_OK)goto done;

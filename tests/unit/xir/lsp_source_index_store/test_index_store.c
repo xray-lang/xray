@@ -82,7 +82,8 @@ static XrXirStatus store_trace(XrCompileResourceLimits limits,XrCompileResourceS
 done:
     if(stats)*stats=sdk_stats(resources);
     if(external)xr_compile_resources_release(resources);
-    for(unsigned i=0;i<4;++i)xlsp_source_index_free(owners[i]);xlsp_source_index_store_free(store);
+    for(unsigned i=0;i<4;++i)xlsp_source_index_free(owners[i]);
+    xlsp_source_index_store_free(store);
     CHECK(!runtime_live&&!runtime_bytes);return status;
 }
 static void store_bad_arguments(void) {

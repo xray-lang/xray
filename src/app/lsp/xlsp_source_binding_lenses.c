@@ -58,12 +58,16 @@ static XrXirStatus binding_lens_eligible(const XrXirSourceView *view,const XrXir
     const XrXirTypeNode *node=xr_xir_type_node(view->types,d->type.type);if(!node||node->kind!=XR_XIR_TYPE_NOMINAL)return XR_XIR_OK;
     if(!view->types->nominals||!view->types->nominals->declarations||node->nominal.declaration>=view->types->nominals->count)return XR_XIR_BAD_STRUCTURE;
     uint32_t kind=view->types->nominals->declarations[node->nominal.declaration].kind;
-    if(kind>XR_XIR_NOMINAL_CLASS)return XR_XIR_BAD_STRUCTURE;*out=kind==XR_XIR_NOMINAL_CLASS||kind==XR_XIR_NOMINAL_STRUCT;return XR_XIR_OK;
+    if(kind>XR_XIR_NOMINAL_CLASS)return XR_XIR_BAD_STRUCTURE;
+    *out=kind==XR_XIR_NOMINAL_CLASS||kind==XR_XIR_NOMINAL_STRUCT;
+    return XR_XIR_OK;
 }
 static XrXirStatus binding_lens_target(const XrXirSourceView *view,uint32_t *id) {
     for(uint32_t n=0;n<view->declaration_count;++n) {
-        if(!*id||*id>view->declaration_count)return XR_XIR_BAD_STRUCTURE;uint32_t next=view->declarations[*id-1].target;
-        if(!next||next==*id)return XR_XIR_OK;*id=next;
+        if(!*id||*id>view->declaration_count)return XR_XIR_BAD_STRUCTURE;
+        uint32_t next=view->declarations[*id-1].target;
+        if(!next||next==*id)return XR_XIR_OK;
+        *id=next;
     }
     return XR_XIR_BAD_STRUCTURE;
 }
@@ -77,17 +81,21 @@ static XrXirStatus binding_lens_name(BindingLenses *w,const XlspSourceDocument *
     size_t length=0;for(;;++length){if(!name[length])break;if(length==SIZE_MAX-1)return XR_XIR_BUDGET;}
     if(length!=(size_t)(source.end_column-source.column))return XR_XIR_UNSUPPORTED;
     size_t offset=0;int line=1;while(offset<text->length&&line<source.line){if(text->text[offset++]=='\n')++line;}
-    if(line!=source.line||(size_t)(source.column-1)>text->length-offset)return XR_XIR_UNSUPPORTED;offset+=(size_t)(source.column-1);
-    if(length>text->length-offset)return XR_XIR_UNSUPPORTED;XrXirStatus s;
+    if(line!=source.line||(size_t)(source.column-1)>text->length-offset)return XR_XIR_UNSUPPORTED;
+    offset+=(size_t)(source.column-1);
+    if(length>text->length-offset)return XR_XIR_UNSUPPORTED;
+    XrXirStatus s;
     if(memcmp(text->text+offset,name,length))return XR_XIR_UNSUPPORTED;
     s=xlsp_source_position(w->resources,text->text,text->length,source.line,source.column,&out->start);
-    if(s==XR_XIR_OK)s=xlsp_source_position(w->resources,text->text,text->length,source.end_line,source.end_column,&out->end);return s;
+    if(s==XR_XIR_OK)s=xlsp_source_position(w->resources,text->text,text->length,source.end_line,source.end_column,&out->end);
+    return s;
 }
 static XrXirStatus binding_lens_row(const XrXirSourceView *view,const XrXirSourceSyntaxView *syntax,uint32_t index,BindingLensRow *out) {
     const XrXirSourceDeclaration *d=&view->declarations[index];const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[index];
     if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)return XR_XIR_UNSUPPORTED;
     if(fact->name.module>=view->module_count)return XR_XIR_BAD_STRUCTURE;
-    *out=(BindingLensRow){view->modules[fact->name.module].identity,d->name,d->kind,fact->name,{0},0};return XR_XIR_OK;
+    *out=(BindingLensRow){.identity=view->modules[fact->name.module].identity,.name=d->name,
+        .kind=d->kind,.source=fact->name};return XR_XIR_OK;
 }
 static XrXirStatus binding_lens_append(BindingLenses *w,BindingLensRow row) {
     for(size_t i=0;i<w->row_count;++i){bool same=false;XrXirStatus s=binding_lens_key_same(w->rows[i],row,&same);if(s!=XR_XIR_OK)return s;if(same)return XR_XIR_OK;
@@ -96,7 +104,10 @@ static XrXirStatus binding_lens_append(BindingLenses *w,BindingLensRow row) {
         XrXirStatus s=xir_compile_resource_status(xr_compile_resources_resize(w->resources,(void **)&w->rows,next*sizeof(row)));if(s!=XR_XIR_OK)return s;w->row_capacity=next;}
     size_t at=w->row_count;
     while(at){XrLspPosition before=w->rows[at-1].range.start;
-        if(before.line<row.range.start.line||(before.line==row.range.start.line&&before.character<=row.range.start.character))break;w->rows[at]=w->rows[at-1];--at;}
+        if(before.line<row.range.start.line||(before.line==row.range.start.line&&before.character<=row.range.start.character))break;
+        w->rows[at]=w->rows[at-1];
+        --at;
+    }
     w->rows[at]=row;++w->row_count;return XR_XIR_OK;
 }
 static XrXirStatus binding_lens_declarations(BindingLenses *w) {
@@ -106,7 +117,10 @@ static XrXirStatus binding_lens_declarations(BindingLenses *w) {
             size_t document=0;s=binding_lens_document(w,view,d->range.module,&document);if(s==XR_XIR_UNRESOLVED)continue;if(s!=XR_XIR_OK)return s;if(document!=w->entry)continue;
             if(fact->name.module!=d->range.module)return XR_XIR_BAD_STRUCTURE;
             BindingLensRow row={0};s=binding_lens_row(view,syntax,i,&row);if(s==XR_XIR_OK)s=binding_lens_name(w,&w->documents[document],row.name,row.source,&row.range);
-            if(s==XR_XIR_OK)s=binding_lens_append(w,row);if(s!=XR_XIR_OK)return s;}}
+            if(s==XR_XIR_OK)s=binding_lens_append(w,row);
+            if(s!=XR_XIR_OK)return s;
+        }
+    }
     return XR_XIR_OK;
 }
 static XrXirStatus binding_lens_site(BindingLenses *w,BindingLensSite site,BindingLensSite **sites,size_t *count,size_t *capacity) {
@@ -125,7 +139,8 @@ static XrXirStatus binding_lens_count(BindingLenses *w,BindingLensRow *row) {
             status=binding_lens_target(view,&id);if(status!=XR_XIR_OK)break;const XrXirSourceDeclaration *decl=&view->declarations[id-1];const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[id-1];
             if(decl->kind!=row->kind||!binding_lens_range_same(row->source,fact->name))continue;
             if(fact->name.module>=view->module_count){status=XR_XIR_BAD_STRUCTURE;break;}
-            BindingLensRow target={view->modules[fact->name.module].identity,decl->name,decl->kind,fact->name,{0},0};
+            BindingLensRow target={.identity=view->modules[fact->name.module].identity,.name=decl->name,
+                .kind=decl->kind,.source=fact->name};
             bool same=false;status=binding_lens_key_same(*row,target,&same);if(status!=XR_XIR_OK)break;if(!same)continue;
             if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){status=XR_XIR_UNSUPPORTED;break;}
             XrXirSourceRange range=syntax->references[i];if(range.line<=0||range.column<=0||range.end_line<range.line||range.end_column<=0){status=XR_XIR_UNSUPPORTED;break;}
@@ -133,12 +148,19 @@ static XrXirStatus binding_lens_count(BindingLenses *w,BindingLensRow *row) {
             XrLspPosition start={0},end={0};const XlspSourceDocument *text=&w->documents[document];
             status=xlsp_source_position(w->resources,text->text,text->length,range.line,range.column,&start);
             if(status==XR_XIR_OK)status=xlsp_source_position(w->resources,text->text,text->length,range.end_line,range.end_column,&end);
-            if(status!=XR_XIR_OK)break;if(end.line<start.line||(end.line==start.line&&end.character<=start.character)){status=XR_XIR_UNSUPPORTED;break;}
+            if(status!=XR_XIR_OK)break;
+            if(end.line<start.line||(end.line==start.line&&end.character<=start.character)){status=XR_XIR_UNSUPPORTED;
+                break;
+            }
             status=binding_lens_site(w,(BindingLensSite){view->modules[range.module].identity,range},&sites,&count,&capacity);if(status!=XR_XIR_OK)break;}}
-    if(status==XR_XIR_OK)row->references=(uint32_t)count;xr_compile_resources_free(sites);return status;
+    if(status==XR_XIR_OK)row->references=(uint32_t)count;
+    xr_compile_resources_free(sites);
+    return status;
 }
 static bool binding_lens_member(XrJsonValue *object,const char *key,XrJsonValue *value) {
-    if(!value)return false;int before=object->as.object.count;xjson_object_set_new(object,key,value);
+    if(!value)return false;
+    int before=object->as.object.count;
+    xjson_object_set_new(object,key,value);
     if(object->as.object.count==before){xjson_free(value);return false;}if(object->as.object.count!=before+1)return false;
     XrJsonMember *m=&object->as.object.members[before];return m->key&&m->value==value&&m->key_len==strlen(key)&&!memcmp(m->key,key,m->key_len);
 }

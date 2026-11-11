@@ -45,7 +45,8 @@ XR_FUNC XrXirStatus xlsp_source_type_hints_many_json(const XlspSourceTypeHintReq
         const XlspSourceSnapshot *snapshot=request->snapshots[i];
         if(!xlsp_source_snapshot_uses_resources(snapshot,request->resources)){status=XR_XIR_BAD_STRUCTURE;goto done;}
         bool contains=false;status=xlsp_source_snapshot_contains(snapshot,request->document.uri,request->document.uri_length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
+        if(status!=XR_XIR_OK)goto done;
+        if(!contains)continue;
         XlspSourceDocument actual={0};status=xlsp_source_snapshot_document(snapshot,request->document.uri,request->document.uri_length,&actual);
         if(status!=XR_XIR_OK)goto done;
         if(actual.version!=request->document.version||actual.length!=request->document.length){status=XR_XIR_BAD_STRUCTURE;goto done;}

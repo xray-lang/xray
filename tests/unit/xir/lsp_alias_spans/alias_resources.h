@@ -4,7 +4,8 @@ static void alias_reset(size_t source_fault,size_t json_fault) {
 }
 static void alias_resources(unsigned method,unsigned mode,bool full) {
     alias_reset(SIZE_MAX,SIZE_MAX);XrCompileResourceStats needed={0};XrXirStatus status=alias_once(method,mode,limits,&needed);
-    if(status!=XR_XIR_OK)fprintf(stderr,"Alias method%u mode%u baseline status%u\n",method,mode,(unsigned)status);CHECK(status==XR_XIR_OK);
+    if(status!=XR_XIR_OK)fprintf(stderr,"Alias method%u mode%u baseline status%u\n",method,mode,(unsigned)status);
+    CHECK(status==XR_XIR_OK);
     size_t source=runtime_attempts,json=lsp_json_calls;
     if(full){
         for(size_t prefix=0;prefix<source;++prefix){alias_reset(prefix,SIZE_MAX);status=alias_once(method,mode,limits,NULL);

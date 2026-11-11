@@ -36,7 +36,8 @@ XR_FUNC XlspProtocolStatus xlsp_request_id_parse(const XrJsonValue *message,Xlsp
         const XrJsonMember *member=&message->as.object.members[i];
         if(!member->key||!member->value)return XLSP_PROTOCOL_BAD_ARGUMENT;
         if(member->key_len!=2||memcmp(member->key,"id",2))continue;
-        if(value)return XLSP_PROTOCOL_BAD_ARGUMENT;value=member->value;
+        if(value)return XLSP_PROTOCOL_BAD_ARGUMENT;
+        value=member->value;
     }
     if(!value)return XLSP_PROTOCOL_OK;
     if(value->type==XR_JSON_STRING)return id_string(value->as.string,value->string_len,out);
