@@ -35,10 +35,10 @@ typedef struct XrLirLowerFailure {
  * operation never publishes a partial module or selects another executor.
  * Published modules have passed String reference elision, so a copy binding
  * that would only be dropped shares its source's reference instead. */
-/* Each complete execution starts fresh independent scalar storage. Mutable
- * i64 module Cells remain in the initializer activation while ordinary calls
- * and the actual declaration entry use them. No Cell address escapes its root;
- * no state or lifecycle is attached to a canonical program instance. */
+/* Each complete execution owns fresh typed module storage. Initializers run
+ * in dependency order, and functions receive one trailing state capability
+ * only when their direct-call closure accesses module slots. Publication and
+ * actual reads retain their original control-flow positions. */
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
                                                  XrLirLowerFailure *);
 /* A local numerical observation skips initialization. The original program

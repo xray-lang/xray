@@ -1,0 +1,13 @@
+import "./module_state_leaf" as leaf
+import "./module_state_middle" as middle
+
+print(middle.seed)
+print(middle.observed())
+print(leaf.current())
+print(leaf.label())
+print(leaf.flag())
+print(leaf.value())
+print(middle.next())
+print(leaf.label())
+print(leaf.flag())
+print(leaf.value())

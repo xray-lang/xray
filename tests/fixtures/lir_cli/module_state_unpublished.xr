@@ -1,0 +1,3 @@
+fn read() -> i64 { return value }
+print(read())
+var value: i64 = 7

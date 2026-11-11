@@ -1,0 +1,7 @@
+fn first(n: i64) -> i64 {
+    if (n == 0) { return value }
+    return second(n - 1)
+}
+fn second(n: i64) -> i64 { return first(n) }
+print(second(0))
+var value: i64 = 7

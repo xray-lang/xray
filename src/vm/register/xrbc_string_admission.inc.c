@@ -265,6 +265,20 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
     }
     if (to->published != from->published) return false;
     for (uint32_t r = 0; r < from->function->register_count; ++r) {
+        /* Borrowed capabilities own no value to drop. A missing producer on
+         * either path removes the guarantee until a fresh producer executes. */
+        XrRbcRegisterKind kind = rbc_register_kind(from->function, r);
+        if (kind == XR_RBC_STATE || kind == XR_RBC_STATE_REF) {
+            if (to->state[r] != from->state[r] ||
+                (kind == XR_RBC_STATE_REF && to->origin[r] != from->origin[r])) {
+                if (to->state[r] != RBC_EMPTY || to->origin[r]) {
+                    to->state[r] = RBC_EMPTY;
+                    to->origin[r] = 0;
+                    *changed = true;
+                }
+            }
+            continue;
+        }
         if (to->state[r] != from->state[r]) {
             if ((to->state[r] != RBC_BITS && to->state[r] != RBC_EMPTY) ||
                 (from->state[r] != RBC_BITS && from->state[r] != RBC_EMPTY)) return false;
@@ -278,6 +292,20 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
             to->origin[r] != from->origin[r]) return false;
     }
     for (uint32_t i=0; i<from->function->spill_count; ++i) {
+        if (i >= from->function->reference_spill_count &&
+            (to->spills[i].state == RBC_STATE_BORROWED ||
+             to->spills[i].state == RBC_STATE_REFERENCE ||
+             from->spills[i].state == RBC_STATE_BORROWED ||
+             from->spills[i].state == RBC_STATE_REFERENCE)) {
+            if (to->spills[i].state != from->spills[i].state ||
+                to->spills[i].origin != from->spills[i].origin) {
+                if (to->spills[i].state != RBC_EMPTY || to->spills[i].origin) {
+                    to->spills[i] = (RbcSpillState){0, RBC_EMPTY};
+                    *changed = true;
+                }
+            }
+            continue;
+        }
         if (to->spills[i].state==from->spills[i].state) {
             if (to->spills[i].state == RBC_STATE_REFERENCE &&
                 to->spills[i].origin != from->spills[i].origin) return false;

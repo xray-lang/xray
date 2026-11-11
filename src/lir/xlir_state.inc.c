@@ -10,7 +10,7 @@
  *   Layout storage is committed only after all input arrays are copied.
  *   Reference shapes belong to SSA values inside the same module owner.
  */
-static bool lir_state_payload(XrLirType type, uint32_t *size, uint32_t *alignment) {
+XR_FUNC bool xr_lir_internal_state_payload(XrLirType type, uint32_t *size, uint32_t *alignment) {
     switch (type) {
     case XR_LIR_UNIT: *size = 0; *alignment = 1; return true;
     case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_U8: *size = 1; *alignment = 1; return true;
@@ -53,7 +53,7 @@ static bool lir_state_layout_shape(const XrLirStateLayout *layout) {
         const XrLirStateSlot *slot = &layout->slots[s];
         uint32_t size, alignment;
         if (slot->module >= layout->module_count ||
-            !lir_state_payload(slot->payload, &size, &alignment) ||
+            !xr_lir_internal_state_payload(slot->payload, &size, &alignment) ||
             slot->size != size || slot->alignment != alignment ||
             alignment > layout->payload_alignment || slot->offset % alignment ||
             slot->offset < end || slot->offset > layout->payload_size ||
@@ -105,7 +105,7 @@ XR_FUNC XrLirStatus xr_lir_set_state_reference(XrLirModule *m, XrLirValue value,
     XrLirFunctionData *f = lir_function(m, (XrLirFunction){value.module, value.function});
     uint32_t size, alignment;
     if (!f || !value.id || value.id > f->value_count || !shape ||
-        !lir_state_payload(shape->payload, &size, &alignment))
+        !xr_lir_internal_state_payload(shape->payload, &size, &alignment))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirValueData *v = &f->values[value.id - 1];
     if (!m->state_layout_set || v->type != XR_LIR_STATE_REF || !v->parameter || !v->block ||

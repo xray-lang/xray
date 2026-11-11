@@ -128,6 +128,8 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
     case XR_LIR_STATE_REFERENCE: operation = "xrt_module_reference"; break;
     default: c_error(c, XR_LIR_C_INVALID_LIR, "invalid module state operation"); return;
     }
+    if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_REFERENCE)
+        c_format(c, "    v%" PRIu32 " = NULL;\n", v->result);
     c_format(c, "    xrt_module_require(%s(", operation);
     c_value(c, v->operands[0]);
     if (v->op != XR_LIR_STATE_PUBLISH) c_format(c, ", UINT32_C(%" PRIu64 ")", v->bits);

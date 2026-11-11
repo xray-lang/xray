@@ -14,6 +14,7 @@
 #include "lir/xlir_builder.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_print.h"
+#include "lir/xlir_state.h"
 
 typedef struct Text {
     char bytes[65536];
@@ -68,14 +69,17 @@ static XrLirLowered lower_text(const char *text) {
     OK(xr_lir_verify(output.module, NULL));
     XrLirFunctionView entry;
     OK(xr_lir_function_view(output.module, output.entry, &entry));
-    CHECK(entry.name_length == 4 && !memcmp(entry.name, "main", 4) && entry.parameter_count == 0);
+    CHECK(entry.name_length == 4 && !memcmp(entry.name, "main", 4));
+    CHECK(entry.parameter_count <= 1);
+    bool stateful = entry.parameter_count == 1;
+    if (stateful) CHECK(entry.parameter_types[0] == XR_LIR_STATE);
     XrLirBlock block;
     XrLirInstructionView instruction;
     OK(xr_lir_block_at(output.module, output.entry, 0, &block));
-    OK(xr_lir_instruction_view(output.module, block, 0, &instruction));
+    OK(xr_lir_instruction_view(output.module, block, stateful ? 1 : 0, &instruction));
     CHECK(instruction.op == XR_LIR_CALL);
     uint32_t initializer = instruction.callee;
-    OK(xr_lir_instruction_view(output.module, block, 1, &instruction));
+    OK(xr_lir_instruction_view(output.module, block, stateful ? 3 : 1, &instruction));
     CHECK(instruction.op == XR_LIR_CALL && instruction.callee != initializer);
     unsigned located = 0;
     for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
@@ -546,8 +550,7 @@ static void literal_sources(void) {
             for (uint32_t i = 0; i < bv.instruction_count; ++i) {
                 XrLirInstructionView op;
                 OK(xr_lir_instruction_view(output.module, block, i, &op));
-                if (op.op != XR_LIR_CONST || op.bits != 7 ||
-                    op.source.line < 2 || op.source.line > 3) continue;
+                if (op.op != XR_LIR_STATE_READ || op.source.line < 2 || op.source.line > 3) continue;
                 CHECK(op.type == XR_LIR_I64 && op.source.path && op.source.column > 0);
                 XrXirSourceRange range = expected[op.source.line];
                 CHECK(op.source.path_length == path_length && !memcmp(op.source.path, path, path_length));
@@ -566,9 +569,10 @@ static void literal_sources(void) {
     xr_lir_lowered_free(&output);
     output = lower_text("const n=1+2\nprint(n)\n");
     xr_lir_lowered_free(&output);
-    rejected("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n", false,
-             "constant scalar initializer");
-    rejected("const s=\"managed\"\nprint(7)\n", false, "module slots");
+    output = lower_text("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n");
+    xr_lir_lowered_free(&output);
+    output = lower_text("const s=\"managed\"\nprint(7)\n");
+    xr_lir_lowered_free(&output);
     static const char *constants[] = {
         "const n=7\nconst m=8\nprint(n+m)\n",
         "const n=7\nfn reader()->i64{return n}\nprint(reader())\n",
@@ -577,9 +581,10 @@ static void literal_sources(void) {
     for (size_t i=0; i<sizeof(constants)/sizeof(constants[0]); ++i) {
         output = lower_text(constants[i]); xr_lir_lowered_free(&output);
     }
-    rejected("print(reader())\nconst n=7\nfn reader()->i64{return n}\n", false,
-             "before complete publication");
-    rejected("const n=7\nif(true){print(n)}\n", false, "slot read outside");
+    output = lower_text("print(reader())\nconst n=7\nfn reader()->i64{return n}\n");
+    xr_lir_lowered_free(&output);
+    output = lower_text("const n=7\nif(true){print(n)}\n");
+    xr_lir_lowered_free(&output);
 }
 static void module_cells_source(const char *directory) {
     char *text = read_file(directory,
@@ -599,11 +604,12 @@ static void module_cells_source(const char *directory) {
     OK(xr_lir_verify(out.module,NULL));
     XrLirFunctionView root;
     OK(xr_lir_function_view(out.module,out.entry,&root));
-    CHECK(root.result == XR_LIR_I64 && root.parameter_count == 0);
+    CHECK(root.result == XR_LIR_I64 && root.parameter_count == 1 &&
+        root.parameter_types[0] == XR_LIR_STATE);
     XrLirBlock root_block; XrLirInstructionView root_call;
     OK(xr_lir_block_at(out.module,out.entry,0,&root_block));
-    OK(xr_lir_instruction_view(out.module,root_block,0,&root_call));
-    CHECK(root_call.op == XR_LIR_CALL && root_call.type == XR_LIR_I64);
+    OK(xr_lir_instruction_view(out.module,root_block,1,&root_call));
+    CHECK(root_call.op == XR_LIR_CALL && root_call.type == XR_LIR_UNIT);
     uint32_t storage_owner = root_call.callee;
     uint32_t cells=0, reads=0, writes=0;
     for (uint32_t f=0; f<xr_lir_function_count(out.module); ++f) {
@@ -617,21 +623,21 @@ static void module_cells_source(const char *directory) {
             for (uint32_t i=0; i<body.instruction_count; ++i) {
                 XrLirInstructionView op;
                 OK(xr_lir_instruction_view(out.module,block,i,&op));
-                if (op.op == XR_LIR_CELL_NEW) {
-                    CHECK(function.id == storage_owner && b == 0 && op.type == XR_LIR_I64_CELL);
+                if (op.op == XR_LIR_STATE_CONSTRUCT) {
+                    CHECK(function.id == storage_owner && op.type == XR_LIR_STATE_REF);
                     ++cells;
                 }
-                reads += op.op == XR_LIR_CELL_READ;
-                writes += op.op == XR_LIR_CELL_WRITE;
+                reads += op.op == XR_LIR_STATE_READ;
+                writes += op.op == XR_LIR_STATE_WRITE;
             }
         }
     }
     CHECK(cells == 1 && reads >= 2 && writes == 1);
     xr_lir_lowered_free(&out);
-    rejected("fn read()->i64{return n}\nvar first=read()\nvar n=7\nprint(first)\n",
-        false,"module initialization call before complete publication");
-    rejected("if (true) {print(1)}\nvar n=7\nprint(n)\n",false,
-        "module Cell publication outside initializer entry");
+    out = lower_text("fn read()->i64{return n}\nvar first=read()\nvar n=7\nprint(first)\n");
+    xr_lir_lowered_free(&out);
+    out = lower_text("if (true) {print(1)}\nvar n=7\nprint(n)\n");
+    xr_lir_lowered_free(&out);
     rejected("var n=7\nfn bump(v:ref i64)->i64{v=v+1\nreturn v}\nprint(bump(ref n))\n",
         false,"function parameter type");
     rejected("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n",
@@ -659,7 +665,8 @@ static void module_call_closure(const char *text) {
         hidden[f] = reader;
         counts[f] = source->functions[f].parameter_count + reader;
     }
-    counts[init] = 0;
+    counts[init] = 1;
+    hidden[init] = true;
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
     XrLirLowered out = {0};
     OK(xr_lir_lower_program_checked(&request, &out, NULL));
@@ -683,7 +690,7 @@ static void module_call_closure(const char *text) {
                 (int)view.name_length, view.name, counts[original], view.parameter_count, init, entry);
         CHECK(original < 64 && view.parameter_count == counts[original]);
         if (hidden[original])
-            CHECK(view.parameter_types[view.parameter_count-1] == XR_LIR_I64_CELL);
+            CHECK(view.parameter_types[view.parameter_count-1] == XR_LIR_STATE);
         ++selected;
         for (uint32_t b = 0; b < view.block_count; ++b) {
             XrLirBlock block; XrLirBlockView bv;
@@ -718,18 +725,20 @@ static void module_call_closures(void) {
     module_call_closure("fn leaf(n:i64)->i64{print(n)\nreturn n+1}\n"
         "fn top(n:i64)->i64{return leaf(n)}\nfn unused()->i64{return state}\n"
         "print(top(6))\nvar state=7\nfn readstate()->i64{return state}\nprint(readstate())\n");
-    rejected("fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n"
-        "fn top()->i64{return middle()}\nprint(top())\nvar state=7\n", false,
-        "module initialization call before complete publication");
-    rejected("fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n"
-        "fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n", false,
-        "module initialization call before complete publication");
-    rejected("fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n"
-        "fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n", false,
-        "module initialization call before complete publication");
-    rejected("fn leaf()->i64{var local=1\nreturn local}\n"
-        "fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n", false,
-        "module initialization call before complete publication");
+    static const char *const deferred_reads[] = {
+        "fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n"
+        "fn top()->i64{return middle()}\nprint(top())\nvar state=7\n",
+        "fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n"
+        "fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n",
+        "fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n"
+        "fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n",
+        "fn leaf()->i64{var local=1\nreturn local}\n"
+        "fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n"
+    };
+    for (size_t i = 0; i < sizeof(deferred_reads) / sizeof(deferred_reads[0]); ++i) {
+        XrLirLowered out = lower_text(deferred_reads[i]);
+        xr_lir_lowered_free(&out);
+    }
     puts("complete direct-call storage closures share physical signatures after Source retirement");
 }
 
@@ -739,7 +748,9 @@ static void frame_cells_source(const char *directory) {
     XrLirLowerRequest request={fixture.closed,fixture.source.snapshot,false};
     XrLirLowered out={0};OK(xr_lir_lower_program_checked(&request,&out,NULL));
     source_fixture_free(&fixture);OK(xr_lir_verify(out.module,NULL));
-    unsigned total_cells=0,total_drops=0,multiple_blocks=0;
+    XrLirStateLayout layout;
+    OK(xr_lir_state_layout_view(out.module, &layout));
+    unsigned total_cells=0,total_drops=0,multiple_blocks=0,module_strings=0;
     for(uint32_t n=0;n<xr_lir_function_count(out.module);++n) {
         XrLirFunction f;XrLirFunctionView v;
         OK(xr_lir_function_at(out.module,n,&f));OK(xr_lir_function_view(out.module,f,&v));
@@ -755,13 +766,17 @@ static void frame_cells_source(const char *directory) {
                     CHECK(block.id==v.entry);++owners;
                 }
                 if(op.op==XR_LIR_STRING_CELL_DROP) {CHECK(term.op==XR_LIR_RET);++drops;}
+                if(op.op==XR_LIR_STATE_CONSTRUCT) {
+                    CHECK(op.bits < layout.slot_count);
+                    module_strings += layout.slots[op.bits].payload == XR_LIR_STRING;
+                }
             }
         }
         CHECK(drops==owners*returns);
         if(owners) {CHECK(v.block_count>1);++multiple_blocks;}
         total_cells+=owners;total_drops+=drops;
     }
-    CHECK(total_cells==3 && total_drops==3 && multiple_blocks==1);
+    CHECK(total_cells==0 && total_drops==0 && multiple_blocks==0 && module_strings==3);
     xr_lir_lowered_free(&out);
     static const char *const programs[]={
         "var text=\"seed\"\nvar i=0\nwhile(i<3){text=\"v${i}\"\ni=i+1}\nprint(text)\n",
@@ -777,7 +792,7 @@ static void frame_cells_source(const char *directory) {
         OK(xr_lir_lower_program_checked(&request,&out,NULL));source_fixture_free(&fixture);
         OK(xr_lir_verify(out.module,NULL));xr_lir_lowered_free(&out);
     }
-    puts("full original String module frame owns three Cells across CFG and drops on normal return");
+    puts("original String module Cells belong to the execution independently of CFG frames");
 }
 
 static void local_boundaries(void) {
@@ -829,14 +844,21 @@ static void imported_time(const char *programs) {
     OK(xr_lir_verify(output.module, NULL));
     XrLirBlock block;
     OK(xr_lir_block_at(output.module, output.entry, 0, &block));
-    uint32_t selected[3];
-    for (uint32_t i=0; i<3; ++i) {
+    XrLirBlockView body;
+    OK(xr_lir_block_view(output.module, block, &body));
+    uint32_t selected[3], calls = 0, begins = 0, ready = 0;
+    for (uint32_t i = 0; i < body.instruction_count; ++i) {
         XrLirInstructionView instruction;
         OK(xr_lir_instruction_view(output.module, block, i, &instruction));
-        CHECK(instruction.op == XR_LIR_CALL);
-        selected[i] = instruction.callee;
-        for (uint32_t j=0; j<i; ++j) CHECK(selected[j] != selected[i]);
+        begins += instruction.op == XR_LIR_MODULE_BEGIN;
+        ready += instruction.op == XR_LIR_MODULE_READY;
+        if (instruction.op != XR_LIR_CALL) continue;
+        CHECK(calls < 3);
+        selected[calls] = instruction.callee;
+        for (uint32_t j = 0; j < calls; ++j) CHECK(selected[j] != selected[calls]);
+        ++calls;
     }
+    CHECK(calls == 3 && begins == 2 && ready == 2);
     xr_lir_lowered_free(&output);
 }
 static void clock_sources(const char *programs) {
@@ -859,7 +881,8 @@ static void clock_sources(const char *programs) {
     }
     CHECK(clocks == 7); xr_lir_lowered_free(&output);
     dynamic_division_source("const divisor=0\nfn f(x:i64)->i64{return x/divisor}\nprint(f(1))\n");
-    rejected("print(f(1))\nconst divisor=2\nfn f(x:i64)->i64{return x/divisor}\n",false,"before complete publication");
+    output = lower_text("print(f(1))\nconst divisor=2\nfn f(x:i64)->i64{return x/divisor}\n");
+    xr_lir_lowered_free(&output);
 }
 static void offset_sources(void) {
     SourceFixture fixture=source_fixture("import time\nprint(time.localOffsetAt(1700000000))\nprint(time.localOffset())\n");

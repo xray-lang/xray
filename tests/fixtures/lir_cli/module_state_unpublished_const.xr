@@ -1,0 +1,3 @@
+print(divide(1))
+const divisor: i64 = 2
+fn divide(value: i64) -> i64 { return value / divisor }

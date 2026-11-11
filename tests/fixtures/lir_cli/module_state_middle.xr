@@ -1,0 +1,7 @@
+import "./module_state_leaf" as leaf
+
+export const seed: i64 = leaf.base + 2
+var seen: i64 = leaf.bump()
+
+export fn observed() -> i64 { return seen }
+export fn next() -> i64 { return leaf.bump() }

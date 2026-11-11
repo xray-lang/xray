@@ -1188,7 +1188,69 @@ static void test_spill_managed_backedge(void) {
     immediate(code,1,XR_RBC_LOADI,0,1);reject_prepare(&m,0,NULL,0);
 }
 
+static void test_module_capabilities(void) {
+    XrtModuleTypeSpec type = {XRT_MODULE_I64};
+    XrtModuleSpec owner = {0, 0};
+    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+        .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
+        .payload_alignment=8, .byte_limit=UINT64_MAX};
+    XrtModuleLayout *storage = NULL;
+    CHECK(xrt_module_layout_new(&layout, &storage) == 0);
+    XrRbcStateAccess accesses[] = {{0, 0, 1}, {0, 0, 0}};
+    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF,
+        XR_RBC_BITS, XR_RBC_STATE_REF};
+    uint32_t code[18];
+    immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
+    immediate(code, 1, XR_RBC_LOADI, 1, 42);
+    immediate(code, 2, XR_RBC_STATE_CONSTRUCT, 2, 0);
+    emit(code, 3, XR_RBC_STATE_PUBLISH, 2, 0, 0);
+    immediate(code, 4, XR_RBC_MODULE_READY, 0, 0);
+    immediate(code, 5, XR_RBC_LOADI, 3, 0);
+    emit(code, 6, XR_RBC_EQ, 3, 3, 0);
+    CHECK(xr_rbc_jump(code + 7, 7, 10, 18));
+    CHECK(xr_rbc_jump(code + 8, 8, 12, 18));
+    emit(code, 9, XR_RBC_RET0, 0, 0, 0);
+    immediate(code, 10, XR_RBC_STATE_REFERENCE, 4, 1);
+    CHECK(xr_rbc_jump(code + 11, 11, 14, 18));
+    immediate(code, 12, XR_RBC_LOADI, 1, 0);
+    CHECK(xr_rbc_jump(code + 13, 13, 14, 18));
+    immediate(code, 14, XR_RBC_STATE_REFERENCE, 4, 1);
+    immediate(code, 15, XR_RBC_STATE_REFERENCE, 4, 1);
+    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_MODULE_I64);
+    emit(code, 17, XR_RBC_RET, 1, 0, 0);
+    XrRbcFunction function = {.code=code, .code_count=18, .register_count=5,
+        .parameter_count=1, .register_kinds=kinds, .register_kind_count=5,
+        .state_accesses=accesses, .state_access_count=2};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    uint64_t result = 0;
+    for (unsigned i = 0; i < 2; ++i)
+        CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 42);
+    /* A definition on only one incoming arm cannot authorize the join's read. */
+    uint32_t saved14 = code[14], saved15 = code[15], saved16 = code[16];
+    immediate(code, 14, XR_RBC_LOADI, 1, 0);
+    immediate(code, 15, XR_RBC_LOADI, 1, 0);
+    reject_prepare(&module, 0, NULL, 0);
+    code[14] = saved14;
+    code[15] = saved15;
+    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_MODULE_F64);
+    reject_prepare(&module, 0, NULL, 0);
+    code[16] = saved16;
+    emit(code, 14, XR_RBC_MOV, 4, 1, 0);
+    reject_prepare(&module, 0, NULL, 0);
+    code[14] = saved14;
+    uint64_t forged = 0;
+    reject_prepare(&module, 0, &forged, 1);
+    accesses[1].slot = UINT32_MAX;
+    reject_prepare(&module, 0, NULL, 0);
+    accesses[1].slot = 0;
+    module.state_layout = NULL;
+    reject_prepare(&module, 0, NULL, 0);
+    xrt_module_layout_drop(&storage);
+}
+
 int main(int argc, char **argv) {
+    test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();
     test_scalar_reload_copies();

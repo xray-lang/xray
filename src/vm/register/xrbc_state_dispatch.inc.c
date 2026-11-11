@@ -20,8 +20,9 @@ XR_RBC_CASE(STATE_REFERENCE) {
     XrRbcStateAccess access = function->state_accesses[instruction >> 16];
     XrtModuleState *state = XR_RBC_SLOT(op == XR_RBC_STATE_INITIALIZE ? a : access.state).state;
     XrXirValueStatus status;
+    XrtModuleRef *reference = NULL;
     if (op == XR_RBC_STATE_REFERENCE) {
-        status = xrt_module_reference(state, access.slot, &XR_RBC_SLOT(a).state_ref);
+        status = xrt_module_reference(state, access.slot, &reference);
     } else {
         uint32_t kind = (xr_rbc_state_shape(module, access.slot) & 255u) - 1u;
         bool boolean = false;
@@ -33,10 +34,11 @@ XR_RBC_CASE(STATE_REFERENCE) {
             value = &boolean;
         }
         status = op == XR_RBC_STATE_CONSTRUCT ?
-            xrt_module_construct(state, access.slot, value, &XR_RBC_SLOT(a).state_ref) :
+            xrt_module_construct(state, access.slot, value, &reference) :
             xrt_module_initialize(state, access.slot, value);
     }
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, XR_RBC_SOURCE());
+    if (op != XR_RBC_STATE_INITIALIZE) XR_RBC_SLOT(a).state_ref = reference;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(STATE_PUBLISH) {

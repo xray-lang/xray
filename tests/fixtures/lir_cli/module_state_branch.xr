@@ -1,0 +1,17 @@
+fn choose(read: bool) -> i64 {
+    if (read) { return value }
+    return 1
+}
+
+print(choose(false))
+if (true) { print(2) }
+var value: i64 = 7
+const suffix: string = "!"
+var text: string = "seed"
+var i: i64 = 0
+while (i < 3) {
+    text = text + suffix
+    i = i + 1
+}
+print(choose(true))
+print(text)

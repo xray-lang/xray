@@ -1,0 +1,15 @@
+fn number() -> i64 { return 7 }
+fn message() -> string { return "managed" }
+fn local() -> i64 {
+    var value: i64 = 1
+    return value
+}
+print(local())
+const n: i64 = number()
+const text: string = message()
+if (true) { print(n) }
+print(text)
+var count: i64 = 1
+fn read() -> i64 { return count }
+var observed: i64 = read()
+print(observed)

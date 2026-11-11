@@ -86,6 +86,7 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
 }
 XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirStateLayout *);
+XR_FUNC bool xr_lir_internal_state_payload(XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *, uint32_t function,
                                                       const XrLirInstructionView *,

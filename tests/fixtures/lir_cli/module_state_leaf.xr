@@ -1,0 +1,23 @@
+export const base: i64 = 40
+export const scale: f64 = 1.5
+export const prefix: string = "leaf"
+var count: i64 = base
+var text: string = prefix
+var enabled: bool = true
+var weight: f64 = scale
+
+export fn bump() -> i64 {
+    count = count + 1
+    text = text + "!"
+    enabled = !enabled
+    weight = weight + 0.5
+    return count
+}
+
+export fn current() -> i64 { return count }
+export fn label() -> string { return text }
+export fn flag() -> i64 {
+    if (enabled) { return 1 }
+    return 0
+}
+export fn value() -> f64 { return weight }
