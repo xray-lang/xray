@@ -70,7 +70,8 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     XrtModuleTypeKind kind = layout.types[layout.slots[access.slot].type].kind;
     XrRbcRegisterKind payload = kind == XRT_MODULE_STRING ? XR_RBC_STRING : XR_RBC_BITS;
     if (op == XR_RBC_STATE_INITIALIZE)
-        return !access.state && rbc_register_kind(function, a) == XR_RBC_STATE &&
+        return !(layout.slots[access.slot].flags & XRT_MODULE_SLOT_MUTABLE) &&
+            !access.state && rbc_register_kind(function, a) == XR_RBC_STATE &&
             (kind == XRT_MODULE_UNIT ? !access.value : rbc_register_kind(function, access.value) == payload);
     if (rbc_register_kind(function, a) != XR_RBC_STATE_REF ||
         rbc_register_kind(function, access.state) != XR_RBC_STATE) return false;

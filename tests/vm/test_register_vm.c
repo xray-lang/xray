@@ -1246,6 +1246,12 @@ static void test_module_capabilities(void) {
     accesses[1].slot = 0;
     module.state_layout = NULL;
     reject_prepare(&module, 0, NULL, 0);
+    module.state_layout = storage;
+    /* INITIALIZE cannot replace the construction/publication of a mutable slot. */
+    immediate(code, 2, XR_RBC_STATE_INITIALIZE, 0, 0);
+    emit(code, 3, XR_RBC_RET0, 0, 0, 0);
+    function.code_count = 4;
+    reject_prepare(&module, 0, NULL, 0);
     xrt_module_layout_drop(&storage);
 }
 
