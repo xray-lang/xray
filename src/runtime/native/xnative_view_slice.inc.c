@@ -85,7 +85,7 @@ XRAY_API XR_NOINLINE XrtSliceI64 xrt_slice_i64_new(XrtViewFrame token, uint32_t 
     scope->module_root = xr_xir_cell_module_storage(&root->value);
     scope->root_owner = scope->module_root ? NULL : origin.frame;
     XrXirViewStorageSpec spec = {scope->authority, range.start, length, XR_XIR_TYPE_SLICE};
-    view_require_status(xr_xir_view_new(VIEW_SLICE_TYPE, &root->value, NULL, &spec,
+    view_require_status(xr_xir_view_new((XrXirType)VIEW_SLICE_TYPE, &root->value, NULL, &spec,
         &admission, &frame->pending), source);
     view_scope_publish(frame, scope);
     return view_install(frame, ordinal, identity, scope);
@@ -106,7 +106,7 @@ XRAY_API XR_NOINLINE XrtSliceI64 xrt_slice_i64_reborrow(XrtViewFrame token, uint
     uint64_t identity = view_identity(source);
     XrtViewScope *scope = view_scope_prepare(frame, identity, source);
     XrXirViewStorageSpec spec = {scope->authority, range.start, length, XR_XIR_TYPE_SLICE};
-    view_require_status(xr_xir_view_reborrow(VIEW_SLICE_TYPE, &parent->value, &spec,
+    view_require_status(xr_xir_view_reborrow((XrXirType)VIEW_SLICE_TYPE, &parent->value, &spec,
         &access, &frame->pending), source);
     scope->parent = parent->scope;
     scope->root_owner = parent->scope->root_owner;
@@ -157,7 +157,7 @@ XRAY_API XR_NOINLINE XrtArray *xrt_slice_i64_copy(XrtViewFrame token, XrtSliceI6
     XrXirValueAdmission admission = view_value_admission(&value->value);
     XrtViewAccessContext context = {frame, value->scope};
     XrXirViewAccess access = {&admission, view_authorize, &context};
-    view_require_status(xr_xir_view_copy(VIEW_ARRAY_TYPE, &value->value, &access,
+    view_require_status(xr_xir_view_copy((XrXirType)VIEW_ARRAY_TYPE, &value->value, &access,
         &frame->registry->root->pending), source);
     return xrt_array_publish_pending(source);
 }
