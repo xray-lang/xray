@@ -657,7 +657,7 @@ module sys {
   }
 
   fn __onSignal {
-    signature: "(signal: i64, handler: fn(): ()): bool"
+    signature: "(signal: i64, handler: escaping fn(): ()): bool"
     doc: "Register a VM-hosted safe-point handler for a portable process signal"
     vm: "sys_on_signal"
     aot: "xrt_sys_on_signal"

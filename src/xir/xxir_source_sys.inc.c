@@ -95,11 +95,15 @@ static bool source_sys_declare(SourceContext *ctx) {
             symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;
             ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),
                 .parameters=parameters,.parameter_count=count,.result=result,.error_type=XR_XIR_NEVER};
-            if (id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL) {
-                uint32_t *escaping=source_alloc(ctx,1,sizeof(*escaping));
+            uint32_t escaping_count=0;
+            for(uint32_t p=0;p<count;++p)escaping_count+=native->member->parameters[p].escaping;
+            if(escaping_count) {
+                uint32_t *escaping=source_alloc(ctx,escaping_count,sizeof(*escaping));
                 if(!escaping)return false;
-                *escaping=1;
-                ctx->functions[index].escaping_parameter_count=1;
+                uint32_t ordinal=0;
+                for(uint32_t p=0;p<count;++p)
+                    if(native->member->parameters[p].escaping)escaping[ordinal++]=p;
+                ctx->functions[index].escaping_parameter_count=escaping_count;
                 ctx->functions[index].escaping_parameters=escaping;
             }
             ctx->identities[index]=(XrXirFunctionIdentity){.module=m,

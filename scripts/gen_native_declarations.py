@@ -561,7 +561,7 @@ def render_type(root, stem):
         lines.append(f'static const XrNativeParameter xr_native_{stem}_parameters_{index}[] = {{')
         for pname, term, text, optional, variadic in member.parameters:
             lines.append(f'    {{{c_string(pname)}, {c_string(text)}, XR_NATIVE_TERM_{simple_term(term, binder)}, '
-                         f'{str(optional).lower()}, {str(variadic).lower()}}},')
+                         f'{str(optional).lower()}, {str(variadic).lower()}, false}},')
         lines.append('};')
     lines.append(f'static const XrNativeMemberDeclaration xr_native_{stem}_members[] = {{')
     for index, member in enumerate(members):
@@ -625,7 +625,7 @@ def render_atomic_identities(root):
             output.append(f'static const XrNativeParameter xr_native_atomic_parameters_{index}[] = {{')
             for pname, term, spelling, optional, variadic in parameters:
                 output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
-                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
+                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower(), 'false']) + '},')
             output.append('};')
     output += ['static const XrNativeMemberDeclaration xr_native_atomic_members[] = {']
     for index, name, signature, parameters, result, (number, raw) in facts:
@@ -736,7 +736,7 @@ def render_task_identity(root):
                     ('XR_NATIVE_TERM_I64' if spelling == 'i64' else
                      'XR_NATIVE_TERM_TASK_ELEMENT' if name == 'timeout' else
                      'XR_NATIVE_TERM_ARRAY_TASK') if static else 'XR_NATIVE_TERM_UNADMITTED',
-                    str(optional).lower(), str(variadic).lower()]) + '},')
+                    str(optional).lower(), str(variadic).lower(), 'false']) + '},')
             output.append('};')
         facts.append((index, number, raw, name, signature, receiver, method, parameters, result_text, private, static))
     output.append('static const XrNativeMemberDeclaration xr_native_task_members[] = {')
@@ -800,7 +800,7 @@ def render_iterator_identity(root):
             output.append(f'static const XrNativeParameter xr_native_iterator_parameters_{index}[] = {{')
             for pname, term, spelling, optional, variadic in parameters:
                 output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
-                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
+                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower(), 'false']) + '},')
             output.append('};')
         lowered = number > 1 and source.splitlines()[number - 2].strip() == '// @lowered'
         if name in ('hasNext', 'next', 'nth') and not lowered:
@@ -867,7 +867,7 @@ def render_channel_identity(root):
             output.append(f'static const XrNativeParameter xr_native_channel_parameters_{index}[] = {{')
             for pname, _, spelling, optional, variadic in parameters:
                 output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
-                    'XR_NATIVE_TERM_'+{'T':'ELEMENT','i64':'I64'}.get(spelling,'UNADMITTED'), str(optional).lower(), str(variadic).lower()]) + '},')
+                    'XR_NATIVE_TERM_'+{'T':'ELEMENT','i64':'I64'}.get(spelling,'UNADMITTED'), str(optional).lower(), str(variadic).lower(), 'false']) + '},')
             output.append('};')
         facts.append((index, number, raw, name, signature, method, parameters, result_text))
     output.append('static const XrNativeMemberDeclaration xr_native_channel_members[] = {')
@@ -937,10 +937,10 @@ def render_channel_result_identities(root):
         if native_id==19:
             for index,(field,spelling,term) in enumerate((('value','T','ELEMENT'),('error','E','UNADMITTED'),('info','PanicInfo','UNADMITTED'))):
                 lines += ['static const XrNativeParameter xr_native_task_result_parameters_'+str(index)+'[] = {',
-                          '    {'+c_string(field)+', '+c_string(spelling)+', XR_NATIVE_TERM_'+term+', false, false}', '};']
+                          '    {'+c_string(field)+', '+c_string(spelling)+', XR_NATIVE_TERM_'+term+', false, false, false}', '};']
         elif arity:
             lines += ['static const XrNativeParameter xr_native_recv_value_parameters[] = {',
-                      '    {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false}', '};']
+                      '    {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false, false}', '};']
         lines.append('static const XrNativeMemberDeclaration xr_native_'+variable+'_members[] = {')
         for index,(variant,payload) in enumerate(variants):
             member_line,member_raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1)
@@ -1095,7 +1095,7 @@ def render_math_callables(declarations):
         symbol = 'xr_native_math_' + str(ordinal)
         if params:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + t.upper() + ', false, false},' for n, t in params]
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + t.upper() + ', false, false, false},' for n, t in params]
             lines += ['};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1135,17 +1135,27 @@ def render_sys_signal(declarations):
             row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
             row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
             row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-            '(signal: i64, handler: fn(): ()): bool', '2', 'vv', 'internal', '', '', '',
+            '(signal: i64, handler: escaping fn(): ()): bool', '2', 'vv', 'internal', '', '', '',
             'system', 'sys_on_signal', 'xrt_sys_on_signal', True, 'method', '', 'normal', '', '',
             'value', False, None, (), ''):
         raise ValueError('Signal registration differs from its complete source contract')
+    from stdlibgen import parse_function_signature_shape, function_parameter_type
+    fragments, result = parse_function_signature_shape(row.signature)
+    parameters = []
+    terms = {'i64': 'I64', 'fn(): ()': 'UNIT_CALLBACK'}
+    for fragment in fragments:
+        name = fragment.split(':', 1)[0].strip()
+        spelling = function_parameter_type(fragment, row.symbol)
+        escaping = spelling.startswith('escaping ')
+        payload = spelling.removeprefix('escaping ')
+        parameters.append('    {' + c_string(name) + ', ' + c_string(spelling) + ', XR_NATIVE_TERM_' +
+            terms[payload] + ', false, false, ' + str(escaping).lower() + '},')
     return [
         'static const XrNativeParameter xr_native_sys_on_signal_parameters[] = {',
-        '    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},',
-        '    {"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false},',
+        *parameters,
         '};',
         'static const XrNativeMemberDeclaration xr_native_sys_on_signal = {',
-        '    3, "__onSignal", "(signal: i64, handler: fn(): ()): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
+        '    3, "__onSignal", ' + c_string(row.signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
         '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
         '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_sys_on_signal_parameters, 2, XR_NATIVE_TERM_BOOL',
         '};'], [
@@ -1173,7 +1183,7 @@ def render_sys_thread_tokens(declarations):
         symbol = 'xr_native_' + identity.lower()
         if arguments:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-                      '    {"id", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+                      '    {"id", "i64", XR_NATIVE_TERM_I64, false, false, false},', '};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' +
             c_string('bool' if arguments else 'i64') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1236,7 +1246,7 @@ def render_sys_pipes(declarations):
         symbol = 'xr_native_' + identity.lower()
         if parameters:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false, false},' for n, t, k in parameters]
             lines += ['};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(at + 6) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1268,7 +1278,7 @@ def render_sys_processes(declarations):
             raise ValueError('Process callable differs from its complete source contract: ' + name)
         symbol = 'xr_native_' + identity.lower()
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-        lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+        lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false, false},' for n, t, k in parameters]
         lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(at + 10) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
@@ -1291,9 +1301,9 @@ def render_os_exec_shell_spawn(declarations):
         raise ValueError('System shell spawn differs from its complete source contract')
     return [
         'static const XrNativeParameter xr_native_os_exec_shell_spawn_parameters[] = {',
-        '    {"command", "string", XR_NATIVE_TERM_STRING, false, false},',
-        '    {"stdoutToken", "i64", XR_NATIVE_TERM_I64, false, false},',
-        '    {"stderrToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"command", "string", XR_NATIVE_TERM_STRING, false, false, false},',
+        '    {"stdoutToken", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+        '    {"stderrToken", "i64", XR_NATIVE_TERM_I64, false, false, false},',
         '};',
         'static const XrNativeMemberDeclaration xr_native_os_exec_shell_spawn = {',
         '    1, "__execShellSpawn", "(command: string, stdoutToken: i64, stderrToken: i64): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1317,8 +1327,8 @@ def render_os_exec_pipe_close(declarations):
         raise ValueError('Shell capture cleanup differs from its complete source contract')
     return [
         'static const XrNativeParameter xr_native_os_exec_pipe_close_parameters[] = {',
-        '    {"readToken", "i64", XR_NATIVE_TERM_I64, false, false},',
-        '    {"writeToken", "i64", XR_NATIVE_TERM_I64, false, false},',
+        '    {"readToken", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+        '    {"writeToken", "i64", XR_NATIVE_TERM_I64, false, false, false},',
         '};',
         'static const XrNativeMemberDeclaration xr_native_os_exec_pipe_close = {',
         '    1, "__execPipeClose", "(readToken: i64, writeToken: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1373,7 +1383,7 @@ def render_sys_dylibs(declarations):
         symbol = 'xr_native_' + identity.lower()
         if parameters:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in parameters]
+            lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false, false},' for n, t, k in parameters]
             lines += ['};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(at + 13) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1405,7 +1415,7 @@ def render_cpu_callables(declarations):
         symbol = 'xr_native_' + identity.lower()
         if count:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-                '    {"cpu", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+                '    {"cpu", "i64", XR_NATIVE_TERM_I64, false, false, false},', '};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' +
             c_string('bool' if count else 'i64') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1449,8 +1459,8 @@ def render_os_system_callables(declarations):
         symbol = 'xr_native_' + identity.lower()
         if kill:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-                '    {"pid", "i64", XR_NATIVE_TERM_I64, false, false},',
-                '    {"signal", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+                '    {"pid", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+                '    {"signal", "i64", XR_NATIVE_TERM_I64, false, false, false},', '};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal) + ', ' + c_string('__' + name) + ', ' + c_string(signature) + ', ' +
             c_string(signature.split(': ')[-1]) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1527,19 +1537,19 @@ def render_io_callables(declarations):
             result, term = 'i64', 'I64'
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
         if identity in ('IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE'):
-            lines += ['    {"root", "string", XR_NATIVE_TERM_STRING, false, false},']
+            lines += ['    {"root", "string", XR_NATIVE_TERM_STRING, false, false, false},']
         elif identity in ('IO_DIR_NEXT', 'IO_DIR_CLOSE'):
-            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false},']
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false, false},']
         elif identity == 'IO_RENAME':
-            lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false},',
-                      '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false},']
+            lines += ['    {"old", "Path", XR_NATIVE_TERM_PATH, false, false, false},',
+                      '    {"new", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
         elif identity == 'IO_SYMLINK':
-            lines += ['    {"source", "Path", XR_NATIVE_TERM_PATH, false, false},',
-                      '    {"link", "Path", XR_NATIVE_TERM_PATH, false, false},']
+            lines += ['    {"source", "Path", XR_NATIVE_TERM_PATH, false, false, false},',
+                      '    {"link", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
         else:
-            lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false},']
+            lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
             if len(arguments) == 2:
-                lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false},']
+                lines += ['    {"mode", "i64", XR_NATIVE_TERM_I64, false, false, false},']
         lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
@@ -1611,12 +1621,12 @@ def render_os_callables(declarations):
         symbol = 'xr_native_os_' + provider
         if terminate:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-                '    {"code", "i64", XR_NATIVE_TERM_I64, false, false},', '};']
+                '    {"code", "i64", XR_NATIVE_TERM_I64, false, false, false},', '};']
         if environment or setter or remove:
             lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
-                '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},']
+                '    {"name", "string", XR_NATIVE_TERM_STRING, false, false, false},']
             if setter:
-                lines += ['    {"value", "string", XR_NATIVE_TERM_STRING, false, false},']
+                lines += ['    {"value", "string", XR_NATIVE_TERM_STRING, false, false, false},']
             lines += ['};']
         lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal + 1) + ', "__' + name + '", ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1692,7 +1702,7 @@ def render_unicode_callable(root, decoder):
         symbol = 'xr_native_buffer_' + str(ordinal)
         if params:
             buffer_lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-            buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + terms[t] + ', false, false},' for n, t in params]
+            buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + terms[t] + ', false, false, false},' for n, t in params]
             buffer_lines += ['};']
         buffer_lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result_text) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
@@ -1729,7 +1739,7 @@ def render_unicode_callable(root, decoder):
         symbol = 'xr_native_crypto_' + str(ordinal)
         params = [('bytes', 'ref Array<u8>')] if ordinal == 0 else [('a', 'Array<u8>'), ('b', 'Array<u8>')]
         buffer_lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
-        buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_ARRAY_U8, false, false},' for n, t in params]
+        buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_ARRAY_U8, false, false, false},' for n, t in params]
         buffer_lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
             '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string('()' if ordinal == 0 else 'bool') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('UNKNOWN' if ordinal == 0 else 'NO_HEAP') + ',',
@@ -1781,10 +1791,10 @@ def render_unicode_callable(root, decoder):
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
         'static const XrNativeParameter xr_native_unicode_property_parameters[] = {',
-        '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},', '};',
+        '    {"name", "string", XR_NATIVE_TERM_STRING, false, false, false},', '};',
         'static const XrNativeParameter xr_native_unicode_has_property_parameters[] = {',
-        '    {"cp", "i64", XR_NATIVE_TERM_I64, false, false},',
-        '    {"propId", "i64", XR_NATIVE_TERM_I64, false, false},', '};',
+        '    {"cp", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+        '    {"propId", "i64", XR_NATIVE_TERM_I64, false, false, false},', '};',
         'static const XrNativeMemberDeclaration xr_native_unicode_property = {',
         '    1, "__unicodePropId", "(name: string): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
         '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,',

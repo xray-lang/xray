@@ -184,7 +184,7 @@ typedef enum XrNativeResultOwnership {
 typedef struct XrNativeParameter {
     const char *name, *type_text;
     XrNativeTypeTerm type;
-    bool optional, variadic;
+    bool optional, variadic, escaping;
 } XrNativeParameter;
 typedef struct XrNativeMemberDeclaration {
     uint32_t id;

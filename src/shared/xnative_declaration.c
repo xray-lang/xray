@@ -118,7 +118,8 @@ XR_FUNC bool xr_native_declaration_validate(const XrNativeTypeDeclaration *decla
             const XrNativeParameter *param = &member->parameters[p], *want = &expected->parameters[p];
             if (!param->name || !param->type_text || !native_text_equal(param->name, want->name) ||
                 !native_text_equal(param->type_text, want->type_text) || param->type != want->type ||
-                param->optional != want->optional || param->variadic != want->variadic) return false;
+                param->optional != want->optional || param->variadic != want->variadic ||
+                param->escaping != want->escaping) return false;
         }
     }
     return true;

@@ -48,7 +48,7 @@ static inline bool xir_sys_native_signature(uint32_t id,const XrXirTypes *types,
     bool pin=id==XR_NATIVE_CALLABLE_SYS_PIN_TO_CPU,signal=id==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL;
     bool token=id==XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ID,alive=id==XR_NATIVE_CALLABLE_SYS_THREAD_LOCAL_ALIVE;
     const char *name=signal?"__onSignal":pin?"__pinToCpu":token?"__threadLocalId":alive?"__threadLocalAlive":"__threadYield";
-    const char *signature=signal?"(signal: i64, handler: fn(): ()): bool":
+    const char *signature=signal?"(signal: i64, handler: escaping fn(): ()): bool":
         pin?"(cpu: i64): bool":token?"(): i64":alive?"(id: i64): bool":"(): ()";
     if(!xir_sys_native_id(id) || !native || native->owner || native->error_e_type || native->ctfe || !native->namespace_id ||
         strcmp(native->namespace_id,"sys") || !native->source_path ||
@@ -67,7 +67,7 @@ static inline bool xir_sys_native_signature(uint32_t id,const XrXirTypes *types,
         const XrNativeParameter *a=member->parameters,*b=a+1;
         if(!a->name || strcmp(a->name,"signal") || !a->type_text || strcmp(a->type_text,"i64") ||
             a->type!=XR_NATIVE_TERM_I64 || a->optional || a->variadic ||
-            !b->name || strcmp(b->name,"handler") || !b->type_text || strcmp(b->type_text,"fn(): ()") ||
+            !b->name || strcmp(b->name,"handler") || !b->type_text || strcmp(b->type_text,"escaping fn(): ()") ||
             b->type!=XR_NATIVE_TERM_UNIT_CALLBACK || b->optional || b->variadic) return false;
         const XrXirTypeNode *handler=xr_xir_type_node(types,parameters[1]);
         return handler && handler->kind==XR_XIR_TYPE_CALLABLE && !handler->parameter_span && !handler->parameter_count && !handler->parameters &&

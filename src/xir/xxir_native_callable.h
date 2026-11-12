@@ -153,10 +153,18 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
         function->operands || function->operand_count || function->consume_parameter_count ||
         function->consume_parameters || index==module->declarations->entry_function)
         return XR_XIR_BAD_STRUCTURE;
-    if(id->native_callable==XR_NATIVE_CALLABLE_SYS_ON_SIGNAL) {
-        if(function->escaping_parameter_count!=1 || !function->escaping_parameters ||
-            function->escaping_parameters[0]!=1)return XR_XIR_BAD_TYPE;
-    } else if(function->escaping_parameter_count || function->escaping_parameters)return XR_XIR_BAD_TYPE;
+    const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id->native_callable);
+    if(!native || !native->member || (native->member->parameter_count && !native->member->parameters))
+        return XR_XIR_BAD_TYPE;
+    uint32_t escaping_count=0;
+    for(uint32_t p=0;p<native->member->parameter_count;++p) {
+        if(!native->member->parameters[p].escaping)continue;
+        if(!function->escaping_parameters || escaping_count>=function->escaping_parameter_count ||
+            function->escaping_parameters[escaping_count]!=p)return XR_XIR_BAD_TYPE;
+        ++escaping_count;
+    }
+    if(function->escaping_parameter_count!=escaping_count || (!escaping_count && function->escaping_parameters))
+        return XR_XIR_BAD_TYPE;
     for (uint32_t m=0;m<module->declarations->module_count;++m)
         if (module->declarations->modules[m].initializer==index) return XR_XIR_BAD_STRUCTURE;
     return xir_native_callable_types(id->native_callable,module->types,function->parameters,

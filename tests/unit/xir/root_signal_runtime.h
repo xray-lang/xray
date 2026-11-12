@@ -62,7 +62,7 @@ static const char root_signal_text[]=
  "print(\"registered\");while(state==0){time.sleep(1)};return state}\n"
  "export fn guarded(mode:i64)->i64{try{return parent(mode)}catch panic{print(\"unexpected-catch\");return -1}}\n"
  "export fn owned()->fn(){return make(0)}\n"
- "export fn withHandler(handler:fn())->bool{return __onSignal(2,handler)}\n"
+ "export fn withHandler(handler:escaping fn())->bool{return __onSignal(2,handler)}\n"
  "export fn read()->i64{return state}\n"
  "fn ctfeReceive(handler:fn())->bool{handler();return true}\n"
  "export fn ctfePlain()->bool{return ctfeReceive(fn(){})}\n"

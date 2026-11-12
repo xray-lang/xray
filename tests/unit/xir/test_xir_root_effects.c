@@ -51,6 +51,8 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     return checked;
 }
+#include "xir_signal_escaping_cases.h"
+
 static void captured_cell_bound_types(void) {
     EffectMark baseline = effect_mark();
     XrXirArtifact *artifact = root_source("captured_cell_bounds.xr",XR_XIR_OK);
@@ -1408,6 +1410,7 @@ static void control_summary_kernel(void) {
     execution_cell_input_boundaries();
     execution_symbolic_environment_inputs();
     execution_callable_result_upper();
+    signal_escaping_contracts();
     storage_environment_guard_cases();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));

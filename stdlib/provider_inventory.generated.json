@@ -2918,7 +2918,7 @@
     },
     {
       "symbol": "sys.__onSignal",
-      "signature": "(signal: i64, handler: fn(): ()): bool",
+      "signature": "(signal: i64, handler: escaping fn(): ()): bool",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [

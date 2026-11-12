@@ -738,8 +738,8 @@ class SignalCallableSchemaTests(unittest.TestCase):
         self.assertIn('XR_NATIVE_CALLABLE_SYS_ON_SIGNAL, NULL,', rows[0])
         self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[0])
         text = '\n'.join(lines)
-        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
-        self.assertIn('{"handler", "fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false}', text)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
+        self.assertIn('{"handler", "escaping fn(): ()", XR_NATIVE_TERM_UNIT_CALLBACK, false, false, true}', text)
         self.assertIn('XR_NATIVE_ALLOCATION_UNKNOWN', text)
         self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
 
@@ -749,11 +749,12 @@ class SignalCallableSchemaTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 schema.render_sys_signal(changed)
         mutations = [('module', 'other'), ('name', '__other'),
-                     ('signature', '(signal: i64, handler: fn(x: i64): ()): bool'),
-                     ('signature', '(signal: i64, handler: fn(...i64): ()): bool'),
-                     ('signature', '(signal: i64, handler: nosuspend fn(): ()): bool'),
-                     ('signature', '(signal: i64, handler: fn(): i64): bool'),
-                     ('signature', '(signal: i64, handler: fn() throws Error): bool'),
+                     ('signature', '(signal: i64, handler: fn(): ()): bool'),
+                     ('signature', '(signal: i64, handler: escaping fn(x: i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: escaping fn(...i64): ()): bool'),
+                     ('signature', '(signal: i64, handler: escaping nosuspend fn(): ()): bool'),
+                     ('signature', '(signal: i64, handler: escaping fn(): i64): bool'),
+                     ('signature', '(signal: i64, handler: escaping fn() throws Error): bool'),
                      ('argc', '1'), ('arg_spec', 'v'), ('visibility', 'public'),
                      ('effect', 'nothrow'), ('allocation', 'no_heap'), ('return_ownership', 'fresh'),
                      ('layer', 'core'), ('vm', 'other'), ('aot', 'other'), ('aot_direct', False),
@@ -782,7 +783,7 @@ class ThreadTokenCallableSchemaTests(unittest.TestCase):
         text = '\n'.join(lines)
         self.assertIn('"__threadLocalId", "(): i64", "i64"', text)
         self.assertIn('"__threadLocalAlive", "(id: i64): bool", "bool"', text)
-        self.assertIn('{"id", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"id", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
         for row in rows:
             self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', row)
@@ -824,7 +825,7 @@ class CpuCallableSchemaTests(unittest.TestCase):
         self.assertIn('"__pinToCpu", "(cpu: i64): bool", "bool"', text)
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
         self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', text)
-        self.assertIn('{"cpu", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"cpu", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
 
     def test_missing_duplicate_and_single_contract_changes_are_rejected(self):
         for module, name in (('os', '__cpuCount'), ('sys', '__pinToCpu')):
@@ -863,20 +864,20 @@ class IoCallableSchemaTests(unittest.TestCase):
         text = '\n'.join(lines)
         self.assertIn('"__chmod", "(path: Path, mode: i64): bool", "bool"', text)
         self.assertIn('"__chdir", "(path: Path): bool", "bool"', text)
-        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false}'), 10)
-        self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false}', text)
-        self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
-        self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
-        self.assertIn('{"source", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
-        self.assertIn('{"link", "Path", XR_NATIVE_TERM_PATH, false, false}', text)
-        self.assertEqual(text.count('{"root", "string", XR_NATIVE_TERM_STRING, false, false}'), 2)
+        self.assertEqual(text.count('{"path", "Path", XR_NATIVE_TERM_PATH, false, false, false}'), 10)
+        self.assertIn('{"mode", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
+        self.assertIn('{"old", "Path", XR_NATIVE_TERM_PATH, false, false, false}', text)
+        self.assertIn('{"new", "Path", XR_NATIVE_TERM_PATH, false, false, false}', text)
+        self.assertIn('{"source", "Path", XR_NATIVE_TERM_PATH, false, false, false}', text)
+        self.assertIn('{"link", "Path", XR_NATIVE_TERM_PATH, false, false, false}', text)
+        self.assertEqual(text.count('{"root", "string", XR_NATIVE_TERM_STRING, false, false, false}'), 2)
         self.assertIn('"__makeTempDir", "(root: string): string?", "string?"', text)
         self.assertIn('"__makeTempFile", "(root: string): string?", "string?"', text)
         self.assertEqual(text.count('1, XR_NATIVE_TERM_NULLABLE_STRING'), 5)
         self.assertIn('"__dirOpen", "(path: Path): i64", "i64"', text)
         self.assertIn('"__dirNext", "(handle: i64): string?", "string?"', text)
         self.assertIn('"__dirClose", "(handle: i64): bool", "bool"', text)
-        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false}'), 2)
+        self.assertEqual(text.count('{"handle", "i64", XR_NATIVE_TERM_I64, false, false, false}'), 2)
         self.assertIn('XR_NATIVE_TERM_NULLABLE_FILE_STAT', text)
         self.assertEqual(text.count('XR_NATIVE_ALLOCATION_UNKNOWN'), len(identities))
 
@@ -922,8 +923,8 @@ class OsSystemDeclarations(unittest.TestCase):
         self.assertEqual(text.count('XR_NATIVE_RESULT_OWNERSHIP_OWNED'), 8)
         self.assertEqual(text.count('XR_NATIVE_TERM_NULLABLE_I64'), 2)
         self.assertIn('XR_NATIVE_TERM_NULLABLE_ARRAY_F64', text)
-        self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false}', text)
-        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false}', text)
+        self.assertIn('{"pid", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
+        self.assertIn('{"signal", "i64", XR_NATIVE_TERM_I64, false, false, false}', text)
         self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>').type(), ''), 'ARRAY_F64')
         self.assertEqual(schema.simple_term(schema.TypeParser('Array<f64>?').type(), ''), 'NULLABLE_ARRAY_F64')
         for name in ('__uid', '__gid'):
