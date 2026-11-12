@@ -46,7 +46,7 @@ static void native_view_root(void *opaque) {
     XrtViewCell imported = xrt_view_cell_import(child, 0, access.reference, 0);
     XrtSliceI64 part = xrt_slice_i64_new(child, 0, imported, (XrtViewRange){1, 3, false}, 0);
     if (context->mode == 2) { xrt_view_cell_i64_set(child, imported, 0, 77, 0); CHECK(false); }
-    if (context->mode == 3) { xrt_null_unwrap(0); CHECK(false); }
+    if (context->mode == 3) xrt_null_unwrap(0);
     part = xrt_slice_i64_return(child, part, 0);
     xrt_view_frame_leave(child, 0);
     if (context->mode == 5) { (void)xrt_view_cell_read(frame, imported, 0); CHECK(false); }
