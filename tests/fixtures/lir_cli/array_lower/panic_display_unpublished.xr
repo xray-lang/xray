@@ -1,0 +1,3 @@
+inspect()
+const later:Array<i64>=[7]
+fn inspect(){const unused="${later}"}
