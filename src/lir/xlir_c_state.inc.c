@@ -40,10 +40,10 @@ static void c_state_layout(LirC *c) {
     bool arrays = false;
     for (uint32_t s = 0; s < layout->slot_count; ++s) arrays |= layout->slots[s].payload == XR_LIR_ARRAY;
     c_text(c, "static const XrtModuleTypeSpec xrl_state_types[] = {\n"
-        "    {XRT_MODULE_UNIT}, {XRT_MODULE_BOOL}, {XRT_MODULE_I64},\n"
-        "    {XRT_MODULE_F64}, {XRT_MODULE_STRING}");
-    if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64}, {XRT_MODULE_ARRAY_STRING},\n"
-        "    {XRT_MODULE_ARRAY_U8}, {XRT_MODULE_ARRAY_U64}");
+        "    {XRT_MODULE_UNIT, 0}, {XRT_MODULE_BOOL, 0}, {XRT_MODULE_I64, 0},\n"
+        "    {XRT_MODULE_F64, 0}, {XRT_MODULE_STRING, 0}");
+    if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64, 0}, {XRT_MODULE_ARRAY_STRING, 0},\n"
+        "    {XRT_MODULE_ARRAY_U8, 0}, {XRT_MODULE_ARRAY_U64, 0}");
     c_text(c, "\n};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)

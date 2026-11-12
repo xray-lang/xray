@@ -267,7 +267,7 @@ static void raw_array_string_observe(void *context) {
 static void test_raw_array_string_state(void) {
     RawArray f;
     raw_array_init(&f);
-    XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING};
+    XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, sizeof(void *), _Alignof(void *)};
     XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,

@@ -62,7 +62,7 @@ static void counted_aligned_free(void *memory, size_t alignment) {
 #include "runtime/native/xnative_module_state.c"
 
 static XrtModuleStatus make_layout(XrtModuleLayout **out) {
-    XrtModuleTypeSpec types[] = {{XRT_MODULE_I64}, {XRT_MODULE_STRING}, {XRT_MODULE_BOOL}, {XRT_MODULE_F64}};
+    XrtModuleTypeSpec types[] = {{XRT_MODULE_I64, 0}, {XRT_MODULE_STRING, 0}, {XRT_MODULE_BOOL, 0}, {XRT_MODULE_F64, 0}};
     XrtModuleSpec modules[] = {{0, 0}, {0, 1}};
     uint32_t dependencies[] = {0};
     XrtModuleSlotSpec slots[] = {
@@ -249,8 +249,11 @@ static void invalid_layouts(void) {
     CHECK(!live);
 }
 
+#include "native_fixed_state_cases.h"
+
 int main(void) {
     allocation_failures(); independent_lifetimes(); pending_string_failure(); invalid_layouts();
+    fixed_state_values(); fixed_state_invalid_shapes(); fixed_state_allocation_failures();
     puts("Typed module state ownership and failures passed");
     return 0;
 }

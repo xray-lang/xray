@@ -10,7 +10,7 @@
 #define REGISTER_STATE_FUSION_CASES_H
 
 static void module_state_fused_retain_failure(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_STRING};
+    XrtModuleTypeSpec type = {XRT_MODULE_STRING, 0};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0,
         sizeof(void *), _Alignof(void *)};

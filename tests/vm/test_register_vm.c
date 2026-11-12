@@ -1189,7 +1189,7 @@ static void test_spill_managed_backedge(void) {
 }
 
 static void test_module_capabilities(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_I64};
+    XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
     XrtModuleSpec owner = {0, 0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
     XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
@@ -1283,6 +1283,7 @@ int main(int argc, char **argv) {
     test_raw_state_spill_shapes();
     test_raw_state_bool_bits();
     test_raw_state_fused_read_entries();
+    test_raw_fixed_state_frontier();
     test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();

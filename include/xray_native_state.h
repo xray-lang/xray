@@ -32,9 +32,15 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_I8, XRT_MODULE_I16, XRT_MODULE_I32, XRT_MODULE_I64,
     XRT_MODULE_U8, XRT_MODULE_U16, XRT_MODULE_U32, XRT_MODULE_U64,
     XRT_MODULE_F32, XRT_MODULE_F64, XRT_MODULE_STRING,
-    XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64
+    XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64,
+    XRT_MODULE_FIXED_U8
 } XrtModuleTypeKind;
-typedef struct XrtModuleTypeSpec { XrtModuleTypeKind kind; } XrtModuleTypeSpec;
+/* Fixed-byte payloads own their exact nonzero count. All other kinds require
+ * a zero count. A fixed payload has count bytes, alignment one and no RC. */
+typedef struct XrtModuleTypeSpec {
+    XrtModuleTypeKind kind;
+    uint32_t fixed_count;
+} XrtModuleTypeSpec;
 typedef struct XrtModuleSpec { uint32_t first_dependency, dependency_count; } XrtModuleSpec;
 enum { XRT_MODULE_SLOT_MUTABLE = 1u };
 typedef struct XrtModuleSlotSpec {

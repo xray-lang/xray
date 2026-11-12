@@ -113,7 +113,7 @@ static void test_raw_array_reference_publication(void) {
         f.function.parameter_count = 1;
         f.function.register_count = f.function.register_kind_count = 8;
         f.function.cell_count = f.function.cell_kind_count = 0; f.function.cell_kinds = NULL;
-        XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_I64};
+        XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_I64, 0};
         XrtModuleSpec owner = {0};
         XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
         XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner, .module_count=1,

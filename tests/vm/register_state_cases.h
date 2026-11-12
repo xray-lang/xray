@@ -19,7 +19,7 @@ typedef struct RawStateTransport {
 } RawStateTransport;
 
 static void test_raw_state_deferred_publication(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_I64};
+    XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
     XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
@@ -72,7 +72,7 @@ static void test_raw_state_deferred_publication(void) {
 
 static void raw_state_transport(RawStateTransport *f) {
     memset(f, 0, sizeof(*f));
-    XrtModuleTypeSpec types[] = {{XRT_MODULE_I64}, {XRT_MODULE_BOOL}, {XRT_MODULE_STRING}};
+    XrtModuleTypeSpec types[] = {{XRT_MODULE_I64, 0}, {XRT_MODULE_BOOL, 0}, {XRT_MODULE_STRING, 0}};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slots[] = {
         {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8},
@@ -225,6 +225,26 @@ static void test_raw_state_fused_read_entries(void) {
     f.function.code_count = 21;
     reject_prepare(&f.module, 0, &choice, 1);
     xrt_module_layout_drop(&f.layout);
+}
+
+static void test_raw_fixed_state_frontier(void) {
+    XrtModuleTypeSpec type = {XRT_MODULE_FIXED_U8, 17};
+    XrtModuleSpec owner = {0};
+    XrtModuleSlotSpec slot = {.size=17, .alignment=1};
+    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&owner,
+        .module_count=1, .slots=&slot, .slot_count=1, .payload_size=17,
+        .payload_alignment=1, .byte_limit=UINT64_MAX};
+    XrtModuleLayout *layout = NULL;
+    CHECK(xrt_module_layout_new(&spec, &layout) == 0);
+    uint32_t code[2];
+    immediate(code, 0, XR_RBC_LOADI, 1, 0);
+    emit(code, 1, XR_RBC_RET, 1, 0, 0);
+    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS};
+    XrRbcFunction function = {.code=code, .code_count=2, .register_count=2,
+        .parameter_count=1, .register_kinds=kinds, .register_kind_count=2};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=layout};
+    reject_prepare(&module, 0, NULL, 0);
+    xrt_module_layout_drop(&layout);
 }
 
 #endif // REGISTER_STATE_CASES_H

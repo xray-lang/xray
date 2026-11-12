@@ -65,7 +65,7 @@ static void unsigned_state_observe(void *opaque) {
 }
 static void unsigned_state_new(UnsignedArrayProbe *probe) {
     probe->reference = NULL;
-    XrtModuleTypeSpec type = {probe->wide ? XRT_MODULE_ARRAY_U64 : XRT_MODULE_ARRAY_U8};
+    XrtModuleTypeSpec type = {probe->wide ? XRT_MODULE_ARRAY_U64 : XRT_MODULE_ARRAY_U8, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=sizeof(void *), .alignment=_Alignof(void *)};
     XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,

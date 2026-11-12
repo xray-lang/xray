@@ -66,7 +66,7 @@ static void reference_set(XrtModuleTypeKind kind, XrtArrayRef reference, int64_t
     }
 }
 static void reference_state_new(ArrayRefProbe *probe) {
-    XrtModuleTypeSpec type = {probe->kind};
+    XrtModuleTypeSpec type = {probe->kind, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=probe->failure == 2 ? 0 : XRT_MODULE_SLOT_MUTABLE,
         .size=8, .alignment=8};

@@ -115,7 +115,9 @@ static void module_array_drop(const XrtModuleType *type, void *value) {
     xrt_array_owned_drop(&array);
 }
 
-static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
+static bool module_type(const XrtModuleTypeSpec *spec, XrtModuleType *type) {
+    if (!spec || (spec->kind != XRT_MODULE_FIXED_U8 && spec->fixed_count)) return false;
+    XrtModuleTypeKind kind = spec->kind;
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
     case XRT_MODULE_UNIT: type->alignment = 1; return true;
@@ -133,6 +135,11 @@ static bool module_type(XrtModuleTypeKind kind, XrtModuleType *type) {
     case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
         type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
         type->copy = module_array_copy; type->drop = module_array_drop; return true;
+    case XRT_MODULE_FIXED_U8:
+        if (!spec->fixed_count || spec->fixed_count > 65535) return false;
+        type->size = spec->fixed_count;
+        type->alignment = 1;
+        return true;
     default: return false;
     }
 }

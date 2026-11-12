@@ -28,7 +28,7 @@ static XrXirValueStatus module_layout_shape(const XrtModuleLayoutSpec *spec, uin
     if (peak > spec->byte_limit) return XR_XIR_VALUE_MEMORY_LIMIT;
     for (uint32_t t = 0; t < spec->type_count; ++t) {
         XrtModuleType type;
-        if (!module_type(spec->types[t].kind, &type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (!module_type(&spec->types[t], &type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     uint32_t dependency = 0;
     for (uint32_t m = 0; m < spec->module_count; ++m) {
@@ -47,7 +47,7 @@ static XrXirValueStatus module_layout_shape(const XrtModuleLayoutSpec *spec, uin
         const XrtModuleSlotSpec *slot = &spec->slots[s];
         XrtModuleType type;
         if (slot->module >= spec->module_count || slot->type >= spec->type_count ||
-            (slot->flags & ~XRT_MODULE_SLOT_MUTABLE) || !module_type(spec->types[slot->type].kind, &type) ||
+            (slot->flags & ~XRT_MODULE_SLOT_MUTABLE) || !module_type(&spec->types[slot->type], &type) ||
             slot->size != type.size || slot->alignment != type.alignment ||
             slot->alignment > spec->payload_alignment || slot->offset % type.alignment ||
             slot->offset < end || slot->offset > spec->payload_size ||
@@ -127,7 +127,7 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         (spec->dependency_count && !layout->view.dependencies) || (spec->slot_count && !layout->view.slots) ||
         !layout->slot_counts) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
     for (uint32_t t = 0; t < spec->type_count; ++t) {
-        bool valid = module_type(layout->view.types[t].kind, &layout->types[t]);
+        bool valid = module_type(&layout->view.types[t], &layout->types[t]);
         XR_DCHECK(valid, "Every owned type was validated before callback selection");
         (void)valid;
         if (layout->types[t].copy == module_array_copy && !layout->array_types) {

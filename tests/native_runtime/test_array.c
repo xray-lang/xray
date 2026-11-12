@@ -47,7 +47,7 @@ static XrtArray *state_array(ArrayContext *context) {
     return array;
 }
 static void state_new(ArrayContext *context) {
-    XrtModuleTypeSpec type = {context->string ? XRT_MODULE_ARRAY_STRING : XRT_MODULE_ARRAY_I64};
+    XrtModuleTypeSpec type = {context->string ? XRT_MODULE_ARRAY_STRING : XRT_MODULE_ARRAY_I64, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=context->immutable ? 0 : XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
     XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
@@ -295,7 +295,7 @@ static void cached_shape_cases(XrtLocationOwner *locations) {
 }
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
 static void state_allocation_sweep(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING};
+    XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
     XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
