@@ -52,7 +52,3 @@ fn sequential() -> fn() -> i64 {
     var second = leaf
     return fn() -> i64 { return first() + second() }
 }
-fn cleanupPure() {
-    const callback = leaf
-    defer { callback() }
-}

@@ -52,6 +52,59 @@ static void entry_suspend_parameter_ownership(void) {
     printf("symbolic suspension presentation: same-owner helper edge and %zu allocation failures PASS\n", sites);
 }
 
+static XrXirStatus entry_cleanup_case(const XrXirArtifact *artifact) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    XrXirEffects *effects = NULL;
+    XrXirDiagnostic diagnostic = {0};
+    XrXirStatus status = xir_effects_infer_lifetimes_input(&effect_context,
+        (XirEffectInput){module,artifact->construction,NULL},&effects,&diagnostic);
+    uint32_t cleanups = 0;
+    for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
+        if (!module->declarations->functions[f].cleanup_owner) continue;
+        ++cleanups;
+        XrXirEffect task = XR_XIR_EFFECT_UNKNOWN;
+        XrXirEffectFacts facts = xir_effects_declaration_read(&effect_context,effects,f,&task);
+        CHECK(facts.status == XR_XIR_OK && facts.control.suspend == XR_XIR_EFFECT_NONE &&
+            facts.control.throws == XR_XIR_EFFECT_NONE && task == XR_XIR_EFFECT_NONE);
+        const EffectCheckedRoots *roots = effects->checked_roots;
+        const EffectControlSummary *control = effect_roots_read(effects)->control_summary;
+        uint32_t node = control->source_nodes[f];
+        CHECK(node < roots->nodes && node != roots->function[f].root);
+        uint32_t call = roots->node[node].cleanup_call;
+        CHECK(call < roots->calls && roots->call[call].protocol == 4 &&
+            roots->call[call].target == roots->function[f].root && roots->call[call].output == node);
+    }
+    if (status == XR_XIR_OK) CHECK(cleanups == 1);
+    xr_xir_compile_effects_free(effects);
+    return status;
+}
+
+static void entry_cleanup_ownership(void) {
+    EffectMark baseline = effect_mark();
+    XrXirArtifact *artifact = root_source("cleanup_receiver_footprints.xr",XR_XIR_OK);
+    EffectMark retained = effect_mark();
+    attempts = 0; injected = false;
+    CHECK(entry_cleanup_case(artifact) == XR_XIR_OK);
+    size_t sites = attempts;
+    effect_mark_check(retained);
+    for (size_t site = 0; site < sites; ++site) {
+        attempts = 0; injected = false; fail_at = site;
+        CHECK(entry_cleanup_case(artifact) == XR_XIR_OUT_OF_MEMORY && injected);
+        fail_at = SIZE_MAX;
+        effect_mark_check(retained);
+    }
+    XrXirCheckedPacket packet = {0};
+    XrXirArtifact *received = NULL;
+    CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(artifact);
+    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,NULL) == XR_XIR_OK);
+    CHECK(entry_cleanup_case(received) == XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(received);
+    effect_mark_check(baseline);
+    printf("cleanup and receiver loans: actual suspension, cold Checked receipt and %zu allocation failures PASS\n", sites);
+}
+
 static bool entry_footprint_map(const XrXirModule *module, uint32_t function,
     XirStorageRelocation *map, XrXirStatus *status) {
     const XrXirFunction *body = &module->functions[function];
@@ -145,6 +198,7 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
 
 static void entry_footprint_ownership(void) {
     entry_suspend_parameter_ownership();
+    entry_cleanup_ownership();
     EffectMark baseline = effect_mark();
     XrXirArtifact *artifact = root_source("entry_cell_footprints.xr",XR_XIR_OK);
     EffectMark retained = effect_mark();

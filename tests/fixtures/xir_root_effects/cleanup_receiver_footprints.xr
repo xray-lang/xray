@@ -1,0 +1,13 @@
+export fn main() -> i64 { return 0 }
+fn leaf() -> i64 { return 7 }
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+class Box {
+    n: i64
+    init() { this.n = 7 }
+    get() -> i64 { return this.n }
+}
+fn cleanupReceiver(view: Slice<u8>, box: Box) -> i64 {
+    const callback = leaf
+    defer { invoke(callback) }
+    return box.get()
+}
