@@ -26,3 +26,17 @@ fn generator(callback: escaping fn() -> i64) -> Iterator<i64> {
     slot = callback
     return iterator
 }
+fn older(callback: fn() -> i64) -> fn() -> i64 {
+    var saved = leaf
+    var done = false
+    while (true) {
+        var slot = leaf
+        if (done) {
+            slot = callback
+            break
+        }
+        saved = fn() -> i64 { return slot() }
+        done = true
+    }
+    return saved
+}

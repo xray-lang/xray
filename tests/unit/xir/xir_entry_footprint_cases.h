@@ -12,6 +12,22 @@
 #ifndef XIR_ENTRY_FOOTPRINT_CASES_H
 #define XIR_ENTRY_FOOTPRINT_CASES_H
 
+static bool entry_footprint_map(const XrXirModule *module, uint32_t function,
+    XirStorageRelocation *map, XrXirStatus *status) {
+    const XrXirFunction *body = &module->functions[function];
+    uint32_t count = body->parameter_count + body->instruction_count;
+    uint32_t *values = xir_compile_alloc(&effect_context,(size_t)count*sizeof(*values),status);
+    *map = (XirStorageRelocation){.function=function,.physical_values=count+1,
+        .instruction_count=body->instruction_count+1,.values=values};
+    if (!values) return false;
+    uint32_t *instructions = xir_compile_alloc(&effect_context,(size_t)body->instruction_count*sizeof(*instructions),status);
+    map->instructions = instructions;
+    if (!instructions) return false;
+    for (uint32_t v = 0; v < count; ++v) values[v] = v < body->parameter_count ? v : v+1;
+    for (uint32_t i = 0; i < body->instruction_count; ++i) instructions[i] = i+1;
+    return true;
+}
+
 static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relocate) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     XrXirEffects *effects = NULL;
@@ -50,23 +66,20 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
         unused |= captured && !called;
         observed = input; ++found;
     }
-    if (status == XR_XIR_OK) CHECK(found && unused);
-    uint32_t *values = NULL, *instructions = NULL;
+    if (status == XR_XIR_OK) CHECK(found && unused && facts.storage.bottom_count);
+    XirStorageBottom bottom = status == XR_XIR_OK ? facts.storage.bottoms[0] : (XirStorageBottom){0};
+    XirStorageRelocation maps[2] = {0};
     if (status == XR_XIR_OK && relocate) {
-        const XrXirFunction *body = &module->functions[observed.function];
-        uint32_t count = body->parameter_count + body->instruction_count;
-        values = xir_compile_alloc(&effect_context,(size_t)count*sizeof(*values),&status);
-        if (status == XR_XIR_OK) instructions = xir_compile_alloc(&effect_context,
-            (size_t)body->instruction_count*sizeof(*instructions),&status);
+        uint32_t count = bottom.function == observed.function ? 1u : 2u;
+        entry_footprint_map(module,observed.function,&maps[0],&status);
+        if (status == XR_XIR_OK && count == 2) entry_footprint_map(module,bottom.function,&maps[1],&status);
         if (status == XR_XIR_OK) {
-            for (uint32_t v = 0; v < count; ++v) values[v] = v < body->parameter_count ? v : v+1;
-            for (uint32_t i = 0; i < body->instruction_count; ++i) instructions[i] = i+1;
-            XirStorageRelocation map = {observed.function,count+1,body->instruction_count+1,values,instructions};
             const XirStorageInput *before = facts.storage.inputs;
-            status = xir_storage_flow_relocate(effects->checked_roots->storage,&map,1,NULL);
+            const XirStorageBottom *before_bottom = facts.storage.bottoms;
+            status = xir_storage_flow_relocate(effects->checked_roots->storage,maps,count,NULL);
             XirStorageFlowView view = {0};
             CHECK(xir_storage_flow_view(effects->checked_roots->storage,&view) == XR_XIR_OK);
-            if (status != XR_XIR_OK) CHECK(view.inputs == before);
+            if (status != XR_XIR_OK) CHECK(view.inputs == before && view.bottoms == before_bottom);
             else {
                 bool moved = false;
                 for (uint32_t i = 0; i < view.input_count; ++i) {
@@ -75,10 +88,17 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
                         input.handle == observed.handle && input.entry_environment;
                 }
                 CHECK(moved);
+                bool moved_bottom = false;
+                for (uint32_t b = 0; b < view.bottom_count; ++b)
+                    moved_bottom |= view.bottoms[b].function == bottom.function && view.bottoms[b].value == bottom.value+1;
+                CHECK(moved_bottom);
             }
         }
     }
-    xr_compile_resources_free(values); xr_compile_resources_free(instructions);
+    for (uint32_t m = 0; m < 2; ++m) {
+        xr_compile_resources_free((void *)maps[m].values);
+        xr_compile_resources_free((void *)maps[m].instructions);
+    }
     xr_xir_compile_effects_free(effects);
     return status;
 }

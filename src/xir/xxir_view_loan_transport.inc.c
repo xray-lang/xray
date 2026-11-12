@@ -22,7 +22,7 @@ typedef struct ViewLoanState {
 typedef struct ViewLoanDependency { uint32_t dependent, next; } ViewLoanDependency;
 typedef struct ViewLoanSlot { uint32_t value, generation; } ViewLoanSlot;
 typedef struct ViewLoanBindingSlot { uint32_t application, value; } ViewLoanBindingSlot;
-enum { VIEW_LOAN_EXTERNAL = 1u, VIEW_LOAN_INVOCATION = 2u };
+enum { VIEW_LOAN_EXTERNAL = 1u, VIEW_LOAN_INVOCATION = 2u, VIEW_LOAN_BOTTOM = 4u };
 
 struct XirViewLoanTransport {
     XrXirCompileContext memory;
@@ -218,6 +218,13 @@ static bool view_loan_index(XirViewLoanTransport *a) {
         if (value == UINT32_MAX) return false;
         a->terminals[value] |= VIEW_LOAN_EXTERNAL;
     }
+    for (uint32_t b = 0; b < s->bottom_count && view_loan_transport_step(a); ++b) {
+        XirStorageBottom bottom = s->bottoms[b];
+        uint32_t value = view_loan_value(a,bottom.function,bottom.value);
+        if (value == UINT32_MAX) return false;
+        if (bottom.value < r->functions[bottom.function].physical_values) {a->status=XR_XIR_BAD_STRUCTURE;return false;}
+        a->terminals[value] |= VIEW_LOAN_BOTTOM;
+    }
     return a->status == XR_XIR_OK && view_loan_bindings(a);
 }
 
@@ -242,7 +249,8 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *conte
         (facts->storage.binding_count && !facts->storage.bindings) ||
         (facts->storage.crossflow_count && !facts->storage.crossflows) ||
         (facts->storage.input_count && !facts->storage.inputs) ||
-        (facts->storage.unknown_count && !facts->storage.unknowns)) return XR_XIR_BAD_STRUCTURE;
+        (facts->storage.unknown_count && !facts->storage.unknowns) ||
+        (facts->storage.bottom_count && !facts->storage.bottoms)) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=sizeof(XirViewLoanTransport)+(flags && module->types?module->types->count:0u);
     if (bytes > context->limits.frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
@@ -367,6 +375,7 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
     if (!view_loan_substitute(a,id,&bound) || bound) return a->status == XR_XIR_OK;
     uint32_t value=view_loan_value(a,reference.function,reference.value);
     if (a->terminals[value] & VIEW_LOAN_EXTERNAL) {a->status=XR_XIR_UNRESOLVED;return false;}
+    if (a->terminals[value] & VIEW_LOAN_BOTTOM) a->states[id].grounded = true;
     if (a->terminals[value] & VIEW_LOAN_INVOCATION) {
         if (reference.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT || reference.function != demand->function) {
             a->status=XR_XIR_UNRESOLVED;return false;

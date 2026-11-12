@@ -95,10 +95,6 @@ static bool storage_identity_input_expand(StorageEnvironmentProof *proof, uint32
     if (storage_identity_support_get(flow, node, &proof->nodes[index].remainder)) return flow->status == XR_XIR_OK;
     if (flow->status != XR_XIR_OK) return false;
     StorageFunction *row = &flow->rows[node.reference.function];
-    if (row->cyclic) {
-        proof->nodes[index].remainder = XIR_EXECUTION_REMAINDER_OPAQUE;
-        return true;
-    }
     StorageAddress address;
     if (!storage_address(flow, node.reference.function, node.reference.value, &address)) return false;
     if (address.count != 1) {

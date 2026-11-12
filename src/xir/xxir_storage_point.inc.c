@@ -62,6 +62,20 @@ static XrXirStatus storage_current_reference(XirStorageFlow *flow, uint32_t func
     return storage_local_reference(flow, function, reference, true, output);
 }
 
+static XrXirStatus storage_history_identity(XirStorageFlow *flow, XirStorageReference *reference) {
+    StorageAddress address;
+    if (!storage_address(flow,reference->function,reference->value,&address)) return flow->status;
+    if (address.count != 1) return storage_reference_pending(flow,XIR_EXECUTION_REMAINDER_OPAQUE);
+    StorageFunction *row = &flow->rows[reference->function];
+    uint32_t root = row->address_values[address.first];
+    if (root < row->body->parameter_count) return storage_reference_pending(flow,XIR_EXECUTION_REMAINDER_OPAQUE);
+    XrXirOp operation = row->operations[root-row->body->parameter_count].op;
+    if (operation != XR_XIR_CELL_NEW && operation != XR_XIR_CELL_NEW_TAKE)
+        return storage_reference_pending(flow,XIR_EXECUTION_REMAINDER_OPAQUE);
+    reference->value = root;
+    return XR_XIR_OK;
+}
+
 static uint32_t storage_point_value_hash(XirStorageValuePoint point) {
     uint32_t fields[] = {point.function, point.instruction, (uint32_t)point.point,
         point.reference.function, point.reference.value, point.reference.environment};

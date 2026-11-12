@@ -261,7 +261,7 @@ static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSit
         if (cell) {
             /* A bound ordinary ref still names a storable variable when its
              * contents change between environment construction and invocation. */
-            XirStorageObservation observation = {site->function, site->instruction, XIR_STORAGE_BEFORE, reference};
+            XirStorageObservation observation = {site->function, site->instruction, XIR_STORAGE_BEFORE, reference, XIR_STORAGE_RECENT};
             status = restriction_storage_status(solver,
                 xir_storage_flow_reference(solver->storage, &observation, &value, NULL));
             reason = "a ref or stored place";
@@ -325,7 +325,7 @@ static bool restriction_cell_publications(HirRestrictionSolver *solver) {
         if (xr_xir_type_is_cell(owner->module->types, type)) type = xr_xir_cell_element(owner->module->types, type);
         if (!xr_xir_callable_signature(owner->module->types, type) || xr_xir_type_is_c_callable(owner->module->types, type)) continue;
         XirStorageObservation observation = {use.function, use.instruction, use.point,
-            {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}};
+            {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}, XIR_STORAGE_RECENT};
         uint32_t contents = UINT32_MAX;
         owner->status = restriction_storage_status(solver,
             xir_storage_flow_reference(solver->storage, &observation, &contents, NULL));
@@ -367,7 +367,7 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
         if (!restriction_function_use(owner, use)) continue;
         if (use.kind == HIR_ESCAPE_CELL_PUBLICATION) {
             XirStorageObservation publication = {use.function, use.instruction, XIR_STORAGE_NORMAL,
-                {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}};
+                {use.function, use.value, XIR_EXECUTION_CURRENT_ENVIRONMENT}, XIR_STORAGE_RECENT};
             owner->status = restriction_storage_status(solver,
                 xir_storage_flow_expose_reference(solver->storage, &publication));
             owner->status = restriction_request(solver, owner->status,
@@ -382,7 +382,7 @@ static bool restriction_observe_storage(HirRestrictionSolver *solver, bool final
         else {
             point.point = XIR_STORAGE_NORMAL;
             XirStorageObservation condition = {use.function, use.instruction, XIR_STORAGE_BEFORE,
-                {use.function, use.storage - owner->offsets[use.function], XIR_EXECUTION_CURRENT_ENVIRONMENT}};
+                {use.function, use.storage - owner->offsets[use.function], XIR_EXECUTION_CURRENT_ENVIRONMENT}, XIR_STORAGE_RECENT};
             owner->status = restriction_storage_status(solver,
                 xir_storage_flow_expose_value_when(solver->storage, &point, &condition));
         }

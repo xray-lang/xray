@@ -93,7 +93,7 @@ static XrXirStatus execution_result_edges(const XrXirCompileContext *memory, con
                 uint32_t value = call.output-caller.first;
                 uint32_t target = origins->offsets[caller.declaration]+value;
                 origins->edges[origins->count] = (EffectCheckOriginEdge){function,callee.result-callee.first,
-                    application,origins->heads[target],false,true};
+                    application,origins->heads[target],false,true,false};
                 origins->heads[target] = origins->count++;
                 break;
             }

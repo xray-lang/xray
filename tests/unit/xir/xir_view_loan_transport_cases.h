@@ -200,6 +200,24 @@ static void view_loan_affine_availability(ViewLoanAffineCase kind) {
     effect_mark_check(baseline);
 }
 
+static void view_loan_transport_bottom(void) {
+    ViewLoanTransportFixture fixture;
+    view_loan_transport_fixture(&fixture);
+    XirStorageBottom bottom = {0,4};
+    fixture.facts.storage.bottoms = &bottom;
+    fixture.facts.storage.bottom_count = 1;
+    uint64_t mask = 0;
+    CHECK(view_loan_transport_case(&fixture,5,&mask) == XR_XIR_OK && mask == 1);
+    fixture.restrictions[0].flow_count = 0;
+    mask = 0;
+    CHECK(view_loan_transport_case(&fixture,5,&mask) == XR_XIR_OK && !mask);
+    fixture.facts.storage.unknown_count = 1;
+    CHECK(view_loan_transport_case(&fixture,5,&mask) == XR_XIR_UNRESOLVED);
+    fixture.facts.storage.unknown_count = 0;
+    bottom.value = 0;
+    CHECK(view_loan_transport_case(&fixture,5,&mask) == XR_XIR_BAD_STRUCTURE);
+}
+
 static void view_loan_transport_cases(void) {
     ViewLoanTransportFixture fixture;view_loan_transport_fixture(&fixture);
     EffectMark baseline=effect_mark();uint64_t mask=0;
@@ -253,6 +271,7 @@ static void view_loan_transport_cases(void) {
     view_loan_affine_availability(VIEW_LOAN_AFFINE_MUTABLE);
     view_loan_affine_availability(VIEW_LOAN_AFFINE_MUTABLE_ALIAS);
     view_loan_affine_availability(VIEW_LOAN_AFFINE_DIRECT_ENDED);
+    view_loan_transport_bottom();
     effect_mark_check(baseline);
     printf("loan transport: isolated application inputs and %zu allocation failures PASS\n",sites);
 }

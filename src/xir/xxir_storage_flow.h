@@ -94,14 +94,23 @@ typedef struct XirStorageUnknown {
 } XirStorageUnknown;
 
 typedef struct XirStorageExposureSeed { uint32_t function, value, application; } XirStorageExposureSeed;
+/* An owned absent-allocation version has no value or environment. */
+typedef struct XirStorageBottom { uint32_t function, value; } XirStorageBottom;
 
 /* A value may be an owned storage identity proxy. Execution's physical actual
  * namespace remains unchanged. Environment IDs use the execution sentinels. */
 typedef XirExecutionValue XirStorageReference;
+
+/* Age is relative to one captured allocation in its qualified template frame.
+ * Historical denotes the finite summary of its earlier dynamic instances. */
+typedef enum XirStorageIdentityAge {
+    XIR_STORAGE_RECENT, XIR_STORAGE_HISTORICAL
+} XirStorageIdentityAge;
 typedef struct XirStorageObservation {
     uint32_t function, instruction;
     XirStoragePointKind point;
     XirStorageReference reference;
+    XirStorageIdentityAge age;
 } XirStorageObservation;
 typedef struct XirStorageValuePoint {
     uint32_t function, instruction;
@@ -131,6 +140,7 @@ typedef struct XirStorageCapture {
      * footprint leaf through contents and has no exposure coordinate. A
      * contents carrier names a hidden Cell's entry environment input. */
     XirStorageCaptureKind kind;
+    XirStorageIdentityAge age;
 } XirStorageCapture;
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
 enum {
@@ -160,6 +170,8 @@ typedef struct XirStorageFlowView {
     uint32_t exposure_seed_count;
     const XirStoragePointValue *point_values;
     uint32_t point_value_count;
+    const XirStorageBottom *bottoms;
+    uint32_t bottom_count;
 } XirStorageFlowView;
 
 typedef struct XirStorageFlow XirStorageFlow;
