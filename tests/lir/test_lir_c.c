@@ -332,6 +332,13 @@ static void emit(const char *name, const char *path) {
     xr_compile_resources_release(r);
     /* The generated text is consumed only after both producers are gone. */
     CHECK(strstr(output.bytes, "xray_lir_entry(void)") && !strstr(output.bytes, "({"));
+    const char *bounds = strstr(output.bytes, "xrt_fixed_array_bounds(");
+    if (bounds) {
+        const char *branch = strstr(output.bytes, "if ((uint64_t)xrl_index >= UINT64_C(");
+        const char *capture = strstr(output.bytes, "volatile int64_t xrl_guard = xrl_index;");
+        const char *load = strstr(output.bytes, ".bytes[xrl_index]");
+        CHECK(branch && capture && load && branch < capture && capture < bounds && bounds < load);
+    }
     if (!strcmp(name, "extremes")) {
         CHECK(strstr(output.bytes, "v1 = (int64_t)(-INT64_C(1) - INT64_C(9223372036854775807));"));
         CHECK(strstr(output.bytes, "v4 = (int8_t)(-INT64_C(1) - INT64_C(0));"));

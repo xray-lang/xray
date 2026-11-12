@@ -76,13 +76,18 @@ static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {
     XrLirType type = c_value_type(c, v->operands[0]);
     const LirCFixedType *fixed = &c->fixed_types[type - XR_LIR_TYPE_COUNT];
     uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
-    c_text(c, "    if ((uint64_t)");
+    c_text(c, "    {\n    int64_t xrl_index = ");
     c_value(c, v->operands[1]);
-    c_format(c, " >= UINT64_C(%" PRIu32 "))\n        xrt_fixed_array_bounds(UINT32_C(%" PRIu32 "));\n",
+    /* Keep valid loads ordinary C. Only the rejected branch captures through
+     * volatile, so host propagation cannot diagnose subsequent guest code as
+     * unreachable after a statically known panic. Both checks use one value. */
+    c_format(c, ";\n    if ((uint64_t)xrl_index >= UINT64_C(%" PRIu32 ")) {\n"
+        "        volatile int64_t xrl_guard = xrl_index;\n        xrl_index = xrl_guard;\n"
+        "        if ((uint64_t)xrl_index >= UINT64_C(%" PRIu32 "))\n"
+        "            xrt_fixed_array_bounds(UINT32_C(%" PRIu32 "));\n    }\n",
+        fixed->shape.count,
         fixed->shape.count, source);
     c_format(c, "    v%" PRIu32 " = ", v->result);
     c_value(c, v->operands[0]);
-    c_text(c, ".bytes[");
-    c_value(c, v->operands[1]);
-    c_text(c, "];\n");
+    c_text(c, ".bytes[xrl_index];\n    }\n");
 }
