@@ -98,7 +98,8 @@ static bool rbc_aggregate_state_valid(const XrRbcModule *module, const XrRbcFunc
 
 static bool rbc_aggregate_return_word(const XrRbcFunction *f, uint32_t word) {
     return (word & 255) == XR_RBC_AGGREGATE_ACCESS && (word >> 16) < f->aggregate_access_count &&
-        f->aggregate_accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN;
+        (f->aggregate_accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN ||
+         f->aggregate_accesses[word >> 16].operation == XR_RBC_FUNCTION_RETURN);
 }
 
 static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunction *f,
@@ -107,7 +108,7 @@ static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunct
         access.result.index || access.result.spill || access.first > f->aggregate_argument_count ||
         access.count > f->aggregate_argument_count - access.first) return false;
     const XrRbcFunction *callee = &module->functions[access.callee];
-    if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type) ||
+    if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type && !callee->callable) ||
         access.count != callee->aggregate_parameter_count || access.window >= f->register_count ||
         callee->parameter_count != f->register_count - access.window - 1 ||
         rbc_register_kind(f, access.window) != XR_RBC_CALL_WINDOW) return false;
@@ -156,6 +157,10 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_FUNCTION_RETURN) {
+            if (!rbc_callable_access_valid(module, f, access)) return false;
+            continue;
+        }
         if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
             if (!rbc_display_valid(module, f, access)) return false;
             continue;

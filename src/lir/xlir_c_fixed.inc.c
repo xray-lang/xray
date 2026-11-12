@@ -38,6 +38,21 @@ static void c_prepare_types(LirC *c) {
     for (uint32_t n = 0; n < count && c_request_poll(c); ++n) {
         XrLirType type = XR_LIR_TYPE_COUNT + n;
         LirCConstructedType *owned = &c->constructed_types[n];
+        owned->pod_index = UINT32_MAX;
+        if (xr_lir_type_view(module, type, &owned->shape) == XR_LIR_OK &&
+            owned->shape.kind == XR_LIR_TYPE_CALLABLE) {
+            owned->layout = (XrLirTypeLayout){24, 8, 0, true};
+            snprintf(owned->name, sizeof(owned->name), "XrlFn_%" PRIu32, type);
+            XrLirCallableType signature;
+            if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) {
+                c_error(c, XR_LIR_C_INVALID_LIR, "callable signature is unavailable");
+                return;
+            }
+            c_scalar(c, signature.result);
+            for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p)
+                c_scalar(c, signature.parameters[p].type);
+            continue;
+        }
         if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||
             xr_lir_type_layout(module, type, &owned->layout) != XR_LIR_OK ||
             (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE) ||
@@ -46,13 +61,16 @@ static void c_prepare_types(LirC *c) {
             return;
         }
         snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 : "XrlNullable_%" PRIu32, type);
+        owned->pod_index = c->pod_count++;
     }
 }
 
 static void c_constructed_types(LirC *c) {
     for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
         const LirCConstructedType *type = &c->constructed_types[n];
-        if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
+        if (type->shape.kind == XR_LIR_TYPE_CALLABLE) {
+            c_callable_type(c, XR_LIR_TYPE_COUNT + n);
+        } else if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
             c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",
                 type->name, type->shape.count, type->name);
         } else {

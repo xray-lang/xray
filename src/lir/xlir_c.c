@@ -29,6 +29,7 @@
 typedef struct LirCConstructedType {
     XrLirTypeView shape;
     XrLirTypeLayout layout;
+    uint32_t pod_index;
     char name[32];
 } LirCConstructedType;
 
@@ -42,7 +43,7 @@ typedef struct LirC {
     uint32_t closure_count;
     uint8_t *seen, *fixed_divisors, *used_literals;
     LirCConstructedType *constructed_types;
-    uint32_t constructed_count, state_type_base;
+    uint32_t constructed_count, pod_count, state_type_base;
     XrLirFunction function;
     XrLirFunctionView view;
     uint32_t block, instruction, scratch;
@@ -171,8 +172,11 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
 static bool c_located(const XrLirSource *source) {
     return source->path && source->path_length && source->line && source->column;
 }
+static void c_callable_type(LirC *, XrLirType);
+static bool c_scalar(LirC *, XrLirType);
 #include "xlir_c_fixed.inc.c"
 #include "xlir_c_nullable.inc.c"
+#include "xlir_c_callable.inc.c"
 static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(c, type))
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
@@ -364,6 +368,16 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                 else
                     ++c->location_count;
             }
+            break;
+        case XR_LIR_FUNCTION_REF:
+            if (v->operand_count)
+                c_error(c, XR_LIR_C_UNSUPPORTED, "captured environments require native lifetime transport");
+            else {
+                c_visit(c, v->callee);
+                c->seen[v->callee - 1] |= 2u;
+            }
+            break;
+        case XR_LIR_CALL_INDIRECT:
             break;
         default:
             c_error(c, XR_LIR_C_UNSUPPORTED, "operation has no admitted portable C implementation");
@@ -694,6 +708,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
+    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
+        c_callable_instruction(c, v);
+        return;
+    }
     if (v->op >= XR_LIR_NULLABLE_NONE && v->op <= XR_LIR_NULLABLE_UNWRAP) {
         c_nullable_instruction(c, v);
         return;
@@ -985,6 +1003,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             continue;
         c_signature(c, false);
     }
+    c_callable_thunks(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);

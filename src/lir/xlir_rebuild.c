@@ -17,6 +17,7 @@
 #include "xlir_verify.h"
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
+#include "xlir_callable_copy.h"
 #include "xlir_types.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
@@ -88,6 +89,8 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status == XR_LIR_OK)
             status = lir_copy_array_signature(c->input, function, c->functions[function.id]);
+        if (status == XR_LIR_OK)
+            status = lir_copy_closure_target(c->input, function, c->functions[function.id]);
         if (status != XR_LIR_OK) return status;
     }
     XrLirFunction entry;

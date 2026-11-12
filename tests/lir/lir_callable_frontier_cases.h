@@ -43,7 +43,18 @@ static void callable_backend_frontier(void) {
         OK(xr_lir_module_finish(m, NULL));
         XrRbcProgram *program = NULL;
         XrRbcCompileDiagnostic diagnostic = {0};
-        CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, &diagnostic);
+        if (scenario) CHECK(status == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        else {
+            CHECK(status == XR_RBC_COMPILE_OK && program);
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+            xr_rbc_outcome_free(&outcome);
+            xr_rbc_execution_free(&execution);
+            xr_rbc_program_destroy(program);
+        }
         XrLirCOutput output = {0};
         XrLirCDiagnostic c_diagnostic = {0};
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
@@ -51,8 +62,8 @@ static void callable_backend_frontier(void) {
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrLirCRequest request = {.module=m, .entry=root, .resources=resources,
             .translation_unit="callable-frontier.c"};
-        CHECK(xr_lir_emit_c(&request, &output, &c_diagnostic) == XR_LIR_C_UNSUPPORTED);
-        CHECK(!output.bytes && !output.length);
+        CHECK(xr_lir_emit_c(&request, &output, &c_diagnostic) == XR_LIR_C_OK);
+        CHECK(output.bytes && output.length);
         xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);

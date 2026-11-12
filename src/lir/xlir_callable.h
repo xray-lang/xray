@@ -34,10 +34,21 @@ typedef struct XrLirCallableType {
     bool throws; /* Throwing signatures require an error ABI and are unsupported. */
 } XrLirCallableType;
 
+typedef struct XrLirClosureTarget {
+    XrLirType callable;
+    uint32_t capture_count;
+    bool state_capture;
+} XrLirClosureTarget;
+
 /* Construction copies the complete signature and preserves output on failure.
  * Constructed dependencies must already belong to this receiving module.
  * Query slices borrow their module and never outlive it. */
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *, const XrLirCallableType *, XrLirType *);
 XR_FUNC XrLirStatus xr_lir_callable_type_view(const XrLirModule *, XrLirType, XrLirCallableType *);
+/* Captures are the declaration's ordered prefix. A hidden State parameter,
+ * when present, remains its final parameter and is bound by the environment.
+ * Setting this metadata never turns an ordinary function ID into a value. */
+XR_FUNC XrLirStatus xr_lir_set_closure_target(XrLirModule *, XrLirFunction, XrLirClosureTarget);
+XR_FUNC XrLirStatus xr_lir_closure_target_view(const XrLirModule *, XrLirFunction, XrLirClosureTarget *);
 
 #endif // XLIR_CALLABLE_H

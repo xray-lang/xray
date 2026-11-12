@@ -15,6 +15,7 @@
 #include "xlir_verify.h"
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
+#include "xlir_callable_copy.h"
 #include "xlir_types.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
@@ -213,6 +214,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
             .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
+            (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
+        if (status == XR_LIR_OK) status = lir_copy_closure_target(c->input,
             (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
         if (status != XR_LIR_OK) return status;
     }

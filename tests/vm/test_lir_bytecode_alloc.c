@@ -124,6 +124,32 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "lir_array_copy_cases.h"
 #include "../lir/lir_view_fixture.h"
+#include "../lir/lir_callable_fixture.h"
+
+static void callable_compiler_failures(void) {
+    XrLirModule *module = NULL;
+    XrLirFunction root = {0};
+    callable_fixture(&module, &root);
+    XrRbcProgram *program = NULL;
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(!live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && !live_allocations && attempts >= point);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    uint64_t result = 0;
+    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("Callable bytecode compiler failure points: %zu\n", total);
+}
 
 static void view_compiler_failures(void) {
     XrLirModule *module = NULL;
@@ -841,6 +867,7 @@ int main(void) {
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
     view_compiler_failures();
+    callable_compiler_failures();
     display_compiler_failures();
     compiled_source_maps();
     frame_cfg_compiler_failures();

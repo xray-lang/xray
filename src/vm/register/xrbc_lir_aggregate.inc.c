@@ -17,23 +17,32 @@ static bool rbc_lir_aggregate_type(const XrLirModule *module, XrLirType type) {
         (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_NULLABLE);
 }
 
+static uint32_t rbc_lir_aggregate_ordinal(const RbcLirCompiler *c, XrLirType type) {
+    uint32_t ordinal = type - XR_LIR_TYPE_COUNT;
+    const XrRbcProgram *program = c->literals->program;
+    return program->physical_aggregates ? program->physical_aggregates[ordinal] : ordinal;
+}
+
 static bool rbc_lir_aggregate_state(const XrLirModule *module, XrLirFunction function,
     const XrLirInstructionView *instruction) {
-    if (instruction->op == XR_LIR_STATE_READ) return instruction->type >= XR_LIR_TYPE_COUNT;
+    if (instruction->op == XR_LIR_STATE_READ) return rbc_lir_aggregate_type(module, instruction->type);
     if ((instruction->op != XR_LIR_STATE_WRITE && instruction->op != XR_LIR_STATE_CONSTRUCT &&
          instruction->op != XR_LIR_STATE_INITIALIZE) || instruction->operand_count != 2) return false;
     XrLirType type = XR_LIR_TYPE_INVALID;
     xr_lir_value_type(module, (XrLirValue){module, function.id, instruction->operands[1]}, &type);
-    return type >= XR_LIR_TYPE_COUNT;
+    return rbc_lir_aggregate_type(module, type);
 }
 
 static bool rbc_lir_aggregate_call(const XrLirModule *module, const XrLirInstructionView *instruction) {
     if (!xr_lir_constructed_type_count(module)) return false;
     XrLirFunctionView callee;
     xr_lir_function_view(module, (XrLirFunction){module, instruction->callee}, &callee);
-    if (callee.result >= XR_LIR_TYPE_COUNT) return true;
+    XrLirClosureTarget target = {0};
+    if (xr_lir_closure_target_view(module, (XrLirFunction){module, instruction->callee}, &target) == XR_LIR_OK &&
+        target.callable) return true;
+    if (rbc_lir_aggregate_type(module, callee.result)) return true;
     for (uint32_t p = 0; p < callee.parameter_count; ++p)
-        if (callee.parameter_types[p] >= XR_LIR_TYPE_COUNT) return true;
+        if (rbc_lir_aggregate_type(module, callee.parameter_types[p])) return true;
     return false;
 }
 
@@ -42,7 +51,8 @@ static uint32_t rbc_lir_scalar_arguments(const XrLirModule *module, const XrLirI
     XrLirFunctionView callee;
     xr_lir_function_view(module, (XrLirFunction){module, instruction->callee}, &callee);
     uint32_t count = 0;
-    for (uint32_t p = 0; p < callee.parameter_count; ++p) count += callee.parameter_types[p] < XR_LIR_TYPE_COUNT;
+    for (uint32_t p = 0; p < callee.parameter_count; ++p)
+        count += !rbc_lir_aggregate_type(module, callee.parameter_types[p]);
     return count;
 }
 
@@ -52,7 +62,7 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
     for (uint32_t id = 1; id <= c->view.value_count; ++id) {
         XrLirType type = XR_LIR_TYPE_INVALID;
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, id}, &type);
-        count += type >= XR_LIR_TYPE_COUNT;
+        count += rbc_lir_aggregate_type(c->input, type);
     }
     if (!count) return true;
     uint32_t parameters = 0;
@@ -64,7 +74,7 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, view.parameters[p]}, &type);
-            parameters += type >= XR_LIR_TYPE_COUNT;
+            parameters += rbc_lir_aggregate_type(c->input, type);
         }
     }
     size_t values = (size_t)c->view.value_count + 1;
@@ -81,8 +91,8 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
     for (uint32_t id = 1; id <= c->view.value_count; ++id) {
         XrLirType type = XR_LIR_TYPE_INVALID;
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, id}, &type);
-        if (type < XR_LIR_TYPE_COUNT) continue;
-        uint32_t ordinal = type - XR_LIR_TYPE_COUNT;
+        if (!rbc_lir_aggregate_type(c->input, type)) continue;
+        uint32_t ordinal = rbc_lir_aggregate_ordinal(c, type);
         XrRbcAggregateLayout layout;
         if (ordinal >= module->aggregate_type_count ||
             !xr_rbc_aggregate_layout(module->aggregate_types[ordinal], &layout))
@@ -158,7 +168,7 @@ static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView 
     } else {
         access.source = c->aggregate_home[instruction->operands[0]];
         access.operation = instruction->op == XR_LIR_NULLABLE_IS_SOME ? XR_RBC_NULLABLE_IS_SOME : XR_RBC_NULLABLE_UNWRAP;
-        if (instruction->type >= XR_LIR_TYPE_COUNT) access.destination = c->aggregate_home[instruction->result];
+        if (rbc_lir_aggregate_type(c->input, instruction->type)) access.destination = c->aggregate_home[instruction->result];
         else if (instruction->type != XR_LIR_UNIT) access.result = rbc_lir_array_location(c, instruction->result);
     }
     return rbc_lir_aggregate_append(c, access);
@@ -170,9 +180,9 @@ static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *
     xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, operand}, &type);
     XrRbcAggregateAccess access = {.operation=XR_RBC_AGGREGATE_DISPLAY,
         .result=rbc_lir_array_location(c, instruction->result)};
-    if (type >= XR_LIR_TYPE_COUNT) {
+    if (rbc_lir_aggregate_type(c->input, type)) {
         access.source = c->aggregate_home[operand];
-        access.slot = XR_POD_SCALAR_COUNT + type - XR_LIR_TYPE_COUNT;
+        access.slot = XR_POD_SCALAR_COUNT + rbc_lir_aggregate_ordinal(c, type);
     } else {
         access.slot = XR_POD_BOOL;
         access.count = 1;

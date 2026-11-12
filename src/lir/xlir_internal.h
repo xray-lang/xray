@@ -49,6 +49,7 @@ typedef struct XrLirFunctionData {
     uint32_t parameter_count;
     XrLirType result;
     XrLirType array_result;
+    XrLirClosureTarget closure;
     XrLirFunctionKind kind;
     XrLirExternKind extern_kind;
     bool defined;
@@ -112,6 +113,9 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
 }
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
+XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);
+XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *,
+    const XrLirFunctionData *, const XrLirInstructionView *);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {

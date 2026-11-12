@@ -11,6 +11,12 @@
 static XrLirModule *constructed_frontier_module(unsigned scenario, XrLirFunction *root) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
+    bool state = scenario == 2 || scenario == 5;
+    if (scenario == 5) {
+        XrLirCallableType signature = {.result=XR_LIR_I64};
+        XrLirType unused = 0;
+        OK(xr_lir_callable_type(m, &signature, &unused));
+    }
     XrLirType fixed = 0;
     OK(xr_lir_fixed_array_type(m, XR_LIR_U8, 11, &fixed));
     if (scenario == 3) {
@@ -18,27 +24,27 @@ static XrLirModule *constructed_frontier_module(unsigned scenario, XrLirFunction
         XrLirRegistry registry = {&signature, 1};
         OK(xr_lir_set_registry(m, &registry));
     }
-    if (scenario == 2) {
+    if (state) {
         XrLirStateModule module = {0};
         XrLirStateSlot slot = {.payload = fixed, .size = 11, .alignment = 1};
         XrLirStateLayout layout = {.modules = &module, .module_count = 1, .slots = &slot,
             .slot_count = 1, .payload_size = 11, .payload_alignment = 1};
         OK(xr_lir_set_state_layout(m, &layout));
     }
-    XrLirType parameter = scenario == 2 ? XR_LIR_STATE : fixed;
-    bool has_parameter = scenario <= 2;
+    XrLirType parameter = state ? XR_LIR_STATE : fixed;
+    bool has_parameter = scenario <= 2 || state;
     XrLirFunctionSpec spec = {.name = "constructed_frontier", .name_length = 20,
         .parameters = has_parameter ? &parameter : NULL, .parameter_count = has_parameter ? 1u : 0u,
         .result = scenario == 1 ? fixed : XR_LIR_UNIT};
     OK(xr_lir_declare_function(m, &spec, root));
     OK(xr_lir_define_function(m, *root));
-    if (scenario == 2) OK(xr_lir_set_state_entry(m, *root));
+    if (state) OK(xr_lir_set_state_entry(m, *root));
     XrLirBlock block = {0};
     OK(xr_lir_add_block(m, *root, NULL, 0, &block));
     OK(xr_lir_set_entry(m, *root, block));
     XrLirValue input = {0};
     if (has_parameter) OK(xr_lir_function_parameter(m, *root, 0, &input));
-    if (scenario == 2) {
+    if (state) {
         XrLirInstruction reference = {.op = XR_LIR_STATE_REFERENCE, .type = XR_LIR_STATE_REF,
             .operands = &input, .operand_count = 1};
         XrLirValue result = {0};
@@ -61,10 +67,10 @@ static XrLirModule *constructed_frontier_module(unsigned scenario, XrLirFunction
 }
 
 static void constructed_backend_frontiers(void) {
-    for (unsigned scenario = 0; scenario < 5; ++scenario) {
+    for (unsigned scenario = 0; scenario < 6; ++scenario) {
         XrLirFunction root = {0};
         XrLirModule *m = constructed_frontier_module(scenario, &root);
-        CHECK(xr_lir_constructed_type_count(m) == 1);
+        CHECK(xr_lir_constructed_type_count(m) == (scenario == 5 ? 2u : 1u));
         XrRbcProgram *program = NULL;
         XrRbcCompileDiagnostic bytecode_diagnostic;
         XrRbcCompileStatus compiled = xr_rbc_compile(m, root, &program, &bytecode_diagnostic);

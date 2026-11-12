@@ -63,6 +63,32 @@ static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess ac
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (access.operation == XR_RBC_FUNCTION_RETURN)
+        return rbc_string_step(s, (XrRbcOperands){.op=access.count ? XR_RBC_RET : XR_RBC_RET0, .a=access.source});
+    if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
+        uint32_t r = access.result.index;
+        if (s->state[r] != RBC_EMPTY && s->state[r] != RBC_FUNCTION) return false;
+        s->state[r] = RBC_FUNCTION;
+        s->origin[r] = access.slot;
+        return true;
+    }
+    if (access.operation == XR_RBC_FUNCTION_CALL) {
+        if (s->state[access.source] != RBC_FUNCTION || s->origin[access.source] != access.slot) return false;
+        XrRbcCallableType type = s->module->callable_types[access.slot - 1];
+        for (uint32_t p = 0; p < type.parameter_count; ++p) {
+            uint32_t r = access.window + 1 + p;
+            XrRbcCallableValue value = type.parameters[p].value;
+            if (value.kind == XR_RBC_CALLABLE_FUNCTION) {
+                if (s->state[r] != RBC_FUNCTION || s->origin[r] != value.type + 1) return false;
+            } else if (!rbc_call_parameter_matches(s, r, rbc_callable_value_kind(value))) return false;
+        }
+        if (!rbc_bits_destination(s, access.window)) return false;
+        for (uint32_t p = 0; p < type.parameter_count; ++p) s->state[access.window + 1 + p] = RBC_EMPTY;
+        XrRbcRegisterKind result = rbc_callable_value_kind(type.result);
+        s->state[access.window] = rbc_managed_kind(result) ? RBC_STRING_OWNED : RBC_BITS;
+        s->origin[access.window] = result;
+        return true;
+    }
     if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
         if (!rbc_array_destination(s, access.result)) return false;
         if (access.slot >= XR_POD_SCALAR_COUNT) {

@@ -135,6 +135,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
 #include "xlir_array.inc.c"
 #include "xlir_view.inc.c"
 #include "xlir_display.inc.c"
+#include "xlir_callable_target.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
     xr_free((void *) instruction->view.operands);
@@ -537,7 +538,7 @@ static bool lir_instruction_copy(XrLirModule *m, uint32_t function, const XrLirI
         lir_fail(m, XR_LIR_INVALID_ARGUMENT);
         return false;
     }
-    if (input->op == XR_LIR_CALL) {
+    if (input->op == XR_LIR_CALL || input->op == XR_LIR_FUNCTION_REF) {
         if (!lir_function(m, input->callee)) {
             lir_fail(m, XR_LIR_INVALID_ARGUMENT);
             return false;

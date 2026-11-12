@@ -127,6 +127,8 @@ static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uin
 #include "xlir_array_verify.inc.c"
 #include "xlir_view_verify.inc.c"
 
+#include "xlir_callable_verify.inc.c"
+
 static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
@@ -301,7 +303,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE && !lir_view_operation(v->op) && v->bits)
         goto invalid;
-    if ((v->op != XR_LIR_CALL && v->callee) || (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
+    if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
+        (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
     uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR ? 2 : 0);
     if (v->edge_count != edges || !lir_edges_valid(f, v)) {
@@ -326,6 +329,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     }
     if (v->op == XR_LIR_STRING_LITERAL) {
         if (v->type != XR_LIR_STRING || !v->bits || v->bits > m->literal_count) goto invalid;
+        return XR_LIR_OK;
+    }
+    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
+        if (!xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_CALL) {
@@ -613,7 +620,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_CELL ||
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
-        (f->parameter_count && (!f->parameters || !f->parameter_types)))
+        (f->parameter_count && (!f->parameters || !f->parameter_types)) ||
+        !xr_lir_internal_closure_target_valid(m, f))
         return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false))
