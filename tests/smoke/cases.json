@@ -126,7 +126,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: VIEW_CLEANUP is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:18:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -138,7 +138,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: VIEW_CLEANUP is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:18:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -775,7 +775,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:4: VIEW_CLEANUP is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:52: VIEW_NEW is not supported by LIR lowering yet"
       }
     },
     {
@@ -787,7 +787,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:4: VIEW_CLEANUP is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:52: VIEW_NEW is not supported by LIR lowering yet"
       }
     },
     {
