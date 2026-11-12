@@ -226,6 +226,10 @@ XR_FUNC XrXirStatus xir_storage_flow_expose_value_when(XirStorageFlow *, const X
 /* Read immediately after an unresolved qualified query. STORAGE can await the
  * next shared receiving round. PARAMETER and OPAQUE require a semantic bound. */
 XR_FUNC uint32_t xir_storage_flow_remainder(const XirStorageFlow *);
+/* A closed writer environment covers only the unknown environment branch of
+ * a reaching Cell version. Callable origins and effect uppers are unchanged. */
+XR_FUNC XrXirStatus xir_storage_flow_environment_closed(XirStorageFlow *, uint32_t function,
+    uint32_t value, uint32_t instance, bool *closed);
 /* Every borrow must be rebound after a query or link can grow storage. */
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *, XirStorageFlowView *);
 /* Sealing retires body borrows. The resulting numeric view stays valid until

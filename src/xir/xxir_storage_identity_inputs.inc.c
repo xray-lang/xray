@@ -13,23 +13,24 @@
  *   substitutes its actual contents and loan inputs.
  */
 static StorageEnvironmentNode storage_identity_key(StorageIdentitySupport value) {
-    return (StorageEnvironmentNode){.reference=value.reference, .target=value.instance, .kind=STORAGE_ENVIRONMENT_VALUE};
+    return (StorageEnvironmentNode){.reference=value.reference, .target=value.instance,
+        .kind=(StorageEnvironmentKind)value.kind};
 }
 
-static uint32_t storage_identity_support_slot(XirStorageFlow *flow, StorageEnvironmentNode node) {
-    StorageIdentitySupportCache *cache = &flow->identity_support;
+static uint32_t storage_identity_support_slot(XirStorageFlow *flow, StorageIdentitySupportCache *cache,
+    StorageEnvironmentNode node) {
     uint32_t slot = storage_environment_hash(node) & (cache->index_capacity - 1);
     while (cache->index[slot] && storage_step(flow)) {
         StorageEnvironmentNode found = storage_identity_key(cache->values[cache->index[slot] - 1]);
-        if (found.target == node.target && found.reference.function == node.reference.function &&
+        if (found.kind == node.kind && found.target == node.target &&
+            found.reference.function == node.reference.function &&
             found.reference.value == node.reference.value && found.reference.environment == node.reference.environment) break;
         slot = (slot + 1) & (cache->index_capacity - 1);
     }
     return slot;
 }
 
-static bool storage_identity_support_index(XirStorageFlow *flow) {
-    StorageIdentitySupportCache *cache = &flow->identity_support;
+static bool storage_identity_support_index(XirStorageFlow *flow, StorageIdentitySupportCache *cache) {
     uint64_t next = cache->index_capacity ? (uint64_t)cache->index_capacity * 2 : 16;
     if (next > UINT32_MAX || next > SIZE_MAX / sizeof(*cache->index)) {
         flow->status = XR_XIR_OVERFLOW;
@@ -52,33 +53,33 @@ static bool storage_identity_support_index(XirStorageFlow *flow) {
     return true;
 }
 
-static bool storage_identity_support_get(XirStorageFlow *flow, StorageEnvironmentNode node, uint32_t *remainder) {
-    StorageIdentitySupportCache *cache = &flow->identity_support;
+static bool storage_identity_support_get(XirStorageFlow *flow, StorageIdentitySupportCache *cache,
+    StorageEnvironmentNode node, uint32_t *remainder) {
     if (!cache->index_capacity) return false;
-    uint32_t slot = storage_identity_support_slot(flow, node);
+    uint32_t slot = storage_identity_support_slot(flow, cache, node);
     if (!cache->index[slot]) return false;
     *remainder = cache->values[cache->index[slot] - 1].remainder;
     return true;
 }
 
-static bool storage_identity_support_put(XirStorageFlow *flow, StorageEnvironmentNode node) {
-    StorageIdentitySupportCache *cache = &flow->identity_support;
+static bool storage_identity_support_put(XirStorageFlow *flow, StorageIdentitySupportCache *cache,
+    StorageEnvironmentNode node) {
     if (!cache->index_capacity || cache->count >= cache->index_capacity / 2)
-        if (!storage_identity_support_index(flow)) return false;
-    uint32_t slot = storage_identity_support_slot(flow, node);
+        if (!storage_identity_support_index(flow, cache)) return false;
+    uint32_t slot = storage_identity_support_slot(flow, cache, node);
     if (flow->status != XR_XIR_OK) return false;
     if (!cache->index[slot]) {
         if (!storage_reserve(flow, (void **)&cache->values, cache->count, &cache->capacity, sizeof(*cache->values))) return false;
         cache->index[slot] = ++cache->count;
     }
-    cache->values[cache->index[slot] - 1] = (StorageIdentitySupport){node.reference, node.target, node.remainder};
+    cache->values[cache->index[slot] - 1] = (StorageIdentitySupport){
+        node.reference, node.target, node.remainder, node.kind};
     return true;
 }
 
-static void storage_identity_support_prepare(XirStorageFlow *flow) {
-    StorageIdentitySupportCache *cache = &flow->identity_support;
-    /* The binding index invalidates this cache on each linking round. Query
-     * results contain identity support only, never point contents or loans. */
+static void storage_identity_support_prepare(XirStorageFlow *flow, StorageIdentitySupportCache *cache) {
+    /* The binding index invalidates these property facts on each linking
+     * round. No cached fact freezes point contents or environment loans. */
     if (cache->sites == flow->site_count && cache->identities == flow->view.identity_count &&
         cache->applications == flow->view.application_count) return;
     cache->count = 0;
@@ -92,7 +93,8 @@ static bool storage_identity_input_expand(StorageEnvironmentProof *proof, uint32
     XirStorageFlow *flow = proof->flow;
     XR_DCHECK(index < proof->count, "identity query node belongs to its owner");
     StorageEnvironmentNode node = proof->nodes[index];
-    if (storage_identity_support_get(flow, node, &proof->nodes[index].remainder)) return flow->status == XR_XIR_OK;
+    if (storage_identity_support_get(flow, &flow->identity_support, node, &proof->nodes[index].remainder))
+        return flow->status == XR_XIR_OK;
     if (flow->status != XR_XIR_OK) return false;
     StorageFunction *row = &flow->rows[node.reference.function];
     StorageAddress address;
@@ -169,19 +171,20 @@ static bool storage_identity_input_close(StorageEnvironmentProof *proof) {
     for (uint32_t n = 0; n < proof->count && storage_step(flow); ++n) {
         if (proof->nodes[n].pending) proof->nodes[n].remainder |= XIR_EXECUTION_REMAINDER_PARAMETER;
         if (!(proof->nodes[n].remainder & XIR_EXECUTION_REMAINDER_STORAGE) &&
-            !storage_identity_support_put(flow, proof->nodes[n])) return false;
+            !storage_identity_support_put(flow, &flow->identity_support, proof->nodes[n])) return false;
     }
     return flow->status == XR_XIR_OK;
 }
 
 static bool storage_identity_input(XirStorageFlow *flow, const XirExecutionSite *input) {
-    storage_identity_support_prepare(flow);
+    storage_identity_support_prepare(flow, &flow->identity_support);
     StorageEnvironmentProof proof = {.flow=flow, .current=UINT32_MAX};
     StorageEnvironmentNode initial = {
         .reference={input->receiver_function, input->index, XIR_EXECUTION_CURRENT_ENVIRONMENT},
         .target=input->caller_instance, .kind=STORAGE_ENVIRONMENT_VALUE};
     uint32_t remainder = 0;
-    if (storage_identity_support_get(flow, initial, &remainder)) return !remainder && flow->status == XR_XIR_OK;
+    if (storage_identity_support_get(flow, &flow->identity_support, initial, &remainder))
+        return !remainder && flow->status == XR_XIR_OK;
     storage_environment_push(&proof, initial);
     for (uint32_t n = 0; n < proof.count && storage_step(flow); ++n) {
         proof.current = n;

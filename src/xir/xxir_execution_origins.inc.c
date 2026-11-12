@@ -445,6 +445,13 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     }
                 }
                 if (edge.function == UINT32_MAX) {
+                    if (walk.footprint && roots->storage && !origin.equation) {
+                        bool closed = false;
+                        walk.status = xir_storage_flow_environment_closed(roots->storage,
+                            function.declaration, origin.value, origin.function, &closed);
+                        if (walk.status != XR_XIR_OK) break;
+                        if (closed) {found = true; predecessor = true; continue;}
+                    }
                     unresolved |= origin.storable ? XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT :
                         XIR_EXECUTION_REMAINDER_OPAQUE;
                     predecessor = true;

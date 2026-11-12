@@ -1,0 +1,8 @@
+fn leaf() -> i64 { return 7 }
+fn saved(callback: fn() -> i64) -> fn() -> i64 {
+    var first = leaf
+    var second = leaf
+    first = fn() -> i64 { return second() }
+    second = fn() -> i64 { return first() + callback() }
+    return fn() -> i64 { return leaf() + first() }
+}

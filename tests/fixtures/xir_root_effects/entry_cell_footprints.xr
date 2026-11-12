@@ -47,3 +47,8 @@ fn unrelated(callback: fn() -> i64) -> fn() -> i64 {
     while (counter < 1) { counter = counter + 1 }
     return fn() -> i64 { return first + second }
 }
+fn sequential() -> fn() -> i64 {
+    var first = leaf
+    var second = leaf
+    return fn() -> i64 { return first() + second() }
+}

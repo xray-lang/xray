@@ -31,13 +31,26 @@ typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityL
 typedef struct StorageFootprintLink { uint32_t input, next; } StorageFootprintLink;
 typedef struct StorageIdentitySupport {
     XirStorageReference reference;
-    uint32_t instance, remainder;
+    uint32_t instance, remainder, kind;
 } StorageIdentitySupport;
 typedef struct StorageIdentitySupportCache {
     StorageIdentitySupport *values;
     uint32_t *index;
     uint32_t count, capacity, index_capacity, sites, identities, applications;
 } StorageIdentitySupportCache;
+
+typedef struct StorageCellUse {
+    uint32_t function, parameter, instance, next;
+    bool opaque;
+} StorageCellUse;
+
+typedef struct StorageCellEnvironmentIndex {
+    uint32_t *offsets, *heads;
+    uint8_t *unresolved;
+    StorageCellUse *uses;
+    uint32_t use_count, use_capacity;
+    bool ready;
+} StorageCellEnvironmentIndex;
 enum { STORAGE_TRUTH_UNKNOWN, STORAGE_TRUTH_FALSE, STORAGE_TRUTH_TRUE };
 typedef struct StorageOperation { XrXirOp op; uint32_t source, destination, receiver; uint8_t truth; } StorageOperation;
 typedef struct StorageRead {
@@ -123,6 +136,8 @@ struct XirStorageFlow {
     uint32_t progress, request_remainder;
     uint64_t revision;
     StorageIdentitySupportCache identity_support;
+    StorageIdentitySupportCache closed_cell_environments;
+    StorageCellEnvironmentIndex cell_environments;
     uint32_t bottom_capacity;
     XrXirStatus status;
     bool sealed, sealing, local_finished, exposure_started;
@@ -870,6 +885,8 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
                 return flow->status = XR_XIR_BAD_STRUCTURE;
             flow->sites[index].site = *site;
             flow->sites[index].active = true;
+            flow->cell_environments.ready = false;
+            flow->closed_cell_environments.sites = UINT32_MAX;
             return XR_XIR_OK;
         }
         slot = (slot + 1) & (flow->site_index_capacity - 1);
@@ -894,6 +911,8 @@ static XrXirStatus storage_import_site(void *opaque, const XirExecutionSite *sit
     }
     ++flow->generation;
     if (!flow->generation) return flow->status = XR_XIR_OVERFLOW;
+    flow->cell_environments.ready = false;
+    flow->closed_cell_environments.sites = UINT32_MAX;
     return flow->status;
 }
 
@@ -1013,6 +1032,8 @@ static bool storage_bind_application(XirStorageFlow *flow, uint32_t site_index, 
         XirStorageApplication *application = (XirStorageApplication *)&flow->view.applications[application_index];
         application->first = first; application->count = count;
         if (++flow->generation == 0) { flow->status = XR_XIR_OVERFLOW; return false; }
+        flow->cell_environments.ready = false;
+        flow->closed_cell_environments.sites = UINT32_MAX;
     }
     flow->sites[site_index].bindings_ready = complete;
     return true;
@@ -1059,6 +1080,8 @@ static bool storage_reindex_sites(XirStorageFlow *flow) {
     }
     /* Equal site counts can still describe a different active binding set. */
     flow->identity_support.sites = UINT32_MAX;
+    flow->closed_cell_environments.sites = UINT32_MAX;
+    flow->cell_environments.ready = false;
     return flow->status == XR_XIR_OK;
 }
 
@@ -1468,6 +1491,14 @@ static void storage_retire_construction(XirStorageFlow *flow) {
     xr_compile_resources_free(flow->identity_support.values);
     xr_compile_resources_free(flow->identity_support.index);
     flow->identity_support = (StorageIdentitySupportCache){0};
+    xr_compile_resources_free(flow->closed_cell_environments.values);
+    xr_compile_resources_free(flow->closed_cell_environments.index);
+    flow->closed_cell_environments = (StorageIdentitySupportCache){0};
+    xr_compile_resources_free(flow->cell_environments.offsets);
+    xr_compile_resources_free(flow->cell_environments.heads);
+    xr_compile_resources_free(flow->cell_environments.unresolved);
+    xr_compile_resources_free(flow->cell_environments.uses);
+    flow->cell_environments = (StorageCellEnvironmentIndex){0};
     flow->site_count = 0; flow->work_count = 0; flow->work_first = 0;
     flow->stage_count = 0; flow->stage_first = 0;
     flow->module = NULL; flow->execution = NULL; flow->control = NULL;
@@ -1709,6 +1740,7 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
 #include "xxir_storage_occurrence.inc.c"
 #include "xxir_storage_environment.inc.c"
 #include "xxir_storage_identity_inputs.inc.c"
+#include "xxir_storage_cell_environments.inc.c"
 #include "xxir_storage_capture.inc.c"
 
 XR_FUNC XrXirStatus xir_storage_flow_view(const XirStorageFlow *flow, XirStorageFlowView *output) {

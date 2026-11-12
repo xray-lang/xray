@@ -179,9 +179,19 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
             return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
         bool entry = storage_environment_entry(flow, capture, &walk->point);
         if (flow->status != XR_XIR_OK) return flow->status;
-        if (!entry) return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
         XirStorageReference proxy;
-        status = storage_formal_footprint(flow, &walk->point, formal.value, capture->receiver_value, true, &proxy);
+        if (entry) status = storage_formal_footprint(flow, &walk->point, formal.value,
+            capture->receiver_value, true, &proxy);
+        else {
+            if (!storage_cell_closed_environments(flow, capture))
+                return flow->status == XR_XIR_OK ?
+                    storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE) : flow->status;
+            XirStorageValuePoint point = walk->point;
+            point.reference = (XirStorageReference){formal.function, capture->receiver_value, formal.environment};
+            status = xir_storage_flow_point_value(flow, &point, &proxy);
+            if (status == XR_XIR_OK && !storage_relation_bank(flow, point.function,
+                formal.value, proxy.value, XIR_STORAGE_FOOTPRINT)) status = flow->status;
+        }
         if (status != XR_XIR_OK) return status;
         return storage_capture_push(walk, (StorageCaptureItem){
             .reference={formal.function, formal.value, formal.environment}, .kind=STORAGE_CARRIER_CONTENTS,
