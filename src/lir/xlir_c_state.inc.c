@@ -24,10 +24,20 @@ static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
 }
 
 static void c_state_layout(LirC *c) {
+    static const char *const names[] = {
+        "XRT_MODULE_UNIT", "XRT_MODULE_BOOL",
+        "XRT_MODULE_I8", "XRT_MODULE_I16", "XRT_MODULE_I32", "XRT_MODULE_I64",
+        "XRT_MODULE_U8", "XRT_MODULE_U16", "XRT_MODULE_U32", "XRT_MODULE_U64",
+        "XRT_MODULE_F32", "XRT_MODULE_F64", "XRT_MODULE_STRING",
+        "XRT_MODULE_ARRAY_I64", "XRT_MODULE_ARRAY_STRING",
+        "XRT_MODULE_ARRAY_U8", "XRT_MODULE_ARRAY_U64"
+    };
+    _Static_assert(sizeof(names) / sizeof(*names) == LIR_STATE_CONSTRUCTED_BASE,
+        "Every builtin module type has a symbolic C name");
     const XrLirStateLayout *layout = &c->state_layout;
     c_text(c, "static const XrtModuleTypeSpec xrl_state_types[] = {\n");
     for (uint32_t kind = XRT_MODULE_UNIT; kind < XRT_MODULE_FIXED_U8; ++kind)
-        c_format(c, "    {%u, 0},\n", kind);
+        c_format(c, "    {%s, 0},\n", names[kind - XRT_MODULE_UNIT]);
     for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
         XrLirTypeView shape = c->constructed_types[n].shape;
         uint32_t argument = shape.count;
