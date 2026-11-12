@@ -130,13 +130,21 @@ class Lease:
         self.live = None
         self.slot = None
         self.record = {}
+        self._inactive_requests: set[str] = set()
 
     def _requests(self) -> list[dict]:
         pending = []
-        for path in sorted((self.root / "requests").glob("*.json")):
+        candidates = (path for path in (self.root / "requests").glob("*.json")
+                      if path.name not in self._inactive_requests)
+        for path in sorted(candidates):
             record = json.loads(path.read_text(encoding="utf-8"))
             if record["kind"] != self.kind or record["state"] not in (
                     "queued", "running", "NEEDS_RECOVERY"):
+                # A request keeps its resource kind and completed records are
+                # immutable history. Mutable and recovery states stay live.
+                if record["kind"] != self.kind or record["state"] in (
+                        "finished", "failed", "cancelled"):
+                    self._inactive_requests.add(path.name)
                 continue
             if path != self.path and record["state"] != "NEEDS_RECOVERY":
                 probe = FileLock(path.with_suffix(".live"))
@@ -168,9 +176,12 @@ class Lease:
                                "payload": self.payload}
                 save_json(self.path, self.record)
             notice = time.monotonic()
+            poll_delay = 0.1
             while True:
                 with mutex(self.root / "scheduler.lock", self.deadline):
                     pending = self._requests()
+                    if time.monotonic() >= self.deadline:
+                        raise TimeoutError(f"Timed out waiting for {self.kind} slot")
                     if pending and pending[0]["sequence"] == sequence:
                         for number in range(self.capacity):
                             slot = FileLock(self.root / f"{self.kind}-{number}.lock")
@@ -184,7 +195,9 @@ class Lease:
                 if time.monotonic() - notice >= 30:
                     print(f"Waiting for {self.kind} slot; request {sequence}", flush=True)
                     notice = time.monotonic()
-                time.sleep(0.1)
+                remaining = max(0.0, self.deadline - time.monotonic())
+                time.sleep(min(poll_delay, remaining))
+                poll_delay = min(1.0, poll_delay * 1.5)
         except BaseException:
             self.__exit__(*sys.exc_info())
             raise
