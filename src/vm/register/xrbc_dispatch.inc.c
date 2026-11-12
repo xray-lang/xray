@@ -26,6 +26,23 @@
 #define XR_RBC_STRING(index) XR_RBC_SLOT(index).string
 #define XR_RBC_SOURCE() (function->source_ids ? function->source_ids[pc - 1] : 0)
 #define XR_RBC_BINARY(expression) (XR_RBC_REG(a) = (expression))
+#define XR_RBC_AGGREGATE_EXECUTE() do { \
+    uint32_t aggregate_index = instruction >> 16; \
+    bool aggregate_control = function->aggregate_accesses[aggregate_index].operation >= XR_RBC_AGGREGATE_CALL; \
+    XrRbcStatus aggregate_status = aggregate_control ? \
+        xr_rbc_aggregate_control(module, stack, function, aggregate_index, XR_RBC_SOURCE(), pc) : \
+        xr_rbc_aggregate_step(module, stack, frame, function, aggregate_index, XR_RBC_SOURCE()); \
+    if (aggregate_status != XR_RBC_OK) return aggregate_status; \
+    if (aggregate_control) { \
+        if (!stack->depth) { *result = (XrRbcRegister){0}; return XR_RBC_OK; } \
+        frame = &stack->frames[stack->depth - 1]; \
+        function = &module->functions[frame->function]; \
+        registers = stack->slots + frame->base; \
+        code = function->code; \
+        constants = function->constants; \
+        pc = frame->pc; \
+    } \
+} while (0)
 
 #if defined(__clang__) || defined(__GNUC__)
 static const void *const dispatch[] = {
@@ -63,9 +80,7 @@ XR_RBC_CASE(MOV) {
 }
 #if defined(__clang__) || defined(__GNUC__)
 XR_RBC_CASE(AGGREGATE_ACCESS) {
-    XrRbcStatus status = xr_rbc_aggregate_step(module, stack, frame, function,
-        instruction >> 16, XR_RBC_SOURCE());
-    if (status != XR_RBC_OK) return status;
+    XR_RBC_AGGREGATE_EXECUTE();
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(ARRAY_ACCESS) {
@@ -446,9 +461,7 @@ XR_RBC_CASE(RET0) {
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
     if (op == XR_RBC_AGGREGATE_ACCESS) {
-        XrRbcStatus status = xr_rbc_aggregate_step(module, stack, frame, function,
-            instruction >> 16, XR_RBC_SOURCE());
-        if (status != XR_RBC_OK) return status;
+        XR_RBC_AGGREGATE_EXECUTE();
         XR_RBC_NEXT();
     }
     if (op == XR_RBC_ARRAY_ACCESS) {
@@ -482,5 +495,6 @@ return XR_RBC_INVALID;
 #undef XR_RBC_STRING
 #undef XR_RBC_SOURCE
 #undef XR_RBC_BINARY
+#undef XR_RBC_AGGREGATE_EXECUTE
 #undef XR_RBC_CASE
 #undef XR_RBC_NEXT

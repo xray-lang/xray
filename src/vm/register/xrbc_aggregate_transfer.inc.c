@@ -37,6 +37,23 @@ static bool rbc_aggregate_state_transfer(RbcStringAdmission *s, XrRbcAggregateAc
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (access.operation == XR_RBC_AGGREGATE_CALL) {
+        for (uint32_t n = 0; n < access.count; ++n)
+            if (!s->aggregates[s->function->aggregate_arguments[access.first + n]]) return false;
+        if (!rbc_strings_call(s, (XrRbcOperands){.op = XR_RBC_CALL, .a = access.window,
+            .immediate = access.callee})) return false;
+        if (s->module->functions[access.callee].aggregate_result_type) {
+            s->aggregates[access.destination] = 1;
+            s->state[access.window] = RBC_EMPTY;
+        }
+        return true;
+    }
+    if (access.operation == XR_RBC_AGGREGATE_RETURN) {
+        if (!s->aggregates[access.source]) return false;
+        for (uint32_t r = 0; r < s->function->register_count; ++r)
+            if (s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED) return false;
+        return true;
+    }
     if (access.operation >= XR_RBC_AGGREGATE_STATE_READ)
         return rbc_aggregate_state_transfer(s, access);
     for (uint32_t n = 0; n < access.count; ++n) {

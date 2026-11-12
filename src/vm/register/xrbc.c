@@ -70,6 +70,10 @@ typedef struct {
     XrtModuleAccess *module_accesses;
     void *array_arguments;
     size_t array_argument_capacity;
+    // Borrowed from the execution and its pending outcome for one synchronous
+    // run. Neither pointer owns another stack or survives execution retirement.
+    const XrRbcEntry *entries;
+    uint8_t *aggregate_result;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -78,6 +82,8 @@ struct XrRbcOutcome {
     XrRbcRegisterKind result_kind;
     XrtExecutionFailure failure;
     XrtLocationOwner *locations;
+    XrRbcAggregateType aggregate_type;
+    uint8_t *aggregate_bytes;
 };
 
 struct XrRbcExecution {
@@ -179,6 +185,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     switch (op) {
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;
+        if (rbc_aggregate_return_word(function, word)) return true;
         break;
     case XR_RBC_ARRAY_ACCESS:
         if (a || index >= function->array_access_count) return false;
@@ -249,6 +256,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_CALL:
         if (a >= registers || index >= module->function_count ||
+            module->functions[index].aggregate_parameter_count || module->functions[index].aggregate_result_type ||
             a + 1 + module->functions[index].parameter_count != registers) return false;
         break;
     case XR_RBC_CALLN:
@@ -258,9 +266,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
             return false;
         break;
     case XR_RBC_RET:
-        return a < registers && !(word >> 16);
+        return !function->aggregate_result_type && a < registers && !(word >> 16);
     case XR_RBC_RET0:
-        return word == XR_RBC_RET0;
+        return !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
         return false;
     }
@@ -286,6 +294,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
+        if (!rbc_aggregate_calls_valid(module, function)) return XR_RBC_INVALID;
         for (size_t pc = 0; pc < function->code_count; ++pc)
             if (!xr_rbc_instruction_valid(module, function, pc)) return XR_RBC_INVALID;
         XrRbcStatus status = xr_rbc_strings_valid(module, function);
@@ -369,6 +378,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
+#include "xrbc_aggregate_call.inc.c"
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
@@ -394,7 +404,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
-    if ((inject_state && !function->parameter_count) ||
+    if (function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
         (!inject_state && function->parameter_count &&
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
@@ -419,6 +429,16 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->pending->locations = locations;
     execution->pending->status = XR_RBC_INVALID;
     execution->pending->result_kind = function->result_kind;
+    execution->stack.entries = execution->entries;
+    if (function->aggregate_result_type) {
+        execution->pending->aggregate_type = module->aggregate_types[function->aggregate_result_type - 1];
+        execution->pending->aggregate_bytes = xr_malloc(execution->pending->aggregate_type.count);
+        if (!execution->pending->aggregate_bytes) {
+            xr_rbc_execution_free(&execution);
+            return XR_RBC_OUT_OF_MEMORY;
+        }
+        execution->stack.aggregate_result = execution->pending->aggregate_bytes;
+    }
     if (inject_state) {
         XrXirValueStatus status = xrt_module_state_new(module->state_layout, UINT64_MAX, &execution->state);
         if (status == XR_XIR_VALUE_OK)
@@ -506,8 +526,16 @@ XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome) {
 }
 
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output) {
-    if (!outcome || outcome->status != XR_RBC_OK || !output || outcome->result_kind != XR_RBC_BITS) return false;
+    if (!outcome || outcome->status != XR_RBC_OK || !output || outcome->aggregate_bytes ||
+        outcome->result_kind != XR_RBC_BITS) return false;
     *output = outcome->value.bits;
+    return true;
+}
+XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
+    XrRbcAggregateType *type, const uint8_t **bytes) {
+    if (!outcome || outcome->status != XR_RBC_OK || !outcome->aggregate_bytes || !type || !bytes) return false;
+    *type = outcome->aggregate_type;
+    *bytes = outcome->aggregate_bytes;
     return true;
 }
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed) {
@@ -575,6 +603,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     if (!outcome || !*outcome) return;
     XrRbcOutcome *owned = *outcome;
     *outcome = NULL;
+    xr_free(owned->aggregate_bytes);
     if (owned->result_kind == XR_RBC_STRING) xrt_string_owned_drop(&owned->value.string);
     if (rbc_array_kind(owned->result_kind)) xrt_array_owned_drop(&owned->value.array);
     xrt_locations_release(owned->locations);

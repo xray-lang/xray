@@ -18,7 +18,9 @@ static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
     ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE,
-    ARRAY_ARGUMENT_FAILURE, AGGREGATE_STATE_FAILURE } fault;
+    ARRAY_ARGUMENT_FAILURE, AGGREGATE_STATE_FAILURE, AGGREGATE_OUTCOME_FAILURE } fault;
+static bool observe_fixed_moves;
+static unsigned fixed_register_moves, fixed_spill_moves;
 static bool observe_aggregate_allocations;
 static uint32_t aggregate_allocations;
 static size_t spill_state_failure_entries=2;
@@ -55,6 +57,8 @@ static void *moving_realloc(void *old, size_t size) {
     void *fresh = xr_malloc(size);
     if (!fresh) return NULL;
     if (old) {
+        if (observe_fixed_moves && index == 0) ++fixed_register_moves;
+        if (observe_fixed_moves && index == 3) ++fixed_spill_moves;
         XR_CHECK(size >= blocks[index].size, "interpreter only grows buffers");
         memcpy(fresh, old, blocks[index].size);
         xr_free(old);
@@ -89,6 +93,7 @@ static void moving_free(void *pointer) {
 #undef xrt_string_drop
 
 static void *execution_malloc(size_t size) {
+    if (fault == AGGREGATE_OUTCOME_FAILURE && size == 17) { fault = NO_FAILURE; return NULL; }
     if (fault == ARRAY_ARGUMENT_FAILURE && size == 2 * sizeof(XrRbcRegister)) { fault = NO_FAILURE; return NULL; }
     if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
         (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
@@ -574,6 +579,53 @@ static void array_argument_failures(void) {
     for (size_t i = 0; i < 4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all Array fault stack banks retired");
 }
 
+#include "register_fixed_call_fixture.h"
+
+static void aggregate_call_failures(void) {
+    const uint32_t counts[] = {1, 17, 256};
+    for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {
+        RawFixedCalls f;
+        fixed_call_fixture(&f, counts[n]);
+        f.functions[0].cell_count = f.functions[0].spill_count = 1;
+        f.functions[1].cell_count = 32;
+        f.functions[1].spill_count = 64;
+        f.functions[2].spill_count = 1024;
+        XrtLocationOwner *locations = NULL;
+        XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "fixed call locations");
+        for (unsigned failure = 0; failure < 2; ++failure) {
+            XrRbcExecution *execution = NULL;
+            XR_CHECK(xr_rbc_module_prepare(&f.module, 0, NULL, 0, locations, &execution) == XR_RBC_OK,
+                "fixed call prepare");
+            if (failure) fault = SPILL_GROWTH_FAILURE;
+            fixed_register_moves = fixed_spill_moves = 0;
+            observe_fixed_moves = true;
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            observe_fixed_moves = false;
+            XR_CHECK(xr_rbc_outcome_status(outcome) == (failure ? XR_RBC_OUT_OF_MEMORY : XR_RBC_OK),
+                "fixed call returns an owned success or allocation failure");
+            if (!failure) {
+                uint64_t bits = 0;
+                XR_CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 3737,
+                    "first returned value survives later callees");
+                XR_CHECK(fixed_register_moves && fixed_spill_moves, "register and aggregate banks really relocated");
+            }
+            XR_CHECK(fault == NO_FAILURE, "fixed call allocation failure reached");
+            xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+            for (size_t p = 0; p < 4; ++p) XR_CHECK(!blocks[p].pointer, "all moving banks retired");
+        }
+        if (counts[n] == 17) {
+            XrRbcExecution *execution = NULL;
+            uint64_t seed = 37;
+            fault = AGGREGATE_OUTCOME_FAILURE;
+            XR_CHECK(xr_rbc_module_prepare(&f.module, 1, &seed, 1, locations, &execution) == XR_RBC_OUT_OF_MEMORY &&
+                !execution && fault == NO_FAILURE, "fixed outcome allocation failure publishes no execution");
+            for (size_t p = 0; p < 4; ++p) XR_CHECK(!blocks[p].pointer, "failed outcome retires every moving bank");
+        }
+        xrt_locations_release(locations);
+        xr_free(f.operands);
+    }
+}
+
 static void aggregate_bank_failures(void) {
     XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
     XrRbcAggregateValue home = {0, 0};
@@ -627,6 +679,7 @@ static void aggregate_bank_failures(void) {
 }
 
 int main(void) {
+    aggregate_call_failures();
     aggregate_bank_failures();
     array_argument_failures();
     module_state_fused_retain_failure();

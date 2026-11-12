@@ -68,6 +68,7 @@ static void rbc_string_forget_borrows(RbcStringAdmission *s, uint32_t owner) {
             s->state[r] = RBC_EMPTY;
 }
 #include "xrbc_array_transfer.inc.c"
+static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v);
 #include "xrbc_aggregate_transfer.inc.c"
 static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
     uint8_t *state = s->state;
@@ -479,6 +480,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
         g->work.aggregates = g->aggregates;
         for (size_t b = 0; b < g->count; ++b)
             g->incoming[b].state.aggregates = g->aggregates + (b + 1) * f->aggregate_value_count;
+        for (size_t n = 0; n < f->aggregate_parameter_count; ++n)
+            g->work.aggregates[f->aggregate_parameters[n]] = 1;
     }
     for (uint32_t r = 0; r < f->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(f,r);
@@ -539,7 +542,7 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
             bool valid = v.op==XR_RBC_SPILL || v.op==XR_RBC_RELOAD ?
                 rbc_spill_transfer(&g->work,v) : rbc_string_step(&g->work,v);
             if (!valid) return false;
-            if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0) {
+            if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0 || rbc_aggregate_return_word(f, f->code[pc])) {
                 for (uint32_t i=0; i<f->reference_spill_count; ++i)
                     if (g->work.spills[i].state!=RBC_EMPTY) return false;
                 return true;

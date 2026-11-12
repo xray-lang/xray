@@ -152,13 +152,14 @@ typedef struct XrRbcAggregateValue { uint32_t type, offset; } XrRbcAggregateValu
 typedef enum XrRbcAggregateOperation {
     XR_RBC_AGGREGATE_NEW, XR_RBC_AGGREGATE_GET, XR_RBC_AGGREGATE_COPY,
     XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
-    XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE
+    XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
+    XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
     uint32_t destination, source;
     XrRbcArrayLocation result;
-    uint32_t first, count, slot;
+    uint32_t first, count, slot, callee, window;
 } XrRbcAggregateAccess;
 
 typedef struct {
@@ -203,6 +204,13 @@ typedef struct {
     size_t aggregate_access_count;
     const XrRbcArrayLocation *aggregate_operands;
     size_t aggregate_operand_count;
+    // Fixed formals name ordered independent homes. A nonzero result type is
+    // its owned type ordinal plus one. Scalar arguments retain the usual ABI.
+    const uint32_t *aggregate_parameters;
+    size_t aggregate_parameter_count;
+    uint32_t aggregate_result_type;
+    const uint32_t *aggregate_arguments;
+    size_t aggregate_argument_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -298,6 +306,10 @@ XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 // Failure outcomes keep their owner independently of the executable. Retain
 // that owner explicitly before outcome_free to keep it longer.
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
+// The outcome owns both the exact shape and compact bytes after all execution
+// and program owners retire. The borrowed byte span ends with the outcome.
+XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
+    XrRbcAggregateType *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
 XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);

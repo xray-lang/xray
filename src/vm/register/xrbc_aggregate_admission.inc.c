@@ -39,6 +39,45 @@ static bool rbc_aggregate_state_valid(const XrRbcModule *module, const XrRbcFunc
          (slot.flags & XRT_MODULE_SLOT_MUTABLE) && rbc_aggregate_reference_location(f, access.result));
 }
 
+static bool rbc_aggregate_return_word(const XrRbcFunction *f, uint32_t word) {
+    return (word & 255) == XR_RBC_AGGREGATE_ACCESS && (word >> 16) < f->aggregate_access_count &&
+        f->aggregate_accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN;
+}
+
+static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunction *f,
+    XrRbcAggregateAccess access) {
+    if (access.callee >= module->function_count || access.source || access.slot ||
+        access.result.index || access.result.spill || access.first > f->aggregate_argument_count ||
+        access.count > f->aggregate_argument_count - access.first) return false;
+    const XrRbcFunction *callee = &module->functions[access.callee];
+    if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type) ||
+        access.count != callee->aggregate_parameter_count || access.window >= f->register_count ||
+        callee->parameter_count != f->register_count - access.window - 1 ||
+        rbc_register_kind(f, access.window) != XR_RBC_CALL_WINDOW) return false;
+    for (uint32_t n = 0; n < access.count; ++n) {
+        uint32_t actual = f->aggregate_arguments[access.first + n];
+        uint32_t formal = callee->aggregate_parameters[n];
+        if (actual >= f->aggregate_value_count ||
+            f->aggregate_values[actual].type != callee->aggregate_values[formal].type) return false;
+    }
+    return callee->aggregate_result_type ? access.destination < f->aggregate_value_count &&
+        f->aggregate_values[access.destination].type == callee->aggregate_result_type - 1 : !access.destination;
+}
+
+static bool rbc_aggregate_signature_valid(const XrRbcModule *module, const XrRbcFunction *f) {
+    if ((!f->aggregate_parameters && f->aggregate_parameter_count) ||
+        f->aggregate_parameter_count > f->aggregate_value_count ||
+        (!f->aggregate_arguments && f->aggregate_argument_count) || f->aggregate_argument_count > UINT32_MAX ||
+        f->aggregate_result_type > module->aggregate_type_count ||
+        (f->aggregate_result_type && f->result_kind != XR_RBC_BITS)) return false;
+    for (size_t n = 0; n < f->aggregate_parameter_count; ++n)
+        if (f->aggregate_parameters[n] >= f->aggregate_value_count ||
+            (n && f->aggregate_parameters[n] <= f->aggregate_parameters[n - 1])) return false;
+    for (size_t n = 0; n < f->aggregate_argument_count; ++n)
+        if (f->aggregate_arguments[n] >= f->aggregate_value_count) return false;
+    return true;
+}
+
 static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     if ((!f->aggregate_values && f->aggregate_value_count) || f->aggregate_value_count > UINT32_MAX ||
         (!f->aggregate_accesses && f->aggregate_access_count) || f->aggregate_access_count > 65536 ||
@@ -55,10 +94,20 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         end = (size_t)value.offset + layout.size;
     }
     if ((!f->aggregate_value_count && f->aggregate_size) || end != f->aggregate_size) return false;
+    if (!rbc_aggregate_signature_valid(module, f)) return false;
     for (size_t n = 0; n < f->aggregate_operand_count; ++n)
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation == XR_RBC_AGGREGATE_CALL) continue;
+        if (access.callee || access.window) return false;
+        if (access.operation == XR_RBC_AGGREGATE_RETURN) {
+            if (!f->aggregate_result_type || access.source >= f->aggregate_value_count ||
+                f->aggregate_values[access.source].type != f->aggregate_result_type - 1 ||
+                access.destination || access.first || access.count || access.slot || access.result.index || access.result.spill)
+                return false;
+            continue;
+        }
         if (access.first > f->aggregate_operand_count || access.count > f->aggregate_operand_count - access.first)
             return false;
         if (access.operation >= XR_RBC_AGGREGATE_STATE_READ &&
@@ -83,5 +132,12 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
                 access.first || access.count || access.result.index || access.result.spill) return false;
         } else return false;
     }
+    return true;
+}
+
+static bool rbc_aggregate_calls_valid(const XrRbcModule *module, const XrRbcFunction *f) {
+    for (size_t n = 0; n < f->aggregate_access_count; ++n)
+        if (f->aggregate_accesses[n].operation == XR_RBC_AGGREGATE_CALL &&
+            !rbc_aggregate_call_valid(module, f, f->aggregate_accesses[n])) return false;
     return true;
 }
