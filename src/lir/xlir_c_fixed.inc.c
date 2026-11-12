@@ -57,7 +57,10 @@ static void c_constructed_types(LirC *c) {
                 type->name, type->shape.count, type->name);
         } else {
             XrLirTypeLayout payload;
-            xr_lir_type_layout(c->request->module, type->shape.element, &payload);
+            if (xr_lir_type_layout(c->request->module, type->shape.element, &payload) != XR_LIR_OK) {
+                c_error(c, XR_LIR_C_INVALID_LIR, "nullable payload layout is unavailable");
+                return;
+            }
             c_format(c, "typedef struct %s { uint8_t tag;", type->name);
             if (payload.alignment > 1) c_format(c, " uint8_t pad[%" PRIu32 "];", payload.alignment - 1);
             if (type->shape.element != XR_LIR_UNIT) c_format(c, " %s payload;",
