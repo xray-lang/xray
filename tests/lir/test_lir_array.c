@@ -23,6 +23,7 @@
 #include "lir_array_c_fixture.h"
 #include "lir_array_unsigned_frontier_cases.h"
 #include "lir_array_ref_cases.h"
+#include "lir_constructed_frontier_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -490,6 +491,7 @@ static void array_vm_fixture(const char *name,int64_t expected) {
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
+    constructed_backend_frontiers();
     array_catalog();
     array_reference_owners();
     array_unsigned_frontier();
