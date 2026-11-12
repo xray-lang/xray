@@ -116,8 +116,52 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
             if (status != XR_LIR_OK) REQUIRE(nullable == XR_LIR_I64);
             output = nullable;
         }
+        if (status == XR_LIR_OK) {
+            XrLirCallableParameter parameters[] = {{.type=XR_LIR_I64}, {.type=output}};
+            XrLirCallableType signature = {.parameters=parameters, .parameter_count=2, .result=output};
+            XrLirType callable = XR_LIR_I64;
+            status = xr_lir_callable_type(*module, &signature, &callable);
+            if (status != XR_LIR_OK) REQUIRE(callable == XR_LIR_I64);
+        }
     }
     return status;
+}
+
+static void callable_import_failures(void) {
+    fail_at = SIZE_MAX;
+    XrLirModule *source = NULL;
+    REQUIRE(xr_lir_module_create(NULL, &source) == XR_LIR_OK);
+    XrLirType type = XR_LIR_I64;
+    for (uint32_t i = 0; i < 16; ++i) {
+        XrLirCallableParameter parameter = {.type=type};
+        XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=type};
+        REQUIRE(xr_lir_callable_type(source, &signature, &type) == XR_LIR_OK);
+    }
+    REQUIRE(xr_lir_module_finish(source, NULL) == XR_LIR_OK);
+    size_t retained_count = live_allocations, retained_bytes = live_bytes;
+    allocation_index = 0;
+    XrLirModule *target = NULL;
+    XrLirType imported = 0;
+    REQUIRE(xr_lir_module_create(NULL, &target) == XR_LIR_OK);
+    REQUIRE(xr_lir_import_type(target, source, type, &imported) == XR_LIR_OK);
+    size_t sites = allocation_index;
+    xr_lir_module_destroy(target);
+    for (size_t point = 0; point < sites; ++point) {
+        fail_at = point;
+        allocation_index = 0;
+        target = NULL;
+        imported = 0;
+        XrLirStatus status = xr_lir_module_create(NULL, &target);
+        if (status == XR_LIR_OK) status = xr_lir_import_type(target, source, type, &imported);
+        REQUIRE(status == XR_LIR_OUT_OF_MEMORY && !imported);
+        xr_lir_module_destroy(target);
+        REQUIRE(live_allocations == retained_count && live_bytes == retained_bytes);
+    }
+    fail_at = SIZE_MAX;
+    REQUIRE(xr_lir_verify(source, NULL) == XR_LIR_OK);
+    xr_lir_module_destroy(source);
+    REQUIRE(!live_allocations && !live_bytes);
+    printf("callable cross-owner import failures covered %zu allocation sites\n", sites);
 }
 
 static void type_pool_failures(void) {
@@ -169,6 +213,7 @@ static void type_pool_failures(void) {
 }
 
 int main(void) {
+    callable_import_failures();
     type_pool_failures();
     creation_failure(0);
     creation_failure(2);

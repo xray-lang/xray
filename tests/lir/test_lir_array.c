@@ -26,6 +26,7 @@
 #include "lir_constructed_frontier_cases.h"
 #include "lir_fixed_bytecode_cases.h"
 #include "lir_view_cases.h"
+#include "lir_callable_frontier_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -495,6 +496,7 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     view_receiving_owners();
+    callable_backend_frontier();
     constructed_backend_frontiers();
     fixed_bytecode_execution();
     fixed_bytecode_selected_edges();

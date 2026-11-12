@@ -17,7 +17,8 @@
 typedef enum XrLirTypeKind {
     XR_LIR_TYPE_BUILTIN,
     XR_LIR_TYPE_FIXED_ARRAY,
-    XR_LIR_TYPE_NULLABLE
+    XR_LIR_TYPE_NULLABLE,
+    XR_LIR_TYPE_CALLABLE
 } XrLirTypeKind;
 
 typedef struct XrLirTypeView {
