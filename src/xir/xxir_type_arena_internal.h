@@ -10,12 +10,28 @@
 #define XXIR_TYPE_ARENA_INTERNAL_H
 #include "xxir_type_arena.h"
 typedef struct XirTypeReceivingRoot { XrXirType source, target; } XirTypeReceivingRoot;
+typedef struct XirTypeIdentity { const XrXirTypeArena *owner; XrXirType type; } XirTypeIdentity;
 /* The Source compiler has proved these exact stored-type roots using its
  * actual receiving map and both sealed Programs. Shape checks below only
  * validate that correspondence; matching unrelated shapes grants nothing.
  * The target must be private and unused. Failure changes neither arena. */
 XR_FUNC XrXirValueStatus xir_compile_type_arena_receive(const XrXirCompileContext *context,
     XrXirTypeArena *target,XrXirTypeArena *source,const XirTypeReceivingRoot *roots,uint32_t count);
+/* A live input owns this borrowed identity and its complete receiving lineage.
+ * The projection grants no value, publication, Domain or loan permission. */
+XR_FUNC bool xir_type_arena_identity(const XrXirTypeArena *, XrXirType, XirTypeIdentity *);
+/* The native builtin producer has admitted an actual Array<i64> word. Its
+ * private six-type catalog receives only that exact Array identity; the other
+ * types remain new. Target allocations own their ledger and retain the source. */
+XR_FUNC XrXirValueStatus xir_native_type_arena_receive_i64_array(XrXirTypeArena *target,
+    const XrXirValue *array);
+/* Derived directories charge the base catalog's existing finite ledger. A
+ * failed receive releases the unpublished directory and preserves output. */
+XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
+    const XrXirValue *array, XrXirTypeArena **empty);
+/* Only the native receiving producer publishes this immutable directory role.
+ * Reusing its owned arena keeps repeated materialization from adding lineage. */
+XR_FUNC bool xir_native_type_arena_i64_views(const XrXirTypeArena *);
 /* Identity equality grants no Domain, publication, borrow or call permission. */
 XR_FUNC bool xir_type_arena_same_type(const XrXirTypeArena *left,XrXirType left_type,
     const XrXirTypeArena *right,XrXirType right_type);

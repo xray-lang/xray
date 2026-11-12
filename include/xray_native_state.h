@@ -34,7 +34,8 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_F32, XRT_MODULE_F64, XRT_MODULE_STRING,
     XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64,
     XRT_MODULE_FIXED_U8,
-    XRT_MODULE_NULLABLE
+    XRT_MODULE_NULLABLE,
+    XRT_MODULE_CELL_ARRAY_I64
 } XrtModuleTypeKind;
 /* Fixed U8 argument is its nonzero count. Nullable argument is an earlier
  * type ordinal in this catalog. Other kinds require zero. Nullable admits

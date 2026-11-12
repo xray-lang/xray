@@ -31,7 +31,9 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         XrLirStateSlot source = layout.slots[n];
         XrtModuleTypeKind kind;
         uint32_t type;
-        if (source.payload >= XR_LIR_TYPE_COUNT) {
+        if (source.payload == XR_LIR_VIEW_CELL) {
+            type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
+        } else if (source.payload >= XR_LIR_TYPE_COUNT) {
             uint32_t ordinal = source.payload - XR_LIR_TYPE_COUNT;
             if (ordinal >= program->module.aggregate_type_count || ordinal > UINT32_MAX - LIR_STATE_CONSTRUCTED_BASE) {
                 status = XR_RBC_COMPILE_UNSUPPORTED; break;
@@ -44,7 +46,8 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             source.mutable ? XRT_MODULE_SLOT_MUTABLE : 0, source.offset, source.size, source.alignment};
     }
     if (status == XR_RBC_COMPILE_OK) {
-        uint64_t type_count = (uint64_t)LIR_STATE_CONSTRUCTED_BASE + program->module.aggregate_type_count;
+        uint64_t type_count = (uint64_t)LIR_STATE_CONSTRUCTED_BASE + program->module.aggregate_type_count +
+            lir_state_has_view_cells(&layout);
         XrtModuleTypeSpec *types = NULL;
         if (type_count > UINT32_MAX / 2 || type_count > SIZE_MAX / sizeof(*types)) status = XR_RBC_COMPILE_LIMIT;
         else if (!(types = xr_malloc((size_t)type_count * sizeof(*types)))) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
@@ -60,6 +63,8 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
                 types[LIR_STATE_CONSTRUCTED_BASE + t] = (XrtModuleTypeSpec){
                     shape.kind == XR_RBC_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
             }
+            if (lir_state_has_view_cells(&layout)) types[type_count - 1] =
+                (XrtModuleTypeSpec){XRT_MODULE_CELL_ARRAY_I64, 0};
         }
         XrtModuleLayoutSpec spec = {types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,

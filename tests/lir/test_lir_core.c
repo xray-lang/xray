@@ -471,7 +471,7 @@ static void first_failure_diagnostic(void) {
 
 static void intrinsic_and_float(void) {
     XrLirType input = XR_LIR_F64;
-    XrLirIntrinsic intrinsic = {71, &input, 1, XR_LIR_F64, true};
+    XrLirIntrinsic intrinsic = {71, &input, 1, XR_LIR_F64, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(&registry, &m));
@@ -503,7 +503,7 @@ static void intrinsic_and_float(void) {
     CHECK(instruction.op == XR_LIR_CALL_INTRINSIC && instruction.intrinsic == 71 &&
           instruction.operands[0] == converted.id);
     xr_lir_module_destroy(m);
-    intrinsic = (XrLirIntrinsic) {71, &type, 1, XR_LIR_F64, false};
+    intrinsic = (XrLirIntrinsic) {71, &type, 1, XR_LIR_F64, false, 0};
     m = NULL;
     CHECK(xr_lir_module_create(&registry, &m) == XR_LIR_UNSUPPORTED && !m);
 }
@@ -512,7 +512,7 @@ static void intrinsic_query_and_transfer(void) {
     XrLirType *input = xr_malloc(sizeof(*input));
     CHECK(input);
     *input = XR_LIR_I64;
-    XrLirIntrinsic entries[] = {{19, input, 1, XR_LIR_I64, true}, {71, NULL, 0, XR_LIR_UNIT, true}};
+    XrLirIntrinsic entries[] = {{19, input, 1, XR_LIR_I64, true, 0}, {71, NULL, 0, XR_LIR_UNIT, true, 0}};
     XrLirRegistry registry = {entries, 2};
     XrLirModule *source = NULL, *copy = NULL;
     OK(xr_lir_module_create(&registry, &source));
@@ -584,7 +584,7 @@ static void intrinsic_query_and_transfer(void) {
     CHECK(instruction_view.intrinsic == 19 &&
           !strcmp(instruction_view.source.path, "intrinsic-owner.xr"));
     xr_lir_module_destroy(copy);
-    XrLirIntrinsic duplicate[] = {{19, &type, 1, type, true}, {19, NULL, 0, XR_LIR_UNIT, true}};
+    XrLirIntrinsic duplicate[] = {{19, &type, 1, type, true, 0}, {19, NULL, 0, XR_LIR_UNIT, true, 0}};
     registry = (XrLirRegistry) {duplicate, 2};
     copy = NULL;
     CHECK(xr_lir_module_create(&registry, &copy) == XR_LIR_INVALID_ARGUMENT && !copy);

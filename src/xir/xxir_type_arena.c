@@ -18,7 +18,6 @@
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_class_hierarchy_internal.h"
 
-typedef struct XirTypeIdentity { const XrXirTypeArena *owner; XrXirType type; } XirTypeIdentity;
 #include "xxir_view_types_internal.h"
 
 struct XrXirTypeArena {
@@ -32,6 +31,7 @@ struct XrXirTypeArena {
     XirTypeIdentity *identities;
     uint8_t *borrowed;
     uint8_t *enum_sendable;
+    bool native_i64_views;
 };
 
 #include "xxir_type_arena_nominal.inc.c"

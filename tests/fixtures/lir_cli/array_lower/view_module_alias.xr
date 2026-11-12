@@ -1,0 +1,9 @@
+var values = [11,22,33]
+fn bump(data:ref Array<i64>) { data[0] = data[0] + 1 }
+fn sample()->i64 {
+    const part:Slice<i64> = values[1:3]
+    const saved = part[0]
+    bump(ref values)
+    return saved + values[0]
+}
+print(sample())

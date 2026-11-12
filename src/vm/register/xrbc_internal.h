@@ -15,6 +15,10 @@
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
 
+static inline bool xr_rbc_view_kind(XrRbcRegisterKind kind) {
+    return kind >= XR_RBC_VIEW_FRAME && kind <= XR_RBC_SLICE_I64;
+}
+
 typedef struct XrRbcAggregateLayout {
     uint32_t size, alignment, scalar_slots;
 } XrRbcAggregateLayout;

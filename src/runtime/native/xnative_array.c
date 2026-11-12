@@ -43,7 +43,7 @@ XR_FUNC XrXirType xrt_array_type(XrtArrayElement element) {
         (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + (uint32_t)element) : XR_XIR_UNIT;
 }
 
-XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **output, uint64_t *bytes) {
+static XrXirValueStatus array_types_new(uint64_t limit, bool views, XrXirTypeArena **output, uint64_t *bytes) {
     if (!output || *output || !bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, limit, true};
     if (limit == UINT64_MAX) limits = (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY, 0, true};
@@ -51,10 +51,12 @@ XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **ou
     XrCompileResourceStatus resource = xr_compile_resources_new(&limits, &context.resources);
     if (resource != XR_COMPILE_RESOURCE_OK)
         return resource == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_VALUE_MEMORY_LIMIT : XR_XIR_VALUE_OOM;
-    XrXirTypeNode nodes[XRT_ARRAY_ELEMENT_COUNT];
+    XrXirTypeNode nodes[XRT_ARRAY_ELEMENT_COUNT + 2];
     for (uint32_t i = 0; i < XRT_ARRAY_ELEMENT_COUNT; ++i)
         nodes[i] = (XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY, .element=array_payload_type((XrtArrayElement)i)};
-    XrXirTypes types = {nodes, XRT_ARRAY_ELEMENT_COUNT, NULL, NULL};
+    nodes[4] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CELL, .element=XR_XIR_CONSTRUCTED_TYPE_BASE};
+    nodes[5] = (XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE, .element=XR_XIR_I64};
+    XrXirTypes types = {nodes, XRT_ARRAY_ELEMENT_COUNT + (views ? 2u : 0u), NULL, NULL};
     XrXirValueStatus status = xr_xir_compile_type_arena_new(&context, &types, output);
     XrCompileResourceStats stats = {0};
     if (status == XR_XIR_VALUE_OK) {
@@ -66,6 +68,13 @@ XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **ou
     }
     xr_compile_resources_release(context.resources);
     return status;
+}
+
+XR_FUNC XrXirValueStatus xrt_array_types_new(uint64_t limit, XrXirTypeArena **output, uint64_t *bytes) {
+    return array_types_new(limit, false, output, bytes);
+}
+XR_FUNC XrXirValueStatus xrt_view_types_new(uint64_t limit, XrXirTypeArena **output, uint64_t *bytes) {
+    return array_types_new(limit, true, output, bytes);
 }
 
 static XrXirValue array_value(const XrtArray *array) {
@@ -261,6 +270,17 @@ XR_FUNC XrtArray *xrt_array_root_take(XrtArray *array) {
     if (!--owner->count) array_remove(root, owner);
     return array;
 }
+XR_FUNC XrtArray *xrt_array_publish_pending(uint32_t source) {
+    XrtValueRoot *root = xrt_value_root_current(source);
+    XrtArrayElement element = XRT_ARRAY_I64;
+    if (!array_element(&root->pending, &element)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    array_reserve(root, source);
+    XrtArray *result = (XrtArray *)(intptr_t)root->pending.payload;
+    array_adopt(root, root->pending, element);
+    root->pending = (XrXirValue){0};
+    return result;
+}
+
 XRAY_API XrtArray *xrt_array_retain(const XrtArray *array, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
     XrtArrayElement element = XRT_ARRAY_I64;

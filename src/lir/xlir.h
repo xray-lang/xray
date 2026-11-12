@@ -50,6 +50,9 @@ enum XrLirBuiltinType {
     XR_LIR_ARRAY,
     XR_LIR_ARRAY_CELL,
     XR_LIR_ARRAY_REF,
+    XR_LIR_VIEW_FRAME,
+    XR_LIR_VIEW_CELL,
+    XR_LIR_SLICE_I64,
     XR_LIR_TYPE_COUNT
 };
 
@@ -129,6 +132,7 @@ typedef struct XrLirIntrinsic {
     uint32_t parameter_count;
     XrLirType result;
     bool scalar_sync;
+    uint32_t view_operation;
 } XrLirIntrinsic;
 typedef struct XrLirFunctionView {
     const char *name;

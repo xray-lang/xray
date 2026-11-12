@@ -25,6 +25,7 @@
 #include "lir_array_ref_cases.h"
 #include "lir_constructed_frontier_cases.h"
 #include "lir_fixed_bytecode_cases.h"
+#include "lir_view_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -115,7 +116,7 @@ static void array_corruptions(void) {
 
 static void array_catalog(void) {
     XrLirType scalar = XR_LIR_I64;
-    XrLirIntrinsic extra = {1, &scalar, 1, scalar, true};
+    XrLirIntrinsic extra = {1, &scalar, 1, scalar, true, 0};
     XrLirRegistry registry = {&extra, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_array_module_create(&registry, &m));
@@ -248,7 +249,7 @@ static void array_shape_rejections(void) {
     xr_lir_module_destroy(m);
     m = NULL;
     XrLirType scalar = XR_LIR_I64;
-    XrLirIntrinsic entry = {17, &scalar, 1, scalar, true};
+    XrLirIntrinsic entry = {17, &scalar, 1, scalar, true, 0};
     XrLirRegistry registry = {&entry, 1};
     OK(xr_lir_module_create(&registry, &m));
     XrLirType no_shape = XR_LIR_TYPE_INVALID;
@@ -493,6 +494,7 @@ static void array_vm_fixture(const char *name,int64_t expected) {
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
+    view_receiving_owners();
     constructed_backend_frontiers();
     fixed_bytecode_execution();
     fixed_bytecode_selected_edges();

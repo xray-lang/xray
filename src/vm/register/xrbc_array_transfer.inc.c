@@ -89,6 +89,8 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
 
 static bool rbc_call_parameter_matches(const RbcStringAdmission *s, uint32_t actual, XrRbcRegisterKind formal) {
     uint8_t state = s->state[actual];
+    if (formal == XR_RBC_VIEW_CELL) return state == RBC_VIEW_CELL;
+    if (formal == XR_RBC_SLICE_I64) return state == RBC_VIEW_SLICE;
     uint32_t reference = xr_rbc_array_ref_family(formal);
     if (reference < XR_RBC_ARRAY_FAMILY_COUNT)
         return rbc_array_ref_state(state) &&

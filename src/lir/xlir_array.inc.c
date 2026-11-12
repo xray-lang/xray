@@ -159,7 +159,7 @@ XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *m, XrLirType element
 static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra) {
     enum { operations = XR_LIR_ARRAY_OP_REPEAT, base_catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations,
         reference_end = base_catalog + XR_LIR_ARRAY_FAMILY_COUNT * 2,
-        catalog = reference_end + XR_LIR_ARRAY_FAMILY_COUNT };
+        catalog = XR_LIR_ARRAY_CATALOG_COUNT };
     uint32_t count = extra ? extra->count : 0;
     if (!m || m->intrinsic_count || m->function_count || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
         (size_t)count + catalog > SIZE_MAX / sizeof(XrLirIntrinsic))
@@ -208,7 +208,7 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
             shapes[i][0] = XR_LIR_TYPE_INVALID; result = XR_LIR_ARRAY; break;
         default: break;
         }
-        entries[count + i] = (XrLirIntrinsic){next, parameters[i], arity, result, true};
+        entries[count + i] = (XrLirIntrinsic){next, parameters[i], arity, result, true, 0};
         descriptors[i] = (XrLirArrayIntrinsic){next, shapes[i], arity,
             result == XR_LIR_ARRAY ? element : XR_LIR_TYPE_INVALID,
             operation == XR_LIR_ARRAY_OP_NEW, operation};
@@ -281,6 +281,8 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INTRINSIC) {
         uint32_t index = lir_array_intrinsic_index(m, v->intrinsic);
+        if (index != UINT32_MAX && (m->intrinsics[index].view_operation == XR_LIR_VIEW_OP_CELL_READ ||
+            m->intrinsics[index].view_operation == XR_LIR_VIEW_OP_COPY)) return XR_LIR_I64;
         return index != UINT32_MAX && m->array_intrinsics ?
             m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
     }

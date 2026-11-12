@@ -27,7 +27,10 @@ def main() -> None:
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
-             "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished")
+             "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
+             "view_local", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
+             "view_module_const", "view_conditional_cleanup", "view_phi", "view_copy_argument",
+             "view_copy_unused_parameter", "panic_nullable_view")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))
@@ -124,6 +127,10 @@ def main() -> None:
         "reject_unsigned_family": b"expression cannot satisfy its declared type",
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
         "reject_ref_alias": b"ref arguments of one call must not alias",
+        "reject_view_live_write": b"during view lifetime normalization",
+        "reject_view_copy_live_write": b"during view lifetime normalization",
+        "reject_view_module_alias": b"during view lifetime normalization",
+        "reject_view_local_return": b"constructed XIR failed checking",
     }
     for name, diagnostic in rejected_sources.items():
         source = fixtures / (name + ".xr")

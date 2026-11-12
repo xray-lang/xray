@@ -48,7 +48,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays;
+    bool runtime, runtime_header, f64, state, arrays, views;
     XrLirStateLayout state_layout;
 } LirC;
 
@@ -132,7 +132,7 @@ static const char *c_builtin_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
         NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **",
-        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **", "XrtArrayRef"};
+        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **", "XrtArrayRef", "XrtViewFrame", "XrtViewCell", "XrtSliceI64"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -179,7 +179,8 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->f64 |= type == XR_LIR_F64;
     c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
     c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
-    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays;
+    c->views |= type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
+    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -200,6 +201,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 }
 #include "xlir_c_state.inc.c"
 #include "xlir_c_array.inc.c"
+#include "xlir_c_view.inc.c"
 static void c_visit(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= xr_lir_function_count(c->request->module), "valid callee");
     if (!c->seen[id - 1]) {
@@ -265,7 +267,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) ||
+    if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_view_point(c, v) ||
         (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
         if (c_located(&v->source)) {
@@ -274,6 +276,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else ++c->location_count;
         }
     }
+    if (c_view_point(c, v)) return;
     switch (v->op) {
         case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
         case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
@@ -453,7 +456,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_view_point(c, &v) &&
                      !c_arithmetic_point(c, &v) && v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
                 ++id;
@@ -693,6 +696,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     }
     if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
         c_fixed_instruction(c, v);
+        return;
+    }
+    if (c_view_point(c, v)) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_view_instruction(c, v, source);
         return;
     }
     if (c_array_point(c, v) || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_ARRAY_CELL_DROP) {
@@ -948,6 +956,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
+    if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (root_result == XR_LIR_STRING)
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
@@ -1025,7 +1034,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         !request->resources || !request->translation_unit || !request->module ||
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
-        entry.kind != XR_LIR_FUNCTION_DEFINITION ||
+        entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.result == XR_LIR_SLICE_I64 ||
         (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;

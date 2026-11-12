@@ -17,9 +17,9 @@ static XrLirStatus array_fixture_registry(XrLirType element, XrLirModule **outpu
     XrLirType constructor[] = {element}, length[] = {XR_LIR_ARRAY};
     XrLirType append[] = {XR_LIR_ARRAY_CELL, element};
     XrLirType get[] = {XR_LIR_ARRAY, XR_LIR_I64}, set[] = {XR_LIR_ARRAY_CELL, XR_LIR_I64, element};
-    XrLirIntrinsic entries[] = {{11, constructor, 1, XR_LIR_ARRAY, true},
-        {12, length, 1, XR_LIR_I64, true}, {13, append, 2, XR_LIR_UNIT, true},
-        {14, get, 2, element, true}, {15, set, 3, XR_LIR_UNIT, true}};
+    XrLirIntrinsic entries[] = {{11, constructor, 1, XR_LIR_ARRAY, true, 0},
+        {12, length, 1, XR_LIR_I64, true, 0}, {13, append, 2, XR_LIR_UNIT, true, 0},
+        {14, get, 2, element, true, 0}, {15, set, 3, XR_LIR_UNIT, true, 0}};
     XrLirRegistry registry = {entries, 5};
     XrLirStatus status = xr_lir_module_create(&registry, output);
     if (status != XR_LIR_OK) return status;

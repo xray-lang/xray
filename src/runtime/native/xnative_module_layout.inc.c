@@ -49,6 +49,8 @@ static XrXirValueStatus module_layout_slots(const XrtModuleLayout *layout) {
         if (slot->module >= spec->module_count || slot->type >= spec->type_count ||
             (slot->flags & ~XRT_MODULE_SLOT_MUTABLE)) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrtModuleType type = layout->types[slot->type];
+        if (type.kind == XRT_MODULE_CELL_ARRAY_I64 && !(slot->flags & XRT_MODULE_SLOT_MUTABLE))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
         if (slot->size != type.size || slot->alignment != type.alignment ||
             slot->alignment > spec->payload_alignment || slot->offset % type.alignment ||
             slot->offset < end || slot->offset > spec->payload_size ||

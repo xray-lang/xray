@@ -1,0 +1,7 @@
+fn sample(choose:bool)->i64 {
+ var values=[11,22,33]
+ const part:Slice<i64> = choose ? values[1:3] : values[0:2]
+ return part[0]
+}
+print(sample(false))
+print(sample(true))

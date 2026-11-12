@@ -15,6 +15,7 @@ static bool c_state_point(const XrLirInstructionView *v) {
 }
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
+    if (type == XR_LIR_VIEW_CELL) return c->state_type_base + c->constructed_count;
     if (type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count)
         return c->state_type_base + type - XR_LIR_TYPE_COUNT;
     XrtModuleTypeKind kind = lir_state_payload_kind(type, element);
@@ -47,6 +48,7 @@ static void c_state_layout(LirC *c) {
         c_format(c, "    {%s, UINT32_C(%" PRIu32 ")},\n",
             shape.kind == XR_LIR_TYPE_NULLABLE ? "XRT_MODULE_NULLABLE" : "XRT_MODULE_FIXED_U8", argument);
     }
+    if (lir_state_has_view_cells(layout)) c_text(c, "    {XRT_MODULE_CELL_ARRAY_I64, 0},\n");
     c_text(c, "};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)
@@ -69,7 +71,8 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
-        c->state_type_base + c->constructed_count, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
+        c->state_type_base + c->constructed_count + lir_state_has_view_cells(layout),
+        layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);

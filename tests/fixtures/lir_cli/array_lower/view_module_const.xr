@@ -1,0 +1,6 @@
+const values = [11,22,33]
+fn sample()->i64 {
+    const part:Slice<i64> = values[1:3]
+    return part[0]
+}
+print(sample())

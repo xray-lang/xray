@@ -106,4 +106,10 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_write(const XrXirValue *va
 XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_push(const XrXirValue *value,
     const XrXirCellAuthority *authority,const XrXirValuePath *path,
     const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirFaultDetail *fault);
+/* The typed activation producer prepays exact whole Cell<Array<i64>> shape
+ * and physical lifetime. These leaves still enforce current loan authority. */
+XR_FUNC XrXirValueStatus xir_cell_array_i64_read_owned(const XrXirValue *, int64_t,
+    const XrXirCellAuthority *, int64_t *);
+XR_FUNC XrXirValueStatus xir_cell_array_i64_write_owned(const XrXirValue *, int64_t, int64_t,
+    const XrXirCellAuthority *, XrXirValueAdmission *, XrXirFaultDetail *);
 #endif // XXIR_CELL_OWNER_INTERNAL_H

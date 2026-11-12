@@ -18,6 +18,11 @@ static bool lower_array_read(LowerFunction *f, uint32_t b, XrLirValue receiver,
     XrLirValue *output) {
     XrLirType type = lower_value_type(f, receiver);
     if (type == XR_LIR_ARRAY) { *output = receiver; return true; }
+    if (type == XR_LIR_VIEW_CELL) {
+        XrLirValue args[] = {f->view_frame, receiver};
+        LowerViewCall call = {XR_LIR_VIEW_OP_CELL_READ, args, 2, 0};
+        return lower_view_call(f, b, &call, output);
+    }
     if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_STATE_REF && type != XR_LIR_ARRAY_REF)
         return lower_unsupported(f->owner, "Array receiver without a typed binding");
     XrLirInstruction read = {.op = type == XR_LIR_ARRAY_CELL ? XR_LIR_CELL_READ :

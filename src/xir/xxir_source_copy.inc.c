@@ -6,6 +6,12 @@
  *
  * xxir_source_copy.inc.c - Explicit logical copies of ordinary owned positions
  */
+static bool source_copy_result_type(SourceContext *ctx,XrXirType input,XrXirType *output) {
+    *output=input;
+    const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,input);
+    if (!node || node->kind!=XR_XIR_TYPE_SLICE || node->element!=XR_XIR_I64) return true;
+    return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=node->element},output);
+}
 static bool source_copy_position(SourceContext *ctx,AstNode *node) {
     for(uint32_t depth=0;node && depth<128;++depth) {
         if(node->type==AST_VARIABLE || node->type==AST_THIS_EXPR)return true;
@@ -80,8 +86,15 @@ static bool source_copy(SourceContext *ctx,AstNode *node,SourceExpectedType expe
     }
     if (range && range->type==AST_SLICE_EXPR)return source_copy_range(ctx,node,range,value);
     AstNode *position=node->as.unary.operand;SourceValue input;
-    if(!source_copy_position(ctx,position) || !source_plan_expression(ctx,position,expected,&input) ||
-        !source_copy_type(ctx,node,input.type))return false;
+    SourceExpectedType declared;
+    XrXirType result=XR_XIR_UNIT;
+    if (!source_copy_position(ctx,position) || !source_ground_type(ctx,position,0,&declared) ||
+        !source_copy_result_type(ctx,declared.type,&result)) return false;
+    if (declared.present && result!=declared.type) expected=(SourceExpectedType){0};
+    if (!source_plan_expression(ctx,position,expected,&input) ||
+        !source_copy_result_type(ctx,input.type,&result) || !source_copy_type(ctx,node,result)) return false;
+    if (result!=input.type)
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_VIEW_COPY,result,{input.id},{0},0,{0}},value);
     if(input.type==XR_XIR_UNIT){*value=input;return true;}
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,input.type,{input.id},{0},0,{0}},value);
 }

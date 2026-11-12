@@ -13,7 +13,7 @@ static XrLirModule *type_pool_identity(void) {
     OK(xr_lir_module_create(NULL, &m));
     XrLirType type = 0;
     OK(xr_lir_fixed_array_type(m, XR_LIR_U8, 11, &type));
-    XrLirIntrinsic intrinsic = {99, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {99, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     OK(xr_lir_set_registry(m, &registry));
     XrLirFunction f = test_function(m, "fixed_identity", &type, 1, type);

@@ -187,7 +187,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     for(uint32_t v=1;v<=c->view.value_count;++v)
         c->state_scratch |= rbc_lir_value_type(c,v)==XR_LIR_STATE;
     uint64_t reserved=(uint64_t)c->temporary_strings+rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+window+
-        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u);
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
     uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
@@ -219,7 +219,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         XrLirType type=rbc_lir_value_type(c,v);
         if(c->slots[v]!=UINT32_MAX ||
             (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF &&
-             type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE))continue;
+             type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE && type!=XR_LIR_VIEW_FRAME &&
+             type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {
@@ -239,7 +240,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     }
     c->typed_spills=true;
     c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+
-        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u);
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u);
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
     return true;
@@ -316,6 +317,7 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (kinds[first] == XR_RBC_STRING) c->string_scratch = true;
         if (kinds[first] == XR_RBC_STATE) c->state_scratch = true;
         if (kinds[first] == XR_RBC_STATE_REF) c->state_ref_scratch = true;
+        if (xr_rbc_view_kind(kinds[first])) c->view_scratch[kinds[first] - XR_RBC_VIEW_FRAME] = true;
         uint32_t family = xr_rbc_array_family(kinds[first]);
         if (family < XR_RBC_ARRAY_FAMILY_COUNT) c->array_scratch[family] = true;
         if (emit && !rbc_lir_array_move(c, kinds[first], temporary, source)) return false;

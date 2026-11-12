@@ -14,7 +14,7 @@ static XrLirModule *constructed_frontier_module(unsigned scenario, XrLirFunction
     XrLirType fixed = 0;
     OK(xr_lir_fixed_array_type(m, XR_LIR_U8, 11, &fixed));
     if (scenario == 3) {
-        XrLirIntrinsic signature = {71, &fixed, 1, fixed, true};
+        XrLirIntrinsic signature = {71, &fixed, 1, fixed, true, 0};
         XrLirRegistry registry = {&signature, 1};
         OK(xr_lir_set_registry(m, &registry));
     }

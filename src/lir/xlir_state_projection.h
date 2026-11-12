@@ -9,9 +9,11 @@
 #ifndef XLIR_STATE_PROJECTION_H
 #define XLIR_STATE_PROJECTION_H
 #include "xlir_pod.h"
+#include "xlir_state.h"
 #include "shared/xr_pod_state.h"
 
 static inline XrtModuleTypeKind lir_state_payload_kind(XrLirType type, XrLirType element) {
+    if (type == XR_LIR_VIEW_CELL) return XRT_MODULE_CELL_ARRAY_I64;
     if (type == XR_LIR_STRING) return XRT_MODULE_STRING;
     if (type == XR_LIR_ARRAY) {
         switch (element) {
@@ -28,4 +30,9 @@ static inline XrtModuleTypeKind lir_state_payload_kind(XrLirType type, XrLirType
 }
 
 enum { LIR_STATE_CONSTRUCTED_BASE = XRT_MODULE_FIXED_U8 - XRT_MODULE_UNIT };
+static inline bool lir_state_has_view_cells(const XrLirStateLayout *layout) {
+    for (uint32_t s = 0; s < layout->slot_count; ++s)
+        if (layout->slots[s].payload == XR_LIR_VIEW_CELL) return true;
+    return false;
+}
 #endif // XLIR_STATE_PROJECTION_H

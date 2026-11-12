@@ -1,0 +1,1 @@
+fn bad(view:Slice<i64>)->i64{const owned=copy view;return 0}
