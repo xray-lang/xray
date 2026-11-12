@@ -773,6 +773,14 @@ static void enum_metadata_cases(void) {
 static void stage_packet_word(uint8_t *bytes, uint32_t value) {
     for (unsigned i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
 }
+static uint32_t stage_packet_read_word(const XrXirCheckedPacket *packet, size_t *cursor) {
+    CHECK(*cursor <= packet->length && 4 <= packet->length - *cursor);
+    const uint8_t *bytes = packet->bytes + *cursor;
+    uint32_t word = (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8 |
+        (uint32_t)bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+    *cursor += 4;
+    return word;
+}
 static void error_filter_packets(const XrXirArtifact *checked) {
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
@@ -877,15 +885,41 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(module->function_count == 1);
     const XrXirFunction *function = &module->functions[0];
     CHECK(function->block_count == 3 && function->instruction_count == 8);
-    // Consume ordinals precede the result, error and canonical block records.
-    size_t blocks = 64 + 3 * 4 + 4 + function->name_length + 4 +
-        (size_t)function->parameter_count * 4 + 4 +
-        (size_t)function->consume_parameter_count * 4 + 4 + 4 + 4;
-    size_t instructions = blocks + (size_t)function->block_count * 16 + 4;
+    /* Read encoded vector counts before locating the block and instruction rows. */
+    size_t cursor = 64;
+    CHECK(stage_packet_read_word(&packet, &cursor) == (uint32_t)module->linkage_kind);
+    CHECK(stage_packet_read_word(&packet, &cursor) == module->function_count);
+    CHECK(stage_packet_read_word(&packet, &cursor) == (module->declarations ? 1u : 0u));
+    uint32_t name_length = stage_packet_read_word(&packet, &cursor);
+    CHECK(name_length == function->name_length);
+    CHECK(cursor <= packet.length && name_length <= packet.length - cursor);
+    CHECK(!memcmp(packet.bytes + cursor, function->name, name_length));
+    cursor += name_length;
+    uint32_t parameters = stage_packet_read_word(&packet, &cursor);
+    CHECK(parameters == function->parameter_count);
+    for (uint32_t p = 0; p < parameters; ++p)
+        CHECK(stage_packet_read_word(&packet, &cursor) == (uint32_t)function->parameters[p]);
+    uint32_t consumes = stage_packet_read_word(&packet, &cursor);
+    CHECK(consumes == function->consume_parameter_count);
+    for (uint32_t p = 0; p < consumes; ++p)
+        CHECK(stage_packet_read_word(&packet, &cursor) == function->consume_parameters[p]);
+    uint32_t escapings = stage_packet_read_word(&packet, &cursor);
+    CHECK(escapings == function->escaping_parameter_count);
+    for (uint32_t p = 0; p < escapings; ++p)
+        CHECK(stage_packet_read_word(&packet, &cursor) == function->escaping_parameters[p]);
+    CHECK(stage_packet_read_word(&packet, &cursor) == (uint32_t)function->result);
+    size_t error_offset = cursor;
+    CHECK(stage_packet_read_word(&packet, &cursor) == (uint32_t)function->error_type);
+    CHECK(stage_packet_read_word(&packet, &cursor) == function->block_count);
+    size_t blocks = cursor;
+    CHECK(blocks <= packet.length && function->block_count <= (packet.length - blocks) / 16);
+    cursor += (size_t)function->block_count * 16;
+    CHECK(stage_packet_read_word(&packet, &cursor) == function->instruction_count);
+    size_t instructions = cursor;
     CHECK(instructions <= packet.length && function->instruction_count <= (packet.length - instructions) / 40);
     uint8_t word[4];
     stage_packet_word(word, (uint32_t)function->error_type);
-    CHECK(!memcmp(packet.bytes + blocks - 8, word, sizeof(word)));
+    CHECK(!memcmp(packet.bytes + error_offset, word, sizeof(word)));
     for (uint32_t b = 0; b < function->block_count; ++b) {
         const XrXirBlock *block = &function->blocks[b];
         uint32_t fields[] = {block->first, block->count, block->panic, block->frontier};
