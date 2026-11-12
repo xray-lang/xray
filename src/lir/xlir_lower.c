@@ -27,6 +27,7 @@ typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
     XrLirModule *module;
+    XrLirType *constructed_types;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
     uint32_t *queue, queued;
@@ -76,6 +77,11 @@ static bool lower_managed_type(XrLirType type) {
     return type == XR_LIR_STRING || type == XR_LIR_ARRAY;
 }
 static XrLirType lower_type(const Lower *c, XrXirType type) {
+    uint32_t id = (uint32_t)type;
+    if (c->constructed_types && id >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
+        id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count &&
+        c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE])
+        return c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE];
     if (lower_array_element(c, type)) return XR_LIR_ARRAY;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_array_element(c, xr_xir_cell_element(c->source->types, type)))
@@ -95,6 +101,32 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
     if (type == XR_XIR_STRING)
         return XR_LIR_STRING;
     return XR_LIR_TYPE_INVALID;
+}
+
+static XrLirSource lower_range_source(const Lower *c, XrXirSourceRange range) {
+    XrLirSource result = {0};
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(c->request->snapshot);
+    if (!view) return result;
+    /* Debug points can retain only a start coordinate. Represent that fact as
+     * an empty range rather than dropping the available source location. */
+    if (!range.end_line) {
+        range.end_line = range.line;
+        range.end_column = range.column;
+    }
+    if (range.module >= view->module_count || range.line <= 0 || range.column <= 0 ||
+        range.end_line < range.line || range.end_column <= 0)
+        return result;
+    const XrXirSourceQueryModule *module = &view->modules[range.module];
+    const char *path = module->path ? module->path : module->identity;
+    if (!path || !path[0])
+        return result;
+    result = (XrLirSource) {path,
+                            strlen(path),
+                            (uint32_t) range.line,
+                            (uint32_t) range.column,
+                            (uint32_t) range.end_line,
+                            (uint32_t) range.end_column};
+    return result;
 }
 
 static XrLirSource lower_source(const Lower *c) {
@@ -121,26 +153,20 @@ static XrLirSource lower_source(const Lower *c) {
                 range = function->points[i].range;
                 break;
             }
-    /* Debug points can retain only a start coordinate. Represent that fact as
-     * an empty range rather than dropping the available source location. */
-    if (!range.end_line) {
-        range.end_line = range.line;
-        range.end_column = range.column;
-    }
-    if (range.module >= view->module_count || range.line <= 0 || range.column <= 0 ||
-        range.end_line < range.line || range.end_column <= 0)
-        return result;
-    const XrXirSourceQueryModule *module = &view->modules[range.module];
-    const char *path = module->path ? module->path : module->identity;
-    if (!path || !path[0])
-        return result;
-    result = (XrLirSource) {path,
-                            strlen(path),
-                            (uint32_t) range.line,
-                            (uint32_t) range.column,
-                            (uint32_t) range.end_line,
-                            (uint32_t) range.end_column};
-    return result;
+    return lower_range_source(c, range);
+}
+
+static XrLirSource lower_slot_source(const Lower *c, uint32_t slot) {
+    const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(c->request->snapshot);
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(c->request->snapshot);
+    if (debug && view)
+        for (uint32_t i = 0; i < debug->global_count; ++i) {
+            const XrXirSourceDebugGlobal *global = &debug->globals[i];
+            if (global->slot == slot && global->declaration &&
+                global->declaration <= view->declaration_count)
+                return lower_range_source(c, view->declarations[global->declaration - 1].range);
+        }
+    return lower_source(c);
 }
 
 static XrLirStatus lower_error_source(Lower *c, XrLirStatus status, const char *message,
@@ -206,9 +232,27 @@ static bool lower_build(Lower *c, XrLirStatus status) {
     return false;
 }
 
+
+/* Only admitted payloads and signatures receive physical type identities.
+ * An unused source descriptor cannot change the retained program's frontier. */
+static bool lower_receive_type(Lower *c, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
+    if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY) return true;
+    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (!c->constructed_types) {
+        c->constructed_types = lower_alloc(c, c->source->types->count,
+            sizeof(*c->constructed_types));
+        if (!c->constructed_types) return false;
+    }
+    if (c->constructed_types[index]) return true;
+    return lower_build(c, xr_lir_fixed_array_type(c->module, lower_type(c, node->element),
+        node->parameter_count, &c->constructed_types[index]));
+}
+
 static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+        case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
         case XR_XIR_ARRAY_NEW:
         case XR_XIR_ARRAY_REPEAT:
         case XR_XIR_ARRAY_LEN:
@@ -376,6 +420,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 }
 
 static void lower_modules_free(Lower *c) {
+    xr_free(c->constructed_types);
     if (c->module_cells)
         for (uint32_t f = 0; f < c->source->function_count; ++f)
             xr_free(c->module_cells[f]);
@@ -435,10 +480,15 @@ static bool lower_state_layout(Lower *c) {
                 return lower_unsupported(c, "mutable module slot without a Cell");
             type = xr_xir_cell_element(c->source->types, type);
         }
+        if (!lower_receive_type(c, type)) return false;
         XrLirStateSlot physical = {.module = slot->module, .payload = lower_type(c, type),
             .mutable = slot->mutable != 0, .array_element = lower_array_element(c, type)};
-        if (!xr_lir_internal_state_payload(c->module, physical.payload, &physical.size, &physical.alignment))
-            return lower_unsupported(c, "module slot payload type");
+        if (!xr_lir_internal_state_payload(c->module, physical.payload, &physical.size, &physical.alignment)) {
+            XrLirSource source = lower_slot_source(c, s);
+            lower_error_source(c, XR_LIR_UNSUPPORTED,
+                "module slot payload type is not supported by LIR lowering yet", &source);
+            return false;
+        }
         uint64_t padding = (physical.alignment - end % physical.alignment) % physical.alignment;
         if (end > UINT64_MAX - padding || end + padding > UINT64_MAX - physical.size) {
             lower_error(c, XR_LIR_OUT_OF_MEMORY, "module payload size overflow");
@@ -661,7 +711,8 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
         const XrXirInstruction *op = &f->instructions[i];
         if (!lower_known(op->op)) continue;
         if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
-            op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET) {
+            op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
+            op->op == XR_XIR_FIXED_ARRAY_NEW) {
             if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0]) {
                 lower_unsupported(c, "literal use range");
                 xr_free(uses);
@@ -708,6 +759,9 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c, "module slot publication authority");
         return true;
     }
+    XrXirType payload = op->op == XR_XIR_CELL_NEW ?
+        xr_xir_cell_element(c->source->types, op->type) : op->type;
+    if (!lower_receive_type(c, payload)) return false;
     if (lower_array_element(c, op->type) || lower_type(c, op->type) == XR_LIR_ARRAY_CELL)
         c->arrays = true;
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
@@ -772,7 +826,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         XrXirType type = xr_xir_operand_type(f, value);
         if (type == XR_XIR_STRING || type == XR_XIR_F64) {
             c->string_prints = true;
-        } else if (type == XR_XIR_I64) c->prints = true;
+        } else if (type == XR_XIR_I64 || type == XR_XIR_U8) c->prints = true;
         else return lower_unsupported(c, "print other than one supported value");
     }
     return true;
@@ -796,10 +850,12 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[function];
     XR_DCHECK(c->active[function], "only executable functions enter admission");
+    if (!lower_receive_type(c, f->result)) return false;
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_ARRAY_CELL)
         return lower_unsupported(c, "function result type");
     c->arrays |= lower_array_element(c, f->result) != XR_LIR_TYPE_INVALID;
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
+        if (!lower_receive_type(c, f->parameters[p])) return false;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;
         if (lower_type(c, f->parameters[p]) <= XR_LIR_UNIT)
@@ -1271,10 +1327,49 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
               "SSA values remain in their defining output function");
     return true;
 }
+static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
+    Lower *c = f->owner;
+    const XrXirInstruction *op = &f->source->instructions[i];
+    XrLirValue *result = &f->values[f->source->parameter_count + i];
+    XrLirValue operands[2] = {{0}};
+    if (op->op == XR_XIR_FIXED_ARRAY_LEN) {
+        if (!lower_value(f, op->args[0], &operands[0])) return false;
+        XrXirType type = xr_xir_operand_type(f->source, op->args[0]);
+        XrLirInstruction length = {.op=XR_LIR_CONST, .type=XR_LIR_I64,
+            .bits=xr_xir_fixed_array_length(c->source->types, type), .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &length, result));
+    }
+    if (op->op == XR_XIR_FIXED_ARRAY_GET) {
+        if (!lower_value(f, op->args[0], &operands[0]) ||
+            !lower_value(f, op->args[1], &operands[1])) return false;
+        XrLirInstruction get = {.op=XR_LIR_FIXED_ARRAY_GET, .type=XR_LIR_U8,
+            .operands=operands, .operand_count=2, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &get, result));
+    }
+    if (op->args[0] > f->source->operand_count ||
+        op->args[1] > f->source->operand_count - op->args[0]) {
+        lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked fixed byte operand range");
+        return false;
+    }
+    XrLirValue *elements = lower_alloc(c, op->args[1], sizeof(*elements));
+    if (!elements) return false;
+    bool good = true;
+    for (uint32_t a = 0; a < op->args[1] && good; ++a)
+        good = lower_value(f, f->source->operands[op->args[0] + a], &elements[a]);
+    XrLirInstruction construct = {.op=XR_LIR_FIXED_ARRAY_NEW, .type=lower_type(c, op->type),
+        .operands=elements, .operand_count=op->args[1], .source=lower_source(c)};
+    if (good) good = lower_build(c,
+        xr_lir_emit_value(c->module, f->blocks[b], &construct, result));
+    xr_free(elements);
+    return good;
+}
+
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
     uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
+        op->op == XR_XIR_FIXED_ARRAY_LEN) return lower_fixed_instruction(f, b, i);
     if (op->op == XR_XIR_CLOCK_NANOS) {
         XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64,
             .callee=c->clocks[op->immediate - 1], .source=lower_source(c)};
@@ -1361,6 +1456,16 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
+        if (xr_xir_operand_type(f->source, value) == XR_XIR_U8) {
+            XrLirValue argument = {0}, widened = {0};
+            if (!lower_value(f, value, &argument)) return false;
+            XrLirInstruction cast = {.op=XR_LIR_INTCAST, .type=XR_LIR_I64,
+                .operands=&argument, .operand_count=1, .source=lower_source(c)};
+            if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &cast, &widened))) return false;
+            XrLirInstruction print = {.op=XR_LIR_CALL, .type=XR_LIR_UNIT, .callee=c->print,
+                .operands=&widened, .operand_count=1, .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &print));
+        }
         if (xr_xir_operand_type(f->source, value) == XR_XIR_F64) {
             XrLirValue argument = {0}, text = {0};
             if (!lower_value(f, value, &argument)) return false;

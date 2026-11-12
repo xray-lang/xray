@@ -1,0 +1,2 @@
+fn ignored()->[u8;3]{return b"abc"}
+print(17)

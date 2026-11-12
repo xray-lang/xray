@@ -1,0 +1,6 @@
+const bytes = b"0123456789ABCDEFG"
+fn identity(value: [u8; 17]) -> [u8; 17] { return value }
+fn at(value: [u8; 17], index: i64) -> u8 { return value[index] }
+print(len(identity(bytes)))
+print(identity(bytes)[16])
+print(at(bytes, 16))

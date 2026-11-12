@@ -1,0 +1,3 @@
+const bytes = b"abc"
+bytes[-1]
+print(99)

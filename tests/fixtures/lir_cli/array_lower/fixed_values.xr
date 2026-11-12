@@ -1,0 +1,10 @@
+var bytes = b"\x00\x80\xff"
+const saved = bytes
+fn change() { bytes = b"\x7f\x01\x02" }
+fn identity(value: [u8; 3]) -> [u8; 3] { return value }
+change()
+print(saved[0])
+print(saved[1])
+print(saved[2])
+print(bytes[0])
+print(identity(saved)[2])

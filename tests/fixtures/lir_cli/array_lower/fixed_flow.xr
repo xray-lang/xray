@@ -1,0 +1,12 @@
+fn choose(flag: bool) -> [u8; 3] { return flag ? b"abc" : b"XYZ" }
+fn cycle(n: i64) -> [u8; 3] {
+    var value = b"abc"
+    var i = 0
+    while (i < n) {
+        value = choose(i == 1)
+        i = i + 1
+    }
+    return value
+}
+print(cycle(3)[0])
+print(cycle(2)[0])

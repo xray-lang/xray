@@ -49,7 +49,8 @@ def main() -> None:
                  "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
                  "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
                  "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
-                 "panic_bounds", "panic_unpublished"):
+                 "panic_bounds", "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
+                 "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length"):
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
@@ -102,6 +103,8 @@ def main() -> None:
         if vm_out != out or vm_err != err:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
     rejected_sources = {
+        "reject_fixed_empty": b"this fixed byte length",
+        "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",
         "reject_repeat_string_default": b"type has no admitted default initializer",
         "reject_unsigned_family": b"expression cannot satisfy its declared type",
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",

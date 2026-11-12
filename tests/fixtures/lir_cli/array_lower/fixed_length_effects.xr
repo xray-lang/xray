@@ -1,0 +1,7 @@
+var visits = 0
+fn receiver() -> [u8; 3] { visits = visits + 1; return b"abc" }
+fn branch(flag: bool) -> i64 { if (flag) { return len(receiver()) }; return 0 }
+print(branch(false))
+print(visits)
+print(len(receiver()))
+print(visits)

@@ -233,7 +233,34 @@ static void array_reference_failures(void) {
     printf("Borrowed Array binding Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void unused_fixed_type_allocations(void) {
+    SourceFixture builtin = source_fixture("print(17)\n");
+    SourceFixture unused = source_fixture(
+        "fn ignored()->[u8;3]{return b\"abc\"}\nprint(17)\n");
+    fail_at = SIZE_MAX; attempts = 0; OK(run(&builtin));
+    size_t baseline = attempts;
+    attempts = 0; OK(run(&unused));
+    CHECK(attempts == baseline);
+    source_fixture_free(&unused); source_fixture_free(&builtin);
+}
+
+static void fixed_byte_failures(void) {
+    SourceFixture fixture = source_fixture("var bytes=b\"A\\x00B\"\n"
+        "fn change(){bytes=b\"XYZ\"}\nchange()\nprint(bytes[1])\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Fixed byte Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    unused_fixed_type_allocations();
+    fixed_byte_failures();
     array_unsigned_failures();
     array_reference_failures();
     array_repeat_failures();

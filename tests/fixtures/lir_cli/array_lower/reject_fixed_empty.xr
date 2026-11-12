@@ -1,0 +1,2 @@
+const bytes = b""
+print(len(bytes))

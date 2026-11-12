@@ -1,0 +1,4 @@
+fn inspect() -> i64 { return len(later) }
+const measured = inspect()
+const later = b"abc"
+print(measured)

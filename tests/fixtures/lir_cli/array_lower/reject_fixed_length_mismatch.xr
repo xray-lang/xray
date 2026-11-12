@@ -1,0 +1,2 @@
+fn identity(value: [u8; 3]) -> [u8; 3] { return value }
+print(len(identity(b"abcd")))

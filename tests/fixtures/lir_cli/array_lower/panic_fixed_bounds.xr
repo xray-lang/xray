@@ -1,0 +1,3 @@
+const bytes = b"abc"
+bytes[3]
+print(99)
