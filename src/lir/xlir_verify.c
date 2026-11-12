@@ -126,11 +126,24 @@ static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uin
 #include "xlir_state_verify.inc.c"
 #include "xlir_array_verify.inc.c"
 
-static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
+static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
+        case XR_LIR_FIXED_ARRAY_NEW: {
+            XrLirTypeView shape;
+            if (xr_lir_type_view(m, v->type, &shape) != XR_LIR_OK ||
+                shape.kind != XR_LIR_TYPE_FIXED_ARRAY || v->operand_count != shape.count) return false;
+            for (uint32_t p = 0; p < v->operand_count; ++p)
+                if (f->values[v->operands[p] - 1].type != shape.element) return false;
+            return true;
+        }
+        case XR_LIR_FIXED_ARRAY_GET: {
+            XrLirTypeView shape;
+            return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
+                xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
+        }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
         case XR_LIR_CELL_NEW:
@@ -338,7 +351,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_UNSUPPORTED;
     }
     if (v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE ? !lir_state_instruction_types(m, f, v) :
-        !lir_scalar_instruction_types(f, v))
+        !lir_scalar_instruction_types(m, f, v))
         goto invalid;
     if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;
     return XR_LIR_OK;

@@ -61,4 +61,11 @@ XR_FUNC XrLirStatus xr_lir_import_type(XrLirModule *target, const XrLirModule *s
  * copying registry entries or signatures. The copied ordinals remain exact. */
 XR_FUNC XrLirStatus xr_lir_copy_types(XrLirModule *target, const XrLirModule *source);
 
+/* FIXED_ARRAY_NEW has its exact constructed result type and exactly count
+ * U8 operands. FIXED_ARRAY_GET returns U8 from a fixed value and signed I64
+ * index. Negative and out-of-range indices fail at that instruction's source,
+ * including when its result is unused. Both ops have zero bits/callee/intrinsic.
+ * Length is an I64 constant derived from this type, after receiver evaluation.
+ * Such a fold preserves the receiver's calls, state reads and possible traps. */
+
 #endif // XLIR_TYPES_H

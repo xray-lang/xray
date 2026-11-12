@@ -54,3 +54,7 @@ XR_LIR_OP(ARRAY_CELL_DROP, "array_cell_drop", 1)
 XR_LIR_OP(ARRAY_BORROW, "array_borrow", 1)
 XR_LIR_OP(ARRAY_REF_READ, "array_ref_read", 1)
 XR_LIR_OP(ARRAY_REF_WRITE, "array_ref_write", 2)
+/* Fixed aggregates are unboxed values. GET retains its bounds trap even when
+ * the result is unused; receiver evaluation precedes that instruction. */
+XR_LIR_OP(FIXED_ARRAY_NEW, "fixed_array_new", -1)
+XR_LIR_OP(FIXED_ARRAY_GET, "fixed_array_get", 2)
