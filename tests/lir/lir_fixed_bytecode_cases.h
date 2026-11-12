@@ -183,3 +183,32 @@ static void fixed_bytecode_state(void) {
             xr_rbc_outcome_free(&outcome);
         }
 }
+
+static void fixed_bytecode_calls(void) {
+    const uint32_t counts[] = {1, 16, 17, 256, 65535};
+    for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n)
+        for (unsigned aggregate = 0; aggregate < 2; ++aggregate) {
+            XrLirFunction root = {0};
+            XrLirModule *module = fixed_bytecode_calls_fixture(counts[n], aggregate != 0, counts[n] == 256, &root);
+            XrRbcProgram *program = NULL;
+            XrRbcCompileDiagnostic diagnostic = {0};
+            XrRbcCompileStatus status = xr_rbc_compile(module, root, &program, &diagnostic);
+            if (status) fprintf(stderr, "Fixed call compile %u: %s\n", (unsigned)status, diagnostic.message);
+            CHECK(status == XR_RBC_COMPILE_OK && program);
+            xr_lir_module_destroy(module);
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
+            uint64_t bits = 0;
+            if (!aggregate) CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 3737);
+            else {
+                const uint8_t *bytes = NULL;
+                XrRbcAggregateType type = {0};
+                CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.kind == XR_RBC_FIXED_U8 && type.count == counts[n]);
+                CHECK(!xr_rbc_outcome_bits(outcome, &bits));
+                for (uint32_t p = 0; p < type.count; ++p) CHECK(bytes[p] == 37);
+            }
+            xr_rbc_outcome_free(&outcome);
+        }
+}

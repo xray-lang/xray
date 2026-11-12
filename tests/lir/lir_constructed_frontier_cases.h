@@ -77,7 +77,7 @@ static void constructed_backend_frontiers(void) {
         XrLirCDiagnostic native_diagnostic;
         XrLirCStatus emitted = xr_lir_emit_c(&request, &output, &native_diagnostic);
         CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
-        if (scenario < 4 && scenario != 2) {
+        if (scenario == 3) {
             CHECK(compiled == XR_RBC_COMPILE_UNSUPPORTED && !program);
             CHECK(strstr(bytecode_diagnostic.message, "constructed physical types"));
         } else {
@@ -101,5 +101,5 @@ static void constructed_backend_frontiers(void) {
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);
     }
-    puts("constructed State accepted while bytecode function ABI frontiers remain closed");
+    puts("constructed values and State accepted while unknown intrinsic frontiers remain closed");
 }

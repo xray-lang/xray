@@ -63,6 +63,9 @@ typedef struct {
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
     uint32_t *aggregate_home, *aggregate_scratch;
+    uint32_t *aggregate_parameters, *aggregate_arguments;
+    uint32_t scalar_parameter_count, aggregate_parameter_count;
+    size_t aggregate_argument_count, aggregate_argument_capacity;
     XrRbcAggregateValue *aggregate_values;
     uint32_t aggregate_value_count;
     size_t aggregate_size;
@@ -375,7 +378,8 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         return false;
     }
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
-        (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && !rbc_lir_scalar(v->result))) {
+        (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY &&
+         !rbc_lir_scalar(v->result) && !rbc_lir_fixed_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
             rbc_lir_value_source(input, f, v, 0, d));
@@ -428,7 +432,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
     if (xr_lir_constructed_type_count(input) && !rbc_lir_fixed_point(i) &&
-        !rbc_lir_fixed_state(input, function, i)) {
+        !rbc_lir_fixed_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[p]}, &type);
@@ -621,7 +625,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
                     type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF ||
-                    type==XR_LIR_I64_CELL || type==XR_LIR_STATE)continue;
+                    type==XR_LIR_I64_CELL || type==XR_LIR_STATE || type>=XR_LIR_TYPE_COUNT)continue;
                 if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
                 else if(type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,v,type))];else ++bits;
             }
@@ -630,7 +634,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 else if(i.type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type))];
                 else if(i.type==XR_LIR_STATE_REF)++refs;
                 else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF &&
-                    i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE)++bits;
+                    i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
             if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8) ++bits;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
@@ -647,7 +651,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 uint32_t mapped=c->functions[i.callee-1];
                 uint32_t physical=rbc_lir_native(mapped)?
                     (mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_PRINT_I64 ||
-                     mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_UTC_OFFSET_AT?2u:1u):i.operand_count;
+                     mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_UTC_OFFSET_AT?2u:1u):rbc_lir_scalar_arguments(c->input, &i);
                 if(physical==UINT32_MAX)
                     return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"call window exceeds index space");
                 if(window<physical+1)window=physical+1;
@@ -669,7 +673,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 uint32_t mapped = c->functions[i.callee - 1];
                 uint32_t physical = rbc_lir_native(mapped) ?
                     (mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_PRINT_I64 ||
-                     mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) : i.operand_count;
+                     mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) : rbc_lir_scalar_arguments(c->input, &i);
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
@@ -839,6 +843,7 @@ static bool rbc_lir_literal(RbcLirCompiler *c, uint32_t origin, uint32_t *ordina
 }
 
 #include "xrbc_lir_state.inc.c"
+#include "xrbc_lir_aggregate_call.inc.c"
 
 static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t result = i->result ? c->slots[i->result] : 0;
@@ -916,9 +921,13 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
     case XR_LIR_RET:
+        if (c->view.result >= XR_LIR_TYPE_COUNT)
+            return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=XR_RBC_AGGREGATE_RETURN,
+                .source=c->aggregate_home[i->operands[0]]});
         return rbc_lir_emit(c, i->operand_count ? XR_RBC_RET : XR_RBC_RET0,
             i->operand_count ? c->slots[i->operands[0]] : 0, 0, 0, 0);
     case XR_LIR_CALL: {
+        if (rbc_lir_fixed_call(c->input, i)) return rbc_lir_aggregate_call_emit(c, i);
         if (c->functions[i->callee - 1] == RBC_LIR_PRINT_STRING) {
             uint32_t ordinal;
             return rbc_lir_literal(c, c->output.literals[i->operands[0]], &ordinal) &&
@@ -1128,7 +1137,9 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         uint32_t op = c->code[pc] & 255;
         if (op == XR_RBC_JMP) {
             successors[successors_count++] = rbc_lir_jump_target(c, pc);
-        } else if (op != XR_RBC_RET && op != XR_RBC_RET0) {
+        } else if (op != XR_RBC_RET && op != XR_RBC_RET0 &&
+            !(op == XR_RBC_AGGREGATE_ACCESS &&
+              c->aggregate_accesses[c->code[pc] >> 16].operation == XR_RBC_AGGREGATE_RETURN)) {
             XR_DCHECK(pc + 1 < count, "emitted fallthrough stays inside its function");
             successors[successors_count++] = pc + 1;
             if (rbc_lir_paired_jump(op)) {
@@ -1194,6 +1205,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!c->slots || !c->spill_home)
         return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA home tables");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->spill_home[v]=UINT32_MAX;
+    c->scalar_parameter_count = c->view.parameter_count;
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
@@ -1244,7 +1256,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");
     *out = (XrRbcFunction) {.code=c->code, .code_count=c->code_count,
         .constants=c->constants, .constant_count=c->constant_count,
-        .register_count=c->register_count, .parameter_count=c->view.parameter_count,
+        .register_count=c->register_count, .parameter_count=c->scalar_parameter_count,
         .source_ids=c->source_ids, .source_id_count=c->code_count, .cell_count=c->cell_count,
         .register_kinds=c->register_kinds, .register_kind_count=c->register_count,
         .cell_kinds=c->cell_kinds, .cell_kind_count=c->cell_count,
@@ -1258,7 +1270,10 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .aggregate_values=c->aggregate_values, .aggregate_value_count=c->aggregate_value_count,
         .aggregate_size=c->aggregate_size, .aggregate_accesses=c->aggregate_accesses,
         .aggregate_access_count=c->aggregate_access_count, .aggregate_operands=c->aggregate_operands,
-        .aggregate_operand_count=c->aggregate_operand_count};
+        .aggregate_operand_count=c->aggregate_operand_count,
+        .aggregate_parameters=c->aggregate_parameters, .aggregate_parameter_count=c->aggregate_parameter_count,
+        .aggregate_arguments=c->aggregate_arguments, .aggregate_argument_count=c->aggregate_argument_count,
+        .aggregate_result_type=c->view.result >= XR_LIR_TYPE_COUNT ? c->view.result - XR_LIR_TYPE_COUNT + 1 : 0};
     return true;
 }
 
@@ -1277,6 +1292,8 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].aggregate_values);
         xr_free((void *) program->module.functions[f].aggregate_accesses);
         xr_free((void *) program->module.functions[f].aggregate_operands);
+        xr_free((void *) program->module.functions[f].aggregate_parameters);
+        xr_free((void *) program->module.functions[f].aggregate_arguments);
     }
     xr_free((void *) program->module.functions);
     for (size_t i = 0; i < program->module.literal_count; ++i)
@@ -1383,6 +1400,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.state_accesses);
             xr_free(c.array_accesses);xr_free(c.array_operands);xr_free(c.reference_spill_kinds);
             xr_free(c.aggregate_values);xr_free(c.aggregate_accesses);xr_free(c.aggregate_operands);
+            xr_free(c.aggregate_parameters);xr_free(c.aggregate_arguments);
             xr_free(pool.mapping);
             return c.status;
         }
@@ -1454,7 +1472,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "constructed physical types have no bytecode implementation", (XrLirSource) {0});
     for (uint32_t i = 0; i < root.parameter_count; ++i)
-        if (root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
+        if (root.parameter_types[i] >= XR_LIR_TYPE_COUNT ||
+            root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
             root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
             root.parameter_types[i]==XR_LIR_ARRAY_CELL || root.parameter_types[i]==XR_LIR_ARRAY_REF)
             return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,

@@ -496,6 +496,7 @@ int main(int argc, char **argv) {
     fixed_bytecode_execution();
     fixed_bytecode_selected_edges();
     fixed_bytecode_state();
+    fixed_bytecode_calls();
     array_catalog();
     array_reference_owners();
     array_unsigned_frontier();

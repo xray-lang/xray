@@ -27,8 +27,8 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
         view.kind == XR_LIR_TYPE_FIXED_ARRAY && view.element == XR_LIR_U8;
 }
 
-/* Signatures and module payloads remain builtin until their physical ABI is
- * supported. Aggregate SSA values have a separately owned storage projection. */
+/* Definitions and State use the owned Fixed projection. Intrinsic and external
+ * boundaries retain their closed builtin ABI until a typed consumer exists. */
 static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
     if (!xr_lir_module_is_readable(module)) return false;
     if (!xr_lir_constructed_type_count(module)) return true;
@@ -43,8 +43,11 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         XrLirFunctionView view;
         if (xr_lir_function_at(module, i, &function) != XR_LIR_OK ||
             xr_lir_function_view(module, function, &view) != XR_LIR_OK ||
-            !lir_builtin_signature(view.result, view.parameter_types, view.parameter_count))
-            return false;
+            !lir_builtin_or_fixed_type(module, view.result)) return false;
+        for (uint32_t p = 0; p < view.parameter_count; ++p)
+            if (!lir_builtin_or_fixed_type(module, view.parameter_types[p])) return false;
+        if (view.kind != XR_LIR_FUNCTION_DEFINITION &&
+            !lir_builtin_signature(view.result, view.parameter_types, view.parameter_count)) return false;
         if (view.result == XR_LIR_ARRAY) {
             XrLirArrayShape shape;
             if (xr_lir_array_result_view(module, function, &shape) != XR_LIR_OK ||

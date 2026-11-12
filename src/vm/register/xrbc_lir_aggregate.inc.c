@@ -26,6 +26,25 @@ static bool rbc_lir_fixed_state(const XrLirModule *module, XrLirFunction functio
     return type >= XR_LIR_TYPE_COUNT;
 }
 
+static bool rbc_lir_fixed_call(const XrLirModule *module, const XrLirInstructionView *instruction) {
+    if (!xr_lir_constructed_type_count(module)) return false;
+    XrLirFunctionView callee;
+    xr_lir_function_view(module, (XrLirFunction){module, instruction->callee}, &callee);
+    if (callee.result >= XR_LIR_TYPE_COUNT) return true;
+    for (uint32_t p = 0; p < callee.parameter_count; ++p)
+        if (callee.parameter_types[p] >= XR_LIR_TYPE_COUNT) return true;
+    return false;
+}
+
+static uint32_t rbc_lir_scalar_arguments(const XrLirModule *module, const XrLirInstructionView *instruction) {
+    if (!xr_lir_constructed_type_count(module)) return instruction->operand_count;
+    XrLirFunctionView callee;
+    xr_lir_function_view(module, (XrLirFunction){module, instruction->callee}, &callee);
+    uint32_t count = 0;
+    for (uint32_t p = 0; p < callee.parameter_count; ++p) count += callee.parameter_types[p] < XR_LIR_TYPE_COUNT;
+    return count;
+}
+
 static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
     if (!xr_lir_constructed_type_count(c->input)) return true;
     uint32_t count = 0;
@@ -73,6 +92,19 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
         c->aggregate_home[id] = c->aggregate_value_count;
         c->aggregate_values[c->aggregate_value_count++] = (XrRbcAggregateValue){ordinal, (uint32_t)offset};
         c->aggregate_size = (size_t)offset + layout.size;
+    }
+    for (uint32_t p = 0; p < c->view.parameter_count; ++p)
+        c->aggregate_parameter_count += c->aggregate_home[c->view.parameters[p]] != UINT32_MAX;
+    if (c->aggregate_parameter_count) {
+        c->aggregate_parameters = xr_malloc((size_t)c->aggregate_parameter_count * sizeof(*c->aggregate_parameters));
+        if (!c->aggregate_parameters)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own aggregate parameter homes");
+        uint32_t next = 0;
+        for (uint32_t p = 0; p < c->view.parameter_count; ++p) {
+            uint32_t home = c->aggregate_home[c->view.parameters[p]];
+            if (home != UINT32_MAX) c->aggregate_parameters[next++] = home;
+        }
+        c->scalar_parameter_count -= c->aggregate_parameter_count;
     }
     for (uint32_t b = 0; parameters && b < c->view.block_count; ++b) {
         XrLirBlock block;

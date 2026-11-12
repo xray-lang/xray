@@ -156,9 +156,11 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
     }
     for (uint32_t v = 0; v <= c->view.value_count; ++v)
         c->slots[v] = UINT32_MAX;
-    c->slot_count = c->view.parameter_count;
+    c->slot_count = c->scalar_parameter_count;
+    uint32_t physical = 0;
     for (uint32_t p = 0; p < c->view.parameter_count; ++p)
-        c->slots[rbc_lir_group(r, c->view.parameters[p])] = p;
+        if (!c->aggregate_home || c->aggregate_home[c->view.parameters[p]] == UINT32_MAX)
+            c->slots[rbc_lir_group(r, c->view.parameters[p])] = physical++;
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX) continue;
         uint32_t group = rbc_lir_group(r, v);
@@ -189,11 +191,14 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
     uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
-    if(c->view.parameter_count>budget)
+    if(c->scalar_parameter_count>budget)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"parameters and temporaries exceed register capacity");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->slots[v]=c->spill_home[v]=UINT32_MAX;
-    c->slot_count=c->view.parameter_count;
-    for(uint32_t p=0;p<c->view.parameter_count;++p)c->slots[c->view.parameters[p]]=p;
+    c->slot_count=c->scalar_parameter_count;
+    uint32_t physical=0;
+    for(uint32_t p=0;p<c->view.parameter_count;++p)
+        if(!c->aggregate_home || c->aggregate_home[c->view.parameters[p]]==UINT32_MAX)
+            c->slots[c->view.parameters[p]]=physical++;
     /* Edge owners stay resident until selected-edge TAKE. Scalar conditions
      * reload by copy into instruction temporaries. */
     for (uint32_t b=0; b<c->view.block_count; ++b) {
@@ -256,8 +261,10 @@ static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
         r->fixed[v] = UINT32_MAX;
         rbc_lir_set_add(&r->members[v], v);
     }
+    uint32_t physical = 0;
     for (uint32_t p = 0; p < c->view.parameter_count; ++p)
-        r->fixed[c->view.parameters[p]] = p;
+        if (!c->aggregate_home || c->aggregate_home[c->view.parameters[p]] == UINT32_MAX)
+            r->fixed[c->view.parameters[p]] = physical++;
     rbc_lir_liveness(c, r);
     rbc_lir_interference(c, r);
     rbc_lir_coalesce(c, r);

@@ -726,7 +726,47 @@ static void aggregate_state_compiler_failures(void) {
     attempts = 0;
 }
 
+static void aggregate_call_compiler_failures(bool aggregate) {
+    XrLirFunction root = {0};
+    XrLirModule *module = fixed_bytecode_calls_fixture(17, aggregate, true, &root);
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(total > 50 && !live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
+    if (aggregate) {
+        XrRbcAggregateType type = {0};
+        const uint8_t *bytes = NULL;
+        CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.count == 17);
+        for (uint32_t n = 0; n < type.count; ++n) CHECK(bytes[n] == 37);
+    } else {
+        uint64_t bits = 0;
+        CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 3737);
+    }
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!live_allocations);
+    printf("aggregate calls %s result %zu allocation failures and all metadata retired PASS\n",
+        aggregate ? "owned byte" : "scalar", total);
+    attempts = 0;
+}
+
 int main(void) {
+    aggregate_call_compiler_failures(false);
+    aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();
     aggregate_value_compiler_failures(17, false, false);
     aggregate_value_compiler_failures(300, true, false);
