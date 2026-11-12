@@ -135,6 +135,9 @@ jobs:
             build/lir-cli-commands/**/result.json
             build/lir-cli-commands/**/*.stdout
             build/lir-cli-commands/**/*.stderr
+            build/lir-cli-array-native/**/result.json
+            build/lir-cli-array-native/**/*.stdout
+            build/lir-cli-array-native/**/*.stderr
 
   scalar-performance:
     if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
