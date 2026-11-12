@@ -39,6 +39,8 @@ def main() -> None:
     work = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
     fixtures = root / "tests/fixtures/lir_cli/array_lower"
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
+    if os.name == "nt":
+        environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     records = []
     failures = []
 
