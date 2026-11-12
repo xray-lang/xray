@@ -1,0 +1,7 @@
+import "./display_library" as library
+const before=library.snapshot()
+const text=library.describe()
+library.change()
+print(before)
+print(text)
+print(library.describe())
