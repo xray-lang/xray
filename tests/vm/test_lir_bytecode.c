@@ -612,7 +612,7 @@ static void test_call_capacity(uint32_t count) {
 
 static void test_unused_and_invalid(void) {
     XrLirType type = XR_LIR_I64;
-    XrLirIntrinsic intrinsic = {123, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {123, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(&registry, &m));
@@ -663,7 +663,7 @@ static void test_unused_and_invalid(void) {
 
 static void test_owned_diagnostic_and_rejection(void) {
     XrLirType type = XR_LIR_I64;
-    XrLirIntrinsic intrinsic = {123, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {123, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(&registry, &m));

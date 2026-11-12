@@ -1,0 +1,10 @@
+fn invalid(input:Slice<i64>)->Slice<i64> {
+    var values=[11,22,33]
+    return values[:]
+}
+fn sample()->i64 {
+    var owner=[7,8]
+    const part:Slice<i64>=owner[:]
+    return len(invalid(part))
+}
+print(sample())

@@ -1,0 +1,9 @@
+fn tail(part:Slice<i64>)->Slice<i64> { return part[1:] }
+fn relay(part:Slice<i64>)->Slice<i64> { return tail(part) }
+fn sample()->i64 {
+    var values = [11,22,33]
+    const part:Slice<i64> = values[:]
+    const result:Slice<i64> = relay(part)
+    return result[0] + len(result)
+}
+print(sample())

@@ -75,6 +75,7 @@ typedef struct {
     XrRbcArrayLocation *aggregate_operands;
     size_t aggregate_access_count, aggregate_access_capacity, aggregate_operand_count, aggregate_operand_capacity;
     RbcLirImmediate *immediates;
+    uint32_t *view_constants;
     uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits, temporary_refs;
     uint32_t temporary_arrays[XR_RBC_ARRAY_FAMILY_COUNT];
     bool typed_spills;
@@ -312,6 +313,7 @@ static bool rbc_lir_immediates(RbcLirCompiler *c) {
             xr_lir_instruction_view(c->input, block, n, &i);
             // Reuse entries at every other use of the same SSA constant. Only
             // reserve values that already need LOADK, preserving pool limits.
+            c->has_views |= rbc_lir_view_role(c->input, &i) != 0;
             if (i.op == XR_LIR_CONST && i.type == XR_LIR_F64 &&
                 i.bits > INT16_MAX && i.bits < UINT64_MAX - 32767 &&
                 c->constant_count <= UINT8_MAX) {
@@ -327,6 +329,12 @@ static bool rbc_lir_immediates(RbcLirCompiler *c) {
                 (int64_t)i.bits : -1 - (int64_t)~i.bits);
         }
     }
+    if (c->has_views) {
+        c->view_constants = xr_malloc(count * sizeof(*c->view_constants));
+        if (!c->view_constants)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot receive view slot constants");
+        for (size_t v = 0; v < count; ++v) c->view_constants[v] = UINT32_MAX;
+    }
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
         XrLirBlockView view;
@@ -335,6 +343,8 @@ static bool rbc_lir_immediates(RbcLirCompiler *c) {
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
+            if (c->view_constants && i.op == XR_LIR_CONST && i.type == XR_LIR_U32 && i.bits < UINT32_MAX)
+                c->view_constants[i.result] = (uint32_t)i.bits;
             uint32_t selected = rbc_lir_immediate_operand(c, &i);
             for (uint32_t a = 0; a < i.operand_count; ++a)
                 if (a != selected) c->immediates[i.operands[a]].materialize = true;
@@ -396,6 +406,12 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             rbc_lir_value_source(input, f, v, 0, d));
         return false;
     }
+    for (uint32_t p = 0; p < v->parameter_count; ++p)
+        if (v->parameter_types[p] == XR_LIR_U32) {
+            rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+                "U32 is admitted only for closed view slot constants", (XrLirSource){0});
+            return false;
+        }
     if (!rbc_lir_output_values(input, f, v, output,d)) return false;
     if (v->result == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
@@ -441,6 +457,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
+    if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
     if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) &&
@@ -1428,6 +1445,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.aggregate_home);
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
+        xr_free(c.view_constants);
         if (!success) {
             xr_free(c.code);
             xr_free(c.constants);

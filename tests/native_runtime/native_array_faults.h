@@ -95,6 +95,7 @@ static void *native_array_realloc(void *pointer, size_t bytes) {
 #define xr_free_aligned(pointer, alignment) native_array_aligned_free(pointer, alignment)
 #include "xir/xxir_value.c"
 #include "runtime/native/xnative_module_state.c"
+#include "runtime/native/xnative_view.c"
 #pragma pop_macro("xr_free_aligned")
 #pragma pop_macro("xr_malloc_aligned")
 #pragma pop_macro("xr_realloc")

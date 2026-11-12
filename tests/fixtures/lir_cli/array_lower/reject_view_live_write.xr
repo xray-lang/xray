@@ -1,0 +1,7 @@
+fn sample()->i64 {
+    var values = [11,22,33]
+    const part:Slice<i64> = values[:]
+    values[0] = 77
+    return part[0]
+}
+print(sample())

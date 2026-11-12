@@ -50,7 +50,7 @@ static void injected_free(void *memory) {
 
 static void creation_failure(size_t point) {
     XrLirType type = XR_LIR_I64;
-    XrLirIntrinsic intrinsic = {19, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {19, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *module = NULL;
     allocation_index = 0;

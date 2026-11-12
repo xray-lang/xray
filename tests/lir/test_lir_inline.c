@@ -231,7 +231,7 @@ static void test_noreturn_and_api(void) {
 }
 static void test_owned_metadata(void) {
     XrLirType *types = xr_malloc(2 * sizeof(*types)); CHECK(types); types[0] = XR_LIR_I64; types[1] = XR_LIR_PTR;
-    XrLirIntrinsic entries[] = {{7, types, 1, XR_LIR_I64, true}, {91, types, 2, XR_LIR_UNIT, true}};
+    XrLirIntrinsic entries[] = {{7, types, 1, XR_LIR_I64, true, 0}, {91, types, 2, XR_LIR_UNIT, true, 0}};
     XrLirRegistry registry = {entries, 2}; XrLirModule *m = NULL; OK(xr_lir_module_create(&registry, &m)); xr_free(types);
     XrLirType type = XR_LIR_I64; XrLirFunction root = test_function(m, "root", NULL, 0, type);
     char *name = xr_malloc(13), *path = xr_malloc(401); CHECK(name && path);

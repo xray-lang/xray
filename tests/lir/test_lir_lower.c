@@ -901,8 +901,10 @@ static void offset_sources(void) {
 }
 #include "lir_lower_array_cases.h"
 #include "lir_fixed_lower_cases.h"
+#include "lir_view_lower_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
+    view_cold_checked_sources(argv[1]);
     fixed_sources();
     array_sources();
     offset_sources();

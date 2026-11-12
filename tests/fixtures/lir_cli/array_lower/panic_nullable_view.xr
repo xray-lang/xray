@@ -1,0 +1,11 @@
+fn fail(part:Slice<i64>)->i64 {
+    const absent:i64? = null
+    print(absent!)
+    return part[0]
+}
+fn sample()->i64 {
+    var values = [11,22,33]
+    const part:Slice<i64> = values[:]
+    return fail(part)
+}
+print(sample())

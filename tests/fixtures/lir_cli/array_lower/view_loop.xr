@@ -1,0 +1,12 @@
+fn sample()->i64 {
+    var values = [11,22,33]
+    var i = 0
+    var total = 0
+    while (i < 4) {
+        const part:Slice<i64> = values[1:3]
+        total += part[0]
+        i += 1
+    }
+    return total
+}
+print(sample())

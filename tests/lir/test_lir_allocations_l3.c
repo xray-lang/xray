@@ -65,7 +65,7 @@ static XrLirStatus build_allocating_graph(void) {
     XrLirModule *m = NULL;
     XrLirStatus status;
     XrLirType type = XR_LIR_I64;
-    XrLirIntrinsic intrinsic = {19, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {19, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     TRY(xr_lir_module_create(&registry, &m));
     XrLirFunctionSpec spec = {.name = "owned",
@@ -110,7 +110,7 @@ static void registry_transfer_allocations(void) {
     fail_at = SIZE_MAX;
     attempts = 0;
     XrLirType type = XR_LIR_I64;
-    XrLirIntrinsic intrinsic = {91, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {91, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *source = NULL, *copy = NULL;
     REQUIRE(xr_lir_module_create(&registry, &source) == XR_LIR_OK);

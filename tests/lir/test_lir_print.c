@@ -113,7 +113,7 @@ static void entry_and_same_target(void) {
 
 static void intrinsic_format(void) {
     XrLirType type = XR_LIR_F64;
-    XrLirIntrinsic intrinsic = {71, &type, 1, type, true};
+    XrLirIntrinsic intrinsic = {71, &type, 1, type, true, 0};
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *module = NULL;
     OK(xr_lir_module_create(&registry, &module));

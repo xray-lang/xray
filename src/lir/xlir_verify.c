@@ -831,10 +831,16 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             (entry->parameter_count && !entry->parameters))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic signature is invalid");
         bool array = xr_lir_internal_array_type(entry->result);
+        if (!entry->view_operation && (entry->result == XR_LIR_VIEW_FRAME ||
+            entry->result == XR_LIR_VIEW_CELL || entry->result == XR_LIR_SLICE_I64))
+            return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot produce a view capability");
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
             if (!xr_lir_internal_type_valid(m, entry->parameters[p], false))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
+            if (!entry->view_operation && (entry->parameters[p] == XR_LIR_VIEW_FRAME ||
+                entry->parameters[p] == XR_LIR_VIEW_CELL || entry->parameters[p] == XR_LIR_SLICE_I64))
+                return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot receive a view capability");
         }
         const XrLirArrayIntrinsic *shape = m->array_intrinsics ? &m->array_intrinsics[i] : NULL;
         bool empty = !shape || (!shape->id && !shape->parameter_elements && !shape->parameter_count &&
@@ -877,8 +883,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f) ||
-            !lir_view_function_shape(m, f))
+        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||
@@ -892,6 +897,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (seen)
             memset(seen, 0, f->value_count);
         XrLirStatus status = lir_definitions(m, index, seen, d);
+        if (status == XR_LIR_OK && !lir_view_function_shape(m, f))
+            status = xr_lir_internal_error(d, "view activation or return shape is invalid", index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
             status = lir_literal_consumers(f, index + 1, seen, d);
         if (status != XR_LIR_OK) { xr_free(seen); return status; }

@@ -181,8 +181,8 @@ static void test_registry_and_bits(void) {
     XrLirType *types = xr_malloc(3 * sizeof(*types));
     CHECK(types);
     types[0] = XR_LIR_I64; types[1] = XR_LIR_PTR; types[2] = XR_LIR_I1;
-    XrLirIntrinsic entries[] = {{7, types, 1, XR_LIR_I64, true},
-        {91, types + 1, 2, XR_LIR_UNIT, true}};
+    XrLirIntrinsic entries[] = {{7, types, 1, XR_LIR_I64, true, 0},
+        {91, types + 1, 2, XR_LIR_UNIT, true, 0}};
     XrLirRegistry registry = {entries, 2};
     XrLirModule *module = NULL;
     OK(xr_lir_module_create(&registry, &module));

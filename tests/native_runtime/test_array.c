@@ -368,9 +368,11 @@ static void allocation_sweep(XrtLocationOwner *owner, bool string) {
 #include "native_array_unsigned_cases.h"
 #include "native_array_ref_cases.h"
 #include "native_array_display_cases.h"
+#include "native_view_cases.h"
 
 int main(void) {
     XrtLocationOwner *owner = locations();
+    native_view_cases(owner);
     array_reference_cases();
     array_display_cases(owner);
     repeat_cases(owner);
@@ -405,6 +407,7 @@ int main(void) {
     CHECK(!native_array_live && !native_array_bytes);
     allocation_sweep(owner, false); allocation_sweep(owner, true);
     state_allocation_sweep();
+    native_view_allocation_sweep(owner);
     repeat_allocation_sweep(owner, false);
     repeat_allocation_sweep(owner, true);
     unsigned_allocation_sweep(owner, false);

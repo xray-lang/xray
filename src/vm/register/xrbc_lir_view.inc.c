@@ -23,24 +23,9 @@ static bool rbc_lir_view_emit(RbcLirCompiler *c, const XrLirInstructionView *i) 
     XrRbcViewAccess row = {.operation=(XrRbcViewOperation)rbc_lir_view_role(c->input, i),
         .count=i->operand_count, .bits=i->bits};
     if (row.operation == XR_RBC_VIEW_CELL_CONSTRUCT) {
-        bool found = false;
-        for (uint32_t b = 0; b < c->view.block_count && !found; ++b) {
-            XrLirBlock block;
-            XrLirBlockView view;
-            xr_lir_block_at(c->input, c->function, b, &block);
-            xr_lir_block_view(c->input, block, &view);
-            for (uint32_t n = 0; n < view.instruction_count; ++n) {
-                XrLirInstructionView constant;
-                xr_lir_instruction_view(c->input, block, n, &constant);
-                if (constant.result != i->operands[3]) continue;
-                if (constant.op != XR_LIR_CONST || constant.type != XR_LIR_U32 || constant.bits > UINT32_MAX)
-                    return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "view construction lost its exact module slot");
-                row.bits = constant.bits;
-                found = true;
-                break;
-            }
-        }
-        if (!found) return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "view module slot has no producer");
+        if (!c->view_constants || c->view_constants[i->operands[3]] == UINT32_MAX)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "view module slot has no exact constant producer");
+        row.bits = c->view_constants[i->operands[3]];
     }
     if (i->result) row.result = rbc_lir_array_location(c, i->result);
     for (uint32_t p = 0; p < row.count; ++p) row.operands[p] = rbc_lir_array_location(c, i->operands[p]);

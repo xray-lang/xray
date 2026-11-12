@@ -55,6 +55,41 @@ static void array_free(void *memory) {
 #include "lir_array_fixture.h"
 #include "lir_array_repeat_fixture.h"
 #include "lir_array_ref_fixture.h"
+#include "lir_view_fixture.h"
+
+static void view_metadata_sweep(void) {
+    XrLirModule *input = NULL, *output = NULL;
+    attempt = 0; fail_at = SIZE_MAX;
+    OK(view_fixture_create(&input));
+    size_t construction = attempt;
+    xr_lir_module_destroy(input);
+    CHECK(!live && !live_bytes);
+    for (size_t point = 0; point < construction; ++point) {
+        input = NULL; attempt = 0; fail_at = point;
+        CHECK(view_fixture_create(&input) == XR_LIR_OUT_OF_MEMORY);
+        CHECK(!input && attempt > point && !live && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    OK(view_fixture_create(&input));
+    size_t baseline = live, bytes = live_bytes;
+    for (unsigned transform = 0; transform < 2; ++transform) {
+        attempt = 0;
+        OK(transform ? xr_lir_inline(input, &output) : xr_lir_rebuild(input, &output));
+        size_t count = attempt;
+        xr_lir_module_destroy(output); output = NULL;
+        CHECK(live == baseline && live_bytes == bytes);
+        for (size_t point = 0; point < count; ++point) {
+            attempt = 0; fail_at = point;
+            CHECK((transform ? xr_lir_inline(input, &output) : xr_lir_rebuild(input, &output)) == XR_LIR_OUT_OF_MEMORY);
+            CHECK(!output && attempt > point && live == baseline && live_bytes == bytes);
+            OK(xr_lir_verify(input, NULL));
+        }
+        fail_at = SIZE_MAX;
+    }
+    xr_lir_module_destroy(input);
+    CHECK(!live && !live_bytes);
+    printf("View metadata construction failure points: %zu\n", construction);
+}
 
 static void array_construction_sweep(XrLirType element) {
     XrLirModule *m = NULL;
@@ -167,6 +202,7 @@ static void array_transform_sweep(bool inlining, bool repeating) {
 }
 
 int main(void) {
+    view_metadata_sweep();
     array_catalog_sweep();
     array_reference_sweep();
     array_reference_transform_sweep(false);

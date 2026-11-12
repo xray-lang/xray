@@ -204,8 +204,8 @@ static XrLirModule *make_case(const char *name) {
 static void test_preserved_operations(void) {
     XrLirType *parameters = xr_malloc(2 * sizeof(*parameters)); CHECK(parameters);
     parameters[0] = XR_LIR_I64; parameters[1] = XR_LIR_PTR;
-    XrLirIntrinsic entries[] = {{7, parameters, 1, XR_LIR_I64, true},
-        {91, parameters, 2, XR_LIR_UNIT, true}};
+    XrLirIntrinsic entries[] = {{7, parameters, 1, XR_LIR_I64, true, 0},
+        {91, parameters, 2, XR_LIR_UNIT, true, 0}};
     XrLirRegistry registry = {entries, 2};
     XrLirModule *m = NULL; OK(xr_lir_module_create(&registry, &m));
     xr_free(parameters);
