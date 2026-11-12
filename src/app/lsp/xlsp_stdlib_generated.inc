@@ -628,7 +628,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "", NULL, 0},
-    {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: fn()): bool", "", NULL, 0},
+    {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: escaping fn()): bool", "", NULL, 0},
     {"BarrierError", XLSP_SYM_CLASS, "type BarrierError", "Enum type", NULL, 0},
     {"OsMutex", XLSP_SYM_CLASS, "type OsMutex", "Class type", NULL, 0},
     {"OsRwLock", XLSP_SYM_CLASS, "type OsRwLock", "Class type", NULL, 0},
@@ -752,7 +752,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"recv", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, timeout?: i64): WsMessage?", "", NULL, 0},
     {"ping", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn): bool", "", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, code?: i64, reason?: string): bool", "", NULL, 0},
-    {"serve", XLSP_SYM_FUNCTION, "fn(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage?: i64): bool", "", NULL, 0},
+    {"serve", XLSP_SYM_FUNCTION, "fn(port: i64, handler: escaping fn(ref WsConn), running: Atomic<bool>, maxMessage?: i64): bool", "", NULL, 0},
     {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
     {"WsUrl", XLSP_SYM_CLASS, "type WsUrl", "Class type", NULL, 0},
     {"ClosePayload", XLSP_SYM_CLASS, "type ClosePayload", "Class type", NULL, 0},
