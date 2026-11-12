@@ -25,12 +25,26 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
         count += type >= XR_LIR_TYPE_COUNT;
     }
     if (!count) return true;
+    uint32_t parameters = 0;
+    for (uint32_t b = 0; b < c->view.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->input, c->function, b, &block);
+        xr_lir_block_view(c->input, block, &view);
+        for (uint32_t p = 0; p < view.parameter_count; ++p) {
+            XrLirType type = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, view.parameters[p]}, &type);
+            parameters += type >= XR_LIR_TYPE_COUNT;
+        }
+    }
     size_t values = (size_t)c->view.value_count + 1;
-    if (values > SIZE_MAX / sizeof(*c->aggregate_home) || sizeof(*c->aggregate_values) > SIZE_MAX / count)
+    if (parameters > UINT32_MAX - count || values > SIZE_MAX / sizeof(*c->aggregate_home) ||
+        sizeof(*c->aggregate_values) > SIZE_MAX / ((size_t)count + parameters))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate home metadata exceeds address space");
     c->aggregate_home = xr_malloc(values * sizeof(*c->aggregate_home));
-    c->aggregate_values = xr_malloc((size_t)count * sizeof(*c->aggregate_values));
-    if (!c->aggregate_home || !c->aggregate_values)
+    c->aggregate_scratch = parameters ? xr_malloc(values * sizeof(*c->aggregate_scratch)) : NULL;
+    c->aggregate_values = xr_malloc(((size_t)count + parameters) * sizeof(*c->aggregate_values));
+    if (!c->aggregate_home || !c->aggregate_values || (parameters && !c->aggregate_scratch))
         return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own physical aggregate homes");
     for (size_t id = 0; id < values; ++id) c->aggregate_home[id] = UINT32_MAX;
     const XrRbcModule *module = &c->literals->program->module;
@@ -50,7 +64,37 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
         c->aggregate_values[c->aggregate_value_count++] = (XrRbcAggregateValue){ordinal, (uint32_t)offset};
         c->aggregate_size = (size_t)offset + layout.size;
     }
+    for (uint32_t b = 0; parameters && b < c->view.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->input, c->function, b, &block);
+        xr_lir_block_view(c->input, block, &view);
+        for (uint32_t p = 0; p < view.parameter_count; ++p) {
+            uint32_t value = view.parameters[p];
+            if (c->aggregate_home[value] == UINT32_MAX) continue;
+            XrRbcAggregateValue original = c->aggregate_values[c->aggregate_home[value]];
+            XrRbcAggregateLayout layout;
+            xr_rbc_aggregate_layout(module->aggregate_types[original.type], &layout);
+            uint64_t offset = ((uint64_t)c->aggregate_size + layout.alignment - 1) & ~(uint64_t)(layout.alignment - 1);
+            if (offset + layout.size > UINT32_MAX)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate edge storage exceeds indexed capacity");
+            c->aggregate_scratch[value] = c->aggregate_value_count;
+            c->aggregate_values[c->aggregate_value_count++] = (XrRbcAggregateValue){original.type, (uint32_t)offset};
+            c->aggregate_size = (size_t)offset + layout.size;
+        }
+    }
     return true;
+}
+
+static bool rbc_lir_aggregate_append(RbcLirCompiler *c, XrRbcAggregateAccess access) {
+    if (c->aggregate_access_count > UINT16_MAX)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate operations exceed bytecode indices");
+    void *storage = c->aggregate_accesses;
+    if (!rbc_lir_grow(c, &storage, &c->aggregate_access_capacity,
+        c->aggregate_access_count + 1, sizeof(*c->aggregate_accesses))) return false;
+    c->aggregate_accesses = storage;
+    c->aggregate_accesses[c->aggregate_access_count] = access;
+    return rbc_lir_emit(c, XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, (int64_t)c->aggregate_access_count++);
 }
 
 static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
@@ -68,15 +112,29 @@ static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView
     if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
         c->aggregate_operand_count + access.count, sizeof(*c->aggregate_operands))) return false;
     c->aggregate_operands = storage;
-    storage = c->aggregate_accesses;
-    if (!rbc_lir_grow(c, &storage, &c->aggregate_access_capacity,
-        c->aggregate_access_count + 1, sizeof(*c->aggregate_accesses))) return false;
-    c->aggregate_accesses = storage;
     access.first = (uint32_t)c->aggregate_operand_count;
     for (uint32_t n = 0; n < access.count; ++n) {
         uint32_t value = instruction->operands[construct ? n : 1];
         c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, value);
     }
-    c->aggregate_accesses[c->aggregate_access_count] = access;
-    return rbc_lir_emit(c, XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, (int64_t)c->aggregate_access_count++);
+    return rbc_lir_aggregate_append(c, access);
+}
+
+static bool rbc_lir_aggregate_edge(RbcLirCompiler *c, XrLirEdgeView edge) {
+    if (!c->aggregate_scratch) return true;
+    XrLirBlockView target;
+    xr_lir_block_view(c->input, (XrLirBlock){c->input, c->function.id, edge.target}, &target);
+    /* Every old source reaches a distinct scratch home before any destination
+     * is overwritten, including cycles through loop block parameters. */
+    for (uint32_t pass = 0; pass < 2; ++pass)
+        for (uint32_t p = 0; p < edge.argument_count; ++p) {
+            uint32_t actual = edge.arguments[p], formal = target.parameters[p];
+            if (c->aggregate_home[actual] == UINT32_MAX) continue;
+            uint32_t temporary = c->aggregate_scratch[formal];
+            XrRbcAggregateAccess access = {.operation = XR_RBC_AGGREGATE_COPY,
+                .source = pass ? temporary : c->aggregate_home[actual],
+                .destination = pass ? c->aggregate_home[formal] : temporary};
+            if (!rbc_lir_aggregate_append(c, access)) return false;
+        }
+    return true;
 }

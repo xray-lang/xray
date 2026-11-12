@@ -62,7 +62,7 @@ typedef struct {
     RbcLirOutputValues output;
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
-    uint32_t *aggregate_home;
+    uint32_t *aggregate_home, *aggregate_scratch;
     XrRbcAggregateValue *aggregate_values;
     uint32_t aggregate_value_count;
     size_t aggregate_size;
@@ -433,12 +433,6 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[p]}, &type);
             if (type >= XR_LIR_TYPE_COUNT) return false;
         }
-        for (uint32_t e = 0; e < i->edge_count; ++e)
-            for (uint32_t p = 0; p < i->edges[e].argument_count; ++p) {
-                XrLirType type = XR_LIR_TYPE_INVALID;
-                xr_lir_value_type(input, (XrLirValue){input, function.id, i->edges[e].arguments[p]}, &type);
-                if (type >= XR_LIR_TYPE_COUNT) return false;
-            }
     }
     // A length can also be an operand of otherwise valid unsigned LIR. Its
     // output use must not silently enable signed arithmetic or comparisons.
@@ -1375,6 +1369,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         rbc_lir_output_free(&c.output);
         xr_free(c.slots);xr_free(c.spill_home);
         xr_free(c.aggregate_home);
+        xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
         if (!success) {
             xr_free(c.code);

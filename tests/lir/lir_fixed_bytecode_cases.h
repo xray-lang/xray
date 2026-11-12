@@ -64,3 +64,25 @@ static void fixed_bytecode_execution(void) {
     fixed_bytecode_case(11, false, true, UINT64_MAX);
     fixed_bytecode_case(17, false, true, 17);
 }
+
+static void fixed_bytecode_selected_edges(void) {
+    const uint32_t counts[] = {1, 16, 17, 256};
+    for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {
+        XrLirFunction root = {0};
+        XrLirModule *module = fixed_bytecode_loop_fixture(counts[n], &root);
+        XrRbcProgram *program = NULL;
+        XrRbcCompileDiagnostic diagnostic = {0};
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+        xr_lir_module_destroy(module);
+        for (uint64_t iterations = 0; iterations < 4; ++iterations) {
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_program_prepare(program, &iterations, 1, &execution) == XR_RBC_OK);
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            xr_rbc_execution_free(&execution);
+            uint64_t bits = 0;
+            CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == (iterations & 1 ? 1107 : 711));
+            xr_rbc_outcome_free(&outcome);
+        }
+        xr_rbc_program_destroy(program);
+    }
+}

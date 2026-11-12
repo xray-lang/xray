@@ -670,15 +670,16 @@ static void aggregate_type_projection_failures(void) {
     attempts = 0;
 }
 
-static void aggregate_value_compiler_failures(uint32_t count, bool dynamic) {
+static void aggregate_value_compiler_failures(uint32_t count, bool dynamic, bool edges) {
     XrLirFunction root = {0};
-    XrLirModule *module = fixed_bytecode_fixture(count, dynamic, false, &root);
+    XrLirModule *module = edges ? fixed_bytecode_loop_fixture(count, &root) :
+        fixed_bytecode_fixture(count, dynamic, false, &root);
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic = {0};
     attempts = 0; fail_at = SIZE_MAX;
     CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
     size_t total = attempts;
-    CHECK(total > 20 && program->module.functions[0].aggregate_value_count == 1);
+    CHECK(total > 20 && program->module.functions[0].aggregate_value_count == (edges ? 10 : 1));
     xr_rbc_program_destroy(program); program = NULL;
     CHECK(!live_allocations);
     for (size_t point = 1; point <= total; ++point) {
@@ -689,18 +690,20 @@ static void aggregate_value_compiler_failures(uint32_t count, bool dynamic) {
     fail_at = SIZE_MAX;
     CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(module);
-    uint64_t arguments[] = {37, count - 1}, bits = 0;
-    CHECK(execute(program, arguments, 2, &bits) == XR_RBC_OK &&
-        bits == (dynamic ? (37u + count - 1) & 255u : 37u));
+    uint64_t arguments[] = {edges ? 3 : 37, count - 1}, bits = 0;
+    CHECK(execute(program, arguments, edges ? 1 : 2, &bits) == XR_RBC_OK &&
+        bits == (edges ? 1107 : dynamic ? (37u + count - 1) & 255u : 37u));
     xr_rbc_program_destroy(program);
     CHECK(!live_allocations);
-    printf("aggregate %u-byte construction %zu allocation failures and retired LIR PASS\n", count, total);
+    printf("aggregate %u-byte %s %zu allocation failures and retired LIR PASS\n",
+        count, edges ? "selected edges" : "construction", total);
     attempts = 0;
 }
 
 int main(void) {
-    aggregate_value_compiler_failures(17, false);
-    aggregate_value_compiler_failures(300, true);
+    aggregate_value_compiler_failures(17, false, false);
+    aggregate_value_compiler_failures(300, true, false);
+    aggregate_value_compiler_failures(17, false, true);
     aggregate_type_projection_failures();
     array_reference_compiler_failures();
     physical_array_copy_cycle();

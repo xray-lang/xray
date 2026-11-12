@@ -494,6 +494,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1);
     constructed_backend_frontiers();
     fixed_bytecode_execution();
+    fixed_bytecode_selected_edges();
     array_catalog();
     array_reference_owners();
     array_unsigned_frontier();

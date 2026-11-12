@@ -150,7 +150,8 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
             xr_lir_block_view(c->input,
                 (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
             for (uint32_t p = 0; p < edge.argument_count; ++p)
-                rbc_lir_join(r, target.parameters[p], edge.arguments[p]);
+                if (!c->aggregate_home || c->aggregate_home[edge.arguments[p]] == UINT32_MAX)
+                    rbc_lir_join(r, target.parameters[p], edge.arguments[p]);
         }
     }
     for (uint32_t v = 0; v <= c->view.value_count; ++v)
@@ -266,12 +267,14 @@ static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
 
 static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
     bool *scratch) {
+    if (emit && !rbc_lir_aggregate_edge(c, edge)) return false;
     XrLirBlockView target;
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
     uint32_t destinations[255], sources[255], count = 0;
     XrRbcRegisterKind kinds[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
+        if (c->aggregate_home && c->aggregate_home[edge.arguments[p]] != UINT32_MAX) continue;
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];
         if (destination != source) {
             destinations[count] = destination;
