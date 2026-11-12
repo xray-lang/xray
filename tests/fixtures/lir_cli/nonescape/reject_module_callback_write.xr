@@ -1,0 +1,7 @@
+fn leaf() -> i64 { return 7 }
+var stored = leaf
+fn install(callback: fn() -> i64) {
+    stored = callback
+    const value = stored()
+}
+print(1)

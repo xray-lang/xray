@@ -32,7 +32,7 @@ typedef struct EffectCheckNode {
     uint32_t component, reason[2], parameter_seed, suspend_parameter_seed, suspend_seed_instruction[2];
     XrXirType type;
     uint32_t block, mode, cleanup_call, cleanup_parent;
-    bool cell, escaping, weaken, erased, callable_opaque, callable_input, storable_value;
+    bool cell, escaping, weaken, erased, callable_opaque, callable_input, storable_value, module_cell;
     uint32_t suspend_reason[2], suspend_call[2], suspend_parameter[2], suspend_instruction[2], suspend_distance[2], suspend_order[2];
     uint8_t cell_use, origin, bound, closed, suspend_bound, root_seed, suspend_seed;
     bool task_creation, restricted, refined_weaken;
@@ -750,6 +750,10 @@ static void effect_check_cell_seed(EffectCheckBuild *build, uint32_t node, const
     case XR_XIR_SLOT_PLACE:
         origin = XR_XIR_CELL_ORIGIN_MODULE;
         break;
+    case XR_XIR_SLOT_LOAD:
+        origin = XR_XIR_CELL_ORIGIN_MODULE;
+        build->roots->node[node].module_cell = true;
+        break;
     default: break;
     }
     build->roots->node[node].origin = origin;
@@ -941,6 +945,9 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
         if (cell == UINT32_MAX || !effect_check_alias(build, row.root, cell) ||
             !effect_check_alias(build, value, row.contents + op->args[0])) return false;
         build->roots->alias[build->roots->node[value].aliases].callable_origin = false;
+        /* Module Cells are published storage. The contents contract covers
+         * opaque branches while known reaching values retain their own edges. */
+        if (build->roots->node[cell].module_cell) build->roots->node[value].storable_value = true;
         return true;
     }
     case XR_XIR_ARRAY_NEW: case XR_XIR_TUPLE_NEW: {

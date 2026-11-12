@@ -56,7 +56,7 @@ def main() -> None:
                     "local_nested_callback", "nested_cell_overwrite", "local_capture_write", "owned_scalar_capture",
                     "cfn_generic_collection", "cfn_view_lifetime", "ref_forward", "escaping_ref_write", "generator_owned_cell",
                     "generator_storable_cell", "hidden_fn_value_chain", "latent_capture_creation", "opaque_callback_pure",
-                    "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls")
+                    "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls", "module_stored_callbacks")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name

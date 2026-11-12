@@ -105,6 +105,51 @@ static void entry_cleanup_ownership(void) {
     printf("cleanup and receiver loans: actual suspension, cold Checked receipt and %zu allocation failures PASS\n", sites);
 }
 
+static XrXirStatus entry_module_stored_site(void *context, const XirExecutionSite *site) {
+    CHECK(site->kind == XIR_EXECUTION_STORABLE);
+    ++*(uint32_t *)context;
+    return XR_XIR_OK;
+}
+
+static void entry_module_cell_contract(void) {
+    EffectMark baseline = effect_mark();
+    XrXirArtifact *artifact = root_source("module_callback_cells.xr",XR_XIR_OK);
+    XrXirCheckedPacket packet = {0};
+    CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(artifact);
+    artifact = NULL;
+    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&artifact,NULL) == XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    XrXirEffects *effects = NULL;
+    CHECK(xir_effects_infer_lifetimes_input(&effect_context,
+        (XirEffectInput){module,artifact->construction,NULL},&effects,NULL) == XR_XIR_OK);
+    uint32_t reads = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *body = &module->functions[f];
+        EffectCheckFunction row = effects->checked_roots->function[f];
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            XrXirInstruction op = body->instructions[i];
+            if (op.op != XR_XIR_CELL_READ || !xr_xir_type_is_callable(module->types,op.type)) continue;
+            uint32_t value = body->parameter_count + i;
+            CHECK(effects->checked_roots->node[row.first+op.args[0]].module_cell &&
+                effects->checked_roots->node[row.first+value].storable_value);
+            XirExecutionValue reference = {f,value,XIR_EXECUTION_CURRENT_ENVIRONMENT};
+            uint32_t seen = 0, remainder = 0;
+            bool complete = false;
+            CHECK(xir_execution_visit_value_footprint_in(effects->checked_roots,&reference,
+                entry_module_stored_site,&seen,&complete,&remainder) == XR_XIR_OK);
+            CHECK(seen && !complete && remainder == XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT);
+            ++reads;
+        }
+    }
+    CHECK(reads == 1);
+    xr_xir_compile_effects_free(effects);
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(artifact);
+    effect_mark_check(baseline);
+    puts("module callable Cells: stored contract retains opaque environment after cold Checked receipt PASS");
+}
+
 static bool entry_footprint_map(const XrXirModule *module, uint32_t function,
     XirStorageRelocation *map, XrXirStatus *status) {
     const XrXirFunction *body = &module->functions[function];
@@ -199,6 +244,7 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
 static void entry_footprint_ownership(void) {
     entry_suspend_parameter_ownership();
     entry_cleanup_ownership();
+    entry_module_cell_contract();
     EffectMark baseline = effect_mark();
     XrXirArtifact *artifact = root_source("entry_cell_footprints.xr",XR_XIR_OK);
     EffectMark retained = effect_mark();

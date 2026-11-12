@@ -1,0 +1,5 @@
+fn apply(callback: fn(i64) -> i64, value: i64) -> i64 { return callback(value) }
+var square = fn(value: i64) -> i64 { return value * value }
+const direct = square(7)
+const forwarded = apply(square, 7)
+print("square=${square(7)}, forwarded=${apply(square, 7)}")

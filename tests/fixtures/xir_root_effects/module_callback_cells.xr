@@ -1,0 +1,3 @@
+fn leaf(value: i64) -> i64 { return value * value }
+var stored = leaf
+export fn main() -> i64 { return stored(7) }
