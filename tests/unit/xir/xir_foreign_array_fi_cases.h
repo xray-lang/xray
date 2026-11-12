@@ -102,7 +102,7 @@ static size_t foreign_array_attempt(bool append, size_t point, unsigned boundary
     if (changed) {
         CHECK(status == XR_XIR_VALUE_OK && attempts > 0 && f.array.payload != original.payload);
         CHECK(object_pointer(&f.array)->domain == f.domains[0]);
-        CHECK(atomic_load(&object_pointer(&f.old_text)->references) == (append ? 2u : 1u));
+        CHECK(atomic_load(&object_pointer(&f.old_text)->references) == (append ? 2 : 1));
         CHECK(atomic_load(&object_pointer(&f.replacement)->references) == tuple_refs + 1);
     } else {
         CHECK(status == (boundary ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_OOM));
