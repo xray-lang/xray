@@ -26,8 +26,8 @@ typedef struct StoragePredecessor {
 
 typedef struct StorageAddress { uint32_t first, count; bool ready; } StorageAddress;
 typedef struct StorageState {
-    uint32_t point, handle, value, kind, order, generation;
-    bool observes_origins;
+    uint32_t point, handle, value, kind, order, generation, continuation;
+    bool observes_origins, bottom;
 } StorageState;
 typedef struct StorageWork { uint32_t function, state; } StorageWork;
 typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityLink;
@@ -41,6 +41,22 @@ typedef struct StorageIdentitySupportCache {
     uint32_t *index;
     uint32_t count, capacity, index_capacity, sites, identities, applications;
 } StorageIdentitySupportCache;
+
+typedef struct StoragePanicIdentity {
+    uint32_t function, value, instance, environment;
+} StoragePanicIdentity;
+
+typedef struct StoragePanicKey {
+    uint32_t application, target, first, count;
+} StoragePanicKey;
+
+typedef struct StoragePanicCache {
+    StoragePanicKey *keys;
+    StoragePanicIdentity *identities;
+    uint32_t *index;
+    uint32_t count, capacity, identity_count, identity_capacity, index_capacity, generation;
+    bool ready;
+} StoragePanicCache;
 
 typedef struct StorageCellUse {
     uint32_t function, parameter, instance, next;
@@ -94,7 +110,8 @@ typedef struct StorageFunction {
     StoragePublication *publications;
     uint32_t *publication_index, publication_index_capacity;
     uint32_t publication_count, publication_capacity, exposure_capacity;
-    bool events_ready, cyclic;
+    bool events_ready, cyclic, panic_independent;
+    uint32_t panic_bottom;
     uint32_t *blocks, *predecessors;
     StoragePredecessor *edges;
     uint32_t edge_count, edge_capacity, flow_capacity, footprint_capacity;
@@ -140,6 +157,8 @@ struct XirStorageFlow {
     uint32_t progress, request_remainder;
     uint64_t revision;
     StorageIdentitySupportCache identity_support;
+    StoragePanicCache panic_cache;
+    uint32_t *context_index, context_index_capacity, contexts;
     StorageIdentitySupportCache closed_cell_environments;
     StorageCellEnvironmentIndex cell_environments;
     uint32_t bottom_capacity;
@@ -147,12 +166,15 @@ struct XirStorageFlow {
     bool sealed, sealing, local_finished, exposure_started;
 };
 static bool storage_close_applications(XirStorageFlow *flow);
+static void storage_context_refresh(XirStorageFlow *flow);
 static XrXirStatus storage_call_capture_age(XirStorageFlow *, const XirExecutionSite *,
     XirExecutionArgument, uint32_t *);
 static bool storage_temporal_handle(XirStorageFlow *, uint32_t, uint32_t, XirStoragePointKind, uint32_t);
 static bool storage_start_exposure(XirStorageFlow *flow);
 static XrXirStatus storage_call_footprint(XirStorageFlow *, const XirExecutionSite *,
     XirExecutionArgument, uint32_t *);
+static bool storage_call_no_panic(XirStorageFlow *, const XirExecutionSite *, uint32_t);
+static void storage_panic_cache_clear(StoragePanicCache *);
 
 static uint32_t storage_base_kind(StorageState state) { return state.kind & (STORAGE_EXPOSURE_KIND - 1); }
 static XirStorageFlowBank storage_bank(StorageState state) {
@@ -267,8 +289,9 @@ static bool storage_address(XirStorageFlow *flow, uint32_t function, uint32_t ha
     return true;
 }
 
-static uint32_t storage_state_hash(uint32_t point, uint32_t handle, uint32_t kind, uint32_t order) {
-    uint32_t fields[] = {point, handle, kind, order};
+static uint32_t storage_state_hash(uint32_t point, uint32_t handle, uint32_t kind,
+    uint32_t order, uint32_t continuation) {
+    uint32_t fields[] = {point, handle, kind, order, continuation};
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
@@ -281,7 +304,7 @@ static bool storage_index_grow(XirStorageFlow *flow, uint32_t function) {
     if (!index) return false;
     for (uint32_t n = 0; n < row->state_count && storage_step(flow); ++n) {
         StorageState state = row->states[n];
-        uint32_t slot = storage_state_hash(state.point, state.handle, state.kind, state.order) & (capacity - 1);
+        uint32_t slot = storage_state_hash(state.point, state.handle, state.kind, state.order, state.continuation) & (capacity - 1);
         while (index[slot]) slot = (slot + 1) & (capacity - 1);
         index[slot] = n + 1;
     }
@@ -327,8 +350,8 @@ static uint32_t storage_anchor(const XirStorageFlow *flow, uint32_t function,
     return anchor;
 }
 
-static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t point,
-    uint32_t handle, uint32_t kind, uint32_t order) {
+static uint32_t storage_point_in(XirStorageFlow *flow, uint32_t function, uint32_t point,
+    uint32_t handle, uint32_t kind, uint32_t order, uint32_t continuation) {
     StorageFunction *row = &flow->rows[function];
     if (point >= row->point_count ||
         handle >= flow->view.functions[function].physical_values) {
@@ -337,10 +360,11 @@ static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t 
     point = storage_anchor(flow, function, point, handle, kind);
     if (!row->index_capacity || row->state_count >= row->index_capacity / 2)
         if (!storage_index_grow(flow, function)) return UINT32_MAX;
-    uint32_t slot = storage_state_hash(point, handle, kind, order) & (row->index_capacity - 1);
+    uint32_t slot = storage_state_hash(point, handle, kind, order, continuation) & (row->index_capacity - 1);
     while (row->state_index[slot]) {
         StorageState found = row->states[row->state_index[slot] - 1];
-        if (found.point == point && found.handle == handle && found.kind == kind && found.order == order)
+        if (found.point == point && found.handle == handle && found.kind == kind && found.order == order &&
+            found.continuation == continuation)
             return found.value;
         slot = (slot + 1) & (row->index_capacity - 1);
     }
@@ -354,10 +378,15 @@ static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t 
     uint32_t value = storage_aux(flow, function);
     if (value == UINT32_MAX) return value;
     uint32_t index = row->state_count++;
-    row->states[index] = (StorageState){point, handle, value, kind, order, 0, false}; row->state_index[slot] = index + 1;
+    row->states[index] = (StorageState){point, handle, value, kind, order, 0, continuation, false, false}; row->state_index[slot] = index + 1;
     flow->work[flow->work_count++] = (StorageWork){function, index};
     if (stage) flow->stages[flow->stage_count++] = (StorageWork){function, index};
     return value;
+}
+
+static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t point,
+    uint32_t handle, uint32_t kind, uint32_t order) {
+    return storage_point_in(flow, function, point, handle, kind, order, UINT32_MAX);
 }
 
 static uint32_t storage_state(XirStorageFlow *flow, uint32_t function, uint32_t point, uint32_t handle) {
@@ -419,6 +448,10 @@ static bool storage_execution(XrXirOp op) {
         op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_INVOKE || op == XR_XIR_INVOKE_DEFAULT ||
         op == XR_XIR_INVOKE_INDIRECT || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_CLEANUP_ERROR ||
         op == XR_XIR_RETURN || op == XR_XIR_THROW;
+}
+
+static bool storage_cleanup_exit(XrXirOp op) {
+    return xr_xir_instruction_cleanup_exit(op);
 }
 
 static bool storage_unmodeled_resume(XrXirOp op) {
@@ -732,7 +765,10 @@ static bool storage_transfer(XirStorageFlow *flow, uint32_t function, StorageSta
     }
     if (!preserve) return true;
     uint32_t source;
-    if (edge.kind == XIR_INSTRUCTION_FLOW_PANIC)
+    if (edge.kind == XIR_INSTRUCTION_FLOW_PANIC && storage_cleanup_exit(op->op))
+        source = storage_point_in(flow, function, edge.source, state.handle,
+            storage_kind(4, bank), UINT32_MAX, edge.ordinal);
+    else if (edge.kind == XIR_INSTRUCTION_FLOW_PANIC)
         source = storage_point(flow, function, flow->rows[function].blocks[edge.source], state.handle,
             storage_kind(3, bank), UINT32_MAX);
     else if (storage_execution(op->op))
@@ -790,6 +826,12 @@ static bool storage_drain(XirStorageFlow *flow) {
                     storage_payload(flow, item.function, state.handle))) return false;
             }
         }
+        /* The complete CFG can leave a handler without an incoming language
+         * panic. It has no contents version, just like an absent virtual exit.
+         * Point zero retains the real entry inputs above. */
+        if (bank == XIR_STORAGE_CONTENTS && state.point &&
+            row->predecessors[state.point] == UINT32_MAX &&
+            !storage_bottom(flow, item.function, state.value)) return false;
         for (uint32_t e = row->predecessors[state.point]; e != UINT32_MAX && storage_step(flow); e = row->edges[e].next)
             if (!storage_transfer(flow, item.function, state, row->edges[e])) return false;
     }
@@ -822,7 +864,8 @@ static uint32_t storage_application(XirStorageFlow *flow, const XirExecutionSite
         .parent_kind = site->parent_kind, .callback_parameter = site->callback_parameter,
         .entry_context = site->entry_context,
         .environment = site->environment, .order = site->order, .port = site->port,
-        .outcome = outcome, .protocol = site->protocol};
+        .outcome = outcome, .protocol = site->protocol, .after_panic = site->after_panic,
+        .cleanup_handler = site->cleanup_handler};
     return index;
 }
 
@@ -830,7 +873,8 @@ static uint32_t storage_site_hash(XirExecutionSite site) {
     uint32_t fields[] = {(uint32_t)site.kind, site.index, site.function, site.instruction, site.block,
         site.caller_instance, site.environment, site.reference, site.capture_environment,
         site.target, site.declaration, site.order, (uint32_t)site.port,
-        (uint32_t)site.parent_kind, site.callback_parameter, site.entry_context, site.invocation_contract};
+        (uint32_t)site.parent_kind, site.callback_parameter, site.entry_context, site.invocation_contract,
+        site.after_panic, site.cleanup_handler};
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
@@ -840,7 +884,8 @@ static bool storage_same_site(XirExecutionSite a, XirExecutionSite b) {
         a.reference == b.reference && a.capture_environment == b.capture_environment && a.target == b.target &&
         a.declaration == b.declaration && a.order == b.order && a.port == b.port &&
         a.parent_kind == b.parent_kind && a.callback_parameter == b.callback_parameter &&
-        a.entry_context == b.entry_context && a.invocation_contract == b.invocation_contract;
+        a.entry_context == b.entry_context && a.invocation_contract == b.invocation_contract &&
+        a.after_panic == b.after_panic && a.cleanup_handler == b.cleanup_handler;
 }
 
 static bool storage_site_index_grow(XirStorageFlow *flow) {
@@ -929,7 +974,9 @@ static uint32_t storage_call_input_bank(XirStorageFlow *flow, const XirExecution
         !(site->kind == XIR_EXECUTION_CALLBACK_ENTRY && site->parent_kind == XIR_EXECUTION_CLEANUP_USE))
         return storage_bank_state(flow, site->function, site->instruction, root, bank);
     uint32_t point = site->instruction == UINT32_MAX ? site->block : site->instruction;
-    return storage_point(flow, site->function, point, root, storage_kind((uint32_t)site->port + 1, bank), site->order);
+    uint32_t kind = site->after_panic ? 4u : (uint32_t)site->port + 1;
+    return storage_point_in(flow, site->function, point, root, storage_kind(kind, bank), site->order,
+        site->after_panic ? site->cleanup_handler : UINT32_MAX);
 }
 
 static uint32_t storage_call_input(XirStorageFlow *flow, const XirExecutionSite *site, uint32_t handle) {
@@ -1084,6 +1131,7 @@ static bool storage_reindex_sites(XirStorageFlow *flow) {
     }
     /* Equal site counts can still describe a different active binding set. */
     flow->identity_support.sites = UINT32_MAX;
+    flow->panic_cache.ready = false;
     flow->closed_cell_environments.sites = UINT32_MAX;
     flow->cell_environments.ready = false;
     return flow->status == XR_XIR_OK;
@@ -1116,6 +1164,9 @@ static uint32_t storage_stage_count(const XirStorageFlow *flow, uint32_t functio
     uint32_t count = cleanup ? 0 : 1;
     for (uint32_t s = storage_state_sites(flow, function, state); s != UINT32_MAX; s = flow->sites[s].next) {
         XirExecutionSite site = flow->sites[s].site;
+        if (storage_base_kind(state) != 4 && site.after_panic) continue;
+        if (storage_base_kind(state) == 4 && state.continuation != UINT32_MAX &&
+            site.cleanup_handler != state.continuation) continue;
         if (storage_site_port(flow, function, &site, state) && site.order >= count) count = site.order + 1;
     }
     return count;
@@ -1151,6 +1202,17 @@ static bool storage_apply_known(XirStorageFlow *flow, uint32_t site_index, uint3
     XirExecutionSite site = record.site;
     const XrXirFunction *callee = flow->rows[site.declaration].body;
     XirStorageFlowBank bank = storage_bank(state);
+    if (outcome == XIR_EXECUTION_PANIC && storage_call_no_panic(flow, &site, record.applications[outcome])) {
+        if (bank != XIR_STORAGE_CONTENTS) return true;
+        StorageFunction *row = &flow->rows[function];
+        if (!row->panic_bottom) {
+            uint32_t empty = storage_aux(flow, function);
+            if (empty == UINT32_MAX || !storage_bottom(flow, function, empty)) return false;
+            row->panic_bottom = empty + 1;
+        }
+        return storage_state_relation(flow, function, state, row->panic_bottom - 1);
+    }
+    if (flow->status != XR_XIR_OK) return false;
     bool affected = false, exact = record.bindings_ready;
     for (uint32_t p = 0; p < site.argument_count && storage_step(flow); ++p) {
         XirExecutionArgument actual = {0};
@@ -1310,6 +1372,11 @@ static bool storage_panic_join(XirStorageFlow *flow, uint32_t function, StorageS
     for (uint32_t c = storage_lower(row->calls, 0, row->call_count, block.first);
         c < row->call_count && row->calls[c] < end && storage_step(flow); ++c) {
         uint32_t point = row->calls[c];
+        XrXirOp op = row->operations[point].op;
+        /* Cleanup exits already have ordered invocation states. Feeding their
+         * entire unwind back into the block's panic entry repeats cleanups
+         * and lets an earlier invocation observe a later invocation's write. */
+        if (storage_cleanup_exit(op)) continue;
         source = storage_point(flow, function, point, state.handle, storage_kind(4, bank), UINT32_MAX);
         if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
         if (point + 1 == end) continue;
@@ -1327,26 +1394,72 @@ static bool storage_panic_join(XirStorageFlow *flow, uint32_t function, StorageS
     return flow->status == XR_XIR_OK;
 }
 
+/* A first panic starts at the current cleanup's real prefix. Later cleanups
+ * continue from that panic version; a second panic has no successor. */
+static bool storage_cleanup_panic_stage(XirStorageFlow *flow, uint32_t function,
+    uint32_t state_index, StorageState state) {
+    XirStorageFlowBank bank = storage_bank(state);
+    for (uint32_t s = storage_state_sites(flow, function, state); s != UINT32_MAX; s = flow->sites[s].next) {
+        StorageExecution record = flow->sites[s];
+        if (!storage_site_port(flow, function, &record.site, state) || record.site.order != state.order - 1) continue;
+        if (record.site.cleanup_handler != state.continuation) continue;
+        uint32_t prefix = record.site.after_panic ? 4u : (uint32_t)record.site.port + 1;
+        uint32_t input = storage_point_in(flow, function, state.point, state.handle,
+            storage_kind(prefix, bank), state.order - 1,
+            record.site.after_panic ? state.continuation : UINT32_MAX);
+        if (input == UINT32_MAX) return false;
+        if (record.applications[0] == UINT32_MAX) {
+            flow->rows[function].states[state_index].observes_origins = true;
+            if (!storage_apply_opaque(flow, &record.site, function, state, input)) return false;
+        } else if (record.site.after_panic) {
+            if (!storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_NORMAL) ||
+                !storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_ERROR)) return false;
+        } else if (!storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_PANIC)) return false;
+    }
+    return flow->status == XR_XIR_OK;
+}
+
+static bool storage_cleanup_panic_join(XirStorageFlow *flow, uint32_t function,
+    uint32_t state_index, StorageState state) {
+    bool found = false;
+    for (uint32_t s = storage_state_sites(flow, function, state); s != UINT32_MAX; s = flow->sites[s].next) {
+        XirExecutionSite site = flow->sites[s].site;
+        if (!storage_site_port(flow, function, &site, state)) continue;
+        uint32_t source = storage_point_in(flow, function, state.point, state.handle,
+            state.kind, UINT32_MAX, site.cleanup_handler);
+        if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
+        found = true;
+    }
+    if (!found && storage_bank(state) == XIR_STORAGE_CONTENTS && !state.bottom) {
+        if (!storage_bottom(flow, function, state.value)) return false;
+        flow->rows[function].states[state_index].bottom = true;
+    }
+    return flow->status == XR_XIR_OK;
+}
+
 static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint32_t state_index) {
     StorageState state = flow->rows[function].states[state_index];
     uint32_t kind = storage_base_kind(state);
     XirStorageFlowBank bank = storage_bank(state);
     if (!kind || kind == 5 || state.generation == flow->generation) return true;
     uint32_t generation = flow->generation;
+    bool cleanup_panic = kind == 4 && storage_cleanup_exit(flow->rows[function].operations[state.point].op);
     StorageAddress address;
     if (!storage_address(flow, function, state.handle, &address)) return false;
     if (address.count > 1) {
         for (uint32_t a = 0; a < address.count && storage_step(flow); ++a) {
             uint32_t root = flow->rows[function].address_values[address.first + a];
-            uint32_t source = storage_point(flow, function, state.point, root, state.kind, state.order);
+            uint32_t source = storage_point_in(flow, function, state.point, root, state.kind, state.order, state.continuation);
             if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
         }
         flow->rows[function].states[state_index].generation = generation;
         return flow->status == XR_XIR_OK;
     }
-    if (state.order == UINT32_MAX) {
+    if (cleanup_panic && state.continuation == UINT32_MAX) {
+        if (!storage_cleanup_panic_join(flow, function, state_index, state)) return false;
+    } else if (state.order == UINT32_MAX) {
         uint32_t count = storage_stage_count(flow, function, state);
-        if (kind == 4) {
+        if (kind == 4 && !cleanup_panic) {
             uint32_t prefix = (uint32_t)storage_activation(flow, function, state) + 1;
             uint32_t source = storage_point(flow, function, state.point, state.handle, storage_kind(prefix, bank), 0);
             if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
@@ -1355,22 +1468,30 @@ static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint3
                 if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
             }
         } else {
-            uint32_t source = storage_point(flow, function, state.point, state.handle, state.kind, count);
+            uint32_t source = storage_point_in(flow, function, state.point, state.handle, state.kind, count, state.continuation);
             if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
         }
     } else if (!state.order) {
-        if (kind == 3) {
+        if (cleanup_panic) {
+            if (bank == XIR_STORAGE_CONTENTS && !state.bottom) {
+                if (!storage_bottom(flow, function, state.value)) return false;
+                flow->rows[function].states[state_index].bottom = true;
+            }
+        } else if (kind == 3) {
             if (!storage_panic_join(flow, function, state)) return false;
         } else {
             uint32_t source = storage_bank_state(flow, function, state.point, state.handle, bank);
             if (source == UINT32_MAX || !storage_state_relation(flow, function, state, source)) return false;
         }
+    } else if (cleanup_panic) {
+        if (!storage_cleanup_panic_stage(flow, function, state_index, state)) return false;
     } else {
         uint32_t prefix = kind == 4 ? (uint32_t)storage_activation(flow, function, state) + 1 : kind;
         uint32_t input = storage_point(flow, function, state.point, state.handle, storage_kind(prefix, bank), state.order - 1);
         if (input == UINT32_MAX) return false;
         for (uint32_t s = storage_state_sites(flow, function, state); s != UINT32_MAX; s = flow->sites[s].next) {
             StorageExecution record = flow->sites[s];
+            if (record.site.after_panic) continue;
             if (!storage_site_port(flow, function, &record.site, state) || record.site.order != state.order - 1) continue;
             if (record.applications[0] == UINT32_MAX) {
                 flow->rows[function].states[state_index].observes_origins = true;
@@ -1384,8 +1505,8 @@ static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint3
                         !storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_NORMAL)) return false;
                     if (outcome != XIR_EXECUTION_ERROR &&
                         !storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_ERROR)) return false;
-                    if (kind == 3 &&
-                        !storage_apply_known(flow, s, function, state, input, XIR_EXECUTION_PANIC)) return false;
+                    /* A second panic terminates an existing panic unwind, so
+                     * that outcome cannot reach the next cleanup. */
                 }
             }
         }
@@ -1496,6 +1617,7 @@ static void storage_retire_construction(XirStorageFlow *flow) {
     xr_compile_resources_free(flow->identity_support.values);
     xr_compile_resources_free(flow->identity_support.index);
     flow->identity_support = (StorageIdentitySupportCache){0};
+    storage_panic_cache_clear(&flow->panic_cache);
     xr_compile_resources_free(flow->closed_cell_environments.values);
     xr_compile_resources_free(flow->closed_cell_environments.index);
     flow->closed_cell_environments = (StorageIdentitySupportCache){0};
@@ -1527,6 +1649,7 @@ XR_FUNC void xir_storage_flow_free(XirStorageFlow *flow) {
     xr_compile_resources_free((void *)flow->view.unknowns);
     xr_compile_resources_free((void *)flow->view.exposure_seeds);
     xr_compile_resources_free((void *)flow->view.bottoms);
+    xr_compile_resources_free(flow->context_index);
     xr_compile_resources_free((void *)flow->view.point_values);
     xr_compile_resources_free(flow);
 }
@@ -1592,6 +1715,10 @@ XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *flow, uint32_t func
         record.receiver = (uint32_t)op->immediate;
     }
     row->operations[instruction] = record; row->blocks[instruction] = row->current_block;
+    if (xr_xir_instruction_has_panic_port(op->op) && !storage_write(op->op) &&
+        (!storage_execution(op->op) ||
+         (storage_cleanup_exit(op->op) && body->blocks[row->current_block].frontier)))
+        row->panic_independent = true;
     if (row->first_environment_effect == body->instruction_count && !storage_preserves_entry_environment(op->op))
         row->first_environment_effect = instruction;
     if (record.destination != UINT32_MAX && !storage_record_write(flow, function, instruction, record.destination))
@@ -1605,7 +1732,11 @@ XR_FUNC XrXirStatus xir_storage_flow_observe(XirStorageFlow *flow, uint32_t func
         body->instruction_count, XIR_INSTRUCTION_FLOW_NEXT, 0)) return flow->status;
     if (op->op == XR_XIR_THROW && !storage_predecessor(flow, function, instruction,
         body->instruction_count + 1, XIR_INSTRUCTION_FLOW_NEXT, 0)) return flow->status;
-    if (!body->blocks[row->current_block].panic && !storage_predecessor(flow, function, instruction,
+    if (storage_cleanup_exit(op->op)) {
+        flow->status = xr_xir_cleanup_panic_edges(&point, true, storage_successor, &connect);
+        if (flow->status != XR_XIR_OK) return flow->status;
+    } else if (xr_xir_instruction_has_panic_port(op->op) && !body->blocks[row->current_block].panic &&
+        !storage_predecessor(flow, function, instruction,
         body->instruction_count + 2, XIR_INSTRUCTION_FLOW_PANIC, 0)) return flow->status;
     if (!storage_observe_identity(flow, function, instruction, op) ||
         !storage_observe_values(flow, function, instruction, op)) return flow->status;
@@ -1729,6 +1860,7 @@ static bool storage_start_exposure(XirStorageFlow *flow) {
         for (uint32_t o = 0; o < outcomes; ++o)
             if (!storage_bind_application(flow, s, (XirExecutionPort)o)) return false;
     }
+    storage_context_refresh(flow);
     return storage_close_applications(flow);
 }
 
@@ -1745,6 +1877,7 @@ XR_FUNC XrXirStatus xir_storage_flow_exposure_at(XirStorageFlow *flow, uint32_t 
 #include "xxir_storage_occurrence.inc.c"
 #include "xxir_storage_environment.inc.c"
 #include "xxir_storage_identity_inputs.inc.c"
+#include "xxir_storage_call_panic.inc.c"
 #include "xxir_storage_cell_environments.inc.c"
 #include "xxir_storage_capture.inc.c"
 
@@ -1799,10 +1932,13 @@ XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *flow, const XirExecuti
         for (uint32_t o = 0; o < outcomes; ++o)
             if (!storage_bind_application(flow, s, (XirExecutionPort)o)) return flow->status;
     }
+    storage_context_refresh(flow);
     if (!storage_close_applications(flow)) return flow->status;
     *changed = generation != flow->generation || work != flow->work_count || revision != flow->revision;
     return XR_XIR_OK;
 }
+
+#include "xxir_storage_context.inc.c"
 
 XR_FUNC XrXirStatus xir_storage_flow_seal(XirStorageFlow *flow, XirStorageFlowView *output) {
     if (!flow || !output) return XR_XIR_BAD_STRUCTURE;

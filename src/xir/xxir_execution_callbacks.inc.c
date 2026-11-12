@@ -131,6 +131,8 @@ static XrXirStatus execution_callback_receiver(void *context, const XirExecution
     run->entry.function = app.function; run->entry.instruction = app.instruction;
     run->entry.block = app.block; run->entry.caller_instance = app.caller_instance;
     run->entry.environment = app.environment; run->entry.order = app.order; run->entry.port = app.port;
+    run->entry.after_panic = app.after_panic;
+    run->entry.cleanup_handler = app.cleanup_handler;
     run->entry.parent_kind = app.kind; run->entry.callback_parameter = UINT32_MAX;
     run->entry.entry_context = resolved->entry_context;
     run->entry.output_function = run->entry.output_value = UINT32_MAX;
@@ -152,7 +154,7 @@ static XrXirStatus execution_callback_receivers(ExecutionCallbackVisit *run) {
         status = execution_visit_origins(roots, roots->node[pending.receiver].function,
             pending.receiver - receiver->first, XIR_EXECUTION_CURRENT_ENVIRONMENT,
             execution_callback_receiver, run, &complete, &remainder,
-            (ExecutionOriginRequest){EXECUTION_ORIGINS_CALLBACK_ENTRY, &run->entries});
+            (ExecutionOriginRequest){.kind=EXECUTION_ORIGINS_CALLBACK_ENTRY, .entries=&run->entries});
     }
     return status;
 }

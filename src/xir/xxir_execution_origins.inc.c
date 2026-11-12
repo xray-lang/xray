@@ -223,6 +223,7 @@ typedef enum ExecutionOriginQuery {
 typedef struct ExecutionOriginRequest {
     ExecutionOriginQuery kind;
     ExecutionEntryIndex *entries;
+    bool allow_bottom;
 } ExecutionOriginRequest;
 
 static bool execution_origin_incoming(ExecutionOriginWalk *walk, const EffectCheckedRoots *roots,
@@ -239,6 +240,7 @@ static bool execution_origin_incoming(ExecutionOriginWalk *walk, const EffectChe
         for (uint32_t f = 0; f < roots->functions; ++f) entries->incoming[f] = UINT32_MAX;
         for (uint32_t a = 0; a < storage->application_count; ++a) {
             XirStorageApplication app = storage->applications[a];
+            if (app.context_only) continue;
             if (app.kind == XIR_EXECUTION_CALLBACK_ENTRY || app.outcome != XIR_EXECUTION_NORMAL ||
                 (app.protocol != 2 && app.kind != XIR_EXECUTION_CLEANUP_USE)) continue;
             if (app.target >= roots->functions) {walk->status = XR_XIR_BAD_STRUCTURE; return false;}
@@ -259,6 +261,12 @@ static bool execution_origin_binding(ExecutionOriginWalk *walk, const EffectChec
     if (origin.environment >= XIR_EXECUTION_UNKNOWN_ENVIRONMENT) return false;
     if (origin.environment >= storage->application_count) {walk->status = XR_XIR_BAD_STRUCTURE; return true;}
     XirStorageApplication app = storage->applications[origin.environment];
+    if (app.context_only) {
+        if (app.source_application >= storage->application_count) {walk->status = XR_XIR_BAD_STRUCTURE; return true;}
+        XirStorageApplication source = storage->applications[app.source_application];
+        app.first = source.first;
+        app.count = source.count;
+    }
     if (app.kind == XIR_EXECUTION_CALLBACK_ENTRY) {
         *unresolved |= XIR_EXECUTION_REMAINDER_OPAQUE;
         return true;
@@ -425,7 +433,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 EffectCheckOriginEdge edge = origins->edges[e];
                 if (edge.result && (query == EXECUTION_ORIGINS_EFFECTS || query == EXECUTION_ORIGINS_CALLABLE)) continue;
                 if (edge.bottom) {
-                    found |= walk.observe_environment;
+                    found |= walk.observe_environment || request.allow_bottom;
                     predecessor = true;
                     continue;
                 }
@@ -436,6 +444,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     predecessor = true;
                     continue;
                 }
+                uint32_t next_environment = origin.environment;
                 if (edge.application != UINT32_MAX) {
                     /* A target visitor can append guard applications within
                      * this cursor. Rebind before reading the receiving bank. */
@@ -443,12 +452,27 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     if (walk.status != XR_XIR_OK) break;
                     if (edge.application >= storage.application_count) {walk.status = XR_XIR_BAD_STRUCTURE; break;}
                     XirStorageApplication app = storage.applications[edge.application];
+                    next_environment = edge.application;
                     if (edge.result && app.caller_instance != origin.function) continue;
                     if (app.function == function.declaration && app.environment != origin.environment) {
-                        if (app.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT)
+                        if (app.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+                            origin.environment < XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
+                            walk.status = xir_storage_flow_compose_environment(roots->storage,
+                                edge.application, origin.environment, &next_environment);
+                            if (walk.status == XR_XIR_UNRESOLVED) {
+                                walk.status = XR_XIR_OK;
+                                unresolved |= XIR_EXECUTION_REMAINDER_STORAGE;
+                                continue;
+                            }
+                            if (walk.status != XR_XIR_OK) break;
+                            walk.status = xir_storage_flow_view(roots->storage, &storage);
+                            if (walk.status != XR_XIR_OK) break;
+                        } else {
+                            if (app.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT)
                             unresolved |= edge.result && origin.storable ?
                                 XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT : XIR_EXECUTION_REMAINDER_STORAGE;
-                        continue;
+                            continue;
+                        }
                     }
                 }
                 if (edge.function == UINT32_MAX) {
@@ -464,7 +488,6 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                     predecessor = true;
                     continue;
                 }
-                uint32_t next_environment = edge.application == UINT32_MAX ? origin.environment : edge.application;
                 uint32_t source_function = !edge.result && edge.function == function.declaration ? origin.function : edge.function;
                 execution_origin_push(&walk, (ExecutionOrigin){source_function, edge.value,
                     next_environment, edge.result, origin.entry_context, origin.storable});

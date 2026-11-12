@@ -616,6 +616,7 @@ XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects
 }
 
 #include "xxir_effect_refinement.inc.c"
+#include "xxir_effect_cleanup_suspend.inc.c"
 
 XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *memory,
     XrXirEffects *effects, const XrXirDiagnostic *diagnostic) {
@@ -713,6 +714,7 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         .roots = effects->checked_roots, .control = input.control};
     if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
+    if (status == XR_XIR_OK) status = effect_cleanup_suspend_project(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
     if (status==XR_XIR_OK && (!refiner || !refiner->admit) &&
         effects->checked_roots->restrictions.view.pending.status!=XR_XIR_OK)

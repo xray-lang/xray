@@ -1,0 +1,14 @@
+export fn main() -> i64 { return 0 }
+fn leaf() -> i64 { return 7 }
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn write_i64(value: ref i64) { value = 1 }
+fn forward_i64(value: ref i64) { write_i64(ref value) }
+fn cleanupMutable() -> i64 {
+    var callback = leaf
+    var value: i64 = 0
+    defer { invoke(callback) }
+    defer { forward_i64(ref value); callback = leaf }
+    return 7
+}
+fn plainWriter() -> i64 { var value: i64 = 0; write_i64(ref value); return value }
+fn projectedWriter() -> i64 { var values: Array<i64> = [0]; write_i64(ref values[0]); return values[0] }

@@ -116,6 +116,9 @@ typedef struct XirExecutionSite {
     /* A footprint branch has crossed a validated stored-value boundary.
      * Its restriction is fixed, while captures and environment loans remain. */
     bool storable_environment;
+    /* An earlier cleanup in this exit has already raised the first panic. */
+    bool after_panic;
+    uint32_t cleanup_handler;
 } XirExecutionSite;
 
 typedef struct XirExecutionValue { uint32_t function, value, environment; } XirExecutionValue;
@@ -189,6 +192,9 @@ XR_FUNC XrXirStatus xir_execution_visit_value_footprint_in(const XirExecutionOwn
     const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
 /* Construction rebinds this receiving index once after each storage round. */
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);
+/* Looks up the owner's existing qualified environment without constructing it. */
+XR_FUNC XrXirStatus xir_execution_environment(const XirExecutionOwner *,
+    uint32_t application, uint32_t parent, uint32_t *output);
 /* The append-only origin inventory can grow without adding call sites.
  * Storage stages must consume that new inventory before final exposure. */
 XR_FUNC uint64_t xir_execution_storage_revision(const XirExecutionOwner *);

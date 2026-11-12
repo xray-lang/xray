@@ -57,7 +57,14 @@ def main() -> None:
                     "cfn_generic_collection", "cfn_view_lifetime", "ref_forward", "escaping_ref_write", "generator_owned_cell",
                     "generator_storable_cell", "hidden_fn_value_chain", "latent_capture_creation", "opaque_callback_pure",
                     "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls", "module_stored_callbacks",
-                    "returned_environment_contract", "opaque_factory_contract")
+                    "returned_environment_contract", "opaque_factory_contract",
+                    "cleanup_const_pure",
+                    "cleanup_cell_unchanged",
+                    "cleanup_cell_write_before_registration",
+                    "cleanup_explicit_snapshot_before_change",
+                    "cleanup_lifo_restore_then_read",
+                    "cleanup_lifo_read_then_suspend",
+                    "cleanup_snapshot_task_late", "cleanup_nested_restore", "cleanup_diamond_helper")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name

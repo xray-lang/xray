@@ -1,0 +1,4 @@
+{
+  "line": 7,
+  "message": "E0392: defer may suspend or create a task. Reason probe via invoke parameter `callback` -> probe (unqualified callable)"
+}

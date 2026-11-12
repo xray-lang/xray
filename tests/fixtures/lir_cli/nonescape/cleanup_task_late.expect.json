@@ -1,0 +1,4 @@
+{
+  "line": 8,
+  "message": "E0392: defer may suspend or create a task"
+}

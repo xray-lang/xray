@@ -1,0 +1,17 @@
+fn pure() -> i64 { return 7 }
+fn suspending() -> i64 { Coro.yield(); return 9 }
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn probe(flag: bool) -> i64 {
+    var callback = pure
+    defer { print(invoke(callback)) }
+    defer {
+        if (flag) {
+            callback = suspending
+            assert(false, "after write outside inner handler")
+        }
+        callback = pure
+    }
+    try { return 17 }
+    catch panic { return -1 }
+}
+print(probe(true))

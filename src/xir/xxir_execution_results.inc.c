@@ -45,7 +45,7 @@ static bool execution_result_equal(const EffectCheckedRoots *roots, EffectCheckC
 static bool execution_result_application(const EffectCheckedRoots *roots, const XirStorageFlowView *view,
     uint32_t application) {
     XirStorageApplication app = view->applications[application];
-    if (app.kind != XIR_EXECUTION_CALL || app.protocol != 2 || app.outcome != XIR_EXECUTION_NORMAL ||
+    if (app.context_only || app.kind != XIR_EXECUTION_CALL || app.protocol != 2 || app.outcome != XIR_EXECUTION_NORMAL ||
         app.site >= roots->calls) return false;
     EffectCheckCall call = roots->call[app.site];
     EffectCheckFunction callee = roots->function[roots->node[call.target].function];

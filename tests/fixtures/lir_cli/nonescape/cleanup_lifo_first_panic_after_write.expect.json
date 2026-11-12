@@ -1,0 +1,4 @@
+{
+  "line": 8,
+  "message": "E0392: defer may suspend or create a task. Reason probe via $cleanup7 parameter `callback` -> $cleanup8 -> suspending (suspending operation)"
+}

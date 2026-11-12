@@ -235,6 +235,7 @@ static XrXirStatus effect_relocation_nodes(EffectRelocation *relocation) {
             EffectCheckNode node = roots->node[n];
             if (node.component != UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
             node.cleanup_parent = effect_relocation_frontier(relocation, f, node.cleanup_parent);
+            node.cleanup_panic_frontier = effect_relocation_frontier(relocation, f, node.cleanup_panic_frontier);
             for (uint32_t bit = 0; bit < 2; ++bit) {
                 node.reason[bit] = effect_relocation_node(relocation, node.reason[bit]);
                 node.suspend_reason[bit] = effect_relocation_node(relocation, node.suspend_reason[bit]);
@@ -276,6 +277,8 @@ static XrXirStatus effect_relocation_edges(EffectRelocation *relocation) {
         roots->element[e].source = effect_relocation_node(relocation, roots->element[e].source);
     for (uint32_t a = 0; a < roots->arguments; ++a)
         roots->argument[a] = effect_relocation_node(relocation, roots->argument[a]);
+    for (uint32_t a = 0; a < roots->suspend_actuals; ++a)
+        roots->suspend_actual[a].source = effect_relocation_node(relocation, roots->suspend_actual[a].source);
     for (uint32_t c = 0; c < roots->calls; ++c) {
         if (!effect_relocation_step(relocation)) return relocation->status;
         EffectCheckCall *call = &roots->call[c];

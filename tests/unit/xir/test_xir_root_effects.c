@@ -586,14 +586,42 @@ static void suspension_reason_order(void) {
     puts("equal-length suspension causes retain source order across recursive component scheduling PASS");
 }
 
+static void suspension_dependency_reclosure(void) {
+    EffectMark baseline = effect_mark();
+    XrXirInstruction a[] = {{.op=XR_XIR_CALL,.immediate=1},{.op=XR_XIR_RETURN}};
+    XrXirInstruction b = {.op=XR_XIR_RETURN};
+    XrXirBlock blocks[] = {{.count=2},{.count=1}};
+    XrXirFunction functions[] = {
+        {.instructions=a,.instruction_count=2,.blocks=blocks,.block_count=1,.error_type=XR_XIR_NEVER},
+        {.instructions=&b,.instruction_count=1,.blocks=blocks+1,.block_count=1,.error_type=XR_XIR_NEVER}};
+    XrXirModule module = {.stage=XR_XIR_CHECKED,.functions=functions,.function_count=2};
+    EffectCheckedRoots *roots = NULL;
+    CHECK(effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,true) == XR_XIR_OK);
+    uint32_t first = roots->function[0].root, second = roots->function[1].root;
+    CHECK(roots->node[first].component != roots->node[second].component);
+    EffectCheckBuild build = {.memory=&effect_context,.roots=roots};
+    CHECK(effect_check_dependency(&build,first,second));
+    effect_suspend_reset(roots);
+    CHECK(effect_check_close(&build) == XR_XIR_OK);
+    CHECK(roots->node[first].component == roots->node[second].component &&
+        !roots->node[first].closed && !roots->node[second].closed);
+    effect_checked_roots_free(roots);
+    effect_mark_check(baseline);
+    puts("suspension reclosure rebuilds recursive components after appending an argument dependency PASS");
+}
+
 typedef struct ExecutionCleanupOracle {
-    uint32_t normal, panic, captures;
+    uint32_t normal, panic, captures, after_panic;
 } ExecutionCleanupOracle;
 static XrXirStatus execution_cleanup_oracle(void *context, const XirExecutionSite *site) {
     ExecutionCleanupOracle *oracle = context;
     CHECK(site->kind == XIR_EXECUTION_CLEANUP_USE && site->protocol == 4 && site->function == 0);
     CHECK(site->registration != UINT32_MAX);
-    if (site->port == XIR_EXECUTION_PANIC) {
+    if (site->after_panic) {
+        CHECK(site->port == XIR_EXECUTION_NORMAL && site->instruction == 2 && site->block == 2 &&
+            site->order == 1 && site->declaration == 1 && !site->cleanup_handler);
+        ++oracle->after_panic;
+    } else if (site->port == XIR_EXECUTION_PANIC) {
         CHECK(site->instruction == UINT32_MAX && (site->block == 1 || site->block == 2));
         CHECK(site->declaration == (site->block == 1 ? 1u : 2u - site->order));
         ++oracle->panic;
@@ -636,7 +664,7 @@ static void execution_cleanup_order(void) {
     ExecutionCleanupOracle oracle = {0};
     CHECK(xir_execution_visit_calls(roots, execution_cleanup_oracle, &oracle) == XR_XIR_OK);
     CHECK(xir_execution_visit_captures(roots, execution_capture_oracle, &oracle) == XR_XIR_OK);
-    CHECK(oracle.normal == 2 && oracle.panic == 3 && oracle.captures == 2);
+    CHECK(oracle.normal == 2 && !oracle.panic && oracle.captures == 2 && oracle.after_panic == 1);
     XirExecutionSite site = {0};
     CHECK(xir_execution_site(roots, XIR_EXECUTION_CLEANUP_USE, 0, &site) == XR_XIR_OK);
     effect_checked_roots_free(roots);
@@ -654,7 +682,7 @@ static void execution_cleanup_order(void) {
     for (uint32_t n = 0; n < roots->nodes; ++n) CHECK(roots->node[n].component == UINT32_MAX);
     oracle = (ExecutionCleanupOracle){0};
     CHECK(xir_execution_visit_calls(roots, execution_cleanup_oracle, &oracle) == XR_XIR_OK);
-    CHECK(oracle.normal == 2 && oracle.panic == 3);
+    CHECK(oracle.normal == 2 && !oracle.panic && oracle.after_panic == 1);
     XirStorageFlowView storage = {0};
     CHECK(xir_storage_flow_seal(roots->storage, &storage) == XR_XIR_OK && storage.function_count == 3);
     EffectCheckBuild close = {.memory = &effect_context, .roots = roots};
@@ -1400,6 +1428,7 @@ static void control_summary_kernel(void) {
     control_summary_detached();
     suspension_parameter_equations();
     suspension_reason_order();
+    suspension_dependency_reclosure();
     execution_cleanup_order();
     execution_origin_namespaces();
     restriction_owner_relocation();

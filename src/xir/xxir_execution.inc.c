@@ -57,6 +57,8 @@ static XirExecutionSite execution_cleanup_site(const EffectCheckedRoots *roots, 
     site.block = use->block;
     site.order = use->order;
     site.port = use->port;
+    site.after_panic = use->after_panic;
+    site.cleanup_handler = use->handler;
     site.registration = use->registration;
     return site;
 }
@@ -315,4 +317,11 @@ XR_FUNC XrXirStatus xir_execution_visit_value_captures(const XirExecutionOwner *
 XR_FUNC const XrXirTypes *xir_execution_types(const XirExecutionOwner *owner) {
     const EffectCheckedRoots *roots = owner;
     return roots ? (roots->terms ? &roots->terms->types : roots->borrowed_types) : NULL;
+}
+
+XR_FUNC XrXirStatus xir_execution_environment(const XirExecutionOwner *owner,
+    uint32_t application, uint32_t parent, uint32_t *output) {
+    const EffectCheckedRoots *roots = owner;
+    if (!roots || !roots->storage) return XR_XIR_BAD_STRUCTURE;
+    return xir_storage_flow_environment(roots->storage,application,parent,output);
 }

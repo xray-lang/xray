@@ -52,13 +52,104 @@ static void entry_suspend_parameter_ownership(void) {
     printf("symbolic suspension presentation: same-owner helper edge and %zu allocation failures PASS\n", sites);
 }
 
-static XrXirStatus entry_cleanup_case(const XrXirArtifact *artifact) {
+static bool entry_footprint_map(const XrXirModule *, uint32_t, XirStorageRelocation *, XrXirStatus *);
+
+typedef struct EntryCleanupPreparation {
+    EffectLifetimePreparation lifetime;
+    const XrXirModule *module;
+    uint32_t parent, composed;
+    bool panic_places;
+} EntryCleanupPreparation;
+
+static XrXirStatus entry_cleanup_observe(void *context, const XrXirModule *module,
+    uint32_t function, uint32_t instruction, const XrXirInstruction *op) {
+    EntryCleanupPreparation *prepare = context;
+    return effect_lifetime_observe(&prepare->lifetime,module,function,instruction,op);
+}
+
+static XrXirStatus entry_cleanup_points(void *context, const XirExecutionOwner *execution,
+    XirStorageFlow *flow, bool final, bool *ready) {
+    EntryCleanupPreparation *prepare = context;
+    uint32_t targets[] = {root_find(prepare->module,"forward_i64"),root_find(prepare->module,"write_i64")};
+    while (prepare->composed < 2) {
+        XirStorageFlowView view = {0};
+        XrXirStatus status = xir_storage_flow_view(flow,&view);
+        if (status != XR_XIR_OK) return status;
+        uint32_t source = UINT32_MAX;
+        for (uint32_t a = 0; a < view.application_count; ++a) {
+            XirStorageApplication app = view.applications[a];
+            if (app.context_only || app.kind != XIR_EXECUTION_CALL || app.protocol != 2 ||
+                app.declaration != targets[prepare->composed] ||
+                app.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT) continue;
+            if (prepare->composed) {
+                if (app.caller_instance == view.applications[prepare->parent].target) {source=a; break;}
+            } else for (uint32_t b = 0; b < view.application_count; ++b) {
+                XirStorageApplication caller = view.applications[b];
+                if (caller.context_only || caller.kind != XIR_EXECUTION_CLEANUP_USE ||
+                    caller.target != app.caller_instance) continue;
+                source=a; prepare->parent=b; break;
+            }
+            if (source != UINT32_MAX) break;
+        }
+        if (source == UINT32_MAX) break;
+        status = xir_storage_flow_compose_environment(flow,source,prepare->parent,&prepare->parent);
+        if (status != XR_XIR_OK) return status;
+        ++prepare->composed;
+    }
+    if (prepare->composed == 2 && !prepare->panic_places) {
+        uint32_t callers[] = {root_find(prepare->module,"plainWriter"),root_find(prepare->module,"projectedWriter")};
+        for (uint32_t c = 0; c < 2; ++c) {
+            const XrXirFunction *body = &prepare->module->functions[callers[c]];
+            uint32_t call = UINT32_MAX;
+            for (uint32_t i = 0; i < body->instruction_count; ++i)
+                if (body->instructions[i].op == XR_XIR_CALL && body->instructions[i].immediate == targets[1]) {call=i; break;}
+            CHECK(call != UINT32_MAX);
+            XrXirInstruction op = body->instructions[call];
+            CHECK(op.args[1] == 1);
+            uint32_t handle = body->operands[op.args[0]], value = UINT32_MAX;
+            XrXirStatus status = xir_storage_flow_contents_at(flow,callers[c],call,handle,XIR_STORAGE_PANIC,&value);
+            if (status != XR_XIR_OK) return status;
+            XirStorageFlowView view = {0};
+            CHECK(xir_storage_flow_view(flow,&view) == XR_XIR_OK);
+            bool panic = false;
+            for (uint32_t e = 0; e < view.crossflow_count; ++e) {
+                XirStorageCrossFlow edge = view.crossflows[e];
+                XirStorageApplication app = view.applications[edge.application];
+                panic |= app.function == callers[c] && app.instruction == call &&
+                    app.declaration == targets[1] && app.outcome == XIR_EXECUTION_PANIC;
+            }
+            CHECK(panic == (c != 0));
+        }
+        prepare->panic_places = true;
+    }
+    if (final) CHECK(prepare->composed == 2 && prepare->panic_places);
+    return effect_lifetime_points(&prepare->lifetime,execution,flow,final,ready);
+}
+
+static XrXirStatus entry_cleanup_finish(void *context, const XirExecutionOwner *execution,
+    XirStorageFlow *flow, const XirRestrictionReceiver *receiver) {
+    EntryCleanupPreparation *prepare = context;
+    return effect_lifetime_finish(&prepare->lifetime,execution,flow,receiver);
+}
+
+static XrXirStatus entry_cleanup_case(const XrXirArtifact *artifact, bool qualified) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     XrXirEffects *effects = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xir_effects_infer_lifetimes_input(&effect_context,
-        (XirEffectInput){module,artifact->construction,NULL},&effects,&diagnostic);
-    uint32_t cleanups = 0;
+    XirEffectInput input = {module,artifact->construction,NULL};
+    EntryCleanupPreparation prepare = {.module=module,.parent=UINT32_MAX};
+    prepare.lifetime.diagnostic = &diagnostic;
+    XrXirStatus status = qualified ? xr_hir_escape_builder_new(&effect_context,module,NULL,NULL,
+        &prepare.lifetime.builder) : XR_XIR_OK;
+    if (status == XR_XIR_OK && qualified) {
+        XrXirRootRefiner refiner = {.context=&prepare,.observe=entry_cleanup_observe,
+            .points=entry_cleanup_points,.prepare=entry_cleanup_finish};
+        status = effect_infer(&effect_context,input,&refiner,&effects,&diagnostic);
+        if (status == XR_XIR_OK) CHECK(prepare.composed == 2);
+    } else if (status == XR_XIR_OK)
+        status = xir_effects_infer_lifetimes_input(&effect_context,input,&effects,&diagnostic);
+    xr_hir_escape_builder_free(prepare.lifetime.builder);
+    uint32_t cleanups = 0, projected = 0;
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         if (!module->declarations->functions[f].cleanup_owner) continue;
         ++cleanups;
@@ -73,23 +164,59 @@ static XrXirStatus entry_cleanup_case(const XrXirArtifact *artifact) {
         uint32_t call = roots->node[node].cleanup_call;
         CHECK(call < roots->calls && roots->call[call].protocol == 4 &&
             roots->call[call].target == roots->function[f].root && roots->call[call].output == node);
+        CHECK(roots->call[call].suspend_projected);
+        for (uint32_t a = roots->call[call].suspend_actuals; a != UINT32_MAX; a = roots->suspend_actual[a].next) {
+            CHECK(a < roots->suspend_actuals && roots->suspend_actual[a].source < roots->nodes);
+            ++projected;
+        }
     }
-    if (status == XR_XIR_OK) CHECK(cleanups == 1);
+    if (status == XR_XIR_OK) CHECK(cleanups == (qualified ? 2u : 1u) && projected);
+    XirStorageRelocation map = {0};
+    if (status == XR_XIR_OK && qualified) {
+        XirStorageFlowView before = {0};
+        CHECK(xir_storage_flow_view(effects->checked_roots->storage,&before) == XR_XIR_OK);
+        uint32_t contexts = 0, sample = UINT32_MAX;
+        for (uint32_t a = 0; a < before.application_count; ++a) {
+            XirStorageApplication app = before.applications[a];
+            if (!app.context_only) continue;
+            uint32_t found = UINT32_MAX;
+            CHECK(xir_storage_flow_environment(effects->checked_roots->storage,app.source_application,app.environment,&found) == XR_XIR_OK && found == a);
+            sample = a;
+            ++contexts;
+        }
+        CHECK(contexts && sample != UINT32_MAX);
+        XirStorageApplication context = before.applications[sample];
+        entry_footprint_map(module,context.function,&map,&status);
+        if (status == XR_XIR_OK) status = xir_storage_flow_relocate(effects->checked_roots->storage,&map,1,NULL);
+        if (status == XR_XIR_OK) {
+            XirStorageFlowView after = {0};
+            CHECK(xir_storage_flow_view(effects->checked_roots->storage,&after) == XR_XIR_OK);
+            uint32_t found = UINT32_MAX;
+            CHECK(xir_storage_flow_environment(effects->checked_roots->storage,context.source_application,context.environment,&found) == XR_XIR_OK && found == sample);
+            CHECK(after.applications[sample].instruction == context.instruction + 1 &&
+                after.applications[sample].cleanup_handler == context.cleanup_handler &&
+                after.applications[sample].after_panic == context.after_panic);
+        }
+    }
+    xr_compile_resources_free((void *)map.values);
+    xr_compile_resources_free((void *)map.instructions);
     xr_xir_compile_effects_free(effects);
     return status;
 }
 
-static void entry_cleanup_ownership(void) {
+static void entry_cleanup_fixture(const char *file, bool qualified) {
     EffectMark baseline = effect_mark();
-    XrXirArtifact *artifact = root_source("cleanup_receiver_footprints.xr",XR_XIR_OK);
+    XrXirArtifact *artifact = root_source(file,XR_XIR_OK);
     EffectMark retained = effect_mark();
     attempts = 0; injected = false;
-    CHECK(entry_cleanup_case(artifact) == XR_XIR_OK);
+    XrXirStatus initial = entry_cleanup_case(artifact,qualified);
+    if (initial != XR_XIR_OK) fprintf(stderr,"cleanup fixture %s initial status%u\n",file,initial);
+    CHECK(initial == XR_XIR_OK);
     size_t sites = attempts;
     effect_mark_check(retained);
     for (size_t site = 0; site < sites; ++site) {
         attempts = 0; injected = false; fail_at = site;
-        CHECK(entry_cleanup_case(artifact) == XR_XIR_OUT_OF_MEMORY && injected);
+        CHECK(entry_cleanup_case(artifact,qualified) == XR_XIR_OUT_OF_MEMORY && injected);
         fail_at = SIZE_MAX;
         effect_mark_check(retained);
     }
@@ -97,12 +224,43 @@ static void entry_cleanup_ownership(void) {
     XrXirArtifact *received = NULL;
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(artifact);
-    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,NULL) == XR_XIR_OK);
-    CHECK(entry_cleanup_case(received) == XR_XIR_OK);
+    XrXirDiagnostic cold = {0};
+    XrXirStatus cold_status = xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,&cold);
+    if (cold_status != XR_XIR_OK) fprintf(stderr,"cleanup cold %s status%u f%u b%u i%u reason%u\n",
+        file,cold_status,cold.function,cold.block,cold.instruction,cold.reason);
+    CHECK(cold_status == XR_XIR_OK);
+    CHECK(entry_cleanup_case(received,qualified) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(received);
     effect_mark_check(baseline);
-    printf("cleanup and receiver loans: actual suspension, cold Checked receipt and %zu allocation failures PASS\n", sites);
+    printf("cleanup %s: actual suspension, cold Checked receipt and %zu allocation failures PASS\n", file, sites);
+}
+
+static void entry_cleanup_ownership(void) {
+    entry_cleanup_fixture("cleanup_receiver_footprints.xr",false);
+    entry_cleanup_fixture("cleanup_mutable_footprints.xr",true);
+    EffectMark baseline = effect_mark();
+    XrXirArtifact *artifact = root_source("cleanup_receiver_footprints.xr",XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    bool checked = false;
+    for (uint32_t f = 0; f < module->function_count && !checked; ++f) {
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
+            XrXirInstruction *op = (XrXirInstruction *)module->functions[f].instructions + i;
+            if (op->op != XR_XIR_CLEANUP_REGISTER) continue;
+            XrXirInstruction original = *op;
+            op->op = XR_XIR_OP_COUNT;
+            CHECK(xr_xir_compile_verify_v2(&effect_context,module,artifact->construction,NULL) == XR_XIR_BAD_STRUCTURE);
+            *op = original;
+            op->immediate = module->function_count;
+            CHECK(xr_xir_compile_verify_v2(&effect_context,module,artifact->construction,NULL) == XR_XIR_BAD_STRUCTURE);
+            *op = original;
+            checked = true;
+            break;
+        }
+    }
+    CHECK(checked);
+    xr_xir_compile_artifact_free(artifact);
+    effect_mark_check(baseline);
 }
 
 static XrXirStatus entry_module_stored_site(void *context, const XirExecutionSite *site) {

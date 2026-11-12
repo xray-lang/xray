@@ -31,7 +31,7 @@ typedef struct EffectCheckNode {
     uint32_t function, dependencies, consumers, aliases, calls, last_call, bindings, elements;
     uint32_t component, reason[2], parameter_seed, suspend_parameter_seed, suspend_seed_instruction[2];
     XrXirType type;
-    uint32_t block, mode, cleanup_call, cleanup_parent;
+    uint32_t block, mode, cleanup_call, cleanup_parent, cleanup_handler, cleanup_panic_frontier;
     bool cell, escaping, weaken, erased, callable_opaque, callable_input, storable_value, module_cell;
     uint32_t suspend_reason[2], suspend_call[2], suspend_parameter[2], suspend_instruction[2], suspend_distance[2], suspend_order[2];
     uint8_t cell_use, origin, bound, closed, suspend_bound, root_seed, suspend_seed;
@@ -81,7 +81,14 @@ typedef struct EffectCheckCall {
     uint32_t type_first, type_count;
     uint8_t protocol;
     bool default_result, fixed_effects;
+    uint32_t suspend_actuals;
+    bool suspend_projected;
 } EffectCheckCall;
+
+typedef struct EffectCheckSuspendActual {
+    uint32_t source, parameter, next;
+    bool formula;
+} EffectCheckSuspendActual;
 
 typedef struct EffectCheckCleanupExit {
     uint32_t instruction, block, from, to;
@@ -91,6 +98,8 @@ typedef struct EffectCheckCleanupExit {
 typedef struct EffectCheckCleanupUse {
     uint32_t function, instruction, block, order, registration;
     XirExecutionPort port;
+    bool after_panic;
+    uint32_t handler;
 } EffectCheckCleanupUse;
 
 typedef struct EffectCheckOriginEdge {
@@ -132,6 +141,7 @@ typedef struct EffectCheckedRoots {
     uint32_t bindings, binding_capacity;
     uint32_t elements, element_capacity;
     uint32_t cleanup_exits, cleanup_exit_capacity, cleanup_uses, cleanup_use_capacity;
+    uint32_t suspend_actuals, suspend_actual_capacity;
     uint32_t stringable_interface, stringable_integer, stringable_string;
     EffectCheckFunction *function;
     EffectCheckNode *node;
@@ -142,6 +152,7 @@ typedef struct EffectCheckedRoots {
     EffectCheckCall *call;
     EffectCheckCleanupExit *cleanup_exit;
     EffectCheckCleanupUse *cleanup_use;
+    EffectCheckSuspendActual *suspend_actual;
     uint32_t *argument;
     uint32_t *module_offsets, *module_functions;
     EffectCheckPending *pending;
@@ -196,6 +207,7 @@ static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     xr_compile_resources_free(roots->call);
     xr_compile_resources_free(roots->cleanup_exit);
     xr_compile_resources_free(roots->cleanup_use);
+    xr_compile_resources_free(roots->suspend_actual);
     xr_compile_resources_free(roots->argument);
     xr_compile_resources_free(roots->module_offsets);
     xr_compile_resources_free(roots->module_functions);
@@ -601,6 +613,8 @@ static bool effect_check_call_record(EffectCheckBuild *build, uint32_t output, E
     /* Source order breaks equal first-cause choices without retaining bodies. */
     call.next = UINT32_MAX;
     call.output = output;
+    call.suspend_actuals = UINT32_MAX;
+    call.suspend_projected = false;
     roots->call[index] = call;
     if (roots->node[output].last_call == UINT32_MAX) roots->node[output].calls = index;
     else roots->call[roots->node[output].last_call].next = index;
@@ -900,6 +914,10 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
             uint32_t block = build->roots->node[value].block;
             if (block >= function->block_count) return false;
             build->roots->node[value].cleanup_parent = function->blocks[block].frontier;
+            uint32_t handler = function->blocks[block].panic;
+            if (handler >= function->block_count) return false;
+            build->roots->node[value].cleanup_handler = handler;
+            build->roots->node[value].cleanup_panic_frontier = handler ? function->blocks[handler].frontier : 0;
         }
         if (callable && !effect_check_call(build, value, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_VALUE)) return false;
         return !effect_check_array_result(build->module->types, op->type) ||
@@ -1728,9 +1746,12 @@ static bool effect_check_capture_bindings(EffectCheckBuild *build) {
     EffectCheckedRoots *roots = build->roots;
     for (uint32_t c = 0; c < roots->calls; ++c) {
         EffectCheckCall call = roots->call[c];
-        if (call.protocol != 1) continue;
+        if (call.protocol != 1 && call.protocol != 4) continue;
+        /* Both authenticated capture prefixes preserve the actual Cell
+         * identity and the union of its writes throughout its lifetime. */
         EffectCheckFunction callee = roots->function[roots->node[call.target].function];
         for (uint32_t p = 0; p < call.count; ++p) {
+            if (call.protocol == 4 && p >= callee.capture_count) continue;
             uint32_t source = roots->argument[call.first + p], target = callee.first + p;
             if (!effect_check_binding(build, target, source)) return false;
             if (!roots->node[target].cell_parameter) continue;
@@ -1989,7 +2010,7 @@ static XrXirStatus effect_check_cell_roles(EffectCheckBuild *build) {
                 roots->node[function->first + p].origin = XR_XIR_CELL_ORIGIN_OWNED;
                 roots->node[function->first + p].bound = 0;
             }
-            if (cell && !(node->cell_use & 1u)) {
+            if (cell && !(node->cell_use & 1u) && p >= function->capture_count) {
                 uint64_t *contents = effect_check_suspend_bits(roots, function->contents + p);
                 contents[bit / 64] &= ~(UINT64_C(1) << (bit % 64));
                 roots->node[function->contents + p].suspend_parameter_seed = 0;
@@ -2135,6 +2156,17 @@ static bool effect_check_suspend_apply(EffectCheckedRoots *roots, uint32_t outpu
             uint32_t parameter = (uint32_t)(term % callee->parameters);
             bool contents = term >= callee->parameters;
             if (parameter < call.count) {
+                if (call.suspend_projected) {
+                    bool substituted = false;
+                    for (uint32_t a = call.suspend_actuals; a != UINT32_MAX; a = roots->suspend_actual[a].next) {
+                        EffectCheckSuspendActual actual = roots->suspend_actual[a];
+                        if (actual.parameter != term) continue;
+                        substituted = true;
+                        changed |= effect_check_suspend_merge(roots, output, actual.source,
+                            index, parameter, UINT32_MAX, actual.formula);
+                    }
+                    if (substituted) continue;
+                }
                 uint32_t source = roots->argument[call.first + parameter];
                 if (contents) {
                     const EffectCheckFunction *caller = &roots->function[roots->node[source].function];
@@ -2264,6 +2296,9 @@ static XrXirStatus effect_check_close(EffectCheckBuild *build) {
     uint32_t *queue = xir_compile_alloc(build->memory, (size_t)count * sizeof(*queue), &build->status);
     EffectCheckFrame *frames = xir_compile_alloc(build->memory, (size_t)frames_bytes, &build->status);
     if (!index || !low || !stack || !queue || !frames) goto done;
+    /* Every close schedules the current dependency graph, including edges
+     * appended by argument refinement. Previous SCC membership is retired. */
+    for (uint32_t n = 0; n < count; ++n) roots->node[n].component = UINT32_MAX;
     uint32_t next = 0, components = 0, stacked = 0;
     for (uint32_t start = 0; start < count && build->status == XR_XIR_OK; ++start) {
         if (index[start]) continue;

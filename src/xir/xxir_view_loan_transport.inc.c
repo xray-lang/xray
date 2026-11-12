@@ -414,8 +414,14 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
         ViewLoanEdge edge=a->edges[e];uint32_t environment=reference.environment;
         if (edge.application != UINT32_MAX) {
             XirStorageApplication app=a->facts->storage.applications[edge.application];
-            if (app.function == reference.function && app.environment != reference.environment) continue;
             environment=edge.application;
+            if (app.function == reference.function && app.environment != reference.environment) {
+                if (app.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+                    reference.environment >= XIR_EXECUTION_UNKNOWN_ENVIRONMENT) continue;
+                a->status=xir_execution_environment(a->facts->execution,
+                    edge.application,reference.environment,&environment);
+                if (a->status != XR_XIR_OK) return false;
+            }
         } else if (edge.function != reference.function) {a->status=XR_XIR_UNRESOLVED;return false;}
         predecessor=true;
         if (!view_loan_push(a,(XirStorageReference){edge.function,edge.value,environment},id)) return false;

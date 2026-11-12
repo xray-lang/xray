@@ -1,0 +1,13 @@
+fn pure() -> i64 { return 7 }
+fn suspending() -> i64 { Coro.yield(); return 9 }
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn w0(value: ref i64) { value = 1 }
+fn w1(value: ref i64) { w0(ref value); w0(ref value) }
+fn w2(value: ref i64) { w1(ref value); w1(ref value) }
+fn w3(value: ref i64) { w2(ref value); w2(ref value) }
+fn w4(value: ref i64) { w3(ref value); w3(ref value) }
+fn w5(value: ref i64) { w4(ref value); w4(ref value) }
+fn w6(value: ref i64) { w5(ref value); w5(ref value) }
+fn w7(value: ref i64) { w6(ref value); w6(ref value) }
+fn probe() { var callback = suspending; var value:i64=0; defer { print(invoke(callback)) }; defer { w7(ref value); callback=pure } }
+probe()

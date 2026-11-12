@@ -60,6 +60,12 @@ typedef struct XirStorageApplication {
     XirExecutionPort port, outcome;
     uint8_t protocol;
     uint32_t first, count;
+    bool after_panic;
+    uint32_t cleanup_handler;
+    /* A relative call viewed in one actual parent frame. It is a context,
+     * not an additional execution site or an additional possible caller. */
+    bool context_only;
+    uint32_t source_application;
 } XirStorageApplication;
 
 typedef struct XirStorageIdentity {
@@ -194,6 +200,11 @@ XR_FUNC XrXirStatus xir_storage_flow_finish_local(XirStorageFlow *);
 /* New real execution edges extend applications monotonically. Read-origin
  * consumers must use this graph before closing indirect call candidates. */
 XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *, const XirExecutionOwner *, bool *changed);
+XR_FUNC XrXirStatus xir_storage_flow_compose_environment(XirStorageFlow *,
+    uint32_t application, uint32_t parent, uint32_t *output);
+/* Reads an already owned relative environment without allocating or linking. */
+XR_FUNC XrXirStatus xir_storage_flow_environment(const XirStorageFlow *,
+    uint32_t application, uint32_t parent, uint32_t *output);
 /* Returns the contents immediately before instruction. Physical handles retain
  * identity independently of contents. Queries may append numeric aux values. */
 XR_FUNC XrXirStatus xir_storage_flow_contents(XirStorageFlow *, uint32_t function,

@@ -457,15 +457,26 @@ static XrXirStatus storage_call_footprint(XirStorageFlow *flow, const XirExecuti
     if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), type) ||
         xr_xir_type_is_c_callable(xir_execution_types(flow->execution), type)) return XR_XIR_BAD_STRUCTURE;
     if (site->kind == XIR_EXECUTION_CLEANUP_USE) {
-        /* This binding keeps the real cleanup application and order. A closed
-         * immutable value has no mutable environment to observe at that port.
-         * Cell contents still require the ordered storage input. */
-        if (actual.cell || actual.function != site->function ||
-            actual.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT)
+        XirStorageReference reference = {actual.function, actual.value, actual.environment};
+        if (actual.cell) {
+            if (actual.caller_handle == UINT32_MAX)
+                return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
+            if (actual.caller_handle >= flow->view.functions[site->function].physical_values ||
+                !storage_is_handle(flow, site->function, actual.caller_handle)) return XR_XIR_BAD_STRUCTURE;
+            uint32_t contents = storage_call_input(flow, site, actual.caller_handle);
+            if (contents == UINT32_MAX) return flow->status;
+            reference = (XirStorageReference){site->function, contents, XIR_EXECUTION_CURRENT_ENVIRONMENT};
+        } else if (actual.function != site->function ||
+            actual.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT) {
             return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
-        XrXirStatus status = storage_closed_value_environment(flow,
-            (XirStorageReference){actual.function, actual.value, actual.environment});
-        if (status == XR_XIR_OK) *output = actual.value;
+        }
+        /* The contents version already carries the actual exit port and LIFO
+         * order, including panic exits without a physical instruction. Only
+         * a closed value can use this bounded environment transport. */
+        XrXirStatus status = storage_closed_value_environment(flow, reference);
+        if (status == XR_XIR_OK && actual.cell && !storage_relation_bank(flow, site->function,
+            actual.caller_handle, reference.value, XIR_STORAGE_FOOTPRINT)) status = flow->status;
+        if (status == XR_XIR_OK) *output = reference.value;
         return status;
     }
     XirStorageValuePoint use = {site->function, site->instruction,

@@ -56,7 +56,33 @@ static void effect_refinement_weakening(EffectCheckedRoots *roots,uint32_t funct
  * were recorded by the same producers, including generic instantiation and
  * capture ownership discharge. The SCC solver consumes those inputs and the
  * existing numeric dependency edges. */
+static void effect_suspend_reset(EffectCheckedRoots *roots) {
+    for (uint32_t f = 0; f < roots->functions; ++f) {
+        EffectCheckFunction row = roots->function[f];
+        for (uint32_t id = row.first; id <= row.last; ++id) {
+            EffectCheckNode *node = &roots->node[id];
+            uint64_t *suspension = effect_check_suspend_bits(roots,id);
+            memset(suspension,0,(size_t)row.words*sizeof(*suspension));
+            suspension[0] = node->suspend_seed;
+            uint32_t bit = node->suspend_parameter_seed;
+            if (bit) suspension[bit/64] |= UINT64_C(1) << (bit%64);
+            for (uint32_t b = 0; b < 2; ++b) {
+                bool seed = !!(node->suspend_seed & (1u << b));
+                node->suspend_reason[b] = seed ? id : UINT32_MAX;
+                node->suspend_call[b] = node->suspend_parameter[b] = UINT32_MAX;
+                node->suspend_instruction[b] = node->suspend_order[b] = seed ? node->suspend_seed_instruction[b] : UINT32_MAX;
+                node->suspend_distance[b] = seed ? 0 : UINT32_MAX;
+            }
+        }
+        for (uint32_t p = 0; p < row.parameters; ++p) {
+            uint32_t bit = roots->node[row.first+p].suspend_parameter_seed;
+            if (bit) effect_check_suspend_bits(roots,row.root)[bit/64] |= UINT64_C(1) << (bit%64);
+        }
+    }
+}
+
 static void effect_refinement_reset(EffectCheckedRoots *roots) {
+    effect_suspend_reset(roots);
     for (uint32_t f = 0; f < roots->functions; ++f) {
         EffectCheckFunction row = roots->function[f];
         for (uint32_t id = row.first; id <= row.last; ++id) {
@@ -70,22 +96,6 @@ static void effect_refinement_reset(EffectCheckedRoots *roots) {
                 node->reason[b] = node->root_seed & (1u << b) ? id : UINT32_MAX;
             node->closed = 0;
             node->component = UINT32_MAX;
-            uint64_t *suspension = effect_check_suspend_bits(roots,id);
-            memset(suspension,0,(size_t)row.words*sizeof(*suspension));
-            suspension[0] = node->suspend_seed;
-            bit = node->suspend_parameter_seed;
-            if (bit) suspension[bit/64] |= UINT64_C(1) << (bit%64);
-            for (uint32_t b = 0; b < 2; ++b) {
-                bool seed = !!(node->suspend_seed & (1u << b));
-                node->suspend_reason[b] = seed ? id : UINT32_MAX;
-                node->suspend_call[b] = node->suspend_parameter[b] = UINT32_MAX;
-                node->suspend_instruction[b] = node->suspend_order[b] = seed ? node->suspend_seed_instruction[b] : UINT32_MAX;
-                node->suspend_distance[b] = seed ? 0 : UINT32_MAX;
-            }
-        }
-        for (uint32_t p = 0; p < row.parameters; ++p) {
-            uint32_t bit = roots->node[row.first+p].suspend_parameter_seed;
-            if (bit) effect_check_suspend_bits(roots,row.root)[bit/64] |= UINT64_C(1) << (bit%64);
         }
     }
 }
