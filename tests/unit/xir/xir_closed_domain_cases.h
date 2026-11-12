@@ -53,7 +53,7 @@ static void closed_no_roots(void) {
         ClosedRing r; closed_ring_new(&r,edges,false);
         XirObject *cell = object_pointer(&r.cell), *function = object_pointer(&r.function);
         xr_xir_value_drop(&r.cell); xr_xir_value_drop(&r.function);
-        CHECK(atomic_load(&cell->references) == edges && atomic_load(&function->references) == 1);
+        CHECK(xir_object_count(cell) == edges && atomic_load(&function->references) == 1);
         CHECK(!r.releases);
         size_t blocks = live, before; closed_no_alloc_begin(&before);
         xr_xir_domain_close(r.domain);

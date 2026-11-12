@@ -391,6 +391,8 @@ XR_FUNC XrXirValueStatus xir_cell_write_take_prepare(const XrXirValue *destinati
             else if(!output->local.work||!xr_xir_domain_work(output->local.domain,1))status=XR_XIR_VALUE_LIMIT;
             else --output->local.work;
         } else if(status==XR_XIR_VALUE_OK)status=xr_xir_value_admit(value,element,&output->local);
+        if(status==XR_XIR_VALUE_OK&&xir_object_references(&cell->object)<0)
+            status=xr_xir_value_share(value);
         if(status==XR_XIR_VALUE_OK&&cell->module_storage)
             status=xr_xir_class_publication_prepare(value,1,&output->local,&output->publication);
         if(status==XR_XIR_VALUE_OK) {

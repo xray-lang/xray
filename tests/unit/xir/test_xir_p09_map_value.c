@@ -99,10 +99,10 @@ static void map_value_strings(XrXirValueAdmission *admission,bool full) {
     CHECK(xr_xir_map_new((XrXirType)257,keys,strings,2,admission,&map)==XR_XIR_VALUE_OK);
     map_value_probe(7,&map,strings,true,admission,full);
     map_value_probe(8,&map,strings+2,false,admission,full);
-    XirObject *item=object_pointer(strings);uint32_t refs=atomic_load(&item->references);size_t baseline=live;
-    atomic_store(&item->references,UINT32_MAX);bool output=false;
+    XirObject *item=object_pointer(strings);int32_t refs=atomic_load(&item->references);size_t baseline=live;
+    atomic_store(&item->references,INT32_MAX);bool output=false;
     CHECK(xr_xir_map_contains_value(&map,strings,admission,&output)==XR_XIR_VALUE_REFCOUNT_LIMIT && !output && live==baseline);
-    CHECK(atomic_load(&item->references)==UINT32_MAX);atomic_store(&item->references,refs);
+    CHECK(atomic_load(&item->references)==INT32_MAX);atomic_store(&item->references,refs);
     xr_xir_domain_close(producer);xr_xir_domain_drop(producer);
     map_value_probe(9,&map,strings,true,admission,full);
     xr_xir_value_drop(&map);for(unsigned i=0;i<3;++i)xr_xir_value_drop(strings+i);

@@ -59,7 +59,7 @@ static XrXirValueStatus root_string_allocate(XrXirDomain *domain, size_t length,
     XirString *string = &root->string;
     /* Every header field of a known leaf kind, as graph_object_initialize
      * would leave it, without its generic kind and domain checks. */
-    atomic_init(&string->object.references, 1);
+    xir_object_initialize(&string->object);
     string->object.domain = domain;
     string->object.arena = NULL;
     string->object.type = XR_XIR_STRING;
@@ -192,12 +192,12 @@ XR_FUNC void xr_xir_string_release(XirString *string) {
     /* Unpublished and unclosed: only the reference count is shared. */
     XR_CHECK(!string->object.graph_registered, "a root String never enters the residual graph");
     if (!((XirRootString *)string)->escaped) {
-        XR_CHECK(atomic_load_explicit(&string->object.references, memory_order_relaxed) == 1,
+        XR_CHECK(xir_object_references(&string->object) == 1,
             "an unescaped root String has only its root's reference");
         root_string_recycle(string);
         return;
     }
-    if (!xr_xir_reference_release(&string->object.references)) return;
+    if (!xir_object_release(&string->object)) return;
     XrXirDomain *domain = string->object.domain;
     root_string_deallocate(string);
     xr_xir_domain_drop(domain);

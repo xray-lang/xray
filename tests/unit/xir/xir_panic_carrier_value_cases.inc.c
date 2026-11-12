@@ -57,8 +57,8 @@ static void value_failures(void) {
     XrXirPanicPayload borrowed = {{445, 0, 0, 0}, message};
     size_t baseline_count = runtime_live, baseline_bytes = runtime_bytes;
     XirObject *object = object_pointer(&message);
-    uint32_t references = atomic_load(&object->references), domain_references = atomic_load(&domain->references);
-    atomic_store(&object->references, UINT32_MAX);
+    int32_t references = atomic_load(&object->references); uint32_t domain_references = atomic_load(&domain->references);
+    atomic_store(&object->references, INT32_MAX);
     XrXirPanicPayload copy = {0}; XrXirValue info = {0}; XrXirCallResult out = {0};
     CHECK(xr_xir_panic_copy(&borrowed, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && xr_xir_panic_empty(&copy));
     CHECK(xr_xir_panic_info_new(domain, &borrowed, &info) == XR_XIR_VALUE_REFCOUNT_LIMIT && unit_value(&info));

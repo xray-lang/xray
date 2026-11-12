@@ -83,7 +83,7 @@ static void array_ref_mutate(XrtArrayRef reference, int64_t index, XrXirValue el
     /* The place consumes the State's one canonical reference. Its replacement
      * stays State-owned, so the guest registry neither adopts nor drops it.
      * Canonical prepare/grow/COW completes before this payload is published. */
-    XrXirValuePlace place = {(XrXirType)value.type, &value.payload};
+    XrXirValuePlace place = {(XrXirType)value.type, &value.payload, NULL};
     XrXirFaultDetail fault = {0};
     XrXirValueStatus status = push && kind == XRT_ARRAY_I64 ?
         xr_xir_array_i64_push_owned(&value, element.payload, admission.domain) :

@@ -121,9 +121,9 @@ static void remaining_oracle(RemainingTrace *trace,const XrXirCallResult *outcom
 static void remaining_copy_limit(RemainingTrace *trace) {
     XrXirCallResult *failure=&trace->instance->failure;XrXirCallResult cached=*failure;
     const XrXirValue *value=remaining_has_error(trace->scenario)?&failure->value:&failure->panic.message;
-    XirObject *object=object_pointer(value);uint32_t references=atomic_load(&object->references);
+    XirObject *object=object_pointer(value);int32_t references=atomic_load(&object->references);
     size_t live=runtime_live,bytes=runtime_bytes,attempts=runtime_attempts;
-    XrXirCallResult empty={0},before=empty;atomic_store(&object->references,UINT32_MAX);
+    XrXirCallResult empty={0},before=empty;atomic_store(&object->references,INT32_MAX);
     XrXirCallStatus status=xr_xir_instance_copy_failure(trace->instance,&empty);
     atomic_store(&object->references,references);
     CHECK(status==XR_XIR_CALL_LIMIT && !memcmp(&empty,&before,sizeof(empty)));
@@ -233,8 +233,8 @@ static void remaining_publication_limit(XrXirProgram *program,uint32_t scenario)
     }
     CHECK(result.status==remaining_expected(scenario,0) && trace.constructed==3 && !trace.release_count && !trace.free_count);
     const XrXirValue *value=remaining_has_error(scenario)?&result.value:&result.panic.message;
-    XirObject *object=object_pointer(value);CHECK(object);uint32_t references=atomic_load(&object->references);
-    size_t attempts=runtime_attempts;atomic_store(&object->references,UINT32_MAX);
+    XirObject *object=object_pointer(value);CHECK(object);int32_t references=atomic_load(&object->references);
+    size_t attempts=runtime_attempts;atomic_store(&object->references,INT32_MAX);
     XrXirInstanceResult terminal=xr_xir_instance_poll_bounded(trace.instance,8);
     atomic_store(&object->references,references);
     CHECK(terminal.outcome.status==XR_XIR_CALL_LIMIT && attempts==runtime_attempts);

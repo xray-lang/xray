@@ -54,7 +54,7 @@ static XrXirAction native_inbox_observe(XrXirCallView *view) {
             CHECK(references==1 && before.live_bytes>w->input_baseline.live_bytes);
             if (w->attack==1) {
                 CHECK(w->mode==1);
-                atomic_store_explicit(&carrier->references,UINT32_MAX,memory_order_relaxed);
+                atomic_store_explicit(&carrier->references,INT32_MAX,memory_order_relaxed);
             }
         } else {
             CHECK(xr_xir_call_result_valid(&view->inbox) && !view->inbox.value.type);
@@ -88,7 +88,7 @@ static XrXirAction native_inbox_observe(XrXirCallView *view) {
             CHECK(action.kind==XR_XIR_ACTION_FAULT && !action.callee && !action.arguments &&
                 !action.argument_count && !action.flags && xr_xir_panic_empty(&action.panic) && action.value.type==XR_XIR_I64 &&
                 !action.value.reserved && action.value.payload==XR_XIR_CALL_LIMIT);
-            CHECK(atomic_load_explicit(&carrier->references,memory_order_relaxed)==UINT32_MAX);
+            CHECK(atomic_load_explicit(&carrier->references,memory_order_relaxed)==INT32_MAX);
             atomic_store_explicit(&carrier->references,references,memory_order_relaxed);
         } else if (w->mode==2 && w->attack) {
             CHECK(action.kind==XR_XIR_ACTION_FAULT && !action.callee && !action.arguments &&

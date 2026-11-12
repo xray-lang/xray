@@ -120,8 +120,8 @@ static void class_inline_value_cases(void) {
     XrXirValueAdmission wrong={foreign,reader,NULL,NULL,10000,65536};
     CHECK(xr_xir_class_get(&object,0,&wrong,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
     xr_xir_compile_type_arena_drop(foreign);
-    XirObject *string_object=object_pointer(&text);uint32_t refs=atomic_load(&string_object->references);
-    atomic_store(&string_object->references,UINT32_MAX);
+    XirObject *string_object=object_pointer(&text);int32_t refs=atomic_load(&string_object->references);
+    atomic_store(&string_object->references,INT32_MAX);
     CHECK(xr_xir_class_set(&object,0,&record,&a)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(xr_xir_class_get(&object,0,&b,&out)==XR_XIR_VALUE_REFCOUNT_LIMIT && !out.type);
     atomic_store(&string_object->references,refs);

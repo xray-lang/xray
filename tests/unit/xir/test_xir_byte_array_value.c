@@ -114,7 +114,7 @@ static void byte_fixture_free(ByteFixture *f) {
 static XrXirValue byte_array_new(ByteFixture *f,const char *bytes,size_t count,int64_t capacity) {
     XrXirValue output={0};
     CHECK(xr_xir_array_with_capacity(f->bytes,capacity,&f->admission,&output)==XR_XIR_VALUE_OK);
-    XrXirValuePlace place={f->bytes,&output.payload};
+    XrXirValuePlace place={f->bytes,&output.payload, NULL};
     for (size_t i=0;i<count;++i) {
         XrXirValue item={XR_XIR_U8,0,(unsigned char)bytes[i]};
         CHECK(xr_xir_array_push(&place,&item,&f->admission)==XR_XIR_VALUE_OK);
@@ -149,7 +149,7 @@ static void byte_candidates(void) {
     CHECK(out.payload!=source.payload);byte_expect(&out,"abab",4);byte_expect(&source,"ab",2);
     CHECK(((const XirArray *)object_pointer(&out))->capacity==capacity);
     CHECK(xr_xir_value_copy(&out,&alias)==XR_XIR_VALUE_OK);
-    XrXirValuePlace place={f.bytes,&out.payload};XrXirValue letter={XR_XIR_U8,0,'Z'};XrXirFaultDetail fault={0};
+    XrXirValuePlace place={f.bytes,&out.payload, NULL};XrXirValue letter={XR_XIR_U8,0,'Z'};XrXirFaultDetail fault={0};
     CHECK(xr_xir_array_set(&place,0,&letter,&f.admission,&fault)==XR_XIR_VALUE_OK);
     byte_expect(&out,"Zbab",4);byte_expect(&source,"ab",2);byte_expect(&alias,"abab",4);
     xr_xir_value_drop(&out);xr_xir_value_drop(&alias);

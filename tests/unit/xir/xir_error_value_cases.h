@@ -96,7 +96,7 @@ static void error_nominal_identity_cases(const XrXirTypes *types, const XrXirVal
     CHECK(xr_xir_error_erase(&concrete, &receiving, &error) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)257, &receiving, &output) == XR_XIR_VALUE_BAD_ARGUMENT && !output.type);
     bool matches = true;
-    size_t allocations = value_allocation_calls; uint32_t references = atomic_load(&object_pointer(&error)->references);
+    size_t allocations = value_allocation_calls; int32_t references = atomic_load(&object_pointer(&error)->references);
     CHECK(xr_xir_error_is(&error, (XrXirType)257, &receiving, &matches) == XR_XIR_VALUE_OK && !matches);
     CHECK(xr_xir_error_is(&error, (XrXirType)256, &receiving, &matches) == XR_XIR_VALUE_OK && matches);
     CHECK(value_allocation_calls == allocations && atomic_load(&object_pointer(&error)->references) == references);
@@ -166,8 +166,8 @@ static void error_value_cases(const XrXirTypes *types, const XrXirValue *empty,
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_OK && copy.payload == pair->payload && value_allocation_calls == before);
     fail_at = SIZE_MAX;
     xr_xir_value_drop(&copy); CHECK(live == baseline);
-    XirObject *object = object_pointer(pair); uint32_t references = atomic_load(&object->references);
-    atomic_store(&object->references, UINT32_MAX);
+    XirObject *object = object_pointer(pair); int32_t references = atomic_load(&object->references);
+    atomic_store(&object->references, INT32_MAX);
     CHECK(xr_xir_error_narrow(&error, (XrXirType)256, admission, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&object->references, references);
     XrXirValue fake = {XR_XIR_ERROR, 0, ((XirNominalValue *)object)->fields[0].payload};

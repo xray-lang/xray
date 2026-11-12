@@ -95,7 +95,7 @@ static void admission_replacement_work_case(void) {
     XrXirCall *previous_call = instance->call;
     uint32_t requested = instance->requested;
     size_t baseline = live;
-    uint32_t references = atomic_load(&object_pointer(&function)->references);
+    int32_t references = atomic_load(&object_pointer(&function)->references);
     XrXirCallAccounting before[2] = {instance->accounting[0], instance->accounting[1]};
     /* The original three-unit value probe cannot replace the live cumulative
      * ledger. A new replacement also needs its complete execution boundary. */
@@ -125,7 +125,7 @@ static void admission_replacement_budget_case(void) {
     unsigned releases=0;XrXirProgram *program=NULL;XrXirInstance *instance=NULL;XrXirValue function={0};
     admission_case_setup(&releases,&program,&instance,&function,0);
     uint64_t epoch=instance->epoch;XrXirCall *previous_call=instance->call;uint32_t requested=instance->requested;
-    size_t baseline=live;uint32_t references=atomic_load(&object_pointer(&function)->references);
+    size_t baseline=live;int32_t references=atomic_load(&object_pointer(&function)->references);
     XrXirCallAccounting before[2]={instance->accounting[0],instance->accounting[1]};
     /* Argument capture and the candidate's copied table succeed; its first
      * physical frame segment allocation then fails. The completed call stays. */

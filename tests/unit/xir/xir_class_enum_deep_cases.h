@@ -43,7 +43,7 @@ static XrXirValueStatus class_enum_sequence(XrXirTypeArena *arena,XrXirDomain *d
  ESTEP(xr_xir_enum_new((XrXirType)258,2,&text,1,&a,&v[4]));
  ESTEP(xr_xir_enum_new((XrXirType)258,3,&v[1],1,&a,&v[5]));
  ESTEP(xr_xir_array_new((XrXirType)259,&v[2],4,&a,&v[6]));ESTEP(xr_xir_value_copy(&v[6],&v[7]));
- XrXirValuePlace place={(XrXirType)259,&v[6].payload};ESTEP(xr_xir_array_push(&place,&v[2],&a));CHECK(v[6].payload!=v[7].payload);
+ XrXirValuePlace place={(XrXirType)259,&v[6].payload, NULL};ESTEP(xr_xir_array_push(&place,&v[2],&a));CHECK(v[6].payload!=v[7].payload);
  int64_t count=0;ESTEP(xr_xir_array_len(&v[7],&a,&count));CHECK(count==4);
  for(uint32_t variant=0;variant<4;++variant){
  ESTEP(xr_xir_array_get(&v[7],variant,&a,&v[8],&fault));uint32_t tag=99;ESTEP(xr_xir_enum_variant(&v[8],&tag));CHECK(tag==variant);

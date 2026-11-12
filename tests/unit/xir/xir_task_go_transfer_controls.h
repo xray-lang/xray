@@ -48,7 +48,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instructi
     int64_t original=0,current=0;memcpy(&original,word,sizeof(original));
     CHECK(original==arguments[0].payload);
     XirObject *object=object_pointer(arguments);
-    uint32_t references=atomic_load(&object->references);
+    int32_t references=atomic_load(&object->references);
     XrXirValue refused={0};
     CHECK(task_go_transfer_actual(view,instruction,
         (unsigned char *)view->state+view->activation->top->entry->state_bytes,

@@ -55,7 +55,7 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
     status = hash_probe(map, key, admission, &probe);
     if (status != XR_XIR_VALUE_OK) return status;
     if (!probe.found) { *removed = false; return XR_XIR_VALUE_OK; }
-    if (atomic_load_explicit(&map->object.references, memory_order_acquire) == 1) {
+    if (!value_place_shared(place) && xir_object_unique(&map->object)) {
         status = hash_delete_preflight(map, probe.entry, admission);
         if (status != XR_XIR_VALUE_OK) return status;
         hash_delete_commit(map, &probe);
@@ -65,6 +65,8 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
         status = hash_clone(map, map->capacity, &edit, admission, &copy);
         if (status != XR_XIR_VALUE_OK) return status;
         XrXirValue replacement = hash_value(copy);
+        status = value_place_publish(place, &replacement);
+        if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
         xr_xir_value_drop(&current);
     }
@@ -81,7 +83,7 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
     XrXirValue current = {0}; XirHash *map = NULL;
     XrXirValueStatus status = hash_place_current(place, 0, admission, &current, &map);
     if (status != XR_XIR_VALUE_OK || !map->length) return status;
-    if (atomic_load_explicit(&map->object.references, memory_order_acquire) == 1) {
+    if (!value_place_shared(place) && xir_object_unique(&map->object)) {
         status = hash_charge(admission, (uint64_t)map->length * 2 + map->capacity);
         if (status != XR_XIR_VALUE_OK) return status;
         XirObject *pending = NULL;
@@ -93,6 +95,8 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
         status = hash_allocate(map->object.type, 0, admission, &copy);
         if (status != XR_XIR_VALUE_OK) return status;
         XrXirValue replacement = hash_value(copy);
+        status = value_place_publish(place, &replacement);
+        if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
         xr_xir_value_drop(&current);
     }

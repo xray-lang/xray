@@ -280,7 +280,7 @@ XR_FUNC XrXirValueStatus xr_xir_borrowed_tuple_unpack_move(XrXirValue *value,
     const XrXirTypeNode *node=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(access->values->arena),(XrXirType)value->type);
     if (!node || node->parameter_count!=count || !count) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirTuple *tuple=(XirTuple *)object_pointer(value);
-    if (atomic_load_explicit(&tuple->object.references,memory_order_acquire)!=1) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xir_object_unique(&tuple->object)) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t i=0;i<count;++i) if (&fields[i]==value || !unit_value(&fields[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status=borrowed_admit_operation(value,(XrXirType)value->type,access);
@@ -301,7 +301,7 @@ XR_FUNC XrXirValueStatus xr_xir_borrowed_some_take(XrXirValue *value,
     const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(access->values->arena),(XrXirType)value->type);
     if (!node || node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirNominalValue *record=(XirNominalValue *)object_pointer(value);
-    if (record->count!=1 || atomic_load_explicit(&record->object.references,memory_order_acquire)!=1)
+    if (record->count!=1 || !xir_object_unique(&record->object))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status=borrowed_admit_operation(value,(XrXirType)value->type,access);

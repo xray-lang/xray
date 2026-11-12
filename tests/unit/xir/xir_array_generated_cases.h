@@ -141,7 +141,7 @@ static void array_growth_transaction(XrXirProgram *program,uint32_t entry) {
     for(size_t ordinal=0;ordinal<127;++ordinal) {
         XrXirValue value=array_success(program,entry,NULL),snapshot={0};
         CHECK(xr_xir_value_copy(&value,&snapshot)==XR_XIR_VALUE_OK);
-        XrXirValueAdmission admission=array_admission(&value);XrXirValuePlace place={value.type,&value.payload};
+        XrXirValueAdmission admission=array_admission(&value);XrXirValuePlace place={value.type,&value.payload, NULL};
         XrXirValue appended={XR_XIR_I64,0,99};int64_t original=value.payload;
         runtime_attempts=0;runtime_fail_at=ordinal;
         XrXirValueStatus status=xr_xir_array_push(&place,&appended,&admission);

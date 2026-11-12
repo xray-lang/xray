@@ -185,7 +185,7 @@ static XrXirValueStatus xr_xir_panic_info_new_graph_operation(XrXirDomain *domai
     if (status != XR_XIR_VALUE_OK) { xr_xir_domain_drop(domain); return status; }
     XirPanicInfo *info = xr_xir_domain_allocate(domain, sizeof(*info), &status);
     if (!info) { xr_xir_panic_drop(&owned); xr_xir_domain_drop(domain); return status; }
-    atomic_init(&info->object.references, 1);
+    xir_object_initialize(&info->object);
     info->object.domain = domain;
     info->object.type = XR_XIR_PANIC_INFO;
     info->object.arena = NULL; info->object.kind = 0;

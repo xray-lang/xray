@@ -49,9 +49,9 @@ static void class_array_field_value_cases(void) {
     XrXirValueAdmission bounded=admission;bounded.work=0;
     CHECK(xr_xir_class_set(&object,1,&number,&bounded)==XR_XIR_VALUE_LIMIT);
     CHECK(xr_xir_class_new((XrXirType)258,fields,2,&admission,&invalid)==XR_XIR_VALUE_BAD_ARGUMENT && !invalid.type);
-    XirObject *last=object_pointer(&texts);uint32_t refs=atomic_load(&last->references);
+    XirObject *last=object_pointer(&texts);int32_t refs=atomic_load(&last->references);
     size_t baseline=live;uint64_t bytes=xr_xir_domain_stats(domain).live_bytes;
-    atomic_store(&last->references,UINT32_MAX);
+    atomic_store(&last->references,INT32_MAX);
     CHECK(xr_xir_class_new((XrXirType)258,fields,3,&admission,&invalid)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(!invalid.type && live==baseline && xr_xir_domain_stats(domain).live_bytes==bytes);
     CHECK(xr_xir_class_set(&object,2,&texts,&admission)==XR_XIR_VALUE_REFCOUNT_LIMIT);

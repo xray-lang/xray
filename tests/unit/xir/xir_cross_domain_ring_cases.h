@@ -46,7 +46,7 @@ static void cross_domain_ring_case(unsigned mode, unsigned order) {
     CHECK(object_pointer(&array)->domain == domains[1]);
     int64_t before_payload = array.payload;
     if (mode == 1) CHECK(xr_xir_value_copy(&array, &old_alias) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)257, &array.payload};
+    XrXirValuePlace place = {(XrXirType)257, &array.payload, NULL};
     CHECK(xr_xir_array_push(&place, &function, &local) == XR_XIR_VALUE_OK);
     CHECK(array.payload != before_payload && object_pointer(&array)->domain == domains[0]);
     int64_t length = -1;

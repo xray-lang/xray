@@ -88,7 +88,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_read(const XrXirValue *val
     XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
     if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !fault || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
+    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload, NULL};
     ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
         .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();
@@ -102,7 +102,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_write(const XrXirValue *va
     XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
     if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !replacement || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
+    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload, NULL};
     ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
         .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();
@@ -116,7 +116,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_push(const XrXirValue *val
     XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
     if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !replacement || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
+    XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload, NULL};
     ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
         .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();

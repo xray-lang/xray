@@ -49,7 +49,7 @@ static XrXirValueStatus pointer_new(XrXirDomain *domain,const XrXirTypeArena *ar
         if (source) pointer_origin_drop(source->origin);
         xr_xir_compile_type_arena_drop((XrXirTypeArena *)arena);xr_xir_domain_drop(domain);return status;
     }
-    memset(pointer,0,sizeof(*pointer));atomic_init(&pointer->object.references,1);
+    memset(pointer,0,sizeof(*pointer));xir_object_initialize(&pointer->object);
     pointer->object.domain=domain;pointer->object.arena=(XrXirTypeArena *)arena;pointer->object.type=type;
     pointer->object.kind=xr_xir_type_node(xr_xir_compile_type_arena_types(arena),type)->kind;
     if (source) {pointer->origin=source->origin;pointer->generation=source->generation;pointer->address=source->address;}

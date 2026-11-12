@@ -29,8 +29,8 @@ static void contains_bad_admission(const XrXirValue *map, const XrXirValue *set,
     no_arena.arena = NULL; no_domain.domain = NULL;
     XrXirValueAdmission *invalid[] = {NULL, &no_arena, &no_domain};
     XrXirValue root = *map, set_root = *set, output = {0};
-    XrXirValuePlace place = {(XrXirType)root.type, &root.payload};
-    XrXirValuePlace set_place = {(XrXirType)set_root.type, &set_root.payload};
+    XrXirValuePlace place = {(XrXirType)root.type, &root.payload, NULL};
+    XrXirValuePlace set_place = {(XrXirType)set_root.type, &set_root.payload, NULL};
     size_t before = value_allocation_calls;
     for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
         bool found = true; int64_t length = -1;
@@ -123,7 +123,7 @@ static void contains_key_relations(XrXirValueAdmission *admission) {
     CHECK(xr_xir_map_new((XrXirType)260, &zero, &optional, 1, admission, &map) == XR_XIR_VALUE_OK);
     XrXirValue positive_zero = {XR_XIR_F64, 0, 0};
     CHECK(xr_xir_map_contains_key(&map, &positive_zero, admission, &found) == XR_XIR_VALUE_OK && found);
-    XrXirValuePlace place = {(XrXirType)260, &map.payload};
+    XrXirValuePlace place = {(XrXirType)260, &map.payload, NULL};
     CHECK(xr_xir_map_set(&place, &nan, &optional, admission) == XR_XIR_VALUE_OK);
     nan.payload = INT64_C(0x7ff0000000000001);
     CHECK(xr_xir_map_contains_key(&map, &nan, admission, &found) == XR_XIR_VALUE_OK && found);

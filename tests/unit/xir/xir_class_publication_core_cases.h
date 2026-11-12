@@ -55,7 +55,7 @@ static void publication_core_foreign(ValueCompileOwner *compiler, XrXirTypeArena
     XrXirValue object = {0}; publication_core_simple(arena, domain, &object);
     XrXirValueAdmission admission = {arena, foreign, NULL, NULL, 65536, 65536};
     XrXirClassPublication publication = {0};
-    uint32_t references = atomic_load(&object_pointer(&object)->references);
+    int32_t references = atomic_load(&object_pointer(&object)->references);
     CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(class_publication_empty(&publication) && !xr_xir_class_module_storage(&object));
     CHECK(atomic_load(&object_pointer(&object)->references) == references);
@@ -106,7 +106,7 @@ static void publication_core_borrowed(XrXirTypeArena *arena) {
     CHECK(xr_xir_cell_loan_prepare(&projection, &authority, &loan) == XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&projection, &loan, &authority);
     XrXirClassPublication publication = {0};
-    uint32_t references = atomic_load(&object_pointer(&object)->references);
+    int32_t references = atomic_load(&object_pointer(&object)->references);
     CHECK(xr_xir_class_publication_prepare(&object, 1, &admission, &publication) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(class_publication_empty(&publication) && !xr_xir_class_module_storage(&object));
     CHECK(((const XirClassObject *)object_pointer(&object))->borrow_top == &loan &&
@@ -340,8 +340,8 @@ static size_t publication_cell_operation(XrXirTypeArena *arena, size_t ordinal, 
     CHECK(!xr_xir_class_module_storage(&object) && !xr_xir_cell_module_storage(&cell));
     uint64_t live = xr_xir_domain_stats(domain).live_bytes;
     size_t original_blocks = cell_owner_live, original_bytes = cell_owner_bytes;
-    uint32_t object_refs = atomic_load(&object_pointer(&object)->references);
-    uint32_t cell_refs = atomic_load(&object_pointer(&cell)->references);
+    int32_t object_refs = atomic_load(&object_pointer(&object)->references);
+    int32_t cell_refs = atomic_load(&object_pointer(&cell)->references);
     XrXirClassPublication publication = {0};
     observation_runtime_fault_begin(ordinal); observation_runtime_phase(OBSERVATION_FAULT_CLASS);
     XrXirValueStatus status = xr_xir_class_publication_prepare(&cell, 1, &admission, &publication);

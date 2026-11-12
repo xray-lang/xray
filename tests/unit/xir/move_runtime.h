@@ -109,7 +109,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_take_at(XrXirCallView *view,
     XrXirValue value=xr_xir_value_load(view->arena,xr_xir_operand_type(function,op->args[1]),source);
     XrXirValue cell=xr_xir_value_load(view->arena,xr_xir_operand_type(function,op->args[0]),handle);
     XirCell *owner=cell_owner(&cell);int64_t previous=owner->value.payload;
-    uint32_t references=atomic_load(&object_pointer(&value)->references);
+    int32_t references=atomic_load(&object_pointer(&value)->references);
     size_t blocks=runtime_live,bytes=runtime_bytes;uint64_t work=view->activation->config.admission.work;
     CHECK(move_test_write_take_at_real(view,instruction,(unsigned char *)view->state+
         view->activation->top->entry->state_bytes)==XR_XIR_CALL_BAD_ARGUMENT);
@@ -135,7 +135,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_return_take_at(XrXirCallView *view,
     void *word=(unsigned char *)frame+layout->offsets[function->instructions[instruction].args[0]];
     int64_t source=0;memcpy(&source,word,sizeof(source));
     XrXirValue value=xr_xir_value_load(view->arena,function->result,source);XrXirAction refused={0};
-    uint32_t references=atomic_load(&object_pointer(&value)->references);
+    int32_t references=atomic_load(&object_pointer(&value)->references);
     size_t blocks=runtime_live,bytes=runtime_bytes;uint64_t work=view->activation->config.admission.work;
     CHECK(move_test_return_take_at_real(view,instruction,(unsigned char *)view->state+
         view->activation->top->entry->state_bytes,&refused)==XR_XIR_CALL_BAD_ARGUMENT);

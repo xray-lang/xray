@@ -63,7 +63,7 @@ static void nested_storage_vectors(const XrXirCompileContext *context) {
     CHECK(xr_xir_nullable_new(NESTED_OUTER,&inner[0],&admission,&result)==XR_XIR_VALUE_REFCOUNT_LIMIT && !result.type);
     atomic_store(&arena->references,references);
     XirObject *payload_object=object_pointer(&inner[0]);references=atomic_load(&payload_object->references);
-    atomic_store(&payload_object->references,UINT32_MAX);
+    atomic_store(&payload_object->references,INT32_MAX);
     CHECK(xr_xir_nullable_new(NESTED_OUTER,&inner[0],&admission,&result)==XR_XIR_VALUE_REFCOUNT_LIMIT && !result.type);
     atomic_store(&payload_object->references,references);
     CHECK(domain->stats.live_bytes==baseline_bytes);

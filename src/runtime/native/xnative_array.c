@@ -390,7 +390,7 @@ static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, 
     int64_t old = value.payload;
     XrtArrayOwner *owner = array_find(root, old);
     XR_CHECK(owner && owner->count, "Array mutation binds an owned current activation slot");
-    XrXirValuePlace place = {(XrXirType)value.type, &value.payload};
+    XrXirValuePlace place = {(XrXirType)value.type, &value.payload, NULL};
     XrXirFaultDetail fault = {0};
     XrXirValueStatus status = push && kind == XRT_ARRAY_I64 ?
         xr_xir_array_i64_push_owned(&value, element.payload, admission.domain) :

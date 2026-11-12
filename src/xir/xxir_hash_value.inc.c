@@ -21,7 +21,7 @@ static XrXirValueStatus hash_new(XrXirType type, const XrXirValue *keys,
     status = hash_allocate(type, capacity, admission, &map);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue result = hash_value(map);
-    XrXirValuePlace place = {type, &result.payload};
+    XrXirValuePlace place = {type, &result.payload, NULL};
     for (size_t i = 0; i < count; ++i) {
         status = hash_upsert(&place, &keys[i], values ? &values[i] : NULL, admission);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return status; }

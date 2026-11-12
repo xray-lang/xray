@@ -84,16 +84,16 @@ static size_t foreign_array_attempt(bool append, size_t point, unsigned boundary
     CHECK(backing->stride == sizeof(old_slot)); memcpy(old_slot, backing->data, sizeof(old_slot));
     XrXirDomainStats a = xr_xir_domain_stats(f.domains[0]), b = xr_xir_domain_stats(f.domains[1]);
     uint64_t requested = xr_xir_domain_budget_stats(f.domains[0]).requested_bytes;
-    uint32_t function_refs = atomic_load(&object_pointer(&f.function)->references);
-    uint32_t tuple_refs = atomic_load(&object_pointer(&f.replacement)->references);
-    uint32_t string_refs = atomic_load(&object_pointer(&f.new_text)->references);
+    int32_t function_refs = atomic_load(&object_pointer(&f.function)->references);
+    int32_t tuple_refs = atomic_load(&object_pointer(&f.replacement)->references);
+    int32_t string_refs = atomic_load(&object_pointer(&f.new_text)->references);
     if (boundary == 1) f.local.work = 0;
     if (boundary == 2) f.local.scratch_bytes = 0;
     if (boundary == 3) f.domains[0]->limit = a.live_bytes;
     if (boundary == 4) f.domains[0]->budget.requested_limit = requested;
     size_t physical = live, compiler = value_compile_live, compiler_bytes = value_compile_bytes, begin = value_allocation_calls;
     if (point != SIZE_MAX) { CHECK(point <= SIZE_MAX - begin); fail_at = begin + point; }
-    XrXirValuePlace place = {(XrXirType)259, &f.array.payload}; XrXirFaultDetail fault = {0};
+    XrXirValuePlace place = {(XrXirType)259, &f.array.payload, NULL}; XrXirFaultDetail fault = {0};
     XrXirValueStatus status = append ? xr_xir_array_push(&place, &f.replacement, &f.local) :
         xr_xir_array_set(&place, 0, &f.replacement, &f.local, &fault);
     size_t attempts = value_allocation_calls - begin; fail_at = SIZE_MAX;

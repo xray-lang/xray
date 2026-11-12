@@ -387,7 +387,7 @@ static bool value_header_valid(const XrXirValue *value) {
     XrXirType local=XR_XIR_UNIT;
     if ((type != XR_XIR_ERROR && object->type != type &&
             !class_view_type(object,object->arena,type,&local)) ||
-        !atomic_load_explicit(&object->references, memory_order_relaxed)) return false;
+        !xir_object_references(object) || xir_object_references(object) == INT32_MIN) return false;
     if (!object->domain) {
         if (object->kind != XR_XIR_TYPE_NOMINAL || object->release_next) return false;
         const XirNominalValue *record = (const XirNominalValue *)object;
@@ -949,7 +949,7 @@ static XrXirValueStatus string_allocate(XrXirDomain *domain, size_t length, XirS
         string->capacity = string_capacity(length + 1);
         string->bytes = xr_xir_domain_allocate(domain, string->capacity, &status);
         if (string->bytes) {
-            atomic_init(&string->object.references, 1);
+            xir_object_initialize(&string->object);
             string->object.domain = domain;
             string->object.type = XR_XIR_STRING;
             string->object.arena = NULL; string->object.kind = 0;
@@ -981,7 +981,7 @@ static XrXirValueStatus xr_xir_string_new_graph_operation(XrXirDomain *domain, c
         for (XirObject *object = domain->objects; object && checked < 8; object = object->graph_next, ++checked) {
             if (!xr_xir_domain_is_compile(domain) && (!xr_xir_domain_work(domain, 1))) return XR_XIR_VALUE_LIMIT;
             if (object->type != XR_XIR_STRING || object->kind || object->graph_dead ||
-                atomic_load_explicit(&object->references, memory_order_acquire) == UINT32_MAX) continue;
+                xir_object_count(object) == INT32_MAX) continue;
             XirString *existing = (XirString *)object;
             if (existing->length != length) continue;
             if (!xr_xir_domain_is_compile(domain) && (!xr_xir_domain_work(domain, length))) return XR_XIR_VALUE_LIMIT;
@@ -1049,7 +1049,7 @@ static void queue_release(const XrXirValue *value, XirObject **pending) {
     if (empty_enum_object(object)) { xr_xir_compile_type_arena_drop(object->arena); return; }
     if (object->kind==XR_XIR_TYPE_MUT_SLICE || object->kind==XR_XIR_TYPE_SLICE) {
         XirView *view=(XirView *)object;
-        if (view->state==XIR_VIEW_ACTIVE && (uint64_t)atomic_load_explicit(&object->references,memory_order_acquire)==
+        if (view->state==XIR_VIEW_ACTIVE && (uint64_t)xir_object_count(object)==
             (uint64_t)view->children+1u) view_value_detach(view);
     }
     graph_lock();
@@ -1251,6 +1251,7 @@ static void release_pending(XirObject *pending) {
     }
 }
 #include "xxir_value_graph_retire.inc.c"
+#include "xxir_value_share.inc.c"
 static void xr_xir_value_drop_graph_operation(XrXirValue *value) {
     if (!value) return;
     XR_CHECK(xr_xir_value_valid(value), "invalid owned value release");
@@ -1271,7 +1272,7 @@ static XrXirValueStatus xr_xir_string_append_graph_operation(XrXirValue *destina
     if (!right->length) return XR_XIR_VALUE_OK;
     if (right->length >= SIZE_MAX - left->length) return XR_XIR_VALUE_LIMIT;
     size_t length = left->length + right->length, runes = left->runes + right->runes;
-    if (atomic_load_explicit(&left->object.references, memory_order_acquire) == 1) {
+    if (xir_object_unique(&left->object)) {
         if (length + 1 > left->capacity) {
             XrXirValueStatus status = string_resize(left, string_capacity(length + 1));
             if (status != XR_XIR_VALUE_OK) return status;
@@ -1568,7 +1569,7 @@ static XirObject *constructed_allocate(XrXirDomain *domain, XrXirTypeArena *aren
     }
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), type);
     XR_CHECK(node, "constructed allocation requires an exact runtime descriptor");
-    atomic_init(&object->references, 1);
+    xir_object_initialize(object);
     object->domain = domain; object->arena = arena; object->type = type; object->kind = object_storage_kind(node->kind);
     object->release_next = NULL;
     graph_object_initialize(object);
@@ -1753,6 +1754,10 @@ static XrXirValueStatus cell_write_storage(const XrXirValue *cell, const XrXirVa
         status = XR_XIR_VALUE_OK;
     } else status = xr_xir_value_admit(value, element, admission);
     if (status != XR_XIR_VALUE_OK) return status;
+    if (xir_object_references(&target->object) < 0) {
+        status = xr_xir_value_share(value);
+        if (status != XR_XIR_VALUE_OK) return status;
+    }
     XrXirValue replacement = {0};
     status = xr_xir_value_copy(value, &replacement);
     if (status != XR_XIR_VALUE_OK) return status;
@@ -1803,7 +1808,7 @@ static XrXirValueStatus cell_value_place_storage(const XrXirValue *cell,
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) &&
         !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    *output = (XrXirValuePlace) {type, &holder->value.payload};
+    *output = (XrXirValuePlace) {type, &holder->value.payload, &holder->object};
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus xr_xir_cell_value_place_graph_operation(const XrXirValue *cell,

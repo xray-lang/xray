@@ -61,7 +61,7 @@ static void array_set_callback_case(void) {
     CHECK(!observer.calls && atomic_load(&object_pointer(&f.array)->references) == 1);
     CHECK(atomic_load(&object_pointer(&f.old_text)->references) == 2);
     observer.backing = f.array.payload; observer.mutating = true;
-    XrXirValuePlace place = {(XrXirType)259, &f.array.payload}; XrXirFaultDetail fault = {0};
+    XrXirValuePlace place = {(XrXirType)259, &f.array.payload, NULL}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_set(&place, 0, &f.replacement, &f.local, &fault) == XR_XIR_VALUE_OK && !fault.code);
     observer.mutating = false;
     CHECK(observer.calls == 1 && !f.releases && f.array.payload == observer.backing);

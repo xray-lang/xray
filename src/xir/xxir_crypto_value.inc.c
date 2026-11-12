@@ -56,17 +56,17 @@ static XrXirValueStatus crypto_fill_storage(const XrXirValue *value,const XrXirC
     XrXirValue *root=owner->kind==XIR_OBJECT_CLASS?&cell->value:&((XirCell *)owner)->value;
     XrXirType root_type=owner->kind==XIR_OBJECT_CLASS?owner->type:
         xr_xir_cell_element(xr_xir_compile_type_arena_types(owner->arena),owner->type);
-    XrXirValuePlace place={root_type,&root->payload};XrXirValuePath empty={0};
+    XrXirValuePlace place={root_type,&root->payload, NULL};XrXirValuePath empty={0};
     ValuePathRoute route=cell_projection_route(cell,&empty);ValuePathSlot slot={0};
-    ValuePathWrite write={.module_publication=route.module_publication};uint32_t count=0;
-    XrXirClassPublication publication={0};XrXirValue replacement={0},previous_leaf={0},previous_root={0};
+    ValuePathWrite write={.identity=route.identity,.module_publication=route.module_publication};uint32_t count=0;
+    XrXirClassPublication publication={0};XrXirValue replacement={0},previous_leaf={0};
     status=path_route_begin(&place,&route,&local,&slot,&count,fault);
     for(uint32_t i=0;status==XR_XIR_VALUE_OK && i<count;++i)
         status=path_step(&slot,path_route_step(&route,i,local.arena),&local,&write,fault,i?NULL:route.borrow_owner);
     XrXirValueAdmission storage={0};XrXirValuePlace actual={0};XirArray *array=NULL,*prepared=NULL;
     if(status==XR_XIR_VALUE_OK) {
         XrXirValueAdmission leaf=local;leaf.arena=slot.arena;
-        status=storage_place_admission(&(XrXirValuePlace){slot.type,slot.bytes},&leaf,&storage,&actual);
+        status=storage_place_admission(&(XrXirValuePlace){slot.type,slot.bytes, NULL},&leaf,&storage,&actual);
         status=storage_admission_end(&local,&leaf,status);
     }
     if(status==XR_XIR_VALUE_OK) {
@@ -75,7 +75,7 @@ static XrXirValueStatus crypto_fill_storage(const XrXirValue *value,const XrXirC
         else status=crypto_array(&current,&storage,&array);
         if(status==XR_XIR_VALUE_OK && !cell_projection_work(&storage,array->length))status=XR_XIR_VALUE_LIMIT;
         if(status==XR_XIR_VALUE_OK) {
-            bool unique=atomic_load_explicit(&array->object.references,memory_order_acquire)==1;
+            bool unique=(slot.private_storage || !(write.identity && xir_object_references(write.identity)<0)) && xir_object_unique(&array->object);
             prepared=array;
             if(!unique) {
                 status=array_allocate(actual.type,array->capacity,&storage,&prepared);
@@ -97,20 +97,21 @@ static XrXirValueStatus crypto_fill_storage(const XrXirValue *value,const XrXirC
         /* Only the nonfailing provider and commit remain. No byte prefix can
          * become visible through a shared ancestor before preparation ends. */
         xr_random_bytes(prepared->data,array->length);prepared->length=array->length;
+        if(!slot.private_storage && write.identity && xir_object_references(write.identity)<0) {
+            XrXirValue result=array_value(prepared);
+            XR_CHECK(xr_xir_value_share(&result)==XR_XIR_VALUE_OK,
+                "the prepared primitive Array publishes without allocation or new child pins");
+        }
         if(publication.operation)xr_xir_class_publication_commit(&publication);
         if(replacement.type) {
             previous_leaf=array_value(array);memcpy(actual.payload,&replacement.payload,sizeof(replacement.payload));
             replacement=(XrXirValue){0};
         }
-        if(write.publish) {
-            previous_root=(XrXirValue){write.candidate.type,0,0};
-            memcpy(&previous_root.payload,write.publish,sizeof(previous_root.payload));
-            memcpy(write.publish,&write.candidate.payload,sizeof(write.candidate.payload));write.candidate=(XrXirValue){0};
-        }
+        status=path_write_publish(&write);
         if(root_changed)*root=root_after;
     }
-    xr_xir_value_drop(&previous_leaf);xr_xir_value_drop(&previous_root);
-    xr_xir_value_drop(&replacement);xr_xir_value_drop(&write.candidate);xr_xir_class_publication_drop(&publication);
+    xr_xir_value_drop(&previous_leaf);
+    xr_xir_value_drop(&replacement);path_write_end(&write,&local);xr_xir_class_publication_drop(&publication);
     return storage_admission_end(admission,&local,status);
 }
 XR_FUNC XrXirValueStatus xir_cell_crypto_fill(const XrXirValue *value,const XrXirCellAuthority *authority,

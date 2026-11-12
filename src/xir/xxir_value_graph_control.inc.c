@@ -77,7 +77,7 @@ XR_FUNC void xr_xir_value_object_publish(XirObject *object) {
     graph_lock();
     XR_CHECK(value_graph_operations && object && object->domain &&
         !object->graph_registered && !object->graph_dead && !object->root_private &&
-        atomic_load_explicit(&object->references, memory_order_relaxed),
+        xir_object_references(object),
         "complete value publication requires an operation and its original owner");
     XrXirDomain *domain = object->domain;
     XR_CHECK(xr_xir_domain_current(domain), "graph object retains its current domain");
@@ -92,7 +92,7 @@ static bool graph_object_retain(XirObject *object) {
         xr_xir_domain_current(object->domain), "graph storage requires its current physical kind and domain");
     graph_lock();
     bool retained = !object->graph_dead && root_string_escape(object) &&
-        xr_xir_reference_retain(&object->references);
+        xir_object_retain(object);
     graph_unlock();
     return retained;
 }
@@ -101,7 +101,7 @@ static void graph_object_release_locked(XirObject *object, XirObject **pending) 
         xr_xir_domain_current(object->domain), "graph storage requires its current physical kind and domain");
     XR_CHECK(!object->graph_dead, "detached graph ownership cannot be released twice");
     graph_dirty(object->domain);
-    if (xr_xir_reference_release(&object->references)) {
+    if (xir_object_release(object)) {
         graph_object_unlink(object);
         object->release_next = *pending; *pending = object;
     }

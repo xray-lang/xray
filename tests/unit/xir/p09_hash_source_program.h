@@ -59,12 +59,12 @@ static void hash_source_program_run(XrXirProgram *program, uint32_t map_entry, u
     XrXirValue number = {0}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_get(&read, 1, &admission, &number, &fault) == XR_XIR_VALUE_OK && number.payload == 23);
     xr_xir_value_drop(&number); xr_xir_value_drop(&read);
-    XrXirValuePlace place = {map_type, &outcomes[0].payload};
+    XrXirValuePlace place = {map_type, &outcomes[0].payload, NULL};
     CHECK(xr_xir_hash_delete(&place, &key, &admission, &found) == XR_XIR_VALUE_OK && found);
     CHECK(xr_xir_map_get(&outcomes[1], &key, &admission, &read, &found) == XR_XIR_VALUE_OK && found);
     xr_xir_value_drop(&read); xr_xir_value_drop(&key);
     CHECK(xr_xir_set_contains(&set_outcomes[0], &members[0], &admission, &found) == XR_XIR_VALUE_OK && found);
-    place = (XrXirValuePlace){set_type, &set_outcomes[0].payload};
+    place = (XrXirValuePlace){set_type, &set_outcomes[0].payload, NULL};
     CHECK(xr_xir_hash_delete(&place, &members[1], &admission, &found) == XR_XIR_VALUE_OK && found);
     CHECK(xr_xir_set_contains(&set_outcomes[1], &members[1], &admission, &found) == XR_XIR_VALUE_OK && found);
     xr_xir_value_drop(&set_outcomes[0]); xr_xir_value_drop(&set_outcomes[1]);

@@ -36,7 +36,7 @@ static void buffer_domain_cases(XrXirCompileContext *compile) {
         XrXirValueAdmission caller={.arena=arena,.domain=cross?other:home,.work=UINT64_MAX,.scratch_bytes=1048576};
         XrXirValue array={0},old={0},incoming={0},read={0};XrXirFaultDetail fault={0};
         CHECK(xr_xir_array_with_capacity((XrXirType)256,4,&owner,&array)==XR_XIR_VALUE_OK);
-        XrXirValuePlace root={(XrXirType)256,&array.payload};
+        XrXirValuePlace root={(XrXirType)256,&array.payload, NULL};
         if(populated) {
             CHECK(xr_xir_buffer_storage_new(home,21,0,true,&old)==XR_XIR_VALUE_OK);
             CHECK(xr_xir_array_push(&root,&old,&owner)==XR_XIR_VALUE_OK);

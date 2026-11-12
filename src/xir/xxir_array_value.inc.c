@@ -323,13 +323,15 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
         return XR_XIR_VALUE_BOUNDS;
     }
     if (append && array->length == (uint64_t) INT64_MAX) return XR_XIR_VALUE_LIMIT;
+    status = value_place_publish(place, element);
+    if (status != XR_XIR_VALUE_OK) return status;
     size_t length = array->length + (append ? 1u : 0u), capacity = 0;
     if (!array_capacity(length, array->stride, &capacity)) return XR_XIR_VALUE_LIMIT;
     if (capacity < array->capacity) capacity = array->capacity;
     StoragePrepared prepared = {0};
     status = storage_prepared_begin(&prepared,array->element,element,array->stride,admission);
     if (status != XR_XIR_VALUE_OK) return status;
-    bool unique = atomic_load_explicit(&array->object.references, memory_order_acquire) == 1;
+    bool unique = !value_place_shared(place) && xir_object_unique(&array->object);
     bool grow = length > array->capacity;
     bool detach = array->object.domain != admission->domain && domain_sensitive;
     if (!unique || grow || detach) {
@@ -386,6 +388,11 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
     }
     if (append) {
         array_prepared_transfer(&prepared, replacement, replacement->length); ++replacement->length;
+    }
+    status = value_place_publish(place, &result);
+    if (status != XR_XIR_VALUE_OK) {
+        xr_xir_value_drop(&result); release_pending(pending); storage_prepared_end(&prepared);
+        return status;
     }
     if (mutation->publication) xr_xir_class_publication_commit(mutation->publication);
     memcpy(place->payload, &result.payload, sizeof(result.payload));
@@ -457,9 +464,9 @@ XR_FUNC XrXirValueStatus xr_xir_array_i64_push_owned(XrXirValue *value,
     /* Root domains have no work budget. Every other owner keeps ordinary
      * admission and COW, including a root borrowing a foreign allocation. */
     if (!domain->root || array->object.domain != domain ||
-        atomic_load_explicit(&array->object.references, memory_order_acquire) != 1) {
+        !xir_object_unique(&array->object)) {
         XrXirValueAdmission admission = {array->object.arena, domain, NULL, NULL, UINT64_MAX, UINT64_MAX};
-        XrXirValuePlace place = {(XrXirType)value->type, &value->payload};
+        XrXirValuePlace place = {(XrXirType)value->type, &value->payload, NULL};
         XrXirValue item = {XR_XIR_I64, 0, element};
         return xr_xir_array_push(&place, &item, &admission);
     }

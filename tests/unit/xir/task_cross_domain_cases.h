@@ -98,7 +98,7 @@ static void task_cross_domain_case(unsigned mode, unsigned order) {
     XrXirValue captures[] = {cell, tasks[0], tasks[1]};
     XrXirFunctionBinding binding = {&binding_releases, task_cross_binding_release, 0, captures, 3};
     CHECK(xr_xir_function_new(domains[0], fixture.arena, (XrXirType)258, &binding, &local, &function) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)259, &array.payload};
+    XrXirValuePlace place = {(XrXirType)259, &array.payload, NULL};
     CHECK(xr_xir_array_push(&place, &function, &local) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_write(&cell, &array, &local) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_arena(&function) == fixture.arena && xr_xir_value_arena(&tasks[0]) == fixture.arena &&

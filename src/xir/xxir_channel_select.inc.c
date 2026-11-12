@@ -78,6 +78,8 @@ static XrXirValueStatus channel_select_arm_prepare(XrXirChannelSelect *select,
     if(arm->sending) {
         status=channel_element_admit(arm->storage,&arm->message,admission);
         if(status!=XR_XIR_VALUE_OK)return status;
+        status=xr_xir_value_share(&arm->message);
+        if(status!=XR_XIR_VALUE_OK)return status;
     }
     if(!arm->storage->buffer.capacity&&
         !(arm->sending&&atomic_load_explicit(&arm->storage->closed,memory_order_acquire)))return XR_XIR_VALUE_UNSUPPORTED;

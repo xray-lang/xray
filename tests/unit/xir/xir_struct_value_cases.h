@@ -108,10 +108,10 @@ static void struct_value_cases(void) {
     CHECK(xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &parent) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&parent, &copy) == XR_XIR_VALUE_OK);
     XrXirValue replacement = {XR_XIR_I64, 0, 19};
-    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload}, 0, &replacement, &admission) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload}, 1, &fields[1], &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload}, 0, &fields[1], &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) parent.type, &parent.payload}, 0, &leaf, &admission) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload, NULL}, 0, &replacement, &admission) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload, NULL}, 1, &fields[1], &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) leaf.type, &leaf.payload, NULL}, 0, &fields[1], &admission) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) parent.type, &parent.payload, NULL}, 0, &leaf, &admission) == XR_XIR_VALUE_OK);
     XrXirValue old_leaf = {0}, old_number = {0}, new_leaf = {0}, new_number = {0};
     CHECK(xr_xir_struct_get(&copy, 0, &admission, &old_leaf) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_struct_get(&old_leaf, 0, &admission, &old_number) == XR_XIR_VALUE_OK);

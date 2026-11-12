@@ -64,7 +64,7 @@ static void core_runtime_faults(void) {
     XirAtomic *cell = NULL;
     CHECK(xr_xir_atomic_new((XrXirType)CORE_I64, &initial, &owner.admission, &receiver) == XR_XIR_VALUE_OK);
     cell = (XirAtomic *)object_pointer(&receiver);
-    atomic_store_explicit(&cell->object.references, UINT32_MAX, memory_order_relaxed);
+    atomic_store_explicit(&cell->object.references, INT32_MAX, memory_order_relaxed);
     CHECK(core_execute(&owner, &receiver, XR_XIR_ATOMIC_OPERATION_COMPARE_EXCHANGE, operands, NULL, &output).status == XR_XIR_RUN_STEP_LIMIT);
     atomic_store_explicit(&cell->object.references, 1, memory_order_relaxed);
     CHECK(core_load(&owner, &receiver) == 7 && !output.type);

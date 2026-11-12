@@ -11,7 +11,7 @@ static bool atomic_cell_capable(XirAtomic *cell) {
 }
 static bool xr_xir_atomic_capability_graph_operation(void) {
     XirAtomic cell = {0};
-    atomic_init(&cell.object.references, 1);
+    xir_object_initialize(&cell.object);
     atomic_init(&cell.bits, 0);
     return atomic_cell_capable(&cell);
 }
@@ -46,6 +46,7 @@ static XrXirValueStatus xr_xir_atomic_new_graph_operation(XrXirType type, const 
         return XR_XIR_VALUE_UNSUPPORTED;
     }
     atomic_init(&cell->bits, (uint64_t)initial->payload);
+    atomic_store_explicit(&cell->object.references, -1, memory_order_relaxed);
     XrXirValue result = {(uint32_t)type, 0, 0};
     xr_xir_value_object_publish(&cell->object);
     memcpy(&result.payload, &cell, sizeof(cell));

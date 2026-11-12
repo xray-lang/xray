@@ -33,7 +33,7 @@ static void hash_graph_cases(void) {
     CHECK(xr_xir_nullable_new((XrXirType)258, NULL, &local, &none) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_class_new((XrXirType)256, &none, 1, &local, &node) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_class_new((XrXirType)256, &none, 1, &remote, &other) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)257, &map.payload}; int64_t previous = map.payload;
+    XrXirValuePlace place = {(XrXirType)257, &map.payload, NULL}; int64_t previous = map.payload;
     CHECK(xr_xir_map_set(&place, &key, &other, &local) == XR_XIR_VALUE_BAD_ARGUMENT && map.payload == previous);
     CHECK(xr_xir_map_set(&place, &key, &node, &local) == XR_XIR_VALUE_OK && map.payload != previous);
     CHECK(object_pointer(&map)->domain == owner);

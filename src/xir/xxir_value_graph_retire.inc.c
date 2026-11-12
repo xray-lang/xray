@@ -236,7 +236,7 @@ static XirObject *graph_retire_locked(XrXirDomain *domain, XirObject **pending) 
     GraphScan scan = {.domain = domain};
     if (domain->graph_invalid) return NULL;
     for (XirObject *o = domain->objects; o; o = o->graph_next) {
-        o->graph_trial = atomic_load_explicit(&o->references, memory_order_relaxed);
+        o->graph_trial = xir_object_count(o);
         o->graph_live = false; o->graph_work = NULL;
     }
     for (XirObject *o = domain->objects; o; o = o->graph_next)

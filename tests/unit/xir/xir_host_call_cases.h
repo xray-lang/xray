@@ -75,8 +75,8 @@ static void host_text(const XrXirValue *value, const char *expected) {
 }
 static void host_copy_limit(XrXirHostCall *call, const XrXirValue *value) {
     XirObject *object = object_pointer(value);
-    uint32_t references = atomic_load(&object->references);
-    atomic_store(&object->references, UINT32_MAX);
+    int32_t references = atomic_load(&object->references);
+    atomic_store(&object->references, INT32_MAX);
     XrXirCallResult output = {0};
     CHECK(xr_xir_host_call_take(call, &output) == XR_XIR_CALL_LIMIT && xr_xir_call_result_empty(&output));
     atomic_store(&object->references, references);

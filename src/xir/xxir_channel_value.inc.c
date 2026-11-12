@@ -74,6 +74,7 @@ static XrXirValueStatus channel_new_operation(XrXirType type, int64_t capacity,
         constructed_discard(&channel->object, (size_t)bytes); return XR_XIR_VALUE_UNSUPPORTED;
     }
     if (capacity) memset(channel_slots(channel), 0, (size_t)capacity * sizeof(XrXirValue));
+    atomic_store_explicit(&channel->object.references, -1, memory_order_relaxed);
     XrXirValue value = {(uint32_t)type,0,0};
     memcpy(&value.payload, &channel, sizeof(channel));
     xr_xir_value_object_publish(&channel->object); *output = value;
@@ -93,6 +94,8 @@ static XrXirValueStatus channel_send_operation(const XrXirValue *value, XrXirVal
     XrXirValueStatus status = channel_receiver(value, admission, &channel);
     if (status != XR_XIR_VALUE_OK) return status;
     status = channel_element_admit(channel, owned, admission);
+    if (status != XR_XIR_VALUE_OK) return status;
+    status = xr_xir_value_share(owned);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirClassPublication publication = {0};
     status = xr_xir_class_publication_prepare(owned, 1, admission, &publication);

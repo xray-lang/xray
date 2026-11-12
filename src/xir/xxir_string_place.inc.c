@@ -20,7 +20,7 @@ static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
     XirString *first = string_pointer(&owned);
     if (length >= SIZE_MAX - first->length) return XR_XIR_VALUE_LIMIT;
     bool receiving = first->object.domain == admission->domain;
-    bool unique = receiving && atomic_load_explicit(&first->object.references, memory_order_acquire) == 1;
+    bool unique = receiving && !value_place_shared(place) && xir_object_unique(&first->object);
     if (!admission_is_compile(admission)) {
         uint64_t work = (uint64_t)length + 1;
         if (length && !unique) {
@@ -55,8 +55,12 @@ static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
             if (first->length) memcpy(joined->bytes, first->bytes, first->length);
             memcpy(joined->bytes + first->length, bytes, length);
             joined->runes = total_runes;
+            XrXirValue result = string_value(joined);
+            status = value_place_publish(place, &result);
+            if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return status; }
+            memcpy(place->payload, &result.payload, sizeof(result.payload));
             xr_xir_value_drop_graph_operation(&owned);
-            owned = string_value(joined);
+            owned = result;
         }
     }
     if (status == XR_XIR_VALUE_OK) memcpy(place->payload, &owned.payload, sizeof(owned.payload));

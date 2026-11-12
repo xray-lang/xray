@@ -59,10 +59,10 @@ static size_t array_allocation_failure(unsigned mode, size_t offset) {
     if (mode == 1) CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
     if (mode == 3) admission.domain = receiver;
     XirArray *original = (XirArray *) object_pointer(&array);
-    XrXirValuePlace place = {(XrXirType) 260, &array.payload};
+    XrXirValuePlace place = {(XrXirType) 260, &array.payload, NULL};
     size_t start = value_allocation_calls, physical = live, old_length = original->length, old_capacity = original->capacity;
     uint64_t bytes = domain->stats.live_bytes, receiver_bytes = receiver->stats.live_bytes;
-    uint32_t references = atomic_load(&object_pointer(&string)->references);
+    int32_t references = atomic_load(&object_pointer(&string)->references);
     fail_at = offset == SIZE_MAX ? SIZE_MAX : start + offset;
     XrXirValueStatus status = mode == 0 ? xr_xir_array_new((XrXirType) 260, inputs, 4, &admission, &output) :
         xr_xir_array_push(&place, &string, &admission);
@@ -102,7 +102,7 @@ static void array_cross_domain_accounting(void) {
     XrXirValue string = {0}, array = {0}, copy = {0};
     CHECK(xr_xir_string_new(origin, "held", 4, &string) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 260, &string, 1, &admission, &array) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType) 260, &array.payload};
+    XrXirValuePlace place = {(XrXirType) 260, &array.payload, NULL};
     XirArray *original = (XirArray *) object_pointer(&array);
     CHECK(original->stride == 8 && original->capacity == 4);
     admission.domain = receiver;
@@ -139,16 +139,16 @@ static void array_retain_atomicity(void) {
     CHECK(xr_xir_string_new(domain, "first", 5, strings) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "second", 6, strings + 1) == XR_XIR_VALUE_OK);
     uint64_t bytes = domain->stats.live_bytes; size_t physical = live;
-    atomic_store(&object_pointer(strings + 1)->references, UINT32_MAX);
+    atomic_store(&object_pointer(strings + 1)->references, INT32_MAX);
     CHECK(xr_xir_array_new((XrXirType) 260, strings, 2, &admission, &rejected) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(!rejected.type && live == physical && domain->stats.live_bytes == bytes);
     CHECK(atomic_load(&object_pointer(strings)->references) == 1);
     atomic_store(&object_pointer(strings + 1)->references, 1);
     CHECK(xr_xir_array_new((XrXirType) 260, strings, 2, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType) 260, &array.payload}; XrXirFaultDetail fault = {0};
+    XrXirValuePlace place = {(XrXirType) 260, &array.payload, NULL}; XrXirFaultDetail fault = {0};
     bytes = domain->stats.live_bytes; physical = live;
-    atomic_store(&object_pointer(strings + 1)->references, UINT32_MAX);
+    atomic_store(&object_pointer(strings + 1)->references, INT32_MAX);
     CHECK(xr_xir_array_push(&place, strings, &admission) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(array.payload == copy.payload && live == physical && domain->stats.live_bytes == bytes);
     CHECK(atomic_load(&object_pointer(strings)->references) == 2);
@@ -224,7 +224,7 @@ static void array_nested_gate_scratch(void) {
     admission.work = 100;
     CHECK(xr_xir_value_admit(&nested, (XrXirType) 258, &admission) == XR_XIR_VALUE_OK);
     CHECK(admission.work < 100 && admission.scratch_bytes == scratch && live == physical && domain->stats.live_bytes == bytes);
-    atomic_store(&object_pointer(&nested)->references, UINT32_MAX);
+    atomic_store(&object_pointer(&nested)->references, INT32_MAX);
     int64_t length = -1;
     CHECK(xr_xir_array_len(&nested, &admission, &length) == XR_XIR_VALUE_OK && length == 1);
     atomic_store(&object_pointer(&nested)->references, 1);
@@ -246,11 +246,11 @@ static void array_copy_work_budget(void) {
         CHECK(xr_xir_array_new((XrXirType) 260, inputs, 64, &admission, &array) == XR_XIR_VALUE_OK);
         if (!mode) CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
         else if (mode == 1) admission.domain = receiver;
-        XrXirValuePlace place = {(XrXirType) 260, &array.payload};
+        XrXirValuePlace place = {(XrXirType) 260, &array.payload, NULL};
         int64_t payload = array.payload; size_t physical = live, allocations = value_allocation_calls;
         uint64_t bytes = domain->stats.live_bytes, receiver_bytes = receiver->stats.live_bytes;
         XrXirDomainStats before = domain->stats, receiving_before = receiver->stats;
-        uint32_t references = atomic_load(&object_pointer(&string)->references);
+        int32_t references = atomic_load(&object_pointer(&string)->references);
         /* Receiver + two descriptor nodes + RHS + 64 copied/moved elements. */
         admission.work = 67;
         CHECK(xr_xir_array_push(&place, &string, &admission) == XR_XIR_VALUE_LIMIT);

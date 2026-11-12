@@ -41,7 +41,7 @@ XR_FUNC XrXirValueStatus xir_cell_array_i64_write_owned(const XrXirValue *value,
         cell->object.domain != admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(cell->object.arena),
         cell->object.type);
-    XrXirValuePlace place = {element, &cell->value.payload};
+    XrXirValuePlace place = {element, &cell->value.payload, &cell->object};
     XrXirValue replacement = {XR_XIR_I64, 0, number};
     return xr_xir_array_set(&place, index, &replacement, admission, fault);
 }
