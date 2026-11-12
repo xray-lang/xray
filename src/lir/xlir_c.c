@@ -15,6 +15,7 @@
  *   No interpreter frame is emitted.
  */
 #include "xlir_c.h"
+#include "xlir_builtin_admission.h"
 #include "xlir_verify.h"
 #include "xlir_internal.h"
 #include "xlir_state.h"
@@ -1029,6 +1030,10 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
 #endif
     if (!c_request_poll(&c))
         return c.status;
+    if (!lir_module_has_builtin_types(request->module)) {
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "constructed physical types have no native implementation");
+        return c.status;
+    }
     uint32_t literal_count = xr_lir_literal_count(request->module);
     if (literal_count) {
         void *used = NULL;

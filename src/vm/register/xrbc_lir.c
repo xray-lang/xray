@@ -15,6 +15,7 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_state.h"
 #include "lir/xlir_array.h"
+#include "lir/xlir_builtin_admission.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
@@ -1381,6 +1382,9 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
 #endif
+    if (!lir_module_has_builtin_types(input))
+        return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "constructed physical types have no bytecode implementation", (XrLirSource) {0});
     for (uint32_t i = 0; i < root.parameter_count; ++i)
         if (root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
             root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
