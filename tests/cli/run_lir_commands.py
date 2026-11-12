@@ -60,6 +60,14 @@ def main() -> None:
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
+        formatted = work / "nonescape-formatter-types.xr"
+        shutil.copyfile(source_root / "formatter_nested_types.xr", formatted)
+        run("nonescape-format-types", [binary, "fmt", formatted], 0)
+        expected_format = source_root / "formatter_nested_types.fmt"
+        assert formatted.read_text(encoding="utf-8") == expected_format.read_text(encoding="utf-8")
+        checked = run("nonescape-check-formatted-types", [binary, "check", formatted], 0)
+        assert not checked.stdout and not checked.stderr
+        run("nonescape-format-types-idempotent", [binary, "fmt", "--check", formatted], 0)
         for golden in sorted(source_root.glob("*.expect.json")):
             expected = json.loads(golden.read_text(encoding="utf-8"))
             name = golden.name.removesuffix(".expect.json")

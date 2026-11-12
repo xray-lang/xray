@@ -1,0 +1,2 @@
+fn nested(callback:fn(escaping nosuspend fn()->i64)->i64){}
+fn direct(callback:escaping nosuspend fn()->i64)->i64{return callback()}
