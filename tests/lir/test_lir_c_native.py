@@ -39,7 +39,7 @@ def main():
     expected = {'arithmetic': 17, 'extremes': -1, 'overflow': 9223372036854775806,
                 'fib': 2178309, 'swap': 1234, 'self': 1212,
                 'same-true': 1234, 'same-false': 3412, 'unused': 42, 'unit': None, 'bool': 1,
-                'source-entry': 0, 'source-call': 0, 'divrem': 0}
+                'source-entry': 0, 'source-call': 0, 'divrem': 0, 'nullable-f32-none': 0}
     sources = {
         'source-entry': 'fn main()->string{return "ordinary"}\nfn work()->i64{var i=0\nwhile(i<5){i=i+1}\nreturn i}\nwork()\n',
         'source-call': 'fn sum(n:i64)->i64{var i=0\nvar total=0\nwhile(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(7)\n',

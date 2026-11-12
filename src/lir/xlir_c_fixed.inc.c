@@ -60,7 +60,8 @@ static void c_constructed_types(LirC *c) {
             xr_lir_type_layout(c->request->module, type->shape.element, &payload);
             c_format(c, "typedef struct %s { uint8_t tag;", type->name);
             if (payload.alignment > 1) c_format(c, " uint8_t pad[%" PRIu32 "];", payload.alignment - 1);
-            if (type->shape.element != XR_LIR_UNIT) c_format(c, " %s payload;", c_type(c, type->shape.element));
+            if (type->shape.element != XR_LIR_UNIT) c_format(c, " %s payload;",
+                type->shape.element == XR_LIR_F32 ? "float" : c_type(c, type->shape.element));
             c_format(c, " } %s;\n", type->name);
             if (type->shape.element != XR_LIR_UNIT)
                 c_format(c, "_Static_assert(offsetof(%s, payload) == %u, \"nullable payload offset\");\n",

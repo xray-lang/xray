@@ -282,10 +282,32 @@ static void fixed_division(void) {
 }
 #include "lir_fixed_c_cases.h"
 
+static void nullable_float_metadata(void) {
+    XrLirType nullable;
+    OK(xr_lir_nullable_type(module, XR_LIR_F32, &nullable));
+    XrLirFunction forward = function("nullable_float_forward", &nullable, 1, nullable);
+    XrLirBlock body = block(forward, NULL, 0);
+    OK(xr_lir_set_entry(module, forward, body));
+    XrLirValue input;
+    OK(xr_lir_function_parameter(module, forward, 0, &input));
+    ret(body, input);
+    root = function("nullable_float_metadata", NULL, 0, XR_LIR_I64);
+    XrLirBlock entry = block(root, NULL, 0);
+    OK(xr_lir_set_entry(module, root, entry));
+    XrLirValue none = fixed_c_emit(entry, XR_LIR_NULLABLE_NONE, nullable, NULL, 0);
+    none = fixed_c_call(entry, forward, nullable, none);
+    XrLirValue present = fixed_c_emit(entry, XR_LIR_NULLABLE_IS_SOME, XR_LIR_I1, &none, 1);
+    XrLirBlock some = block(root, NULL, 0), missing = block(root, NULL, 0);
+    conditional(entry, present, (XrLirEdge){some, NULL, 0}, (XrLirEdge){missing, NULL, 0});
+    ret(some, constant(some, XR_LIR_I64, 1));
+    ret(missing, constant(missing, XR_LIR_I64, 0));
+}
+
 static void build(const char *name) {
     OK(xr_lir_module_create(NULL, &module));
     if (!strncmp(name, "fixed-", 6)) fixed_c_fixture(name);
     else if (!strcmp(name, "divrem")) fixed_division();
+    else if (!strcmp(name, "nullable-f32-none")) nullable_float_metadata();
     else if (!strcmp(name, "arithmetic")) arithmetic();
     else if (!strcmp(name, "extremes")) extremes();
     else if (!strcmp(name, "overflow")) overflow();
@@ -310,6 +332,25 @@ static XrCompileResources *resources(void) {
     CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
     return r;
 }
+static void nullable_float_scalar_rejection(void) {
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType nullable;
+    OK(xr_lir_nullable_type(module, XR_LIR_F32, &nullable));
+    XrLirBlock entry = root_block();
+    XrLirValue scalar = constant(entry, XR_LIR_F32, 0);
+    (void)fixed_c_emit(entry, XR_LIR_NULLABLE_SOME, nullable, &scalar, 1);
+    ret(entry, constant(entry, XR_LIR_I64, 0));
+    OK(xr_lir_module_finish(module, NULL));
+    XrCompileResources *r = resources();
+    XrLirCRequest request = {module, root, r, "unsupported_float", NULL};
+    XrLirCOutput output = {0};
+    XrLirCDiagnostic diagnostic = {0};
+    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_UNSUPPORTED &&
+        !output.bytes && !output.length && diagnostic.message[0]);
+    xr_lir_module_destroy(module);
+    module = NULL;
+    xr_compile_resources_release(r);
+}
 static void emit(const char *name, const char *path) {
     build(name);
     XrCompileResources *r = resources();
@@ -320,6 +361,7 @@ static void emit(const char *name, const char *path) {
     if (status != XR_LIR_C_OK)
         fprintf(stderr, "C status %u: %s\n", (unsigned) status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
+    if (!strcmp(name, "nullable-f32-none")) CHECK(strstr(output.bytes, "float payload;"));
     bool fixed_result = !strcmp(name, "fixed-return") || !strcmp(name, "fixed-state-return");
     if (fixed_result) {
         CHECK(output.entry_shape.kind == XR_LIR_TYPE_FIXED_ARRAY &&
@@ -457,9 +499,10 @@ int main(int argc, char **argv) {
         return 0;
     }
     CHECK(argc == 1);
+    nullable_float_scalar_rejection();
     const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
-        "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",
+        "nullable-f32-none", "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",
         "fixed-state", "fixed-state-return", "fixed-unpublished", "fixed-negative", "fixed-bounds",
         "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
         "typed-bool", "typed-unit", "typed-root-call", "state-ref-even", "state-ref-odd"};
