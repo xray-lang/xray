@@ -237,10 +237,8 @@ print(append(@N@))
 STRING_APPEND_PY = """import sys
 def append(count):
     text = ""
-    i = 0
-    while i < count:
+    for _ in range(count):
         text += "x"
-        i += 1
     return len(text)
 sys.stdout.buffer.write(str(append(@N@)).encode("ascii") + b"\\n")
 """

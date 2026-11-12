@@ -29,6 +29,8 @@ class StringBaselineTests(unittest.TestCase):
     def test_workloads_append_and_print_length(self):
         self.assertIn('text+="x"', BASELINE.STRING_APPEND_XR)
         self.assertIn('text += "x"', BASELINE.STRING_APPEND_PY)
+        self.assertIn("for _ in range(count):", BASELINE.STRING_APPEND_PY)
+        self.assertNotIn("while", BASELINE.STRING_APPEND_PY)
         self.assertIn('b"\\n"', BASELINE.STRING_APPEND_PY)
         self.assertIn("realloc(text->data, next)", BASELINE.STRING_APPEND_C)
         self.assertNotIn("noinline", BASELINE.STRING_APPEND_C)
