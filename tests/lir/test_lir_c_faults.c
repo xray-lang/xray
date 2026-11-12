@@ -240,6 +240,47 @@ static void literal_memory_boundaries(void) {
     CHECK(!runtime_live && !runtime_bytes);
     puts("literal used-set OOM/held/control and retired-producer output ownership PASS");
 }
+static void fixed_memory_boundaries(void) {
+    XrLirModule *module = NULL;
+    CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    XrLirType fixed = 0;
+    CHECK(xr_lir_fixed_array_type(module, XR_LIR_U8, 17, &fixed) == XR_LIR_OK);
+    XrLirFunction entry = {0};
+    XrLirFunctionSpec spec = {.name = "fixed", .name_length = 5, .result = fixed};
+    CHECK(xr_lir_declare_function(module, &spec, &entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module, entry) == XR_LIR_OK);
+    XrLirBlock block = {0};
+    CHECK(xr_lir_add_block(module, entry, NULL, 0, &block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module, entry, block) == XR_LIR_OK);
+    XrLirValue values[17] = {{0}}, aggregate = {0};
+    for (uint32_t n = 0; n < 17; ++n) {
+        XrLirInstruction byte = {.op = XR_LIR_CONST, .type = XR_LIR_U8, .bits = n};
+        CHECK(xr_lir_emit_value(module, block, &byte, &values[n]) == XR_LIR_OK);
+    }
+    XrLirInstruction instruction = {.op = XR_LIR_FIXED_ARRAY_NEW, .type = fixed,
+        .operands = values, .operand_count = 17};
+    CHECK(xr_lir_emit_value(module, block, &instruction, &aggregate) == XR_LIR_OK);
+    instruction = (XrLirInstruction){.op = XR_LIR_RET, .type = XR_LIR_UNIT,
+        .operands = &aggregate, .operand_count = 1};
+    CHECK(xr_lir_set_terminator(module, block, &instruction) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module, entry, resources, "fixed-publication-fault", NULL};
+    control_boundaries(&request);
+    XrLirCOutput output = memory_boundaries(&request);
+    xr_lir_module_destroy(module);
+    xr_compile_resources_release(resources);
+    memset(&request, 0xa5, sizeof(request));
+    CHECK(output.entry_shape.kind == XR_LIR_TYPE_FIXED_ARRAY && output.entry_shape.element == XR_LIR_U8 &&
+        output.entry_shape.count == 17 && output.entry_layout.size == 17 &&
+        output.entry_layout.alignment == 1 && output.entry_layout.scalar_count == 17 &&
+        !output.entry_layout.managed && strstr(output.bytes, "uint8_t bytes[17]"));
+    xr_lir_c_output_free(&output);
+    CHECK(!output.entry_shape.count && !output.entry_layout.size && !runtime_live && !runtime_bytes);
+    puts("fixed type workspace FI and retired-producer result shape PASS");
+}
+
 int main(int argc, char **argv) {
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
@@ -303,6 +344,7 @@ int main(int argc, char **argv) {
     xr_lir_c_output_free(&output);
     CHECK(!output.bytes && !output.length && !output.entry_result && !runtime_live && !runtime_bytes);
     literal_memory_boundaries();
+    fixed_memory_boundaries();
     puts("representative C workspace/text failures and cancellation passed");
     puts("output survives module, caller memory reference, control/context destruction; physical zero PASS");
     return 0;

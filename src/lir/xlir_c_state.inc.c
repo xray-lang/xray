@@ -15,6 +15,8 @@ static bool c_state_point(const XrLirInstructionView *v) {
 }
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
+    if (type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->fixed_count)
+        return c->state_type_base + type - XR_LIR_TYPE_COUNT;
     switch (type) {
     case XR_LIR_UNIT: return 0;
     case XR_LIR_I1: return 1;
@@ -37,13 +39,14 @@ static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
 
 static void c_state_layout(LirC *c) {
     const XrLirStateLayout *layout = &c->state_layout;
-    bool arrays = false;
-    for (uint32_t s = 0; s < layout->slot_count; ++s) arrays |= layout->slots[s].payload == XR_LIR_ARRAY;
+    bool arrays = c->state_type_base == 9;
     c_text(c, "static const XrtModuleTypeSpec xrl_state_types[] = {\n"
         "    {XRT_MODULE_UNIT, 0}, {XRT_MODULE_BOOL, 0}, {XRT_MODULE_I64, 0},\n"
         "    {XRT_MODULE_F64, 0}, {XRT_MODULE_STRING, 0}");
     if (arrays) c_text(c, ",\n    {XRT_MODULE_ARRAY_I64, 0}, {XRT_MODULE_ARRAY_STRING, 0},\n"
         "    {XRT_MODULE_ARRAY_U8, 0}, {XRT_MODULE_ARRAY_U64, 0}");
+    for (uint32_t n = 0; n < c->fixed_count && c_request_poll(c); ++n)
+        c_format(c, ",\n    {XRT_MODULE_FIXED_U8, UINT32_C(%" PRIu32 ")}", c->fixed_types[n].shape.count);
     c_text(c, "\n};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)
@@ -66,7 +69,7 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
-        arrays ? 9u : 5u, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
+        c->state_type_base + c->fixed_count, layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);
@@ -106,14 +109,20 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     c_state_check_access(c, reference, source);
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
+        if (shape.payload >= XR_LIR_TYPE_COUNT) {
+            c_format(c, "    memcpy(&v%" PRIu32 ", xrl_access%" PRIu32 ".payload, sizeof(v%" PRIu32 "));\n",
+                v->result, reference, v->result);
+            return;
+        }
         c_format(c, "    v%" PRIu32 " = ", v->result);
         if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
             c_text(c, shape.payload == XR_LIR_ARRAY ? "xrt_array_retain(" : "xrt_string_retain(");
-        c_format(c, "*(%s const *)xrl_access%" PRIu32 ".payload", c_type(shape.payload), reference);
+        c_format(c, "*(%s const *)xrl_access%" PRIu32 ".payload", c_type(c, shape.payload), reference);
         if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
             c_format(c, ", UINT32_C(%" PRIu32 "))", source);
         c_text(c, ";\n");
-    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_UNIT) {
+    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_UNIT ||
+        shape.payload >= XR_LIR_TYPE_COUNT) {
         c_text(c, "    xrt_module_require(xrt_module_replace(");
         c_value(c, reference);
         c_text(c, ", ");
@@ -122,7 +131,7 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
         c_text(c, ")");
         c_state_require_end(c, source);
     } else {
-        c_format(c, "    *(%s *)xrl_access%" PRIu32 ".payload = ", c_type(shape.payload), reference);
+        c_format(c, "    *(%s *)xrl_access%" PRIu32 ".payload = ", c_type(c, shape.payload), reference);
         c_value(c, v->operands[1]);
         c_text(c, ";\n");
     }
@@ -169,7 +178,7 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
 }
 
 static void c_state_root(LirC *c, XrLirType result) {
-    const char *type = c_type(result);
+    const char *type = c_type(c, result);
     c_text(c, "static void xrl_invoke(void *context, XrtModuleState *state) {\n");
     if (result == XR_LIR_UNIT) c_text(c, "    (void)context;\n    ");
     else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY) c_format(c, "    %s owned = ", type);

@@ -14,6 +14,7 @@
 #ifndef XLIR_C_H
 #define XLIR_C_H
 #include "xlir.h"
+#include "xlir_types.h"
 #include "../base/xcompile_request.h"
 
 typedef enum XrLirCStatus {
@@ -42,6 +43,8 @@ typedef struct XrLirCOutput {
     char *bytes;
     size_t length;
     XrLirType entry_result;
+    XrLirTypeView entry_shape;
+    XrLirTypeLayout entry_layout;
 } XrLirCOutput;
 
 typedef struct XrLirCDiagnostic {
@@ -62,6 +65,7 @@ typedef struct XrLirCDiagnostic {
  * traversal and validation boundaries, including immediately before publication.
  * Neither output nor its memory owner retains the control or parent request. Every TU
  * passes the mandatory existing W1-W4 ICE boundary before publication.
+ * Result shape and layout are owned POD facts, including after module retirement.
  * xray_lir_entry has no parameters and keeps entry_result as its C result type.
  * With an output or possible arithmetic panic dependency it establishes the
  * runtime scope before invoking the complete selected root. Ordinary calls target typed workers;

@@ -280,9 +280,12 @@ static void fixed_division(void) {
     }
     ret(entry, result);
 }
+#include "lir_fixed_c_cases.h"
+
 static void build(const char *name) {
     OK(xr_lir_module_create(NULL, &module));
-    if (!strcmp(name, "divrem")) fixed_division();
+    if (!strncmp(name, "fixed-", 6)) fixed_c_fixture(name);
+    else if (!strcmp(name, "divrem")) fixed_division();
     else if (!strcmp(name, "arithmetic")) arithmetic();
     else if (!strcmp(name, "extremes")) extremes();
     else if (!strcmp(name, "overflow")) overflow();
@@ -317,7 +320,13 @@ static void emit(const char *name, const char *path) {
     if (status != XR_LIR_C_OK)
         fprintf(stderr, "C status %u: %s\n", (unsigned) status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
-    CHECK(output.entry_result == fixture_result(name));
+    bool fixed_result = !strcmp(name, "fixed-return") || !strcmp(name, "fixed-state-return");
+    if (fixed_result) {
+        CHECK(output.entry_shape.kind == XR_LIR_TYPE_FIXED_ARRAY &&
+            output.entry_shape.element == XR_LIR_U8 && output.entry_shape.count == 17 &&
+            output.entry_layout.size == 17 && output.entry_layout.alignment == 1 &&
+            output.entry_layout.scalar_count == 17 && !output.entry_layout.managed);
+    } else CHECK(output.entry_result == fixture_result(name));
     xr_lir_module_destroy(module);
     module = NULL;
     xr_compile_resources_release(r);
@@ -443,6 +452,8 @@ int main(int argc, char **argv) {
     CHECK(argc == 1);
     const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
+        "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",
+        "fixed-state", "fixed-state-return", "fixed-unpublished", "fixed-negative", "fixed-bounds",
         "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
         "typed-bool", "typed-unit", "typed-root-call", "state-ref-even", "state-ref-odd"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)

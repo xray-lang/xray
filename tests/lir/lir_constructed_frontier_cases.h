@@ -76,14 +76,12 @@ static void constructed_backend_frontiers(void) {
         XrLirCOutput output = {0};
         XrLirCDiagnostic native_diagnostic;
         XrLirCStatus emitted = xr_lir_emit_c(&request, &output, &native_diagnostic);
+        CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
         if (scenario < 4) {
             CHECK(compiled == XR_RBC_COMPILE_UNSUPPORTED && !program);
-            CHECK(emitted == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
-            CHECK(strstr(bytecode_diagnostic.message, "constructed physical types") &&
-                strstr(native_diagnostic.message, "constructed physical types"));
+            CHECK(strstr(bytecode_diagnostic.message, "constructed physical types"));
         } else {
             CHECK(compiled == XR_RBC_COMPILE_OK && program);
-            CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
             XrRbcExecution *execution = NULL;
             CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
             XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
@@ -98,5 +96,5 @@ static void constructed_backend_frontiers(void) {
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);
     }
-    puts("constructed backend frontiers rejected four actual type uses and accepted unused metadata");
+    puts("constructed native types accepted while bytecode value frontiers remain closed");
 }

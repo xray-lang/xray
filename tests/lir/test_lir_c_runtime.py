@@ -10,6 +10,7 @@ import sys
 import tempfile
 from test_lir_c_native import run
 from test_lir_carriers_native import _f64_profile, _f64_reject
+from test_lir_fixed_c_native import fixed_c_cases
 
 MODULE_CALL_CLOSURES = {
     'closure-chain': ('fn leaf(n:i64)->i64{return n+1}\n'
@@ -55,6 +56,7 @@ def main():
                 'systemLibraries': args.runtime_system_libraries,
                 'header': str(header), 'headerSHA256': hashlib.sha256(header.read_bytes()).hexdigest()}
     print(json.dumps(identity), flush=True)
+    identity['fixedValues'] = fixed_c_cases(args, root)
     cases = {
         'fib': ('fn fib(n:i64)->i64{if(n<2){return n}\nreturn fib(n-1)+fib(n-2)}\nprint(fib(32))\n', b'2178309\n'),
         'sum': ('fn sum(n:i64)->i64{var i=0\nvar total=0\nwhile(i<n){total=total+i\ni=i+1}\nreturn total}\nprint(sum(100000000))\n', b'4999999950000000\n'),

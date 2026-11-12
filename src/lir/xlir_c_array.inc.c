@@ -95,7 +95,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_format(c, "xrt_array_%s_new(", family);
         if (v->operand_count) {
             if (element == XR_LIR_STRING) c_text(c, "(XrtString *const[]){");
-            else c_format(c, "(const %s[]){", c_type(element));
+            else c_format(c, "(const %s[]){", c_type(c, element));
             for (uint32_t p = 0; p < v->operand_count; ++p) {
                 if (p) c_text(c, ", ");
                 c_value(c, v->operands[p]);

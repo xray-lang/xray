@@ -39,6 +39,9 @@ XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source
     longjmp(*binding->target, 1);
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecutionFailure *failure);
+XRAY_API_NORET void xrt_fixed_array_bounds(uint32_t source_id) {
+    xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
+}
 
 /* Mutable managed-value state belongs to the caller of this setjmp function. */
 static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure *failure,
