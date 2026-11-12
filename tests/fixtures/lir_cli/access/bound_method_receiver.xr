@@ -1,0 +1,11 @@
+class Box {
+    n: i64
+    init() { this.n = 7 }
+    get() -> i64 { return this.n }
+}
+fn parameter(view: Slice<u8>, box: Box) -> i64 { return box.get() }
+fn local(view: Slice<u8>) -> i64 {
+    const box = Box()
+    return box.get()
+}
+print(1)

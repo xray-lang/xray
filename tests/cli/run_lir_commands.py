@@ -95,7 +95,7 @@ def main() -> None:
                      "root_generic_identity_pure", "root_generic_forward_pure",
                      "root_generic_array_pure", "root_generic_tuple_pure",
                      "root_generic_scalar", "root_generic_generator", "defer_helper_pure",
-                     "nosuspend_helper_pure", "cfn_helper_pure"):
+                     "nosuspend_helper_pure", "cfn_helper_pure", "compress_bound_receivers"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -103,12 +103,13 @@ def main() -> None:
         accepted_access = ("default_class_positive.xr", "imported_default/root.xr",
                            "imported_generic/root.xr", "imported_callable/root.xr",
                            "pure_recursive.xr", "primitive_equality.xr",
-                           "latent_reference.xr", "immutable_scalar.xr")
+                           "latent_reference.xr", "immutable_scalar.xr", "bound_method_receiver.xr")
         for name in accepted_access:
             checked = run("access-" + name.replace("/", "-") + "-check",
                           [binary, "check", access / name], 0)
             assert not checked.stdout and not checked.stderr, name
         rejected_access = (
+            ("bound_method_owner_conflict.xr", b"constructed XIR failed checking at function 1"),
             ("default_class_borrowed_input.xr", b"(CALL)"),
             ("default_class_existing_alias.xr", b"(ARRAY_SET)"),
             ("default_class_existing_alias_read.xr", b"(CALL_DEFAULT)"),

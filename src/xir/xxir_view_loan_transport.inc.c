@@ -333,10 +333,24 @@ static bool view_loan_substitute(XirViewLoanTransport *a, uint32_t id, bool *bou
     return a->status == XR_XIR_OK;
 }
 
-static XrXirStatus view_loan_empty(void *context, const XirExecutionSite *site) {
-    bool *empty=context;
-    if (site->kind != XIR_EXECUTION_CALL || site->protocol != 1 || site->argument_count) *empty=false;
-    return XR_XIR_OK;
+typedef struct ViewLoanCaptures {
+    XirViewLoanTransport *transport;
+    uint32_t dependent;
+} ViewLoanCaptures;
+
+static XrXirStatus view_loan_transport_capture(void *context, const XirExecutionSite *site) {
+    ViewLoanCaptures *walk=context;
+    XirViewLoanTransport *a=walk->transport;
+    if (site->kind != XIR_EXECUTION_CALL || site->protocol != 1) return XR_XIR_UNRESOLVED;
+    if (!site->argument_count) a->states[walk->dependent].grounded=true;
+    for (uint32_t p=0;p<site->argument_count && view_loan_transport_step(a);++p) {
+        XirExecutionArgument actual={0};
+        a->status=xir_execution_argument(a->facts->execution,site,p,&actual);
+        if (a->status != XR_XIR_OK) return a->status;
+        if (!view_loan_push(a,(XirStorageReference){actual.function,actual.value,actual.environment},
+            walk->dependent)) return a->status;
+    }
+    return a->status;
 }
 
 static bool view_loan_borrowed(const XirViewLoanTransport *a, XrXirType type) {
@@ -358,13 +372,18 @@ static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirVi
     }
     bool scalar=type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING ||
         xr_xir_type_is_integer(type) || type==XR_XIR_F32 || type==XR_XIR_F64;
-    if (!borrowed && !callable && !scalar) {a->status=XR_XIR_UNRESOLVED;return false;}
+    /* The physical receiver retains its owner at this observation. Access
+     * obligations still consume receiver effects and actual alias facts. */
+    bool receiver=xr_xir_type_is_class(a->module->types,type) &&
+        reference.function == demand->function && reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT;
+    if (!borrowed && !callable && !scalar && !receiver) {a->status=XR_XIR_UNRESOLVED;return false;}
     if (callable && !xr_xir_type_is_c_callable(a->module->types,type)) {
-        bool empty=true,complete=false;uint32_t remainder=0;
+        bool complete=false;uint32_t remainder=0;
+        ViewLoanCaptures walk={a,id};
         a->status=xir_execution_visit_value_environment_in(a->facts->execution,&reference,
-            view_loan_empty,&empty,&complete,&remainder);
-        if (a->status == XR_XIR_OK && (!empty || !complete || remainder)) a->status=XR_XIR_UNRESOLVED;
-        if (a->status != XR_XIR_OK) return false;
+            view_loan_transport_capture,&walk,&complete,&remainder);
+        if (a->status == XR_XIR_OK && (!complete || remainder)) a->status=XR_XIR_UNRESOLVED;
+        return a->status == XR_XIR_OK;
     }
     a->states[id].grounded=true;return true;
 }
