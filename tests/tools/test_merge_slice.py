@@ -52,26 +52,43 @@ add_test(NAME asan_focused COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/
 
 
 class QueueTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.template_directory = tempfile.TemporaryDirectory(prefix="xray-queue-template-")
+        cls.addClassCleanup(cls.template_directory.cleanup)
+        cls.template = Path(cls.template_directory.name) / "repo"
+        cls.template.mkdir()
+        for arguments in [("init", "-b", "main"), ("config", "user.name", "Queue Fixture"),
+                          ("config", "user.email", "fixture@example.com"),
+                          ("config", "core.autocrlf", "false")]:
+            subprocess.run(["git", "-C", str(cls.template), *arguments], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        plan = {"schema": 1, "targets": ["xray"], "tests": ["actual"],
+                "versionCommand": [sys.executable, "{source}/version.py", "{build}/identity.json"],
+                "smokeStatus": "fixture only"}
+        files = {"gate.py": GATE, "CMakeLists.txt": CMAKE,
+                 "version.py": "from pathlib import Path\nimport sys\nprint(Path(sys.argv[1]).read_text())\n",
+                 "scripts/l1-v0.json": json.dumps(plan)}
+        for path, content in files.items():
+            file = cls.template / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(content, encoding="utf-8")
+        for arguments in [("add", "."), ("commit", "-m", "Create queue fixture")]:
+            subprocess.run(["git", "-C", str(cls.template), *arguments], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cls.template_base = subprocess.check_output(
+            ["git", "-C", str(cls.template), "rev-parse", "HEAD"], text=True).strip()
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="xray-queue-test-")
         self.root = Path(self.temporary.name)
         self.repo = self.root / "repo"
-        self.repo.mkdir()
+        # Independent copies keep work files, refs, configuration and objects
+        # private while avoiding repeated creation of the same base commit.
+        shutil.copytree(self.template, self.repo)
         self.children = []
-        self.git("init", "-b", "main")
-        self.git("config", "user.name", "Queue Fixture")
-        self.git("config", "user.email", "fixture@example.com")
-        self.git("config", "core.autocrlf", "false")
-        self.write("gate.py", GATE)
-        self.write("version.py", "from pathlib import Path\nimport sys\nprint(Path(sys.argv[1]).read_text())\n")
-        self.write("CMakeLists.txt", CMAKE)
-        plan = {"schema": 1, "targets": ["xray"], "tests": ["actual"],
-                "versionCommand": [sys.executable, "{source}/version.py", "{build}/identity.json"],
-                "smokeStatus": "fixture only"}
-        self.write("scripts/l1-v0.json", json.dumps(plan))
-        self.git("add", ".")
-        self.git("commit", "-m", "Create queue fixture")
-        self.base = self.git("rev-parse", "HEAD")
+        self.git("update-index", "--refresh")
+        self.base = self.template_base
         self.integration = self.root / "int"
         self.git("worktree", "add", "--detach", str(self.integration), self.base)
         self.git("switch", "--detach")
@@ -145,6 +162,17 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "main"), log["candidate"])
         self.assertEqual(log["gates"]["L1"], "PASS")
         self.assertEqual(len(self.logs()), 1)
+
+    def test_repository_copy_keeps_template_files_and_refs_independent(self):
+        original = (self.template / "gate.py").read_bytes()
+        self.write("gate.py", "changed independently\n")
+        self.git("config", "user.name", "Independent Fixture")
+        self.git("update-ref", "refs/heads/private", self.base)
+        self.assertEqual((self.template / "gate.py").read_bytes(), original)
+        self.assertEqual(self.git("config", "user.name", root=self.template), "Queue Fixture")
+        self.assertEqual(self.git("for-each-ref", "refs/heads/private", root=self.template), "")
+        self.assertNotEqual(self.git("rev-parse", "--path-format=absolute", "--git-common-dir"),
+                            self.git("rev-parse", "--path-format=absolute", "--git-common-dir", root=self.template))
 
     def test_failure_keeps_main_and_allows_next_request(self):
         bad = self.branch("a/fail", {"fail": "yes"})

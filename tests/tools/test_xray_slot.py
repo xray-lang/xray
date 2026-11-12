@@ -144,6 +144,68 @@ class Slots(unittest.TestCase):
         self.release("heavy2", second)
         self.release("build", build)
 
+    def test_waiting_reads_completed_history_once_and_refreshes_active_requests(self):
+        requests = self.root / "requests"
+        requests.mkdir()
+        for sequence in range(200):
+            save_json(requests / f"{sequence:020d}-completed.json", {
+                "kind": "heavy", "state": ("finished", "failed", "cancelled")[sequence % 3],
+                "sequence": sequence, "priority": 1})
+        lease = Lease(self.root, "heavy")
+        read_text = Path.read_text
+        reads = []
+
+        def observe_read(path, *args, **kwargs):
+            if path.parent == requests:
+                reads.append(path.name)
+            return read_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", observe_read):
+            self.assertEqual(lease._requests(), [])
+            self.assertEqual(len(reads), 200)
+            self.assertEqual(lease._requests(), [])
+            self.assertEqual(len(reads), 200)
+            lease.path = requests / "00000000000000000200-active.json"
+            record = {"kind": "heavy", "state": "queued", "sequence": 200, "priority": 0}
+            save_json(lease.path, record)
+            self.assertEqual(lease._requests(), [record])
+            self.assertEqual(len(reads), 201)
+            record["state"] = "running"
+            save_json(lease.path, record)
+            self.assertEqual(lease._requests(), [])
+            self.assertEqual(len(reads), 202)
+            record["state"] = "NEEDS_RECOVERY"
+            save_json(lease.path, record)
+            with self.assertRaisesRegex(RuntimeError, "requires recovery"):
+                lease._requests()
+            self.assertEqual(len(reads), 203)
+            record["state"] = "finished"
+            save_json(lease.path, record)
+            self.assertEqual(lease._requests(), [])
+            self.assertEqual(len(reads), 204)
+            self.assertEqual(lease._requests(), [])
+            self.assertEqual(len(reads), 204)
+
+    def test_waiting_keeps_unrecognized_intermediate_states_observable(self):
+        requests = self.root / "requests"
+        requests.mkdir()
+        lease = Lease(self.root, "heavy")
+        lease.path = requests / "00000000000000000001-transition.json"
+        record = {"kind": "heavy", "state": "recovering", "sequence": 1, "priority": 1}
+        save_json(lease.path, record)
+        self.assertEqual(lease._requests(), [])
+        record["state"] = "queued"
+        save_json(lease.path, record)
+        self.assertEqual(lease._requests(), [record])
+
+    def test_expired_request_cannot_acquire_an_available_slot(self):
+        lease = Lease(self.root, "heavy", timeout=0)
+        with self.assertRaisesRegex(TimeoutError, "Timed out waiting for heavy slot"):
+            with lease:
+                self.fail("an expired request acquired a slot")
+        self.assertIsNone(lease.slot)
+        self.assertEqual(self.rows()[0]["state"], "failed")
+
     def test_nonzero_child_exit_is_preserved(self):
         result = subprocess.run([sys.executable, str(SCRIPTS / "xray_slot.py"), "--kind", "build",
                                  "--root", str(self.root), "--", sys.executable, "-c", "raise SystemExit(7)"],

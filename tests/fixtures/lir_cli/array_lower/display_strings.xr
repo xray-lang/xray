@@ -1,0 +1,5 @@
+fn render(values:Array<string>)->string{return "${values}"}
+const values=["a\"b","c\\d","你好🌍","line\nend","A\0B"]
+const text=render(values)
+print(text)
+print("again=${values}")

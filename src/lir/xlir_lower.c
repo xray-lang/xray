@@ -799,7 +799,8 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
     if (op->op == XR_XIR_TO_STRING && xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 &&
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_F64 &&
-        xr_xir_operand_type(f, op->args[0]) != XR_XIR_STRING)
+        xr_xir_operand_type(f, op->args[0]) != XR_XIR_STRING &&
+        !lower_array_element(c, xr_xir_operand_type(f, op->args[0])))
         return lower_unsupported(c, "String conversion other than i64, f64 or String");
     if (op->op == XR_XIR_CONVERT_NUMBER) {
         XrLirType from = lower_type(c, xr_xir_operand_type(f, op->args[0]));

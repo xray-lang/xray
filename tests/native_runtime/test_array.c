@@ -367,10 +367,12 @@ static void allocation_sweep(XrtLocationOwner *owner, bool string) {
 #include "native_array_repeat_cases.h"
 #include "native_array_unsigned_cases.h"
 #include "native_array_ref_cases.h"
+#include "native_array_display_cases.h"
 
 int main(void) {
     XrtLocationOwner *owner = locations();
     array_reference_cases();
+    array_display_cases(owner);
     repeat_cases(owner);
     repeat_cross_root(owner);
     unsigned_retirement_cases(owner);
@@ -407,6 +409,7 @@ int main(void) {
     repeat_allocation_sweep(owner, true);
     unsigned_allocation_sweep(owner, false);
     unsigned_allocation_sweep(owner, true);
+    for (unsigned family = 0; family < 4; ++family) display_allocation_sweep(owner, family);
 #endif
     xrt_locations_release(owner);
     puts("Canonical Array COW, state/root retirement and structural admission passed");

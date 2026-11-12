@@ -1257,6 +1257,7 @@ static void test_module_capabilities(void) {
 
 #include "register_state_cases.h"
 #include "register_array_cases.h"
+#include "register_array_display_cases.h"
 #include "register_array_unsigned_cases.h"
 #include "register_array_ref_cases.h"
 
@@ -1269,6 +1270,7 @@ int main(int argc, char **argv) {
     test_raw_fixed_calls();
     test_raw_fixed_no_value_callee();
     test_raw_arrays();
+    test_raw_array_display();
     test_raw_array_repeat();
     test_raw_unsigned_arrays();
     test_raw_array_reference_lifetime();

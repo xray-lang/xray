@@ -54,6 +54,11 @@ XRAY_API int64_t xrt_array_i64_get(const XrtArray *, int64_t index, uint32_t sou
 XRAY_API XrtString *xrt_array_string_get(const XrtArray *, int64_t index, uint32_t source_id);
 XRAY_API uint8_t xrt_array_u8_get(const XrtArray *, int64_t index, uint32_t source_id);
 XRAY_API uint64_t xrt_array_u64_get(const XrtArray *, int64_t index, uint32_t source_id);
+/* Display borrows the exact Array family and returns one current String owner. */
+XRAY_API XrtString *xrt_array_i64_display(const XrtArray *, uint32_t source_id);
+XRAY_API XrtString *xrt_array_string_display(const XrtArray *, uint32_t source_id);
+XRAY_API XrtString *xrt_array_u8_display(const XrtArray *, uint32_t source_id);
+XRAY_API XrtString *xrt_array_u64_display(const XrtArray *, uint32_t source_id);
 /* The binding is loaded after all arguments have been evaluated. A failure
  * preserves that current binding; RHS effects already performed remain. */
 XRAY_API void xrt_array_i64_set(XrtArray **, int64_t index, int64_t value, uint32_t source_id);

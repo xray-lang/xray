@@ -45,7 +45,7 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         XrRbcArrayAccess access = f->array_accesses[i];
         if (!rbc_array_kind(access.kind) || access.first > f->array_operand_count ||
             access.count > f->array_operand_count - access.first ||
-            (unsigned)access.operation > XR_RBC_ARRAY_REF_PUSH) return false;
+            (unsigned)access.operation > XR_RBC_ARRAY_DISPLAY) return false;
         uint32_t count = access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_PUSH ||
             access.operation == XR_RBC_ARRAY_CELL_WRITE || access.operation == XR_RBC_ARRAY_REPEAT ||
             access.operation == XR_RBC_ARRAY_REF_WRITE || access.operation == XR_RBC_ARRAY_REF_PUSH ? 2u :
@@ -55,11 +55,12 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
             access.operation == XR_RBC_ARRAY_GET || access.operation == XR_RBC_ARRAY_RETAIN ||
             access.operation == XR_RBC_ARRAY_TAKE || access.operation == XR_RBC_ARRAY_CELL_NEW ||
             access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_BORROW ||
-            access.operation == XR_RBC_ARRAY_REF_READ;
+            access.operation == XR_RBC_ARRAY_REF_READ || access.operation == XR_RBC_ARRAY_DISPLAY;
         XrRbcRegisterKind element = access.kind == XR_RBC_ARRAY_STRING ? XR_RBC_STRING : XR_RBC_BITS;
         if (result) {
             if (!rbc_array_location_valid(f, access.result)) return false;
-            XrRbcRegisterKind expected = access.operation == XR_RBC_ARRAY_LEN ? XR_RBC_BITS :
+            XrRbcRegisterKind expected = access.operation == XR_RBC_ARRAY_DISPLAY ? XR_RBC_STRING :
+                access.operation == XR_RBC_ARRAY_LEN ? XR_RBC_BITS :
                 access.operation == XR_RBC_ARRAY_GET ? element : access.operation == XR_RBC_ARRAY_CELL_NEW ?
                 xr_rbc_array_cell_at(xr_rbc_array_family(access.kind)) : access.operation == XR_RBC_ARRAY_BORROW ?
                 xr_rbc_array_ref_at(xr_rbc_array_family(access.kind)) : access.kind;

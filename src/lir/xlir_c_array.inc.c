@@ -69,7 +69,8 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
     switch (shape->operation) {
     case XR_LIR_ARRAY_OP_NEW: case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_GET:
-    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: case XR_LIR_ARRAY_OP_REPEAT: break;
+    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: case XR_LIR_ARRAY_OP_REPEAT:
+    case XR_LIR_ARRAY_OP_DISPLAY: break;
     default:
         c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
         return;
@@ -108,7 +109,8 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     if (shape->operation == XR_LIR_ARRAY_OP_LEN) c_text(c, "xrt_array_length(");
     else c_format(c, "xrt_array_%s%s_%s(", receiver == XR_LIR_ARRAY_REF ? "ref_" : "", family,
         shape->operation == XR_LIR_ARRAY_OP_GET ? "get" :
-        shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : shape->operation == XR_LIR_ARRAY_OP_PUSH ? "push" : "repeat");
+        shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : shape->operation == XR_LIR_ARRAY_OP_PUSH ? "push" :
+        shape->operation == XR_LIR_ARRAY_OP_REPEAT ? "repeat" : "display");
     for (uint32_t p = 0; p < v->operand_count; ++p) {
         if (p) c_text(c, ", ");
         c_value(c, v->operands[p]);

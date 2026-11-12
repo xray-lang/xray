@@ -14,6 +14,7 @@
 #include "xnative_array.h"
 #include "xnative_string.h"
 #include "xir/xxir_array.h"
+#include "xir/xxir_format.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
 #include "base/xhash.h"
@@ -355,6 +356,28 @@ XRAY_API int64_t xrt_array_i64_get(const XrtArray *array, int64_t index, uint32_
 XRAY_API XrtString *xrt_array_string_get(const XrtArray *array, int64_t index, uint32_t source_id) {
     (void)array_get(array, index, XRT_ARRAY_STRING, source_id);
     return xrt_string_publish_pending(source_id);
+}
+
+static XrtString *array_display(const XrtArray *array, XrtArrayElement element, uint32_t source_id) {
+    XrtValueRoot *root = xrt_value_root_current(source_id);
+    XR_CHECK(!root->pending.type && !root->pending.payload, "Array display owns a distinct pending result");
+    XrXirValueAdmission admission = array_admission(root, source_id);
+    XrXirValue value = array_argument(root, array, &admission, element, source_id);
+    XrXirValueStatus status = xr_xir_value_display_text(&value, &admission, &root->pending);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+    return xrt_string_publish_pending(source_id);
+}
+XRAY_API XrtString *xrt_array_i64_display(const XrtArray *array, uint32_t source_id) {
+    return array_display(array, XRT_ARRAY_I64, source_id);
+}
+XRAY_API XrtString *xrt_array_string_display(const XrtArray *array, uint32_t source_id) {
+    return array_display(array, XRT_ARRAY_STRING, source_id);
+}
+XRAY_API XrtString *xrt_array_u8_display(const XrtArray *array, uint32_t source_id) {
+    return array_display(array, XRT_ARRAY_U8, source_id);
+}
+XRAY_API XrtString *xrt_array_u64_display(const XrtArray *array, uint32_t source_id) {
+    return array_display(array, XRT_ARRAY_U64, source_id);
 }
 
 static void array_mutate(XrtArray **binding, int64_t index, XrXirValue element, bool push, uint32_t source_id) {

@@ -26,7 +26,8 @@ def main() -> None:
              "panic_bounds", "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
-             "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit")
+             "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
+             "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))
@@ -38,6 +39,8 @@ def main() -> None:
     work = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
     fixtures = root / "tests/fixtures/lir_cli/array_lower"
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
+    if os.name == "nt":
+        environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     records = []
     failures = []
 

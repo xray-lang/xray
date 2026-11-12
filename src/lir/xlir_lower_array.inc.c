@@ -66,10 +66,18 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         case XR_XIR_ARRAY_GET: operation = XR_LIR_ARRAY_OP_GET; break;
         case XR_XIR_ARRAY_SET: operation = XR_LIR_ARRAY_OP_SET; break;
         case XR_XIR_ARRAY_PUSH: operation = XR_LIR_ARRAY_OP_PUSH; break;
+        case XR_XIR_TO_STRING:
+            if (!lower_array_element(c, xr_xir_operand_type(f->source, op->args[0]))) {
+                *handled = false;
+                return true;
+            }
+            operation = XR_LIR_ARRAY_OP_DISPLAY;
+            break;
         default: *handled = false; return true;
     }
     bool grouped = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET;
-    uint32_t count = grouped ? op->args[1] : op->op == XR_XIR_ARRAY_LEN ? 1u : 2u;
+    uint32_t count = grouped ? op->args[1] :
+        operation == XR_LIR_ARRAY_OP_LEN || operation == XR_LIR_ARRAY_OP_DISPLAY ? 1u : 2u;
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     bool good = true;
