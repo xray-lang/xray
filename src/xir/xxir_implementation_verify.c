@@ -78,7 +78,7 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     XrXirStatus status = implementation_identity_arguments(full_count,budget,&arguments);
     for (uint32_t a = 0; status == XR_XIR_OK && a < signature->parameter_count; ++a) {
         if (signature->parameters[a].mode ||
-            signature->parameters[a].escaping != xr_xir_function_parameter_escaping(f,a+1)) {
+            signature->parameters[a].escaping != (uint32_t)xr_xir_function_parameter_escaping(f,a+1)) {
             status = XR_XIR_BAD_TYPE;
             break;
         }

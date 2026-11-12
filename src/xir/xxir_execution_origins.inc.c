@@ -404,9 +404,9 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 if (!roots->alias[a].callable_origin) continue;
                 uint32_t source = roots->alias[a].source;
                 EffectCheckFunction source_function = roots->function[roots->node[source].function];
-                uint32_t value = source - source_function.first;
+                uint32_t source_value = source - source_function.first;
                 execution_origin_push(&walk, (ExecutionOrigin){roots->node[source].function,
-                    value, origin.environment, value >= source_function.values, origin.entry_context, origin.storable});
+                    source_value, origin.environment, source_value >= source_function.values, origin.entry_context, origin.storable});
                 predecessor = true;
             }
         }

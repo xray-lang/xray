@@ -271,7 +271,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
             (!xr_xir_callable_signature(module->types,callee->parameters[p+op->args[1]]) &&
              xr_xir_callable_signature(module->types,signature->parameters[p].type) &&
              !xr_xir_type_is_c_callable(module->types,signature->parameters[p].type));
-        if(signature->parameters[p].escaping!=escaping ||
+        if(signature->parameters[p].escaping!=(uint32_t)escaping ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,
             callee->parameters[p+op->args[1]],callee->consume_parameters,callee->consume_parameter_count,p+op->args[1]))
             return XR_XIR_BAD_TYPE;

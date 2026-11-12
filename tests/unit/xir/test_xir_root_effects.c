@@ -544,10 +544,10 @@ static void suspension_parameter_equations(void) {
         if (roots->pending[p].function != 6) continue;
         XirExecutionSite site = {0};
         CHECK(xir_execution_site(roots, XIR_EXECUTION_PENDING, p, &site) == XR_XIR_OK);
-        uint32_t remainder = 0;
+        uint32_t site_remainder = 0;
         CHECK(xir_execution_resolve_site(roots, &site, XIR_EXECUTION_CURRENT_ENVIRONMENT,
-            execution_value_oracle, &captures, &complete, &remainder) == XR_XIR_OK);
-        CHECK(!complete && !captures && (remainder & XIR_EXECUTION_REMAINDER_PARAMETER));
+            execution_value_oracle, &captures, &complete, &site_remainder) == XR_XIR_OK);
+        CHECK(!complete && !captures && (site_remainder & XIR_EXECUTION_REMAINDER_PARAMETER));
     }
     memset(rows, 0xCE, sizeof(rows));
     memset(functions, 0xCE, sizeof(functions));

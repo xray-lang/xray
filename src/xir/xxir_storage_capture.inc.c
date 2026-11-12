@@ -203,7 +203,7 @@ static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSit
         XirExecutionArgument formal = {0};
         status = xir_execution_argument(flow->execution, capture, 0, &formal);
         if (status != XR_XIR_OK) return status;
-        XirStorageReference local, proxy;
+        XirStorageReference local, proxy = {0};
         status = storage_local_reference(flow, walk->point.function,
             (XirStorageReference){formal.function, formal.value, formal.environment}, false, &local);
         if (status == XR_XIR_OK) status = storage_formal_footprint(flow, &walk->point, local.value, local.value, false, &proxy);

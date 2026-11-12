@@ -1926,8 +1926,8 @@ static XrXirStatus effect_check_link(EffectCheckBuild *build) {
         if (pending->kind == EFFECT_CHECK_HIGHER_ORDER && !pending->root_linked) {
             const XrXirTypeNode *type = xr_xir_callable_signature(effect_check_types_read(build), pending->receiver_type);
             bool higher = false;
-            for (uint32_t p = 0; type && p < type->parameter_count; ++p)
-                higher |= xr_xir_type_is_callable(effect_check_types_read(build), type->parameters[p].type);
+            for (uint32_t parameter = 0; type && parameter < type->parameter_count; ++parameter)
+                higher |= xr_xir_type_is_callable(effect_check_types_read(build), type->parameters[parameter].type);
             if (type && !higher) {
                 if (!effect_check_alias(build, pending->node, pending->receiver)) goto done;
                 roots->alias[roots->node[pending->node].aliases].instruction = pending->instruction;

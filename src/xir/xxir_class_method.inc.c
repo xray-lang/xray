@@ -160,7 +160,7 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
         ((signature->flags&XR_XIR_CALLABLE_NO_SUSPEND) && !(domain.declarations->functions[slot].promises&XR_XIR_FUNCTION_NO_SUSPEND)))return XR_XIR_BAD_TYPE;
     for(uint32_t p=0;p<signature->parameter_count;++p)
         if(!xr_xir_callable_parameter_storage_valid(module->types,&signature->parameters[p]) ||
-            signature->parameters[p].escaping!=xr_xir_parameter_escaping(anchor.escaping_parameters,anchor.escaping_parameter_count,p+1) ||
+            signature->parameters[p].escaping!=(uint32_t)xr_xir_parameter_escaping(anchor.escaping_parameters,anchor.escaping_parameter_count,p+1) ||
             signature->parameters[p].type!=anchor.parameters[p+1] ||
             signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,anchor.parameters[p+1],
                 anchor.consume_parameters,anchor.consume_parameter_count,p+1))return XR_XIR_BAD_TYPE;

@@ -385,7 +385,7 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
         witness->callee = UINT32_MAX;
         witness->instruction = UINT32_MAX;
         witness->distance = reason->suspend_distance[bit];
-        if (!(effect_check_suspend_bits(roots, node)[0] & (1u << bit))) {
+        if (!(effect_check_suspend_bits(roots, node)[0] & (UINT64_C(1) << bit))) {
             witness->cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             witness->distance = 0;
             continue;
@@ -426,7 +426,7 @@ XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
     if (!mask) return XR_XIR_OK;
     uint32_t bit = mask & 2 ? 1 : 0;
     const uint64_t *bits = effect_check_suspend_bits(roots, node);
-    if (!(bits[0] & (1u << bit))) {
+    if (!(bits[0] & (UINT64_C(1) << bit))) {
         const EffectCheckFunction *body = &roots->function[function];
         for (uint64_t p = 0; p < (uint64_t)body->parameters * 2; ++p) {
             if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
