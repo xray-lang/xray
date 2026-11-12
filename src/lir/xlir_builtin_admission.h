@@ -10,6 +10,7 @@
 #define XLIR_BUILTIN_ADMISSION_H
 #include "xlir_array.h"
 #include "xlir_state.h"
+#include "xlir_types.h"
 
 static inline bool lir_builtin_signature(XrLirType result, const XrLirType *parameters,
     uint32_t count) {
@@ -22,6 +23,8 @@ static inline bool lir_builtin_signature(XrLirType result, const XrLirType *para
 /* An unused signature or module slot still belongs to the received artifact.
  * A constructed ordinal must never reach a builtin-only layout or emitter. */
 static inline bool lir_module_has_builtin_types(const XrLirModule *module) {
+    if (!xr_lir_module_is_readable(module)) return false;
+    if (!xr_lir_constructed_type_count(module)) return true;
     for (uint32_t i = 0; i < xr_lir_intrinsic_count(module); ++i) {
         XrLirIntrinsic signature;
         if (xr_lir_intrinsic_at(module, i, &signature) != XR_LIR_OK ||
