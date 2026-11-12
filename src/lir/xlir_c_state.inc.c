@@ -25,7 +25,7 @@ static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
 
 static void c_state_layout(LirC *c) {
     static const char *const names[] = {
-        "XRT_MODULE_UNIT", "XRT_MODULE_BOOL",
+        "XRT_MODULE_UNIT", "XRT_MODULE_BOOL", "XRT_MODULE_RUNE",
         "XRT_MODULE_I8", "XRT_MODULE_I16", "XRT_MODULE_I32", "XRT_MODULE_I64",
         "XRT_MODULE_U8", "XRT_MODULE_U16", "XRT_MODULE_U32", "XRT_MODULE_U64",
         "XRT_MODULE_F32", "XRT_MODULE_F64", "XRT_MODULE_STRING",
