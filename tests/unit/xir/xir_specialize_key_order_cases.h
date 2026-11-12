@@ -133,13 +133,14 @@ static void spec_key_source_controls(void) {
     const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *borrowed = NULL, *consumed = NULL;
     CHECK(xr_xir_compile_lower(instance,&target,NULL,&borrowed,&diagnostic) == XR_XIR_OK);
-    CHECK(instance && borrowed->program_final &&
-        xir_effects_control_summary(borrowed->program_final));
+    CHECK(instance && borrowed->program_final);
+    XrXirEffectFacts borrowed_facts = xr_xir_effects_read(borrowed->program_final,run);
+    CHECK(borrowed_facts.status == XR_XIR_OK &&
+        borrowed_facts.control.suspend == XR_XIR_EFFECT_NONE &&
+        borrowed_facts.control.throws == XR_XIR_EFFECT_NONE);
     CHECK(xr_xir_compile_lower_take(&instance,&target,NULL,&consumed,&diagnostic) == XR_XIR_OK);
     CHECK(!instance && consumed->program_final &&
-        xir_effects_control_summary(consumed->program_final) &&
-        xir_effects_control_summary(borrowed->program_final) !=
-            xir_effects_control_summary(consumed->program_final));
+        borrowed->program_final != consumed->program_final);
     xr_xir_compile_artifact_free(borrowed);
     XrXirEffectFacts facts = xr_xir_effects_read(consumed->program_final,run);
     CHECK(facts.status == XR_XIR_OK && facts.control.suspend == XR_XIR_EFFECT_NONE &&
