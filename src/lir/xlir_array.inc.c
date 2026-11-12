@@ -154,11 +154,11 @@ XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *m, XrLirType element
     return *id ? XR_LIR_OK : XR_LIR_UNSUPPORTED;
 }
 
-XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLirModule **output) {
+static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra) {
     enum { operations = XR_LIR_ARRAY_OP_REPEAT, base_catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations,
         catalog = base_catalog + XR_LIR_ARRAY_FAMILY_COUNT * 2 };
     uint32_t count = extra ? extra->count : 0;
-    if (!output || *output || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
+    if (!m || m->intrinsic_count || m->function_count || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
         (size_t)count + catalog > SIZE_MAX / sizeof(XrLirIntrinsic))
         return XR_LIR_INVALID_ARGUMENT;
     uint32_t total = count + catalog;
@@ -208,11 +208,25 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLir
             operation == XR_LIR_ARRAY_OP_NEW, operation};
     }
     XrLirRegistry registry = {entries, total};
-    XrLirModule *m = NULL;
-    XrLirStatus status = xr_lir_module_create(&registry, &m);
+    XrLirStatus status = xr_lir_set_registry(m, &registry);
     for (uint32_t i = 0; status == XR_LIR_OK && i < catalog; ++i)
         status = xr_lir_set_array_intrinsic(m, &descriptors[i]);
     xr_free(entries); xr_free(used);
+    return status;
+}
+
+XR_FUNC XrLirStatus xr_lir_array_catalog_install(XrLirModule *m) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    status = lir_array_catalog(m, NULL);
+    return status == XR_LIR_OK ? status : lir_fail(m, status);
+}
+
+XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *extra, XrLirModule **output) {
+    if (!output || *output) return XR_LIR_INVALID_ARGUMENT;
+    XrLirModule *m = NULL;
+    XrLirStatus status = xr_lir_module_create(NULL, &m);
+    if (status == XR_LIR_OK) status = lir_array_catalog(m, extra);
     if (status != XR_LIR_OK) { xr_lir_module_destroy(m); return status; }
     *output = m;
     return XR_LIR_OK;

@@ -17,6 +17,7 @@
 #include "xlir_verify.h"
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
+#include "xlir_types.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -50,9 +51,11 @@ static XrLirStatus rebuild_registry(Rebuild *c) {
     }
     if (status == XR_LIR_OK) {
         XrLirRegistry registry = {entries, count};
-        status = xr_lir_module_create(&registry, &c->output);
+        status = xr_lir_module_create(NULL, &c->output);
+        if (status == XR_LIR_OK) status = xr_lir_copy_types(c->output, c->input);
+        if (status == XR_LIR_OK) status = xr_lir_set_registry(c->output, &registry);
     }
-    // module_create copied parameter slices while their source was still live.
+    // The registry copied parameter slices while their source was still live.
     xr_free(entries);
     if (status == XR_LIR_OK) status = lir_copy_array_registry(c->input, c->output);
     if (status == XR_LIR_OK) {

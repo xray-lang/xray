@@ -36,7 +36,7 @@ static XrLirStatus lir_state_layout_verify(const XrLirModule *m, XrLirDiagnostic
             return xr_lir_internal_error(d, "absent state layout has residual storage", 0, 0, 0, NULL);
         return XR_LIR_OK;
     }
-    if (!xr_lir_internal_state_layout_valid(layout) || !m->state_entry ||
+    if (!xr_lir_internal_state_layout_valid(m, layout) || !m->state_entry ||
         m->state_entry > m->function_count)
         return xr_lir_internal_error(d, "state layout or injected entry is invalid", 0, 0, 0, NULL);
     if (sizeof(uint32_t) > SIZE_MAX / layout->module_count) return XR_LIR_OUT_OF_MEMORY;

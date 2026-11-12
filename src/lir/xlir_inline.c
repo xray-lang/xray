@@ -15,6 +15,7 @@
 #include "xlir_verify.h"
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
+#include "xlir_types.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -185,7 +186,9 @@ static XrLirStatus inline_registry(Inliner *c) {
     if (count && !entries) return XR_LIR_OUT_OF_MEMORY;
     for (uint32_t i = 0; i < count; ++i) xr_lir_intrinsic_at(c->input, i, &entries[i]);
     XrLirRegistry registry = {entries, count};
-    XrLirStatus status = xr_lir_module_create(&registry, &c->output);
+    XrLirStatus status = xr_lir_module_create(NULL, &c->output);
+    if (status == XR_LIR_OK) status = xr_lir_copy_types(c->output, c->input);
+    if (status == XR_LIR_OK) status = xr_lir_set_registry(c->output, &registry);
     xr_free(entries);
     if (status == XR_LIR_OK) status = lir_copy_array_registry(c->input, c->output);
     if (status == XR_LIR_OK) {

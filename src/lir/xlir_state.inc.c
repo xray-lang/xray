@@ -10,7 +10,7 @@
  *   Layout storage is committed only after all input arrays are copied.
  *   Reference shapes belong to SSA values inside the same module owner.
  */
-XR_FUNC bool xr_lir_internal_state_payload(XrLirType type, uint32_t *size, uint32_t *alignment) {
+XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type, uint32_t *size, uint32_t *alignment) {
     switch (type) {
     case XR_LIR_UNIT: *size = 0; *alignment = 1; return true;
     case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_U8: *size = 1; *alignment = 1; return true;
@@ -19,7 +19,15 @@ XR_FUNC bool xr_lir_internal_state_payload(XrLirType type, uint32_t *size, uint3
     case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: *size = 8; *alignment = 8; return true;
     case XR_LIR_STRING: case XR_LIR_ARRAY:
         *size = sizeof(void *); *alignment = _Alignof(void *); return true;
-    default: return false;
+    default: {
+        XrLirTypeView view;
+        XrLirTypeLayout layout;
+        if (xr_lir_type_view(m, type, &view) != XR_LIR_OK || view.kind != XR_LIR_TYPE_FIXED_ARRAY ||
+            xr_lir_type_layout(m, type, &layout) != XR_LIR_OK || layout.size > UINT32_MAX) return false;
+        *size = (uint32_t)layout.size;
+        *alignment = layout.alignment;
+        return true;
+    }
     }
 }
 
@@ -30,7 +38,7 @@ static void lir_state_layout_free(XrLirStateLayout *layout) {
     *layout = (XrLirStateLayout){0};
 }
 
-static bool lir_state_layout_shape(const XrLirStateLayout *layout) {
+static bool lir_state_layout_shape(const XrLirModule *m, const XrLirStateLayout *layout) {
     if (!layout || !layout->module_count || !layout->modules ||
         (layout->dependency_count != 0) != (layout->dependencies != NULL) ||
         (layout->slot_count != 0) != (layout->slots != NULL) ||
@@ -56,7 +64,7 @@ static bool lir_state_layout_shape(const XrLirStateLayout *layout) {
         if (slot->module >= layout->module_count ||
             (slot->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(slot->array_element) :
                 slot->array_element != XR_LIR_TYPE_INVALID) ||
-            !xr_lir_internal_state_payload(slot->payload, &size, &alignment) ||
+            !xr_lir_internal_state_payload(m, slot->payload, &size, &alignment) ||
             slot->size != size || slot->alignment != alignment ||
             alignment > layout->payload_alignment || slot->offset % alignment ||
             slot->offset < end || slot->offset > layout->payload_size ||
@@ -66,14 +74,14 @@ static bool lir_state_layout_shape(const XrLirStateLayout *layout) {
     return true;
 }
 
-XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirStateLayout *layout) {
-    return lir_state_layout_shape(layout);
+XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirModule *m, const XrLirStateLayout *layout) {
+    return lir_state_layout_shape(m, layout);
 }
 
 XR_FUNC XrLirStatus xr_lir_set_state_layout(XrLirModule *m, const XrLirStateLayout *input) {
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
-    if (m->state_layout_set || !lir_state_layout_shape(input))
+    if (m->state_layout_set || !lir_state_layout_shape(m, input))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirStateLayout copy = *input;
     copy.modules = lir_copy(m, input->modules, input->module_count, sizeof(*copy.modules));
@@ -113,7 +121,7 @@ XR_FUNC XrLirStatus xr_lir_set_state_reference(XrLirModule *m, XrLirValue value,
     if (!f || !value.id || value.id > f->value_count || !shape ||
         (shape->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape->array_element) :
             shape->array_element != XR_LIR_TYPE_INVALID) ||
-        !xr_lir_internal_state_payload(shape->payload, &size, &alignment))
+        !xr_lir_internal_state_payload(m, shape->payload, &size, &alignment))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirValueData *v = &f->values[value.id - 1];
     if (!m->state_layout_set || v->type != XR_LIR_STATE_REF || !v->parameter || !v->block ||

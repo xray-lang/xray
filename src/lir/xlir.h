@@ -26,7 +26,8 @@ typedef enum XrLirStatus {
     XR_LIR_VERIFY_ERROR,
     XR_LIR_OUTPUT_ERROR
 } XrLirStatus;
-typedef enum XrLirType {
+typedef uint32_t XrLirType;
+enum XrLirBuiltinType {
     XR_LIR_TYPE_INVALID,
     XR_LIR_UNIT,
     XR_LIR_I1,
@@ -50,7 +51,7 @@ typedef enum XrLirType {
     XR_LIR_ARRAY_CELL,
     XR_LIR_ARRAY_REF,
     XR_LIR_TYPE_COUNT
-} XrLirType;
+};
 
 /* String and Array instruction results own references. Ordinary call parameters borrow
  * through that call; a language binding explicitly retains its parameter.
@@ -183,6 +184,7 @@ XR_FUNC XrLirStatus xr_lir_block_view(const XrLirModule *, XrLirBlock, XrLirBloc
 XR_FUNC XrLirStatus xr_lir_instruction_view(const XrLirModule *, XrLirBlock, uint32_t ordinal,
                                             XrLirInstructionView *);
 XR_FUNC XrLirStatus xr_lir_value_type(const XrLirModule *, XrLirValue, XrLirType *);
+/* Builtin names are context-free; constructed shapes use the module type query. */
 XR_FUNC const char *xr_lir_type_name(XrLirType type);
 XR_FUNC const char *xr_lir_op_name(XrLirOp op);
 

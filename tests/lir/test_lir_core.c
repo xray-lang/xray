@@ -922,7 +922,11 @@ static void frame_string_cells(void) {
 #include "lir_array_block_cell_cases.h"
 #include "lir_array_cell_cfg_cases.h"
 #include "lir_array_loop_owner_cases.h"
+#include "lir_type_pool_cases.h"
 int main(void) {
+    type_pool_queries_and_receivers();
+    type_pool_rejections();
+    type_pool_calls_and_state();
     array_block_cells();
     array_cell_cfg();
     array_loop_owners();

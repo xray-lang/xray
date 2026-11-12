@@ -15,6 +15,7 @@
 #include "xlir_verify.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xhash.h"
 #include <string.h>
 
 static void lir_status_diagnostic(XrLirDiagnostic *diagnostic, XrLirStatus status) {
@@ -107,11 +108,11 @@ static void *lir_copy(XrLirModule *m, const void *source, size_t count, size_t s
     return memory;
 }
 
-static bool lir_types_valid(const XrLirType *types, uint32_t count) {
+static bool lir_types_valid(const XrLirModule *m, const XrLirType *types, uint32_t count) {
     if (count && !types)
         return false;
     for (uint32_t i = 0; i < count; ++i)
-        if (!xr_lir_internal_type_valid(types[i], false))
+        if (!xr_lir_internal_type_valid(m, types[i], false))
             return false;
     return true;
 }
@@ -129,6 +130,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
     return f;
 }
 
+#include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
 
@@ -168,6 +170,8 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     xr_free(m->literals);
     xr_free(m->functions);
     xr_free(m->intrinsics);
+    xr_free(m->types);
+    xr_free(m->type_index);
     xr_free(m->failure_path);
     lir_state_layout_free(&m->state_layout);
     xr_free(m);
@@ -186,8 +190,8 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
     for (uint32_t i = 0; i < registry->count; ++i) {
         XrLirIntrinsic entry = registry->entries[i];
         if (!entry.id || !entry.scalar_sync ||
-            !lir_types_valid(entry.parameters, entry.parameter_count) ||
-            !xr_lir_internal_type_valid(entry.result, true))
+            !lir_types_valid(m, entry.parameters, entry.parameter_count) ||
+            !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
         if (entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF)
             return XR_LIR_UNSUPPORTED;
@@ -205,6 +209,14 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
         m->intrinsics[i] = entry;
     }
     return XR_LIR_OK;
+}
+
+XR_FUNC XrLirStatus xr_lir_set_registry(XrLirModule *m, const XrLirRegistry *registry) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    if (m->intrinsic_count || m->function_count) return lir_fail(m, XR_LIR_INVALID_STATE);
+    status = lir_registry_copy(m, registry);
+    return status == XR_LIR_OK ? status : lir_fail(m, status);
 }
 
 XR_FUNC XrLirStatus xr_lir_module_create(const XrLirRegistry *registry, XrLirModule **output) {
@@ -274,11 +286,11 @@ static const char *clock_external_name(XrLirExternKind kind) {
     }
 }
 
-static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
+static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpec *spec) {
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
-        !lir_types_valid(spec->parameters, spec->parameter_count) ||
-        !xr_lir_internal_type_valid(spec->result, true) || spec->result == XR_LIR_I64_CELL ||
+        !lir_types_valid(m, spec->parameters, spec->parameter_count) ||
+        !xr_lir_internal_type_valid(m, spec->result, true) || spec->result == XR_LIR_I64_CELL ||
         spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
         spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
         spec->result == XR_LIR_ARRAY_REF)
@@ -340,7 +352,7 @@ XR_FUNC XrLirStatus xr_lir_declare_function(XrLirModule *m, const XrLirFunctionS
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK)
         return status;
-    if (!output || !lir_function_spec_valid(spec))
+    if (!output || !lir_function_spec_valid(m, spec))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     for (uint32_t i = 0; i < m->function_count; ++i)
         if (m->functions[i].name_length == spec->name_length &&
@@ -396,7 +408,7 @@ XR_FUNC XrLirStatus xr_lir_add_block(XrLirModule *m, XrLirFunction handle, const
     if (status != XR_LIR_OK)
         return status;
     XrLirFunctionData *f = lir_function(m, handle);
-    if (!output || !f || !f->defined || !lir_types_valid(types, count))
+    if (!output || !f || !f->defined || !lir_types_valid(m, types, count))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (count > UINT32_MAX - f->value_count)
         return lir_fail(m, XR_LIR_UNSUPPORTED);

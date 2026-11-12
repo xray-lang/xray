@@ -437,7 +437,7 @@ static bool lower_state_layout(Lower *c) {
         }
         XrLirStateSlot physical = {.module = slot->module, .payload = lower_type(c, type),
             .mutable = slot->mutable != 0, .array_element = lower_array_element(c, type)};
-        if (!xr_lir_internal_state_payload(physical.payload, &physical.size, &physical.alignment))
+        if (!xr_lir_internal_state_payload(c->module, physical.payload, &physical.size, &physical.alignment))
             return lower_unsupported(c, "module slot payload type");
         uint64_t padding = (physical.alignment - end % physical.alignment) % physical.alignment;
         if (end > UINT64_MAX - padding || end + padding > UINT64_MAX - physical.size) {
@@ -1893,8 +1893,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (d->entry_function >= source->function_count ||
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
+    if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
     if (!lower_modules(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
         lower_modules_free(&c);
+        xr_lir_module_destroy(c.module);
         return c.status;
     }
     c.functions = lower_alloc(&c, source->function_count, sizeof(*c.functions));
@@ -1910,9 +1912,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         good = lower_local_pure(&c, selected);
     for (uint32_t s = 0; s < c.state_layout.slot_count; ++s)
         c.arrays |= c.state_layout.slots[s].payload == XR_LIR_ARRAY;
-    if (good)
-        good = lower_build(&c, c.arrays ? xr_lir_array_module_create(NULL, &c.module) :
-            xr_lir_module_create(NULL, &c.module));
+    if (good && c.arrays)
+        good = lower_build(&c, xr_lir_array_catalog_install(c.module));
     if (good && c.state_layout.slot_count)
         good = lower_build(&c, xr_lir_set_state_layout(c.module, &c.state_layout));
     if (good && c.prints) {

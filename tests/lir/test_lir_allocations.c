@@ -104,7 +104,66 @@ static void literal_allocation_failure(unsigned which) {
     xr_lir_module_destroy(module);REQUIRE(!live_allocations && !live_bytes);
 }
 
+static XrLirStatus type_pool_build(XrLirModule **module) {
+    XrLirStatus status = xr_lir_module_create(NULL, module);
+    for (uint32_t n = 1; status == XR_LIR_OK && n <= 24; ++n) {
+        XrLirType output = XR_LIR_I64;
+        status = xr_lir_fixed_array_type(*module, XR_LIR_U8, n, &output);
+        if (status != XR_LIR_OK) REQUIRE(output == XR_LIR_I64);
+    }
+    return status;
+}
+
+static void type_pool_failures(void) {
+    fail_at = SIZE_MAX;
+    allocation_index = 0;
+    XrLirModule *source = NULL;
+    REQUIRE(type_pool_build(&source) == XR_LIR_OK);
+    size_t construction_sites = allocation_index;
+    REQUIRE(xr_lir_module_finish(source, NULL) == XR_LIR_OK);
+    xr_lir_module_destroy(source);
+    REQUIRE(!live_allocations && !live_bytes);
+    for (size_t point = 0; point < construction_sites; ++point) {
+        allocation_index = 0;
+        fail_at = point;
+        XrLirModule *module = NULL;
+        REQUIRE(type_pool_build(&module) == XR_LIR_OUT_OF_MEMORY);
+        if (module) REQUIRE(xr_lir_module_finish(module, NULL) == XR_LIR_OUT_OF_MEMORY);
+        xr_lir_module_destroy(module);
+        REQUIRE(!live_allocations && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    source = NULL;
+    REQUIRE(type_pool_build(&source) == XR_LIR_OK);
+    REQUIRE(xr_lir_module_finish(source, NULL) == XR_LIR_OK);
+    size_t retained_count = live_allocations, retained_bytes = live_bytes;
+    allocation_index = 0;
+    XrLirModule *copy = NULL;
+    REQUIRE(xr_lir_module_create(NULL, &copy) == XR_LIR_OK);
+    REQUIRE(xr_lir_copy_types(copy, source) == XR_LIR_OK);
+    size_t receiving_sites = allocation_index;
+    xr_lir_module_destroy(copy);
+    for (size_t point = 0; point < receiving_sites; ++point) {
+        fail_at = point;
+        allocation_index = 0;
+        copy = NULL;
+        XrLirStatus status = xr_lir_module_create(NULL, &copy);
+        if (status == XR_LIR_OK) status = xr_lir_copy_types(copy, source);
+        REQUIRE(status == XR_LIR_OUT_OF_MEMORY);
+        if (copy) REQUIRE(xr_lir_module_finish(copy, NULL) == XR_LIR_OUT_OF_MEMORY);
+        xr_lir_module_destroy(copy);
+        REQUIRE(live_allocations == retained_count && live_bytes == retained_bytes);
+    }
+    fail_at = SIZE_MAX;
+    REQUIRE(xr_lir_verify(source, NULL) == XR_LIR_OK);
+    xr_lir_module_destroy(source);
+    REQUIRE(!live_allocations && !live_bytes);
+    printf("type pool construction/receiving failures covered %zu/%zu allocation sites\n",
+        construction_sites, receiving_sites);
+}
+
 int main(void) {
+    type_pool_failures();
     creation_failure(0);
     creation_failure(2);
     instruction_failure();

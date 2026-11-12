@@ -41,8 +41,9 @@ XR_FUNC const char *xr_lir_type_name(XrLirType type) {
 XR_FUNC const char *xr_lir_op_name(XrLirOp op) {
     return op > XR_LIR_OP_INVALID && op < XR_LIR_OP_COUNT ? lir_op_names[op] : "invalid";
 }
-XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit) {
-    return type > XR_LIR_TYPE_INVALID && type < XR_LIR_TYPE_COUNT && (unit || type != XR_LIR_UNIT);
+XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bool unit) {
+    if (type < XR_LIR_TYPE_COUNT) return type > XR_LIR_TYPE_INVALID && (unit || type != XR_LIR_UNIT);
+    return m && m->types && m->type_count <= m->type_capacity && type - XR_LIR_TYPE_COUNT < m->type_count;
 }
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET;
@@ -253,7 +254,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     const XrLirFunctionData *f = &m->functions[function - 1];
     const char *message = "instruction type or signature mismatch";
     if (v->op <= XR_LIR_OP_INVALID || v->op >= XR_LIR_OP_COUNT ||
-        !xr_lir_internal_type_valid(v->type, true))
+        !xr_lir_internal_type_valid(m, v->type, true))
         goto invalid;
     if ((v->operand_count && !v->operands) ||
         (lir_arities[v->op] >= 0 && v->operand_count != (uint32_t) lir_arities[v->op]))
@@ -374,7 +375,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         for (uint32_t p = 0; p < block->parameter_count; ++p) {
             uint32_t id = block->parameters[p];
             if (!id || id > f->value_count ||
-                !xr_lir_internal_type_valid(f->values[id - 1].type, false) ||
+                !xr_lir_internal_type_valid(m, f->values[id - 1].type, false) ||
                 !lir_definition(f, seen, id, f->values[id - 1].type, b + 1, p, true))
                 return xr_lir_internal_error(d, "block parameter definition is inconsistent",
                                              index + 1, b + 1, 0, NULL);
@@ -567,15 +568,15 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
     return XR_LIR_OK;
 }
 
-static bool lir_function_shape(const XrLirFunctionData *f) {
-    if (!f->name || !f->name_length || !xr_lir_internal_type_valid(f->result, true) ||
+static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
+    if (!f->name || !f->name_length || !xr_lir_internal_type_valid(m, f->result, true) ||
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_CELL ||
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)))
         return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (!xr_lir_internal_type_valid(f->parameter_types[p], false))
+        if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false))
             return false;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->defined || f->block_count || f->entry) return false;
@@ -784,13 +785,23 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid LIR module");
     if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
+    if (!xr_lir_internal_types_valid(m))
+        return lir_status_error(d, XR_LIR_VERIFY_ERROR, "constructed type pool is invalid");
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_REPEAT] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
+    if (m->intrinsic_count && !m->intrinsics)
+        return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic registry is missing");
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
         const XrLirIntrinsic *entry = &m->intrinsics[i];
+        if (!entry->id || !entry->scalar_sync || !xr_lir_internal_type_valid(m, entry->result, true) ||
+            (entry->parameter_count && !entry->parameters))
+            return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic signature is invalid");
         bool array = xr_lir_internal_array_type(entry->result);
-        for (uint32_t p = 0; p < entry->parameter_count; ++p)
+        for (uint32_t p = 0; p < entry->parameter_count; ++p) {
+            if (!xr_lir_internal_type_valid(m, entry->parameters[p], false))
+                return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
+        }
         if (!m->array_intrinsics) {
             if (array) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is missing");
             continue;
@@ -827,7 +838,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
+        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||

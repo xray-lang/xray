@@ -122,6 +122,13 @@ static void lir_print_constant(LirPrinter *p, XrLirType type, uint64_t bits) {
     lir_print_format(p, "%" PRIu64, bits);
 }
 
+static void lir_print_type(LirPrinter *p, const XrLirModule *m, XrLirType type) {
+    XrLirTypeView view;
+    if (xr_lir_type_view(m, type, &view) == XR_LIR_OK && view.kind == XR_LIR_TYPE_FIXED_ARRAY)
+        lir_print_format(p, "[u8;%" PRIu32 "]", view.count);
+    else lir_print_text(p, xr_lir_type_name(type));
+}
+
 static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrLirFunctionData *f,
                                   const XrLirInstructionView *v) {
     static const char *const predicates[] = {"invalid", "eq", "ne", "lt", "le", "gt", "ge"};
@@ -163,7 +170,9 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
             lir_print_format(p, " %s", predicates[v->predicate]);
             displayed = f->values[v->operands[0] - 1].type;
         }
-        lir_print_format(p, " %s ", xr_lir_type_name(displayed));
+        lir_print_text(p, " ");
+        lir_print_type(p, m, displayed);
+        lir_print_text(p, " ");
         if (v->op == XR_LIR_LITERAL_ADDR)
             lir_print_format(p, "#%" PRIu64, v->bits);
         else if (v->op == XR_LIR_CONST)
@@ -174,7 +183,7 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
     lir_print_text(p, "\n");
 }
 
-static void lir_print_parameters(LirPrinter *p, const XrLirFunctionData *f, const uint32_t *ids,
+static void lir_print_parameters(LirPrinter *p, const XrLirModule *m, const XrLirFunctionData *f, const uint32_t *ids,
                                  uint32_t count, bool external) {
     for (uint32_t i = 0; i < count; ++i) {
         if (i)
@@ -184,7 +193,7 @@ static void lir_print_parameters(LirPrinter *p, const XrLirFunctionData *f, cons
             lir_print_text(p, ": ");
         }
         XrLirType type = external ? f->parameter_types[i] : f->values[ids[i] - 1].type;
-        lir_print_text(p, xr_lir_type_name(type));
+        lir_print_type(p, m, type);
     }
 }
 
@@ -214,8 +223,9 @@ static XrLirStatus lir_print_function(LirPrinter *p, const XrLirModule *m,
     lir_print_text(p, external ? "  extern " : "  func ");
     lir_print_name(p, f);
     lir_print_text(p, "(");
-    lir_print_parameters(p, f, f->parameters, f->parameter_count, external);
-    lir_print_format(p, ") -> %s", xr_lir_type_name(f->result));
+    lir_print_parameters(p, m, f, f->parameters, f->parameter_count, external);
+    lir_print_text(p, ") -> ");
+    lir_print_type(p, m, f->result);
     if (external)
         lir_print_text(p, "\n");
     else {
@@ -225,7 +235,7 @@ static XrLirStatus lir_print_function(LirPrinter *p, const XrLirModule *m,
             lir_print_format(p, "  ^b%" PRIu32, b);
             if (block->parameter_count) {
                 lir_print_text(p, "(");
-                lir_print_parameters(p, f, block->parameters, block->parameter_count, false);
+                lir_print_parameters(p, m, f, block->parameters, block->parameter_count, false);
                 lir_print_text(p, ")");
             }
             lir_print_text(p, ":\n");

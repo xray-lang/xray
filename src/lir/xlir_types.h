@@ -1,0 +1,64 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xlir_types.h - Module-owned physical aggregate identities
+ *
+ * KEY CONCEPT:
+ *   Constructed IDs belong to their receiving module. Their complete shape
+ *   is the type of values and signatures, including module-state payloads.
+ */
+#ifndef XLIR_TYPES_H
+#define XLIR_TYPES_H
+#include "xlir.h"
+
+typedef enum XrLirTypeKind {
+    XR_LIR_TYPE_BUILTIN,
+    XR_LIR_TYPE_FIXED_ARRAY
+} XrLirTypeKind;
+
+typedef struct XrLirTypeView {
+    XrLirTypeKind kind;
+    XrLirType element;
+    uint32_t count;
+} XrLirTypeView;
+
+typedef struct XrLirTypeLayout {
+    uint64_t size;
+    uint32_t alignment, scalar_count;
+    bool managed;
+} XrLirTypeLayout;
+
+typedef struct XrLirScalarPart {
+    XrLirType type;
+    uint64_t offset;
+} XrLirScalarPart;
+
+/* Finished-module inventory. An unreadable module returns zero. Constructed
+ * ordinals start at XR_LIR_TYPE_COUNT and follow their owned interning order. */
+XR_FUNC uint32_t xr_lir_constructed_type_count(const XrLirModule *);
+
+/* Interning copies the complete shape and preserves output on failure.
+ * The admitted fixed-byte shape is U8 with the Checked count 1..65535.
+ * Builtin ordinals remain global. Other IDs are local to the given module.
+ * No descriptor borrows a frontend type pool or allocates an execution value. */
+XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *, XrLirType element,
+    uint32_t count, XrLirType *output);
+/* POD queries accept a live, unfailed construction or a finished module.
+ * They preserve output on failure. Capabilities retain their dedicated ABI
+ * and have no ordinary storage layout or scalar-leaf projection here. */
+XR_FUNC XrLirStatus xr_lir_type_view(const XrLirModule *, XrLirType, XrLirTypeView *);
+XR_FUNC XrLirStatus xr_lir_type_layout(const XrLirModule *, XrLirType, XrLirTypeLayout *);
+XR_FUNC XrLirStatus xr_lir_type_scalar(const XrLirModule *, XrLirType, uint32_t ordinal,
+    XrLirScalarPart *);
+/* Cross-owner transport imports structure into the receiving pool. A numeric
+ * ordinal alone does not establish correspondence between two modules. */
+XR_FUNC XrLirStatus xr_lir_import_type(XrLirModule *target, const XrLirModule *source,
+    XrLirType type, XrLirType *output);
+/* Copy a finished module's complete pool into an empty receiving pool before
+ * copying registry entries or signatures. The copied ordinals remain exact. */
+XR_FUNC XrLirStatus xr_lir_copy_types(XrLirModule *target, const XrLirModule *source);
+
+#endif // XLIR_TYPES_H

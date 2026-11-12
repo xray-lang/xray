@@ -16,6 +16,7 @@
 #include "xlir_builder.h"
 #include "xlir_state.h"
 #include "xlir_array.h"
+#include "xlir_types.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 
@@ -58,6 +59,9 @@ typedef struct XrLirLiteralData {
     size_t length;
 } XrLirLiteralData;
 struct XrLirModule {
+    XrLirTypeView *types;
+    uint32_t type_count, type_capacity;
+    uint32_t *type_index, type_index_capacity;
     XrLirLiteralData *literals;
     uint32_t literal_count, literal_capacity;
     XrLirFunctionData *functions;
@@ -92,7 +96,8 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
     const XrLirInstructionView *definition = &block->instructions[value->instruction].view;
     return definition->result == id ? definition : NULL;
 }
-XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
+XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
+XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
@@ -105,8 +110,8 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *,
     const XrLirFunctionData *, const XrLirInstructionView *);
 XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *,
     const XrLirFunctionData *, const XrLirInstructionView *);
-XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirStateLayout *);
-XR_FUNC bool xr_lir_internal_state_payload(XrLirType, uint32_t *, uint32_t *);
+XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirModule *, const XrLirStateLayout *);
+XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *, XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *, uint32_t function,
                                                       const XrLirInstructionView *,

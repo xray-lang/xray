@@ -50,6 +50,9 @@ typedef struct XrLirInstruction {
 /* Creation requires an empty output. NULL registry means no intrinsics.
  * The module owns a snapshot of every supplied intrinsic signature. */
 XR_FUNC XrLirStatus xr_lir_module_create(const XrLirRegistry *, XrLirModule **output);
+/* Install an owned registry after importing types and before declaring any
+ * functions. A module can receive only one nonempty registry. */
+XR_FUNC XrLirStatus xr_lir_set_registry(XrLirModule *, const XrLirRegistry *);
 XR_FUNC void xr_lir_module_destroy(XrLirModule *module);
 /* Literal data is copied before publication. The address is usable only by
  * the exact String output call, paired with this record's explicit length. */
