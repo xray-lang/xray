@@ -403,17 +403,21 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
         if (roots->node[node].task_creation) summary->task_creation[f] = XR_XIR_EFFECT_MAY;
         if (!mask) continue;
         uint32_t bit = mask & 2 ? 1 : 0;
-        const EffectCheckNode *reason = &roots->node[node];
+        uint32_t source = node;
+        if (function->cleanup &&
+            (effect_check_suspend_bits(roots, function->root)[0] & (UINT64_C(1) << bit)))
+            source = function->root;
+        const EffectCheckNode *reason = &roots->node[source];
         XrXirEffectWitness *witness = &summary->causes[f];
         witness->callee = UINT32_MAX;
         witness->instruction = UINT32_MAX;
         witness->distance = reason->suspend_distance[bit];
-        if (!(effect_check_suspend_bits(roots, node)[0] & (UINT64_C(1) << bit))) {
+        if (!(effect_check_suspend_bits(roots, source)[0] & (UINT64_C(1) << bit))) {
             witness->cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             witness->distance = 0;
             continue;
         }
-        uint32_t current = node;
+        uint32_t current = source;
         for (uint32_t step = 0; step < roots->nodes; ++step) {
             reason = &roots->node[current];
             uint32_t call = reason->suspend_call[bit];
@@ -433,7 +437,8 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
             current = next;
         }
         if (!witness->cause) status = XR_XIR_BAD_STRUCTURE;
-        if (function->cleanup) witness->instruction = UINT32_MAX;
+        if (function->cleanup && roots->function[roots->node[source].function].declaration != function->declaration)
+            witness->instruction = UINT32_MAX;
     }
     if (status != XR_XIR_OK) { xir_effect_control_free(summary); return status; }
     *output = summary;
@@ -736,7 +741,7 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
         records->functions = records->control_summary->facts;
         records->witnesses = records->control_summary->causes;
         records->task_creation = records->control_summary->task_creation;
-        status = xir_compile_local_errors_verify(memory, input.module, NULL);
+        status = xir_compile_local_errors_verify(memory, input.module, diagnostic);
         if (status==XR_XIR_OK) effects->local_errors_checked=true;
     }
     if (status == XR_XIR_OK && effects->checked_roots->restrictions.view.pending.status != XR_XIR_OK) {
