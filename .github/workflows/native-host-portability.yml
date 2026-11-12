@@ -118,6 +118,11 @@ jobs:
       - name: Verify Unix current gates
         if: runner.os != 'Windows'
         run: python scripts/verify_current_build.py --build build --evidence current-evidence
+      - name: Verify Unix pipe closure with unread bytes
+        if: runner.os != 'Windows'
+        run: >-
+          python scripts/ci_build_log.py --log current-evidence/pipe-probe.log --
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^os_pipe_owned$'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -206,6 +206,7 @@ static void child_stdio(bool writer){
 }
 #else
 #include "os/unix/pipe_owned_unix.c"
+#include "pipe_probe_posix_cases.h"
 #endif
 
 int main(int argc,char **argv){
@@ -220,6 +221,7 @@ int main(int argc,char **argv){
 #else
  (void)argc;(void)argv;XrOsPipeOwner owner={0};bool opened=true;
  CHECK(xr_os_io_pipe_open(NULL,NULL,&owner,&opened)==XR_OS_IO_UNSUPPORTED&&opened&&!owner.state);
+ pipe_probe_closed_tail();
 #endif
  puts("42");return 0;
 }

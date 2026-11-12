@@ -110,12 +110,15 @@ int64_t xr_pipe_read(XrPipeHandle handle, void *buf, size_t len) {
 
 XR_FUNC XrPipeIoStatus xr_pipe_probe(XrPipeHandle handle, size_t *available, bool *eof) {
     if (!pipe_handle_valid(handle) || !available || !eof) { errno = EINVAL; return XR_PIPE_IO_ERROR; }
-    int bytes = 0;
-    if (ioctl((int)handle, FIONREAD, &bytes) != 0 || bytes < 0) return XR_PIPE_IO_ERROR;
     struct pollfd p = {(int)handle, POLLIN, 0}; int ready;
     do { ready = poll(&p, 1, 0); } while (ready < 0 && errno == EINTR);
     if (ready < 0) return XR_PIPE_IO_ERROR;
     if (p.revents & (POLLERR | POLLNVAL)) { errno = EBADF; return XR_PIPE_IO_ERROR; }
+    /* Observe closure before counting bytes. A writer can publish its tail
+     * and close between the two calls; an earlier empty count cannot prove
+     * EOF for a later hangup. Once hangup is observed, no writer can add data. */
+    int bytes = 0;
+    if (ioctl((int)handle, FIONREAD, &bytes) != 0 || bytes < 0) return XR_PIPE_IO_ERROR;
     *available = (size_t)bytes; *eof = !bytes && (p.revents & POLLHUP);
     return bytes || *eof ? XR_PIPE_IO_OK : XR_PIPE_IO_WOULD_BLOCK;
 }
