@@ -497,8 +497,9 @@ static uint32_t float_family_callee(XrLirModule *module,bool relation) {
                     case XR_LIR_FMUL:bit=4;break;case XR_LIR_FDIV:bit=8;break;default:break;
                 }
                 if(!bit)continue;
+                XrLirType result_type = relation ? XR_LIR_I64 : XR_LIR_F64;
                 CHECK((!selected || selected==f.id) && fv.parameter_count==(relation?2u:3u) &&
-                    fv.result==(relation?XR_LIR_I64:XR_LIR_F64));
+                    fv.result==result_type);
                 if(relation)CHECK(fv.parameter_types[0]==XR_LIR_F64 && fv.parameter_types[1]==XR_LIR_F64);
                 else CHECK(fv.parameter_types[0]==XR_LIR_I64 && fv.parameter_types[1]==XR_LIR_F64 &&
                     fv.parameter_types[2]==XR_LIR_F64);

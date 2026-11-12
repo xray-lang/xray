@@ -319,8 +319,9 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_ITOF: case XR_LIR_FTOI: {
             bool to_float = v->op == XR_LIR_ITOF;
-            if (v->type != (to_float ? XR_LIR_F64 : XR_LIR_I64) ||
-                c_value_type(c, v->operands[0]) != (to_float ? XR_LIR_I64 : XR_LIR_F64)) {
+            XrLirType result_type = to_float ? XR_LIR_F64 : XR_LIR_I64;
+            XrLirType operand_type = to_float ? XR_LIR_I64 : XR_LIR_F64;
+            if (v->type != result_type || c_value_type(c, v->operands[0]) != operand_type) {
                 c_error(c, XR_LIR_C_UNSUPPORTED, "numeric conversion requires signed64 and binary64");
                 break;
             }

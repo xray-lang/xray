@@ -46,13 +46,13 @@ static bool lir_state_layout_shape(const XrLirModule *m, const XrLirStateLayout 
         layout->payload_size > SIZE_MAX || layout->payload_size % layout->payload_alignment)
         return false;
     uint32_t dependency = 0;
-    for (uint32_t m = 0; m < layout->module_count; ++m) {
-        XrLirStateModule module = layout->modules[m];
+    for (uint32_t module_index = 0; module_index < layout->module_count; ++module_index) {
+        XrLirStateModule module = layout->modules[module_index];
         if (module.first_dependency != dependency ||
             module.dependency_count > layout->dependency_count - dependency) return false;
         for (uint32_t d = 0; d < module.dependency_count; ++d) {
             uint32_t target = layout->dependencies[dependency + d];
-            if (target >= layout->module_count || target == m) return false;
+            if (target >= layout->module_count || target == module_index) return false;
         }
         dependency += module.dependency_count;
     }

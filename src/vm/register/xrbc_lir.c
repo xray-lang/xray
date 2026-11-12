@@ -461,13 +461,16 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_ITOF: case XR_LIR_FTOI: {
         XrLirType source = XR_LIR_TYPE_INVALID;
         bool to_float = i->op == XR_LIR_ITOF;
-        return i->type == (to_float ? XR_LIR_F64 : XR_LIR_I64) && i->operand_count == 1 &&
+        XrLirType result_type = to_float ? XR_LIR_F64 : XR_LIR_I64;
+        XrLirType operand_type = to_float ? XR_LIR_I64 : XR_LIR_F64;
+        return i->type == result_type && i->operand_count == 1 &&
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
-                &source) == XR_LIR_OK && source == (to_float ? XR_LIR_I64 : XR_LIR_F64);
+                &source) == XR_LIR_OK && source == operand_type;
     }
     case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV: case XR_LIR_FCMP: {
         XrLirType left=XR_LIR_TYPE_INVALID,right=XR_LIR_TYPE_INVALID;
-        return i->operand_count==2 && i->type==(i->op==XR_LIR_FCMP?XR_LIR_I1:XR_LIR_F64) &&
+        XrLirType result_type = i->op == XR_LIR_FCMP ? XR_LIR_I1 : XR_LIR_F64;
+        return i->operand_count==2 && i->type==result_type &&
             xr_lir_value_type(input,(XrLirValue){input,function.id,i->operands[0]},&left)==XR_LIR_OK &&
             xr_lir_value_type(input,(XrLirValue){input,function.id,i->operands[1]},&right)==XR_LIR_OK &&
             left==XR_LIR_F64 && right==XR_LIR_F64;
