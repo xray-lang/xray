@@ -24,6 +24,7 @@
 #include "lir_array_unsigned_frontier_cases.h"
 #include "lir_array_ref_cases.h"
 #include "lir_constructed_frontier_cases.h"
+#include "lir_fixed_bytecode_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -492,6 +493,7 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     constructed_backend_frontiers();
+    fixed_bytecode_execution();
     array_catalog();
     array_reference_owners();
     array_unsigned_frontier();

@@ -121,6 +121,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #undef xr_rbc_module_admit
 #include "../lir/lir_array_c_fixture.h"
 #include "../lir/lir_array_ref_fixture.h"
+#include "../lir/lir_fixed_bytecode_fixture.h"
 #include "lir_array_copy_cases.h"
 
 static void array_compiler_failures(const char *name,uint64_t expected) {
@@ -669,7 +670,37 @@ static void aggregate_type_projection_failures(void) {
     attempts = 0;
 }
 
+static void aggregate_value_compiler_failures(uint32_t count, bool dynamic) {
+    XrLirFunction root = {0};
+    XrLirModule *module = fixed_bytecode_fixture(count, dynamic, false, &root);
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    CHECK(total > 20 && program->module.functions[0].aggregate_value_count == 1);
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(!live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    uint64_t arguments[] = {37, count - 1}, bits = 0;
+    CHECK(execute(program, arguments, 2, &bits) == XR_RBC_OK &&
+        bits == (dynamic ? (37u + count - 1) & 255u : 37u));
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("aggregate %u-byte construction %zu allocation failures and retired LIR PASS\n", count, total);
+    attempts = 0;
+}
+
 int main(void) {
+    aggregate_value_compiler_failures(17, false);
+    aggregate_value_compiler_failures(300, true);
     aggregate_type_projection_failures();
     array_reference_compiler_failures();
     physical_array_copy_cycle();

@@ -20,9 +20,9 @@ static inline bool lir_builtin_signature(XrLirType result, const XrLirType *para
     return true;
 }
 
-/* An unused signature or module slot still belongs to the received artifact.
- * A constructed ordinal must never reach a builtin-only layout or emitter. */
-static inline bool lir_module_has_builtin_types(const XrLirModule *module) {
+/* Signatures and module payloads remain builtin until their physical ABI is
+ * supported. Aggregate SSA values have a separately owned storage projection. */
+static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
     if (!xr_lir_module_is_readable(module)) return false;
     if (!xr_lir_constructed_type_count(module)) return true;
     for (uint32_t i = 0; i < xr_lir_intrinsic_count(module); ++i) {
@@ -46,8 +46,7 @@ static inline bool lir_module_has_builtin_types(const XrLirModule *module) {
         for (uint32_t value = 0; value < view.value_count; ++value) {
             XrLirValue handle = {module, function.id, value + 1};
             XrLirType type;
-            if (xr_lir_value_type(module, handle, &type) != XR_LIR_OK ||
-                (uint32_t)type >= XR_LIR_TYPE_COUNT) return false;
+            if (xr_lir_value_type(module, handle, &type) != XR_LIR_OK) return false;
             if (type == XR_LIR_STATE_REF) {
                 XrLirStateReference shape;
                 if (xr_lir_state_reference_view(module, handle, &shape) != XR_LIR_OK ||

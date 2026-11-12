@@ -62,6 +62,13 @@ typedef struct {
     RbcLirOutputValues output;
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
+    uint32_t *aggregate_home;
+    XrRbcAggregateValue *aggregate_values;
+    uint32_t aggregate_value_count;
+    size_t aggregate_size;
+    XrRbcAggregateAccess *aggregate_accesses;
+    XrRbcArrayLocation *aggregate_operands;
+    size_t aggregate_access_count, aggregate_access_capacity, aggregate_operand_count, aggregate_operand_capacity;
     RbcLirImmediate *immediates;
     uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits, temporary_refs;
     uint32_t temporary_arrays[XR_RBC_ARRAY_FAMILY_COUNT];
@@ -173,6 +180,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     }
     if (!unsigned_value) return true;
     switch (i->op) {
+    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
@@ -184,6 +192,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
 }
 
 #include "xrbc_lir_array.inc.c"
+#include "xrbc_lir_aggregate.inc.c"
 
 static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstructionView *i) {
     if (i->op != XR_LIR_CALL) return false;
@@ -387,6 +396,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF &&
+             !rbc_lir_fixed_type(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -417,6 +427,19 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
+    if (xr_lir_constructed_type_count(input) && !rbc_lir_fixed_point(i)) {
+        for (uint32_t p = 0; p < i->operand_count; ++p) {
+            XrLirType type = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[p]}, &type);
+            if (type >= XR_LIR_TYPE_COUNT) return false;
+        }
+        for (uint32_t e = 0; e < i->edge_count; ++e)
+            for (uint32_t p = 0; p < i->edges[e].argument_count; ++p) {
+                XrLirType type = XR_LIR_TYPE_INVALID;
+                xr_lir_value_type(input, (XrLirValue){input, function.id, i->edges[e].arguments[p]}, &type);
+                if (type >= XR_LIR_TYPE_COUNT) return false;
+            }
+    }
     // A length can also be an operand of otherwise valid unsigned LIR. Its
     // output use must not silently enable signed arithmetic or comparisons.
     for (uint32_t a = 0; a < i->operand_count; ++a)
@@ -437,6 +460,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
         return true;
+    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
@@ -596,7 +620,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (rbc_lir_array_point(c, &i)) continue;
+            if (rbc_lir_array_point(c, &i) || rbc_lir_fixed_point(&i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
@@ -682,7 +706,7 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         XrLirType type = XR_LIR_TYPE_INVALID;
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, v}, &type);
-        if (c->output.literals[v] || c->output.lengths[v]) continue;
+        if (c->output.literals[v] || c->output.lengths[v] || type >= XR_LIR_TYPE_COUNT) continue;
         XrRbcRegisterKind kind = rbc_lir_register_kind(c, v, type);
         uint32_t slot = c->slots[v];
         if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
@@ -984,6 +1008,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (rbc_lir_fixed_point(i)) return rbc_lir_aggregate_emit(c, i);
     if(rbc_lir_array_point(c,i))return rbc_lir_array_emit(c,i);
     if (i->op == XR_LIR_CONST &&
         (c->immediates[i->result].known || c->immediates[i->result].pooled) &&
@@ -1172,7 +1197,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!c->slots || !c->spill_home)
         return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA home tables");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->spill_home[v]=UINT32_MAX;
-    if (!rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
+    if (!rbc_lir_aggregate_homes(c) || !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "block table exceeds address space");
@@ -1232,7 +1257,11 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
         .result_kind=c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) : XR_RBC_BITS,
-        .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count};
+        .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count,
+        .aggregate_values=c->aggregate_values, .aggregate_value_count=c->aggregate_value_count,
+        .aggregate_size=c->aggregate_size, .aggregate_accesses=c->aggregate_accesses,
+        .aggregate_access_count=c->aggregate_access_count, .aggregate_operands=c->aggregate_operands,
+        .aggregate_operand_count=c->aggregate_operand_count};
     return true;
 }
 
@@ -1248,6 +1277,9 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].array_accesses);
         xr_free((void *) program->module.functions[f].array_operands);
         xr_free((void *) program->module.functions[f].reference_spill_kinds);
+        xr_free((void *) program->module.functions[f].aggregate_values);
+        xr_free((void *) program->module.functions[f].aggregate_accesses);
+        xr_free((void *) program->module.functions[f].aggregate_operands);
     }
     xr_free((void *) program->module.functions);
     for (size_t i = 0; i < program->module.literal_count; ++i)
@@ -1342,6 +1374,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.patches);
         rbc_lir_output_free(&c.output);
         xr_free(c.slots);xr_free(c.spill_home);
+        xr_free(c.aggregate_home);
         xr_free(c.immediates);
         if (!success) {
             xr_free(c.code);
@@ -1351,6 +1384,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.cell_kinds);
             xr_free(c.state_accesses);
             xr_free(c.array_accesses);xr_free(c.array_operands);xr_free(c.reference_spill_kinds);
+            xr_free(c.aggregate_values);xr_free(c.aggregate_accesses);xr_free(c.aggregate_operands);
             xr_free(pool.mapping);
             return c.status;
         }
@@ -1418,7 +1452,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
 #endif
-    if (!lir_module_has_builtin_types(input))
+    if (!lir_module_has_builtin_abi(input))
         return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "constructed physical types have no bytecode implementation", (XrLirSource) {0});
     for (uint32_t i = 0; i < root.parameter_count; ++i)
