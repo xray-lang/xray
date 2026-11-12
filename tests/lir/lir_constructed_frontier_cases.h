@@ -82,6 +82,11 @@ static void constructed_backend_frontiers(void) {
             CHECK(strstr(bytecode_diagnostic.message, "constructed physical types"));
         } else {
             CHECK(compiled == XR_RBC_COMPILE_OK && program);
+            xr_lir_module_destroy(m);
+            m = NULL;
+            const XrRbcModule *owned = xr_rbc_program_view(program);
+            CHECK(owned->aggregate_type_count == 1 && owned->aggregate_types &&
+                owned->aggregate_types[0].kind == XR_RBC_FIXED_U8 && owned->aggregate_types[0].count == 11);
             XrRbcExecution *execution = NULL;
             CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
             XrRbcOutcome *outcome = xr_rbc_execution_run(execution);

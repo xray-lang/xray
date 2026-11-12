@@ -1250,6 +1250,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     for (size_t i = 0; i < program->module.literal_count; ++i)
         xr_free((void *)program->module.literals[i].bytes);
     xr_free((void *)program->module.literals);
+    xr_free((void *)program->module.aggregate_types);
     xrt_locations_release(program->locations);
     xrt_module_layout_drop(&program->module.state_layout);
     xr_free(program);
@@ -1361,6 +1362,38 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
     return XR_RBC_COMPILE_OK;
 }
 
+static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
+    XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
+    uint32_t count = xr_lir_constructed_type_count(input);
+    if (!count) return XR_RBC_COMPILE_OK;
+    if (sizeof(XrRbcAggregateType) > SIZE_MAX / count)
+        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
+            "physical type projection exceeds address space", (XrLirSource){0});
+    XrRbcAggregateType *types = xr_malloc((size_t)count * sizeof(*types));
+    if (!types)
+        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
+            "cannot receive physical aggregate types", (XrLirSource){0});
+    program->module.aggregate_types = types;
+    program->module.aggregate_type_count = count;
+    for (uint32_t n = 0; n < count; ++n) {
+        XrLirTypeView shape = {0};
+        XrLirTypeLayout memory = {0};
+        if (xr_lir_type_view(input, XR_LIR_TYPE_COUNT + n, &shape) != XR_LIR_OK ||
+            xr_lir_type_layout(input, XR_LIR_TYPE_COUNT + n, &memory) != XR_LIR_OK ||
+            shape.kind != XR_LIR_TYPE_FIXED_ARRAY || shape.element != XR_LIR_U8 ||
+            memory.size != shape.count || memory.scalar_count != shape.count ||
+            memory.alignment != 1 || memory.managed)
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
+                "physical aggregate type has no bytecode projection", (XrLirSource){0});
+        types[n] = (XrRbcAggregateType){XR_RBC_FIXED_U8, shape.count};
+        XrRbcAggregateLayout layout;
+        if (!xr_rbc_aggregate_layout(types[n], &layout))
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
+                "physical aggregate layout has no bytecode projection", (XrLirSource){0});
+    }
+    return XR_RBC_COMPILE_OK;
+}
+
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
     XrRbcCompileDiagnostic local = {0};
@@ -1406,6 +1439,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     uint32_t count = 1;
     ids[0] = entry.id;
     mapping[entry.id - 1] = 1;
+    status = rbc_lir_aggregate_types(input, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_state_layout(input, entry, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&

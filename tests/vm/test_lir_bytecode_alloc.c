@@ -632,7 +632,45 @@ static void compiled_float_constants(void) {
     attempts = 0;
 }
 
+static void aggregate_type_projection_failures(void) {
+    XrLirModule *module = NULL;
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType unused = 0;
+    OK(xr_lir_fixed_array_type(module, XR_LIR_U8, 11, &unused));
+    OK(xr_lir_fixed_array_type(module, XR_LIR_U8, 256, &unused));
+    XrLirFunction root = test_function(module, "physical_types", NULL, 0, XR_LIR_UNIT);
+    XrLirBlock body = test_block(module, root, NULL, 0);
+    OK(xr_lir_set_entry(module, root, body));
+    test_return(module, body, (XrLirValue){0});
+    OK(xr_lir_module_finish(module, NULL));
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    attempts = 0;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    CHECK(program->module.aggregate_type_count == 2 && program->module.aggregate_types[0].count == 11 &&
+        program->module.aggregate_types[1].count == 256);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point; program = NULL;
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    attempts = 0; fail_at = SIZE_MAX; program = NULL;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    CHECK(program->module.aggregate_type_count == 2 && program->module.aggregate_types[1].count == 256);
+    uint64_t bits = 91;
+    CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OK && !bits);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("aggregate type projection %zu allocation failures and retired LIR PASS\n", total);
+    attempts = 0;
+}
+
 int main(void) {
+    aggregate_type_projection_failures();
     array_reference_compiler_failures();
     physical_array_copy_cycle();
     array_compiler_failures("string",511);

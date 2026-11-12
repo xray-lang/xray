@@ -199,6 +199,12 @@ typedef struct {
     size_t length;
 } XrRbcLiteral;
 
+typedef enum XrRbcAggregateKind { XR_RBC_FIXED_U8 = 1 } XrRbcAggregateKind;
+typedef struct XrRbcAggregateType {
+    XrRbcAggregateKind kind;
+    uint32_t count;
+} XrRbcAggregateType;
+
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
@@ -211,6 +217,10 @@ typedef struct {
     // It is borrowed with the code. Each execution owns a distinct state.
     XrtModuleLayout *state_layout;
     uint32_t state_entry;
+    // Physical aggregate shapes have module-local ordinals. Programs own this
+    // projection; externally supplied modules borrow it with their code.
+    const XrRbcAggregateType *aggregate_types;
+    size_t aggregate_type_count;
 } XrRbcModule;
 
 typedef enum {

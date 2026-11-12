@@ -266,6 +266,10 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 #include "xrbc_string_admission.inc.c"
 
 static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
+    for (size_t t = 0; t < module->aggregate_type_count; ++t) {
+        XrRbcAggregateLayout layout;
+        if (!xr_rbc_aggregate_layout(module->aggregate_types[t], &layout)) return XR_RBC_INVALID;
+    }
     for (size_t i = 0; i < module->literal_count; ++i)
         if (module->literals[i].length == SIZE_MAX ||
             (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
@@ -303,7 +307,8 @@ static bool xr_rbc_source_maps_valid(const XrRbcModule *module, const XrtLocatio
 XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *module, const XrtLocationOwner *locations) {
     if (!module || !module->functions || !module->function_count || !locations ||
         (module->native_count && !module->natives) || module->native_count > 65536 ||
-        (module->literal_count && !module->literals) || module->literal_count > 65536)
+        (module->literal_count && !module->literals) || module->literal_count > 65536 ||
+        (module->aggregate_type_count && !module->aggregate_types) || module->aggregate_type_count > UINT32_MAX)
         return XR_RBC_INVALID;
     XrRbcStatus status = xr_rbc_module_valid(module);
     if (status != XR_RBC_OK) return status;

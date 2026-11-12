@@ -12,6 +12,20 @@
 #include "xrbc.h"
 
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
+enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
+
+typedef struct XrRbcAggregateLayout {
+    uint32_t size, alignment, scalar_slots;
+} XrRbcAggregateLayout;
+
+static inline bool xr_rbc_aggregate_layout(XrRbcAggregateType type, XrRbcAggregateLayout *output) {
+    if (!output || type.kind != XR_RBC_FIXED_U8 || !type.count || type.count > 65535) return false;
+    bool lanes = type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
+    *output = (XrRbcAggregateLayout){lanes ? type.count * 8u : type.count,
+        lanes ? 8u : 1u, lanes ? type.count : 0u};
+    return true;
+}
+
 static inline XrRbcRegisterKind xr_rbc_array_kind_at(uint32_t family) {
     static const XrRbcRegisterKind kinds[] = {XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_U8, XR_RBC_ARRAY_U64};
     return family < XR_RBC_ARRAY_FAMILY_COUNT ? kinds[family] : XR_RBC_BITS;
