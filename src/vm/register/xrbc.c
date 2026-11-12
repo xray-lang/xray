@@ -16,6 +16,7 @@
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
+#include "xray_native_view.h"
 #include <float.h>
 #include <limits.h>
 #include <string.h>
@@ -149,6 +150,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 #include "xrbc_array_admission.inc.c"
 
 #include "xrbc_state_admission.inc.c"
+#include "xrbc_view_admission.inc.c"
 #include "xrbc_aggregate_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
@@ -164,16 +166,17 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
          function->register_kind_count != 0) ||
         (function->cell_kinds ? function->cell_kind_count != function->cell_count :
          function->cell_kind_count != 0) ||
-        (function->result_kind != XR_RBC_BITS && !rbc_managed_kind(function->result_kind))) return false;
+        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_SLICE_I64 &&
+         !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_ARRAY_U64_REF ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_SLICE_I64 ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
-                 function->register_kinds[i] == XR_RBC_STATE_REF ||
+                 function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
                  (function->register_kinds[i] == XR_RBC_STATE && i + 1 != function->parameter_count)))) return false;
     for (uint32_t i = 0; function->cell_kinds && i < function->cell_count; ++i)
         if (function->cell_kinds[i] != XR_RBC_BITS && !rbc_managed_kind(function->cell_kinds[i])) return false;
-    return rbc_array_metadata_valid(function);
+    return rbc_array_metadata_valid(function) && rbc_view_metadata_valid(function) && rbc_view_function_valid(function);
 }
 
 static bool xr_rbc_instruction_valid(const XrRbcModule *module,
@@ -188,6 +191,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;
         if (rbc_aggregate_return_word(function, word)) return true;
+        break;
+    case XR_RBC_VIEW_ACCESS:
+        if (a || index >= function->view_access_count) return false;
         break;
     case XR_RBC_ARRAY_ACCESS:
         if (a || index >= function->array_access_count) return false;
@@ -297,7 +303,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
-        if (!rbc_aggregate_calls_valid(module, function)) return XR_RBC_INVALID;
+        if (!rbc_aggregate_calls_valid(module, function) || !rbc_view_module_valid(module, function)) return XR_RBC_INVALID;
         for (size_t pc = 0; pc < function->code_count; ++pc)
             if (!xr_rbc_instruction_valid(module, function, pc)) return XR_RBC_INVALID;
         XrRbcStatus status = xr_rbc_strings_valid(module, function);
@@ -381,6 +387,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
+#include "xrbc_view_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
@@ -408,7 +415,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
-    if (function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
+    if (function->result_kind == XR_RBC_SLICE_I64 ||
+        function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
         (!inject_state && function->parameter_count &&
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;

@@ -79,6 +79,11 @@ XR_RBC_CASE(MOV) {
     XR_RBC_NEXT();
 }
 #if defined(__clang__) || defined(__GNUC__)
+XR_RBC_CASE(VIEW_ACCESS) {
+    XrRbcStatus status = xr_rbc_view_step(stack, frame, function, instruction >> 16, XR_RBC_SOURCE());
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(AGGREGATE_ACCESS) {
     XR_RBC_AGGREGATE_EXECUTE();
     XR_RBC_NEXT();
@@ -460,6 +465,11 @@ XR_RBC_CASE(RET0) {
 }
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
+    if (op == XR_RBC_VIEW_ACCESS) {
+        XrRbcStatus status = xr_rbc_view_step(stack, frame, function, instruction >> 16, XR_RBC_SOURCE());
+        if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
     if (op == XR_RBC_AGGREGATE_ACCESS) {
         XR_RBC_AGGREGATE_EXECUTE();
         XR_RBC_NEXT();

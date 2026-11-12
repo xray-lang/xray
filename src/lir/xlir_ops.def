@@ -63,3 +63,6 @@ XR_LIR_OP(NULLABLE_NONE, "nullable_none", 0)
 XR_LIR_OP(NULLABLE_SOME, "nullable_some", -1)
 XR_LIR_OP(NULLABLE_IS_SOME, "nullable_is_some", 1)
 XR_LIR_OP(NULLABLE_UNWRAP, "nullable_unwrap", 1)
+/* Actual activation slots are metadata, never future SSA operand reads. */
+XR_LIR_OP(VIEW_FRAME_ENTER, "view_frame_enter", 0)
+XR_LIR_OP(VIEW_FRAME_LEAVE, "view_frame_leave", 1)

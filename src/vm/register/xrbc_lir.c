@@ -16,6 +16,7 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_state.h"
 #include "lir/xlir_array.h"
+#include "lir/xlir_view.h"
 #include "lir/xlir_builtin_admission.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
@@ -83,6 +84,8 @@ typedef struct {
     XrRbcRegisterKind *register_kinds, *cell_kinds;
     XrRbcStateAccess *state_accesses;
     size_t state_access_count, state_access_capacity;
+    XrRbcViewAccess *view_accesses;
+    size_t view_access_count, view_access_capacity;
     XrRbcArrayAccess *array_accesses;
     XrRbcArrayLocation *array_operands;
     XrRbcRegisterKind *reference_spill_kinds;
@@ -95,6 +98,7 @@ typedef struct {
     XrRbcCompileStatus status;
     bool string_scratch, control_scratch, state_scratch, state_ref_scratch;
     bool array_scratch[XR_RBC_ARRAY_FAMILY_COUNT];
+    bool view_scratch[3], has_views;
 } RbcLirCompiler;
 
 static XrRbcCompileStatus rbc_lir_error(XrRbcCompileDiagnostic *d,
@@ -200,6 +204,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
 }
 
 #include "xrbc_lir_array.inc.c"
+#include "xrbc_lir_view.inc.c"
 #include "xrbc_lir_aggregate.inc.c"
 
 static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstructionView *i) {
@@ -384,6 +389,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     }
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY &&
+         v->result != XR_LIR_SLICE_I64 &&
          !rbc_lir_scalar(v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
@@ -403,7 +409,8 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
-             type != XR_LIR_STATE && type != XR_LIR_STATE_REF &&
+             type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
+             type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF &&
              !rbc_lir_aggregate_type(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
@@ -455,10 +462,12 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     switch (i->op) {
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        return xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id;
+        return rbc_lir_view_role(input, i) ||
+            (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
     }
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
     case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
+    case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return true;
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
     case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
@@ -579,6 +588,9 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
         return type == XR_LIR_ARRAY_CELL ? xr_rbc_array_cell_at(family) :
             type == XR_LIR_ARRAY_REF ? xr_rbc_array_ref_at(family) : xr_rbc_array_kind_at(family);
     }
+    if (type == XR_LIR_VIEW_FRAME) return XR_RBC_VIEW_FRAME;
+    if (type == XR_LIR_VIEW_CELL) return XR_RBC_VIEW_CELL;
+    if (type == XR_LIR_SLICE_I64) return XR_RBC_SLICE_I64;
     return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL :
         type == XR_LIR_STATE ? XR_RBC_STATE : type == XR_LIR_STATE_REF ? XR_RBC_STATE_REF : XR_RBC_BITS;
 }
@@ -587,6 +599,10 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
     uint32_t family = xr_rbc_array_family(kind);
     uint32_t offset = kind == XR_RBC_STRING ? 1u : kind == XR_RBC_STATE ? 2u :
         kind == XR_RBC_STATE_REF ? 3u : family < XR_RBC_ARRAY_FAMILY_COUNT ? 4u + family : 0u;
+    if (xr_rbc_view_kind(kind)) {
+        uint32_t base = c->typed_spills ? c->scratch_count - 3u : 8u;
+        return c->slot_count + base + (uint32_t)(kind - XR_RBC_VIEW_FRAME);
+    }
     if (c->typed_spills) {
         if ((kind == XR_RBC_STRING && !c->temporary_strings) ||
             (kind == XR_RBC_STATE_REF && !c->temporary_refs) ||
@@ -617,6 +633,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
         xr_lir_block_at(c->input,c->function,b,&block);xr_lir_block_view(c->input,block,&view);
         for(uint32_t n=0;n<view.instruction_count;++n) {
             XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
+            c->has_views |= rbc_lir_view_role(c->input, &i) != 0;
             for(uint32_t e=0;e<i.edge_count;++e)
                 for(uint32_t a=0;a<i.edges[e].argument_count;++a) {
                     uint32_t value=i.edges[e].arguments[a];
@@ -626,13 +643,14 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            if (rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
                     type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF ||
-                    type==XR_LIR_I64_CELL || type==XR_LIR_STATE || type>=XR_LIR_TYPE_COUNT)continue;
+                    type==XR_LIR_I64_CELL || type==XR_LIR_STATE ||
+                    type==XR_LIR_VIEW_FRAME || type==XR_LIR_VIEW_CELL || type==XR_LIR_SLICE_I64 || type>=XR_LIR_TYPE_COUNT)continue;
                 if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
                 else if(type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,v,type))];else ++bits;
             }
@@ -641,7 +659,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 else if(i.type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type))];
                 else if(i.type==XR_LIR_STATE_REF)++refs;
                 else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF &&
-                    i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type<XR_LIR_TYPE_COUNT)++bits;
+                    i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
+                    i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
             if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8) ++bits;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
@@ -692,6 +711,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     uint32_t count = c->state_ref_scratch ? 4u : c->state_scratch ? 3u : c->string_scratch ? 2u : 1u;
                     for (uint32_t a = 0; a < XR_RBC_ARRAY_FAMILY_COUNT; ++a)
                         if (c->array_scratch[a]) count = 5u + a;
+                    for (uint32_t v = 0; v < 3; ++v)
+                        if (c->view_scratch[v]) count = 9u + v;
                     if (c->scratch_count < count) c->scratch_count = count;
                 }
             }
@@ -730,13 +751,18 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
                 c->register_kinds[c->slot_count+c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,a)+r]=xr_rbc_array_kind_at(a);
         for(uint32_t r=0;r<c->temporary_refs;++r)
             c->register_kinds[c->slot_count+c->temporary_strings+arrays+r]=XR_RBC_STATE_REF;
-        if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1]=XR_RBC_STATE;
+        if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1-(c->has_views?3u:0u)]=XR_RBC_STATE;
     } else {
         if(c->string_scratch)c->register_kinds[c->slot_count+1]=XR_RBC_STRING;
         if(c->state_scratch)c->register_kinds[c->slot_count+2]=XR_RBC_STATE;
         if(c->state_ref_scratch)c->register_kinds[c->slot_count+3]=XR_RBC_STATE_REF;
         for(uint32_t a=0;a<XR_RBC_ARRAY_FAMILY_COUNT;++a)
             if(c->array_scratch[a])c->register_kinds[c->slot_count+4+a]=xr_rbc_array_kind_at(a);
+    }
+    for (uint32_t v = 0; v < 3; ++v) {
+        uint32_t offset = c->typed_spills ? c->scratch_count - 3u : 8u;
+        if (c->view_scratch[v]) c->register_kinds[c->slot_count + offset + v] =
+            (XrRbcRegisterKind)(XR_RBC_VIEW_FRAME + v);
     }
     if(c->reference_spill_count) {
         c->reference_spill_kinds=xr_malloc((size_t)c->reference_spill_count*sizeof(*c->reference_spill_kinds));
@@ -1022,6 +1048,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
+    if (rbc_lir_view_role(c->input, i)) return rbc_lir_view_emit(c, i);
     if(rbc_lir_array_point(c,i))return rbc_lir_array_emit(c,i);
     if (i->op == XR_LIR_CONST &&
         (c->immediates[i->result].known || c->immediates[i->result].pooled) &&
@@ -1272,7 +1299,9 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .array_operands=c->array_operands,.array_operand_count=c->array_operand_count,
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
         .result_kind=c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
-            xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) : XR_RBC_BITS,
+            xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
+            c->view.result == XR_LIR_SLICE_I64 ? XR_RBC_SLICE_I64 : XR_RBC_BITS,
+        .view_accesses=c->view_accesses, .view_access_count=c->view_access_count,
         .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count,
         .aggregate_values=c->aggregate_values, .aggregate_value_count=c->aggregate_value_count,
         .aggregate_size=c->aggregate_size, .aggregate_accesses=c->aggregate_accesses,
@@ -1293,6 +1322,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].register_kinds);
         xr_free((void *) program->module.functions[f].cell_kinds);
         xr_free((void *) program->module.functions[f].state_accesses);
+        xr_free((void *) program->module.functions[f].view_accesses);
         xr_free((void *) program->module.functions[f].array_accesses);
         xr_free((void *) program->module.functions[f].array_operands);
         xr_free((void *) program->module.functions[f].reference_spill_kinds);
@@ -1405,6 +1435,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.register_kinds);
             xr_free(c.cell_kinds);
             xr_free(c.state_accesses);
+            xr_free(c.view_accesses);
             xr_free(c.array_accesses);xr_free(c.array_operands);xr_free(c.reference_spill_kinds);
             xr_free(c.aggregate_values);xr_free(c.aggregate_accesses);xr_free(c.aggregate_operands);
             xr_free(c.aggregate_parameters);xr_free(c.aggregate_arguments);

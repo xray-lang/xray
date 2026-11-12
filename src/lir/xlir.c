@@ -133,6 +133,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
 #include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
+#include "xlir_view.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
     xr_free((void *) instruction->view.operands);
@@ -193,10 +194,15 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !lir_types_valid(m, entry.parameters, entry.parameter_count) ||
             !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
-        if (entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF)
+        if (entry.view_operation && !xr_lir_internal_view_intrinsic_valid(&entry))
+            return XR_LIR_UNSUPPORTED;
+        if (!entry.view_operation && (entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
+            entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))
             return XR_LIR_UNSUPPORTED;
         for (uint32_t p = 0; p < entry.parameter_count; ++p)
-            if (entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF)
+            if (!entry.view_operation && (entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
+                entry.parameters[p] == XR_LIR_VIEW_FRAME || entry.parameters[p] == XR_LIR_VIEW_CELL ||
+                entry.parameters[p] == XR_LIR_SLICE_I64))
                 return XR_LIR_UNSUPPORTED;
         for (uint32_t j = 0; j < i; ++j)
             if (m->intrinsics[j].id == entry.id)
@@ -293,10 +299,11 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         !xr_lir_internal_type_valid(m, spec->result, true) || spec->result == XR_LIR_I64_CELL ||
         spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
         spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
-        spec->result == XR_LIR_ARRAY_REF)
+        spec->result == XR_LIR_ARRAY_REF || spec->result == XR_LIR_VIEW_FRAME ||
+        spec->result == XR_LIR_VIEW_CELL)
         return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
-        if (spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&
+        if (spec->parameters[p] == XR_LIR_VIEW_FRAME || spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&
             (spec->kind != XR_LIR_FUNCTION_DEFINITION || p != spec->parameter_count - 1))) return false;
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
@@ -614,8 +621,10 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         instruction.view.result = ++f->value_count;
         f->values[f->value_count - 1].array_element =
             xr_lir_internal_array_result(m, f, &instruction.view);
-        if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE) {
-            const XrLirStateSlot *slot = &m->state_layout.slots[input->bits];
+        uint32_t state_slot = (uint32_t)input->bits;
+        if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE ||
+            xr_lir_internal_view_construct_slot(m, f, &instruction.view, &state_slot)) {
+            const XrLirStateSlot *slot = &m->state_layout.slots[state_slot];
             f->values[f->value_count - 1].state_reference =
                 (XrLirStateReference){slot->payload, slot->mutable, slot->array_element};
         }

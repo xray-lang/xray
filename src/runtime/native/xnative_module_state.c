@@ -13,6 +13,9 @@
 #include "xnative_module_state.h"
 #include "xnative_string.h"
 #include "xnative_array.h"
+#include "xnative_module_cell.h"
+#include "xir/xxir_type_arena_internal.h"
+#include "xir/xxir_value_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "shared/xr_pod_layout.h"
@@ -136,6 +139,9 @@ static XrXirValueStatus module_nullable_copy(const XrtModuleType *type, const vo
     return status;
 }
 
+static XrXirValueStatus module_cell_copy(const XrtModuleType *, const void *, void *);
+static void module_cell_drop(const XrtModuleType *, void *);
+
 static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
     const XrtModuleTypeSpec *spec = &layout->types[ordinal];
     XrtModuleType *type = &types[ordinal];
@@ -168,6 +174,10 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
         type->copy = module_nullable_copy; type->element = element;
         return true;
     }
+    case XRT_MODULE_CELL_ARRAY_I64:
+        type->size = sizeof(XrXirValue); type->alignment = _Alignof(XrXirValue);
+        type->copy = module_cell_copy; type->drop = module_cell_drop;
+        return true;
     case XRT_MODULE_FIXED_U8:
         if (!spec->argument || spec->argument > 65535) return false;
         type->size = spec->argument;
@@ -321,7 +331,7 @@ static XrXirValueStatus module_initial_copy(XrtModuleState *state, uint32_t slot
     return type->copy(type, value, module_payload(state, slot));
 }
 
-XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t slot,
+static XrtModuleStatus module_construct_value(XrtModuleState *state, uint32_t slot,
     const void *value, XrtModuleRef **out) {
     if (!state || !out || *out || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
@@ -334,6 +344,15 @@ XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t sl
     *out = &state->initializers[slot];
     return XR_XIR_VALUE_OK;
 }
+
+XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t slot,
+    const void *value, XrtModuleRef **out) {
+    if (!state || slot >= state->layout->view.slot_count ||
+        module_slot_type(state, slot)->kind == XRT_MODULE_CELL_ARRAY_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
+    return module_construct_value(state, slot, value, out);
+}
+
+#include "xnative_module_cell.inc.c"
 
 XRAY_API XrtModuleStatus xrt_module_publish(XrtModuleRef *reference) {
     if (!module_reference_valid(reference) || reference->required_flags != SLOT_CONSTRUCTED)
@@ -386,6 +405,7 @@ XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void 
         (state->flags[slot] & reference->required_flags) != reference->required_flags)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrtModuleType *type = module_slot_type(state, slot);
+    if (type->kind == XRT_MODULE_CELL_ARRAY_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = type->copy(type, value, state->scratch);
     if (status != XR_XIR_VALUE_OK) return status;
     void *payload = module_payload(state, slot);

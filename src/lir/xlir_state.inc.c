@@ -19,6 +19,8 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
     case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: *size = 8; *alignment = 8; return true;
     case XR_LIR_STRING: case XR_LIR_ARRAY:
         *size = sizeof(void *); *alignment = _Alignof(void *); return true;
+    case XR_LIR_VIEW_CELL:
+        *size = 16; *alignment = 8; return true;
     default: {
         XrLirTypeView view;
         XrLirTypeLayout layout;
@@ -63,6 +65,7 @@ static bool lir_state_layout_shape(const XrLirModule *m, const XrLirStateLayout 
         const XrLirStateSlot *slot = &layout->slots[s];
         uint32_t size, alignment;
         if (slot->module >= layout->module_count ||
+            (slot->payload == XR_LIR_VIEW_CELL && !slot->mutable) ||
             (slot->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(slot->array_element) :
                 slot->array_element != XR_LIR_TYPE_INVALID) ||
             !xr_lir_internal_state_payload(m, slot->payload, &size, &alignment) ||

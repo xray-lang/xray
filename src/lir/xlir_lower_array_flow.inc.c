@@ -11,8 +11,7 @@
  *   and snapshots follow the same live-in equations as scalar local state.
  */
 static bool lower_grouped_operands(XrXirOp op) {
-    return op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET || op == XR_XIR_CALL ||
-        op == XR_XIR_PRINT || op == XR_XIR_PHI;
+    return xr_xir_op_uses_operand_table(op);
 }
 static uint32_t lower_operand_count(const XrXirFunction *f, const XrXirInstruction *op) {
     static const uint8_t arity[] = {0,
@@ -20,6 +19,7 @@ static uint32_t lower_operand_count(const XrXirFunction *f, const XrXirInstructi
 #include "../xir/xxir_ops.def"
 #undef XR_XIR_OP
     };
+    if (op->op == XR_XIR_VIEW_CLEANUP) return 0;
     return lower_grouped_operands(op->op) ? op->args[1] :
         op->op == XR_XIR_RETURN ? f->result != XR_XIR_UNIT : arity[op->op];
 }
@@ -51,7 +51,7 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             const XrXirInstruction *op = &source->instructions[i];
             f->value_blocks[value] = b;
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
-                lower_type(c, op->type) == XR_LIR_ARRAY_CELL &&
+                (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;
         }
     }

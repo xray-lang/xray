@@ -35,7 +35,8 @@ static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
             if (layout.slots[i].type >= layout.type_count ||
                 (!xr_rbc_state_payload_kind(layout.types[layout.slots[i].type].kind) &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_FIXED_U8 &&
-                 layout.types[layout.slots[i].type].kind != XRT_MODULE_NULLABLE)) return false;
+                 layout.types[layout.slots[i].type].kind != XRT_MODULE_NULLABLE &&
+                 layout.types[layout.slots[i].type].kind != XRT_MODULE_CELL_ARRAY_I64)) return false;
     } else if (module->state_entry) return false;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
@@ -77,7 +78,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     if (index >= function->state_access_count) return false;
     XrRbcStateAccess access = function->state_accesses[index];
     XrtModuleTypeKind kind = layout.types[layout.slots[access.slot].type].kind;
-    if ((kind == XRT_MODULE_FIXED_U8 || kind == XRT_MODULE_NULLABLE) && op != XR_RBC_STATE_REFERENCE) return false;
+    if ((kind == XRT_MODULE_FIXED_U8 || kind == XRT_MODULE_NULLABLE || kind == XRT_MODULE_CELL_ARRAY_I64) && op != XR_RBC_STATE_REFERENCE) return false;
     XrRbcRegisterKind payload = rbc_state_register_kind(kind);
     if (op == XR_RBC_STATE_INITIALIZE)
         return !(layout.slots[access.slot].flags & XRT_MODULE_SLOT_MUTABLE) &&

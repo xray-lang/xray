@@ -125,7 +125,7 @@ static bool native_inputs_open(XrCompileResources *resources, NativeInputs *inpu
     char *header = NULL;
     bool exists = false;
     static const char *headers[] = {"xray_native_runtime.h", "xray_native_state.h",
-        "xray_native_array.h", "xray_export.h"};
+        "xray_native_array.h", "xray_native_view.h", "xray_export.h"};
     for (size_t i = 0; okay && i < sizeof(headers) / sizeof(headers[0]); ++i) {
         okay = xr_path_join_owned(&policy, inputs->include, headers[i], &header) == XR_OS_IO_OK &&
             xr_os_io_is_file(&policy, header, &exists) == XR_OS_IO_OK && exists;

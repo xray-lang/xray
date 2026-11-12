@@ -78,6 +78,7 @@ static bool lir_state_instruction_types(const XrLirModule *m, const XrLirFunctio
         v->op == XR_LIR_STATE_REFERENCE) {
         if (a != XR_LIR_STATE || v->bits >= m->state_layout.slot_count) return false;
         const XrLirStateSlot *slot = &m->state_layout.slots[v->bits];
+        if (v->op != XR_LIR_STATE_REFERENCE && slot->payload == XR_LIR_VIEW_CELL) return false;
         if (v->op != XR_LIR_STATE_REFERENCE &&
             v->operand_count != (slot->payload == XR_LIR_UNIT ? 1u : 2u)) return false;
         if (v->op == XR_LIR_STATE_INITIALIZE) {
@@ -97,8 +98,9 @@ static bool lir_state_instruction_types(const XrLirModule *m, const XrLirFunctio
     if (shape.payload == XR_LIR_TYPE_INVALID) return false;
     if (shape.payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape.array_element) :
         shape.array_element != XR_LIR_TYPE_INVALID) return false;
-    if (v->op == XR_LIR_STATE_READ) return v->type == shape.payload;
     if (v->op == XR_LIR_STATE_PUBLISH) return v->type == XR_LIR_UNIT && shape.mutable;
+    if (shape.payload == XR_LIR_VIEW_CELL) return false;
+    if (v->op == XR_LIR_STATE_READ) return v->type == shape.payload;
     return v->op == XR_LIR_STATE_WRITE && v->type == XR_LIR_UNIT && shape.mutable &&
         v->operand_count == (shape.payload == XR_LIR_UNIT ? 1u : 2u) &&
         (shape.payload != XR_LIR_ARRAY || f->values[v->operands[1] - 1].array_element == shape.array_element) &&
@@ -141,9 +143,11 @@ static XrLirStatus lir_state_function(const XrLirModule *m, uint32_t index,
         const XrLirValueData *v = &f->values[i];
         if (v->type != XR_LIR_STATE && v->type != XR_LIR_STATE_REF) continue;
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, i + 1);
+        uint32_t slot = 0;
         if ((v->type == XR_LIR_STATE && v->parameter && !v->block) ||
             (v->type == XR_LIR_STATE_REF && definition &&
-             (definition->op == XR_LIR_STATE_CONSTRUCT || definition->op == XR_LIR_STATE_REFERENCE))) {
+             (definition->op == XR_LIR_STATE_CONSTRUCT || definition->op == XR_LIR_STATE_REFERENCE ||
+              xr_lir_internal_view_construct_slot(m, f, definition, &slot)))) {
             grounded[i] = 1;
             queue[count++] = i;
         }

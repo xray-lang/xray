@@ -75,7 +75,7 @@ XRAY_API XR_NOINLINE XrtSliceI64 xrt_slice_i64_new(XrtViewFrame token, uint32_t 
     XrtViewRecord origin = view_require(frame, cell.identity, XRT_VIEW_CELL, source);
     XrtViewCellSlot *root = &origin.frame->cells[origin.slot];
     XrXirValueAdmission admission = view_value_admission(&root->value);
-    view_require_status(xr_xir_cell_authorized_read(&root->value, NULL, &frame->pending), source);
+    view_require_status(xr_xir_cell_authorized_read(&root->value, view_cell_authority(root), &frame->pending), source);
     int64_t length = 0;
     view_require_status(xr_xir_array_len(&frame->pending, &admission, &length), source);
     xr_xir_value_drop(&frame->pending);

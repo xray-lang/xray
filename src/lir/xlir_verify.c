@@ -20,7 +20,7 @@
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
-                                             "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref"};
+                                             "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -125,6 +125,7 @@ static bool lir_signature_matches(const XrLirFunctionData *f, const XrLirInstruc
 static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uint32_t);
 #include "xlir_state_verify.inc.c"
 #include "xlir_array_verify.inc.c"
+#include "xlir_view_verify.inc.c"
 
 static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
@@ -298,7 +299,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR &&
         v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
-        v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE && v->bits)
+        v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE && !lir_view_operation(v->op) && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->callee) || (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
@@ -344,6 +345,12 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
+            if (entry->view_operation) {
+                if (!xr_lir_internal_view_intrinsic_valid(entry) ||
+                    !lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result) ||
+                    !lir_view_instruction_types(m, f, v)) goto invalid;
+                return XR_LIR_OK;
+            }
             const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
             if (shape) {
                 if (!lir_array_intrinsic_signature(f, v, entry, shape) ||
@@ -365,7 +372,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_UNSUPPORTED;
     }
     if (v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE ? !lir_state_instruction_types(m, f, v) :
-        !lir_scalar_instruction_types(m, f, v))
+        (lir_view_operation(v->op) ? !lir_view_instruction_types(m, f, v) : !lir_scalar_instruction_types(m, f, v)))
         goto invalid;
     if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;
     return XR_LIR_OK;
@@ -829,13 +836,18 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
         }
+        const XrLirArrayIntrinsic *shape = m->array_intrinsics ? &m->array_intrinsics[i] : NULL;
+        bool empty = !shape || (!shape->id && !shape->parameter_elements && !shape->parameter_count &&
+            !shape->result_element && !shape->variadic && !shape->operation);
+        if (entry->view_operation) {
+            if (!empty || !xr_lir_internal_view_intrinsic_valid(entry))
+                return lir_status_error(d, XR_LIR_VERIFY_ERROR, "view intrinsic signature is invalid");
+            continue;
+        }
         if (!m->array_intrinsics) {
             if (array) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is missing");
             continue;
         }
-        const XrLirArrayIntrinsic *shape = &m->array_intrinsics[i];
-        bool empty = !shape->id && !shape->parameter_elements && !shape->parameter_count &&
-            !shape->result_element && !shape->variadic && !shape->operation;
         if ((array && empty) || (!empty && (shape->id != entry->id ||
             !xr_lir_internal_array_intrinsic_valid(entry, shape))))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is invalid");
@@ -865,7 +877,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
+        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f) ||
+            !lir_view_function_shape(m, f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||

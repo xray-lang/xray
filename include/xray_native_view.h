@@ -31,6 +31,13 @@ XRAY_API void xrt_view_cell_write(XrtViewFrame, XrtViewCell, const XrtArray *, u
 XRAY_API void xrt_view_cell_drop(XrtViewFrame, XrtViewCell, uint32_t source);
 XRAY_API int64_t xrt_view_cell_i64_get(XrtViewFrame, XrtViewCell, int64_t index, uint32_t source);
 XRAY_API void xrt_view_cell_i64_set(XrtViewFrame, XrtViewCell, int64_t index, int64_t value, uint32_t source);
+XRAY_API void xrt_view_cell_i64_push(XrtViewFrame, XrtViewCell, int64_t value, uint32_t source);
+/* The State owns the published identity independently of the activation alias.
+ * Import checks the actual reference's publication before creating an alias. */
+XRAY_API XrtModuleRef *xrt_view_cell_construct(XrtViewFrame, XrtViewCell,
+    XrtModuleState *, uint32_t slot, uint32_t source);
+XRAY_API XrtViewCell xrt_view_cell_import(XrtViewFrame, uint32_t slot,
+    XrtModuleRef *, uint32_t source);
 
 XRAY_API XrtSliceI64 xrt_slice_i64_new(XrtViewFrame, uint32_t slot,
     XrtViewCell, XrtViewRange, uint32_t source);

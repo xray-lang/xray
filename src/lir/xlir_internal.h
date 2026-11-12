@@ -17,8 +17,10 @@
 #include "xlir_state.h"
 #include "xlir_array.h"
 #include "xlir_types.h"
+#include "xlir_view.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
+enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
 
 typedef struct XrLirValueData {
     XrLirType type;
@@ -83,6 +85,11 @@ struct XrLirModule {
     uint32_t state_entry;
     bool state_layout_set;
 };
+
+XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *);
+XR_FUNC const XrLirIntrinsic *xr_lir_internal_view_intrinsic(const XrLirModule *, uint32_t);
+XR_FUNC bool xr_lir_internal_view_construct_slot(const XrLirModule *,
+    const XrLirFunctionData *, const XrLirInstructionView *, uint32_t *);
 
 /* Operand validation may reach a later block before its shape is checked. */
 static inline const XrLirInstructionView *xr_lir_internal_value_definition(

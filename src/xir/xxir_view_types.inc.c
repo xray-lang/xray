@@ -169,6 +169,7 @@ static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (node && node->kind==XR_XIR_TYPE_NULLABLE && view_pointer(types,node->element))
         node=xr_xir_type_node(types,node->element);
+    if (node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_I64) return true;
     return node && (node->kind==XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_PTR ||
         node->kind==XR_XIR_TYPE_MUT_PTR) && node->element==XR_XIR_U8;
 }

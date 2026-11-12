@@ -12,6 +12,7 @@
  */
 #include "xnative_view.h"
 #include "xnative_array.h"
+#include "xnative_module_cell.h"
 #include "xir/xxir_array.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_type_arena_internal.h"
@@ -26,7 +27,12 @@ enum { VIEW_ARRAY_TYPE = 256, VIEW_CELL_TYPE = 260, VIEW_SLICE_TYPE = 261 };
 typedef enum XrtViewRecordKind { XRT_VIEW_FRAME, XRT_VIEW_CELL, XRT_VIEW_SLICE } XrtViewRecordKind;
 typedef struct XrtViewFrameBody XrtViewFrameBody;
 typedef struct XrtViewScope XrtViewScope;
-typedef struct XrtViewCellSlot { XrXirValue value; uint64_t identity; } XrtViewCellSlot;
+typedef struct XrtViewCellSlot {
+    XrXirValue value;
+    XrXirCellAuthority authority;
+    uint64_t identity;
+    bool writable;
+} XrtViewCellSlot;
 typedef struct XrtViewSlot {
     XrXirValue value;
     XrtViewScope *scope;
@@ -86,6 +92,9 @@ static XrXirValueAdmission view_value_admission(const XrXirValue *value) {
 }
 
 #include "xnative_view_types.inc.c"
+static const XrXirCellAuthority *view_cell_authority(const XrtViewCellSlot *slot) {
+    return slot->authority.epoch ? &slot->authority : NULL;
+}
 static void view_scope_unlink(XrtViewScope *scope) {
     if (scope->previous) scope->previous->next = scope->next;
     else scope->owner->scopes = scope->next;
@@ -118,6 +127,8 @@ static void view_clear_cell(XrtViewFrameBody *frame, uint32_t ordinal) {
     XrtViewCellSlot *slot = &frame->cells[ordinal];
     view_record_remove(frame->registry, slot->identity);
     slot->identity = 0;
+    slot->authority = (XrXirCellAuthority){0};
+    slot->writable = false;
     xr_xir_value_drop(&slot->value);
 }
 static void view_frame_destroy(XrtViewFrameBody *frame) {
@@ -228,24 +239,28 @@ XRAY_API XR_NOINLINE XrtViewCell xrt_view_cell_new(XrtViewFrame token, uint32_t 
         xr_xir_value_drop(&frame->pending);
     }
     frame->cells[ordinal].identity = identity;
+    frame->cells[ordinal].writable = true;
     view_record_insert(frame->registry, (XrtViewRecord){identity, frame, ordinal, XRT_VIEW_CELL});
     return (XrtViewCell){identity};
 }
 XRAY_API XR_NOINLINE XrtArray *xrt_view_cell_read(XrtViewFrame token, XrtViewCell cell, uint32_t source) {
     XrtViewFrameBody *frame = view_current(token, source);
     XrtViewCellSlot *slot = view_cell(frame, cell, source);
-    view_require_status(xr_xir_cell_authorized_read(&slot->value, NULL, &frame->registry->root->pending), source);
+    view_require_status(xr_xir_cell_authorized_read(&slot->value, view_cell_authority(slot),
+        &frame->registry->root->pending), source);
     return xrt_array_publish_pending(source);
 }
 XRAY_API XR_NOINLINE void xrt_view_cell_write(XrtViewFrame token, XrtViewCell cell,
     const XrtArray *array, uint32_t source) {
     XrtViewFrameBody *frame = view_current(token, source);
     XrtViewCellSlot *slot = view_cell(frame, cell, source);
+    if (!slot->writable) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtArray *copy = NULL;
     view_require_status(xrt_array_owned_copy(array, frame->registry->types, XRT_ARRAY_I64, &copy), source);
     frame->pending = (XrXirValue){((const XirObject *)copy)->type, 0, (int64_t)(intptr_t)copy};
     XrXirValueAdmission admission = view_value_admission(&slot->value);
-    view_require_status(xr_xir_cell_authorized_write(&slot->value, NULL, &frame->pending, &admission), source);
+    view_require_status(xr_xir_cell_authorized_write(&slot->value, view_cell_authority(slot),
+        &frame->pending, &admission), source);
     xr_xir_value_drop(&frame->pending);
 }
 XRAY_API XR_NOINLINE void xrt_view_cell_drop(XrtViewFrame token, XrtViewCell cell, uint32_t source) {
@@ -260,17 +275,60 @@ XRAY_API XR_NOINLINE int64_t xrt_view_cell_i64_get(XrtViewFrame token, XrtViewCe
     XrtViewFrameBody *frame = view_current(token, source);
     XrtViewCellSlot *slot = view_cell(frame, cell, source);
     int64_t output = 0;
-    view_require_status(xir_cell_array_i64_read_owned(&slot->value, index, NULL, &output), source);
+    view_require_status(xir_cell_array_i64_read_owned(&slot->value, index, view_cell_authority(slot), &output), source);
     return output;
 }
 XRAY_API XR_NOINLINE void xrt_view_cell_i64_set(XrtViewFrame token, XrtViewCell cell,
     int64_t index, int64_t number, uint32_t source) {
     XrtViewFrameBody *frame = view_current(token, source);
     XrtViewCellSlot *slot = view_cell(frame, cell, source);
+    if (!slot->writable) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrXirValueAdmission admission = view_value_admission(&slot->value);
     XrXirFaultDetail fault = {0};
     view_require_status(xir_cell_array_i64_write_owned(&slot->value, index, number,
-        NULL, &admission, &fault), source);
+        view_cell_authority(slot), &admission, &fault), source);
+}
+
+XRAY_API XR_NOINLINE void xrt_view_cell_i64_push(XrtViewFrame token, XrtViewCell cell,
+    int64_t number, uint32_t source) {
+    XrtViewFrameBody *frame = view_current(token, source);
+    XrtViewCellSlot *slot = view_cell(frame, cell, source);
+    if (!slot->writable) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XrXirValueAdmission admission = view_value_admission(&slot->value);
+    XrXirValuePath path = {0};
+    XrXirFaultDetail fault = {0};
+    XrXirValue value = {XR_XIR_I64, 0, number};
+    view_require_status(xr_xir_cell_authorized_path_push(&slot->value, view_cell_authority(slot),
+        &path, &value, &admission, &fault), source);
+}
+
+XRAY_API XR_NOINLINE XrtModuleRef *xrt_view_cell_construct(XrtViewFrame token, XrtViewCell cell,
+    XrtModuleState *state, uint32_t ordinal, uint32_t source) {
+    XrtViewFrameBody *frame = view_current(token, source);
+    XrtViewCellSlot *slot = view_cell(frame, cell, source);
+    XrtModuleRef *reference = NULL;
+    view_require_status(xrt_module_cell_construct(state, ordinal, &slot->value, &reference), source);
+    slot->authority = (XrXirCellAuthority){frame->registry, slot, slot->identity};
+    return reference;
+}
+
+XRAY_API XR_NOINLINE XrtViewCell xrt_view_cell_import(XrtViewFrame token, uint32_t ordinal,
+    XrtModuleRef *reference, uint32_t source) {
+    XrtViewFrameBody *frame = view_current(token, source);
+    if (ordinal >= frame->cell_count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    uint64_t identity = view_identity(source);
+    XrXirCellPublication publication = {0};
+    bool writable = false;
+    view_require_status(xrt_module_cell_borrow(reference, &frame->pending, &publication, &writable), source);
+    view_clear_cell(frame, ordinal);
+    XrtViewCellSlot *slot = &frame->cells[ordinal];
+    slot->value = frame->pending;
+    frame->pending = (XrXirValue){0};
+    slot->identity = identity;
+    slot->authority = (XrXirCellAuthority){frame->registry, slot, identity};
+    slot->writable = writable;
+    view_record_insert(frame->registry, (XrtViewRecord){identity, frame, ordinal, XRT_VIEW_CELL});
+    return (XrtViewCell){identity};
 }
 
 #include "xnative_view_slice.inc.c"

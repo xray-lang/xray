@@ -101,7 +101,8 @@
     X(STATE_READ, ABK8)                                                                            \
     X(STATE_WRITE, ABK8)                                                                            \
     X(ARRAY_ACCESS, ABX)                                                                            \
-    X(AGGREGATE_ACCESS, ABX)
+    X(AGGREGATE_ACCESS, ABX)                                                                        \
+    X(VIEW_ACCESS, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -121,8 +122,17 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_STATE, XR_RBC_STATE_REF,
     XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_STRING_CELL,
     XR_RBC_ARRAY_U8, XR_RBC_ARRAY_U64, XR_RBC_ARRAY_U8_CELL, XR_RBC_ARRAY_U64_CELL,
-    XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF
+    XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
+    XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64
 } XrRbcRegisterKind;
+
+typedef enum XrRbcViewOperation {
+    XR_RBC_VIEW_NONE,
+#define XR_LIR_VIEW_OP(name, symbol, result, count, a, b, c, d, e, f) XR_RBC_VIEW_##name,
+#include "lir/xlir_view_ops.def"
+#undef XR_LIR_VIEW_OP
+    XR_RBC_VIEW_FRAME_ENTER, XR_RBC_VIEW_FRAME_LEAVE
+} XrRbcViewOperation;
 
 typedef enum XrRbcArrayOperation {
     XR_RBC_ARRAY_NEW, XR_RBC_ARRAY_LEN, XR_RBC_ARRAY_GET, XR_RBC_ARRAY_SET, XR_RBC_ARRAY_PUSH,
@@ -135,6 +145,15 @@ typedef enum XrRbcArrayOperation {
 /* A location names one activation-owned bank. Variadic operands remain real
  * locations, so a constructor need not fit all payloads in a call window. */
 typedef struct XrRbcArrayLocation { uint32_t index; bool spill; } XrRbcArrayLocation;
+
+/* Library calls retain their actual typed locations. Only activation enter
+ * carries immediate counts; all library arguments are real value operands. */
+typedef struct XrRbcViewAccess {
+    XrRbcViewOperation operation;
+    XrRbcArrayLocation result, operands[6];
+    uint32_t count;
+    uint64_t bits;
+} XrRbcViewAccess;
 typedef struct XrRbcArrayAccess {
     XrRbcArrayOperation operation;
     XrRbcRegisterKind kind;
@@ -212,6 +231,8 @@ typedef struct {
     uint32_t aggregate_result_type;
     const uint32_t *aggregate_arguments;
     size_t aggregate_argument_count;
+    const XrRbcViewAccess *view_accesses;
+    size_t view_access_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
