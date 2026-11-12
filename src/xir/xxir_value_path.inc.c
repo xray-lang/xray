@@ -42,8 +42,9 @@ static XrXirValueStatus path_shared_field(ValuePathWrite *write, XirObject *iden
     }
     XrXirLayout layout = {0};
     if (!xr_xir_compile_type_arena_layout(admission->arena, slot->type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (sizeof(ValuePathField) > SIZE_MAX - (size_t)layout.size) return XR_XIR_VALUE_OVERFLOW;
-    size_t bytes = sizeof(ValuePathField) + layout.size;
+    size_t bytes = layout.size;
+    if (bytes > SIZE_MAX - sizeof(ValuePathField)) return XR_XIR_VALUE_OVERFLOW;
+    bytes += sizeof(ValuePathField);
     if (bytes > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     ValuePathField *item = xr_xir_domain_allocate(admission->domain, bytes, &status);
