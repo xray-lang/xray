@@ -126,7 +126,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:18:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:36:1: CELL_STRING_APPEND is not supported by LIR lowering yet"
       }
     },
     {
@@ -138,7 +138,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:18:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:36:1: CELL_STRING_APPEND is not supported by LIR lowering yet"
       }
     },
     {
