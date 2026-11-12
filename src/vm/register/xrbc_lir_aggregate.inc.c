@@ -116,7 +116,9 @@ static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
             if (c->aggregate_home[value] == UINT32_MAX) continue;
             XrRbcAggregateValue original = c->aggregate_values[c->aggregate_home[value]];
             XrRbcAggregateLayout layout;
-            xr_rbc_aggregate_layout(module->aggregate_types[original.type], &layout);
+            if (original.type >= module->aggregate_type_count ||
+                !xr_rbc_aggregate_layout(module->aggregate_types[original.type], &layout))
+                return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "aggregate value lost its exact physical type");
             uint64_t offset = ((uint64_t)c->aggregate_size + layout.alignment - 1) & ~(uint64_t)(layout.alignment - 1);
             if (offset + layout.size > UINT32_MAX)
                 return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate edge storage exceeds indexed capacity");
