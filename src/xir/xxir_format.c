@@ -23,7 +23,7 @@ static bool xir_format_cursor(const void *context,XrValueFormatNode node,XrXirFo
     if (node.type>XR_VALUE_FORMAT_MAX_DEPTH+1 || node.value!=&format->cursors[node.type-1]) return false;
     *output=format->cursors[node.type-1];return true;
 }
-static int xir_format_scalar(const XrXirValue *value,XrValueFormatView *view) {
+XR_FUNC int xr_xir_format_scalar(const XrXirValue *value,XrValueFormatView *view) {
     XrXirType type = (XrXirType)value->type;
     if (type==XR_XIR_UNIT) {
         view->kind=XR_VALUE_FORMAT_LITERAL;view->name="()";view->name_size=2;return 1;
@@ -74,7 +74,7 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     bool is_null=false;
     if (!xr_xir_value_format_unwrap(&cursor,&cursor,&is_null,format->values,&format->status)) return 0;
     if (is_null) {view->kind=XR_VALUE_FORMAT_LITERAL;view->name="null";view->name_size=4;return 1;}
-    if (xr_xir_value_format_leaf(&cursor,&borrowed) && xir_format_scalar(&borrowed,view)) return 1;
+    if (xr_xir_value_format_leaf(&cursor,&borrowed) && xr_xir_format_scalar(&borrowed,view)) return 1;
     XrXirFormatAggregate aggregate={0};
     if (!xr_xir_value_format_aggregate(&cursor,&aggregate)) return 0;
     view->kind=aggregate.kind==XIR_FORMAT_TUPLE?XR_VALUE_FORMAT_TUPLE:

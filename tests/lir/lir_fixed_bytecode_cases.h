@@ -115,7 +115,7 @@ static void fixed_bytecode_state_rejections(XrRbcProgram *program, bool immutabl
         }
         CHECK(snapshot != UINT32_MAX);
     } else {
-        XrRbcAggregateType types[] = {owned->aggregate_types[0], xr_rbc_fixed_type(18)};
+        XrPodType types[] = {owned->aggregate_types[0], xr_rbc_fixed_type(18)};
         module.aggregate_types = types;
         module.aggregate_type_count = 2;
         uint32_t home = (uint32_t)function.aggregate_value_count++;
@@ -204,8 +204,8 @@ static void fixed_bytecode_calls(void) {
             if (!aggregate) CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 3737);
             else {
                 const uint8_t *bytes = NULL;
-                XrRbcAggregateType type = {0};
-                CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.kind == XR_RBC_FIXED_U8 && type.count == counts[n]);
+                XrPodType type = {0};
+                CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.kind == XR_POD_FIXED_U8 && type.count == counts[n]);
                 CHECK(!xr_rbc_outcome_bits(outcome, &bits));
                 for (uint32_t p = 0; p < type.count; ++p) CHECK(bytes[p] == 37);
             }

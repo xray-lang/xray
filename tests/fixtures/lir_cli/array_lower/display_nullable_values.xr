@@ -1,0 +1,15 @@
+fn some<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+var visits = 0
+fn unit() { visits += 1 }
+var value: ()? = null
+print("unit=${value}")
+value = unit()
+print("unit=${value}; visits=${visits}")
+print("${none<i8>()} ${none<i16>()} ${none<i32>()}")
+print("${some<u8>(255)} ${none<u16>()} ${none<u32>()}")
+print("${some<i64>(-9223372036854775808)} ${some<u64>(18446744073709551615)}")
+print("${some<f64>(1.25)} ${some<bool>(true)} ${some<bool>(false)}")
+print("f32=${none<f32>()}")
+print(true)
+print(false)

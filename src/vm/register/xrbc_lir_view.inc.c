@@ -11,7 +11,8 @@ static uint32_t rbc_lir_view_role(const XrLirModule *m, const XrLirInstructionVi
     if (i->op == XR_LIR_VIEW_FRAME_LEAVE) return XR_RBC_VIEW_FRAME_LEAVE;
     if (i->op != XR_LIR_CALL_INTRINSIC) return 0;
     XrLirIntrinsic entry = {0};
-    return xr_lir_intrinsic_view(m, i->intrinsic, &entry) == XR_LIR_OK ? entry.view_operation : 0;
+    return xr_lir_intrinsic_view(m, i->intrinsic, &entry) == XR_LIR_OK &&
+        entry.operation < XR_LIR_VIEW_OP_COUNT ? entry.operation : 0;
 }
 static bool rbc_lir_view_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
     if (c->view_access_count > UINT16_MAX)

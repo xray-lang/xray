@@ -17,6 +17,7 @@
 #include "lir/xlir_state.h"
 #include "lir/xlir_array.h"
 #include "lir/xlir_view.h"
+#include "lir/xlir_display.h"
 #include "lir/xlir_builtin_admission.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
@@ -460,7 +461,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
-    if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) &&
+    if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
@@ -479,7 +480,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     switch (i->op) {
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        return rbc_lir_view_role(input, i) ||
+        return xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
             (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
     }
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
@@ -660,7 +661,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            if (xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
@@ -1063,6 +1064,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
     if (rbc_lir_view_role(c->input, i)) return rbc_lir_view_emit(c, i);
@@ -1475,29 +1477,19 @@ static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
     XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
     uint32_t count = xr_lir_constructed_type_count(input);
     if (!count) return XR_RBC_COMPILE_OK;
-    if (sizeof(XrRbcAggregateType) > SIZE_MAX / count)
+    if (sizeof(XrPodType) > SIZE_MAX / count)
         return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
             "physical type projection exceeds address space", (XrLirSource){0});
-    XrRbcAggregateType *types = xr_malloc((size_t)count * sizeof(*types));
+    XrPodType *types = xr_malloc((size_t)count * sizeof(*types));
     if (!types)
         return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
             "cannot receive physical aggregate types", (XrLirSource){0});
     program->module.aggregate_types = types;
     program->module.aggregate_type_count = count;
     for (uint32_t n = 0; n < count; ++n) {
-        XrLirTypeView shape = {0};
-        XrLirTypeLayout memory = {0};
-        if (xr_lir_type_view(input, XR_LIR_TYPE_COUNT + n, &shape) != XR_LIR_OK ||
-            xr_lir_type_layout(input, XR_LIR_TYPE_COUNT + n, &memory) != XR_LIR_OK ||
-            (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_NULLABLE) ||
-            memory.size > UINT32_MAX || memory.managed)
+        if (xr_lir_pod_type(input, XR_LIR_TYPE_COUNT + n, &types[n]) != XR_LIR_OK)
             return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
                 "physical aggregate type has no bytecode projection", (XrLirSource){0});
-        uint32_t element = shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? 0 :
-            shape.element >= XR_LIR_TYPE_COUNT ? XR_POD_SCALAR_COUNT + shape.element - XR_LIR_TYPE_COUNT :
-            (uint32_t)lir_pod_scalar(shape.element);
-        types[n] = (XrRbcAggregateType){shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? XR_RBC_FIXED_U8 : XR_RBC_NULLABLE,
-            shape.count, element, {(uint32_t)memory.size, memory.alignment, memory.scalar_count}};
         if (!xr_rbc_aggregate_type_valid(&program->module, n))
             return rbc_lir_error(diagnostic, XR_RBC_COMPILE_INVALID,
                 "physical aggregate descriptor differs from its owned layout", (XrLirSource){0});

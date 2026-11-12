@@ -19,10 +19,10 @@ static void test_nullable_outcome_owner(void) {
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
         xr_rbc_execution_free(&execution);
         xr_rbc_program_destroy(program);
-        XrRbcAggregateType type;
+        XrPodType type;
         const uint8_t *bytes = NULL;
         CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes));
-        CHECK(type.kind == XR_RBC_NULLABLE && type.physical.size == (leaf ? 1032u : 128u));
+        CHECK(type.kind == XR_POD_NULLABLE && type.physical.size == (leaf ? 1032u : 128u));
         for (uint32_t n = 0; n < type.physical.size; ++n) CHECK(!bytes[n]);
         uint32_t depth = 1;
         while (type.element >= XR_POD_SCALAR_COUNT) {
@@ -30,8 +30,8 @@ static void test_nullable_outcome_owner(void) {
             ++depth;
         }
         CHECK(depth == 128 && type.element == (leaf ? XR_POD_I64 : XR_POD_UNIT));
-        type.kind = XR_RBC_FIXED_U8;
-        CHECK(!xr_rbc_outcome_aggregate_type(outcome, 128, &type) && type.kind == XR_RBC_FIXED_U8);
+        type.kind = XR_POD_FIXED_U8;
+        CHECK(!xr_rbc_outcome_aggregate_type(outcome, 128, &type) && type.kind == XR_POD_FIXED_U8);
         xr_rbc_outcome_free(&outcome);
     }
 }

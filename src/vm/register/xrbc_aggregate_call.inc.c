@@ -41,7 +41,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         return XR_RBC_OK;
     }
     XrRbcAggregateValue value = function->aggregate_values[access.source];
-    XrRbcAggregateType type = module->aggregate_types[value.type];
+    XrPodType type = module->aggregate_types[value.type];
     XrRbcAggregateLayout layout;
     xr_rbc_aggregate_layout(type, &layout);
     const uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);

@@ -12,7 +12,7 @@
 typedef struct RawFixedCalls {
     XrRbcModule module;
     XrRbcFunction functions[3];
-    XrRbcAggregateType type;
+    XrPodType type;
     XrRbcAggregateValue root_homes[2], callee_home;
     XrRbcAggregateAccess root_accesses[5], callee_accesses[2], forward_access;
     XrRbcArrayLocation index, *operands;

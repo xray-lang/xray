@@ -1263,6 +1263,7 @@ static void test_module_capabilities(void) {
 
 #include "register_fixed_type_cases.h"
 #include "register_nullable_cases.h"
+#include "register_pod_display_cases.h"
 #include "register_fixed_value_cases.h"
 #include "register_fixed_call_cases.h"
 
@@ -1271,6 +1272,7 @@ int main(int argc, char **argv) {
     test_raw_fixed_no_value_callee();
     test_raw_arrays();
     test_raw_array_display();
+    test_raw_pod_display();
     test_raw_array_repeat();
     test_raw_unsigned_arrays();
     test_raw_array_reference_lifetime();

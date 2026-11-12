@@ -173,7 +173,7 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_NULLABLE_NONE, XR_RBC_NULLABLE_SOME, XR_RBC_NULLABLE_IS_SOME, XR_RBC_NULLABLE_UNWRAP,
     XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
     XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
-    XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN
+    XR_RBC_AGGREGATE_DISPLAY, XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
@@ -251,18 +251,10 @@ typedef struct {
     size_t length;
 } XrRbcLiteral;
 
-#include "shared/xr_pod_layout.h"
-typedef enum XrRbcAggregateKind { XR_RBC_FIXED_U8 = 1, XR_RBC_NULLABLE } XrRbcAggregateKind;
-typedef struct XrRbcAggregateType {
-    XrRbcAggregateKind kind;
-    uint32_t count;
-    /* Scalar IDs precede constructed ordinals at XR_POD_SCALAR_COUNT. */
-    uint32_t element;
-    XrPodLayout physical;
-} XrRbcAggregateType;
+#include "xray_native_pod.h"
 
-static inline XrRbcAggregateType xr_rbc_fixed_type(uint32_t count) {
-    return (XrRbcAggregateType){XR_RBC_FIXED_U8, count, 0, {count, 1, count}};
+static inline XrPodType xr_rbc_fixed_type(uint32_t count) {
+    return (XrPodType){XR_POD_FIXED_U8, count, 0, {count, 1, count}};
 }
 
 typedef struct {
@@ -279,7 +271,7 @@ typedef struct {
     uint32_t state_entry;
     // Physical aggregate shapes have module-local ordinals. Programs own this
     // projection; externally supplied modules borrow it with their code.
-    const XrRbcAggregateType *aggregate_types;
+    const XrPodType *aggregate_types;
     size_t aggregate_type_count;
 } XrRbcModule;
 
@@ -340,9 +332,9 @@ XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
 // The outcome owns both the exact shape and compact bytes after all execution
 // and program owners retire. The borrowed byte span ends with the outcome.
 XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
-    XrRbcAggregateType *type, const uint8_t **bytes);
+    XrPodType *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *,
-    uint32_t ordinal, XrRbcAggregateType *type);
+    uint32_t ordinal, XrPodType *type);
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
 XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);

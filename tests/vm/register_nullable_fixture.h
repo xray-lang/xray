@@ -9,7 +9,7 @@
 #ifndef REGISTER_NULLABLE_FIXTURE_H
 #define REGISTER_NULLABLE_FIXTURE_H
 typedef struct RawNullableFixture {
-    XrRbcAggregateType types[2];
+    XrPodType types[2];
     XrRbcAggregateValue homes[2];
     XrRbcAggregateAccess accesses[3];
     uint32_t code[3];
@@ -22,8 +22,8 @@ static void raw_nullable_fixture(RawNullableFixture *f) {
     XrPodLayout scalar, inner, outer;
     XR_CHECK(xr_pod_scalar_layout(XR_POD_I64, &scalar) && xr_pod_nullable_layout(scalar, &inner) &&
         xr_pod_nullable_layout(inner, &outer), "nullable fixture has checked scalar and aggregate layouts");
-    f->types[0] = (XrRbcAggregateType){XR_RBC_NULLABLE, 0, XR_POD_I64, inner};
-    f->types[1] = (XrRbcAggregateType){XR_RBC_NULLABLE, 0, XR_POD_SCALAR_COUNT, outer};
+    f->types[0] = (XrPodType){XR_POD_NULLABLE, 0, XR_POD_I64, inner};
+    f->types[1] = (XrPodType){XR_POD_NULLABLE, 0, XR_POD_SCALAR_COUNT, outer};
     f->homes[0] = (XrRbcAggregateValue){0, 0};
     f->homes[1] = (XrRbcAggregateValue){1, inner.size};
     f->accesses[0] = (XrRbcAggregateAccess){.operation=XR_RBC_NULLABLE_SOME, .result={0, false}};

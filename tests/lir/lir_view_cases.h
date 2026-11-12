@@ -27,10 +27,10 @@ static void view_lir_rejections(XrLirModule *module) {
     for (uint32_t n = 0; n < module->intrinsic_count; ++n) {
         XrLirIntrinsic *entry = &module->intrinsics[n];
         if (entry->id != intrinsic) continue;
-        uint32_t role = entry->view_operation;
-        entry->view_operation = 0;
+        uint32_t role = entry->operation;
+        entry->operation = 0;
         CHECK(xr_lir_verify(module, NULL) == XR_LIR_VERIFY_ERROR);
-        entry->view_operation = role;
+        entry->operation = role;
     }
     XrLirInstructionView *leave = &block->instructions[block->instruction_count - 2].view;
     CHECK(leave->op == XR_LIR_VIEW_FRAME_LEAVE);
@@ -91,7 +91,7 @@ static void view_receiving_owners(void) {
     CHECK(id > XR_LIR_ARRAY_CATALOG_COUNT);
     OK(xr_lir_intrinsic_view(source, id, &before));
     OK(xr_lir_intrinsic_view(copy, id, &after));
-    CHECK(before.parameters != after.parameters && before.view_operation == after.view_operation);
+    CHECK(before.parameters != after.parameters && before.operation == after.operation);
     xr_lir_module_destroy(source);
     OK(xr_lir_verify(copy, NULL));
     XrRbcProgram *program = NULL;

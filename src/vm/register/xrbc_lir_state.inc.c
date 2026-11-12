@@ -55,13 +55,13 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             for (uint32_t kind = XRT_MODULE_UNIT; kind < XRT_MODULE_FIXED_U8; ++kind)
                 types[kind - XRT_MODULE_UNIT] = (XrtModuleTypeSpec){(XrtModuleTypeKind)kind, 0};
             for (size_t t = 0; t < program->module.aggregate_type_count; ++t) {
-                XrRbcAggregateType shape = program->module.aggregate_types[t];
+                XrPodType shape = program->module.aggregate_types[t];
                 uint32_t argument = shape.count;
-                if (shape.kind == XR_RBC_NULLABLE) argument = shape.element < XR_POD_SCALAR_COUNT ?
+                if (shape.kind == XR_POD_NULLABLE) argument = shape.element < XR_POD_SCALAR_COUNT ?
                     (uint32_t)xr_pod_module_kind((XrPodScalar)shape.element) - XRT_MODULE_UNIT :
                     LIR_STATE_CONSTRUCTED_BASE + shape.element - XR_POD_SCALAR_COUNT;
                 types[LIR_STATE_CONSTRUCTED_BASE + t] = (XrtModuleTypeSpec){
-                    shape.kind == XR_RBC_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
+                    shape.kind == XR_POD_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
             }
             if (lir_state_has_view_cells(&layout)) types[type_count - 1] =
                 (XrtModuleTypeSpec){XRT_MODULE_CELL_ARRAY_I64, 0};

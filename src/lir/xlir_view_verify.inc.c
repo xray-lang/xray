@@ -12,7 +12,7 @@ static bool lir_view_operation(XrLirOp op) {
 static uint32_t lir_view_call_operation(const XrLirModule *m, const XrLirInstructionView *v) {
     const XrLirIntrinsic *entry = v->op == XR_LIR_CALL_INTRINSIC ?
         xr_lir_internal_view_intrinsic(m, v->intrinsic) : NULL;
-    return entry ? entry->view_operation : 0;
+    return entry ? entry->operation : 0;
 }
 static bool lir_view_point(const XrLirModule *m, const XrLirInstructionView *v) {
     return lir_view_operation(v->op) || lir_view_call_operation(m, v);

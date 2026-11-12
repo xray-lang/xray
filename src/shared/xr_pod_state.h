@@ -8,7 +8,7 @@
  */
 #ifndef XR_POD_STATE_H
 #define XR_POD_STATE_H
-#include "xr_pod_layout.h"
+#include "xray_native_pod.h"
 #include "xray_native_state.h"
 static inline XrtModuleTypeKind xr_pod_module_kind(XrPodScalar scalar) {
     static const XrtModuleTypeKind kinds[] = {XRT_MODULE_UNIT, XRT_MODULE_BOOL,

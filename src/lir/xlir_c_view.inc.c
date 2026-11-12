@@ -10,7 +10,7 @@ static uint32_t c_view_operation(LirC *c, const XrLirInstructionView *v) {
     XrLirIntrinsic entry = {0};
     if (v->op != XR_LIR_CALL_INTRINSIC ||
         xr_lir_intrinsic_view(c->request->module, v->intrinsic, &entry) != XR_LIR_OK) return 0;
-    return entry.view_operation;
+    return entry.operation < XR_LIR_VIEW_OP_COUNT ? entry.operation : 0;
 }
 static bool c_view_point(LirC *c, const XrLirInstructionView *v) {
     return v->op == XR_LIR_VIEW_FRAME_ENTER || v->op == XR_LIR_VIEW_FRAME_LEAVE || c_view_operation(c, v);

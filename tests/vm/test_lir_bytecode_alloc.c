@@ -769,7 +769,7 @@ static void aggregate_call_compiler_failures(bool aggregate) {
     XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
     if (aggregate) {
-        XrRbcAggregateType type = {0};
+        XrPodType type = {0};
         const uint8_t *bytes = NULL;
         CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.count == 17);
         for (uint32_t n = 0; n < type.count; ++n) CHECK(bytes[n] == 37);
@@ -783,6 +783,8 @@ static void aggregate_call_compiler_failures(bool aggregate) {
         aggregate ? "owned byte" : "scalar", total);
     attempts = 0;
 }
+
+#include "lir_display_alloc_cases.h"
 
 int main(void) {
     aggregate_call_compiler_failures(false);
@@ -839,6 +841,7 @@ int main(void) {
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
     view_compiler_failures();
+    display_compiler_failures();
     compiled_source_maps();
     frame_cfg_compiler_failures();
     CHECK(!live_allocations);

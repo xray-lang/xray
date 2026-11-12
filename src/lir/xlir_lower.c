@@ -42,7 +42,7 @@ typedef struct Lower {
     XrLirStateLayout state_layout;
     uint32_t *state_slots, **module_cells;
     uint8_t *state_required;
-    bool prints, string_prints, arrays, views;
+    bool prints, string_prints, arrays, views, displays;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerArrayCells {
@@ -113,6 +113,20 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
     if (type == XR_XIR_STRING)
         return XR_LIR_STRING;
     return XR_LIR_TYPE_INVALID;
+}
+
+/* Inline Nullable payload transport does not enable ordinary scalar operations
+ * that the execution backend has not admitted. */
+static XrLirType lower_pod_element(const Lower *c, XrXirType type) {
+    switch (type) {
+    case XR_XIR_I8: return XR_LIR_I8;
+    case XR_XIR_I16: return XR_LIR_I16;
+    case XR_XIR_I32: return XR_LIR_I32;
+    case XR_XIR_U16: return XR_LIR_U16;
+    case XR_XIR_U32: return XR_LIR_U32;
+    case XR_XIR_F32: return XR_LIR_F32;
+    default: return lower_type(c, type);
+    }
 }
 
 static XrLirSource lower_range_source(const Lower *c, XrXirSourceRange range) {
@@ -272,7 +286,7 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         type = node->element;
         node = xr_xir_type_node(c->source->types, type);
     }
-    XrLirType element = lower_type(c, type);
+    XrLirType element = lower_pod_element(c, type);
     if (!element || element == XR_LIR_STRING || element == XR_LIR_ARRAY)
         return lower_unsupported(c, "Nullable payload has no inline POD layout");
     while (depth) {
@@ -815,7 +829,11 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     }
     if (op->op == XR_XIR_CONST_STRING)
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
-    if (op->op == XR_XIR_TO_STRING && xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 &&
+    if (op->op == XR_XIR_TO_STRING &&
+        xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f, op->args[0]))))
+        c->displays = true;
+    if (op->op == XR_XIR_TO_STRING &&
+        !xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f, op->args[0]))) && xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 &&
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_F64 &&
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_STRING &&
         !lower_array_element(c, xr_xir_operand_type(f, op->args[0])))
@@ -869,7 +887,11 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c, "print other than one supported value");
         uint32_t value = f->operands[op->args[0]];
         XrXirType type = xr_xir_operand_type(f, value);
-        if (type == XR_XIR_STRING || type == XR_XIR_F64) {
+        if (!lower_receive_type(c, type)) return false;
+        if (xr_lir_display_type(c->module, lower_type(c, type))) {
+            c->displays = true;
+            c->string_prints = true;
+        } else if (type == XR_XIR_STRING || type == XR_XIR_F64) {
             c->string_prints = true;
         } else if (type == XR_XIR_I64 || type == XR_XIR_U8) c->prints = true;
         else return lower_unsupported(c, "print other than one supported value");
@@ -1440,6 +1462,14 @@ static bool lower_nullable_instruction(LowerFunction *f, uint32_t b, uint32_t i)
     return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &invert, result));
 }
 
+static bool lower_display(LowerFunction *f, uint32_t block, XrLirValue argument, XrLirValue *output) {
+    Lower *c = f->owner;
+    uint32_t intrinsic = 0;
+    if (!lower_build(c, xr_lir_display_operation(c->module, &intrinsic))) return false;
+    XrLirInstruction call = {.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_STRING,
+        .intrinsic=intrinsic, .operands=&argument, .operand_count=1, .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &call, output));
+}
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -1485,6 +1515,8 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         XrLirValue args[2] = {{0}};
         uint32_t count = op->op == XR_XIR_CONCAT_STRING ? 2u : 1u;
         for (uint32_t a = 0; a < count; ++a) if (!lower_value(f, op->args[a], &args[a])) return false;
+        if (op->op == XR_XIR_TO_STRING && xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f->source, op->args[0]))))
+            return lower_display(f, b, args[0], &f->values[result]);
         XrLirInstruction owned = {.op = lower_type(c, op->type) == XR_LIR_ARRAY ? XR_LIR_ARRAY_RETAIN :
             op->op == XR_XIR_CONCAT_STRING ? XR_LIR_STRING_CONCAT :
             xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_I64 ? XR_LIR_STRING_I64 :
@@ -1535,6 +1567,13 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
+        if (xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f->source, value)))) {
+            XrLirValue argument = {0}, text = {0};
+            if (!lower_value(f, value, &argument) || !lower_display(f, b, argument, &text)) return false;
+            XrLirInstruction print = {.op=XR_LIR_STRING_PRINT, .type=XR_LIR_UNIT,
+                .operands=&text, .operand_count=1, .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &print));
+        }
         if (xr_xir_operand_type(f->source, value) == XR_XIR_U8) {
             XrLirValue argument = {0}, widened = {0};
             if (!lower_value(f, value, &argument)) return false;
@@ -2107,8 +2146,13 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.arrays |= c.state_layout.slots[s].payload == XR_LIR_ARRAY;
     if (good && c.views) {
         c.arrays = true;
-        good = lower_view_state_layout(&c) && lower_build(&c, xr_lir_view_catalog_install(c.module));
-    } else if (good && c.arrays)
+        good = lower_view_state_layout(&c);
+    }
+    if (good && c.displays)
+        good = lower_build(&c, xr_lir_display_catalog_install(c.module, c.views, c.arrays));
+    else if (good && c.views)
+        good = lower_build(&c, xr_lir_view_catalog_install(c.module));
+    else if (good && c.arrays)
         good = lower_build(&c, xr_lir_array_catalog_install(c.module));
     if (good && c.state_layout.slot_count)
         good = lower_build(&c, xr_lir_set_state_layout(c.module, &c.state_layout));

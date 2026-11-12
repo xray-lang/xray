@@ -1,0 +1,6 @@
+slice=[1, 2]
+pop=3
+shift=1
+last=2
+empty=null
+contains=false

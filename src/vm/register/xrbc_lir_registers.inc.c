@@ -213,6 +213,10 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                     if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
             if (i.op == XR_LIR_ARRAY_BORROW && !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
+            /* The view import ABI consumes an actual State reference register.
+             * Ordinary numeric spill homes carry no such descriptor kind. */
+            if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_IMPORT &&
+                !rbc_lir_pin_value(c, i.operands[2], budget)) return false;
         }
     }
     for(uint32_t v=1;v<=c->view.value_count;++v) {

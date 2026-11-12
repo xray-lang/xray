@@ -53,4 +53,7 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *, uint32_t index
 XR_FUNC bool xr_xir_value_format_unwrap(const XrXirFormatCursor *,XrXirFormatCursor *,bool *is_null,
     XrXirValueAdmission *,XrXirValueStatus *);
 XR_FUNC XrXirValueStatus xr_xir_value_display_text(const XrXirValue *,XrXirValueAdmission *,XrXirValue *);
+XR_FUNC int xr_xir_format_scalar(const XrXirValue *, XrValueFormatView *);
+XR_FUNC XrXirValueStatus xr_xir_format_text(XrValueFormatReader, XrValueFormatNode,
+    XrXirValueAdmission *, XrXirValue *);
 #endif // XXIR_FORMAT_H

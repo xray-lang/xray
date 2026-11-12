@@ -10,6 +10,26 @@ static bool rbc_aggregate_bits_location(const XrRbcFunction *f, XrRbcArrayLocati
     return rbc_array_location_valid(f, location) && rbc_array_location_kind(f, location) == XR_RBC_BITS;
 }
 
+static bool rbc_display_valid(const XrRbcModule *module, const XrRbcFunction *f,
+    XrRbcAggregateAccess access) {
+    if (access.destination || access.callee || access.window || !rbc_array_location_valid(f, access.result) ||
+        rbc_array_location_kind(f, access.result) != XR_RBC_STRING) return false;
+    if (access.slot == XR_POD_BOOL)
+        return !access.source && access.count == 1 && access.first < f->aggregate_operand_count &&
+            rbc_aggregate_bits_location(f, f->aggregate_operands[access.first]);
+    if (access.slot < XR_POD_SCALAR_COUNT || access.source >= f->aggregate_value_count ||
+        access.slot - XR_POD_SCALAR_COUNT != f->aggregate_values[access.source].type ||
+        access.first || access.count) return false;
+    uint32_t type = access.slot;
+    while (type >= XR_POD_SCALAR_COUNT) {
+        uint32_t index = type - XR_POD_SCALAR_COUNT;
+        if (index >= module->aggregate_type_count || module->aggregate_types[index].kind != XR_POD_NULLABLE)
+            return false;
+        type = module->aggregate_types[index].element;
+    }
+    return type < XR_POD_SCALAR_COUNT;
+}
+
 static bool rbc_aggregate_reference_location(const XrRbcFunction *f, XrRbcArrayLocation location) {
     return rbc_array_location_valid(f, location) && (location.spill ?
         location.index >= f->reference_spill_count : rbc_register_kind(f, location.index) == XR_RBC_STATE_REF);
@@ -19,9 +39,9 @@ static bool rbc_aggregate_state_type(const XrRbcModule *module, uint32_t aggrega
     XrtModuleLayoutSpec layout = {0};
     if (!module->state_layout || xrt_module_layout_view(module->state_layout, &layout) != 0) return false;
     while (aggregate < module->aggregate_type_count && runtime < layout.type_count) {
-        XrRbcAggregateType type = module->aggregate_types[aggregate];
+        XrPodType type = module->aggregate_types[aggregate];
         XrtModuleTypeSpec state = layout.types[runtime];
-        if (type.kind == XR_RBC_FIXED_U8)
+        if (type.kind == XR_POD_FIXED_U8)
             return state.kind == XRT_MODULE_FIXED_U8 && state.argument == type.count;
         if (state.kind != XRT_MODULE_NULLABLE || state.argument >= runtime) return false;
         runtime = state.argument;
@@ -38,8 +58,8 @@ static bool rbc_nullable_access_valid(const XrRbcModule *module, const XrRbcFunc
     bool create = access.operation == XR_RBC_NULLABLE_NONE || access.operation == XR_RBC_NULLABLE_SOME;
     uint32_t home = create ? access.destination : access.source;
     if (home >= f->aggregate_value_count) return false;
-    XrRbcAggregateType type = module->aggregate_types[f->aggregate_values[home].type];
-    if (type.kind != XR_RBC_NULLABLE) return false;
+    XrPodType type = module->aggregate_types[f->aggregate_values[home].type];
+    if (type.kind != XR_POD_NULLABLE) return false;
     if (access.operation == XR_RBC_NULLABLE_NONE)
         return !access.source && !access.result.index && !access.result.spill;
     if (access.operation == XR_RBC_NULLABLE_IS_SOME)
@@ -136,6 +156,10 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
+            if (!rbc_display_valid(module, f, access)) return false;
+            continue;
+        }
         if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP) {
             if (!rbc_nullable_access_valid(module, f, access)) return false;
             continue;
@@ -163,12 +187,12 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
             if (access.destination >= f->aggregate_value_count || access.source || access.result.index || access.result.spill)
                 return false;
             XrRbcAggregateValue value = f->aggregate_values[access.destination];
-            if (module->aggregate_types[value.type].kind != XR_RBC_FIXED_U8 ||
+            if (module->aggregate_types[value.type].kind != XR_POD_FIXED_U8 ||
                 access.count != module->aggregate_types[value.type].count) return false;
         } else if (access.operation == XR_RBC_AGGREGATE_GET) {
             if (access.destination || access.source >= f->aggregate_value_count || access.count != 1 ||
                 !rbc_aggregate_bits_location(f, access.result) ||
-                module->aggregate_types[f->aggregate_values[access.source].type].kind != XR_RBC_FIXED_U8) return false;
+                module->aggregate_types[f->aggregate_values[access.source].type].kind != XR_POD_FIXED_U8) return false;
         } else if (access.operation == XR_RBC_AGGREGATE_COPY) {
             if (access.destination >= f->aggregate_value_count || access.source >= f->aggregate_value_count ||
                 f->aggregate_values[access.destination].type != f->aggregate_values[access.source].type ||

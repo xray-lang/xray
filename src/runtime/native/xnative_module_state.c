@@ -18,7 +18,7 @@
 #include "xir/xxir_value_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
-#include "shared/xr_pod_layout.h"
+#include "xray_native_pod.h"
 #include <stdatomic.h>
 #include <string.h>
 

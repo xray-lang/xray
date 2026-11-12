@@ -48,7 +48,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views;
+    bool runtime, runtime_header, f64, state, arrays, views, displays;
     XrLirStateLayout state_layout;
 } LirC;
 
@@ -191,7 +191,9 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     xr_lir_function_view(c->request->module, callee, &view);
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
+static bool c_display_point(LirC *, const XrLirInstructionView *);
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
+    if (c_display_point(c, v)) return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
         v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) return true;
@@ -202,6 +204,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 #include "xlir_c_state.inc.c"
 #include "xlir_c_array.inc.c"
 #include "xlir_c_view.inc.c"
+#include "xlir_c_display.inc.c"
 static void c_visit(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= xr_lir_function_count(c->request->module), "valid callee");
     if (!c->seen[id - 1]) {
@@ -276,6 +279,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else ++c->location_count;
         }
     }
+    if (c_display_point(c, v)) { c->displays = true; return; }
     if (c_view_point(c, v)) return;
     switch (v->op) {
         case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
@@ -714,6 +718,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_state_instruction(c, v, source);
         return;
     }
+    if (c_display_point(c, v)) {
+        c_display_instruction(c, v, string_source);
+        return;
+    }
     switch (v->op) {
         case XR_LIR_STRING_LITERAL: {
             XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
@@ -962,7 +970,9 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
     if (root_result == XR_LIR_ARRAY)
         c_text(c, "extern XrtArray *xrt_array_root_take(XrtArray *array);\n\n");
+    if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
     c_constructed_types(c);
+    c_display_catalog(c);
     c_locations(c);
     c_literals(c);
     if (c->state) c_state_layout(c);

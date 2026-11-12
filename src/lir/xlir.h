@@ -132,7 +132,7 @@ typedef struct XrLirIntrinsic {
     uint32_t parameter_count;
     XrLirType result;
     bool scalar_sync;
-    uint32_t view_operation;
+    uint32_t operation;
 } XrLirIntrinsic;
 typedef struct XrLirFunctionView {
     const char *name;

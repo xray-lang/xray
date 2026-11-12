@@ -35,17 +35,17 @@ static void test_raw_fixed_calls(void) {
         xr_rbc_execution_free(&execution); xrt_locations_release(locations);
         xr_free(f.operands);
         memset(&f, 0, sizeof(f));
-        XrRbcAggregateType type = {0};
+        XrPodType type = {0};
         const uint8_t *bytes = NULL;
         CHECK(!xr_rbc_outcome_bits(outcome, &seed));
-        CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.kind == XR_RBC_FIXED_U8 && type.count == counts[n]);
+        CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.kind == XR_POD_FIXED_U8 && type.count == counts[n]);
         for (uint32_t p = 0; p < type.count; ++p) CHECK(bytes[p] == 37);
         xr_rbc_outcome_free(&outcome);
     }
 }
 
 static void test_raw_fixed_no_value_callee(void) {
-    XrRbcAggregateType type = xr_rbc_fixed_type(17);
+    XrPodType type = xr_rbc_fixed_type(17);
     XrRbcAggregateValue home = {0};
     XrRbcAggregateAccess call = {.operation=XR_RBC_AGGREGATE_CALL, .callee=1};
     XrRbcRegisterKind window = XR_RBC_CALL_WINDOW;

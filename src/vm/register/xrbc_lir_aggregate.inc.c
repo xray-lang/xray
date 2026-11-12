@@ -147,7 +147,7 @@ static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView 
     bool create = instruction->op == XR_LIR_NULLABLE_NONE || instruction->op == XR_LIR_NULLABLE_SOME;
     uint32_t type = create ? c->aggregate_values[c->aggregate_home[instruction->result]].type :
         c->aggregate_values[c->aggregate_home[instruction->operands[0]]].type;
-    XrRbcAggregateType shape = c->literals->program->module.aggregate_types[type];
+    XrPodType shape = c->literals->program->module.aggregate_types[type];
     if (create) {
         access.operation = instruction->op == XR_LIR_NULLABLE_NONE ? XR_RBC_NULLABLE_NONE : XR_RBC_NULLABLE_SOME;
         access.destination = c->aggregate_home[instruction->result];
@@ -160,6 +160,30 @@ static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView 
         access.operation = instruction->op == XR_LIR_NULLABLE_IS_SOME ? XR_RBC_NULLABLE_IS_SOME : XR_RBC_NULLABLE_UNWRAP;
         if (instruction->type >= XR_LIR_TYPE_COUNT) access.destination = c->aggregate_home[instruction->result];
         else if (instruction->type != XR_LIR_UNIT) access.result = rbc_lir_array_location(c, instruction->result);
+    }
+    return rbc_lir_aggregate_append(c, access);
+}
+
+static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
+    uint32_t operand = instruction->operands[0];
+    XrLirType type = XR_LIR_TYPE_INVALID;
+    xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, operand}, &type);
+    XrRbcAggregateAccess access = {.operation=XR_RBC_AGGREGATE_DISPLAY,
+        .result=rbc_lir_array_location(c, instruction->result)};
+    if (type >= XR_LIR_TYPE_COUNT) {
+        access.source = c->aggregate_home[operand];
+        access.slot = XR_POD_SCALAR_COUNT + type - XR_LIR_TYPE_COUNT;
+    } else {
+        access.slot = XR_POD_BOOL;
+        access.count = 1;
+        if (c->aggregate_operand_count == UINT32_MAX)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "display operands exceed bytecode indices");
+        void *storage = c->aggregate_operands;
+        if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
+            c->aggregate_operand_count + 1, sizeof(*c->aggregate_operands))) return false;
+        c->aggregate_operands = storage;
+        access.first = (uint32_t)c->aggregate_operand_count;
+        c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, operand);
     }
     return rbc_lir_aggregate_append(c, access);
 }

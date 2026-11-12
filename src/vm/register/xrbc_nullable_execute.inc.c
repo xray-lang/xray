@@ -6,8 +6,8 @@
  *
  * xrbc_nullable_execute.inc.c - Inline typed values in indexed aggregate homes
  */
-static void xr_rbc_aggregate_pack(XrRbcAggregateType type, const uint8_t *home, uint8_t *bytes) {
-    if (type.kind != XR_RBC_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
+static void xr_rbc_aggregate_pack(XrPodType type, const uint8_t *home, uint8_t *bytes) {
+    if (type.kind != XR_POD_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
         memcpy(bytes, home, type.physical.size);
         return;
     }
@@ -18,8 +18,8 @@ static void xr_rbc_aggregate_pack(XrRbcAggregateType type, const uint8_t *home, 
     }
 }
 
-static void xr_rbc_aggregate_unpack(XrRbcAggregateType type, const uint8_t *bytes, uint8_t *home) {
-    if (type.kind != XR_RBC_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
+static void xr_rbc_aggregate_unpack(XrPodType type, const uint8_t *bytes, uint8_t *home) {
+    if (type.kind != XR_POD_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
         memcpy(home, bytes, type.physical.size);
         return;
     }
@@ -33,11 +33,11 @@ static XrRbcStatus xr_rbc_nullable_step(const XrRbcModule *module, XrRbcStack *s
     XrRbcFrame *frame, const XrRbcFunction *f, XrRbcAggregateAccess access, uint32_t source) {
     bool create = access.operation == XR_RBC_NULLABLE_NONE || access.operation == XR_RBC_NULLABLE_SOME;
     XrRbcAggregateValue value = f->aggregate_values[create ? access.destination : access.source];
-    XrRbcAggregateType type = module->aggregate_types[value.type];
+    XrPodType type = module->aggregate_types[value.type];
     uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
     XrPodLayout payload;
     bool aggregate = type.element >= XR_POD_SCALAR_COUNT;
-    XrRbcAggregateType child = {0};
+    XrPodType child = {0};
     if (aggregate) { child = module->aggregate_types[type.element - XR_POD_SCALAR_COUNT]; payload = child.physical; }
     else if (!xr_pod_scalar_layout((XrPodScalar)type.element, &payload)) return XR_RBC_INVALID;
     if (create) {

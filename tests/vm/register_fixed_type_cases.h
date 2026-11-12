@@ -12,7 +12,7 @@ static void test_raw_aggregate_types(void) {
     uint32_t code = 0;
     CHECK(xr_rbc_encode(&code, (XrRbcOperands){.op = XR_RBC_RET0}));
     XrRbcFunction function = {.code = &code, .code_count = 1, .register_count = 1};
-    XrRbcAggregateType type = xr_rbc_fixed_type(1);
+    XrPodType type = xr_rbc_fixed_type(1);
     XrRbcModule module = {.functions = &function, .function_count = 1,
         .aggregate_types = &type, .aggregate_type_count = 1};
     const uint32_t counts[] = {1, 11, 16, 17, 256, 65535};
@@ -34,8 +34,8 @@ static void test_raw_aggregate_types(void) {
         module.aggregate_type_count = 1;
         if (scenario == 0) type.count = 0;
         if (scenario == 1) type.count = 65536;
-        if (scenario == 2) type.kind = (XrRbcAggregateKind)0;
-        if (scenario == 3) type.kind = (XrRbcAggregateKind)UINT32_MAX;
+        if (scenario == 2) type.kind = (XrPodTypeKind)0;
+        if (scenario == 3) type.kind = (XrPodTypeKind)UINT32_MAX;
         if (scenario == 4) module.aggregate_types = NULL;
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_INVALID && !execution);

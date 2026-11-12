@@ -20,9 +20,9 @@ static const LirViewSignature lir_view_signatures[] = {
 _Static_assert(sizeof(lir_view_signatures) / sizeof(*lir_view_signatures) == XR_LIR_VIEW_OP_COUNT,
     "Every view role has one complete closed signature");
 XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *entry) {
-    if (!entry || !entry->view_operation || entry->view_operation >= XR_LIR_VIEW_OP_COUNT ||
+    if (!entry || !entry->operation || entry->operation >= XR_LIR_VIEW_OP_COUNT ||
         !entry->scalar_sync) return false;
-    const LirViewSignature *shape = &lir_view_signatures[entry->view_operation];
+    const LirViewSignature *shape = &lir_view_signatures[entry->operation];
     if (entry->result != shape->result || entry->parameter_count != shape->count || !entry->parameters) return false;
     for (uint32_t p = 0; p < shape->count; ++p)
         if (entry->parameters[p] != shape->parameters[p]) return false;
@@ -30,7 +30,8 @@ XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *entry) {
 }
 XR_FUNC const XrLirIntrinsic *xr_lir_internal_view_intrinsic(const XrLirModule *m, uint32_t id) {
     for (uint32_t i = 0; m && i < m->intrinsic_count; ++i)
-        if (m->intrinsics[i].id == id && m->intrinsics[i].view_operation) return &m->intrinsics[i];
+        if (m->intrinsics[i].id == id && m->intrinsics[i].operation > 0 &&
+            m->intrinsics[i].operation < XR_LIR_VIEW_OP_COUNT) return &m->intrinsics[i];
     return NULL;
 }
 XR_FUNC const char *xr_lir_view_native_symbol(XrLirViewOperation operation) {
@@ -41,7 +42,7 @@ XR_FUNC bool xr_lir_internal_view_construct_slot(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v, uint32_t *slot) {
     const XrLirIntrinsic *entry = v && v->op == XR_LIR_CALL_INTRINSIC ?
         xr_lir_internal_view_intrinsic(m, v->intrinsic) : NULL;
-    if (!entry || entry->view_operation != XR_LIR_VIEW_OP_CELL_CONSTRUCT ||
+    if (!entry || entry->operation != XR_LIR_VIEW_OP_CELL_CONSTRUCT ||
         v->operand_count != 4 || !slot) return false;
     const XrLirInstructionView *constant = xr_lir_internal_value_definition(f, v->operands[3]);
     if (!constant || constant->op != XR_LIR_CONST || constant->type != XR_LIR_U32 ||
@@ -57,7 +58,7 @@ XR_FUNC XrLirStatus xr_lir_view_catalog_install(XrLirModule *m) {
         const LirViewSignature *shape = &lir_view_signatures[role];
         entries[role - 1] = (XrLirIntrinsic){.id=XR_LIR_ARRAY_CATALOG_COUNT + role,
             .parameters=shape->parameters, .parameter_count=shape->count,
-            .result=shape->result, .scalar_sync=true, .view_operation=role};
+            .result=shape->result, .scalar_sync=true, .operation=role};
     }
     XrLirRegistry registry = {entries, XR_LIR_VIEW_OP_COUNT - 1};
     status = lir_array_catalog(m, &registry);
@@ -68,7 +69,7 @@ XR_FUNC XrLirStatus xr_lir_view_operation(const XrLirModule *m,
     if (!m || !output || m->failure != XR_LIR_OK ||
         operation <= XR_LIR_VIEW_OP_NONE || operation >= XR_LIR_VIEW_OP_COUNT) return XR_LIR_INVALID_ARGUMENT;
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
-        if (m->intrinsics[i].view_operation == (uint32_t)operation) {
+        if (m->intrinsics[i].operation == (uint32_t)operation) {
             *output = m->intrinsics[i].id;
             return XR_LIR_OK;
         }

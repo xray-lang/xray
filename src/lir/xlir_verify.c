@@ -345,7 +345,13 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
-            if (entry->view_operation) {
+            if (entry->operation == XR_LIR_INTRINSIC_DISPLAY) {
+                if (!xr_lir_display_intrinsic_valid(entry) || v->operand_count != 1 ||
+                    v->type != XR_LIR_STRING ||
+                    !xr_lir_display_type(m, f->values[v->operands[0] - 1].type)) goto invalid;
+                return XR_LIR_OK;
+            }
+            if (entry->operation) {
                 if (!xr_lir_internal_view_intrinsic_valid(entry) ||
                     !lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result) ||
                     !lir_view_instruction_types(m, f, v)) goto invalid;
@@ -831,22 +837,22 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             (entry->parameter_count && !entry->parameters))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic signature is invalid");
         bool array = xr_lir_internal_array_type(entry->result);
-        if (!entry->view_operation && (entry->result == XR_LIR_VIEW_FRAME ||
+        if (!entry->operation && (entry->result == XR_LIR_VIEW_FRAME ||
             entry->result == XR_LIR_VIEW_CELL || entry->result == XR_LIR_SLICE_I64))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot produce a view capability");
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
             if (!xr_lir_internal_type_valid(m, entry->parameters[p], false))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
-            if (!entry->view_operation && (entry->parameters[p] == XR_LIR_VIEW_FRAME ||
+            if (!entry->operation && (entry->parameters[p] == XR_LIR_VIEW_FRAME ||
                 entry->parameters[p] == XR_LIR_VIEW_CELL || entry->parameters[p] == XR_LIR_SLICE_I64))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot receive a view capability");
         }
         const XrLirArrayIntrinsic *shape = m->array_intrinsics ? &m->array_intrinsics[i] : NULL;
         bool empty = !shape || (!shape->id && !shape->parameter_elements && !shape->parameter_count &&
             !shape->result_element && !shape->variadic && !shape->operation);
-        if (entry->view_operation) {
-            if (!empty || !xr_lir_internal_view_intrinsic_valid(entry))
+        if (entry->operation) {
+            if (!empty || (!xr_lir_internal_view_intrinsic_valid(entry) && !xr_lir_display_intrinsic_valid(entry)))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "view intrinsic signature is invalid");
             continue;
         }

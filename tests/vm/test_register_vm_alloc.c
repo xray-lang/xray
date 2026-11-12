@@ -158,7 +158,7 @@ static void nullable_allocation_failures(void) {
             XR_CHECK(status == XR_RBC_OK, "nullable success determines every allocation site");
             sites = nullable_attempts;
             XR_CHECK(sites && sites < 128, "nullable tiny fixture has bounded allocation sites");
-            XrRbcAggregateType type;
+            XrPodType type;
             const uint8_t *bytes = NULL;
             XR_CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && bytes[0] == 1 && bytes[8] == 1,
                 "nested nullable result retains both presence layers");
@@ -683,7 +683,7 @@ static void aggregate_call_failures(void) {
 }
 
 static void aggregate_bank_failures(void) {
-    XrRbcAggregateType type = xr_rbc_fixed_type(17);
+    XrPodType type = xr_rbc_fixed_type(17);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[18] = {{0}};
     operands[17].index = 2;

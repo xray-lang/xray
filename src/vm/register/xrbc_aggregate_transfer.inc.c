@@ -37,7 +37,7 @@ static bool rbc_aggregate_state_transfer(RbcStringAdmission *s, XrRbcAggregateAc
 static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess access) {
     bool create = access.operation == XR_RBC_NULLABLE_NONE || access.operation == XR_RBC_NULLABLE_SOME;
     uint32_t home = create ? access.destination : access.source;
-    XrRbcAggregateType type = s->module->aggregate_types[s->function->aggregate_values[home].type];
+    XrPodType type = s->module->aggregate_types[s->function->aggregate_values[home].type];
     if (!create && !s->aggregates[home]) return false;
     if (access.operation == XR_RBC_NULLABLE_NONE) { s->aggregates[home] = 1; return true; }
     if (access.operation != XR_RBC_NULLABLE_IS_SOME && type.element >= XR_POD_SCALAR_COUNT) {
@@ -63,6 +63,14 @@ static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess ac
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
+        if (!rbc_array_destination(s, access.result)) return false;
+        if (access.slot >= XR_POD_SCALAR_COUNT) {
+            if (!s->aggregates[access.source]) return false;
+        } else if (rbc_array_state(s, s->function->aggregate_operands[access.first]) != RBC_BITS) return false;
+        rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
+        return true;
+    }
     if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)
         return rbc_nullable_transfer(s, access);
     if (access.operation == XR_RBC_AGGREGATE_CALL) {

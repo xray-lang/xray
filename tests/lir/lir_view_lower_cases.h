@@ -45,7 +45,7 @@ static void view_cold_checked_sources(const char *programs) {
             OK(role);
             XrLirIntrinsic entry;
             OK(xr_lir_intrinsic_view(output.module, intrinsic, &entry));
-            CHECK(entry.view_operation == XR_LIR_VIEW_OP_NEW && entry.parameter_count == 6);
+            CHECK(entry.operation == XR_LIR_VIEW_OP_NEW && entry.parameter_count == 6);
         }
         xr_lir_lowered_free(&output);
     }

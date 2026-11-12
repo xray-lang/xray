@@ -1,0 +1,13 @@
+var values = [1, 2, 3]
+var slice = copy values[0:2]
+print("slice=${slice}")
+var popped = values.pop()
+print("pop=${popped}")
+var shifted = values.shift()
+print("shift=${shifted}")
+var last = values.pop()
+print("last=${last}")
+var empty = values.pop()
+print("empty=${empty}")
+var found = values.contains(1)
+print("contains=${found}")

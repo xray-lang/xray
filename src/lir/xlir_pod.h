@@ -9,7 +9,7 @@
 #ifndef XLIR_POD_H
 #define XLIR_POD_H
 #include "xlir.h"
-#include "shared/xr_pod_layout.h"
+#include "../../include/xray_native_pod.h"
 
 static inline XrPodScalar lir_pod_scalar(XrLirType type) {
     switch (type) {

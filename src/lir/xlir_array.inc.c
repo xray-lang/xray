@@ -281,8 +281,8 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INTRINSIC) {
         uint32_t index = lir_array_intrinsic_index(m, v->intrinsic);
-        if (index != UINT32_MAX && (m->intrinsics[index].view_operation == XR_LIR_VIEW_OP_CELL_READ ||
-            m->intrinsics[index].view_operation == XR_LIR_VIEW_OP_COPY)) return XR_LIR_I64;
+        if (index != UINT32_MAX && (m->intrinsics[index].operation == XR_LIR_VIEW_OP_CELL_READ ||
+            m->intrinsics[index].operation == XR_LIR_VIEW_OP_COPY)) return XR_LIR_I64;
         return index != UINT32_MAX && m->array_intrinsics ?
             m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
     }

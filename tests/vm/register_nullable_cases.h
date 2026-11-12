@@ -32,7 +32,7 @@ static void test_raw_nullable_boundaries(void) {
             XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
             xr_rbc_execution_free(&execution);
             memset(&f, 0xa5, sizeof(f));
-            XrRbcAggregateType type;
+            XrPodType type;
             const uint8_t *bytes = NULL;
             CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && type.physical.size == 24);
             CHECK(bytes[0] == 1 && bytes[8] == 1);

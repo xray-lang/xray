@@ -83,8 +83,8 @@ struct XrRbcOutcome {
     XrRbcRegisterKind result_kind;
     XrtExecutionFailure failure;
     XrtLocationOwner *locations;
-    XrRbcAggregateType aggregate_type;
-    XrRbcAggregateType *aggregate_types;
+    XrPodType aggregate_type;
+    XrPodType *aggregate_types;
     size_t aggregate_type_count;
     uint8_t *aggregate_bytes;
 };
@@ -550,14 +550,14 @@ XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output) 
     return true;
 }
 XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
-    XrRbcAggregateType *type, const uint8_t **bytes) {
+    XrPodType *type, const uint8_t **bytes) {
     if (!outcome || outcome->status != XR_RBC_OK || !outcome->aggregate_bytes || !type || !bytes) return false;
     *type = outcome->aggregate_type;
     *bytes = outcome->aggregate_bytes;
     return true;
 }
 XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *outcome,
-    uint32_t ordinal, XrRbcAggregateType *type) {
+    uint32_t ordinal, XrPodType *type) {
     if (!outcome || outcome->status != XR_RBC_OK || !type || ordinal >= outcome->aggregate_type_count) return false;
     *type = outcome->aggregate_types[ordinal];
     return true;

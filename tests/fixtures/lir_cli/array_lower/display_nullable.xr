@@ -1,0 +1,13 @@
+fn layer<T>(value: T) -> T? { return value }
+fn forward(value: i64??) -> i64?? { return value }
+var value: i64? = null
+print("none=${value}")
+value = -7
+print("some=${value}")
+var nested: i64?? = null
+print("outer=${nested}")
+nested = layer<i64?>(null)
+print("inner=${forward(nested)}")
+nested = layer<i64?>(7)
+print("nested=${forward(nested)}")
+print("bool=${true}/${false}")

@@ -30,24 +30,30 @@ static int display_write(void *context,const void *bytes,size_t length) {
     }
     sink->used+=length;return 1;
 }
-static XrXirValueStatus display_text_received(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
-    XrXirValueStatus status=xr_xir_value_admit(value,(XrXirType)value->type,admission);
-    if (status!=XR_XIR_VALUE_OK) return status;
-    XrXirFormatContext context={.values=admission};XrValueFormatReader reader=xr_xir_value_format_reader(&context);
+XR_FUNC XrXirValueStatus xr_xir_format_text(XrValueFormatReader reader,XrValueFormatNode node,
+    XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!reader.read || !admission_domain_current(admission) || !unit_value(output))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
     XirDisplaySink sink={.admission=admission};XrValueFormatSink destination={&sink,display_write};
-    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},destination,0))
-        return context.status!=XR_XIR_VALUE_OK?context.status:
-            sink.status==XR_XIR_VALUE_OK?XR_XIR_VALUE_BAD_ARGUMENT:sink.status;
+    if (!xr_value_format_value(reader,node,destination,0))
+        return sink.status==XR_XIR_VALUE_OK?XR_XIR_VALUE_BAD_ARGUMENT:sink.status;
     size_t length=sink.used;
     char *bytes=length?xr_xir_domain_allocate(admission->domain,length,&status):NULL;
     if (status!=XR_XIR_VALUE_OK) return status;
     sink.bytes=bytes;sink.capacity=length;sink.used=0;
-    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},destination,0) || sink.used!=length)
-        status=context.status!=XR_XIR_VALUE_OK?context.status:
-            sink.status==XR_XIR_VALUE_OK?XR_XIR_VALUE_BAD_ARGUMENT:sink.status;
+    if (!xr_value_format_value(reader,node,destination,0) || sink.used!=length)
+        status=sink.status==XR_XIR_VALUE_OK?XR_XIR_VALUE_BAD_ARGUMENT:sink.status;
     if (status==XR_XIR_VALUE_OK) status=xr_xir_string_new(admission->domain,bytes,length,output);
     if (bytes) xr_xir_domain_deallocate(admission->domain,bytes,length);
     return status;
+}
+static XrXirValueStatus display_text_received(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
+    XrXirValueStatus status=xr_xir_value_admit(value,(XrXirType)value->type,admission);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    XrXirFormatContext context={.values=admission};
+    status=xr_xir_format_text(xr_xir_value_format_reader(&context),(XrValueFormatNode){value,0},admission,output);
+    return status!=XR_XIR_VALUE_OK && context.status!=XR_XIR_VALUE_OK ? context.status : status;
 }
 static XrXirValueStatus display_text_graph(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
     if (!value || value->type==XR_XIR_UNIT || !admission_domain_current(admission) || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;

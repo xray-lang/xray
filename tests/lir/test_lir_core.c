@@ -925,9 +925,12 @@ static void frame_string_cells(void) {
 #include "lir_type_pool_cases.h"
 #include "lir_fixed_array_op_cases.h"
 #include "lir_nullable_type_cases.h"
+#include "lir_display_cases.h"
+
 int main(void) {
     nullable_type_owners();
     nullable_type_rejections();
+    display_catalog_owners();
     nullable_instruction_rejections();
     fixed_array_operations();
     fixed_array_operation_rejections();
