@@ -29,7 +29,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));
         stack->cell_count += callee->cell_count;
         stack->spill_count += callee->spill_count;
-        if (!xr_rbc_aggregate_reserve(stack, frame, callee)) return XR_RBC_OUT_OF_MEMORY;
+        if (callee->aggregate_size && !xr_rbc_aggregate_reserve(stack, frame, callee)) return XR_RBC_OUT_OF_MEMORY;
         for (uint32_t n = 0; n < access.count; ++n) {
             XrRbcAggregateValue actual = function->aggregate_values[function->aggregate_arguments[access.first + n]];
             XrRbcAggregateValue formal = callee->aggregate_values[callee->aggregate_parameters[n]];

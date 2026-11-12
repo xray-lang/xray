@@ -43,3 +43,26 @@ static void test_raw_fixed_calls(void) {
         xr_rbc_outcome_free(&outcome);
     }
 }
+
+static void test_raw_fixed_no_value_callee(void) {
+    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
+    XrRbcAggregateValue home = {0};
+    XrRbcAggregateAccess call = {.operation=XR_RBC_AGGREGATE_CALL, .callee=1};
+    XrRbcRegisterKind window = XR_RBC_CALL_WINDOW;
+    uint32_t root[] = {fixed_call_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, 0),
+        fixed_call_word(XR_RBC_RET0, 0, 0, 0, 0)};
+    uint32_t callee[] = {fixed_call_word(XR_RBC_LOADI, 0, 0, 0, 1),
+        fixed_call_word(XR_RBC_LOADI, 1, 0, 0, 0), fixed_call_word(XR_RBC_DIV, 0, 0, 1, 0),
+        fixed_call_word(XR_RBC_JMP, 0, 0, 0, -1)};
+    XrRbcFunction functions[] = {
+        {.code=root, .code_count=2, .register_count=1, .register_kinds=&window, .register_kind_count=1,
+            .aggregate_values=&home, .aggregate_value_count=1, .aggregate_size=17,
+            .aggregate_accesses=&call, .aggregate_access_count=1},
+        {.code=callee, .code_count=4, .register_count=2, .aggregate_result_type=1}
+    };
+    XrRbcModule module = {.functions=functions, .function_count=2, .aggregate_types=&type, .aggregate_type_count=1};
+    uint64_t bits = 0;
+    XrRbcStatus status = execute(&module, 0, NULL, 0, &bits);
+    if (status != XR_RBC_ARITHMETIC_PANIC) fprintf(stderr, "fixed empty callee status %u\n", (unsigned)status);
+    CHECK(status == XR_RBC_ARITHMETIC_PANIC);
+}

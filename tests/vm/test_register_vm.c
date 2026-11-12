@@ -1266,6 +1266,7 @@ static void test_module_capabilities(void) {
 
 int main(int argc, char **argv) {
     test_raw_fixed_calls();
+    test_raw_fixed_no_value_callee();
     test_raw_arrays();
     test_raw_array_repeat();
     test_raw_unsigned_arrays();
