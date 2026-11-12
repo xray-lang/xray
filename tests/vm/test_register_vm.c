@@ -1261,6 +1261,7 @@ static void test_module_capabilities(void) {
 #include "register_array_ref_cases.h"
 
 #include "register_fixed_type_cases.h"
+#include "register_fixed_value_cases.h"
 
 int main(int argc, char **argv) {
     test_raw_arrays();
@@ -1287,6 +1288,7 @@ int main(int argc, char **argv) {
     test_raw_state_fused_read_entries();
     test_raw_fixed_state_frontier();
     test_raw_aggregate_types();
+    test_raw_fixed_aggregate_execution();
     test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();

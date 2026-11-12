@@ -17,6 +17,7 @@ typedef struct RbcStringAdmission {
     uint32_t origin[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t published;
     RbcSpillState *spills;
+    uint8_t *aggregates;
 } RbcStringAdmission;
 
 typedef struct RbcStringIncoming {
@@ -31,6 +32,7 @@ typedef struct RbcStringGraph {
     RbcStringIncoming *incoming;
     uint32_t *indices;
     RbcSpillState *spills;
+    uint8_t *aggregates;
     size_t count;
     uint32_t head, tail;
     bool parameters_only;
@@ -66,6 +68,7 @@ static void rbc_string_forget_borrows(RbcStringAdmission *s, uint32_t owner) {
             s->state[r] = RBC_EMPTY;
 }
 #include "xrbc_array_transfer.inc.c"
+#include "xrbc_aggregate_transfer.inc.c"
 static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
     uint8_t *state = s->state;
     switch (v.op) {
@@ -221,6 +224,7 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
         switch (v.op) {
         case XR_RBC_ARRAY_ACCESS: return rbc_array_transfer(s, (uint32_t)v.immediate);
+        case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
         case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
         case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE:
@@ -273,10 +277,14 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
 }
 static void rbc_string_state_copy(RbcStringAdmission *to, const RbcStringAdmission *from) {
     RbcSpillState *spills = to->spills;
+    uint8_t *aggregates = to->aggregates;
     *to = *from;
     to->spills = spills;
+    to->aggregates = aggregates;
     if (from->function->spill_count)
         memcpy(to->spills,from->spills,(size_t)from->function->spill_count * sizeof(*from->spills));
+    if (from->function->aggregate_value_count)
+        memcpy(to->aggregates, from->aggregates, from->function->aggregate_value_count);
 }
 static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *from,
     bool *seen, bool *changed) {
@@ -286,6 +294,10 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
         return true;
     }
     if (to->published != from->published) return false;
+    for (size_t n = 0; n < from->function->aggregate_value_count; ++n) {
+        uint8_t initialized = to->aggregates[n] & from->aggregates[n];
+        if (initialized != to->aggregates[n]) { to->aggregates[n] = initialized; *changed = true; }
+    }
     for (uint32_t r = 0; r < from->function->register_count; ++r) {
         /* Borrowed capabilities own no value to drop. A missing producer on
          * either path removes the guarantee until a fresh producer executes. */
@@ -405,6 +417,7 @@ static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
     return true;
 }
 static void rbc_string_graph_free(RbcStringGraph *g) {
+    xr_free(g->aggregates);
     xr_free(g->spills);
     xr_free(g->incoming);
     xr_free(g->indices);
@@ -459,6 +472,14 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     }
     g->incoming[previous].end = f->code_count;
     g->work.spills = g->spills;
+    if (f->aggregate_value_count) {
+        if (rows > SIZE_MAX / f->aggregate_value_count) return XR_RBC_OUT_OF_MEMORY;
+        g->aggregates = xr_calloc(rows, f->aggregate_value_count);
+        if (!g->aggregates) return XR_RBC_OUT_OF_MEMORY;
+        g->work.aggregates = g->aggregates;
+        for (size_t b = 0; b < g->count; ++b)
+            g->incoming[b].state.aggregates = g->aggregates + (b + 1) * f->aggregate_value_count;
+    }
     for (uint32_t r = 0; r < f->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(f,r);
         g->work.state[r] = kind == XR_RBC_BITS &&
@@ -548,11 +569,11 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
         }
     }
-    if (!managed && !f->spill_count && !numeric_conversion) return XR_RBC_OK;
+    if (!managed && !f->spill_count && !numeric_conversion && !f->aggregate_value_count) return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
         .head = UINT32_MAX, .tail = UINT32_MAX,
-        .parameters_only = numeric_conversion || f->spill_count != 0};
+        .parameters_only = numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
     if (status == XR_RBC_OK) {
         /* This initial merge remains a virtual predecessor even for a jump to

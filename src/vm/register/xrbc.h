@@ -100,7 +100,8 @@
     X(STATE_REFERENCE, ABX)                                                                        \
     X(STATE_READ, ABK8)                                                                            \
     X(STATE_WRITE, ABK8)                                                                            \
-    X(ARRAY_ACCESS, ABX)
+    X(ARRAY_ACCESS, ABX)                                                                            \
+    X(AGGREGATE_ACCESS, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -147,6 +148,17 @@ typedef struct XrRbcStateAccess {
     uint32_t slot, state, value;
 } XrRbcStateAccess;
 
+typedef struct XrRbcAggregateValue { uint32_t type, offset; } XrRbcAggregateValue;
+typedef enum XrRbcAggregateOperation {
+    XR_RBC_AGGREGATE_NEW, XR_RBC_AGGREGATE_GET, XR_RBC_AGGREGATE_COPY
+} XrRbcAggregateOperation;
+typedef struct XrRbcAggregateAccess {
+    XrRbcAggregateOperation operation;
+    uint32_t destination, source;
+    XrRbcArrayLocation result;
+    uint32_t first, count;
+} XrRbcAggregateAccess;
+
 typedef struct {
     const uint32_t *code;
     size_t code_count;
@@ -181,6 +193,14 @@ typedef struct {
     size_t array_access_count;
     const XrRbcArrayLocation *array_operands;
     size_t array_operand_count;
+    // Each ordered, nonoverlapping home belongs to this activation. Small
+    // values use scalar lanes; larger values use compact byte storage.
+    const XrRbcAggregateValue *aggregate_values;
+    size_t aggregate_value_count, aggregate_size;
+    const XrRbcAggregateAccess *aggregate_accesses;
+    size_t aggregate_access_count;
+    const XrRbcArrayLocation *aggregate_operands;
+    size_t aggregate_operand_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;

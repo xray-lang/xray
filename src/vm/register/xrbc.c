@@ -45,6 +45,7 @@ typedef union {
     XrtModuleAccess *state_ref;
     XrtArray *array;
 } XrRbcRegister;
+XR_STATIC_ASSERT(sizeof(XrRbcRegister) == 8, "physical register lanes occupy eight bytes");
 
 #include "xrbc_entry.inc.c"
 
@@ -54,6 +55,7 @@ typedef struct {
     size_t cell_base;
     uint32_t initialized_cells;
     size_t spill_base;
+    size_t aggregate_base;
 } XrRbcFrame;
 
 typedef struct {
@@ -139,6 +141,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 #include "xrbc_array_admission.inc.c"
 
 #include "xrbc_state_admission.inc.c"
+#include "xrbc_aggregate_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     if (!(function->code && function->code_count && function->register_count &&
@@ -174,6 +177,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
+    case XR_RBC_AGGREGATE_ACCESS:
+        if (a || index >= function->aggregate_access_count) return false;
+        break;
     case XR_RBC_ARRAY_ACCESS:
         if (a || index >= function->array_access_count) return false;
         break;
@@ -275,7 +281,8 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
             (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
-        if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
+        if (!xr_rbc_function_valid(&module->functions[f]) ||
+            !rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
@@ -361,6 +368,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
+#include "xrbc_aggregate_execute.inc.c"
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {

@@ -18,7 +18,9 @@ static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
     ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE,
-    ARRAY_ARGUMENT_FAILURE } fault;
+    ARRAY_ARGUMENT_FAILURE, AGGREGATE_STATE_FAILURE } fault;
+static bool observe_aggregate_allocations;
+static uint32_t aggregate_allocations;
 static size_t spill_state_failure_entries=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
@@ -37,6 +39,7 @@ static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, si
 static void *execution_calloc(size_t count, size_t size);
 
 static void *moving_realloc(void *old, size_t size) {
+    if (observe_aggregate_allocations) ++aggregate_allocations;
     size_t index = 0;
     while (index < 4 && blocks[index].pointer != old) ++index;
     XR_CHECK(index < 4, "unknown stack allocation");
@@ -94,6 +97,10 @@ static void *execution_malloc(size_t size) {
     return real_malloc(size);
 }
 static void *execution_calloc(size_t count, size_t size) {
+    if (fault == AGGREGATE_STATE_FAILURE && size == 1 && count > 1) {
+        fault = NO_FAILURE;
+        return NULL;
+    }
     if (fault == STATE_CACHE_FAILURE && count == 2 && size == sizeof(XrtModuleAccess)) {
         fault = NO_FAILURE;
         return NULL;
@@ -567,7 +574,60 @@ static void array_argument_failures(void) {
     for (size_t i = 0; i < 4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all Array fault stack banks retired");
 }
 
+static void aggregate_bank_failures(void) {
+    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
+    XrRbcAggregateValue home = {0, 0};
+    XrRbcArrayLocation operands[18] = {{0}};
+    operands[17].index = 2;
+    XrRbcAggregateAccess accesses[] = {
+        {.operation = XR_RBC_AGGREGATE_NEW, .count = 17},
+        {.operation = XR_RBC_AGGREGATE_GET, .result = {3, false}, .first = 17, .count = 1}
+    };
+    uint32_t code[9];
+    immediate(code, 0, XR_RBC_LOADI, 0, 37);
+    immediate(code, 1, XR_RBC_LOADI, 1, 1000);
+    immediate(code, 2, XR_RBC_AGGREGATE_ACCESS, 0, 0);
+    XR_CHECK(xr_rbc_encode(&code[3], (XrRbcOperands){XR_RBC_ADDI, 1, 1, 0, -1}), "loop decrement");
+    immediate(code, 4, XR_RBC_GTI, 1, 0);
+    XR_CHECK(xr_rbc_jump(&code[5], 5, 2, 9), "aggregate reconstruction backedge");
+    immediate(code, 6, XR_RBC_LOADI, 2, 16);
+    immediate(code, 7, XR_RBC_AGGREGATE_ACCESS, 0, 1);
+    emit(code, 8, XR_RBC_RET, 3, 0, 0);
+    XrRbcFunction function = {.code = code, .code_count = 9, .register_count = 4,
+        .aggregate_values = &home, .aggregate_value_count = 1, .aggregate_size = 17,
+        .aggregate_accesses = accesses, .aggregate_access_count = 2,
+        .aggregate_operands = operands, .aggregate_operand_count = 18};
+    XrRbcModule module = {.functions = &function, .function_count = 1,
+        .aggregate_types = &type, .aggregate_type_count = 1};
+    XrtLocationOwner *locations = NULL;
+    XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "aggregate failure locations");
+    XrRbcExecution *execution = NULL;
+    fault = AGGREGATE_STATE_FAILURE;
+    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OUT_OF_MEMORY &&
+        !execution && fault == NO_FAILURE, "aggregate CFG state OOM publishes no execution");
+    for (unsigned failure = 0; failure < 2; ++failure) {
+        XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK,
+            "aggregate execution prepared after failed attempt");
+        if (failure) fault = INITIAL_STACK_FAILURE;
+        observe_aggregate_allocations = true;
+        aggregate_allocations = 0;
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        observe_aggregate_allocations = false;
+        XR_CHECK(aggregate_allocations == 1, "one activation allocation is reused across 1000 NEW instructions");
+        XR_CHECK(xr_rbc_outcome_status(outcome) == (failure ? XR_RBC_OUT_OF_MEMORY : XR_RBC_OK),
+            "aggregate storage failure stays an owned execution result");
+        uint64_t bits = 0;
+        if (!failure) XR_CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 37, "loop aggregate value preserved");
+        XR_CHECK(fault == NO_FAILURE, "requested aggregate allocation failure reached");
+        xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+        for (size_t n = 0; n < 4; ++n)
+            XR_CHECK(!blocks[n].pointer && !blocks[n].size, "aggregate bank retired with existing stack owner");
+    }
+    xrt_locations_release(locations);
+}
+
 int main(void) {
+    aggregate_bank_failures();
     array_argument_failures();
     module_state_fused_retain_failure();
     module_state_cache_failure();
