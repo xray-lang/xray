@@ -122,17 +122,23 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
             XrLirType callable = XR_LIR_I64;
             status = xr_lir_callable_type(*module, &signature, &callable);
             if (status != XR_LIR_OK) REQUIRE(callable == XR_LIR_I64);
+            if (status == XR_LIR_OK) {
+                XrLirType cell = XR_LIR_I64;
+                status = xr_lir_cell_type(*module, (XrLirCellType){callable, 0}, &cell);
+                if (status != XR_LIR_OK) REQUIRE(cell == XR_LIR_I64);
+            }
         }
     }
     return status;
 }
 
-static void callable_import_failures(void) {
+static void callable_import_failures(bool cells) {
     fail_at = SIZE_MAX;
     XrLirModule *source = NULL;
     REQUIRE(xr_lir_module_create(NULL, &source) == XR_LIR_OK);
     XrLirType type = XR_LIR_I64;
     for (uint32_t i = 0; i < 16; ++i) {
+        if (cells) REQUIRE(xr_lir_cell_type(source, (XrLirCellType){type, 0}, &type) == XR_LIR_OK);
         XrLirCallableParameter parameter = {.type=type};
         XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=type};
         REQUIRE(xr_lir_callable_type(source, &signature, &type) == XR_LIR_OK);
@@ -161,7 +167,7 @@ static void callable_import_failures(void) {
     REQUIRE(xr_lir_verify(source, NULL) == XR_LIR_OK);
     xr_lir_module_destroy(source);
     REQUIRE(!live_allocations && !live_bytes);
-    printf("callable cross-owner import failures covered %zu allocation sites\n", sites);
+    printf("callable%s cross-owner import failures covered %zu allocation sites\n", cells ? "/Cell" : "", sites);
 }
 
 static void type_pool_failures(void) {
@@ -213,7 +219,8 @@ static void type_pool_failures(void) {
 }
 
 int main(void) {
-    callable_import_failures();
+    callable_import_failures(false);
+    callable_import_failures(true);
     type_pool_failures();
     creation_failure(0);
     creation_failure(2);

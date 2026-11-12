@@ -20,6 +20,7 @@
 #include "xlir_view.h"
 #include "xlir_display.h"
 #include "xlir_callable.h"
+#include "xlir_cell.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
@@ -67,6 +68,7 @@ typedef struct XrLirTypeData {
     XrLirTypeView shape;
     XrLirTypeLayout layout;
     XrLirCallableType callable;
+    XrLirType cell_element;
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;

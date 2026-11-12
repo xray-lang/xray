@@ -7,14 +7,15 @@
  * lir_callable_frontier_cases.h - Valid signatures reach both capability checks
  */
 static void callable_backend_frontier(void) {
-    for (unsigned scenario = 0; scenario < 2; ++scenario) {
+    for (unsigned scenario = 0; scenario < 3; ++scenario) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
         XrLirCallableParameter parameter = {.type=XR_LIR_I64};
         XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=XR_LIR_I64};
         XrLirType callable = 0;
         OK(xr_lir_callable_type(m, &signature, &callable));
-        if (scenario) {
+        if (scenario == 2) OK(xr_lir_cell_type(m, (XrLirCellType){XR_LIR_I64, 0}, &callable));
+        if (scenario == 1) {
             XrLirIntrinsic intrinsic = {.id=91, .parameters=&callable, .parameter_count=1,
                 .result=callable, .scalar_sync=true};
             XrLirRegistry registry = {&intrinsic, 1};
@@ -62,8 +63,9 @@ static void callable_backend_frontier(void) {
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrLirCRequest request = {.module=m, .entry=root, .resources=resources,
             .translation_unit="callable-frontier.c"};
-        CHECK(xr_lir_emit_c(&request, &output, &c_diagnostic) == XR_LIR_C_OK);
-        CHECK(output.bytes && output.length);
+        XrLirCStatus c_status = xr_lir_emit_c(&request, &output, &c_diagnostic);
+        if (scenario == 2) CHECK(c_status == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
+        else CHECK(c_status == XR_LIR_C_OK && output.bytes && output.length);
         xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);

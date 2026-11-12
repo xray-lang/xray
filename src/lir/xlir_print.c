@@ -132,6 +132,7 @@ static void lir_print_type(LirPrinter *p, const XrLirModule *m, XrLirType type) 
     }
     if (view.kind == XR_LIR_TYPE_FIXED_ARRAY) lir_print_format(p, "[u8;%" PRIu32 "]", view.count);
     else if (view.kind == XR_LIR_TYPE_CALLABLE) lir_print_format(p, "fn#%" PRIu32, type);
+    else if (view.kind == XR_LIR_TYPE_CELL) lir_print_format(p, "cell#%" PRIu32, type);
     else lir_print_text(p, xr_lir_type_name(type));
     while (depth) { lir_print_text(p, ">"); --depth; }
 }

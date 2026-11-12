@@ -57,7 +57,7 @@ static XrLirStatus lir_import_callable(XrLirModule *target, const XrLirModule *s
             }
         }
         status = lir_intern_type(target, shape,
-            shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, &mapping[n]);
+            shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, data->cell_element, &mapping[n]);
     }
     if (status == XR_LIR_OK) *output = mapping[count - 1];
 done:

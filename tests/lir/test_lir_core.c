@@ -927,6 +927,7 @@ static void frame_string_cells(void) {
 #include "lir_nullable_type_cases.h"
 #include "lir_display_cases.h"
 #include "lir_callable_type_cases.h"
+#include "lir_owned_cell_type_cases.h"
 
 int main(void) {
     callable_type_owners();
@@ -935,6 +936,8 @@ int main(void) {
     nullable_type_rejections();
     display_catalog_owners();
     nullable_instruction_rejections();
+    owned_cell_type_receivers();
+    owned_cell_type_rejections();
     fixed_array_operations();
     fixed_array_operation_rejections();
     type_pool_queries_and_receivers();
