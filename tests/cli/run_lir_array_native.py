@@ -42,7 +42,7 @@ def main() -> None:
         records.append(row)
         (work / "result.json").write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
         if status != expected_exit:
-            failures.append((name, status, paths["stderr"].read_text(encoding="utf-8")))
+            failures.append((name, status, paths["stderr"].read_text(encoding="utf-8", errors="replace")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
     for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
