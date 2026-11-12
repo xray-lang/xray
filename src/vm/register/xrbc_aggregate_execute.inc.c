@@ -36,7 +36,7 @@ static uint8_t *xr_rbc_aggregate_value(XrRbcStack *stack, const XrRbcFrame *fram
     return (uint8_t *)(stack->spills + frame->aggregate_base - 1) + value.offset;
 }
 
-static XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
     if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
     XrRbcAggregateAccess access = f->aggregate_accesses[index];
