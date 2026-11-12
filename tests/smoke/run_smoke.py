@@ -227,7 +227,8 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             result = invoke(stage, [executable])
         elif result.ok:
             return {"id": case["id"], "group": "native", "status": "fail",
-                    "reason": "successful build produced no executable", "commands": commands}
+                    "reason": "successful build produced no executable", "commands": commands,
+                    "log_directory": str(logs)}
     else:
         # Historical check labels remain part of the fixed denominator only.
         stage = "run"
@@ -237,7 +238,7 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
         if result.stdout != expected or result.stderr:
             return {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
                     "status": "fail", "reason": "initializer changed before the known suite gap",
-                    "executed": True, "commands": commands}
+                    "executed": True, "commands": commands, "log_directory": str(logs)}
         stage = "suite"
         result = invoke(stage, [binary, "test", source])
     diagnostic = first_diagnostic(result.stderr, root, source, spec.path)
@@ -253,7 +254,7 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
     row = {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
             "status": status, "reason": reason, "executed": True, "exit_code": result.returncode,
             "first_diagnostic": diagnostic, "commands": commands,
-            "seconds": round(time.monotonic() - started, 3)}
+            "seconds": round(time.monotonic() - started, 3), "log_directory": str(logs)}
     if suite is not None:
         row["suite"] = suite
     if case.get("crypto_suite") is not None and row["status"] == "pass" and stage == "run":
@@ -319,7 +320,6 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="case-", dir=output) as directory:
             row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout, suites, crypto_suites)
         results.append(row)
-        row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)
     for row in verify_pairs(cases, results):
         print(f"FAIL {row['id']}: {row['reason']}", flush=True)

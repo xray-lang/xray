@@ -33,6 +33,24 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(self.verdict(result(stdout=b"2\n")), "fail")
         self.assertEqual(self.verdict(result(stderr=b"warning\n")), "fail")
 
+    def test_subset_execution_reports_its_actual_log_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.txt").write_bytes(b"1\n")
+            (root / "example.xr").write_text("print(1)\n", encoding="utf-8")
+            source = smoke.Source("example.xr", "demos", "run")
+            for mode in ("run", "build-run"):
+                with self.subTest(mode=mode):
+                    logs = root / mode
+                    logs.mkdir()
+                    work = logs / "work"
+                    work.mkdir()
+                    with patch.object(smoke.proc, "run", return_value=result()):
+                        row = smoke.execute(dict(self.case, mode=mode), source,
+                                            Path("xray"), root, work, logs, 30)
+                    self.assertEqual(row["log_directory"], str(logs))
+                    self.assertTrue((logs / ("run.stdout" if mode == "run" else "build.stdout")).is_file())
+
     def test_gap_success_requires_promotion_even_without_an_oracle(self):
         self.gap()
         self.assertEqual(self.verdict(result(stdout=b"new output\n")), "fail")
