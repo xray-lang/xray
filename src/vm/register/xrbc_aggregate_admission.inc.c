@@ -14,7 +14,8 @@ static bool rbc_display_valid(const XrRbcModule *module, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
     if (access.destination || access.callee || access.window || !rbc_array_location_valid(f, access.result) ||
         rbc_array_location_kind(f, access.result) != XR_RBC_STRING) return false;
-    if (access.slot == XR_POD_BOOL)
+    if (access.slot == XR_POD_BOOL || access.slot == XR_POD_U8 || access.slot == XR_POD_U64 ||
+        access.slot == XR_POD_I64 || access.slot == XR_POD_F64)
         return !access.source && access.count == 1 && access.first < f->aggregate_operand_count &&
             rbc_aggregate_bits_location(f, f->aggregate_operands[access.first]);
     if (access.slot < XR_POD_SCALAR_COUNT || access.source >= f->aggregate_value_count ||
@@ -135,6 +136,8 @@ static bool rbc_aggregate_signature_valid(const XrRbcModule *module, const XrRbc
     return true;
 }
 
+#include "xrbc_string_library_admission.inc.c"
+
 static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     if ((!f->aggregate_values && f->aggregate_value_count) || f->aggregate_value_count > UINT32_MAX ||
         (!f->aggregate_accesses && f->aggregate_access_count) || f->aggregate_access_count > 65536 ||
@@ -156,6 +159,10 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation == XR_RBC_STRING_LIBRARY) {
+            if (!rbc_string_library_valid(f, access)) return false;
+            continue;
+        }
         if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
             if (!rbc_display_valid(module, f, access)) return false;
             continue;

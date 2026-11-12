@@ -1,0 +1,8 @@
+fn fail()->string {
+    var text="alive"
+    text+="!"
+    const missing:i64?=null
+    text+="${missing!}"
+    return text
+}
+print(fail())

@@ -51,18 +51,7 @@ XR_FUNC bool xr_lir_internal_view_construct_slot(const XrLirModule *m,
     return true;
 }
 XR_FUNC XrLirStatus xr_lir_view_catalog_install(XrLirModule *m) {
-    XrLirStatus status = lir_writable(m);
-    if (status != XR_LIR_OK) return status;
-    XrLirIntrinsic entries[XR_LIR_VIEW_OP_COUNT - 1];
-    for (uint32_t role = 1; role < XR_LIR_VIEW_OP_COUNT; ++role) {
-        const LirViewSignature *shape = &lir_view_signatures[role];
-        entries[role - 1] = (XrLirIntrinsic){.id=XR_LIR_ARRAY_CATALOG_COUNT + role,
-            .parameters=shape->parameters, .parameter_count=shape->count,
-            .result=shape->result, .scalar_sync=true, .operation=role};
-    }
-    XrLirRegistry registry = {entries, XR_LIR_VIEW_OP_COUNT - 1};
-    status = lir_array_catalog(m, &registry);
-    return status == XR_LIR_OK ? status : lir_fail(m, status);
+    return lir_library_catalog(m, LIR_LIBRARY_VIEW | LIR_LIBRARY_ARRAY);
 }
 XR_FUNC XrLirStatus xr_lir_view_operation(const XrLirModule *m,
     XrLirViewOperation operation, uint32_t *output) {

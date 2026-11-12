@@ -13,6 +13,8 @@
  */
 #include "xrbc_lir.h"
 #include "xrbc_internal.h"
+#include "lir/xlir_string.h"
+#include "xray_native_string.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_state.h"
 #include "lir/xlir_array.h"
@@ -428,7 +430,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
              type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 &&
-             type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF &&
+             type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
              !rbc_lir_aggregate_type(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
@@ -480,7 +482,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     switch (i->op) {
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        return xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
+        return xr_lir_string_role(input, i) || xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
             (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
     }
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
@@ -609,6 +611,7 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
     if (type == XR_LIR_VIEW_FRAME) return XR_RBC_VIEW_FRAME;
     if (type == XR_LIR_VIEW_CELL) return XR_RBC_VIEW_CELL;
     if (type == XR_LIR_SLICE_I64) return XR_RBC_SLICE_I64;
+    if (type == XR_LIR_STRING_REF) return XR_RBC_STRING_REF;
     return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL :
         type == XR_LIR_STATE ? XR_RBC_STATE : type == XR_LIR_STATE_REF ? XR_RBC_STATE_REF : XR_RBC_BITS;
 }
@@ -661,12 +664,12 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            if (xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
-                    type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF ||
+                    type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF || type==XR_LIR_STRING_REF ||
                     type==XR_LIR_I64_CELL || type==XR_LIR_STATE ||
                     type==XR_LIR_VIEW_FRAME || type==XR_LIR_VIEW_CELL || type==XR_LIR_SLICE_I64 || type>=XR_LIR_TYPE_COUNT)continue;
                 if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
@@ -676,7 +679,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if(i.type==XR_LIR_STRING)++strings;
                 else if(i.type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type))];
                 else if(i.type==XR_LIR_STATE_REF)++refs;
-                else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF &&
+                else if(i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF && i.type!=XR_LIR_STRING_REF &&
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
                     i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
@@ -1064,6 +1067,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
@@ -1529,7 +1533,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         if (root.parameter_types[i] >= XR_LIR_TYPE_COUNT ||
             root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
             root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
-            root.parameter_types[i]==XR_LIR_ARRAY_CELL || root.parameter_types[i]==XR_LIR_ARRAY_REF)
+            root.parameter_types[i]==XR_LIR_ARRAY_CELL || root.parameter_types[i]==XR_LIR_ARRAY_REF ||
+            root.parameter_types[i]==XR_LIR_STRING_REF)
             return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                 "execution entry cannot borrow a cell argument or String value", (XrLirSource) {0});
     size_t all = xr_lir_function_count(input);

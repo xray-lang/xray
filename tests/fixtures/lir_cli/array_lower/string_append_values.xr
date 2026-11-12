@@ -1,0 +1,33 @@
+fn local()->string {
+    var text="a"
+    const old=text
+    text+="b"
+    print(old)
+    print(text)
+    const expression=(text+="!")
+    text+="?"
+    print(expression)
+    print(text)
+    var repeated="ab"
+    repeated+=repeated
+    print(repeated)
+    text+="\0Ω"
+    return text
+}
+print(local())
+var current="m"
+const snapshot=current
+current+="n"
+print(snapshot)
+print(current)
+fn scalars()->string {
+    var scalar=""
+    var number=-17
+    var truth=true
+    var byte:u8=255
+    var word:u64=18446744073709551615
+    var fraction:f64=1.5
+    scalar+="${number}|${truth}|${byte}|${word}|${fraction}"
+    return scalar
+}
+print(scalars())

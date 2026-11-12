@@ -61,8 +61,13 @@ static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess ac
     return true;
 }
 
+#include "xrbc_string_library_transfer.inc.c"
+
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (access.operation == XR_RBC_STRING_LIBRARY) {
+        return rbc_string_library_transfer(s, access);
+    }
     if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
         if (!rbc_array_destination(s, access.result)) return false;
         if (access.slot >= XR_POD_SCALAR_COUNT) {

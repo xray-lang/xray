@@ -130,11 +130,15 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
     return f;
 }
 
+enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8};
+static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
 #include "xlir_view.inc.c"
 #include "xlir_display.inc.c"
+#include "xlir_string.inc.c"
+#include "xlir_library.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
     xr_free((void *) instruction->view.operands);
@@ -196,13 +200,13 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
         if (entry.operation && !xr_lir_internal_view_intrinsic_valid(&entry) &&
-            !xr_lir_display_intrinsic_valid(&entry))
+            !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry))
             return XR_LIR_UNSUPPORTED;
-        if (!entry.operation && (entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
+        if (!entry.operation && (entry.result == XR_LIR_STRING_REF || entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
             entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))
             return XR_LIR_UNSUPPORTED;
         for (uint32_t p = 0; p < entry.parameter_count; ++p)
-            if (!entry.operation && (entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
+            if (!entry.operation && (entry.parameters[p] == XR_LIR_STRING_REF || entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
                 entry.parameters[p] == XR_LIR_VIEW_FRAME || entry.parameters[p] == XR_LIR_VIEW_CELL ||
                 entry.parameters[p] == XR_LIR_SLICE_I64))
                 return XR_LIR_UNSUPPORTED;
@@ -299,7 +303,7 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         memchr(spec->name, 0, spec->name_length) ||
         !lir_types_valid(m, spec->parameters, spec->parameter_count) ||
         !xr_lir_internal_type_valid(m, spec->result, true) || spec->result == XR_LIR_I64_CELL ||
-        spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
+        spec->result == XR_LIR_STRING_REF || spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
         spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
         spec->result == XR_LIR_ARRAY_REF || spec->result == XR_LIR_VIEW_FRAME ||
         spec->result == XR_LIR_VIEW_CELL)

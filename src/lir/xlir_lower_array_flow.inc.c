@@ -34,8 +34,16 @@ static bool lower_array_place_consumer(XrXirOp op, uint32_t a) {
 
 static bool lower_array_flow_inventory(LowerFunction *f) {
     Lower *c = f->owner;
-    if (!c->arrays) return true;
     const XrXirFunction *source = f->source;
+    bool needed = c->arrays || c->string_appends;
+    for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
+        needed = source->parameters[p] == XR_XIR_STRING;
+    for (uint32_t i = 0; !needed && source->block_count > 1 && i < source->instruction_count; ++i) {
+        XrXirType type = source->instructions[i].type;
+        needed = type == XR_XIR_STRING || (xr_xir_type_is_cell(c->source->types, type) &&
+            xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING);
+    }
+    if (!needed) return true;
     f->promoted_arrays = lower_alloc(c, f->value_count, 1);
     f->array_values = lower_alloc(c, f->value_count, sizeof(*f->array_values));
     f->array_places = lower_alloc(c, f->value_count, sizeof(*f->array_places));
@@ -51,7 +59,8 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             const XrXirInstruction *op = &source->instructions[i];
             f->value_blocks[value] = b;
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
-                (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL) &&
+                (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL ||
+                 (source->block_count > 1 && xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING)) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;
         }
     }
@@ -66,7 +75,8 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
                  a += op->op == XR_XIR_PHI ? 2u : 1u) {
                 uint32_t value = lower_operand_at(source, op, a);
                 if (f->promoted_arrays[value] && !(a == 0 &&
-                    (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_PLACE)))
+                    (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
+                     op->op == XR_XIR_CELL_STRING_APPEND || op->op == XR_XIR_CELL_PLACE)))
                     f->promoted_arrays[value] = 0;
                 if (value < source->parameter_count) continue;
                 const XrXirInstruction *definition = &source->instructions[value - source->parameter_count];
@@ -93,16 +103,22 @@ static bool lower_array_flow_values(LowerFunction *f) {
                  a += op->op == XR_XIR_PHI ? 2u : 1u) {
                 uint32_t value = lower_operand_at(source, op, a);
                 uint32_t use_block = op->op == XR_XIR_PHI ? source->operands[op->args[0] + a - 1] : b;
-                if (value < source->parameter_count || f->value_blocks[value] == use_block ||
+                bool parameter = value < source->parameter_count;
+                if ((parameter && (source->parameters[value] != XR_XIR_STRING || !use_block)) ||
+                    f->value_blocks[value] == use_block ||
                     f->array_values[value] != UINT32_MAX) continue;
-                const XrXirInstruction *definition = &source->instructions[value - source->parameter_count];
-                if (!lower_array_element(c, definition->type) || definition->op == XR_XIR_CELL_PLACE ||
-                    definition->op == XR_XIR_SLOT_PLACE || definition->op == XR_XIR_LOCAL_NEW) continue;
-                XR_DCHECK(f->cell_count < source->instruction_count, "each Array state has a distinct source producer");
+                const XrXirInstruction *definition = parameter ? NULL :
+                    &source->instructions[value - source->parameter_count];
+                XrXirType type = parameter ? source->parameters[value] : definition->type;
+                if (!lower_managed_type(lower_type(c, type)) || (definition &&
+                    (definition->op == XR_XIR_CELL_PLACE || definition->op == XR_XIR_SLOT_PLACE ||
+                     definition->op == XR_XIR_LOCAL_NEW))) continue;
+                XR_DCHECK(f->cell_count < f->value_count, "each managed state has a distinct source value");
                 uint32_t cell = f->cell_count++;
                 f->array_values[value] = cell;
-                f->cell_types[cell] = XR_LIR_ARRAY;
-                f->cell_elements[cell] = lower_array_element(c, definition->type);
+                f->cell_types[cell] = lower_type(c, type);
+                f->cell_elements[cell] = lower_array_element(c, type);
+                if (parameter) f->value_blocks[value] = 0;
             }
         }
     }

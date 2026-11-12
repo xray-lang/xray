@@ -30,7 +30,8 @@ def main() -> None:
              "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
              "view_local", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
              "view_module_const", "view_conditional_cleanup", "view_phi", "view_copy_argument",
-             "view_copy_unused_parameter", "panic_nullable_view")
+             "view_copy_unused_parameter", "panic_nullable_view", "string_append_values", "string_append_ref",
+             "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))

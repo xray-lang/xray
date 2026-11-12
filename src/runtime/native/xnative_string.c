@@ -16,6 +16,8 @@
  *   one pinned object per root, lent to the guest without a count.
  */
 #include "xnative_string.h"
+#include "xray_native_string.h"
+#include "xir/xxir_value_place.h"
 #include "xnative_array.h"
 #include "xnative_view.h"
 #include "xir/xxir_value_internal.h"
@@ -329,3 +331,5 @@ XR_FUNC XrtString *xrt_string_publish_pending(uint32_t source_id) {
     }
     return string;
 }
+
+#include "xnative_string_append.inc.c"

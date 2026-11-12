@@ -42,7 +42,7 @@ typedef struct Lower {
     XrLirStateLayout state_layout;
     uint32_t *state_slots, **module_cells;
     uint8_t *state_required;
-    bool prints, string_prints, arrays, views, displays;
+    bool prints, string_prints, arrays, views, displays, string_appends;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerArrayCells {
@@ -73,6 +73,7 @@ typedef struct LowerFunction {
     bool view_needed;
 } LowerFunction;
 
+static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_view_bind(LowerFunction *, uint32_t, uint32_t, XrLirValue, XrLirValue *);
 
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
@@ -98,6 +99,8 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         lower_array_element(c, xr_xir_cell_element(c->source->types, type)))
         return c->views && lower_array_element(c, xr_xir_cell_element(c->source->types, type)) == XR_LIR_I64 ?
             XR_LIR_VIEW_CELL : XR_LIR_ARRAY_CELL;
+    if (xr_xir_type_is_cell(c->source->types, type) &&
+        xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING) return XR_LIR_STRING_CELL;
     if (type == XR_XIR_UNIT)
         return XR_LIR_UNIT;
     if (type == XR_XIR_I64)
@@ -317,6 +320,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_PLACE_WRITE:
         case XR_XIR_SLOT_INIT:
         case XR_XIR_SLOT_LOAD:
+        case XR_XIR_CELL_STRING_APPEND:
         case XR_XIR_CONST_STRING:
         case XR_XIR_CONST_BOOL:
         case XR_XIR_CONST_INT:
@@ -688,19 +692,6 @@ static bool lower_state_read(XrXirOp op) {
 static bool lower_state_write(XrXirOp op) {
     return op == XR_XIR_CELL_WRITE || op == XR_XIR_LOCAL_WRITE;
 }
-/* A direct, nonescaping local Cell can use the existing SSA state inventory.
- * Module Cells and aliases keep their physical activation storage. */
-static bool lower_promoted_string(const Lower *c, const XrXirFunction *f,
-    const XrXirInstruction *op) {
-    if (f->block_count == 1) return false;
-    uint32_t id;
-    if (op->op == XR_XIR_CELL_NEW) id = f->parameter_count + (uint32_t)(op - f->instructions);
-    else if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE) id = op->args[0];
-    else return false;
-    return id >= f->parameter_count && id - f->parameter_count < f->instruction_count &&
-        f->instructions[id - f->parameter_count].op == XR_XIR_CELL_NEW &&
-        lower_module_cell(c, c->function, id) == UINT32_MAX;
-}
 static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruction *op) {
     const Lower *c = lower->owner;
     const XrXirFunction *f = lower->source;
@@ -708,12 +699,12 @@ static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruc
     if (lower->promoted_arrays && id < lower->value_count && lower->promoted_arrays[id]) return false;
     XrXirType type;
     if (op->op == XR_XIR_CELL_NEW) type = op->type;
-    else if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE)
+    else if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_STRING_APPEND)
         type = xr_xir_operand_type(f, op->args[0]);
     else return false;
     return xr_xir_type_is_cell(c->source->types, type) &&
         (lower_array_element(c, xr_xir_cell_element(c->source->types, type)) ||
-         (xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING && !lower_promoted_string(c, f, op)));
+         xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING);
 }
 static const XrXirInstruction *lower_term(Lower *c, const XrXirFunction *f, uint32_t b) {
     if (b >= f->block_count) {
@@ -827,6 +818,16 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         if (!lower_array_element(c, type)) return lower_unsupported(c, "non-Array place");
         return true;
     }
+    if (op->op == XR_XIR_CELL_STRING_APPEND) {
+        c->string_appends = true;
+        if (op->immediate) {
+            XrLirType type = lower_type(c, xr_xir_operand_type(f, op->args[1]));
+            if (type != XR_LIR_I64 && type != XR_LIR_F64 && !xr_lir_display_type(c->module, type))
+                return lower_unsupported(c, "String append scalar payload");
+            c->displays |= type != XR_LIR_I64 && type != XR_LIR_F64;
+        }
+        return true;
+    }
     if (op->op == XR_XIR_CONST_STRING)
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
     if (op->op == XR_XIR_TO_STRING &&
@@ -888,7 +889,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         uint32_t value = f->operands[op->args[0]];
         XrXirType type = xr_xir_operand_type(f, value);
         if (!lower_receive_type(c, type)) return false;
-        if (xr_lir_display_type(c->module, lower_type(c, type))) {
+        if (type != XR_XIR_U8 && xr_lir_display_type(c->module, lower_type(c, type))) {
             c->displays = true;
             c->string_prints = true;
         } else if (type == XR_XIR_STRING || type == XR_XIR_F64) {
@@ -899,18 +900,6 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     return true;
 }
 
-static bool lower_managed(const Lower *c, const XrXirFunction *f, const uint8_t *literal_uses) {
-    bool managed = lower_managed_type(lower_type(c, f->result));
-    for (uint32_t p = 0; p < f->parameter_count; ++p) managed |= lower_managed_type(lower_type(c, f->parameters[p]));
-    for (uint32_t i = 0; i < f->instruction_count; ++i) {
-        const XrXirInstruction *op = &f->instructions[i];
-        managed |= lower_array_element(c, op->type) || (op->type == XR_XIR_STRING &&
-            (op->op != XR_XIR_CONST_STRING || literal_uses[i] != 1)) ||
-            (xr_xir_type_is_cell(c->source->types, op->type) &&
-             xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING);
-    }
-    return managed;
-}
 static bool lower_admit_function(Lower *c, uint32_t function) {
     c->function = function;
     c->block = 0;
@@ -926,6 +915,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         if (!lower_receive_type(c, f->parameters[p])) return false;
         c->views |= lower_type(c, f->parameters[p]) == XR_LIR_SLICE_I64;
+        c->string_appends |= lower_type(c, f->parameters[p]) == XR_LIR_STRING_CELL;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;
         if (lower_type(c, f->parameters[p]) <= XR_LIR_UNIT)
@@ -1024,6 +1014,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         parameters[p] = lower_type(c, f->parameters[p]);
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
+        if (parameters[p] == XR_LIR_STRING_CELL) { parameters[p] = XR_LIR_STRING_REF; c->string_appends = true; }
     }
     if (hidden) parameters[f->parameter_count] = XR_LIR_STATE;
     XrLirFunctionSpec spec = {.name = name,
@@ -1095,7 +1086,6 @@ static bool lower_order(LowerFunction *f) {
     f->phis = lower_alloc(c, count, sizeof(*f->phis));
     if (!f->order || !f->stack || !f->next || !f->reachable || !f->blocks || !f->phis)
         return false;
-    bool managed = lower_managed(c, f->source, f->literal_uses);
     uint32_t depth = 1;
     f->stack[0] = 0;
     f->reachable[0] = 1;
@@ -1107,12 +1097,6 @@ static bool lower_order(LowerFunction *f) {
         if (f->next[b] < lower_edge_count(term)) {
             uint32_t target = term->targets[f->next[b]++];
             XR_DCHECK(target < count, "admission checked every reachable successor");
-            if (managed && f->reachable[target] == 1)
-                for (uint32_t p = 0; p < f->source->parameter_count; ++p)
-                    if (f->source->parameters[p] == XR_XIR_STRING) {
-                        c->block = b; c->instruction = (uint32_t)(term - f->source->instructions);
-                        return lower_unsupported(c, "String parameter across a loop");
-                    }
             if (!f->reachable[target]) {
                 f->reachable[target] = 1;
                 f->stack[depth++] = target;
@@ -1145,8 +1129,8 @@ static bool lower_cell_inventory(LowerFunction *f) {
     f->value_count = (uint32_t) values;
     f->values = lower_alloc(c, f->value_count, sizeof(*f->values));
     f->cell_for = lower_alloc(c, f->value_count, sizeof(*f->cell_for));
-    f->cell_types = lower_alloc(c, source->instruction_count, sizeof(*f->cell_types));
-    f->cell_elements = lower_alloc(c, source->instruction_count, sizeof(*f->cell_elements));
+    f->cell_types = lower_alloc(c, f->value_count, sizeof(*f->cell_types));
+    f->cell_elements = lower_alloc(c, f->value_count, sizeof(*f->cell_elements));
     if ((f->value_count && (!f->values || !f->cell_for)) || !f->cell_types || !f->cell_elements)
         return false;
     for (uint32_t v = 0; v < f->value_count; ++v)
@@ -1160,8 +1144,8 @@ static bool lower_cell_inventory(LowerFunction *f) {
                 if (lower_state_new(op->op) &&
                     !lower_managed_storage(f, op) &&
                     lower_module_cell(c, c->function, source->parameter_count + i) == UINT32_MAX) {
-                    XR_DCHECK(f->cell_count < source->instruction_count,
-                              "each state has one defining instruction");
+                    XR_DCHECK(f->cell_count < f->value_count,
+                              "each state has one defining value");
                     uint32_t id = source->parameter_count + i;
                     f->cell_for[id] = f->cell_count;
                     XrXirType element = op->op == XR_XIR_CELL_NEW
@@ -1199,6 +1183,8 @@ static bool lower_liveness(LowerFunction *f) {
     f->current = lower_alloc(c, f->cell_count, sizeof(*f->current));
     if (!f->use || !f->define || !f->live || !f->states || !f->current)
         return false;
+    for (uint32_t p = 0; f->array_values && p < source->parameter_count; ++p)
+        if (f->array_values[p] != UINT32_MAX) f->define[f->array_values[p]] = 1;
     for (uint32_t b = 0; b < source->block_count; ++b)
         if (f->reachable[b]) {
             const XrXirBlock *block = &source->blocks[b];
@@ -1209,7 +1195,7 @@ static bool lower_liveness(LowerFunction *f) {
                 if (lower_module_cell(c, c->function, lower_state_new(op->op)
                         ? source->parameter_count + i : op->args[0]) != UINT32_MAX) continue;
                 if (!lower_state_new(op->op) && !lower_state_read(op->op) &&
-                    !lower_state_write(op->op))
+                    !lower_state_write(op->op) && op->op != XR_XIR_CELL_STRING_APPEND)
                     continue;
                 c->block = b;
                 c->instruction = i;
@@ -1219,9 +1205,10 @@ static bool lower_liveness(LowerFunction *f) {
                         &cell))
                     return false;
                 size_t at = (size_t) b * f->cell_count + cell;
-                if (lower_state_read(op->op)) {
+                if (lower_state_read(op->op) || op->op == XR_XIR_CELL_STRING_APPEND) {
                     if (!f->define[at])
                         f->use[at] = 1;
+                    if (op->op == XR_XIR_CELL_STRING_APPEND) f->define[at] = 1;
                 } else
                     f->define[at] = 1;
             }
@@ -1390,7 +1377,7 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
     if (lower_managed_type(value->type) && value->block &&
         value->block != f->blocks[f->owner->block].id) {
         uint32_t cell = f->array_values ? f->array_values[id] : UINT32_MAX;
-        if (value->type != XR_LIR_ARRAY || cell == UINT32_MAX || !f->current[cell].id)
+        if (cell == UINT32_MAX || !f->current[cell].id)
             return lower_unsupported(f->owner, value->type == XR_LIR_STRING ?
                 "String alias across blocks without owned parameters" :
                 "managed alias across blocks without owned parameters");
@@ -1567,7 +1554,8 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
-        if (xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f->source, value)))) {
+        if (xr_xir_operand_type(f->source, value) != XR_XIR_U8 &&
+            xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f->source, value)))) {
             XrLirValue argument = {0}, text = {0};
             if (!lower_value(f, value, &argument) || !lower_display(f, b, argument, &text)) return false;
             XrLirInstruction print = {.op=XR_LIR_STRING_PRINT, .type=XR_LIR_UNIT,
@@ -1633,6 +1621,8 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         for (uint32_t a = 0; a < op->args[1] && good; ++a)
             if (callee->parameter_types[a] == XR_LIR_ARRAY_REF)
                 good = lower_array_borrow(f, b, &arguments[a]);
+            else if (callee->parameter_types[a] == XR_LIR_STRING_REF)
+                good = lower_string_borrow(f, b, &arguments[a]);
     }
     if (hidden && good) {
         arguments[op->args[1]] = f->state;
@@ -1740,6 +1730,11 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
             (op->op == XR_XIR_CELL_WRITE && !lower_value(f, op->args[1], &args[1]))) return false;
         if (!create && c->module->functions[f->function.id - 1].values[args[0].id - 1].type == XR_LIR_ARRAY_REF)
             instruction.op = op->op == XR_XIR_CELL_READ ? XR_LIR_ARRAY_REF_READ : XR_LIR_ARRAY_REF_WRITE;
+        if (!create && c->module->functions[f->function.id - 1].values[args[0].id - 1].type == XR_LIR_STRING_REF) {
+            instruction.op = XR_LIR_CALL_INTRINSIC;
+            if (!lower_build(c, xr_lir_string_operation(c->module, op->op == XR_XIR_CELL_READ ?
+                XR_LIR_STRING_OP_READ_REF : XR_LIR_STRING_OP_WRITE_REF, &instruction.intrinsic))) return false;
+        }
     }
     return lower_build(c, instruction.type == XR_LIR_UNIT
         ? xr_lir_emit_effect(c->module, f->blocks[b], &instruction)
@@ -1747,6 +1742,7 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
 }
 
 static bool lower_managed_copy(LowerFunction *, uint32_t, XrLirValue, XrLirValue *);
+#include "xlir_lower_string.inc.c"
 #include "xlir_lower_view.inc.c"
 #include "xlir_lower_array.inc.c"
 
@@ -1769,12 +1765,16 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             f->current[f->array_values[value]] = f->values[value];
     }
     if (!lower_view_phis(f, b)) return false;
+    if (!b && f->array_values)
+        for (uint32_t p = 0; p < f->source->parameter_count; ++p)
+            if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
     for (uint32_t i = block->first + f->phis[b]; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
         bool handled;
-        if (!lower_view_instruction(f, b, i, &handled)) return false;
+        if (!lower_string_append(f, b, i, &handled)) return false;
+        if (!handled && !lower_view_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_module_operation(f, b, i, &handled)) return false;
         if (!handled && !lower_array_instruction(f, b, i, &handled)) return false;
         if (!handled && (lower_state_new(op->op) || lower_state_read(op->op) || lower_state_write(op->op))) {
@@ -1792,7 +1792,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             } else {
                 XrLirValue input = {0};
                 if (!lower_value(f, op->args[lower_state_new(op->op) ? 0 : 1], &input)) return false;
-                if (f->cell_types[cell] == XR_LIR_ARRAY) {
+                if (lower_managed_type(f->cell_types[cell])) {
                     if (!lower_managed_copy(f, b, input, &f->current[cell])) return false;
                 } else f->current[cell] = input;
             }
@@ -1855,7 +1855,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
     if (f->next[target] <= f->next[from])
         for (uint32_t a = 0; a < count; ++a) {
             XrLirType type = c->module->functions[f->function.id - 1].values[arguments[a].id - 1].type;
-            if (type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL)
+            if (type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL)
                 return lower_unsupported(c, "loop-carried managed String transfer");
         }
     return true;
@@ -1928,7 +1928,8 @@ static bool lower_frame_cells(LowerFunction *f) {
         for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
             const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
             if (v->op == XR_LIR_ARRAY_CELL_DROP) released[v->operands[0] - 1] = 1;
-            if (f->retired_values && (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_STRING_DROP))
+            if (f->retired_values && (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_STRING_DROP ||
+                xr_lir_string_role(f->owner->module, v) == XR_LIR_STRING_OP_APPEND_OWNED))
                 f->retired_values[v->operands[0] - 1] = 1;
         }
     f->frame_cells = lower_alloc(f->owner, entry->instruction_count, sizeof(*f->frame_cells));
@@ -2148,7 +2149,9 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.arrays = true;
         good = lower_view_state_layout(&c);
     }
-    if (good && c.displays)
+    if (good && c.string_appends)
+        good = lower_build(&c, xr_lir_string_catalog_install(c.module, c.views, c.arrays, c.displays));
+    else if (good && c.displays)
         good = lower_build(&c, xr_lir_display_catalog_install(c.module, c.views, c.arrays));
     else if (good && c.views)
         good = lower_build(&c, xr_lir_view_catalog_install(c.module));

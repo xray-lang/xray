@@ -56,21 +56,22 @@ static void array_free(void *memory) {
 #include "lir_array_repeat_fixture.h"
 #include "lir_array_ref_fixture.h"
 #include "lir_view_fixture.h"
+#include "lir_string_fixture.h"
 
-static void view_metadata_sweep(void) {
+static void borrowed_metadata_sweep(bool strings) {
     XrLirModule *input = NULL, *output = NULL;
     attempt = 0; fail_at = SIZE_MAX;
-    OK(view_fixture_create(&input));
+    OK(strings ? string_ref_fixture(&input) : view_fixture_create(&input));
     size_t construction = attempt;
     xr_lir_module_destroy(input);
     CHECK(!live && !live_bytes);
     for (size_t point = 0; point < construction; ++point) {
         input = NULL; attempt = 0; fail_at = point;
-        CHECK(view_fixture_create(&input) == XR_LIR_OUT_OF_MEMORY);
+        CHECK((strings ? string_ref_fixture(&input) : view_fixture_create(&input)) == XR_LIR_OUT_OF_MEMORY);
         CHECK(!input && attempt > point && !live && !live_bytes);
     }
     fail_at = SIZE_MAX;
-    OK(view_fixture_create(&input));
+    OK(strings ? string_ref_fixture(&input) : view_fixture_create(&input));
     size_t baseline = live, bytes = live_bytes;
     for (unsigned transform = 0; transform < 2; ++transform) {
         attempt = 0;
@@ -88,7 +89,7 @@ static void view_metadata_sweep(void) {
     }
     xr_lir_module_destroy(input);
     CHECK(!live && !live_bytes);
-    printf("View metadata construction failure points: %zu\n", construction);
+    printf("%s metadata construction failure points: %zu\n", strings ? "String" : "View", construction);
 }
 
 static void array_construction_sweep(XrLirType element) {
@@ -202,7 +203,8 @@ static void array_transform_sweep(bool inlining, bool repeating) {
 }
 
 int main(void) {
-    view_metadata_sweep();
+    borrowed_metadata_sweep(false);
+    borrowed_metadata_sweep(true);
     array_catalog_sweep();
     array_reference_sweep();
     array_reference_transform_sweep(false);

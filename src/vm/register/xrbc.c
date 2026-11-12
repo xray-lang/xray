@@ -13,6 +13,8 @@
  */
 
 #include "xrbc_internal.h"
+#include "lir/xlir_string.h"
+#include "xray_native_string.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
@@ -169,7 +171,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_SLICE_I64 ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_STRING_REF ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||

@@ -142,6 +142,8 @@ static bool rbc_lir_aggregate_append(RbcLirCompiler *c, XrRbcAggregateAccess acc
     return rbc_lir_emit(c, XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, (int64_t)c->aggregate_access_count++);
 }
 
+#include "xrbc_lir_string_library.inc.c"
+
 static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
     XrRbcAggregateAccess access = {0};
     bool create = instruction->op == XR_LIR_NULLABLE_NONE || instruction->op == XR_LIR_NULLABLE_SOME;
@@ -174,7 +176,8 @@ static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *
         access.source = c->aggregate_home[operand];
         access.slot = XR_POD_SCALAR_COUNT + type - XR_LIR_TYPE_COUNT;
     } else {
-        access.slot = XR_POD_BOOL;
+        access.slot = type == XR_LIR_I1 ? XR_POD_BOOL : type == XR_LIR_U8 ? XR_POD_U8 :
+            type == XR_LIR_U64 ? XR_POD_U64 : type == XR_LIR_F64 ? XR_POD_F64 : XR_POD_I64;
         access.count = 1;
         if (c->aggregate_operand_count == UINT32_MAX)
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "display operands exceed bytecode indices");

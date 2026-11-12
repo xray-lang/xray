@@ -1183,9 +1183,18 @@ static void test_spill_managed_backedge(void) {
     XrRbcFunction f={.code=code,.code_count=4,.register_count=2,.register_kinds=kinds,
         .register_kind_count=2,.spill_count=1,.reference_spill_count=1};
     XrRbcModule m={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
-    reject_prepare(&m,0,NULL,0);
-    // A live ordinary String is also forbidden even with an empty spill bank.
-    immediate(code,1,XR_RBC_LOADI,0,1);reject_prepare(&m,0,NULL,0);
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &locations) == XR_XIR_VALUE_OK);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&m,0,NULL,0,locations,&execution) == XR_RBC_OK && execution);
+    xr_rbc_execution_free(&execution);
+    // Each live String has an established owner at the loop's incoming state.
+    immediate(code,1,XR_RBC_LOADI,0,1);
+    CHECK(xr_rbc_module_prepare(&m,0,NULL,0,locations,&execution) == XR_RBC_OK && execution);
+    xr_rbc_execution_free(&execution);
+    // A scalar write cannot overwrite that owner while preserving its kind.
+    immediate(code,1,XR_RBC_LOADI,1,1);reject_prepare(&m,0,NULL,0);
+    xrt_locations_release(locations);
 }
 
 static void test_module_capabilities(void) {
@@ -1264,10 +1273,12 @@ static void test_module_capabilities(void) {
 #include "register_fixed_type_cases.h"
 #include "register_nullable_cases.h"
 #include "register_pod_display_cases.h"
+#include "register_string_library_cases.h"
 #include "register_fixed_value_cases.h"
 #include "register_fixed_call_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_string_references();
     test_raw_fixed_calls();
     test_raw_fixed_no_value_callee();
     test_raw_arrays();
