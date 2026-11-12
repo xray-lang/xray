@@ -69,7 +69,7 @@ static void place_receivers(void) {
 static void contextual_call_receivers(void) {
     XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    XrXirCallableParameter integer={XR_XIR_I64,XR_PARAM_READ,0},string={XR_XIR_STRING,XR_PARAM_READ};
+    XrXirCallableParameter integer={XR_XIR_I64,XR_PARAM_READ,0},string={XR_XIR_STRING,XR_PARAM_READ,0};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&integer,.parameter_count=1,.result=XR_XIR_UNIT},
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&integer,.parameter_count=1,.result=XR_XIR_I64},
