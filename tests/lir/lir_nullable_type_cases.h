@@ -30,7 +30,8 @@ static void nullable_type_owners(void) {
             layout.scalar_count == (n ? 129u : 128u) && !layout.managed);
         XrLirScalarPart scalar;
         OK(xr_lir_type_scalar(target, imported, layout.scalar_count - 1, &scalar));
-        CHECK(scalar.type == (n ? XR_LIR_I64 : XR_LIR_U8) && scalar.offset == (n ? 1024u : 127u));
+        XrLirType expected_scalar = n ? XR_LIR_I64 : XR_LIR_U8;
+        CHECK(scalar.type == expected_scalar && scalar.offset == (n ? 1024u : 127u));
         xr_lir_module_destroy(target);
         for (uint32_t c = 0; c < 3; ++c) {
             OK(xr_lir_verify(copies[c], NULL));
