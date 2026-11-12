@@ -18,6 +18,7 @@
 #include "xxir_declarations.h"
 #include "../base/xchecks.h"
 #include "../base/xhash.h"
+#include "../shared/xr_align_guard.h"
 
 typedef struct StoragePredecessor {
     uint32_t source, next, ordinal;
@@ -94,6 +95,7 @@ typedef struct StorageExecution {
 typedef struct StorageFunction {
     XrXirFunction header;
     const XrXirFunction *body;
+    unsigned char *workspace;
     XrXirType *types;
     uint8_t *handles;
     StorageOperation *operations;
@@ -1515,6 +1517,64 @@ static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint3
     return flow->status == XR_XIR_OK;
 }
 
+typedef struct StorageWorkspacePart {
+    size_t count, size, alignment, offset;
+} StorageWorkspacePart;
+
+static bool storage_prepare_workspace(XirStorageFlow *flow, StorageFunction *row,
+    const XrXirFunction *body, uint32_t physical) {
+    StorageWorkspacePart parts[] = {
+        {physical, sizeof(*row->types), _Alignof(XrXirType), 0},
+        {physical, sizeof(*row->handles), _Alignof(uint8_t), 0},
+        {body->instruction_count, sizeof(*row->operations), _Alignof(StorageOperation), 0},
+        {body->parameter_count, sizeof(*row->content_inputs), _Alignof(uint32_t), 0},
+        {body->parameter_count, sizeof(*row->exposure_inputs), _Alignof(uint32_t), 0},
+        {body->parameter_count, sizeof(*row->footprint_heads), _Alignof(uint32_t), 0},
+        {body->block_count, sizeof(*body->blocks), _Alignof(XrXirBlock), 0},
+        {body->instruction_count, sizeof(*row->blocks), _Alignof(uint32_t), 0},
+        {row->point_count, sizeof(*row->predecessors), _Alignof(uint32_t), 0},
+        {physical, sizeof(*row->identity_heads), _Alignof(uint32_t), 0},
+        {physical, sizeof(*row->addresses), _Alignof(StorageAddress), 0},
+        {physical, sizeof(*row->visited), _Alignof(uint32_t), 0},
+        {physical, sizeof(*row->queue), _Alignof(uint32_t), 0},
+        {row->site_head_count, sizeof(*row->site_heads), _Alignof(uint32_t), 0}
+    };
+    size_t bytes = 0;
+    for (size_t i = 0; i < sizeof(parts) / sizeof(*parts); ++i) {
+        StorageWorkspacePart *part = &parts[i];
+        if (!part->count) continue;
+        if (part->count > SIZE_MAX / part->size ||
+            !xr_checked_align_size(bytes, part->alignment, &part->offset) ||
+            part->count * part->size > SIZE_MAX - part->offset) {
+            flow->status = XR_XIR_OVERFLOW;
+            return false;
+        }
+        bytes = part->offset + part->count * part->size;
+    }
+    unsigned char *memory = xir_compile_calloc(&flow->memory, 1, bytes, &flow->status);
+    if (!memory) return false;
+    /* Fixed function tables share a lifetime and never grow. Their slices are
+     * borrowed from this one owner until construction is retired. */
+    row->workspace = memory;
+    row->types = physical ? (XrXirType *)(memory + parts[0].offset) : NULL;
+    row->handles = physical ? memory + parts[1].offset : NULL;
+    row->operations = body->instruction_count ? (StorageOperation *)(memory + parts[2].offset) : NULL;
+    row->content_inputs = body->parameter_count ? (uint32_t *)(memory + parts[3].offset) : NULL;
+    row->exposure_inputs = body->parameter_count ? (uint32_t *)(memory + parts[4].offset) : NULL;
+    row->footprint_heads = body->parameter_count ? (uint32_t *)(memory + parts[5].offset) : NULL;
+    row->header.blocks = body->block_count ? (XrXirBlock *)(memory + parts[6].offset) : NULL;
+    row->blocks = body->instruction_count ? (uint32_t *)(memory + parts[7].offset) : NULL;
+    row->predecessors = row->point_count ? (uint32_t *)(memory + parts[8].offset) : NULL;
+    row->identity_heads = physical ? (uint32_t *)(memory + parts[9].offset) : NULL;
+    row->addresses = physical ? (StorageAddress *)(memory + parts[10].offset) : NULL;
+    row->visited = physical ? (uint32_t *)(memory + parts[11].offset) : NULL;
+    row->queue = physical ? (uint32_t *)(memory + parts[12].offset) : NULL;
+    row->site_heads = row->site_head_count ? (uint32_t *)(memory + parts[13].offset) : NULL;
+    if (body->block_count) memcpy((void *)row->header.blocks, body->blocks,
+        (size_t)body->block_count * sizeof(*body->blocks));
+    return true;
+}
+
 static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
     StorageFunction *row = &flow->rows[function];
     const XrXirFunction *body = &flow->module->functions[function];
@@ -1530,35 +1590,16 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
     row->header = *body;
     row->first_environment_effect = body->instruction_count;
     row->header.name = NULL; row->header.name_length = 0; row->header.instructions = NULL;
+    row->header.blocks = NULL;
     row->header.consume_parameters = NULL; row->header.consume_parameter_count = 0;
     row->header.escaping_parameters = NULL; row->header.escaping_parameter_count = 0;
-    row->types = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->types), &flow->status);
-    row->handles = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->handles), &flow->status);
-    row->operations = xir_compile_calloc(&flow->memory, body->instruction_count, sizeof(*row->operations), &flow->status);
-    row->content_inputs = xir_compile_calloc(&flow->memory, body->parameter_count,
-        sizeof(*row->content_inputs), &flow->status);
-    row->exposure_inputs = xir_compile_calloc(&flow->memory, body->parameter_count,
-        sizeof(*row->exposure_inputs), &flow->status);
-    row->footprint_heads = xir_compile_calloc(&flow->memory, body->parameter_count,
-        sizeof(*row->footprint_heads), &flow->status);
-    row->header.blocks = xir_compile_copy(&flow->memory, body->blocks,
-        (size_t)body->block_count * sizeof(*body->blocks), &flow->status);
+    row->point_count = (uint32_t)points; row->site_head_count = (uint32_t)heads;
+    if (!storage_prepare_workspace(flow, row, body, (uint32_t)physical)) return false;
     row->header.parameters = row->types;
     row->body = &row->header;
-    row->point_count = (uint32_t)points; row->site_head_count = (uint32_t)heads;
     XirStorageFlowFunction *view = (XirStorageFlowFunction *)&flow->view.functions[function];
     view->physical_values = (uint32_t)physical; view->value_count = (uint32_t)physical;
     view->parameter_count = body->parameter_count;
-    row->blocks = xir_compile_calloc(&flow->memory, body->instruction_count, sizeof(*row->blocks), &flow->status);
-    row->predecessors = xir_compile_calloc(&flow->memory, row->point_count,
-        sizeof(*row->predecessors), &flow->status);
-    row->identity_heads = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->identity_heads), &flow->status);
-    row->addresses = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->addresses), &flow->status);
-    row->visited = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->visited), &flow->status);
-    row->queue = xir_compile_calloc(&flow->memory, (size_t)physical, sizeof(*row->queue), &flow->status);
-    row->site_heads = xir_compile_calloc(&flow->memory, row->site_head_count,
-        sizeof(*row->site_heads), &flow->status);
-    if (flow->status != XR_XIR_OK) return false;
     if (body->parameter_count) memcpy(row->types, body->parameters,
         (size_t)body->parameter_count * sizeof(*row->types));
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
@@ -1581,25 +1622,21 @@ static bool storage_prepare_function(XirStorageFlow *flow, uint32_t function) {
 static void storage_retire_construction(XirStorageFlow *flow) {
     for (uint32_t f = 0; flow->rows && f < flow->view.function_count; ++f) {
         StorageFunction *row = &flow->rows[f];
-        xr_compile_resources_free((void *)row->header.blocks);
-        xr_compile_resources_free(row->types); xr_compile_resources_free(row->handles);
-        xr_compile_resources_free(row->operations); xr_compile_resources_free(row->reads);
+        xr_compile_resources_free(row->reads);
         xr_compile_resources_free(row->allocation_cycles);
         xr_compile_resources_free(row->writes); xr_compile_resources_free(row->write_offsets);
         xr_compile_resources_free(row->write_points); xr_compile_resources_free(row->calls);
-        xr_compile_resources_free(row->content_inputs); xr_compile_resources_free(row->exposure_inputs);
-        xr_compile_resources_free(row->footprint_heads); xr_compile_resources_free(row->footprint_inputs);
+        xr_compile_resources_free(row->footprint_inputs);
         xr_compile_resources_free(row->publications); xr_compile_resources_free(row->exposure_offsets);
         xr_compile_resources_free(row->publication_index);
         xr_compile_resources_free(row->exposure_points);
-        xr_compile_resources_free(row->blocks); xr_compile_resources_free(row->predecessors);
-        xr_compile_resources_free(row->edges); xr_compile_resources_free(row->identity_heads);
+        xr_compile_resources_free(row->edges);
         xr_compile_resources_free(row->flow_index); xr_compile_resources_free(row->exposure_index);
         xr_compile_resources_free(row->footprint_index);
         xr_compile_resources_free(row->identity_links); xr_compile_resources_free(row->address_values);
-        xr_compile_resources_free(row->addresses); xr_compile_resources_free(row->visited);
-        xr_compile_resources_free(row->queue); xr_compile_resources_free(row->states);
-        xr_compile_resources_free(row->state_index); xr_compile_resources_free(row->site_heads);
+        xr_compile_resources_free(row->states);
+        xr_compile_resources_free(row->state_index);
+        xr_compile_resources_free(row->workspace);
     }
     xr_compile_resources_free(flow->rows); flow->rows = NULL;
     xr_compile_resources_free(flow->work); flow->work = NULL;

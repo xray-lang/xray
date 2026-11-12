@@ -1414,8 +1414,10 @@ static void root_unbound_contents_causes(void) {
 
 #include "xir_callback_entry_cases.h"
 #include "xir_effect_conversion_cases.h"
+#include "xir_storage_workspace_cases.h"
 
 static void control_summary_kernel(void) {
+    storage_workspace_ownership();
     captured_cell_bound_types();
     stored_environment_ownership();
     entry_footprint_ownership();
