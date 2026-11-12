@@ -149,7 +149,7 @@ typedef struct CallableErrorFixture {
     XrXirBlock blocks[4];
     XrXirFunction functions[4];
     XrXirType arguments[2],pass_parameter;
-    uint32_t operands[3];
+    uint32_t operands[3],escaping_parameter;
     XrXirGeneric generics[4];
     XrXirSourceModule source;
     XrXirFunctionIdentity identities[4];
@@ -217,7 +217,8 @@ static void callable_error_fixture(CallableErrorFixture *f,XrXirType error) {
     f->functions[2]=(XrXirFunction){.name="callee",.name_length=6,.result=XR_XIR_I64,.blocks=&f->blocks[2],.block_count=1,
         .instructions=f->callee,.instruction_count=2,.error_type=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE};
     f->functions[3]=(XrXirFunction){.name="pass",.name_length=4,.parameters=&f->pass_parameter,.parameter_count=1,
-        .result=f->wide_type,.blocks=&f->blocks[3],.block_count=1,.instructions=&f->pass,.instruction_count=1,.error_type=XR_XIR_NEVER};
+        .result=f->wide_type,.blocks=&f->blocks[3],.block_count=1,.instructions=&f->pass,.instruction_count=1,
+        .error_type=XR_XIR_NEVER,.escaping_parameters=&f->escaping_parameter,.escaping_parameter_count=1};
     f->arguments[0]=XR_XIR_NEVER;f->arguments[1]=error;
     f->generics[1]=(XrXirGeneric){.arguments=f->arguments,.argument_count=2};
     f->generics[2]=(XrXirGeneric){.constraints=&f->error_bound,.parameter_count=1};
