@@ -1,0 +1,7 @@
+var value: i64? = null
+export fn current() -> i64? { return value }
+export fn replace(next: i64?) -> i64? {
+    const previous = value
+    value = next
+    return previous
+}

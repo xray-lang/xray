@@ -58,3 +58,8 @@ XR_LIR_OP(ARRAY_REF_WRITE, "array_ref_write", 2)
  * the result is unused; receiver evaluation precedes that instruction. */
 XR_LIR_OP(FIXED_ARRAY_NEW, "fixed_array_new", -1)
 XR_LIR_OP(FIXED_ARRAY_GET, "fixed_array_get", 2)
+/* Nullable values carry one presence byte and their exact inline payload. */
+XR_LIR_OP(NULLABLE_NONE, "nullable_none", 0)
+XR_LIR_OP(NULLABLE_SOME, "nullable_some", -1)
+XR_LIR_OP(NULLABLE_IS_SOME, "nullable_is_some", 1)
+XR_LIR_OP(NULLABLE_UNWRAP, "nullable_unwrap", 1)

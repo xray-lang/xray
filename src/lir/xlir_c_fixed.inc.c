@@ -14,7 +14,7 @@
 static const char *c_type(const LirC *c, XrLirType type) {
     if (type < XR_LIR_TYPE_COUNT) return c_builtin_type(type);
     uint32_t index = type - XR_LIR_TYPE_COUNT;
-    return index < c->fixed_count ? c->fixed_types[index].name : NULL;
+    return index < c->constructed_count ? c->constructed_types[index].name : NULL;
 }
 
 static void c_prepare_types(LirC *c) {
@@ -23,43 +23,53 @@ static void c_prepare_types(LirC *c) {
         c_error(c, XR_LIR_C_INVALID_LIR, "C emission requires a finished physical type pool");
         return;
     }
-    c->state_type_base = 5;
-    for (uint32_t s = 0; s < c->state_layout.slot_count; ++s)
-        if (c->state_layout.slots[s].payload == XR_LIR_ARRAY) c->state_type_base = 9;
+    c->state_type_base = LIR_STATE_CONSTRUCTED_BASE;
     uint32_t count = xr_lir_constructed_type_count(module);
     if (!count) return;
-    if (sizeof(*c->fixed_types) > SIZE_MAX / count) {
+    if (sizeof(*c->constructed_types) > SIZE_MAX / count) {
         c_error(c, XR_LIR_C_OVERFLOW, "C physical type inventory exceeds machine capacity");
         return;
     }
     void *memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources,
-        count, sizeof(*c->fixed_types), &memory))) return;
-    c->fixed_types = memory;
-    c->fixed_count = count;
+        count, sizeof(*c->constructed_types), &memory))) return;
+    c->constructed_types = memory;
+    c->constructed_count = count;
     for (uint32_t n = 0; n < count && c_request_poll(c); ++n) {
         XrLirType type = XR_LIR_TYPE_COUNT + n;
-        LirCFixedType *owned = &c->fixed_types[n];
+        LirCConstructedType *owned = &c->constructed_types[n];
         if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||
             xr_lir_type_layout(module, type, &owned->layout) != XR_LIR_OK ||
-            owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY || owned->shape.element != XR_LIR_U8 ||
-            !owned->shape.count || owned->shape.count > 65535 || owned->layout.size != owned->shape.count ||
-            owned->layout.alignment != 1 || owned->layout.scalar_count != owned->shape.count ||
+            (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE) ||
             owned->layout.managed) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "constructed physical types have no native implementation");
             return;
         }
-        snprintf(owned->name, sizeof(owned->name), "XrlFixed_%" PRIu32, type);
+        snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 : "XrlNullable_%" PRIu32, type);
     }
 }
 
-static void c_fixed_types(LirC *c) {
-    for (uint32_t n = 0; n < c->fixed_count && c_request_poll(c); ++n) {
-        const LirCFixedType *type = &c->fixed_types[n];
-        c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",
-            type->name, type->shape.count, type->name);
-        c_format(c, "_Static_assert(sizeof(%s) == UINT64_C(%" PRIu64 "), \"fixed byte layout\");\n",
+static void c_constructed_types(LirC *c) {
+    for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
+        const LirCConstructedType *type = &c->constructed_types[n];
+        if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
+            c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",
+                type->name, type->shape.count, type->name);
+        } else {
+            XrLirTypeLayout payload;
+            xr_lir_type_layout(c->request->module, type->shape.element, &payload);
+            c_format(c, "typedef struct %s { uint8_t tag;", type->name);
+            if (payload.alignment > 1) c_format(c, " uint8_t pad[%" PRIu32 "];", payload.alignment - 1);
+            if (type->shape.element != XR_LIR_UNIT) c_format(c, " %s payload;", c_type(c, type->shape.element));
+            c_format(c, " } %s;\n", type->name);
+            if (type->shape.element != XR_LIR_UNIT)
+                c_format(c, "_Static_assert(offsetof(%s, payload) == %u, \"nullable payload offset\");\n",
+                    type->name, payload.alignment);
+        }
+        c_format(c, "_Static_assert(sizeof(%s) == UINT64_C(%" PRIu64 "), \"aggregate size\");\n",
             type->name, type->layout.size);
+        c_format(c, "_Static_assert(_Alignof(%s) == UINT32_C(%" PRIu32 "), \"aggregate alignment\");\n",
+            type->name, type->layout.alignment);
     }
 }
 
@@ -74,7 +84,7 @@ static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     }
     XrLirType type = c_value_type(c, v->operands[0]);
-    const LirCFixedType *fixed = &c->fixed_types[type - XR_LIR_TYPE_COUNT];
+    const LirCConstructedType *fixed = &c->constructed_types[type - XR_LIR_TYPE_COUNT];
     uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
     c_text(c, "    {\n    int64_t xrl_index = ");
     c_value(c, v->operands[1]);

@@ -17,7 +17,19 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", action="append", default=[])
+    parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
+    cases = ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
+             "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
+             "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
+             "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
+             "panic_bounds", "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
+             "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
+             "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
+             "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit")
+    unknown = sorted(set(args.case) - set(cases))
+    if unknown:
+        parser.error("unknown cases: " + ", ".join(unknown))
     root, binary = args.root.resolve(), args.binary.resolve()
     sys.path.insert(0, str(root / "scripts"))
     from xray_process import run_child
@@ -45,12 +57,9 @@ def main() -> None:
             failures.append((name, status, paths["stderr"].read_text(encoding="utf-8", errors="replace")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
-    for name in ("snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
-                 "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
-                 "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
-                 "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
-                 "panic_bounds", "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
-                 "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length"):
+    for name in cases:
+        if args.case and name not in args.case:
+            continue
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
@@ -61,7 +70,8 @@ def main() -> None:
             result = run(name + f"-vm-{repeat}", [binary, "run", source], 1 if panic else 0)
             _, out, err = result
             if panic:
-                if out or b"XR_RUN_6002: value operation rejected" not in err or source.name.encode() not in err:
+                diagnostic = b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
+                if out or diagnostic not in err or source.name.encode() not in err:
                     failures.append((name, "VM runtime diagnostic", out, err))
             elif out != source.with_suffix(".out").read_bytes() or err:
                 failures.append((name, "VM output", out, err))
@@ -87,17 +97,19 @@ def main() -> None:
                 result = run(name + f"-native-{ordinal}-{repeat}", [executable], 1 if panic else 0)
                 _, out, err = result
                 if panic:
-                    if out or b"XR_RUN_6002: value operation rejected" not in err or source.name.encode() not in err:
+                    diagnostic = b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
+                    if out or diagnostic not in err or source.name.encode() not in err:
                         failures.append((name, "runtime diagnostic", out, err))
                 elif out != source.with_suffix(".out").read_bytes() or err:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_bool", "reject_nested"):
+    for name in ("reject_bool", "reject_nested", "reject_nullable_managed"):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
-        if out or b"module slot payload type is not supported" not in err:
+        diagnostic = b"Nullable payload has no inline POD layout" if name == "reject_nullable_managed" else b"module slot payload type is not supported"
+        if out or diagnostic not in err:
             failures.append((name, "unsupported payload", out, err))
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
         if vm_out != out or vm_err != err:

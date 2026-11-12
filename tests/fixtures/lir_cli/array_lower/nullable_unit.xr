@@ -1,0 +1,10 @@
+var visits = 0
+fn unit() { visits += 1 }
+fn consume(value: ()?) { return value! }
+var value: ()? = null
+print(value == null ? 1 : 0)
+value = unit()
+print(value == null ? 0 : 1)
+consume(value)
+print(visits)
+print(42)

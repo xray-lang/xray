@@ -1,0 +1,9 @@
+fn defaulted() -> i64 {
+    var value: i64?
+    return value ?? 5
+}
+var global: i64?
+print(global == null ? 1 : 0)
+print(defaulted())
+global = 19
+print(global!)

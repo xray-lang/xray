@@ -1,0 +1,17 @@
+var visits = 0
+fn fallback() -> i64 { visits += 1; return 17 }
+fn receiver(present: bool) -> i64? { visits += 10; return present ? 3 : null }
+print(receiver(true) ?? fallback())
+print(visits)
+print(receiver(false) ?? fallback())
+print(visits)
+fn mix(a: i64?, scale: i64, b: f64?, flag: bool?, byte: u8?) -> i64? {
+    print(b ?? 1.25)
+    print((flag ?? true) ? 1 : 0)
+    return (a ?? 0) * scale + ((byte ?? (9 as u8)) as i64)
+}
+print(mix(7, 3, 3.75, false, 2 as u8)!)
+print(mix(null, 2, null, null, null)!)
+fn word(value: u64?) -> u64? { return value }
+print((word((-1 as u64)) ?? (0 as u64)) as i64)
+print((word(null) ?? (9 as u64)) as i64)

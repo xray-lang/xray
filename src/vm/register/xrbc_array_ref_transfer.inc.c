@@ -11,8 +11,8 @@ static bool rbc_array_ref_state(uint8_t state) {
 }
 static XrRbcRegisterKind rbc_array_ref_payload(const RbcStringAdmission *s, uint8_t state, uint32_t origin) {
     if (state == RBC_ARRAY_REF_STATE) {
-        uint32_t kind = (origin & 255u) - 1u;
-        return (origin & 256u) && xr_rbc_state_array(kind) ?
+        uint32_t kind = xr_rbc_state_kind(s->module, origin);
+        return (origin & 1u) && xr_rbc_state_array(kind) ?
             xr_rbc_array_kind_at(kind - XRT_MODULE_ARRAY_I64) : XR_RBC_BITS;
     }
     if (origin >= 65537) {

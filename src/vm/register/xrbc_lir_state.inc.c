@@ -7,20 +7,10 @@
  * xrbc_lir_state.inc.c - Receive owned LIR state layouts and reference shapes
  */
 static bool rbc_lir_state_payload(XrLirType type, XrLirType element, XrtModuleTypeKind *kind, uint32_t *index) {
-    switch (type) {
-    case XR_LIR_UNIT: *kind = XRT_MODULE_UNIT; *index = 0; return true;
-    case XR_LIR_I1: *kind = XRT_MODULE_BOOL; *index = 1; return true;
-    case XR_LIR_I64: *kind = XRT_MODULE_I64; *index = 2; return true;
-    case XR_LIR_F64: *kind = XRT_MODULE_F64; *index = 3; return true;
-    case XR_LIR_STRING: *kind = XRT_MODULE_STRING; *index = 4; return true;
-    case XR_LIR_ARRAY:
-        if(element==XR_LIR_I64){*kind=XRT_MODULE_ARRAY_I64;*index=5;return true;}
-        if(element==XR_LIR_STRING){*kind=XRT_MODULE_ARRAY_STRING;*index=6;return true;}
-        if(element==XR_LIR_U8){*kind=XRT_MODULE_ARRAY_U8;*index=7;return true;}
-        if(element==XR_LIR_U64){*kind=XRT_MODULE_ARRAY_U64;*index=8;return true;}
-        return false;
-    default: return false;
-    }
+    *kind = lir_state_payload_kind(type, element);
+    if (!*kind) return false;
+    *index = (uint32_t)*kind - XRT_MODULE_UNIT;
+    return true;
 }
 
 static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFunction entry,
@@ -34,7 +24,6 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
     XrtModuleSpec *modules = layout.module_count ? xr_malloc((size_t)layout.module_count * sizeof(*modules)) : NULL;
     XrtModuleSlotSpec *slots = layout.slot_count ? xr_malloc((size_t)layout.slot_count * sizeof(*slots)) : NULL;
     XrRbcCompileStatus status = XR_RBC_COMPILE_OK;
-    bool fixed = false;
     if ((layout.module_count && !modules) || (layout.slot_count && !slots)) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
     for (uint32_t n = 0; status == XR_RBC_COMPILE_OK && n < layout.module_count; ++n)
         modules[n] = (XrtModuleSpec){layout.modules[n].first_dependency, layout.modules[n].dependency_count};
@@ -44,11 +33,10 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         uint32_t type;
         if (source.payload >= XR_LIR_TYPE_COUNT) {
             uint32_t ordinal = source.payload - XR_LIR_TYPE_COUNT;
-            if (ordinal >= program->module.aggregate_type_count || ordinal > UINT32_MAX - 9) {
+            if (ordinal >= program->module.aggregate_type_count || ordinal > UINT32_MAX - LIR_STATE_CONSTRUCTED_BASE) {
                 status = XR_RBC_COMPILE_UNSUPPORTED; break;
             }
-            type = 9 + ordinal;
-            fixed = true;
+            type = LIR_STATE_CONSTRUCTED_BASE + ordinal;
         } else if (!rbc_lir_state_payload(source.payload, source.array_element, &kind, &type)) {
             status = XR_RBC_COMPILE_UNSUPPORTED; break;
         }
@@ -56,21 +44,24 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             source.mutable ? XRT_MODULE_SLOT_MUTABLE : 0, source.offset, source.size, source.alignment};
     }
     if (status == XR_RBC_COMPILE_OK) {
-        static const XrtModuleTypeSpec builtins[] = {{XRT_MODULE_UNIT, 0}, {XRT_MODULE_BOOL, 0},
-            {XRT_MODULE_I64, 0}, {XRT_MODULE_F64, 0}, {XRT_MODULE_STRING, 0}, {XRT_MODULE_ARRAY_I64, 0}, {XRT_MODULE_ARRAY_STRING, 0},
-            {XRT_MODULE_ARRAY_U8, 0}, {XRT_MODULE_ARRAY_U64, 0}};
-        bool arrays=false;
-        for(uint32_t n=0;n<layout.slot_count;++n)arrays|=layout.slots[n].payload==XR_LIR_ARRAY;
-        uint64_t type_count = fixed ? (uint64_t)program->module.aggregate_type_count + 9 : arrays ? 9u : 5u;
+        uint64_t type_count = (uint64_t)LIR_STATE_CONSTRUCTED_BASE + program->module.aggregate_type_count;
         XrtModuleTypeSpec *types = NULL;
-        if (type_count > UINT32_MAX || type_count > SIZE_MAX / sizeof(*types)) status = XR_RBC_COMPILE_LIMIT;
-        else if (fixed && !(types = xr_malloc((size_t)type_count * sizeof(*types)))) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
+        if (type_count > UINT32_MAX / 2 || type_count > SIZE_MAX / sizeof(*types)) status = XR_RBC_COMPILE_LIMIT;
+        else if (!(types = xr_malloc((size_t)type_count * sizeof(*types)))) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
         if (types) {
-            memcpy(types, builtins, sizeof(builtins));
-            for (size_t t = 0; t < program->module.aggregate_type_count; ++t)
-                types[9 + t] = (XrtModuleTypeSpec){XRT_MODULE_FIXED_U8, program->module.aggregate_types[t].count};
+            for (uint32_t kind = XRT_MODULE_UNIT; kind < XRT_MODULE_FIXED_U8; ++kind)
+                types[kind - XRT_MODULE_UNIT] = (XrtModuleTypeSpec){(XrtModuleTypeKind)kind, 0};
+            for (size_t t = 0; t < program->module.aggregate_type_count; ++t) {
+                XrRbcAggregateType shape = program->module.aggregate_types[t];
+                uint32_t argument = shape.count;
+                if (shape.kind == XR_RBC_NULLABLE) argument = shape.element < XR_POD_SCALAR_COUNT ?
+                    (uint32_t)xr_pod_module_kind((XrPodScalar)shape.element) - XRT_MODULE_UNIT :
+                    LIR_STATE_CONSTRUCTED_BASE + shape.element - XR_POD_SCALAR_COUNT;
+                types[LIR_STATE_CONSTRUCTED_BASE + t] = (XrtModuleTypeSpec){
+                    shape.kind == XR_RBC_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
+            }
         }
-        XrtModuleLayoutSpec spec = {types ? types : builtins, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
+        XrtModuleLayoutSpec spec = {types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
             layout.payload_alignment};
         XrXirValueStatus copied = status == XR_RBC_COMPILE_OK ?

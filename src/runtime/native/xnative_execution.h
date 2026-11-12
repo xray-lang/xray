@@ -39,7 +39,8 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_OUTPUT,
     XRT_FAILURE_ARITHMETIC_PANIC,
     XRT_FAILURE_HOST_CLOCK,
-    XRT_FAILURE_VALUE
+    XRT_FAILURE_VALUE,
+    XRT_FAILURE_NULL_UNWRAP
 } XrtExecutionFailureKind;
 
 typedef struct XrtExecutionFailure {
@@ -77,4 +78,5 @@ XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failu
     XrtOutputOperation operation, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
 XR_FUNC void xrt_value_failure_report(XrXirValueStatus, const XrtSourceLocation *);
+XR_FUNC void xrt_null_unwrap_report(const XrtSourceLocation *);
 #endif // XNATIVE_EXECUTION_H

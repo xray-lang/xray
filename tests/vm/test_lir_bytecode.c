@@ -1487,8 +1487,10 @@ static void test_publication_admission(void) {
 }
 
 #include "lir_bytecode_state_cases.h"
+#include "lir_nullable_owner_cases.h"
 
 int main(void) {
+    test_nullable_outcome_owner();
     test_state_reference_transport();
     test_f64_constant_comparison();
     test_f64_constant_spills_and_phi();

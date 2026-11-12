@@ -15,6 +15,7 @@
 #include "xnative_array.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
+#include "shared/xr_pod_layout.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -27,6 +28,7 @@ struct XrtModuleType {
     XrtModuleCopy copy;
     XrtModuleDrop drop;
     const XrXirTypeArena *arena;
+    const XrtModuleType *element;
 };
 struct XrtModuleLayout {
     atomic_size_t references;
@@ -115,8 +117,29 @@ static void module_array_drop(const XrtModuleType *type, void *value) {
     xrt_array_owned_drop(&array);
 }
 
-static bool module_type(const XrtModuleTypeSpec *spec, XrtModuleType *type) {
-    if (!spec || (spec->kind != XRT_MODULE_FIXED_U8 && spec->fixed_count)) return false;
+static XrXirValueStatus module_nullable_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtModuleType *current = type;
+    const uint8_t *input = source;
+    uint8_t *output = empty;
+    memset(empty, 0, type->size);
+    while (current->kind == XRT_MODULE_NULLABLE) {
+        if (*input > 1) { memset(empty, 0, type->size); return XR_XIR_VALUE_BAD_ARGUMENT; }
+        if (!*input) return XR_XIR_VALUE_OK;
+        *output = 1;
+        input += current->element->alignment;
+        output += current->element->alignment;
+        current = current->element;
+    }
+    XrXirValueStatus status = current->copy(current, input, output);
+    if (status != XR_XIR_VALUE_OK) memset(empty, 0, type->size);
+    return status;
+}
+
+static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
+    const XrtModuleTypeSpec *spec = &layout->types[ordinal];
+    XrtModuleType *type = &types[ordinal];
+    if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE && spec->argument) return false;
     XrtModuleTypeKind kind = spec->kind;
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
@@ -135,9 +158,19 @@ static bool module_type(const XrtModuleTypeSpec *spec, XrtModuleType *type) {
     case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
         type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
         type->copy = module_array_copy; type->drop = module_array_drop; return true;
+    case XRT_MODULE_NULLABLE: {
+        if (spec->argument >= ordinal) return false;
+        const XrtModuleType *element = &types[spec->argument];
+        if (element->copy != module_scalar_copy && element->copy != module_nullable_copy) return false;
+        XrPodLayout payload = {element->size, element->alignment, 0}, shape;
+        if (!xr_pod_nullable_layout(payload, &shape)) return false;
+        type->size = shape.size; type->alignment = shape.alignment;
+        type->copy = module_nullable_copy; type->element = element;
+        return true;
+    }
     case XRT_MODULE_FIXED_U8:
-        if (!spec->fixed_count || spec->fixed_count > 65535) return false;
-        type->size = spec->fixed_count;
+        if (!spec->argument || spec->argument > 65535) return false;
+        type->size = spec->argument;
         type->alignment = 1;
         return true;
     default: return false;

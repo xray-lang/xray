@@ -110,6 +110,12 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
         XrLirType output = XR_LIR_I64;
         status = xr_lir_fixed_array_type(*module, XR_LIR_U8, n, &output);
         if (status != XR_LIR_OK) REQUIRE(output == XR_LIR_I64);
+        for (uint32_t depth = 0; depth < 2 && status == XR_LIR_OK; ++depth) {
+            XrLirType nullable = XR_LIR_I64;
+            status = xr_lir_nullable_type(*module, output, &nullable);
+            if (status != XR_LIR_OK) REQUIRE(nullable == XR_LIR_I64);
+            output = nullable;
+        }
     }
     return status;
 }

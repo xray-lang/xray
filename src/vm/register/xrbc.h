@@ -151,6 +151,7 @@ typedef struct XrRbcStateAccess {
 typedef struct XrRbcAggregateValue { uint32_t type, offset; } XrRbcAggregateValue;
 typedef enum XrRbcAggregateOperation {
     XR_RBC_AGGREGATE_NEW, XR_RBC_AGGREGATE_GET, XR_RBC_AGGREGATE_COPY,
+    XR_RBC_NULLABLE_NONE, XR_RBC_NULLABLE_SOME, XR_RBC_NULLABLE_IS_SOME, XR_RBC_NULLABLE_UNWRAP,
     XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
     XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
     XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN
@@ -204,7 +205,7 @@ typedef struct {
     size_t aggregate_access_count;
     const XrRbcArrayLocation *aggregate_operands;
     size_t aggregate_operand_count;
-    // Fixed formals name ordered independent homes. A nonzero result type is
+    // Aggregate formals name ordered independent homes. A nonzero result type is
     // its owned type ordinal plus one. Scalar arguments retain the usual ABI.
     const uint32_t *aggregate_parameters;
     size_t aggregate_parameter_count;
@@ -229,11 +230,19 @@ typedef struct {
     size_t length;
 } XrRbcLiteral;
 
-typedef enum XrRbcAggregateKind { XR_RBC_FIXED_U8 = 1 } XrRbcAggregateKind;
+#include "shared/xr_pod_layout.h"
+typedef enum XrRbcAggregateKind { XR_RBC_FIXED_U8 = 1, XR_RBC_NULLABLE } XrRbcAggregateKind;
 typedef struct XrRbcAggregateType {
     XrRbcAggregateKind kind;
     uint32_t count;
+    /* Scalar IDs precede constructed ordinals at XR_POD_SCALAR_COUNT. */
+    uint32_t element;
+    XrPodLayout physical;
 } XrRbcAggregateType;
+
+static inline XrRbcAggregateType xr_rbc_fixed_type(uint32_t count) {
+    return (XrRbcAggregateType){XR_RBC_FIXED_U8, count, 0, {count, 1, count}};
+}
 
 typedef struct {
     const XrRbcFunction *functions;
@@ -258,6 +267,7 @@ typedef enum {
     XR_RBC_INVALID,
     XR_RBC_OUT_OF_MEMORY,
     XR_RBC_ARITHMETIC_PANIC,
+    XR_RBC_NULL_UNWRAP,
     XR_RBC_OUTPUT_FAILURE,
     XR_RBC_HOST_CLOCK_FAILURE,
     XR_RBC_VALUE_FAILURE
@@ -310,6 +320,8 @@ XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
 // and program owners retire. The borrowed byte span ends with the outcome.
 XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     XrRbcAggregateType *type, const uint8_t **bytes);
+XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *,
+    uint32_t ordinal, XrRbcAggregateType *type);
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
 XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);
@@ -320,6 +332,8 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
+XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
+    uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);

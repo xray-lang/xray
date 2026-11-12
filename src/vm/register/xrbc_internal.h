@@ -10,6 +10,7 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
+#include "shared/xr_pod_state.h"
 
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
@@ -19,11 +20,34 @@ typedef struct XrRbcAggregateLayout {
 } XrRbcAggregateLayout;
 
 static inline bool xr_rbc_aggregate_layout(XrRbcAggregateType type, XrRbcAggregateLayout *output) {
-    if (!output || type.kind != XR_RBC_FIXED_U8 || !type.count || type.count > 65535) return false;
-    bool lanes = type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
-    *output = (XrRbcAggregateLayout){lanes ? type.count * 8u : type.count,
-        lanes ? 8u : 1u, lanes ? type.count : 0u};
+    if (!output || (type.kind != XR_RBC_FIXED_U8 && type.kind != XR_RBC_NULLABLE) ||
+        !type.physical.size || !type.physical.alignment || type.physical.alignment > 8 ||
+        (type.physical.alignment & (type.physical.alignment - 1))) return false;
+    bool lanes = type.kind == XR_RBC_FIXED_U8 && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
+    *output = (XrRbcAggregateLayout){lanes ? type.count * 8u : type.physical.size,
+        lanes ? 8u : type.physical.alignment, lanes ? type.count : 0u};
     return true;
+}
+
+static inline bool xr_rbc_aggregate_type_valid(const XrRbcModule *module, uint32_t ordinal) {
+    XrRbcAggregateType type = module->aggregate_types[ordinal];
+    XrPodLayout expected;
+    if (type.kind == XR_RBC_FIXED_U8) {
+        if (!type.count || type.count > 65535 || type.element) return false;
+        expected = (XrPodLayout){type.count, 1, type.count};
+    } else if (type.kind == XR_RBC_NULLABLE && !type.count) {
+        XrPodLayout payload;
+        if (type.element < XR_POD_SCALAR_COUNT) {
+            if (!xr_pod_scalar_layout((XrPodScalar)type.element, &payload)) return false;
+        } else {
+            uint32_t child = type.element - XR_POD_SCALAR_COUNT;
+            if (child >= ordinal) return false;
+            payload = module->aggregate_types[child].physical;
+        }
+        if (!xr_pod_nullable_layout(payload, &expected)) return false;
+    } else return false;
+    return type.physical.size == expected.size && type.physical.alignment == expected.alignment &&
+        type.physical.scalar_count == expected.scalar_count;
 }
 
 static inline XrRbcRegisterKind xr_rbc_array_kind_at(uint32_t family) {

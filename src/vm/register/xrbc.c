@@ -83,6 +83,8 @@ struct XrRbcOutcome {
     XrtExecutionFailure failure;
     XrtLocationOwner *locations;
     XrRbcAggregateType aggregate_type;
+    XrRbcAggregateType *aggregate_types;
+    size_t aggregate_type_count;
     uint8_t *aggregate_bytes;
 };
 
@@ -282,7 +284,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     for (size_t t = 0; t < module->aggregate_type_count; ++t) {
         XrRbcAggregateLayout layout;
-        if (!xr_rbc_aggregate_layout(module->aggregate_types[t], &layout)) return XR_RBC_INVALID;
+        if (!xr_rbc_aggregate_type_valid(module, (uint32_t)t) ||
+            !xr_rbc_aggregate_layout(module->aggregate_types[t], &layout)) return XR_RBC_INVALID;
     }
     for (size_t i = 0; i < module->literal_count; ++i)
         if (module->literals[i].length == SIZE_MAX ||
@@ -324,7 +327,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *module, const XrtLoca
     if (!module || !module->functions || !module->function_count || !locations ||
         (module->native_count && !module->natives) || module->native_count > 65536 ||
         (module->literal_count && !module->literals) || module->literal_count > 65536 ||
-        (module->aggregate_type_count && !module->aggregate_types) || module->aggregate_type_count > UINT32_MAX)
+        (module->aggregate_type_count && !module->aggregate_types) || module->aggregate_type_count > UINT32_MAX ||
+        module->aggregate_type_count > SIZE_MAX / sizeof(*module->aggregate_types))
         return XR_RBC_INVALID;
     XrRbcStatus status = xr_rbc_module_valid(module);
     if (status != XR_RBC_OK) return status;
@@ -432,11 +436,15 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->stack.entries = execution->entries;
     if (function->aggregate_result_type) {
         execution->pending->aggregate_type = module->aggregate_types[function->aggregate_result_type - 1];
-        execution->pending->aggregate_bytes = xr_malloc(execution->pending->aggregate_type.count);
-        if (!execution->pending->aggregate_bytes) {
+        execution->pending->aggregate_bytes = xr_malloc(execution->pending->aggregate_type.physical.size);
+        execution->pending->aggregate_types = xr_malloc(module->aggregate_type_count * sizeof(*module->aggregate_types));
+        if (!execution->pending->aggregate_bytes || !execution->pending->aggregate_types) {
             xr_rbc_execution_free(&execution);
             return XR_RBC_OUT_OF_MEMORY;
         }
+        memcpy(execution->pending->aggregate_types, module->aggregate_types,
+            module->aggregate_type_count * sizeof(*module->aggregate_types));
+        execution->pending->aggregate_type_count = module->aggregate_type_count;
         execution->stack.aggregate_result = execution->pending->aggregate_bytes;
     }
     if (inject_state) {
@@ -493,6 +501,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC)
         outcome->status = XR_RBC_ARITHMETIC_PANIC;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_NULL_UNWRAP)
+        outcome->status = XR_RBC_NULL_UNWRAP;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_HOST_CLOCK)
         outcome->status = XR_RBC_HOST_CLOCK_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_VALUE)
@@ -538,6 +548,13 @@ XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     *bytes = outcome->aggregate_bytes;
     return true;
 }
+XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *outcome,
+    uint32_t ordinal, XrRbcAggregateType *type) {
+    if (!outcome || outcome->status != XR_RBC_OK || !type || ordinal >= outcome->aggregate_type_count) return false;
+    *type = outcome->aggregate_types[ordinal];
+    return true;
+}
+
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed) {
     if (!outcome || outcome->status != XR_RBC_OK || outcome->result_kind != XR_RBC_STRING ||
         !outcome->value.string || !borrowed) return false;
@@ -590,6 +607,14 @@ XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     return true;
 }
 
+XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
+    uint32_t *source_id, const XrtLocationOwner **borrowed_locations) {
+    if (!outcome || outcome->status != XR_RBC_NULL_UNWRAP || !source_id || !borrowed_locations) return false;
+    *source_id = outcome->failure.detail.panic.source_id;
+    *borrowed_locations = outcome->locations;
+    return true;
+}
+
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations) {
     if (!outcome || outcome->status != XR_RBC_HOST_CLOCK_FAILURE || !facts || !borrowed_locations)
@@ -604,6 +629,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     XrRbcOutcome *owned = *outcome;
     *outcome = NULL;
     xr_free(owned->aggregate_bytes);
+    xr_free(owned->aggregate_types);
     if (owned->result_kind == XR_RBC_STRING) xrt_string_owned_drop(&owned->value.string);
     if (rbc_array_kind(owned->result_kind)) xrt_array_owned_drop(&owned->value.array);
     xrt_locations_release(owned->locations);

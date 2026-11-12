@@ -1,0 +1,4 @@
+fn layer(value: i64?) -> i64?? { return value }
+const value = layer(null)
+const discarded = value!!
+print(99)

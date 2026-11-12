@@ -29,7 +29,7 @@ static uint32_t fixed_call_word(XrRbcOp op, uint32_t a, uint32_t b, uint32_t c, 
 
 static void fixed_call_fixture(RawFixedCalls *f, uint32_t count) {
     *f = (RawFixedCalls){0};
-    f->type = (XrRbcAggregateType){XR_RBC_FIXED_U8, count};
+    f->type = xr_rbc_fixed_type(count);
     XrRbcAggregateLayout layout;
     XR_CHECK(xr_rbc_aggregate_layout(f->type, &layout), "fixed call layout");
     f->operands = xr_calloc(count, sizeof(*f->operands));

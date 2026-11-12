@@ -258,7 +258,23 @@ static void fixed_byte_failures(void) {
     printf("Fixed byte Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void nullable_lower_failures(void) {
+    SourceFixture fixture = source_fixture("var value:i64?=null\n"
+        "fn replace(next:i64?)->i64?{const old=value\nvalue=next\nreturn old}\n"
+        "replace(7)\nprint(replace(null)??0)\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Nullable Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    nullable_lower_failures();
     unused_fixed_type_allocations();
     fixed_byte_failures();
     array_unsigned_failures();

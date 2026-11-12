@@ -15,7 +15,7 @@ static uint32_t fixed_raw_word(XrRbcOp op, uint32_t a, uint32_t b, int64_t immed
 }
 
 static void test_raw_fixed_values(uint32_t count, bool spills) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, count};
+    XrRbcAggregateType type = xr_rbc_fixed_type(count);
     XrRbcAggregateLayout layout = {0};
     CHECK(xr_rbc_aggregate_layout(type, &layout));
     XrRbcAggregateValue homes[] = {{0, 0}, {0, layout.size}};
@@ -59,7 +59,7 @@ static void test_raw_fixed_values(uint32_t count, bool spills) {
 }
 
 static void test_raw_fixed_failures(void) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 1};
+    XrRbcAggregateType type = xr_rbc_fixed_type(1);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[] = {{0, false}, {1, false}};
     XrRbcAggregateAccess accesses[] = {
@@ -119,7 +119,7 @@ static void test_raw_fixed_failures(void) {
 }
 
 static void test_raw_fixed_selected_edges(void) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
+    XrRbcAggregateType type = xr_rbc_fixed_type(17);
     XrRbcAggregateValue homes[] = {{0, 0}, {0, 17}, {0, 34}};
     XrRbcArrayLocation operands[18];
     for (uint32_t n = 0; n < 18; ++n) operands[n] = (XrRbcArrayLocation){1, false};
@@ -157,7 +157,7 @@ static void test_raw_fixed_selected_edges(void) {
 }
 
 static void test_raw_fixed_callee_growth(void) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 256};
+    XrRbcAggregateType type = xr_rbc_fixed_type(256);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[257] = {{0}};
     operands[256].index = 1;

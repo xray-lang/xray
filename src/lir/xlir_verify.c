@@ -146,6 +146,20 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
+        case XR_LIR_NULLABLE_NONE: {
+            XrLirTypeView shape;
+            return xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE;
+        }
+        case XR_LIR_NULLABLE_SOME: {
+            XrLirTypeView shape;
+            return xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
+                (shape.element == XR_LIR_UNIT ? v->operand_count == 0 : v->operand_count == 1 && a == shape.element);
+        }
+        case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP: {
+            XrLirTypeView shape;
+            return xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
+                v->type == (v->op == XR_LIR_NULLABLE_IS_SOME ? XR_LIR_I1 : shape.element);
+        }
         case XR_LIR_CELL_NEW:
             return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
                 (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING) ||

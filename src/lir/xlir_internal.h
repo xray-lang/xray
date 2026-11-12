@@ -58,8 +58,12 @@ typedef struct XrLirLiteralData {
     uint8_t *bytes;
     size_t length;
 } XrLirLiteralData;
+typedef struct XrLirTypeData {
+    XrLirTypeView shape;
+    XrLirTypeLayout layout;
+} XrLirTypeData;
 struct XrLirModule {
-    XrLirTypeView *types;
+    XrLirTypeData *types;
     uint32_t type_count, type_capacity;
     uint32_t *type_index, type_index_capacity;
     XrLirLiteralData *literals;

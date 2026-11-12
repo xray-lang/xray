@@ -1,0 +1,7 @@
+import "./nullable_library" as library
+const saved = library.current()
+print(library.replace(27) ?? -1)
+print(saved ?? 0)
+print(library.current()!)
+print(library.replace(null)!)
+print(library.current() == null ? 1 : 0)

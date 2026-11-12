@@ -17,13 +17,13 @@ static bool rbc_state_transfer(RbcStringAdmission *s, XrRbcOperands v) {
     if (v.op == XR_RBC_MODULE_BEGIN || v.op == XR_RBC_MODULE_READY)
         return s->state[v.a] == RBC_STATE_BORROWED;
     if (v.op == XR_RBC_STATE_PUBLISH)
-        return s->state[v.a] == RBC_STATE_REFERENCE && (s->origin[v.a] & 256u);
+        return s->state[v.a] == RBC_STATE_REFERENCE && (s->origin[v.a] & 1u);
     if (v.op == XR_RBC_STATE_READ || v.op == XR_RBC_STATE_WRITE) {
         uint32_t reference = v.op == XR_RBC_STATE_READ ? v.b : v.a;
-        if (s->state[reference] != RBC_STATE_REFERENCE || (s->origin[reference] & 255u) != v.c + 1u)
+        if (s->state[reference] != RBC_STATE_REFERENCE || xr_rbc_state_kind(s->module, s->origin[reference]) != v.c)
             return false;
         if (v.op == XR_RBC_STATE_WRITE)
-            return (s->origin[reference] & 256u) && rbc_state_payload(s, v.b, v.c);
+            return (s->origin[reference] & 1u) && rbc_state_payload(s, v.b, v.c);
         if (v.c == XRT_MODULE_UNIT) return true;
         XrRbcRegisterKind payload = rbc_state_register_kind(v.c);
         if (rbc_managed_kind(payload)) {
@@ -36,7 +36,7 @@ static bool rbc_state_transfer(RbcStringAdmission *s, XrRbcOperands v) {
         return true;
     }
     XrRbcStateAccess access = s->function->state_accesses[v.immediate];
-    uint32_t shape = xr_rbc_state_shape(s->module, access.slot), kind = (shape & 255u) - 1u;
+    uint32_t shape = xr_rbc_state_shape(s->module, access.slot), kind = xr_rbc_state_kind(s->module, shape);
     if (v.op == XR_RBC_STATE_INITIALIZE)
         return s->state[v.a] == RBC_STATE_BORROWED && rbc_state_payload(s, access.value, kind);
     if (s->state[access.state] != RBC_STATE_BORROWED) return false;

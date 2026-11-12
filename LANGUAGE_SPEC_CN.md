@@ -2042,7 +2042,7 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 #### 强制解包 `expr!`
 
 ```xray
-var v: i64 = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。

@@ -36,6 +36,8 @@ static uint8_t *xr_rbc_aggregate_value(XrRbcStack *stack, const XrRbcFrame *fram
     return (uint8_t *)(stack->spills + frame->aggregate_base - 1) + value.offset;
 }
 
+#include "xrbc_nullable_execute.inc.c"
+
 static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
     XrRbcAggregateAccess access = f->aggregate_accesses[index];
@@ -52,23 +54,15 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
     XrRbcAggregateValue value = f->aggregate_values[read ? access.destination : access.source];
     XrRbcAggregateType type = module->aggregate_types[value.type];
     uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
-    uint8_t lanes[16];
-    void *payload = type.count <= 16 ? lanes : bytes;
+    uint8_t lanes[XR_RBC_AGGREGATE_INLINE_SCALARS];
+    bool packed = type.kind == XR_RBC_FIXED_U8 && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
+    void *payload = packed ? lanes : bytes;
     if (read) {
-        memcpy(payload, reference->payload, type.count);
-        if (type.count <= 16)
-            for (uint32_t n = 0; n < type.count; ++n) {
-                uint64_t bits = lanes[n];
-                memcpy(bytes + (size_t)n * sizeof(bits), &bits, sizeof(bits));
-            }
+        if (packed) xr_rbc_aggregate_unpack(type, reference->payload, bytes);
+        else memcpy(bytes, reference->payload, type.physical.size);
         return XR_RBC_OK;
     }
-    if (type.count <= 16)
-        for (uint32_t n = 0; n < type.count; ++n) {
-            uint64_t bits = 0;
-            memcpy(&bits, bytes + (size_t)n * sizeof(bits), sizeof(bits));
-            lanes[n] = (uint8_t)bits;
-        }
+    if (packed) xr_rbc_aggregate_pack(type, bytes, lanes);
     XrtModuleStatus status;
     if (construct || initialize) {
         XrtModuleState *state = xr_rbc_aggregate_scalar(stack, frame, operand)->state;
@@ -93,6 +87,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
         return xr_rbc_aggregate_state_step(module, stack, frame, f, index, source);
     if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
     XrRbcAggregateAccess access = f->aggregate_accesses[index];
+    if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)
+        return xr_rbc_nullable_step(module, stack, frame, f, access, source);
     XrRbcAggregateValue value = f->aggregate_values[access.operation == XR_RBC_AGGREGATE_GET ?
         access.source : access.destination];
     XrRbcAggregateType type = module->aggregate_types[value.type];

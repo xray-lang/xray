@@ -45,7 +45,7 @@ static void test_raw_fixed_calls(void) {
 }
 
 static void test_raw_fixed_no_value_callee(void) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
+    XrRbcAggregateType type = xr_rbc_fixed_type(17);
     XrRbcAggregateValue home = {0};
     XrRbcAggregateAccess call = {.operation=XR_RBC_AGGREGATE_CALL, .callee=1};
     XrRbcRegisterKind window = XR_RBC_CALL_WINDOW;

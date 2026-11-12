@@ -30,7 +30,7 @@ static void fixed_state_values(void) {
         OK(fixed_state_layout(count, true, &layout));
         XrtModuleLayoutSpec owned;
         OK(xrt_module_layout_view(layout, &owned));
-        CHECK(owned.types[0].kind == XRT_MODULE_FIXED_U8 && owned.types[0].fixed_count == count);
+        CHECK(owned.types[0].kind == XRT_MODULE_FIXED_U8 && owned.types[0].argument == count);
         CHECK(owned.slots[0].size == count && owned.slots[0].alignment == 1 &&
             owned.payload_size == count);
         OK(xrt_module_state_new(layout, UINT64_MAX, &state));
@@ -94,9 +94,9 @@ static void fixed_state_invalid_shapes(void) {
         XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module,
             .module_count=1, .slots=&slot, .slot_count=1, .payload_size=16,
             .payload_alignment=2, .byte_limit=UINT64_MAX};
-        if (scenario == 0) type.fixed_count = 0;
-        if (scenario == 1) type.fixed_count = 65536;
-        if (scenario == 2) type.fixed_count = UINT32_MAX;
+        if (scenario == 0) type.argument = 0;
+        if (scenario == 1) type.argument = 65536;
+        if (scenario == 2) type.argument = UINT32_MAX;
         if (scenario == 3) type.kind = XRT_MODULE_I64;
         if (scenario == 4) type.kind = XRT_MODULE_TYPE_INVALID;
         if (scenario == 5) slot.size = 15;

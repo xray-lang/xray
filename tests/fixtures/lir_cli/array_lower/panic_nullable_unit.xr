@@ -1,0 +1,4 @@
+fn consume(value: ()?) { return value! }
+var value: ()? = null
+consume(value)
+print(99)

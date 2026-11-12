@@ -303,7 +303,7 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 #### 强制解包 `expr!`
 
 ```xray
-var v: i64 = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
@@ -1021,7 +1021,7 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 #### Force unwrap `expr!`
 
 ```xray
-var v: i64 = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+var v: i64 = nullable_int!      // panics with E0413 when null
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.

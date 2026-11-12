@@ -1,0 +1,16 @@
+fn identity(value: i64?) -> i64? { return value }
+fn local(flag: i64) -> i64 {
+    var value: i64? = null
+    if (flag != 0) { value = identity(7) }
+    var i = 0
+    while (i < 3) { value = identity((value ?? 0) + 1); i += 1 }
+    return value ?? -1
+}
+var current: i64? = null
+print(identity(current) ?? -5)
+current = 42
+print(identity(current)!)
+current = null
+print(current ?? 9)
+print(local(0))
+print(local(1))

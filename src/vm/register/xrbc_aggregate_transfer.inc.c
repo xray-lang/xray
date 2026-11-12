@@ -15,7 +15,6 @@ static bool rbc_aggregate_state_transfer(RbcStringAdmission *s, XrRbcAggregateAc
     bool initialize = access.operation == XR_RBC_AGGREGATE_STATE_INITIALIZE;
     uint32_t home = read ? access.destination : access.source;
     XrRbcAggregateValue value = s->function->aggregate_values[home];
-    uint32_t count = s->module->aggregate_types[value.type].count;
     if (construct || initialize) {
         if (state != RBC_STATE_BORROWED || !s->aggregates[home]) return false;
         if (construct) {
@@ -28,15 +27,44 @@ static bool rbc_aggregate_state_transfer(RbcStringAdmission *s, XrRbcAggregateAc
         }
         return true;
     }
-    if (state != RBC_STATE_REFERENCE || (origin & 255u) != XRT_MODULE_FIXED_U8 + 1u ||
-        (origin >> 16) != count) return false;
-    if (!read) return (origin & 256u) && s->aggregates[home];
+    if (state != RBC_STATE_REFERENCE || !origin ||
+        !rbc_aggregate_state_type(s->module, value.type, (origin >> 1) - 1u)) return false;
+    if (!read) return (origin & 1u) && s->aggregates[home];
     s->aggregates[home] = 1;
+    return true;
+}
+
+static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess access) {
+    bool create = access.operation == XR_RBC_NULLABLE_NONE || access.operation == XR_RBC_NULLABLE_SOME;
+    uint32_t home = create ? access.destination : access.source;
+    XrRbcAggregateType type = s->module->aggregate_types[s->function->aggregate_values[home].type];
+    if (!create && !s->aggregates[home]) return false;
+    if (access.operation == XR_RBC_NULLABLE_NONE) { s->aggregates[home] = 1; return true; }
+    if (access.operation != XR_RBC_NULLABLE_IS_SOME && type.element >= XR_POD_SCALAR_COUNT) {
+        if (create && !s->aggregates[access.source]) return false;
+        s->aggregates[access.destination] = 1;
+        return true;
+    }
+    if (access.operation != XR_RBC_NULLABLE_IS_SOME && type.element == XR_POD_UNIT) {
+        if (create) s->aggregates[home] = 1;
+        return true;
+    }
+    XrRbcArrayLocation location = access.result;
+    if (create) {
+        if ((location.spill ? s->spills[location.index].state : s->state[location.index]) != RBC_BITS) return false;
+        s->aggregates[home] = 1;
+    } else if (location.spill) s->spills[location.index] = (RbcSpillState){0, RBC_BITS};
+    else {
+        if (!rbc_bits_destination(s, location.index)) return false;
+        s->state[location.index] = RBC_BITS;
+    }
     return true;
 }
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)
+        return rbc_nullable_transfer(s, access);
     if (access.operation == XR_RBC_AGGREGATE_CALL) {
         for (uint32_t n = 0; n < access.count; ++n)
             if (!s->aggregates[s->function->aggregate_arguments[access.first + n]]) return false;

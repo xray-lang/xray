@@ -52,13 +52,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         memcpy(xr_rbc_aggregate_value(stack, caller, receiver->aggregate_values[frame->destination]), bytes, layout.size);
     } else {
         XR_DCHECK(stack->aggregate_result, "the pending outcome owns its fixed return storage");
-        if (layout.scalar_slots)
-            for (uint32_t n = 0; n < type.count; ++n) {
-                uint64_t bits = 0;
-                memcpy(&bits, bytes + (size_t)n * sizeof(bits), sizeof(bits));
-                stack->aggregate_result[n] = (uint8_t)bits;
-            }
-        else memcpy(stack->aggregate_result, bytes, type.count);
+        xr_rbc_aggregate_pack(type, bytes, stack->aggregate_result);
     }
     stack->cell_count = frame->cell_base;
     stack->spill_count = frame->spill_base;

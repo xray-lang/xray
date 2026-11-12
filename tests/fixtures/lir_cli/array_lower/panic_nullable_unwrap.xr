@@ -1,0 +1,4 @@
+fn identity(value: i64?) -> i64? { return value }
+var value: i64? = null
+const discarded = identity(value)!
+print(99)

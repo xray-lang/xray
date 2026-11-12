@@ -2070,7 +2070,7 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 #### Force unwrap `expr!`
 
 ```xray
-var v: i64 = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+var v: i64 = nullable_int!      // panics with E0413 when null
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.

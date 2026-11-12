@@ -23,6 +23,14 @@ static bool observe_fixed_moves;
 static unsigned fixed_register_moves, fixed_spill_moves;
 static bool observe_aggregate_allocations;
 static uint32_t aggregate_allocations;
+static bool nullable_observe, nullable_injected;
+static size_t nullable_attempts, nullable_failure = SIZE_MAX, nullable_live;
+static bool nullable_allocation_fails(void) {
+    if (!nullable_observe) return false;
+    if (nullable_attempts++ != nullable_failure) return false;
+    nullable_injected = true;
+    return true;
+}
 static size_t spill_state_failure_entries=2;
 static bool observe_frame_drops;
 static unsigned observed_cell_drops,observed_cell_writes;
@@ -41,6 +49,7 @@ static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, si
 static void *execution_calloc(size_t count, size_t size);
 
 static void *moving_realloc(void *old, size_t size) {
+    if (nullable_allocation_fails()) return NULL;
     if (observe_aggregate_allocations) ++aggregate_allocations;
     size_t index = 0;
     while (index < 4 && blocks[index].pointer != old) ++index;
@@ -56,6 +65,7 @@ static void *moving_realloc(void *old, size_t size) {
     }
     void *fresh = xr_malloc(size);
     if (!fresh) return NULL;
+    if (nullable_observe && !old) ++nullable_live;
     if (old) {
         if (observe_fixed_moves && index == 0) ++fixed_register_moves;
         if (observe_fixed_moves && index == 3) ++fixed_spill_moves;
@@ -70,6 +80,7 @@ static void *moving_realloc(void *old, size_t size) {
 
 static void moving_free(void *pointer) {
     if (!pointer) return;
+    if (nullable_observe) { XR_CHECK(nullable_live, "nullable allocation belongs to its VM owner"); --nullable_live; }
     for (size_t i = 0; i < 4; ++i) {
         if (blocks[i].pointer != pointer) continue;
         blocks[i].pointer = NULL;
@@ -93,15 +104,19 @@ static void moving_free(void *pointer) {
 #undef xrt_string_drop
 
 static void *execution_malloc(size_t size) {
+    if (nullable_allocation_fails()) return NULL;
     if (fault == AGGREGATE_OUTCOME_FAILURE && size == 17) { fault = NO_FAILURE; return NULL; }
     if (fault == ARRAY_ARGUMENT_FAILURE && size == 2 * sizeof(XrRbcRegister)) { fault = NO_FAILURE; return NULL; }
     if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
         (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
     if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_entries * sizeof(RbcSpillState)) { fault=NO_FAILURE;return NULL; }
     if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
-    return real_malloc(size);
+    void *memory = real_malloc(size);
+    if (memory && nullable_observe) ++nullable_live;
+    return memory;
 }
 static void *execution_calloc(size_t count, size_t size) {
+    if (nullable_allocation_fails()) return NULL;
     if (fault == AGGREGATE_STATE_FAILURE && size == 1 && count > 1) {
         fault = NO_FAILURE;
         return NULL;
@@ -115,7 +130,48 @@ static void *execution_calloc(size_t count, size_t size) {
         fault = NO_FAILURE;
         return NULL;
     }
-    return real_calloc(count, size);
+    void *memory = real_calloc(count, size);
+    if (memory && nullable_observe) ++nullable_live;
+    return memory;
+}
+
+#include "register_nullable_fixture.h"
+
+static void nullable_allocation_failures(void) {
+    XrtLocationOwner *locations = NULL;
+    XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "nullable FI location owner");
+    size_t sites = 0;
+    for (size_t attempt = 0; attempt <= sites; ++attempt) {
+        RawNullableFixture fixture;
+        raw_nullable_fixture(&fixture);
+        nullable_observe = true; nullable_injected = false; nullable_attempts = 0;
+        nullable_failure = attempt ? attempt - 1 : SIZE_MAX;
+        uint64_t seed = 7;
+        XrRbcExecution *execution = NULL;
+        XrRbcOutcome *outcome = NULL;
+        XrRbcStatus status = xr_rbc_module_prepare(&fixture.module, 0, &seed, 1, locations, &execution);
+        if (status == XR_RBC_OK) {
+            outcome = xr_rbc_execution_run(execution);
+            status = xr_rbc_outcome_status(outcome);
+        } else XR_CHECK(!execution, "failed nullable preparation publishes no owner");
+        if (!attempt) {
+            XR_CHECK(status == XR_RBC_OK, "nullable success determines every allocation site");
+            sites = nullable_attempts;
+            XR_CHECK(sites && sites < 128, "nullable tiny fixture has bounded allocation sites");
+            XrRbcAggregateType type;
+            const uint8_t *bytes = NULL;
+            XR_CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && bytes[0] == 1 && bytes[8] == 1,
+                "nested nullable result retains both presence layers");
+        } else XR_CHECK(nullable_injected && status == XR_RBC_OUT_OF_MEMORY,
+            "each nullable allocation failure retains its memory status");
+        xr_rbc_execution_free(&execution);
+        xr_rbc_outcome_free(&outcome);
+        XR_CHECK(!nullable_live, "nullable execution and independent outcome retire every owned allocation");
+        nullable_observe = false;
+        for (size_t n = 0; n < 4; ++n) XR_CHECK(!blocks[n].pointer, "nullable moving banks retire after every failure");
+    }
+    xrt_locations_release(locations);
+    printf("Nullable VM verified %zu allocation sites\n", sites);
 }
 
 static void invoke(const XrRbcModule *module, XrtLocationOwner *owner, bool prepare_fails,
@@ -627,7 +683,7 @@ static void aggregate_call_failures(void) {
 }
 
 static void aggregate_bank_failures(void) {
-    XrRbcAggregateType type = {XR_RBC_FIXED_U8, 17};
+    XrRbcAggregateType type = xr_rbc_fixed_type(17);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[18] = {{0}};
     operands[17].index = 2;
@@ -679,6 +735,7 @@ static void aggregate_bank_failures(void) {
 }
 
 int main(void) {
+    nullable_allocation_failures();
     aggregate_call_failures();
     aggregate_bank_failures();
     array_argument_failures();

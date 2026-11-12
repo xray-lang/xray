@@ -18,6 +18,7 @@
 #include "xlir_verify.h"
 #include "xlir_internal.h"
 #include "xlir_state.h"
+#include "xlir_state_projection.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include <inttypes.h>
@@ -25,11 +26,11 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct LirCFixedType {
+typedef struct LirCConstructedType {
     XrLirTypeView shape;
     XrLirTypeLayout layout;
     char name[32];
-} LirCFixedType;
+} LirCConstructedType;
 
 typedef struct LirC {
     const XrLirCRequest *request;
@@ -40,8 +41,8 @@ typedef struct LirC {
     uint32_t *closure;
     uint32_t closure_count;
     uint8_t *seen, *fixed_divisors, *used_literals;
-    LirCFixedType *fixed_types;
-    uint32_t fixed_count, state_type_base;
+    LirCConstructedType *constructed_types;
+    uint32_t constructed_count, state_type_base;
     XrLirFunction function;
     XrLirFunctionView view;
     uint32_t block, instruction, scratch;
@@ -171,6 +172,7 @@ static bool c_located(const XrLirSource *source) {
     return source->path && source->path_length && source->line && source->column;
 }
 #include "xlir_c_fixed.inc.c"
+#include "xlir_c_nullable.inc.c"
 static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(c, type))
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
@@ -264,7 +266,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     c_scalar(c, v->type);
     if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) ||
-        v->op == XR_LIR_FIXED_ARRAY_GET) {
+        (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
         if (c_located(&v->source)) {
             if (c->location_count == UINT32_MAX)
@@ -295,6 +297,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_LITERAL_ADDR: case XR_LIR_STRING_LITERAL:
             c->used_literals[v->bits - 1] = 1;
             break;
+        case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
+        case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
         case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
@@ -450,7 +454,7 @@ static void c_locations(LirC *c) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) &&
-                     !c_arithmetic_point(c, &v) && v.op != XR_LIR_FIXED_ARRAY_GET) || !c_located(&v.source))
+                     !c_arithmetic_point(c, &v) && v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -683,6 +687,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
+    if (v->op >= XR_LIR_NULLABLE_NONE && v->op <= XR_LIR_NULLABLE_UNWRAP) {
+        c_nullable_instruction(c, v);
+        return;
+    }
     if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
         c_fixed_instruction(c, v);
         return;
@@ -907,7 +915,7 @@ static void c_preamble(LirC *c) {
         c_text(c, "#if defined(_M_FP_FAST) || defined(__FAST_MATH__) || "
             "(defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)\n"
             "#error F64_TRANSPORT_REQUIRES_NONFAST_FLOATING_POINT_MODE\n#endif\n"
-            "#include <stdint.h>\n#include <limits.h>\n#include <float.h>\n#include <string.h>\n"
+            "#include <stdint.h>\n#include <stddef.h>\n#include <limits.h>\n#include <float.h>\n#include <string.h>\n"
             "#if CHAR_BIT != 8 || FLT_RADIX != 2 || DBL_MANT_DIG != 53 || "
             "DBL_MIN_EXP != -1021 || DBL_MAX_EXP != 1024\n"
             "#error F64_TRANSPORT_REQUIRES_BINARY64\n#endif\n"
@@ -916,7 +924,7 @@ static void c_preamble(LirC *c) {
             "_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 "
             "&& DBL_MAX_EXP == 1024, \"binary64 precision\");\n\n");
     } else {
-        c_text(c, "#include <stdint.h>\n\n");
+        c_text(c, "#include <stdint.h>\n#include <stddef.h>\n\n");
     }
     if (c->state && !c->f64) c_text(c, "#include <string.h>\n\n");
 }
@@ -945,7 +953,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
     if (root_result == XR_LIR_ARRAY)
         c_text(c, "extern XrtArray *xrt_array_root_take(XrtArray *array);\n\n");
-    c_fixed_types(c);
+    c_constructed_types(c);
     c_locations(c);
     c_literals(c);
     if (c->state) c_state_layout(c);
@@ -1104,7 +1112,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.seen);
     xr_compile_resources_free(c.fixed_divisors);
     xr_compile_resources_free(c.used_literals);
-    xr_compile_resources_free(c.fixed_types);
+    xr_compile_resources_free(c.constructed_types);
     return c.status;
 }
 

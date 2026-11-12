@@ -23,8 +23,10 @@ static inline bool lir_builtin_signature(XrLirType result, const XrLirType *para
 static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirType type) {
     if (type < XR_LIR_TYPE_COUNT) return true;
     XrLirTypeView view = {0};
+    XrLirTypeLayout layout;
     return xr_lir_type_view(module, type, &view) == XR_LIR_OK &&
-        view.kind == XR_LIR_TYPE_FIXED_ARRAY && view.element == XR_LIR_U8;
+        (view.kind == XR_LIR_TYPE_FIXED_ARRAY || view.kind == XR_LIR_TYPE_NULLABLE) &&
+        xr_lir_type_layout(module, type, &layout) == XR_LIR_OK && !layout.managed;
 }
 
 /* Definitions and State use the owned Fixed projection. Intrinsic and external

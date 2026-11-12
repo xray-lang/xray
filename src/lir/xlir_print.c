@@ -123,10 +123,16 @@ static void lir_print_constant(LirPrinter *p, XrLirType type, uint64_t bits) {
 }
 
 static void lir_print_type(LirPrinter *p, const XrLirModule *m, XrLirType type) {
-    XrLirTypeView view;
-    if (xr_lir_type_view(m, type, &view) == XR_LIR_OK && view.kind == XR_LIR_TYPE_FIXED_ARRAY)
-        lir_print_format(p, "[u8;%" PRIu32 "]", view.count);
+    XrLirTypeView view = {0};
+    uint32_t depth = 0;
+    while (xr_lir_type_view(m, type, &view) == XR_LIR_OK && view.kind == XR_LIR_TYPE_NULLABLE) {
+        lir_print_text(p, "nullable<");
+        ++depth;
+        type = view.element;
+    }
+    if (view.kind == XR_LIR_TYPE_FIXED_ARRAY) lir_print_format(p, "[u8;%" PRIu32 "]", view.count);
     else lir_print_text(p, xr_lir_type_name(type));
+    while (depth) { lir_print_text(p, ">"); --depth; }
 }
 
 static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrLirFunctionData *f,

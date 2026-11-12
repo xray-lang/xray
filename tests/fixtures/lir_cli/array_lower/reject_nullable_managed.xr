@@ -1,0 +1,2 @@
+var value: string? = null
+print(value == null ? 1 : 0)

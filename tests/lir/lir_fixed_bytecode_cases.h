@@ -115,7 +115,7 @@ static void fixed_bytecode_state_rejections(XrRbcProgram *program, bool immutabl
         }
         CHECK(snapshot != UINT32_MAX);
     } else {
-        XrRbcAggregateType types[] = {owned->aggregate_types[0], {XR_RBC_FIXED_U8, 18}};
+        XrRbcAggregateType types[] = {owned->aggregate_types[0], xr_rbc_fixed_type(18)};
         module.aggregate_types = types;
         module.aggregate_type_count = 2;
         uint32_t home = (uint32_t)function.aggregate_value_count++;

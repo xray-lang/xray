@@ -1,0 +1,14 @@
+fn layer<T>(value: T) -> T? { return value }
+fn none<T>() -> T? { return null }
+fn forward<T>(value: T) -> T { return value }
+var outer: i64?? = null
+print(outer == null ? 1 : 0)
+outer = layer<i64?>(none<i64>())
+print(outer == null ? 0 : 1)
+print(outer! == null ? 1 : 0)
+outer = layer<i64?>(layer<i64>(7))
+print(forward(outer)!!)
+var single: i64? = outer ?? null
+print(single ?? -1)
+outer = null
+print((outer ?? layer<i64>(11))!)

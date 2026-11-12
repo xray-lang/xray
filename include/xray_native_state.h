@@ -33,13 +33,15 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_U8, XRT_MODULE_U16, XRT_MODULE_U32, XRT_MODULE_U64,
     XRT_MODULE_F32, XRT_MODULE_F64, XRT_MODULE_STRING,
     XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64,
-    XRT_MODULE_FIXED_U8
+    XRT_MODULE_FIXED_U8,
+    XRT_MODULE_NULLABLE
 } XrtModuleTypeKind;
-/* Fixed-byte payloads own their exact nonzero count. All other kinds require
- * a zero count. A fixed payload has count bytes, alignment one and no RC. */
+/* Fixed U8 argument is its nonzero count. Nullable argument is an earlier
+ * type ordinal in this catalog. Other kinds require zero. Nullable admits
+ * inline scalar, Fixed U8 and Nullable payloads with independently owned types. */
 typedef struct XrtModuleTypeSpec {
     XrtModuleTypeKind kind;
-    uint32_t fixed_count;
+    uint32_t argument;
 } XrtModuleTypeSpec;
 typedef struct XrtModuleSpec { uint32_t first_dependency, dependency_count; } XrtModuleSpec;
 enum { XRT_MODULE_SLOT_MUTABLE = 1u };

@@ -1,0 +1,10 @@
+fn first(value: [u8; 16]?) -> [u8; 16]? { return value }
+fn second(value: [u8; 17]?) -> [u8; 17]? { return value }
+var small: [u8; 16]? = null
+var large: [u8; 17]? = b"0123456789ABCDEFG"
+print(len(first(small) ?? b"0123456789ABCDEF"))
+small = b"0123456789ABCDEF"
+print(first(small)![15] as i64)
+print(second(large)![16] as i64)
+large = null
+print(second(large) == null ? 1 : 0)

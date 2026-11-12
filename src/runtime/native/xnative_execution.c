@@ -156,6 +156,11 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
         xrt_output_exit(map, failure->detail.output.io,
             failure->detail.output.operation, failure->detail.output.source_id);
     if (failure->kind == XRT_FAILURE_HOST_CLOCK) xrt_clock_exit(map, failure->detail.clock);
+    if (failure->kind == XRT_FAILURE_NULL_UNWRAP) {
+        uint32_t id = failure->detail.panic.source_id;
+        xrt_null_unwrap_report(id && id <= map->count ? &map->locations[id - 1] : NULL);
+        _Exit(1);
+    }
     if (failure->kind == XRT_FAILURE_VALUE) {
         uint32_t id = failure->detail.value.source_id;
         const XrtSourceLocation *source = id && id <= map->count ? &map->locations[id - 1] : NULL;
@@ -169,6 +174,15 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
         (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
     }
     _Exit(1);
+}
+
+XRAY_API_NORET void xrt_null_unwrap(uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && binding->target && source_id <= binding->map.count,
+        "Null unwrap uses the active execution and its actual source point");
+    binding->failure->kind = XRT_FAILURE_NULL_UNWRAP;
+    binding->failure->detail.panic = (XrtArithmeticPanic){413, source_id};
+    longjmp(*binding->target, 1);
 }
 
 XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {

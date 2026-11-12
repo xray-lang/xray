@@ -6,17 +6,18 @@
  *
  * xrbc_lir_aggregate.inc.c - Owned physical homes and real typed operand spans
  */
-static bool rbc_lir_fixed_point(const XrLirInstructionView *instruction) {
-    return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET;
+static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
+    return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
+        (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP);
 }
 
-static bool rbc_lir_fixed_type(const XrLirModule *module, XrLirType type) {
+static bool rbc_lir_aggregate_type(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
     return type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(module, type, &shape) == XR_LIR_OK &&
-        shape.kind == XR_LIR_TYPE_FIXED_ARRAY && shape.element == XR_LIR_U8 && shape.count && shape.count <= 65535;
+        (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_NULLABLE);
 }
 
-static bool rbc_lir_fixed_state(const XrLirModule *module, XrLirFunction function,
+static bool rbc_lir_aggregate_state(const XrLirModule *module, XrLirFunction function,
     const XrLirInstructionView *instruction) {
     if (instruction->op == XR_LIR_STATE_READ) return instruction->type >= XR_LIR_TYPE_COUNT;
     if ((instruction->op != XR_LIR_STATE_WRITE && instruction->op != XR_LIR_STATE_CONSTRUCT &&
@@ -26,7 +27,7 @@ static bool rbc_lir_fixed_state(const XrLirModule *module, XrLirFunction functio
     return type >= XR_LIR_TYPE_COUNT;
 }
 
-static bool rbc_lir_fixed_call(const XrLirModule *module, const XrLirInstructionView *instruction) {
+static bool rbc_lir_aggregate_call(const XrLirModule *module, const XrLirInstructionView *instruction) {
     if (!xr_lir_constructed_type_count(module)) return false;
     XrLirFunctionView callee;
     xr_lir_function_view(module, (XrLirFunction){module, instruction->callee}, &callee);
@@ -141,7 +142,31 @@ static bool rbc_lir_aggregate_append(RbcLirCompiler *c, XrRbcAggregateAccess acc
     return rbc_lir_emit(c, XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, (int64_t)c->aggregate_access_count++);
 }
 
+static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
+    XrRbcAggregateAccess access = {0};
+    bool create = instruction->op == XR_LIR_NULLABLE_NONE || instruction->op == XR_LIR_NULLABLE_SOME;
+    uint32_t type = create ? c->aggregate_values[c->aggregate_home[instruction->result]].type :
+        c->aggregate_values[c->aggregate_home[instruction->operands[0]]].type;
+    XrRbcAggregateType shape = c->literals->program->module.aggregate_types[type];
+    if (create) {
+        access.operation = instruction->op == XR_LIR_NULLABLE_NONE ? XR_RBC_NULLABLE_NONE : XR_RBC_NULLABLE_SOME;
+        access.destination = c->aggregate_home[instruction->result];
+        if (instruction->operand_count) {
+            if (shape.element >= XR_POD_SCALAR_COUNT) access.source = c->aggregate_home[instruction->operands[0]];
+            else access.result = rbc_lir_array_location(c, instruction->operands[0]);
+        }
+    } else {
+        access.source = c->aggregate_home[instruction->operands[0]];
+        access.operation = instruction->op == XR_LIR_NULLABLE_IS_SOME ? XR_RBC_NULLABLE_IS_SOME : XR_RBC_NULLABLE_UNWRAP;
+        if (instruction->type >= XR_LIR_TYPE_COUNT) access.destination = c->aggregate_home[instruction->result];
+        else if (instruction->type != XR_LIR_UNIT) access.result = rbc_lir_array_location(c, instruction->result);
+    }
+    return rbc_lir_aggregate_append(c, access);
+}
+
 static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
+    if (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP)
+        return rbc_lir_nullable_emit(c, instruction);
     bool construct = instruction->op == XR_LIR_FIXED_ARRAY_NEW;
     XrRbcAggregateAccess access = {.operation = construct ? XR_RBC_AGGREGATE_NEW : XR_RBC_AGGREGATE_GET,
         .count = construct ? instruction->operand_count : 1};

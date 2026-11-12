@@ -28,6 +28,7 @@ typedef struct Lower {
     const XrXirModule *source;
     XrLirModule *module;
     XrLirType *constructed_types;
+    uint32_t *constructed_stack;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
     uint32_t *queue, queued;
@@ -237,21 +238,45 @@ static bool lower_build(Lower *c, XrLirStatus status) {
  * An unused source descriptor cannot change the retained program's frontier. */
 static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
-    if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY) return true;
-    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (!node || (node->kind != XR_XIR_TYPE_FIXED_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return true;
     if (!c->constructed_types) {
-        c->constructed_types = lower_alloc(c, c->source->types->count,
-            sizeof(*c->constructed_types));
+        c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
         if (!c->constructed_types) return false;
     }
-    if (c->constructed_types[index]) return true;
-    return lower_build(c, xr_lir_fixed_array_type(c->module, lower_type(c, node->element),
-        node->parameter_count, &c->constructed_types[index]));
+    if (node->kind == XR_XIR_TYPE_NULLABLE && !c->constructed_stack) {
+        c->constructed_stack = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_stack));
+        if (!c->constructed_stack) return false;
+    }
+    uint32_t depth = 0;
+    while (node && (node->kind == XR_XIR_TYPE_FIXED_ARRAY || node->kind == XR_XIR_TYPE_NULLABLE)) {
+        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+        if (c->constructed_types[index]) break;
+        if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
+            if (!lower_build(c, xr_lir_fixed_array_type(c->module, lower_type(c, node->element),
+                node->parameter_count, &c->constructed_types[index]))) return false;
+            break;
+        }
+        XR_DCHECK(depth < c->source->types->count, "nullable dependencies follow the owned acyclic type pool");
+        c->constructed_stack[depth++] = index;
+        type = node->element;
+        node = xr_xir_type_node(c->source->types, type);
+    }
+    XrLirType element = lower_type(c, type);
+    if (!element || element == XR_LIR_STRING || element == XR_LIR_ARRAY)
+        return lower_unsupported(c, "Nullable payload has no inline POD layout");
+    while (depth) {
+        uint32_t index = c->constructed_stack[--depth];
+        if (!lower_build(c, xr_lir_nullable_type(c->module, element, &element))) return false;
+        c->constructed_types[index] = element;
+    }
+    return true;
 }
 
 static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+        case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
+        case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
         case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
         case XR_XIR_ARRAY_NEW:
         case XR_XIR_ARRAY_REPEAT:
@@ -421,6 +446,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 
 static void lower_modules_free(Lower *c) {
     xr_free(c->constructed_types);
+    xr_free(c->constructed_stack);
     if (c->module_cells)
         for (uint32_t f = 0; f < c->source->function_count; ++f)
             xr_free(c->module_cells[f]);
@@ -1364,10 +1390,38 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     return good;
 }
 
+static bool lower_nullable_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
+    Lower *c = f->owner;
+    const XrXirInstruction *op = &f->source->instructions[i];
+    XrLirValue *result = &f->values[f->source->parameter_count + i];
+    XrLirValue input = {0};
+    XrLirOp code = op->op == XR_XIR_NULLABLE_NONE ? XR_LIR_NULLABLE_NONE :
+        op->op == XR_XIR_NULLABLE_SOME ? XR_LIR_NULLABLE_SOME :
+        op->op == XR_XIR_NULLABLE_IS_SOME ? XR_LIR_NULLABLE_IS_SOME : XR_LIR_NULLABLE_UNWRAP;
+    bool operand = op->op != XR_XIR_NULLABLE_NONE && !(op->op == XR_XIR_NULLABLE_SOME &&
+        xr_xir_nullable_element(c->source->types, op->type) == XR_XIR_UNIT);
+    if (operand && !lower_value(f, op->args[0], &input)) return false;
+    XrLirInstruction instruction = {.op=code, .type=lower_type(c, op->type),
+        .operands=operand ? &input : NULL, .operand_count=operand, .source=lower_source(c)};
+    bool good = lower_build(c, instruction.type == XR_LIR_UNIT ?
+        xr_lir_emit_effect(c->module, f->blocks[b], &instruction) :
+        xr_lir_emit_value(c->module, f->blocks[b], &instruction, result));
+    if (!good || op->op != XR_XIR_NULLABLE_IS_SOME || !op->immediate) return good;
+    XrLirValue args[2] = {*result, {0}};
+    XrLirInstruction zero = {.op=XR_LIR_CONST, .type=XR_LIR_I1};
+    if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &zero, &args[1]))) return false;
+    XrLirInstruction invert = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_EQ,
+        .operands=args, .operand_count=2, .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &invert, result));
+}
+
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
     uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME ||
+        op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP)
+        return lower_nullable_instruction(f, b, i);
     if (op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
         op->op == XR_XIR_FIXED_ARRAY_LEN) return lower_fixed_instruction(f, b, i);
     if (op->op == XR_XIR_CLOCK_NANOS) {
