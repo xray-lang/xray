@@ -435,7 +435,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     if (inject_state) execution->stack.slots[argument_count].state = execution->state;
     if (function->reference_spill_count)
         memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
-    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0};
+    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0, 0};
     execution->stack.depth = 1;
     execution->stack.cell_count = function->cell_count;
     execution->stack.spill_count = function->spill_count;

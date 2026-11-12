@@ -379,7 +379,7 @@ XR_RBC_CASE(CALL) {
     // Reserve may move every stack array. Rebind both cached pointers before
     // touching the new frame or its arguments, including on partial growth.
     frame = &stack->frames[stack->depth++];
-    *frame = (XrRbcFrame){target, 0, base, a, stack->cell_count, 0, stack->spill_count};
+    *frame = (XrRbcFrame){target, 0, base, a, stack->cell_count, 0, stack->spill_count, 0};
     registers = stack->slots + base;
     xr_rbc_entry_clear(registers, &entries[target]);
     if (callee->reference_spill_count)
