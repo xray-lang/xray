@@ -76,7 +76,7 @@ static bool xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source, size_t *pc) {
     XrRbcArrayAccess access = function->array_accesses[index];
-    if (access.operation >= XR_RBC_ARRAY_BORROW)
+    if (access.operation >= XR_RBC_ARRAY_BORROW && access.operation <= XR_RBC_ARRAY_REF_PUSH)
         return xr_rbc_array_reference_step(module, stack, frame, function, access, source);
     const XrRbcArrayLocation *locations = access.count ? function->array_operands + access.first : NULL;
     XrRbcRegister *result = xr_rbc_array_location(stack, frame, access.result);
@@ -152,6 +152,15 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRb
     XrRbcRegister *binding = cell ? xr_rbc_cell(stack, module, first->bits, access.kind) : first;
     if (!binding) return XR_RBC_INVALID;
     switch (access.operation) {
+    case XR_RBC_ARRAY_DISPLAY:
+        switch (access.kind) {
+        case XR_RBC_ARRAY_I64: result->string = xrt_array_i64_display(first->array, source); break;
+        case XR_RBC_ARRAY_STRING: result->string = xrt_array_string_display(first->array, source); break;
+        case XR_RBC_ARRAY_U8: result->string = xrt_array_u8_display(first->array, source); break;
+        case XR_RBC_ARRAY_U64: result->string = xrt_array_u64_display(first->array, source); break;
+        default: return XR_RBC_INVALID;
+        }
+        break;
     case XR_RBC_ARRAY_LEN:
         result->bits = (uint64_t)xrt_array_length(first->array, source); break;
     case XR_RBC_ARRAY_GET:

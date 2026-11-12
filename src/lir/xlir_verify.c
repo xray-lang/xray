@@ -814,7 +814,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
     if (!xr_lir_internal_types_valid(m))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "constructed type pool is invalid");
-    uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_REPEAT] = {{0}};
+    uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_DISPLAY] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
     if (m->intrinsic_count && !m->intrinsics)
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic registry is missing");

@@ -86,6 +86,7 @@ static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i)
         case XR_LIR_ARRAY_OP_SET: operation = XR_RBC_ARRAY_SET; break;
         case XR_LIR_ARRAY_OP_PUSH: operation = XR_RBC_ARRAY_PUSH; break;
         case XR_LIR_ARRAY_OP_REPEAT: operation = XR_RBC_ARRAY_REPEAT; break;
+        case XR_LIR_ARRAY_OP_DISPLAY: operation = XR_RBC_ARRAY_DISPLAY; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unknown Array role");
         }
         if (operation == XR_RBC_ARRAY_SET || operation == XR_RBC_ARRAY_PUSH) {

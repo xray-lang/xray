@@ -1,0 +1,18 @@
+fn identity(values:Array<i64>)->Array<i64>{return values}
+fn describe(values:Array<string>)->string{return "items=${values}"}
+var bytes:Array<u8>=[0,255]
+var words:Array<u64>=[9223372036854775808,18446744073709551615]
+const signed:Array<i64>=[-9223372036854775808,0,9223372036854775807]
+print(Array<i64>())
+print(Array<string>())
+print(Array<u8>())
+print(Array<u64>())
+print(identity(signed))
+print("bytes=${bytes}; words=${words}")
+print(describe(["one","two"]))
+const saved=bytes.toString()
+bytes[0]=17
+words.push(0)
+print(saved)
+print(bytes)
+print(words)

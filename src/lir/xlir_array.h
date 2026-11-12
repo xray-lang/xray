@@ -21,7 +21,8 @@ typedef struct XrLirArrayShape {
 typedef enum XrLirArrayOperation {
     XR_LIR_ARRAY_OP_INVALID,
     XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY_OP_LEN, XR_LIR_ARRAY_OP_GET,
-    XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH, XR_LIR_ARRAY_OP_REPEAT
+    XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH, XR_LIR_ARRAY_OP_REPEAT,
+    XR_LIR_ARRAY_OP_DISPLAY
 } XrLirArrayOperation;
 
 typedef struct XrLirArrayIntrinsic {

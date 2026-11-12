@@ -78,7 +78,7 @@ static void array_sources(void) {
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
         XrLirLowered output = lower_text(cases[i]);
-        CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_REPEAT + 2));
+        CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_DISPLAY + 2));
         XrLirModule *copy = NULL;
         OK(xr_lir_rebuild(output.module, &copy));
         xr_lir_lowered_free(&output);

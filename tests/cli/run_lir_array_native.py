@@ -26,7 +26,8 @@ def main() -> None:
              "panic_bounds", "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
-             "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit")
+             "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
+             "display_values", "display_strings")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))
