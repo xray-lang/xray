@@ -267,7 +267,9 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
                 s->state[v.a] = RBC_EMPTY;
             } else if (v.op == XR_RBC_RET && s->state[v.a] != RBC_BITS) return false;
             for (uint32_t r = 0; r < f->register_count; ++r)
-                if (s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED) return false;
+                if (s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED ||
+                    s->state[r] == RBC_VIEW_FRAME || s->state[r] == RBC_VIEW_CELL ||
+                    s->state[r] == RBC_VIEW_SLICE || s->state[r] == RBC_VIEW_RETURNED) return false;
             break;
         case XR_RBC_LOADK: case XR_RBC_LOADI:
             if (!rbc_bits_destination(s, v.a)) return false;
