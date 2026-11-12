@@ -22,6 +22,7 @@
 #include "xxir_checked.h"
 #include "xxir_effects.h"
 #include "xxir_effect_control_internal.h"
+#include "xxir_execution_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_construction_internal.h"
 #include "xxir_effect_input_internal.h"
@@ -92,6 +93,12 @@ XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *con
  * The read neither accepts mutable Source nor invokes its producer. */
 XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output);
+/* Source emits only changed conversion metadata to its unpublished equations.
+ * Closing consumes those changes on the same dependency owner. */
+XR_FUNC XrXirStatus xir_effects_construction_weaken(const XrXirCompileContext *,
+    const XrXirEffects *,uint32_t function,uint32_t instruction,uint32_t root_mask,bool may_suspend);
+XR_FUNC XrXirStatus xir_effects_construction_close(const XrXirCompileContext *,
+    const XrXirEffects *,XrCompileRequestControl *);
 /* A ledger identity guard grants no source, type or execution proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t functions);
@@ -158,19 +165,46 @@ XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext 
 /* Requires completed structural and type verification; never re-enters verification. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *compile_context, XirEffectInput input, XrXirEffects **output);
 XR_FUNC XrXirStatus xir_effects_lower_verified_input(const XrXirCompileContext *context,
-    XirEffectInput input, EffectControlSummary *control, XrXirEffects **output);
-XR_FUNC EffectControlSummary *xir_effects_control_summary(const XrXirEffects *effects);
+    XirEffectInput input, const XrXirEffects *checked, XrXirEffects **output);
+XR_FUNC XrXirStatus xir_effects_infer_lifetimes_input(const XrXirCompileContext *context,
+    XirEffectInput input, XrXirEffects **output, XrXirDiagnostic *diagnostic);
+struct XirStorageFlow;
+struct XirViewNormalization;
 /* Private construction preparation grants no artifact or execution authority. */
 typedef struct XrXirRootRefiner {
     void *context;
     XrXirStatus (*update)(void *, const XrXirEffects *, bool *);
     /* The diagnostic consumer copies its presentation before the owner expires. */
     void (*explain)(void *, const XrXirModule *, const XrXirEffects *, const XrXirDiagnostic *);
-    XrXirStatus (*prepare)(void *, const XrXirEffects *);
+    XrXirStatus (*begin)(void *, const XrXirEffects *);
+    XrXirStatus (*observe)(void *, const XrXirModule *, uint32_t, uint32_t, const XrXirInstruction *);
+    XrXirStatus (*points)(void *, const XirExecutionOwner *, struct XirStorageFlow *, bool, bool *);
+    XrXirStatus (*prepare)(void *, const XirExecutionOwner *, struct XirStorageFlow *, const XirRestrictionReceiver *);
     /* Reads closed numeric equations before refinement and publication.
      * Neither borrowed module nor provisional semantic owner may escape. */
     XrXirStatus (*admit)(void *, const XrXirModule *, const XrXirEffects *, XrXirDiagnostic *);
 } XrXirRootRefiner;
+/* Ordinary admission precedes collection. Preparation owns numeric equations
+ * and synchronous observer output, with no public effect facts yet. */
+XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext *,
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **);
+/* A finish consumes its private owner on every outcome. All Source callbacks
+ * finish before a successful independent result becomes visible. */
+XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *,
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **, XrXirEffects **, XrXirDiagnostic *);
+XR_FUNC XrXirStatus xir_effects_relocate_prepared(const XrXirCompileContext *,
+    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
+XR_FUNC XrXirStatus xir_effects_accept_view_normalization(const XrXirCompileContext *,
+    XrXirEffects *, const XrXirModule *, const struct XirViewNormalization *, XrCompileRequestControl *);
+XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *);
+XR_FUNC struct XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *);
+XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *, XrXirEffects *,
+    const XrXirDiagnostic *);
+XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext *,
+    const XrXirEffects *, uint32_t, XrXirEffect *);
+XR_FUNC XrXirStatus xir_compile_task_transfer_verified(const XrXirCompileContext *,
+    const XrXirModule *, uint32_t);
+
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 /* Request pointers expire with these synchronous complete verifier calls. */
@@ -219,10 +253,9 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompil
 XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output);
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    XrCompileRequestControl *control, XrXirEffects **prepared, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,

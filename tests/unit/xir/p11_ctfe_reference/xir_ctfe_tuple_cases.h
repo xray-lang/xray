@@ -37,7 +37,7 @@ static void reference_tuple_value(const XrXirValue *value,const CtfeReferenceCas
 }
 static void reference_tuple_type_policy(const XrXirCompileContext *context) {
     const XrXirType first=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,second=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
-    XrXirCallableParameter ordered[]={{first,0},{XR_XIR_UNIT,0}},leaf[]={{XR_XIR_I8,0},{XR_XIR_STRING,0}};
+    XrXirCallableParameter ordered[]={{first,0,0},{XR_XIR_UNIT,0,0}},leaf[]={{XR_XIR_I8,0},{XR_XIR_STRING,0}};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TUPLE,.parameters=leaf,.parameter_count=2},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=ordered,.parameter_count=2}};
     XrXirTypes types={nodes,2,NULL,NULL};XrCompileResourceStats baseline=reference_stats(context);

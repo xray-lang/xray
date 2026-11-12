@@ -22,7 +22,7 @@ static void atomic_instruction_fixture(AtomicInstructionFixture *f,char *name,
     bool optional=known!=-3;
     *f=(AtomicInstructionFixture){0};f->nominal=ordering_declaration(name,f->variants);
     f->table=(XrXirNominalTable){.declarations=&f->nominal,.count=1};
-    f->fields[0]=(XrXirCallableParameter){element,0};f->fields[1]=(XrXirCallableParameter){XR_XIR_BOOL,0};
+    f->fields[0]=(XrXirCallableParameter){element,0,0};f->fields[1]=(XrXirCallableParameter){XR_XIR_BOOL,0,0};
     uint32_t span=marker?1u:0u;
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL};
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256};

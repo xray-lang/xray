@@ -31,8 +31,8 @@ static void cc_types(ClosedCarrierFixture *f) {
     f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.flags=XR_XIR_CALLABLE_ROOT_NONE};
     f->nodes[4]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[5]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)EE_ENUM};
-    f->tuple[0]=(XrXirCallableParameter){(XrXirType)EE_ENUM,0};
-    f->tuple[1]=(XrXirCallableParameter){XR_XIR_I64,0};
+    f->tuple[0]=(XrXirCallableParameter){(XrXirType)EE_ENUM,0,0};
+    f->tuple[1]=(XrXirCallableParameter){XR_XIR_I64,0,0};
     f->nodes[6]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=f->tuple,.parameter_count=2};
     f->nodes[7]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64};
     f->field_type=(XrXirType)EE_ENUM;

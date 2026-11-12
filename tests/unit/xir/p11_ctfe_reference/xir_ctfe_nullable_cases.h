@@ -40,7 +40,7 @@ static void reference_nullable_value(const XrXirValue *value,const CtfeReference
 }
 static void reference_nullable_type_policy(const XrXirCompileContext *context) {
     XrXirType first=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,second=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),third=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
-    XrXirCallableParameter fields[]={{first,0},{XR_XIR_UNIT,0}};
+    XrXirCallableParameter fields[]={{first,0,0},{XR_XIR_UNIT,0,0}};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I8},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=2},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=second}};

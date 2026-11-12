@@ -1,0 +1,4 @@
+fn wrap(callback: fn() -> i64) -> fn() -> i64 {
+    const thunk = fn() -> i64 { return callback() }
+    return thunk
+}

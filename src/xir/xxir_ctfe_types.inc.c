@@ -164,9 +164,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             continue;
         }
 
-        XrXirCallableParameter field=single?(XrXirCallableParameter){node->element,0}:
-            nominal?(XrXirCallableParameter){node->nominal.fields[frame->next],0}:
-            callable && frame->next==node->parameter_count?(XrXirCallableParameter){node->result,0}:node->parameters[frame->next];
+        XrXirCallableParameter field=single?(XrXirCallableParameter){node->element,0,0}:
+            nominal?(XrXirCallableParameter){node->nominal.fields[frame->next],0,0}:
+            callable && frame->next==node->parameter_count?(XrXirCallableParameter){node->result,0,0}:node->parameters[frame->next];
         ++frame->next;
         if (field.mode) {
             if (!internal || !callable || field.mode!=XR_PARAM_REF || !xr_xir_type_is_cell(types,field.type)) {

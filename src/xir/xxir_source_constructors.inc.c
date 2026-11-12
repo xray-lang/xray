@@ -133,7 +133,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     if (declaration->kind == XR_XIR_NOMINAL_STRUCT) declaration->flags |= XR_XIR_NOMINAL_MODULE_LITERAL;
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
     ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : declaration->exported, owner->index + 1, access, 0,
-        declaration->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0};
+        declaration->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0, 0, 0};
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
     if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
     if (!source_nominal_function_scope(ctx,index,owner)) return false;
@@ -145,7 +145,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     uint32_t count = (uint32_t)method->param_count;
     body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
     if (count && !body->parameters) return false;
-    ctx->functions[index] = (XrXirFunction) {"init", 4, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
+    ctx->functions[index] = (XrXirFunction) {"init", 4, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL,0,NULL};
     if (!source_error_clause_type(ctx,node,&method->throws_clause,&ctx->functions[index].error_type)) return false;
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];

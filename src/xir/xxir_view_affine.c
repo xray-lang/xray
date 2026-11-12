@@ -16,6 +16,8 @@
 #include "xxir_native_callable.h"
 #include "xxir_operand_roles.h"
 #include "xxir_compile_memory.h"
+#include "xxir_view_loan_transport_internal.h"
+#include "xxir_receive_control.h"
 #include "../base/xchecks.h"
 
 typedef struct AffineRule { uint8_t operands,edges; } AffineRule;
@@ -35,6 +37,11 @@ typedef struct AffineCheck {
     uint8_t *reachable;
     uint64_t *storage,*inputs,*current,*edge,*borrowed,*initial;
     uint32_t count,words;
+    XirViewLoanTransport *loans;
+    uint64_t frame_bytes;
+    XrCompileRequestControl *control;
+    uint32_t progress;
+    bool pending_loans;
 } AffineCheck;
 
 static uint32_t affine_flags(const AffineCheck *a,XrXirType type) {
@@ -80,6 +87,9 @@ static XrXirStatus affine_allocate(AffineCheck *a) {
     uint64_t bytes=values*sizeof(uint32_t)+(uint64_t)f->block_count*5;
     if (cells>SIZE_MAX/sizeof(uint64_t) || bytes>a->context->limits.frame_bytes ||
         cells>(a->context->limits.frame_bytes-bytes)/sizeof(uint64_t)) return XR_XIR_BUDGET;
+    a->frame_bytes=bytes+cells*sizeof(uint64_t);
+    uint64_t loan_bytes=xir_view_loan_transport_frame_bytes(a->loans);
+    if (loan_bytes>a->context->limits.frame_bytes-a->frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     a->indices=xir_compile_alloc(a->context,(size_t)values*sizeof(*a->indices),&status);
     a->queue=xir_compile_calloc(a->context,f->block_count,sizeof(*a->queue),&status);
@@ -119,7 +129,8 @@ static XrXirStatus affine_reachable(AffineCheck *a) {
     return XR_XIR_OK;
 }
 static bool affine_call(XrXirOp op) {
-    return op==XR_XIR_CALL || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT;
+    return op==XR_XIR_CALL || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT ||
+        op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT;
 }
 static uint32_t affine_operands(const AffineCheck *a,const XrXirInstruction *op) {
     if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(a->module->types,op->type)) return 0;
@@ -144,7 +155,23 @@ static XrXirStatus affine_use(AffineCheck *a,uint32_t value,bool consume,bool bo
     if (borrow) affine_set(a->borrowed,id,true);
     return XR_XIR_OK;
 }
+static XrXirStatus affine_loan_physical(void *context,uint32_t value) {
+    AffineCheck *a=context;
+    return affine_use(a,value,false,affine_mutable(a,value),true);
+}
+static XrXirStatus affine_callable_loans(AffineCheck *a,uint32_t instruction,uint32_t value) {
+    const XrXirTypes *types=a->module->types;
+    XrXirType type=xr_xir_operand_type(a->function,value);
+    if (!a->loans || !xr_xir_type_is_callable(types,type) || xr_xir_type_is_c_callable(types,type)) return XR_XIR_OK;
+    XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
+        .frame_bytes=a->frame_bytes,.physical=affine_loan_physical,.context=a};
+    XrXirStatus status=xir_view_loan_transport_use(a->loans,&use);
+    if (status==XR_XIR_UNRESOLVED) {a->pending_loans=true;return XR_XIR_OK;}
+    return status;
+}
 static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
+    XrXirStatus poll=xir_receive_step(a->control,&a->progress);
+    if (poll!=XR_XIR_OK) return poll;
     const XrXirFunction *f=a->function;const XrXirInstruction *op=&f->instructions[i];
     uint32_t result=affine_index(a,f->parameter_count+i);a->location.instruction=i;
     if (op->op==XR_XIR_VIEW_CLEANUP) {
@@ -156,7 +183,8 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
         }
         return XR_XIR_OK;
     }
-    bool call=affine_call(op->op),aggregate=op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_TUPLE_NEW;
+    bool call=affine_call(op->op),capture=op->op==XR_XIR_FUNCTION_REF;
+    bool aggregate=op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_TUPLE_NEW;
     bool consume=op->op==XR_XIR_RETURN || op->op==XR_XIR_VIEW_END;
     bool shared_copy=op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP;
@@ -165,7 +193,7 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
         op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
         (shared_copy && !affine_mutable(a,f->parameter_count+i));
     if (check && result!=UINT32_MAX && !definition) return XR_XIR_BAD_VALUE;
-    if (call) {
+    if (call || capture) {
 
         memset(a->borrowed,0,(size_t)a->words*sizeof(*a->borrowed));
     }
@@ -174,9 +202,19 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
         bool mutable=affine_mutable(a,v),take=consume || (aggregate && mutable);
         bool view_read=op->op>=XR_XIR_VIEW_REBORROW && op->op<=XR_XIR_VIEW_COPY;
         bool copy=!mutable && (shared_copy || aggregate);
-        if (check && affine_index(a,v)!=UINT32_MAX && !take && !call && !copy && !view_read && op->op!=XR_XIR_NULLABLE_IS_SOME)
+        if (check && affine_index(a,v)!=UINT32_MAX && !take && !call && !capture && !copy && !view_read && op->op!=XR_XIR_NULLABLE_IS_SOME)
             return XR_XIR_BAD_VALUE;
-        XrXirStatus status=affine_use(a,v,take,call && mutable,check);if (status!=XR_XIR_OK) return status;
+        XrXirStatus status=affine_use(a,v,take,(call || capture) && mutable,check);if (status!=XR_XIR_OK) return status;
+    }
+    if (check && a->loans && call) {
+        for (uint32_t p=0;p<affine_operands(a,op);++p) {
+            uint32_t value=xr_xir_op_uses_operand_table(op->op)?f->operands[op->args[0]+p]:op->args[p];
+            XrXirStatus status=affine_callable_loans(a,i,value);if (status!=XR_XIR_OK) return status;
+        }
+        if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
+            XrXirStatus status=affine_callable_loans(a,i,(uint32_t)op->immediate);
+            if (status!=XR_XIR_OK) return status;
+        }
     }
     /* The callee of an indirect call is an owned callable, whose signature
      * never makes the callable payload itself an affine borrowed value. */
@@ -259,24 +297,53 @@ static XrXirStatus affine_function(AffineCheck *a) {
     }
     return status;
 }
-XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+static XrXirStatus affine_module(const XrXirCompileContext *context,
+    const XrXirModule *module,const XirViewLoanFacts *facts,XrCompileRequestControl *control,
+    XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&types);
+    uint64_t fixed=sizeof(AffineCheck)+sizeof(XrXirCompileContext);
+    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
+    uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(&remaining,module->types,&types);
     if (status!=XR_XIR_OK || !types) return status;
+    XirViewLoanTransport *transport=NULL;
+    if (facts && facts->restrictions.point_count)
+        status=xir_view_loan_transport_new(&remaining,module,facts,types,control,&transport);
+    bool pending=false;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
         if (module->declarations && module->declarations->functions[f].native_callable) {
             status=xir_native_callable_verify(module,f);continue;
         }
-        AffineCheck a={.context=context,.module=module,.function=&module->functions[f],.types=types,
+        AffineCheck a={.context=&remaining,.module=module,.function=&module->functions[f],.types=types,.loans=transport,.control=control,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=affine_function(&a);
+        pending|=a.pending_loans;
         if (diagnostic && status!=XR_XIR_OK) {*diagnostic=a.location;diagnostic->status=status;}
         affine_free(&a);
     }
-    xr_compile_resources_free(types);return status;
+    xir_view_loan_transport_free(transport);xr_compile_resources_free(types);
+    return status==XR_XIR_OK && pending ? XR_XIR_UNRESOLVED : status;
+}
+XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+    return affine_module(context,module,NULL,NULL,diagnostic);
+}
+
+XR_FUNC XrXirStatus xir_compile_view_affine_loans_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,const struct XrXirEffects *effects,XrCompileRequestControl *control,
+    XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
+        return XR_XIR_BAD_STRUCTURE;
+    XirViewLoanFacts facts={0};
+    XrXirStatus status=xir_effects_view_loan_facts(context,effects,&facts);
+    if (status!=XR_XIR_OK) return status;
+    if (facts.restrictions.function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    uint64_t fixed=sizeof(facts);
+    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
+    return affine_module(&remaining,module,&facts,control,diagnostic);
 }
 
 #include "xxir_view_liveness.inc.c"

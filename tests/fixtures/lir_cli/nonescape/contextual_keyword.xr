@@ -1,0 +1,5 @@
+type escaping = i64
+fn identity(value: escaping) -> escaping { return value }
+fn consume(callback: escaping nosuspend fn() -> i64) -> i64 { return callback() }
+const escaping = identity(7)
+print(escaping)

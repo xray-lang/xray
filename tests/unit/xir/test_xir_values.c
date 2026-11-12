@@ -240,7 +240,7 @@ static void arena_identity_and_revocation(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
-    XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
+    XrXirCallableParameter parameter = {XR_XIR_STRING, 0,0};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .parameters = &parameter, .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 256},

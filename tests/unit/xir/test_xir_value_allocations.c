@@ -271,7 +271,7 @@ static void arena_allocation_cases(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     size_t baseline = live;
     uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
-    XrXirCallableParameter parameter = {XR_XIR_STRING, 0};
+    XrXirCallableParameter parameter = {XR_XIR_STRING, 0,0};
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .parameters = &parameter,
         .parameter_count = 1, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     XrXirTypes types = {&node, 1, NULL, NULL};

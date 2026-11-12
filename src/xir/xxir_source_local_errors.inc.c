@@ -105,7 +105,7 @@ static bool source_local_escape_until(SourceContext *ctx,AstNode *node,XrXirType
             for (uint32_t i=0;i<handler->count;++i)
                 handled|=handler->complete[i] && (handler->types[i]==XR_XIR_ERROR || handler->types[i]==member);
         if(stop&&!handler)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope error handler is outside its lexical chain");
-        if (!handled) remaining[escaping++]=(XrXirCallableParameter){member,0};
+        if (!handled) remaining[escaping++]=(XrXirCallableParameter){member,0,0};
     }
     if (!escaping) { *output=XR_XIR_NEVER;return true; }
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
@@ -124,7 +124,7 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
         XrXirType body_error=XR_XIR_NEVER;
         if(!source_local_escape_until(ctx,node,error,handlers,scope->handler,asserted,&body_error))return false;
         if(body_error!=XR_XIR_NEVER) {
-            XrXirCallableParameter members[2]={{scope->body_error,XR_PARAM_READ},{body_error,XR_PARAM_READ}};
+            XrXirCallableParameter members[2]={{scope->body_error,XR_PARAM_READ,0},{body_error,XR_PARAM_READ,0}};
             if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
                 .parameters=members,.parameter_count=2},&scope->body_error))return false;
         }
@@ -143,7 +143,7 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
     XrXirType *bound=body->infer_initializer ? &body->initializer_seed :
         &ctx->functions[ctx->function].error_type;
     if (body->infer_errors && !generator) {
-        XrXirCallableParameter members[2]={{*bound,0},{error,0}};
+        XrXirCallableParameter members[2]={{*bound,0,0},{error,0,0}};
         if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
             .parameters=members,.parameter_count=2},bound)) return false;
         return true;
@@ -354,7 +354,7 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
                     ctx->functions[target].error_type,error=XR_XIR_UNIT;
                 if (!source_local_substitute_error(ctx,target,site->arguments,site->argument_count,dependency,&error) ||
                     !source_local_escape(ctx,site->node,error,site->handler,site->asserted,&error)) goto done;
-                XrXirCallableParameter members[2]={{bound,0},{error,0}};
+                XrXirCallableParameter members[2]={{bound,0,0},{error,0,0}};
                 if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
                     .parameters=members,.parameter_count=2},&bound)) goto done;
             }

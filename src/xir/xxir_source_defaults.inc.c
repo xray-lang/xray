@@ -49,12 +49,12 @@ static bool source_struct_constructors(SourceContext *ctx,uint32_t *next) {
         if(!defaults.available)continue;
         if(*next>=ctx->first_closure)return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"default constructor function inventory mismatch");
         uint32_t index=(*next)++;
-        ctx->functions[index]=(XrXirFunction){"$default",8,NULL,0,symbol->type,NULL,0,NULL,0,NULL,0,XR_XIR_UNIT,0,NULL};
+        ctx->functions[index]=(XrXirFunction){"$default",8,NULL,0,symbol->type,NULL,0,NULL,0,NULL,0,XR_XIR_UNIT,0,NULL,0,NULL};
         ctx->bodies[index].infer_errors=ctx->bodies[index].infer_initializer=true;
         ctx->bodies[index].node=symbol->node;ctx->bodies[index].module=symbol->module;ctx->bodies[index].declaration=symbol->declaration;
         if(!source_nominal_function_scope(ctx,index,symbol))return false;
         ctx->identities[index]=(XrXirFunctionIdentity){symbol->module,ctx->nominals.declarations[d].exported,d+1,0,0,
-            ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS?XR_XIR_FUNCTION_NO_SUSPEND:0,XR_XIR_CONSTRUCTOR,0,0,0};
+            ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS?XR_XIR_FUNCTION_NO_SUSPEND:0,XR_XIR_CONSTRUCTOR,0,0,0,0,0};
         if(!source_hir_nominal_bind(ctx,symbol->node,d,index,XR_HIR_NOMINAL_IMPLICIT,UINT32_MAX))return false;
     }
     return true;

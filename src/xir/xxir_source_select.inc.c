@@ -48,7 +48,7 @@ static bool source_select_prepare(SourceContext *ctx,AstNode *node,SourceSelectP
     plan->operands=source_alloc(ctx,plan->channels+1,sizeof(*plan->operands));
     XrXirCallableParameter *fields=source_alloc(ctx,plan->channels+1,sizeof(*fields));
     if(!plan->operands||!fields)return false;
-    fields[0]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ};
+    fields[0]=(XrXirCallableParameter){XR_XIR_I64,XR_PARAM_READ,0};
     uint32_t channel=0;
     for(uint32_t a=0;a<plan->count;++a) {
         if(!(a%64u)&&!source_request_poll(ctx,node))return false;
@@ -70,13 +70,13 @@ static bool source_select_prepare(SourceContext *ctx,AstNode *node,SourceSelectP
                 SourceValue payload[2]={*value};XrXirType pair;
                 XrXirCallableParameter *members=source_alloc(ctx,2,sizeof(*members));
                 if(!members)return false;
-                members[0]=(XrXirCallableParameter){value->type,XR_PARAM_READ};
-                members[1]=(XrXirCallableParameter){element,XR_PARAM_READ};
+                members[0]=(XrXirCallableParameter){value->type,XR_PARAM_READ,0};
+                members[1]=(XrXirCallableParameter){element,XR_PARAM_READ,0};
                 if(!source_plan_expression(ctx,arm->value,(SourceExpectedType){true,element,false,false},payload+1)||
                     !source_hir_tuple_type(ctx,members,2,&pair)||
                     !source_tuple_construct(ctx,plan->arms[a].node,pair,payload,2,NULL,value))return false;
             }
-            fields[channel+1]=(XrXirCallableParameter){nullable,XR_PARAM_READ};
+            fields[channel+1]=(XrXirCallableParameter){nullable,XR_PARAM_READ,0};
             plan->arms[a].tag=channel++;
         }
     }

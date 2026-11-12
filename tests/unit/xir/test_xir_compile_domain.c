@@ -30,7 +30,7 @@ static XrXirValueStatus compile_domain_sequence(XrCompileResources *resources, X
     XrXirTypeArena *arena = NULL;
     XrXirValue values[7] = {{0}};
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    XrXirCallableParameter fields[] = {{XR_XIR_STRING, 0}, {(XrXirType)257, 0}};
+    XrXirCallableParameter fields[] = {{XR_XIR_STRING, 0,0}, {(XrXirType)257, 0,0}};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_ARRAY, .element = XR_XIR_STRING},

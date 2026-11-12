@@ -1,0 +1,4 @@
+fn register(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn relay(callback: fn() -> i64) {
+    const saved = register(callback)
+}

@@ -30,15 +30,15 @@ static XrXirStatus class_field_leaf(XrXirCompileContext *budget,const XrXirTypes
     /* Hash containers own separately admitted dense storage. A class field
      * retains only that handle, so recursive identities stop at this edge. */
     if (node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_SET) return XR_XIR_OK;
-    /* An Array field is a handle whose backing store is its own admitted array; any element the
-     * array family admits (scalars, strings, nominal values, nullable values, arrays) is stored there. */
+    /* An Array field retains its separately admitted backing store, including
+     * owned function handles. This grants no callable invocation authority. */
     if (node->kind==XR_XIR_TYPE_ARRAY) {
         if (node->element==XR_XIR_BOOL || node->element==XR_XIR_RUNE || xr_xir_type_is_number(node->element) || node->element==XR_XIR_STRING) return XR_XIR_OK;
         const XrXirTypeNode *element=xr_xir_type_node(types,node->element);
         return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
             element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY ||
             element->kind==XR_XIR_TYPE_TUPLE || element->kind==XR_XIR_TYPE_MAP ||
-            element->kind==XR_XIR_TYPE_SET) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+            element->kind==XR_XIR_TYPE_SET || element->kind==XR_XIR_TYPE_CALLABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
         (types->nominals->declarations!=NULL)==(types->nominals->identities!=NULL) ||

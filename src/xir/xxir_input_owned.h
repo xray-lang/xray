@@ -35,6 +35,8 @@ typedef struct XirInputFunctionHead {
     XrXirType error_type;
     uint32_t consume_parameter_count;
     const uint32_t *consume_parameters;
+    uint32_t escaping_parameter_count;
+    const uint32_t *escaping_parameters;
 } XirInputFunctionHead;
 /* This readable external span is borrowed only during complete receiving.
  * It is never retained, used as a digest or accepted as semantic authority. */

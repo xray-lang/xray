@@ -18,7 +18,7 @@ static XrXirArtifact *callable_fixture(const XrXirCompileContext *context) {
     XrXirType fn0 = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirType fn1 = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirType generic = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirCallableParameter parameters[] = {{XR_XIR_I64, 0}, {fn0, 0}};
+    XrXirCallableParameter parameters[] = {{XR_XIR_I64, 0,0}, {fn0, 0,0}};
     XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, parameters, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, parameters + 1, 1, fn0, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, NULL, 0, XR_XIR_UNIT, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}}};
@@ -33,6 +33,8 @@ static XrXirArtifact *callable_fixture(const XrXirCompileContext *context) {
         {"forward", 7, &fn1, 1, fn1, &block, 1, caller_ops, 2, &operand, 1,.error_type=XR_XIR_NEVER},
         {"identity", 8, &generic, 1, generic, &block, 1, generic_ops, 2, NULL, 0,.error_type=XR_XIR_NEVER}
     };
+    uint32_t escaping=0;
+    functions[0].escaping_parameter_count=1;functions[0].escaping_parameters=&escaping;
     XrXirGeneric generics[] = {{NULL, 0, &fn1, 1, NULL}, {&constraint, 1, NULL, 0, NULL}};
     XrXirModule built = {XR_XIR_BUILT, functions, 2, NULL, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
@@ -47,7 +49,7 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
     XrXirType parameter = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, concrete = XR_XIR_I64;
     XrXirConstraint constraint = {0};
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1, NULL}, {&constraint,1,NULL,0, NULL}};
-    XrXirCallableParameter input = {XR_XIR_I64, 0};
+    XrXirCallableParameter input = {XR_XIR_I64, 0,0};
     XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, &input, 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
     XrXirTypes types = {&signature, 1, NULL, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
@@ -74,7 +76,7 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
 }
 static XrXirArtifact *generic_callable_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirCallableParameter components[] = {{t,0}, {XR_XIR_STRING,0}};
+    XrXirCallableParameter components[] = {{t,0,0}, {XR_XIR_STRING,0,0}};
     XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE,XR_XIR_NEVER,components,1,t, XR_XIR_CALLABLE_ROOT_UNRESOLVED,1, {0}},
         {XR_XIR_TYPE_CALLABLE,XR_XIR_NEVER,components+1,1,XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}}};
     XrXirTypes table = {signatures,2, NULL, NULL};
@@ -102,7 +104,7 @@ static XrXirArtifact *generic_callable_fixture(const XrXirCompileContext *contex
 /* Two generic owners reuse the same abstract nodes with different substitutions. */
 static XrXirArtifact *constructed_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirCallableParameter inputs[] = {{(XrXirType)257,0}, {(XrXirType)261,0}, {(XrXirType)265,0}};
+    XrXirCallableParameter inputs[] = {{(XrXirType)257,0,0}, {(XrXirType)261,0,0}, {(XrXirType)265,0,0}};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY,t,NULL,0,XR_XIR_UNIT,0,1, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1, {0}},

@@ -25,6 +25,7 @@ static bool source_reify_type(SourceContext *ctx, AstNode *site,
         ok = !node.parameter_count || parameters;
         for (uint32_t p = 0; p < node.parameter_count && ok; ++p) {
             parameters[p].mode = node.parameters[p].mode;
+            parameters[p].escaping = node.parameters[p].escaping;
             ok = source_reify_type(ctx,site,pool,node.parameters[p].type,&parameters[p].type);
         }
         node.parameters = parameters;

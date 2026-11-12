@@ -27,8 +27,7 @@ typedef enum XrXirEvidenceKind {
 
 typedef enum XrXirEffectParameterKind {
     XR_XIR_EFFECT_PARAMETER_FIXED = 0,
-    XR_XIR_EFFECT_PARAMETER_VARIABLE = 1,
-    XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC = 2
+    XR_XIR_EFFECT_PARAMETER_VARIABLE = 1
 } XrXirEffectParameterKind;
 
 typedef enum XrXirRootTermKind {
@@ -51,25 +50,12 @@ typedef enum XrXirEffectBindingFamily {
     XR_XIR_EFFECT_BINDING_REQUIREMENT = 4
 } XrXirEffectBindingFamily;
 
-enum XrXirEffectParameterUse {
-    XR_XIR_EFFECT_USE_INVOKE = 1,
-    XR_XIR_EFFECT_USE_FORWARD = 2,
-    XR_XIR_EFFECT_USE_COPY = 4,
-    XR_XIR_EFFECT_USE_FIXED = 8,
-    XR_XIR_EFFECT_USE_CONST_CAPTURE = 16,
-    XR_XIR_EFFECT_USE_STORE = 32,
-    XR_XIR_EFFECT_USE_RETURN = 64,
-    XR_XIR_EFFECT_USE_CHILD = 128,
-    XR_XIR_EFFECT_USE_OTHER = 256
-};
-
 /* Generic value arguments retain their actual callable identity. The fixed
  * storage contract does not make the binder a declared callable parameter. */
 XR_FUNC bool xir_effect_parameter_identity(XrXirType, XrXirEffectParameterKind);
 
 typedef struct XrXirEffectParameter {
     uint32_t kind;
-    uint32_t uses;
 } XrXirEffectParameter;
 
 typedef struct XrXirRootTerm {

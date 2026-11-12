@@ -95,7 +95,7 @@ static void cross_domain_nested_case(unsigned order) {
 }
 
 static void cross_domain_set_case(unsigned order) {
-    const XrXirCallableParameter fields[] = {{(XrXirType)257, 0}, {XR_XIR_STRING, 0}};
+    const XrXirCallableParameter fields[] = {{(XrXirType)257, 0,0}, {XR_XIR_STRING, 0,0}};
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_NULLABLE, .element = (XrXirType)256},

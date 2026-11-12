@@ -36,8 +36,8 @@ static void value_observer_wrapper_cases(XrXirDomain *domain) {
         {{"wrapper",7},{"Box",3},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0},
         {{"wrapper",7},{"Choice",6},1,0,&payload,1,XR_XIR_NOMINAL_ENUM,variants,2,0,{0}, 0}};
     XrXirNominalTable table={NULL,2,identities};XrXirType scalar[]={XR_XIR_I64},object[]={(XrXirType)256};
-    XrXirCallableParameter unit_member[]={{XR_XIR_UNIT,XR_PARAM_READ}};
-    XrXirCallableParameter members[]={{(XrXirType)256,XR_PARAM_READ},{XR_XIR_I64,XR_PARAM_READ}};
+    XrXirCallableParameter unit_member[]={{XR_XIR_UNIT,XR_PARAM_READ,0}};
+    XrXirCallableParameter members[]={{(XrXirType)256,XR_PARAM_READ,0},{XR_XIR_I64,XR_PARAM_READ,0}};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,scalar,1}},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=members,.parameter_count=2},

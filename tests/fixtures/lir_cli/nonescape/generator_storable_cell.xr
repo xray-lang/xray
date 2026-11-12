@@ -1,0 +1,8 @@
+fn leaf() -> i64 { return 7 }
+fn owned(callback: escaping fn() -> i64) -> Iterator<i64> {
+    var slot = leaf
+    fn values() -> Iterator<i64> { yield slot() }
+    const iterator = values()
+    slot = callback
+    return iterator
+}

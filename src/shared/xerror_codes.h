@@ -153,6 +153,8 @@
  * as a move source, moves a loop backedge would repeat, module-static
  * consumption. Permissions, not argument-type errors (E0356). */
 #define XR_ERR_ANALYZE_MOVE_CAPABILITY 397
+/* A function parameter value or a closure retaining it crosses its invocation. */
+#define XR_ERR_ANALYZE_FUNCTION_ESCAPE 398
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

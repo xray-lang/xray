@@ -33,11 +33,6 @@ static inline XrXirStatus xir_fixture_effects_body_match(const XrXirCompileConte
 
 
 
-static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *context,
-    XirFixtureEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
-    return xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){input.module,input.construction,NULL},refiner,output);
-}
-
 static inline XrXirStatus xir_fixture_effects_terminal(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
     return xir_effects_source_terminal_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);

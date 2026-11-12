@@ -13,6 +13,7 @@
 #include "xxir_display.h"
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
+#include "../hir/xhir_escape.h"
 #include "../hir/xhir_tuple.h"
 #include "../hir/xhir_nominal.h"
 #include "../hir/xhir_nominal_source.h"
@@ -243,6 +244,7 @@ typedef struct SourceFunction {
     uint32_t debug_binding_count, debug_binding_capacity;
     SourceRootValue *root_values;
     bool *root_captures; uint32_t root_capture_count;
+    const char **root_capture_names;
     XrXirEffectParameter *effect_parameters;
     XrXirRootTerm *effect_terms;
     XrXirRootValueIdentity *effect_values;
@@ -714,7 +716,12 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     if (node.parameter_count && !parameters) return false;
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
         parameters[p].mode = node.parameters[p].mode;
+        parameters[p].escaping = node.parameters[p].escaping;
         if (!source_substitute(ctx, sub, node.parameters[p].type, depth + 1, &parameters[p].type)) return false;
+        if (node.kind == XR_XIR_TYPE_CALLABLE &&
+            !xr_xir_callable_signature(&ctx->types,node.parameters[p].type) &&
+            xr_xir_callable_signature(&ctx->types,parameters[p].type) &&
+            !xr_xir_type_is_c_callable(&ctx->types,parameters[p].type)) parameters[p].escaping = 1;
     }
     node.parameters = parameters;
     if(node.kind==XR_XIR_TYPE_TUPLE)return source_hir_tuple_type(ctx,parameters,node.parameter_count,output);
@@ -740,6 +747,7 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
         if (ref->function_rest && p + 1 == count &&
             (mode != XR_PARAM_READ || !source_array_element_type(ctx,parameters[p].type,&parameters[p].type))) return false;
         parameters[p].mode = mode;
+        parameters[p].escaping = ref->children[p]->parameter_escaping;
         if (mode == XR_PARAM_REF && !source_cell_type(ctx, parameters[p].type, &parameters[p].type)) return false;
     }
     XrXirType result, error;
@@ -1862,6 +1870,10 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
         if (!source_substitute(ctx,&arguments.substitution,function->parameters[p],0,&parameters[p].type)) return false;
         parameters[p].mode=xr_xir_declared_parameter_mode(&ctx->types,function->parameters[p],
             function->consume_parameters,function->consume_parameter_count,p);
+        parameters[p].escaping=xr_xir_function_parameter_escaping(function,p) ||
+            (!xr_xir_callable_signature(&ctx->types,function->parameters[p]) &&
+             xr_xir_callable_signature(&ctx->types,parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types,parameters[p].type));
     }
     XrXirType result, error_type;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
@@ -2384,7 +2396,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (decl->param_count && !body->parameters) return false;
     XrXirFunction *function = &ctx->functions[index];
     *function = (XrXirFunction) {decl->name, (uint32_t) source_text_size(ctx, decl->name), body->parameters,
-        (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
+        (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL,0,NULL};
     if (!source_type(ctx, decl->return_type, &function->result) ||
         !source_error_clause_type(ctx, node, &decl->throws_clause, &function->error_type)) return false;
     if (identity.test_role && function->result != XR_XIR_UNIT)
@@ -2798,8 +2810,6 @@ static bool capture_name(SourceCaptureScan *scan, const char *name, AstNode *nod
     if (source && source->kind == SOURCE_PENDING)
         return source_fail(ctx, node, XR_XIR_BAD_VALUE, "nested function is used before its declaration completes");
     if (!source_local_name(source)) return ctx->diagnostic.status == XR_XIR_OK;
-    if (source->direct_borrowed)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"direct borrowed local cannot be captured");
     for (SourceCapture *p = scan->captures; p; p = p->next) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (p->source == source) return true;
@@ -2965,13 +2975,17 @@ static bool capture_scan(AstNode *node, void *pointer) {
 static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     body->root_capture_count = scan->count;
+    ctx->identities[ctx->function].capture_count = scan->count;
     body->root_captures = scan->count ? source_alloc(ctx,scan->count,sizeof(*body->root_captures)) : NULL;
-    if (scan->count && !body->root_captures) return false;
+    body->root_capture_names = scan->count ? source_alloc(ctx,scan->count,sizeof(*body->root_capture_names)) : NULL;
+    if (scan->count && (!body->root_captures || !body->root_capture_names)) return false;
     for (SourceCapture *p = scan->captures; p; p = p->next) {
+        body->root_capture_names[p->index] = p->source->name;
         SourceName *symbol = add_name(ctx, &ctx->locals, p->source->name, node);
         if (!symbol) return false;
         symbol->kind = p->source->kind; symbol->index = p->index; symbol->type = p->source->type;
         symbol->mutable = p->source->mutable; symbol->inferred = p->source->inferred;
+        symbol->direct_borrowed = p->source->direct_borrowed;
         symbol->declaration = p->source->declaration;
         if (symbol->kind == SOURCE_UNIT_LOCAL) {
             if(!source_hir_value_declared(ctx,node,symbol,(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}}))return false;
@@ -2991,7 +3005,7 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
             continue;
         }
         XrXirType type = symbol->type;
-        if (symbol->mutable && !source_cell_type(ctx, type, &type)) return false;
+        if (symbol->mutable && !symbol->direct_borrowed && !source_cell_type(ctx, type, &type)) return false;
         body->parameters[p->index] = type;
         XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
         XrHirBindingAction action;
@@ -3094,8 +3108,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
      * of its source-level callable error contract. */
     ctx->functions[index] = (XrXirFunction) {name, (uint32_t) source_text_size(ctx, name), body->parameters,
         scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0,
-        node->type == AST_FUNCTION_DECL ? XR_XIR_NEVER : XR_XIR_ERROR,0,NULL};
+        node->type == AST_FUNCTION_DECL ? XR_XIR_NEVER : XR_XIR_ERROR,0,NULL,0,NULL};
     ctx->identities[index].module = ctx->module;
+    ctx->identities[index].capture_owner = outer + 1;
     ctx->identities[index].nominal_owner = ctx->identities[outer].nominal_owner;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].promises = no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
@@ -3122,8 +3137,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if(ok) ok=source_generator_declaration(ctx,node,index,&ctx->identities[index],scan.count);
     if(ok && (ctx->identities[index].promises & XR_XIR_FUNCTION_GENERATOR)) {
         ctx->identities[index].promises&=~XR_XIR_FUNCTION_NO_SUSPEND;
-        ok=source_generator_closure_captures(ctx,node,&scan) &&
-            source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
+        ok=source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
     }
     bool nested_function = node->type == AST_FUNCTION_DECL;
     if (ok && (nested_function || scan.self_used)) {
@@ -3168,7 +3182,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     for (SourceCapture *p = scan.captures; p; p = p->next) {
         if (p->source->kind == SOURCE_UNIT_LOCAL) continue;
         XrXirType capture_type = p->source->type;
-        if (p->source->mutable && !source_cell_type(ctx, capture_type, &capture_type)) return false;
+        if (p->source->mutable && !p->source->direct_borrowed && !source_cell_type(ctx, capture_type, &capture_type)) return false;
         if (p->source->construction) {
             if (xr_xir_type_is_class(&ctx->types,p->source->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot be captured during construction");
             if (!source_constructor_value(ctx, &captures[p->index])) return false;
@@ -3301,7 +3315,7 @@ static bool build_bodies(SourceContext *ctx) {
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
-        NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
+        NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL,0,NULL};
     SourceValue value={0};
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&value))return false;
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL))return false;

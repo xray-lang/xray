@@ -231,7 +231,7 @@ static XrXirStatus type_match_next(TypeMatchContext *base,TypeMatchFrame *frame,
         if (!frame->next) {left=from->result;right=to->result;}
         else if (frame->next<=from->parameter_count) {
             uint32_t p=frame->next-1;
-            if (from->parameters[p].mode!=to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+            if (from->parameters[p].mode!=to->parameters[p].mode || from->parameters[p].escaping != to->parameters[p].escaping) return XR_XIR_BAD_TYPE;
             left=from->parameters[p].type;right=to->parameters[p].type;
         }
     }

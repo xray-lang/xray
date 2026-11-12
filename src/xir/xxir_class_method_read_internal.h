@@ -20,6 +20,7 @@ typedef struct XirClassMethodSignature {
     const XrXirType *parameters;uint32_t parameter_count;
     XrXirType result,error_type;
     const uint32_t *consume_parameters;uint32_t consume_parameter_count;
+    uint32_t escaping_parameter_count;const uint32_t *escaping_parameters;
 } XirClassMethodSignature;
 typedef struct XirClassMethodRead {
     const XirMetadataDomain *domain;

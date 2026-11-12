@@ -1,0 +1,5 @@
+class EventBus {
+    handlers: Array<fn(string)>
+    init() { this.handlers = [] }
+    subscribe(handler: escaping fn(string)) { this.handlers.push(handler) }
+}

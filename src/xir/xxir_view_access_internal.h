@@ -29,6 +29,10 @@ typedef struct XirViewAccessCells {
     XrCompileRequestControl *control;
     const XrXirConstruction *construction;
 } XirViewAccessCells;
+/* A synchronous numeric query does not retain the effect owner or grant a
+ * borrowed access. The access consumer still checks the actual live loans. */
+XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, uint32_t function, uint32_t value, bool *output);
 /* Requires ordinary type/structure/SSA, return-origin and affine admission of
  * the immutable generation. Recomputes actual may-owned state, scope ancestry,
  * compatible PHI choices and storage paths. Borrowed inputs denote compatible

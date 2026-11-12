@@ -25,7 +25,9 @@ static bool source_array_callback_context(SourceContext *ctx,AstNode *node,
     if (!parameters) return false;
     for (uint32_t p=0;p<count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        parameters[p]=(XrXirCallableParameter){shape->parameters[p],XR_PARAM_READ};
+        parameters[p]=(XrXirCallableParameter){shape->parameters[p],XR_PARAM_READ,
+            xr_xir_callable_signature(&ctx->types,shape->parameters[p]) != NULL &&
+            !xr_xir_type_is_c_callable(&ctx->types,shape->parameters[p])};
     }
     XrXirType expected;
     if (!source_signature(ctx,parameters,count,shape->has_result ? shape->result : XR_XIR_UNIT,shape->error,&expected)) return false;

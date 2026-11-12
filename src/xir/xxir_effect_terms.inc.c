@@ -143,7 +143,7 @@ static bool effect_term_same( const XrXirTypeNode *a, const XrXirTypeNode *b) {
         a->nominal.declaration != b->nominal.declaration ||
         a->nominal.argument_count != b->nominal.argument_count) return false;
     for (uint32_t i = 0; i < xr_xir_type_parameter_slots(a); ++i)
-        if (a->parameters[i].type != b->parameters[i].type || a->parameters[i].mode != b->parameters[i].mode)
+        if (a->parameters[i].type != b->parameters[i].type || a->parameters[i].mode != b->parameters[i].mode || a->parameters[i].escaping != b->parameters[i].escaping)
             return false;
     for (uint32_t i = 0; i < a->nominal.argument_count; ++i)
         if (a->nominal.arguments[i] != b->nominal.arguments[i]) return false;
@@ -324,7 +324,10 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next>source.parameter_count) frame->node.element=result;
         else ((XrXirCallableParameter *)frame->node.parameters)[frame->next]=
-            (XrXirCallableParameter){result,source.parameters[frame->next].mode};
+            (XrXirCallableParameter){result,source.parameters[frame->next].mode,
+                source.parameters[frame->next].escaping ||
+                (source.kind==XR_XIR_TYPE_CALLABLE && !xr_xir_callable_signature(&pool->types,child) &&
+                 xr_xir_callable_signature(&pool->types,result) && !xr_xir_type_is_c_callable(&pool->types,result))};
         uint32_t span=xr_xir_type_span(&pool->types,result);
         if (span>frame->node.parameter_span) frame->node.parameter_span=span;
         ++frame->next;

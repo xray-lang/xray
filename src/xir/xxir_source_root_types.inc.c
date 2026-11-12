@@ -27,7 +27,7 @@ static bool source_root_join_type(SourceContext *ctx, XrXirType left,
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable flow has invalid bounds");
     for (uint32_t p = 0; p < a->parameter_count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (a->parameters[p].type != b->parameters[p].type || a->parameters[p].mode != b->parameters[p].mode)
+        if (a->parameters[p].type != b->parameters[p].type || a->parameters[p].mode != b->parameters[p].mode || a->parameters[p].escaping != b->parameters[p].escaping)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable parameters must remain exact");
     }
     return source_intern_type(ctx,joined,output);
@@ -51,6 +51,13 @@ static bool source_root_copy_bound(SourceContext *ctx, uint32_t f, uint32_t valu
         operation = XR_XIR_FUNCTION_WEAKEN;
     }
     if (op->op != operation) { op->op = operation; *changed = true; }
+    if (operation == XR_XIR_FUNCTION_WEAKEN) {
+        const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,bound);
+        XrXirStatus status = xir_effects_construction_weaken(&ctx->compile,ctx->root_refinement,f,i,
+            signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED),
+            !(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND));
+        if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"callable conversion metadata is unavailable");
+    }
     return source_root_set(ctx,f,i,bound,changed);
 }
 /* A join's private copy exposes its original input to the equation and receives
@@ -94,6 +101,9 @@ static bool source_root_cell(SourceContext *ctx, uint32_t f, uint32_t i, bool *c
     const XrXirInstruction *op = &body->instructions[i];
     uint32_t id = body->parameter_count + i;
     XrXirType common = source_root_operand(ctx,f,source_root_join_origin(ctx,f,op->args[0]));
+    XrXirType current = xr_xir_cell_element(&ctx->types,op->type);
+    if (xr_xir_callable_signature(&ctx->types,current) &&
+        !source_root_join_type(ctx,current,common,&common)) return false;
     for (uint32_t a = 0; a < body->instruction_count; ++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *write = &body->instructions[a];
@@ -113,6 +123,99 @@ static bool source_root_cell(SourceContext *ctx, uint32_t f, uint32_t i, bool *c
     }
     XrXirType result;
     return source_cell_type(ctx,common,&result) && source_root_set(ctx,f,i,result,changed);
+}
+
+static bool source_root_cell_fixed(SourceContext *ctx, uint32_t function, uint32_t value) {
+    const XrXirFunction *body = &ctx->functions[function];
+    const SourceFunction *source = &ctx->bodies[function];
+    if (source->checked_library || !source->root_values) return true;
+    if (value < body->parameter_count)
+        return value >= source->root_capture_count || !source->root_captures[value];
+    uint8_t kind = source->root_values[value - body->parameter_count].kind;
+    return kind == 1 || kind == 3;
+}
+
+static bool source_root_cell_error(SourceContext *ctx, uint32_t function, uint32_t value,
+    XrXirStatus status, const char *message) {
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    SourceFunction *body = &ctx->bodies[function];
+    ctx->function = function; ctx->module = body->module;
+    source_fail(ctx,body->node,status,message);
+    uint32_t parameters = ctx->functions[function].parameter_count;
+    if (value >= parameters && value-parameters < ctx->functions[function].instruction_count && body->debug_points) {
+        XrXirSourceRange range = body->debug_points[value-parameters].range;
+        if (range.line > 0) {
+            ctx->diagnostic.module = range.module;
+            ctx->diagnostic.line = range.line; ctx->diagnostic.column = range.column;
+        }
+    }
+    return false;
+}
+
+static bool source_root_cell_set(SourceContext *ctx, uint32_t function, uint32_t value,
+    XrXirType type, bool *changed) {
+    const XrXirFunction *body = &ctx->functions[function];
+    if (source_root_operand(ctx,function,value) == type) return true;
+    if (source_root_cell_fixed(ctx,function,value))
+        return source_root_cell_error(ctx,function,value,XR_XIR_BAD_TYPE,"shared Cell type conflicts with its fixed input");
+    if (value >= body->parameter_count) return source_root_set(ctx,function,value-body->parameter_count,type,changed);
+    ((XrXirType *)body->parameters)[value] = type; *changed = true;
+    return true;
+}
+
+static bool source_root_cell_write(SourceContext *ctx, uint32_t function, uint32_t instruction, bool *changed) {
+    const XrXirFunction *body = &ctx->functions[function];
+    const XrXirInstruction *write = &body->instructions[instruction];
+    XrXirType cell = source_root_operand(ctx,function,write->args[0]);
+    if (!xr_xir_type_is_cell(&ctx->types,cell)) return true;
+    XrXirType common = xr_xir_cell_element(&ctx->types,cell);
+    if (!xr_xir_callable_signature(&ctx->types,common)) return true;
+    XrXirType value = source_root_operand(ctx,function,source_root_join_origin(ctx,function,write->args[1]));
+    if (!source_root_cell_fixed(ctx,function,write->args[0]) &&
+        !source_root_join_type(ctx,common,value,&common)) return false;
+    XrXirType joined;
+    if (!source_cell_type(ctx,common,&joined) || !source_root_cell_set(ctx,function,write->args[0],joined,changed)) return false;
+    if (!source_root_copy_bound(ctx,function,write->args[1],common,changed))
+        return source_fail(ctx,NULL,ctx->diagnostic.status == XR_XIR_OK ? XR_XIR_BAD_TYPE : ctx->diagnostic.status,
+            "captured Cell write cannot share its callable bound");
+    return true;
+}
+
+/* An inferred Cell and every captured handle share one invariant payload type.
+ * Storage already owns their identity relation; only the advertised callable
+ * bound is joined here, independently of reaching contents or permissions. */
+static bool source_root_cell_identities(SourceContext *ctx, const XrXirEffects *effects, bool *changed) {
+    XirStorageFlowView view = {0};
+    XrXirStatus status = xir_storage_flow_view(xir_effects_prepared_storage(effects),&view);
+    if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"shared Cell identities are unavailable");
+    for (uint32_t e = 0; e < view.identity_count; ++e) {
+        if (ctx->diagnostic.status != XR_XIR_OK) return false;
+        XirStorageIdentity edge = view.identities[e];
+        if (edge.source_function >= ctx->function_count || edge.target_function >= ctx->function_count ||
+            edge.source >= view.functions[edge.source_function].physical_values ||
+            edge.target >= view.functions[edge.target_function].physical_values)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"shared Cell identity left its physical owner");
+        XrXirType left = source_root_operand(ctx,edge.source_function,edge.source);
+        XrXirType right = source_root_operand(ctx,edge.target_function,edge.target);
+        if (!xr_xir_type_is_cell(&ctx->types,left) || !xr_xir_type_is_cell(&ctx->types,right)) continue;
+        XrXirType a = xr_xir_cell_element(&ctx->types,left), b = xr_xir_cell_element(&ctx->types,right);
+        if (!xr_xir_callable_signature(&ctx->types,a) || !xr_xir_callable_signature(&ctx->types,b)) continue;
+        bool fixed_left = source_root_cell_fixed(ctx,edge.source_function,edge.source);
+        bool fixed_right = source_root_cell_fixed(ctx,edge.target_function,edge.target);
+        XrXirType common;
+        if (fixed_left || fixed_right) {
+            common = fixed_left ? a : b;
+            status = xr_xir_compile_callable_weakening(&ctx->compile,&ctx->types,fixed_left ? b : a,common);
+            if (status != XR_XIR_OK) return source_root_cell_error(ctx,
+                fixed_left ? edge.source_function : edge.target_function, fixed_left ? edge.source : edge.target,
+                status,"shared Cell cannot satisfy its fixed callable bound");
+        } else if (!source_root_join_type(ctx,a,b,&common)) return false;
+        XrXirType cell;
+        if (!source_cell_type(ctx,common,&cell) ||
+            !source_root_cell_set(ctx,edge.source_function,edge.source,cell,changed) ||
+            !source_root_cell_set(ctx,edge.target_function,edge.target,cell,changed)) return false;
+    }
+    return true;
 }
 
 /* Only an inferred capture receives a private bottom. Explicit callable

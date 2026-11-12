@@ -1,0 +1,6 @@
+fn leaf() -> i64 { return 7 }
+fn choose(callback: fn() -> i64, condition: bool) -> fn() -> i64 {
+    var alias = leaf
+    if (condition) { alias = callback }
+    return alias
+}

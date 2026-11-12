@@ -123,7 +123,7 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
         SourceExpectedType hint=source_tuple_field_context(ctx,node,expected.present?&context:NULL,i);
         if (!source_plan_expression(ctx,child,hint,&element)) return false;
-        fields[i]=(XrXirCallableParameter){element.type,0};
+        fields[i]=(XrXirCallableParameter){element.type,0,0};
         values[i]=element;
     }
     XrXirType tuple=XR_XIR_UNIT;
@@ -223,7 +223,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     if (!types) return false;
     for (uint32_t f=0;f<count;++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        types[f]=(XrXirCallableParameter){fields[f].type,0};
+        types[f]=(XrXirCallableParameter){fields[f].type,0,0};
     }
     XrXirType tuple;
     return source_hir_tuple_type(ctx,types,count,&tuple)&&source_tuple_construct(ctx,node,tuple,fields,count,context,value);

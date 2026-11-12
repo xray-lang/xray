@@ -1,0 +1,15 @@
+fn leaf() -> i64 { return 7 }
+fn oldCell(callback: fn() -> i64) -> fn() -> i64 {
+    var saved = leaf
+    var done = false
+    while (true) {
+        var slot = leaf
+        if (done) {
+            slot = callback
+            break
+        }
+        saved = fn() -> i64 { return slot() }
+        done = true
+    }
+    return saved
+}

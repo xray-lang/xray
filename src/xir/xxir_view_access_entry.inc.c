@@ -72,7 +72,8 @@ static XrXirStatus view_access_entry_cell(ViewAccess *a,const XrXirViewRootEvent
         !xr_xir_type_is_cell(a->resolver->check.module->types,a->body->parameters[event->root_value])) return XR_XIR_OK;
 
     XrXirCellProofRole role=a->cells->role(a->cells->owner,a->function,event->root_value);
-    *input=role==XR_XIR_CELL_PROOF_SCOPED_REF || role==XR_XIR_CELL_PROOF_LEXICAL_CLEANUP;return XR_XIR_OK;
+    *input=role==XR_XIR_CELL_PROOF_SCOPED_REF || role==XR_XIR_CELL_PROOF_LEXICAL_CLEANUP ||
+        role==XR_XIR_CELL_PROOF_SCOPED_CAPTURE;return XR_XIR_OK;
 }
 static XrXirStatus view_access_entry_regions(ViewAccess *a,const XrXirViewRootEvent *left,
     const XrXirViewRootEvent *right,bool *safe) {

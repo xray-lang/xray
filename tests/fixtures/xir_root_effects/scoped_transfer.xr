@@ -1,0 +1,5 @@
+fn retained(values: Array<fn()>) {}
+fn worker(values: Array<i64>) {}
+fn launch() {
+    scope { go worker([]) }
+}

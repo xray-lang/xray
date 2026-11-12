@@ -23,7 +23,7 @@ var addOne = fn(x: i64) -> i64 { return x + 1 }
 print("twice(addOne, 5) = ${twice(addOne, 5)}")
 
 // === Function composition ===
-fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {
+fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
     return fn(x: i64) -> i64 { return f(g(x)) }
 }
 

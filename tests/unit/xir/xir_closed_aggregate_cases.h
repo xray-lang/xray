@@ -18,8 +18,8 @@ static void closed_optional_shape(const XrXirValue *outer, unsigned state) {
     if (state == 2) { CHECK(text); closed_string(text); }
 }
 static void closed_tuple_nullable(void) {
-    XrXirCallableParameter fields[] = {{XR_XIR_STRING,0},{XR_XIR_STRING,0},{XR_XIR_UNIT,0},
-        {XR_XIR_I64,0},{(XrXirType)257,0},{(XrXirType)257,0},{(XrXirType)257,0}};
+    XrXirCallableParameter fields[] = {{XR_XIR_STRING,0,0},{XR_XIR_STRING,0,0},{XR_XIR_UNIT,0,0},
+        {XR_XIR_I64,0,0},{(XrXirType)257,0,0},{(XrXirType)257,0,0},{(XrXirType)257,0,0}};
     XrXirTypeNode nodes[] = {
         {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
@@ -176,7 +176,7 @@ static void closed_class_publish_before_callback(void) {
     XrXirNominalFieldIdentity field = {{"items",5},XR_XIR_FIELD_MUTABLE};
     XrXirNominalIdentity identity = {{"module",6},{"CallbackBox",11},1,0,&field,1,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}, 0};
     XrXirNominalTable table = {NULL,1,&identity}; XrXirType member = (XrXirType)258;
-    XrXirCallableParameter tuple_fields[] = {{(XrXirType)256,0},{XR_XIR_I64,0}};
+    XrXirCallableParameter tuple_fields[] = {{(XrXirType)256,0,0},{XR_XIR_I64,0,0}};
     XrXirTypeNode nodes[] = {
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=tuple_fields,.parameter_count=2},

@@ -39,6 +39,7 @@ XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
     const XrXirFunction *a=&module->functions[helper],*b=&module->functions[constructor];
     if(identity->module!=declared->module || declared->member_access ||
         !(declared->promises&XR_XIR_FUNCTION_NO_SUSPEND) || a->parameter_count!=b->parameter_count ||
+        a->escaping_parameter_count!=b->escaping_parameter_count ||
         a->consume_parameter_count!=b->consume_parameter_count || a->error_type!=b->error_type ||
         (a->parameter_count && (!a->parameters || !b->parameters)) ||
         (a->consume_parameter_count && (!a->consume_parameters || !b->consume_parameters)) ||
@@ -48,6 +49,8 @@ XR_FUNC XrXirStatus xir_compile_class_stage_signature(const XrXirModule *module,
         if(a->parameters[p]!=b->parameters[p] || xr_xir_type_is_cell(module->types,a->parameters[p]))return XR_XIR_BAD_TYPE;
     for(uint32_t p=0;p<a->consume_parameter_count;++p)
         if(a->consume_parameters[p]!=b->consume_parameters[p])return XR_XIR_BAD_TYPE;
+    for(uint32_t p=0;p<a->escaping_parameter_count;++p)
+        if(a->escaping_parameters[p]!=b->escaping_parameters[p])return XR_XIR_BAD_TYPE;
     const XrXirTypeNode *subject=xr_xir_type_node(module->types,b->result);
     const XrXirTypeNode *tuple=xr_xir_type_node(module->types,a->result);
     if(!subject || subject->kind!=XR_XIR_TYPE_NOMINAL || subject->nominal.declaration!=owner ||

@@ -40,6 +40,8 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations) return XR_XIR_OK;
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
+    if (identity->capture_count > module->functions[index].parameter_count)
+        return XR_XIR_BAD_STRUCTURE;
 
     if (identity->method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
@@ -258,6 +260,19 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     }
     for (uint32_t i = 0; i < functions; ++i) {
         const XrXirFunctionIdentity *identity = &d->functions[i];
+        if (identity->capture_count && !identity->capture_owner) return XR_XIR_BAD_STRUCTURE;
+        if (identity->capture_owner) {
+            if (identity->capture_owner > i || identity->exported || identity->native_callable ||
+                identity->test_role || i == d->entry_function ||
+                (identity->method_kind != XR_XIR_NON_MEMBER && identity->method_kind != XR_XIR_MEMBER_HELPER))
+                return XR_XIR_BAD_STRUCTURE;
+            const XrXirFunctionIdentity *parent = &d->functions[identity->capture_owner - 1];
+            if (identity->module != parent->module || identity->nominal_owner != parent->nominal_owner ||
+                (identity->cleanup_owner && identity->cleanup_owner != identity->capture_owner))
+                return XR_XIR_BAD_STRUCTURE;
+            for (uint32_t m = 0; m < d->module_count; ++m)
+                if (d->modules[m].initializer == i) return XR_XIR_BAD_STRUCTURE;
+        }
         if (identity->cleanup_owner) {
             if (identity->cleanup_owner > i || identity->exported || i == d->entry_function)
                 return XR_XIR_BAD_STRUCTURE;

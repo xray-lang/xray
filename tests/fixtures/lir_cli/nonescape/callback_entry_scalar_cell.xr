@@ -1,0 +1,5 @@
+fn invoke(action: fn() -> i64) -> i64 { return action() }
+fn probe() -> i64 {
+    var value: i64 = 7
+    return invoke(fn() -> i64 { value = value + 1; return value })
+}

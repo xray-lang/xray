@@ -1,4 +1,4 @@
-fn forward(callback: fn() -> i64) -> i64 { return callback() }
-fn apply(callback: fn() -> i64) {
+fn forward(callback: escaping fn() -> i64) -> i64 { return callback() }
+fn apply(callback: escaping fn() -> i64) {
     const limited: nosuspend fn() -> i64 = fn() -> i64 { return forward(callback) }
 }

@@ -86,6 +86,7 @@ typedef struct SourceCallPlan {
     XrHirBodySignature signature;
     uint32_t rest_count, rest_array;
     XrXirType rest_element;
+    bool fixed_arguments;
 } SourceCallPlan;
 /* Variadic READ recipes repeat one already instantiated caller-pool type. */
 static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
@@ -332,7 +333,7 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     arguments[a].value->expected=expected;
     SourceExpressionPlan *previous_argument = ctx->effect_argument;
     /* Function-value calls keep their declared callback boundary. */
-    bool callback = plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
+    bool callback = !plan->fixed_arguments && plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;
@@ -356,7 +357,7 @@ static XrXirStatus source_inference_union(void *owner,const XrXirType *members,u
     if (!source_request_poll(ctx,NULL)) return ctx->diagnostic.status;
     XrXirCallableParameter *parameters=source_alloc(ctx,count,sizeof(*parameters));
     if (!parameters) return ctx->diagnostic.status;
-    for (uint32_t p=0;p<count;++p) parameters[p]=(XrXirCallableParameter){members[p],0};
+    for (uint32_t p=0;p<count;++p) parameters[p]=(XrXirCallableParameter){members[p],0,0};
     bool completed=source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
         .parameters=parameters,.parameter_count=count},output);
     source_retire_array(ctx,parameters);

@@ -1,0 +1,4 @@
+fn worker() -> i64 { return 7 }
+fn suspending() -> i64 { return await go worker() }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { const unused = suspending; return 7 }
+print(limited())

@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -46,7 +47,36 @@ def main() -> None:
         assert child.returncode == expected, (name, child.returncode, child.stdout, child.stderr)
         return child
 
+    def verify_nonescape():
+        source_root = fixtures / "nonescape"
+        accepted = ("local_alias", "conditional_alias", "local_capture", "forward",
+                    "escaping_storage", "escaping_compose", "escaping_compose_import", "ref_replacement", "contextual_keyword",
+                    "borrow_slice", "borrow_ref", "stored_collection_values", "method_values", "requirement_value",
+                    "local_snapshot", "local_overwrite", "generic_function_tuple", "loop_capture_instance",
+                    "local_nested_callback", "nested_cell_overwrite", "local_capture_write", "owned_scalar_capture",
+                    "cfn_generic_collection", "cfn_view_lifetime", "ref_forward", "escaping_ref_write", "generator_owned_cell",
+                    "generator_storable_cell", "hidden_fn_value_chain", "latent_capture_creation", "opaque_callback_pure",
+                    "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls")
+        for name in accepted:
+            checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
+            assert not checked.stdout and not checked.stderr, name
+        for golden in sorted(source_root.glob("*.expect.json")):
+            expected = json.loads(golden.read_text(encoding="utf-8"))
+            name = golden.name.removesuffix(".expect.json")
+            source = source_root / (name + ".xr")
+            destination = work / ("nonescape-" + name + ".c")
+            destination.write_bytes(sentinel)
+            for command in ("check", "run", "build"):
+                options = ["--c-only", "-o", destination] if command == "build" else []
+                rejected = run("nonescape-" + name + "-" + command,
+                               [binary, command, source, *options], 1)
+                first = rejected.stderr.decode("utf-8").splitlines()[0]
+                pattern = re.escape(str(source)) + rf":{expected['line']}:[0-9]+: error: " + re.escape(expected["message"])
+                assert not rejected.stdout and re.fullmatch(pattern, first), (name, command, first, expected)
+            assert destination.read_bytes() == sentinel, name
+
     def verify_effects():
+        verify_nonescape()
         effects = fixtures / "effects"
         for name in ("pure_recursive_import", "pure_import_go", "pure_scoped_go", "generic_stringable", "nosuspend_literal",
                      "root_const", "signature_throws", "signature_generic_try",

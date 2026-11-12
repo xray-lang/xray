@@ -165,6 +165,7 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
         uint32_t item=0;
         if(!source_parameter_item(ctx,node,parameter,parameter_scope,&item))return false;
         if (!source_type(ctx, parameter->type, &parameters[p].type)) return false;
+        parameters[p].escaping=parameter->type->parameter_escaping;
         if (parameters[p].type == XR_XIR_UNIT)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter must be a value type");
     }

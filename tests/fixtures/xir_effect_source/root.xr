@@ -101,7 +101,7 @@ export fn closureUnion(flag:bool)->i64 {
 fn closureHandledCycle<T>(x:T)->i64 {
     try { return closureHandledCycle<Array<T>>([x]) } catch(e) { return 0 }
 }
-fn closureCallback<T>(f:fn(T)->T)->i64 { return closureFail<fn(T)->T>(f) }
+fn closureCallback<T>(f: escaping fn(T)->T)->i64 { return closureFail<fn(T)->T>(f) }
 fn closureIdentity(x:i64)->i64 { return x }
 export fn closureCallbackCaught()->i64 {
     try { return closureCallback<i64>(closureIdentity) }

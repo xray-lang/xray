@@ -1,0 +1,10 @@
+fn leaf() -> i64 { return 7 }
+fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn publish(callback: fn() -> i64) {
+    var slot = leaf
+    const reader = fn() -> i64 { return slot() }
+    const get = fn() -> fn() -> i64 { return reader }
+    const out = get()
+    const saved = retain(out)
+    slot = callback
+}

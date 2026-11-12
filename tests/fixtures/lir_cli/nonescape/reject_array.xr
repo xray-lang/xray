@@ -1,0 +1,3 @@
+fn stash(callback: fn() -> i64) {
+    const handlers = [callback]
+}

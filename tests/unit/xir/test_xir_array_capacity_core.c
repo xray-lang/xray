@@ -24,7 +24,7 @@ static CapacityCore capacity_core_new(uint64_t live_limit, uint64_t requested, u
     XrXirDomainBudgetControls controls = {requested, 65536, work, 65536, 65536};
     CHECK(xr_xir_domain_new_budgeted(live_limit, &controls, &f.domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_domain_new(65536, &f.reading) == XR_XIR_VALUE_OK);
-    XrXirCallableParameter empty_field = {XR_XIR_UNIT, 0};
+    XrXirCallableParameter empty_field = {XR_XIR_UNIT, 0,0};
     XrXirNominalIdentity empty = {.module = {"capacity", 8}, .name = {"Empty", 5},
         .exported = 1, .kind = XR_XIR_NOMINAL_STRUCT, .parent = 0};
     XrXirNominalTable nominals = {.count = 1, .identities = &empty};

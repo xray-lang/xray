@@ -32,7 +32,7 @@ int main(void) {
     XrXirCompileContext c={0};CHECK(xr_compile_resources_new(&limits,&c.resources)==XR_COMPILE_RESOURCE_OK);
     c.limits=xr_xir_compile_default_limits();XrCompileResourceStats initial={0},final={0};
     CHECK(xr_compile_resources_stats(c.resources,&initial)==XR_COMPILE_RESOURCE_OK);
-    const XrXirCallableParameter fields[]={{(XrXirType)259,0},{XR_XIR_I64,0}};
+    const XrXirCallableParameter fields[]={{(XrXirType)259,0,0},{XR_XIR_I64,0,0}};
     const XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)256},

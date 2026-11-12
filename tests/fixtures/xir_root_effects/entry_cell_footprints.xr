@@ -1,0 +1,54 @@
+export fn main() -> i64 { return 0 }
+fn leaf() -> i64 { return 7 }
+fn local(callback: fn() -> i64) -> i64 {
+    var first = leaf
+    var second = leaf
+    const read = fn() -> i64 { return second() }
+    first = read
+    second = callback
+    return first()
+}
+fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn overwrite(callback: fn() -> i64) {
+    var first = leaf
+    var second = leaf
+    const readFirst = fn() -> i64 { return first() }
+    const readSecond = fn() -> i64 { return second() }
+    first = readSecond
+    first = leaf
+    const saved = retain(readFirst)
+    second = callback
+}
+fn generator(callback: escaping fn() -> i64) -> Iterator<i64> {
+    var slot = leaf
+    fn values() -> Iterator<i64> { yield slot() }
+    const iterator = values()
+    slot = callback
+    return iterator
+}
+fn older(callback: fn() -> i64) -> fn() -> i64 {
+    var saved = leaf
+    var done = false
+    while (true) {
+        var slot = leaf
+        if (done) {
+            slot = callback
+            break
+        }
+        saved = fn() -> i64 { return slot() }
+        done = true
+    }
+    return saved
+}
+fn unrelated(callback: fn() -> i64) -> fn() -> i64 {
+    var first = 1
+    var second = 2
+    var counter = 0
+    while (counter < 1) { counter = counter + 1 }
+    return fn() -> i64 { return first + second }
+}
+fn sequential() -> fn() -> i64 {
+    var first = leaf
+    var second = leaf
+    return fn() -> i64 { return first() + second() }
+}

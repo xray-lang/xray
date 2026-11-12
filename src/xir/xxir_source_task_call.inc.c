@@ -106,7 +106,7 @@ static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_
     SourceCallSyntax syntax;
     SourceCallPlan plan={.family=SOURCE_CALL_FUNCTION,.prefix=substitution,.substitution=substitution,
         .function_parameters=function.parameters,.result=function.result,.values=storage.values,
-        .parameter_offset=captures};
+        .parameter_offset=captures,.fixed_arguments=true};
     plan.declaration.function=*target;plan.declaration.callable=callee.type;plan.declaration.callee_value=callee.id;
     if (!source_hir_call_prepare(ctx,call,&plan,count)) return false;
     plan.value_offset=captures;
@@ -159,7 +159,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
         SourceTaskScope *scope=ctx->task_scope;
         if(error!=XR_XIR_NEVER&&scope->mode==XR_SOURCE_SCOPE_ISOLATED)
             return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"isolated scope child error aggregation is not yet admitted");
-        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ},{error,XR_PARAM_READ}};
+        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ,0},{error,XR_PARAM_READ,0}};
         if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
             .parameters=errors,.parameter_count=2},&scope->child_error))return false;
         if(prepared.count==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scoped argument count overflow");

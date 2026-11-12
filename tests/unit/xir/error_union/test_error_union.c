@@ -86,7 +86,7 @@ static void inference_owner_cases(const XrXirCompileContext *context,const XrXir
         if (mode==1) owner.failure=XR_XIR_CANCELLED;else if (mode==2) owner.failure=XR_XIR_OUT_OF_MEMORY;
         XrXirTypeNode *nodes=owned(context,306,sizeof(*nodes));
         memcpy(nodes,types->nodes,(size_t)types->count*sizeof(*nodes));owner.types.nodes=nodes;owner.types.count=306;
-        XrXirCallableParameter parameter={XR_XIR_I64,0};
+        XrXirCallableParameter parameter={XR_XIR_I64,0,0};
         nodes[304]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE,.element=XR_XIR_CONSTRUCTED_TYPE_BASE+302,
             .result=XR_XIR_I64,.parameters=&parameter,.parameter_count=1,.parameter_span=1};
         nodes[305]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE,.element=XR_XIR_CONSTRUCTED_TYPE_BASE+300,
@@ -146,9 +146,9 @@ static void type_cases(void) {
     XrXirErrorUnion prefix={0};
     CHECK(xr_xir_compile_error_union(&context,&types,members+1,299,&prefix)==XR_XIR_OK && prefix.count==299);
     nodes[301]=(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=prefix.members,.parameter_count=299};
-    XrXirCallableParameter generic_members[2]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0},{XR_XIR_TYPE_PARAMETER_BASE,0}};
+    XrXirCallableParameter generic_members[2]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0,0},{XR_XIR_TYPE_PARAMETER_BASE,0,0}};
     nodes[302]=(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=generic_members,.parameter_count=2,.parameter_span=1};
-    XrXirCallableParameter pair[2]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0},{XR_XIR_CONSTRUCTED_TYPE_BASE+1,0}};
+    XrXirCallableParameter pair[2]={{XR_XIR_CONSTRUCTED_TYPE_BASE,0,0},{XR_XIR_CONSTRUCTED_TYPE_BASE+1,0,0}};
     nodes[303]=(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=pair,.parameter_count=2};
     types.count=304;XrXirTypes receiving={.nodes=reversed,.count=301,.nominals=&table};
     uint64_t populated=held(&context);

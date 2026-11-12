@@ -92,7 +92,7 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
         NULL,NULL,NULL,NULL)==XR_XIR_BUDGET && held(context->resources)==baseline);
 }
 static void physical_flags(const XrXirCompileContext *context) {
-    XrXirCallableParameter field={(XrXirType)256,XR_PARAM_READ};
+    XrXirCallableParameter field={(XrXirType)256,XR_PARAM_READ,0};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_MUT_PTR,.element=XR_XIR_U8},
         {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},

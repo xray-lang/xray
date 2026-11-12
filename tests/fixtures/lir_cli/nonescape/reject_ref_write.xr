@@ -1,0 +1,3 @@
+fn replace(callback: fn() -> i64, slot: ref fn() -> i64) {
+    slot = callback
+}

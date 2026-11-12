@@ -61,8 +61,15 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     }
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
-    for (uint32_t p = 0; p < count; ++p)
+    for (uint32_t p = 0; p < count; ++p) {
         if (!source_substitute(ctx, &selected->substitution, function->parameters[p], 0, &parameters[p].type)) return false;
+        parameters[p].mode = xr_xir_declared_parameter_mode(&ctx->types, function->parameters[p],
+            function->consume_parameters, function->consume_parameter_count, p);
+        parameters[p].escaping = xr_xir_function_parameter_escaping(function, p) ||
+            (!xr_xir_callable_signature(&ctx->types, function->parameters[p]) &&
+             xr_xir_callable_signature(&ctx->types, parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types, parameters[p].type));
+    }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
     return source_substitute(ctx, &selected->substitution, function->result, 0, &result) &&
@@ -92,7 +99,8 @@ static bool source_class_method_reference(SourceContext *ctx,AstNode *node,Sourc
     XrXirCallableParameter *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
     if(count&&!parameters)return false;
     for(uint32_t p=0;p<count;++p)parameters[p]=(XrXirCallableParameter){function.parameters[p+1],
-        xr_xir_declared_parameter_mode(&ctx->types,function.parameters[p+1],function.consume_parameters,function.consume_parameter_count,p+1)};
+        xr_xir_declared_parameter_mode(&ctx->types,function.parameters[p+1],function.consume_parameters,function.consume_parameter_count,p+1),
+        xr_xir_function_parameter_escaping(&function,p+1)};
     XrXirType signature;
     if(!source_signature(ctx,parameters,count,function.result,function.error_type,&signature))return false;
     if(ctx->identities[method->index].promises&XR_XIR_FUNCTION_NO_SUSPEND) {
@@ -248,8 +256,15 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     uint32_t count = function->parameter_count - 1;
     XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
-    for (uint32_t p = 0; p < count; ++p)
+    for (uint32_t p = 0; p < count; ++p) {
         if (!source_substitute(ctx, &substitution, function->parameters[p + 1], 0, &parameters[p].type)) return false;
+        parameters[p].mode = xr_xir_declared_parameter_mode(&ctx->types, function->parameters[p + 1],
+            function->consume_parameters, function->consume_parameter_count, p + 1);
+        parameters[p].escaping = xr_xir_function_parameter_escaping(function, p + 1) ||
+            (!xr_xir_callable_signature(&ctx->types, function->parameters[p + 1]) &&
+             xr_xir_callable_signature(&ctx->types, parameters[p].type) &&
+             !xr_xir_type_is_c_callable(&ctx->types, parameters[p].type));
+    }
     XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &result) &&
@@ -329,7 +344,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
                 access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0,
-                method->is_override?XR_XIR_FUNCTION_OVERRIDE:0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
+                method->is_override?XR_XIR_FUNCTION_OVERRIDE:0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0, 0, 0};
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
             if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
@@ -351,7 +366,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             }
             XrXirFunction *function = &ctx->functions[index];
             *function = (XrXirFunction) {method->name, (uint32_t)source_text_size(ctx, method->name), body->parameters,
-                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
+                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL,0,NULL};
             if (!source_type(ctx, method->return_type, &function->result) ||
                 !source_error_clause_type(ctx,node,&method->throws_clause,&function->error_type)) return false;
             for (int i = 0; i < method->param_count; ++i) {

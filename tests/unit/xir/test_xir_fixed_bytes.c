@@ -51,7 +51,7 @@ static void fixed_shapes(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[0]=original;nodes[0].element=XR_XIR_I64;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
-    XrXirCallableParameter fake={XR_XIR_U8,0};nodes[0]=original;nodes[0].parameters=&fake;
+    XrXirCallableParameter fake={XR_XIR_U8,0,0};nodes[0]=original;nodes[0].parameters=&fake;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);
     nodes[0]=original;nodes[0].parameter_span=1;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_BAD_TYPE);

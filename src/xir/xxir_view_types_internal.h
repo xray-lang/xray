@@ -46,9 +46,14 @@ XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileC
  * This grants neither root/NLL permissions nor executable move semantics. */
 XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirDiagnostic *diagnostic);
-/* Requires ordinary structure and type admission. Return origins, affine
- * ownership, liveness and boundary types precede numeric effect construction.
- * Access conflict admission follows construction of the semantic owner. */
+struct XrXirEffects;
+/* Solves availability with point-specific callable loans after private semantic
+ * collection. Ordinary type, SSA and origin admission precedes this consumer. */
+XR_FUNC XrXirStatus xir_compile_view_affine_loans_verified(const XrXirCompileContext *,
+    const XrXirModule *, const struct XrXirEffects *, XrCompileRequestControl *, XrXirDiagnostic *);
+/* Requires ordinary structure and type admission. Return origins and boundary
+ * types precede private numeric collection. Availability, live intervals and
+ * access obligations consume that owner before any checked publication. */
 XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileContext *context, XirEffectInput input, XrXirDiagnostic *diagnostic);
 /* Complete ordinary Module and Construction checks precede the exact replay
  * of every callback reference and use; a signature alone grants no scope. */

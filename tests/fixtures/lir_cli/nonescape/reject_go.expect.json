@@ -1,0 +1,4 @@
+{
+  "line": 3,
+  "message": "E0398: parameter 'job' cannot escape through a task or generator. Declare 'job: escaping fn(...)'"
+}

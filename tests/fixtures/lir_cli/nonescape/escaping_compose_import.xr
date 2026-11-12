@@ -1,0 +1,3 @@
+import {compose} from "./escaping_compose_library"
+fn leaf(value: i64) -> i64 { return value + 1 }
+fn make() -> fn(i64) -> i64 { return compose(leaf, leaf) }

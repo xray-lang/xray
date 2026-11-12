@@ -93,7 +93,7 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
             break;
         if(input->family==XR_HIR_CALL_ARRAY&&!p) {
             /* This formal is an owned shape, not a provisional Unit type. */
-            parameters[p]=(XrXirCallableParameter){(XrXirType)UINT32_MAX,XR_PARAM_READ};continue;
+            parameters[p]=(XrXirCallableParameter){(XrXirType)UINT32_MAX,XR_PARAM_READ,0};continue;
         }
         if(callable_parameters) {
             parameters[p]=callable_parameters[p];
@@ -105,7 +105,9 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
             XrParamMode mode=input->family==XR_HIR_CALL_FUNCTION||input->family==XR_HIR_CALL_CONSTRUCTOR?
                 (XrParamMode)xr_xir_declared_parameter_mode(body->types,type,function_declaration.consume_parameters,
                     function_declaration.consume_parameter_count,p):XR_PARAM_READ;
-            parameters[p]=(XrXirCallableParameter){type,mode};
+            parameters[p]=(XrXirCallableParameter){type,mode,
+                (input->family==XR_HIR_CALL_FUNCTION||input->family==XR_HIR_CALL_CONSTRUCTOR) &&
+                xr_xir_function_parameter_escaping(&function_declaration,p)};
             if(mode==XR_PARAM_READ&&xr_xir_type_is_cell(body->types,type))
                 status=input->family==XR_HIR_CALL_VARIADIC_READ?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
         }
@@ -179,7 +181,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     if(scope_status!=XR_XIR_OK)return scope_status;
     uint32_t parameter=declaration.declaration.family==XR_HIR_CALL_VARIADIC_READ?0:input->formal;
     if(!receiver&&parameter>=declaration.declaration.count)return XR_XIR_BAD_STRUCTURE;
-    XrXirCallableParameter formal=receiver?(XrXirCallableParameter){declaration.declaration.receiver_type,XR_PARAM_READ}:declaration.parameters[parameter];
+    XrXirCallableParameter formal=receiver?(XrXirCallableParameter){declaration.declaration.receiver_type,XR_PARAM_READ,0}:declaration.parameters[parameter];
     bool callback=declaration.declaration.family==XR_HIR_CALL_ARRAY&&!parameter;
     if(callback&&input->kind==XR_HIR_CALL_VALUE&&declaration.callback_received)return XR_XIR_BAD_STRUCTURE;
     if((input->kind==XR_HIR_CALL_VALUE||input->kind==XR_HIR_CALL_EXACT||input->kind==XR_HIR_CALL_FINAL)&&

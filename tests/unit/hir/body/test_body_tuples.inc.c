@@ -4,8 +4,8 @@ static void tuple_receivers(void) {
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};XrCompileResources *resources=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial={0},before={0},after={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
-    XrXirCallableParameter mixed[]={{XR_XIR_I64,0},{XR_XIR_UNIT,0},{XR_XIR_STRING,0}};
-    XrXirCallableParameter units[]={{XR_XIR_UNIT,0},{XR_XIR_UNIT,0}};
+    XrXirCallableParameter mixed[]={{XR_XIR_I64,0,0},{XR_XIR_UNIT,0,0},{XR_XIR_STRING,0,0}};
+    XrXirCallableParameter units[]={{XR_XIR_UNIT,0,0},{XR_XIR_UNIT,0,0}};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TUPLE,.parameters=mixed,.parameter_count=3},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=units,.parameter_count=2}};
     XrXirTypes types={.nodes=nodes,.count=2},foreign=types;

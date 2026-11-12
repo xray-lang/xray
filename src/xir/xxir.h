@@ -59,6 +59,10 @@ typedef struct XrXirTarget {
     uint32_t abi_version;
 } XrXirTarget;
 
+/* SSA value transport within one function. The receiving analysis owns the
+ * array; synchronous consumers retain only ordinal dependencies. */
+typedef struct XrXirValueFlow { uint32_t source, target; } XrXirValueFlow;
+
 typedef enum XrXirLayoutContext {
     XR_XIR_LAYOUT_STORAGE = 1,
     XR_XIR_LAYOUT_SSA,
@@ -125,6 +129,9 @@ typedef struct XrXirFunction {
     /* Sorted parameter ordinals declared to consume an owned argument. */
     uint32_t consume_parameter_count;
     const uint32_t *consume_parameters;
+    /* Sorted ordinals whose function values may outlive the current invocation. */
+    uint32_t escaping_parameter_count;
+    const uint32_t *escaping_parameters;
 } XrXirFunction;
 
 #define XR_XIR_CONSTRAINT_SENDABLE 1u
@@ -159,7 +166,25 @@ static inline uint32_t xr_xir_binder_kind(const XrXirGeneric *record, uint32_t p
         record->parameter_kinds[parameter] : XR_XIR_BINDER_TYPE;
 }
 
-typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
+typedef struct XrXirCallableParameter {
+    XrXirType type;
+    uint32_t mode;
+    uint32_t escaping;
+} XrXirCallableParameter;
+
+static inline bool xr_xir_parameter_escaping(const uint32_t *ordinals, uint32_t count, uint32_t parameter) {
+    uint32_t low = 0, high = count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2;
+        if (ordinals[middle] < parameter) low = middle + 1;
+        else high = middle;
+    }
+    return low < count && ordinals[low] == parameter;
+}
+
+static inline bool xr_xir_function_parameter_escaping(const XrXirFunction *function, uint32_t parameter) {
+    return xr_xir_parameter_escaping(function->escaping_parameters, function->escaping_parameter_count, parameter);
+}
 
 #define XR_XIR_CALLABLE_NO_SUSPEND 1u
 #define XR_XIR_CALLABLE_REST 16u
@@ -255,7 +280,8 @@ typedef enum XrXirDiagnosticReason {
     XR_XIR_DIAGNOSTIC_NONE, XR_XIR_DIAGNOSTIC_CLEANUP_THROW, XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND,
     XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ, XR_XIR_DIAGNOSTIC_READONLY_WRITE,
     XR_XIR_DIAGNOSTIC_NO_SUSPEND,
-    XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED, XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED
+    XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED, XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED,
+    XR_XIR_DIAGNOSTIC_TASK_SENDABLE, XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE
 } XrXirDiagnosticReason;
 
 typedef struct XrXirDiagnostic {

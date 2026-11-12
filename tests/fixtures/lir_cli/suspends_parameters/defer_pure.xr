@@ -1,0 +1,3 @@
+fn apply(callback: fn()) { callback() }
+fn test() { defer { apply(fn() { print(7) }) } }
+test()

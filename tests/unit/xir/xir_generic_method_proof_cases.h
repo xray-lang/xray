@@ -26,7 +26,7 @@ static void generic_method_proof_fixture(GenericMethodProofFixture *g) {
     g->arguments[1] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1);
     g->own.markers = XR_XIR_CONSTRAINT_SENDABLE;
     f->method.own_parameter_count = 1; f->method.constraints = &g->own;
-    g->parameter = (XrXirCallableParameter){g->arguments[0],0};
+    g->parameter = (XrXirCallableParameter){g->arguments[0],0,0};
     f->nodes[0].parameters = &g->parameter; f->nodes[0].parameter_count = 1;
     f->nodes[0].result = g->arguments[0]; f->nodes[0].parameter_span = 1;
     g->function_constraints[0] = f->bound; g->function_constraints[1] = g->own;
@@ -105,7 +105,7 @@ static void generic_method_proof_alpha(void) {
     GenericMethodProofFixture g; generic_method_proof_fixture(&g);
     XrXirTypeNode nodes[5]; memcpy(nodes,g.base.nodes,sizeof(g.base.nodes));
     nodes[4] = nodes[0];
-    XrXirCallableParameter other_parameter = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0};
+    XrXirCallableParameter other_parameter = {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),0,0};
     nodes[4].parameters = &other_parameter; nodes[4].result = other_parameter.type;
     nodes[4].parameter_span = 2;
     XrXirConstraint empty = {0}, own[2] = {g.own,{0}};

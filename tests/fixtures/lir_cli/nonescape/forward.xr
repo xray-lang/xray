@@ -1,0 +1,2 @@
+fn call(callback: fn() -> i64) -> i64 { return callback() }
+fn relay(callback: fn() -> i64) -> i64 { return call(callback) }

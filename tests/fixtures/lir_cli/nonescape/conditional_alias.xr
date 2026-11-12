@@ -1,0 +1,7 @@
+fn choose(flag: bool, left: fn() -> i64, right: fn() -> i64) -> i64 {
+    const selected = flag ? left : right
+    return selected()
+}
+fn first() -> i64 { return 7 }
+fn second() -> i64 { return 9 }
+print(choose(true, first, second))

@@ -36,18 +36,18 @@ static void generic_method_packet_cases(void) {
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     /* Complete literal method rows locate their own binders, without relying
      * on a historical whole-packet identity or an unrelated trailer size. */
-    uint8_t map[39]={0},copy[40]={0},signature[32]={0};
+    uint8_t map[39]={0},copy[40]={0},signature[36]={0};
     put32(map,3);memcpy(map+4,"map",3);put32(map+7,XR_XIR_CONSTRUCTED_TYPE_BASE);
     put32(map+15,1);put32(map+19,XR_XIR_CONSTRAINT_SENDABLE);put32(map+23,1);
     put32(map+31,1);put32(map+35,XR_XIR_TYPE_PARAMETER_BASE);
     put32(copy,4);memcpy(copy+4,"copy",4);put32(copy+8,XR_XIR_CONSTRUCTED_TYPE_BASE);
     put32(copy+16,1);put32(copy+24,1);put32(copy+32,1);put32(copy+36,XR_XIR_TYPE_PARAMETER_BASE);
     put32(signature,XR_XIR_TYPE_CALLABLE);put32(signature+4,2);put32(signature+8,1);
-    put32(signature+12,XR_XIR_TYPE_PARAMETER_BASE+1);put32(signature+20,XR_XIR_TYPE_PARAMETER_BASE+1);
-    put32(signature+24,XR_XIR_NEVER);put32(signature+28,XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+    put32(signature+12,XR_XIR_TYPE_PARAMETER_BASE+1);put32(signature+24,XR_XIR_TYPE_PARAMETER_BASE+1);
+    put32(signature+28,XR_XIR_NEVER);put32(signature+32,XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     size_t map_own=generic_method_packet_find(&packet,map,sizeof(map))+15;
     size_t copy_own=generic_method_packet_find(&packet,copy,sizeof(copy))+16;
-    size_t flags=generic_method_packet_find(&packet,signature,sizeof(signature))+28;
+    size_t flags=generic_method_packet_find(&packet,signature,sizeof(signature))+32;
     uint8_t *original=xr_malloc(packet.length);CHECK(original);memcpy(original,packet.bytes,packet.length);
     for(uint32_t flag=0;flag<2;++flag) {
         memcpy(packet.bytes,original,packet.length);put32(packet.bytes+flags,flag);digest_packet(&packet);

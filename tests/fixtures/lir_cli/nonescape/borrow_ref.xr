@@ -1,0 +1,4 @@
+fn call(callback: fn() -> i64) -> i64 { return callback() }
+fn increment(value: ref i64) -> i64 {
+    return call(fn() -> i64 { value = value + 1; return value })
+}

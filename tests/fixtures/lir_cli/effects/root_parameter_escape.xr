@@ -1,5 +1,5 @@
 const value=7
 fn leaf()->i64{return value}
-fn wrap(callback:fn()->i64)->fn()->i64{return fn()->i64{return callback()}}
+fn wrap(callback: escaping fn()->i64)->fn()->i64{return fn()->i64{return callback()}}
 fn worker()->i64{const nested=wrap(leaf);return nested()}
 const task=go worker()

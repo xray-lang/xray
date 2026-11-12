@@ -1,0 +1,17 @@
+fn leaf() -> i64 { return 7 }
+fn saved(callback: fn() -> i64) -> fn() -> i64 {
+    var other = leaf
+    var result = leaf
+    var done = false
+    while (true) {
+        var slot = leaf
+        if (done) {
+            slot = callback
+            other = callback
+            break
+        }
+        result = fn() -> i64 { return slot() + other() }
+        done = true
+    }
+    return result
+}

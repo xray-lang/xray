@@ -1,0 +1,10 @@
+fn leaf(value: i64) -> i64 { return value + 1 }
+fn identity<T>(value: T) -> T { return value }
+fn pair<T>(value: T) -> (T, T) { return (value, value) }
+fn copied() {
+    const callback: CFn<fn(i64) -> i64> = leaf
+    const saved = identity(callback)
+    const copies = pair(saved)
+    const values: Array<CFn<fn(i64) -> i64>> = [callback]
+    const mapped = values.map((value) -> value)
+}

@@ -56,10 +56,10 @@ static void root_capture(RootFixture *f,uint32_t value) {
     root_op(f,0,(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=ROOT_CLOSURE,.args={start,1},.immediate=2});
 }
 static void root_fixture(RootFixture *f) {
-    *f=(RootFixture){0};f->array=ROOT_ARRAY;f->ref=(XrXirCallableParameter){ROOT_CELL,XR_PARAM_REF};
-    f->echo=(XrXirCallableParameter){ROOT_SHARED,XR_PARAM_READ};
-    f->fields[0]=(XrXirCallableParameter){XR_XIR_UNIT,XR_PARAM_READ};f->fields[1]=f->echo;
-    f->fields[2]=(XrXirCallableParameter){ROOT_OPTIONAL,XR_PARAM_READ};
+    *f=(RootFixture){0};f->array=ROOT_ARRAY;f->ref=(XrXirCallableParameter){ROOT_CELL,XR_PARAM_REF,0};
+    f->echo=(XrXirCallableParameter){ROOT_SHARED,XR_PARAM_READ,0};
+    f->fields[0]=(XrXirCallableParameter){XR_XIR_UNIT,XR_PARAM_READ,0};f->fields[1]=f->echo;
+    f->fields[2]=(XrXirCallableParameter){ROOT_OPTIONAL,XR_PARAM_READ,0};
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=ROOT_ARRAY};
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};

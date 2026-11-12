@@ -92,6 +92,8 @@ static void source_core_dispose(SourceContext *ctx,SourceContext *parent) {
     xr_hir_items_free(ctx->items);ctx->items=NULL;
     xr_hir_body_end(ctx->typed_body);
     xr_hir_body_free(ctx->typed_body);ctx->typed_body=NULL;
+    xr_xir_compile_effects_free(ctx->semantic_prepare);ctx->semantic_prepare=NULL;
+    xr_hir_escape_builder_free(ctx->escape_builder);ctx->escape_builder=NULL;
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     ctx->construction=NULL;
@@ -230,6 +232,8 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
         original->parameter_count,sizeof(*original->parameters));
     function->consume_parameters=source_library_bytes(ctx,original->consume_parameters,
         original->consume_parameter_count,sizeof(*original->consume_parameters));
+    function->escaping_parameters=source_library_bytes(ctx,original->escaping_parameters,
+        original->escaping_parameter_count,sizeof(*original->escaping_parameters));
     function->blocks=source_library_bytes(ctx,original->blocks,
         original->block_count,sizeof(*original->blocks));
     function->operands=source_library_bytes(ctx,original->operands,
@@ -240,6 +244,7 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
     if (!function->name || !function->blocks || !instructions ||
         (original->parameter_count && !function->parameters) ||
         (original->consume_parameter_count && !function->consume_parameters) ||
+        (original->escaping_parameter_count && !function->escaping_parameters) ||
         (original->operand_count && !function->operands)) return false;
     for (uint32_t p=0;p<function->parameter_count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

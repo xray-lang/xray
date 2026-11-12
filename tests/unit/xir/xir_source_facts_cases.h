@@ -48,8 +48,8 @@ static void source_facts_case_contracts(XrXirArtifact *source) {
         source_facts_case_refuse(source);contracts[f].formula.constant_mask=mask;
         for (uint32_t p=0;p<contracts[f].parameter_count;++p) {
             XrXirEffectParameter *record=(XrXirEffectParameter *)&contracts[f].parameters[p];
-            uint32_t uses=record->uses;record->uses^=1;
-            source_facts_case_refuse(source);record->uses=uses;++parameters;
+            uint32_t kind=record->kind;record->kind^=1;
+            source_facts_case_refuse(source);record->kind=kind;++parameters;
         }
         for (uint32_t t=0;t<contracts[f].formula.term_count;++t) {
             XrXirRootTerm *record=(XrXirRootTerm *)&contracts[f].formula.terms[t];

@@ -105,7 +105,7 @@ order: 019
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
-| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、闭包捕获、跨执行边界） |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、逃逸闭包捕获、跨执行边界） |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 旧分析器的生成器 defer 禁令；当前 Checked 生成器已由 §3.16.3 的登记清理和关闭规则替代，不使用此禁令 |
@@ -120,6 +120,7 @@ order: 019
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | 读取已移动或可能已移动的绑定 |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | move 的能力或约束不满足 |
+| `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | 不逃逸函数参数或捕获它的闭包跨调用保存、返回或转交 |
 
 ### 18.3 运行时
 
@@ -308,7 +309,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
-| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, escaping closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | Legacy analyzer prohibition on generator defer; current Checked generators use the registered-cleanup and close rules of §3.16.3 instead |
@@ -323,6 +324,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
+| `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | A non-escaping function parameter or capturing closure crosses its invocation |
 
 ### 18.3 Runtime
 

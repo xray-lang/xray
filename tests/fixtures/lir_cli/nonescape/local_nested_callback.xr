@@ -1,0 +1,9 @@
+fn leaf() -> i64 { return 7 }
+fn local(callback: fn() -> i64) -> i64 {
+    var first = leaf
+    var second = leaf
+    const read = fn() -> i64 { return second() }
+    first = read
+    second = callback
+    return first()
+}

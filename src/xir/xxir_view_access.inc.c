@@ -556,7 +556,13 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         bool cell=xr_xir_type_is_cell(types,type),object=xr_xir_type_is_class(types,type);
         XrXirPlaceKind place=xr_xir_place_kind(a->body,value);XrXirOperandRole role=xr_xir_operand_role(op->op,p);
         if (borrowed) {
-            if (!call && !pointer) return XR_XIR_UNRESOLVED;
+            bool capture = false;
+            if (op->op == XR_XIR_FUNCTION_REF && a->cells && a->cells->effects) {
+                XrXirStatus status = xir_effects_value_restricted(a->resolver->check.context,
+                    a->cells->effects, a->function, result, &capture);
+                if (status != XR_XIR_OK) return status;
+            }
+            if (!call && !pointer && !capture) return XR_XIR_UNRESOLVED;
             const XrXirTypeNode *node=xr_xir_type_node(types,type);
             bool write=(borrowed&XR_XIR_VIEW_MUTABLE)!=0 || (node && node->kind==XR_XIR_TYPE_MUT_PTR &&
                 (call || ((op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY) && p==0)));

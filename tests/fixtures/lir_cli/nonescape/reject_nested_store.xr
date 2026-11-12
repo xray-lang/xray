@@ -1,0 +1,5 @@
+fn call(callback: fn()) { callback() }
+fn register(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
+fn outer(callback: fn() -> i64) {
+    call(fn() { const saved = register(callback) })
+}

@@ -6,6 +6,7 @@
  *
  * xxir_local_errors_cfg.inc.c - Function-local monotone error value propagation
  */
+#include "xxir_instruction_flow.h"
 static XrXirStatus local_error_enqueue(LocalErrorCfg *cfg,uint32_t block) {
     if (block>=cfg->head.block_count) return XR_XIR_BAD_STRUCTURE;
     if (cfg->queued[block]) return XR_XIR_OK;
@@ -34,33 +35,30 @@ static XrXirStatus local_error_edge(LocalErrorCfg *cfg,uint32_t to,const XrXirIn
     if (!cfg->reachable[to]) { changed=true;cfg->reachable[to]=1; }
     return changed?local_error_enqueue(cfg,to):XR_XIR_OK;
 }
+static XrXirStatus local_error_successor(void *opaque, const XirInstructionFlowEdge *edge) {
+    LocalErrorCfg *cfg = opaque;
+    if (edge->kind == XIR_INSTRUCTION_FLOW_NEXT) return XR_XIR_OK;
+    const XrXirInstruction *op = &cfg->operations[edge->source];
+    if (edge->kind == XIR_INSTRUCTION_FLOW_TARGET && edge->ordinal &&
+        (op->op == XR_XIR_ITERATOR_CLOSE ||
+         (op->op != XR_XIR_BRANCH && cfg->calls[edge->source] == XR_XIR_NEVER))) return XR_XIR_OK;
+    return local_error_edge(cfg, edge->target_block,
+        edge->kind == XIR_INSTRUCTION_FLOW_TARGET && op->op == XR_XIR_BRANCH ? op : NULL,
+        !edge->ordinal);
+}
 static XrXirStatus local_error_block(LocalErrorCfg *cfg,uint32_t b) {
     cfg->block=b;const XrXirBlock *block=&cfg->head.blocks[b];
     if (!block->count || block->first>=cfg->head.instruction_count ||
         block->count>cfg->head.instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
     if (cfg->stride) memcpy(cfg->row,cfg->states+(size_t)b*cfg->stride,cfg->stride*sizeof(uint64_t));
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
-        if (block->panic) {
-            XrXirStatus status=local_error_edge(cfg,block->panic,NULL,true);if (status!=XR_XIR_OK) return status;
-        }
+        XrXirStatus flow = xr_xir_instruction_flow_visit(&cfg->head, i, b,
+            XIR_INSTRUCTION_FLOW_PANIC, local_error_successor, cfg);
+        if (flow != XR_XIR_OK) return flow;
         XrXirStatus status=local_error_instruction(cfg,i);if (status!=XR_XIR_OK) return status;
     }
-    uint32_t last=block->first+block->count-1;const XrXirInstruction *end=&cfg->operations[last];
-    if (end->op==XR_XIR_JUMP || end->op==XR_XIR_CLEANUP_REGISTER || end->op==XR_XIR_CLEANUP_LEAVE ||
-        end->op==XR_XIR_CLEANUP_ERROR || end->op==XR_XIR_ITERATOR_CLOSE || end->op==XR_XIR_TASK_AWAIT_RESULT)
-        return local_error_edge(cfg,end->targets[0],NULL,true);
-    if (end->op==XR_XIR_BRANCH) {
-        XrXirStatus status=local_error_edge(cfg,end->targets[0],end,true);
-        return status==XR_XIR_OK?local_error_edge(cfg,end->targets[1],end,false):status;
-    }
-    if (end->op==XR_XIR_INVOKE || end->op==XR_XIR_INVOKE_DEFAULT || end->op==XR_XIR_INVOKE_INDIRECT ||
-        end->op==XR_XIR_SCOPE_JOIN || end->op==XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT ||
-        end->op==XR_XIR_ITERATOR_NEXT || end->op==XR_XIR_ITERATOR_NTH) {
-        XrXirStatus status=local_error_edge(cfg,end->targets[0],NULL,true);
-        return status==XR_XIR_OK && cfg->calls[last]!=XR_XIR_NEVER?
-            local_error_edge(cfg,end->targets[1],NULL,true):status;
-    }
-    return XR_XIR_OK;
+    return xr_xir_instruction_flow_visit(&cfg->head, block->first + block->count - 1, b,
+        XIR_INSTRUCTION_FLOW_NORMAL, local_error_successor, cfg);
 }
 static XrXirStatus local_error_solve(LocalErrorCfg *cfg) {
     for (uint32_t p=0;p<cfg->head.parameter_count;++p) {

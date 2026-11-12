@@ -25,7 +25,9 @@
 #define XR_XIR_CELL_ACCESS_UNKNOWN 2u
 typedef enum XrXirCellProofRole {
     XR_XIR_CELL_PROOF_UNKNOWN, XR_XIR_CELL_PROOF_OWNED_CAPTURE,
-    XR_XIR_CELL_PROOF_SCOPED_REF, XR_XIR_CELL_PROOF_LEXICAL_CLEANUP
+    XR_XIR_CELL_PROOF_SCOPED_REF, XR_XIR_CELL_PROOF_LEXICAL_CLEANUP,
+    /* A physical environment input retains its symbolic borrow owner. */
+    XR_XIR_CELL_PROOF_SCOPED_CAPTURE
 } XrXirCellProofRole;
 typedef struct XrXirCellProvenance XrXirCellProvenance;
 /* Readable current storage precedes semantic Cell proof comparison. */

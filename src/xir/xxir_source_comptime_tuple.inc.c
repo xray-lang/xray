@@ -165,10 +165,10 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             SourceValue *payloads=source_alloc(ctx,count,sizeof(*payloads));
             if (count && (!fields || !payloads)) { ok=false;break; }
             if (array) {
-                for (uint32_t i=0;i<count;++i) fields[i]=(XrXirCallableParameter){element,0};
+                for (uint32_t i=0;i<count;++i) fields[i]=(XrXirCallableParameter){element,0,0};
             } else if (nominal) {
-                for (uint32_t i=0;i<count;++i) { if (!((ctx)->diagnostic.status == XR_XIR_OK)) { ok=false;goto done; }fields[i]=(XrXirCallableParameter){tuple->nominal.fields[begin+i],0}; }
-            } else if (nullable) fields[0]=(XrXirCallableParameter){tuple->element,0};
+                for (uint32_t i=0;i<count;++i) { if (!((ctx)->diagnostic.status == XR_XIR_OK)) { ok=false;goto done; }fields[i]=(XrXirCallableParameter){tuple->nominal.fields[begin+i],0,0}; }
+            } else if (nullable) fields[0]=(XrXirCallableParameter){tuple->element,0,0};
             else {
                 XrHirTupleView shape={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,target,ctx->request,&shape,NULL);
                 if(status!=XR_XIR_OK) {ok=source_fail(ctx,node,status,"comptime Tuple shape receiving failed");break;}

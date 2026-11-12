@@ -190,6 +190,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
+| `escaping` | 参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存 |
 
 ### 1.6 字面量
 
@@ -682,6 +683,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
+| `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
 
 ### 1.6 Literals
 

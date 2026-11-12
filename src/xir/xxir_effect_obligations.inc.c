@@ -40,7 +40,7 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
         if (!access && !templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
-            xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &owned);
+            xir_effects_infer_lifetimes_input(remaining,input,&owned,diagnostic);
         if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match_input(remaining,
             input, prepared ? prepared : owned);
         if (status==XR_XIR_OK && access)
@@ -74,9 +74,9 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
             }
         }
     }
-    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xir_effects_infer_lifetimes_input(remaining,input,output,diagnostic) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xir_effects_infer_lifetimes_input(remaining,input,&effects,diagnostic);
     const XrXirEffects *facts = prepared ? prepared : effects;
     if (status == XR_XIR_OK) status = xir_effects_parameters_match_input(remaining, input, facts);
     if (status == XR_XIR_OK && access)
@@ -103,11 +103,13 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
 
         bool cleanup = module->declarations->functions[f].cleanup_owner != 0;
         if (!cleanup && !(module->declarations->functions[f].promises & XR_XIR_FUNCTION_NO_SUSPEND)) continue;
-        if (cleanup && xr_xir_effects_task_creation(facts, f) != XR_XIR_EFFECT_NONE) {
+        XrXirEffect task=XR_XIR_EFFECT_UNKNOWN;
+        XrXirEffectFacts fact_read=xir_effects_declaration_read(remaining,facts,f,&task);
+        if (fact_read.status!=XR_XIR_OK) return fact_read.status;
+        if (cleanup && task != XR_XIR_EFFECT_NONE) {
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
             status = XR_XIR_BAD_TYPE; break;
         }
-        XrXirEffectFacts fact_read=xr_xir_effects_read(facts, f);
         const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
         if (!fact) { status=fact_read.status;break; }
         if ((cleanup && fact->throws == XR_XIR_EFFECT_MAY) || fact->suspend != XR_XIR_EFFECT_NONE) {
@@ -116,7 +118,7 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
                 fact->throws == XR_XIR_EFFECT_MAY ? XR_XIR_DIAGNOSTIC_CLEANUP_THROW : XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
             status = XR_XIR_BAD_TYPE;
             if (diagnostic->reason != XR_XIR_DIAGNOSTIC_CLEANUP_THROW) {
-                XrXirEffectFacts witness_read=xr_xir_effects_read(facts, f);
+                XrXirEffectFacts witness_read=fact_read;
                 const XrXirEffectWitness *witness=(witness_read.status==XR_XIR_OK && witness_read.suspend_witness.cause!=0?&witness_read.suspend_witness:NULL);
                 if (!witness) { status = XR_XIR_BAD_STRUCTURE; break; }
                 diagnostic->instruction = witness->instruction;

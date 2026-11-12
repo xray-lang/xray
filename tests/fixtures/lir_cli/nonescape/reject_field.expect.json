@@ -1,0 +1,4 @@
+{
+  "line": 5,
+  "message": "E0398: parameter 'handler' cannot escape through field or collection storage. Declare 'handler: escaping fn(...)'"
+}

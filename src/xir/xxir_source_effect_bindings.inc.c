@@ -179,8 +179,10 @@ static bool source_effect_prepare(SourceContext *ctx) {
         contract->parameter_count = function->parameter_count; contract->parameters = body->effect_parameters;
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
             body->effect_parameters[p] = (XrXirEffectParameter){
-                xr_xir_callable_signature(&ctx->types,function->parameters[p]) ?
-                    XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED,0};
+                xr_xir_callable_signature(&ctx->types,function->parameters[p]) &&
+                    !xr_xir_type_is_c_callable(&ctx->types,function->parameters[p]) &&
+                    !xr_xir_function_parameter_escaping(function,p) ?
+                    XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED};
         }
         if (!source_effect_records(ctx,f,true) || !source_effect_records(ctx,f,false)) return false;
     }
@@ -189,19 +191,24 @@ static bool source_effect_prepare(SourceContext *ctx) {
 
 static bool source_effect_fixed_arguments(SourceContext *ctx,
     const XrXirEffects *effects, uint32_t f, bool *changed) {
-    const XrXirFunctionEffectContract *contract = &ctx->effect_evidence->contracts[f];
+    XrXirFunctionEffectContract *contract = &ctx->effect_evidence->contracts[f];
     const XrXirFunction *function = &ctx->functions[f];
+    uint32_t retained=0;
     for (uint32_t b = 0; b < contract->binding_count; ++b) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirEffectCallBinding binding = contract->bindings[b];
         if (binding.family != XR_XIR_EFFECT_BINDING_DIRECT &&
-            binding.family != XR_XIR_EFFECT_BINDING_CAPTURE) continue;
+            binding.family != XR_XIR_EFFECT_BINDING_CAPTURE) {
+            ctx->bodies[f].effect_bindings[retained++]=binding;continue;
+        }
         const XrXirInstruction *call = &function->instructions[binding.instruction];
         const XrXirFunctionEffectContract *callee = xir_effects_contract(effects,(uint32_t)call->immediate);
         if (!callee || binding.parameter >= callee->parameter_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"callback lost its prepared callee parameter");
         if (xir_effect_parameter_identity(ctx->functions[call->immediate].parameters[binding.parameter],
-            (XrXirEffectParameterKind)callee->parameters[binding.parameter].kind)) continue;
+            (XrXirEffectParameterKind)callee->parameters[binding.parameter].kind)) {
+            ctx->bodies[f].effect_bindings[retained++]=binding;continue;
+        }
         uint32_t i = binding.value - function->parameter_count;
         SourceRootValue *root = &ctx->bodies[f].root_values[i];
         XrXirInstruction *copy = (XrXirInstruction *)function->instructions + i;
@@ -212,8 +219,11 @@ static bool source_effect_fixed_arguments(SourceContext *ctx,
             &ctx->types,actual,root->declared);
         if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"fixed callback requires its declared bound");
         copy->op = XR_XIR_FUNCTION_WEAKEN; copy->type = root->declared; root->kind = 1;
+        if (!source_effect_value_refresh(ctx,f,i)) return false;
         *changed = true;
     }
+    contract->binding_count=retained;
+    contract->bindings=retained?ctx->bodies[f].effect_bindings:NULL;
     return true;
 }
 
@@ -227,8 +237,7 @@ static bool source_effect_library_match(SourceContext *ctx,
     if (!derived || derived->parameter_count != stored->parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"imported effect parameters changed shape");
     for (uint32_t p = 0; p < derived->parameter_count; ++p) {
-        if (derived->parameters[p].kind != stored->parameters[p].kind ||
-            derived->parameters[p].uses != stored->parameters[p].uses)
+        if (derived->parameters[p].kind != stored->parameters[p].kind)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"imported effect parameter facts do not match");
     }
     if (derived->formula.constant_mask != stored->formula.constant_mask ||
@@ -255,8 +264,7 @@ static bool source_effect_sync(SourceContext *ctx, const XrXirEffects *effects, 
         if (!derived || derived->parameter_count != stored->parameter_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"prepared effect owner changed its physical parameters");
         for (uint32_t p = 0; p < derived->parameter_count; ++p) {
-            if (body->effect_parameters[p].kind != derived->parameters[p].kind ||
-                body->effect_parameters[p].uses != derived->parameters[p].uses) *changed = true;
+            if (body->effect_parameters[p].kind != derived->parameters[p].kind) *changed = true;
             body->effect_parameters[p] = derived->parameters[p];
         }
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

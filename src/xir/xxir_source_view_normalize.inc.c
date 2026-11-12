@@ -274,9 +274,63 @@ static XrXirStatus source_view_checked_copy(void *owner,const XrXirModule *modul
         return XR_XIR_BAD_STRUCTURE;
     *preserved=true;return XR_XIR_OK;
 }
+
+static bool source_view_effect_contract(SourceContext *ctx,uint32_t f,const XirViewNormalization *n,
+    SourceFunction *body,XrXirFunctionEffectContract *contract) {
+    const XirViewNormalizedFunction *map=&n->functions[f];
+    if (!map->instructions) return true;
+    if (body->library_effect)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"checked library effect coordinates changed");
+    uint32_t parameters=ctx->functions[f].parameter_count;
+    uint64_t capacity=(uint64_t)parameters+n->bodies[f].instruction_count;
+    if (capacity>UINT32_MAX || contract->formula.term_count>capacity ||
+        contract->value_count!=body->effect_value_capacity || contract->binding_count>body->effect_binding_capacity ||
+        contract->values!=(contract->value_count?body->effect_values:NULL) ||
+        contract->bindings!=(contract->binding_count?body->effect_bindings:NULL))
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source effect lifetime inventory changed shape");
+    body->effect_terms=capacity?source_alloc(ctx,(size_t)capacity,sizeof(*body->effect_terms)):NULL;
+    body->effect_values=source_view_copy(ctx,contract->values,contract->value_count,sizeof(*body->effect_values));
+    body->effect_bindings=source_view_copy(ctx,contract->bindings,contract->binding_count,sizeof(*body->effect_bindings));
+    if ((capacity&&!body->effect_terms) || (contract->value_count&&!body->effect_values) ||
+        (contract->binding_count&&!body->effect_bindings)) return false;
+    body->effect_binding_capacity=contract->binding_count;
+    for (uint32_t t=0;t<contract->formula.term_count;++t) {
+        body->effect_terms[t]=contract->formula.terms[t];
+        if (body->effect_terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+            !source_view_instruction(ctx,map,parameters,&body->effect_terms[t].index)) return false;
+    }
+    for (uint32_t v=0;v<contract->value_count;++v)
+        if (!source_view_instruction(ctx,map,parameters,&body->effect_values[v].instruction)) return false;
+    for (uint32_t b=0;b<contract->binding_count;++b)
+        if (!source_view_instruction(ctx,map,parameters,&body->effect_bindings[b].instruction) ||
+            !source_view_value(ctx,map,parameters,&body->effect_bindings[b].value)) return false;
+    contract->formula.terms=contract->formula.term_count?body->effect_terms:NULL;
+    contract->values=contract->value_count?body->effect_values:NULL;
+    contract->bindings=contract->binding_count?body->effect_bindings:NULL;
+    return true;
+}
+
+static bool source_view_effects(SourceContext *ctx,const XirViewNormalization *n,
+    SourceFunction *bodies,XrXirProvenance **output) {
+    *output=NULL;
+    if (!ctx->effect_evidence) return true;
+    if (ctx->effect_evidence->contract_count!=ctx->function_count || !ctx->effect_evidence->contracts)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source effect lifetime owner changed shape");
+    XrXirProvenance *evidence=source_view_copy(ctx,ctx->effect_evidence,1,sizeof(*evidence));
+    if (!evidence) return false;
+    evidence->contracts=source_view_copy(ctx,ctx->effect_evidence->contracts,
+        ctx->function_count,sizeof(*evidence->contracts));
+    if (!evidence->contracts) return false;
+    for (uint32_t f=0;f<ctx->function_count;++f)
+        if (!source_request_poll(ctx,NULL) ||
+            !source_view_effect_contract(ctx,f,n,bodies+f,evidence->contracts+f)) return false;
+    *output=evidence;
+    return true;
+}
+
 static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     XirViewNormalization *n=NULL;
-    XirViewNormalizationSource source={module,ctx,source_view_checked_copy};
+    XirViewNormalizationSource source={module,ctx,source_view_checked_copy,ctx->semantic_prepare,ctx->request};
     XrXirStatus status=xir_compile_view_normalize_source_verified(&ctx->compile,module,&source,&n,diagnostic);
     if (status!=XR_XIR_OK) return status;
     XrXirConstruction *construction=NULL;
@@ -300,25 +354,39 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
         bodies[f].operand_count=bodies[f].operand_capacity=functions[f].operand_count;
     }
     SourceRootQuery *queries=source_view_queries(ctx,n);if (ctx->diagnostic.status!=XR_XIR_OK) goto source_failure;
-    XrXirModule replacement=*module;replacement.functions=functions;
+    XrXirProvenance *effect_evidence=NULL;
+    if (!source_view_effects(ctx,n,bodies,&effect_evidence)) goto source_failure;
+    XrXirModule replacement=*module;replacement.functions=functions;replacement.provenance=effect_evidence;
     if (!source_view_construction(ctx,n,&construction)) goto source_failure;
+#if XR_XIR_PARANOID
     status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
         if (bodies[f].initialization_regions)
             status=xr_xir_compile_initialization_check(&ctx->compile,&replacement,f,bodies[f].initialization_regions,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&replacement,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
+#endif
+    if (status==XR_XIR_OK) status=xir_effects_relocate_prepared(&ctx->compile,
+        ctx->semantic_prepare,&replacement,n,ctx->request);
+    if (status==XR_XIR_OK) status=xir_effects_accept_view_normalization(&ctx->compile,
+        ctx->semantic_prepare,&replacement,n,ctx->request);
+#if XR_XIR_PARANOID
+    if (status==XR_XIR_OK) {
+        XirViewLiveRequest request={.diagnostic=diagnostic,.control=ctx->request};
+        status=xir_compile_view_liveness_loans_verified(&ctx->compile,&replacement,ctx->semantic_prepare,&request);
+    }
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
+#endif
     if (status==XR_XIR_OK) {
         xr_xir_compile_construction_free(ctx->construction);
         ctx->view_normalized=true;
         ctx->construction=construction;construction=NULL;
+        ctx->effect_evidence=effect_evidence;
         ctx->functions=functions;ctx->bodies=bodies;ctx->root_queries=queries;ctx->remaining_instructions-=(uint32_t)added;
     }
     xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return status;
 source_failure:
-    xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);return ctx->diagnostic.status;
+    xr_xir_compile_construction_free(construction);xir_compile_view_normalization_free(n);
+    return ctx->diagnostic.status==XR_XIR_OK?status:ctx->diagnostic.status;
 }
 
 /* The numeric effects belong to this exact relocated SSA generation. Access
@@ -326,7 +394,11 @@ source_failure:
 static XrXirStatus source_view_admit(void *owner,const XrXirModule *module,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
     SourceContext *ctx=owner;
-    if (!ctx->view_normalized) return XR_XIR_OK;
+    if (!ctx->view_normalized) {
+        bool needed=false;
+        if (!source_view_preparation_needed(ctx,&needed)) return ctx->diagnostic.status;
+        if (!needed) return XR_XIR_OK;
+    }
     XrXirStatus status=xir_compile_view_cell_access_verified_input(&ctx->compile,
         (XirEffectInput){module,ctx->construction,ctx->request},effects,diagnostic);
     if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,module,diagnostic,status);

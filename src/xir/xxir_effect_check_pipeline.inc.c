@@ -10,6 +10,10 @@
  *   Source refinement and specialization consume one numeric ROOT owner.
  *   No native frame or scheduling plan participates in semantic acceptance.
  */
+#include "xxir_view_loan_internal.h"
+#include "xxir_view_liveness_internal.h"
+#include "xxir_view_types_internal.h"
+#include "xxir_view_access_internal.h"
 
 static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     XirEffectInput input, XrXirEffects *effects) {
@@ -22,41 +26,44 @@ static XrXirStatus effect_checked_parameters(const XrXirCompileContext *memory,
     effects->outcomes_work.owns_formulas = true;
     bool variable = module->provenance != NULL;
     for (uint32_t f = 0; f < effects->count; ++f) {
-        uint32_t count = module->functions[f].parameter_count;
+        const XrXirFunction *function = &module->functions[f];
+        uint32_t count = function->parameter_count;
         contracts[f].parameter_count = count;
         XrXirEffectParameter *parameters = count ? xir_compile_calloc(memory, count,
             sizeof(*parameters), &status) : NULL;
         if (count && !parameters) return status;
         contracts[f].parameters = parameters;
         for (uint32_t p = 0; p < count; ++p)
-            parameters[p].kind = variable && xr_xir_type_is_callable(module->types,
-                module->functions[f].parameters[p]) ? XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED;
+            parameters[p].kind = variable && xr_xir_type_is_callable(module->types, function->parameters[p]) &&
+                !xr_xir_type_is_c_callable(module->types, function->parameters[p]) &&
+                !xr_xir_function_parameter_escaping(function, p) ?
+                XR_XIR_EFFECT_PARAMETER_VARIABLE : XR_XIR_EFFECT_PARAMETER_FIXED;
     }
-    if (!variable) return XR_XIR_OK;
-    EffectParameterGraph graph = {.work = memory, .module = *module, .control = input.control};
-    status = effect_parameter_graph_prepare(&graph, contracts);
-    if (status == XR_XIR_OK) status = effect_parameter_graph_collect(&graph);
-    if (status == XR_XIR_OK) status = effect_parameter_graph_finish(&graph, contracts);
-    effect_parameter_graph_free(&graph);
     return status;
 }
+
+static XrXirStatus effect_checked_bound_cause(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output);
 
 static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrXirEffects *effects) {
     EffectFinalOutcomes *records = &effects->outcomes_work;
     EffectCheckedRoots *roots = effects->checked_roots;
     XrXirStatus status = XR_XIR_OK;
-    records->root = xir_compile_calloc(memory, effects->count, sizeof(*records->root), &status);
-    records->root_witnesses = xir_compile_calloc(memory, effects->count, sizeof(*records->root_witnesses), &status);
-    records->unresolved_witnesses = xir_compile_calloc(memory, effects->count,
+    if (!records->root) records->root = xir_compile_calloc(memory, effects->count, sizeof(*records->root), &status);
+    if (!records->root_witnesses) records->root_witnesses = xir_compile_calloc(memory, effects->count, sizeof(*records->root_witnesses), &status);
+    if (!records->unresolved_witnesses) records->unresolved_witnesses = xir_compile_calloc(memory, effects->count,
         sizeof(*records->unresolved_witnesses), &status);
-    records->go_safe = xir_compile_calloc(memory, effects->count, sizeof(*records->go_safe), &status);
+    if (!records->go_safe) records->go_safe = xir_compile_calloc(memory, effects->count, sizeof(*records->go_safe), &status);
     if (!records->root || !records->root_witnesses || !records->unresolved_witnesses || !records->go_safe) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {
         uint32_t node = roots->function[f].root;
         uint8_t mask = roots->node[node].closed;
         records->root[f] = (XrXirRootEffects){!!(mask & 1), !!(mask & 2)};
         records->go_safe[f] = mask || roots->node[node].worker_blocked ? XR_XIR_BAD_TYPE : XR_XIR_OK;
+        records->root_witnesses[f] = records->unresolved_witnesses[f] = (XrXirRootEffectWitness){0};
         XrXirRootFormula *formula = &records->contracts[f].formula;
+        xr_compile_resources_free((void *)formula->terms);
+        *formula = (XrXirRootFormula){0};
         status = effect_checked_root_formula(memory, roots, f, false, formula);
         if (status == XR_XIR_UNRESOLVED) {
             /* The owning summary retains the symbolic requirement. Its
@@ -69,6 +76,8 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
             if (!(mask & (1u << bit))) continue;
             EffectCheckCause cause = {0};
             status = effect_checked_first_cause(roots, node, NULL, 0, bit != 0, &cause);
+            if (status == XR_XIR_UNRESOLVED && !roots->node[node].deferred)
+                status = effect_checked_bound_cause(memory, roots, node, bit != 0, &cause);
             if (status == XR_XIR_UNRESOLVED) {
                 uint32_t instruction = UINT32_MAX;
                 for (uint32_t t = 0; t < formula->term_count; ++t)
@@ -85,6 +94,31 @@ static XrXirStatus effect_checked_project(const XrXirCompileContext *memory, XrX
             else records->root_witnesses[f] = cause.witness;
         }
     }
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, uint32_t value, bool *output) {
+    if (!output || !effects || !effects->checked_roots || function >= effects->count ||
+        !xir_effects_context_matches(context, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckFunction *row = &effects->checked_roots->function[function];
+    if (value >= row->values) return XR_XIR_BAD_STRUCTURE;
+    *output = effects->checked_roots->node[row->first + value].restricted;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_view_loan_facts(const XrXirCompileContext *context,
+    const XrXirEffects *effects, XirViewLoanFacts *output) {
+    if (!output || !effects || !effects->checked_roots ||
+        !xir_effects_context_matches(context, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    if (!roots->storage || roots->restrictions.view.function_count != effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    XirViewLoanFacts view = {.restrictions = roots->restrictions.view, .execution = roots};
+    XrXirStatus status = xir_storage_flow_view(roots->storage, &view.storage);
+    if (status != XR_XIR_OK) return status;
+    if (view.storage.function_count != effects->count) return XR_XIR_BAD_STRUCTURE;
+    *output = view;
     return XR_XIR_OK;
 }
 
@@ -118,28 +152,6 @@ static XrXirStatus effect_checked_reference_current(const XrXirCompileContext *c
     XrXirOp op=module->functions[function].instructions[instruction].op;
     if (op!=XR_XIR_FUNCTION_REF && op!=XR_XIR_CLASS_METHOD_REF) return XR_XIR_BAD_STRUCTURE;
     return effect_checked_reference_read(context,effects,function,instruction,output);
-}
-
-static XrXirStatus effect_checked_control_targets(void *owner, XrXirType receiver,
-    uint32_t slot, XirClassMethodVisitor visit, void *data) {
-    const EffectCheckedRoots *roots = owner;
-    if (!roots || !visit || !roots->dispatch_index_capacity) return XR_XIR_BAD_STRUCTURE;
-    uint32_t mask = roots->dispatch_index_capacity - 1;
-    uint32_t at = effect_check_dispatch_hash(receiver, slot) & mask;
-    for (uint32_t probe = 0; probe < roots->dispatch_index_capacity; ++probe) {
-        uint32_t index = roots->dispatch_index[at];
-        if (!index) return XR_XIR_BAD_STRUCTURE;
-        EffectCheckDispatch row = roots->dispatch[index - 1];
-        if (row.receiver == receiver && row.slot == slot) {
-            for (uint32_t t = 0; t < row.count; ++t) {
-                XrXirStatus status = visit(data, &roots->dispatch_target[row.first + t]);
-                if (status != XR_XIR_OK) return status;
-            }
-            return XR_XIR_OK;
-        }
-        at = (at + 1) & mask;
-    }
-    return XR_XIR_BAD_STRUCTURE;
 }
 
 XR_FUNC XrXirStatus xir_effects_spawn_read(const XrXirCompileContext *context,
@@ -213,6 +225,7 @@ static XrXirStatus effect_checked_trace_next(EffectCheckTraceWalk *walk,
         return XR_XIR_OK;
     }
     for (uint32_t a = roots->node[node].aliases; a != UINT32_MAX; a = roots->alias[a].next) {
+        if (!roots->alias[a].root) continue;
         uint32_t source = roots->alias[a].source;
         if ((roots->node[source].closed & wanted) && !walk->visited[source]) { *next = source; return XR_XIR_OK; }
     }
@@ -247,6 +260,34 @@ static XrXirStatus effect_checked_trace_next(EffectCheckTraceWalk *walk,
         return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;
+}
+
+/* A hidden capture can obtain its closed bit from an actual outer binding
+ * after its local symbolic Cell term was discharged. Read that same numeric
+ * relation used by full traces without turning it into a constant effect. */
+static XrXirStatus effect_checked_bound_cause(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, uint32_t node, bool unresolved, EffectCheckCause *output) {
+    XrXirStatus status = XR_XIR_OK;
+    EffectCheckTraceWalk walk = {.roots = roots};
+    walk.visited = xir_compile_calloc(memory, roots->nodes, sizeof(*walk.visited), &status);
+    if (!walk.visited) return status;
+    uint32_t function = roots->function[roots->node[node].function].declaration;
+    status = XR_XIR_BAD_STRUCTURE;
+    while (node != UINT32_MAX && node < roots->nodes && !walk.visited[node]) {
+        walk.visited[node] = 1;
+        uint32_t next = UINT32_MAX;
+        XrXirRootEffectWitness witness = {0};
+        status = effect_checked_trace_next(&walk, node, unresolved, &next, &witness);
+        if (status != XR_XIR_OK) break;
+        if (witness.cause) {
+            *output = (EffectCheckCause){.function = function, .witness = witness};
+            break;
+        }
+        node = next;
+        status = XR_XIR_BAD_STRUCTURE;
+    }
+    xr_compile_resources_free(walk.visited);
+    return status;
 }
 
 static XrXirStatus effect_checked_trace_domain(EffectCheckTraceWalk *walk, uint32_t node, uint32_t bit) {
@@ -306,30 +347,270 @@ static XrXirStatus effect_checked_trace_copy(const XrXirCompileContext *context,
     return status;
 }
 
-static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
-    XirEffectInput input, const XrXirRootRefiner *refiner, EffectControlSummary *control,
-    XrXirEffects **output) {
+static uint8_t effect_checked_suspend_mask(const EffectCheckedRoots *roots, uint32_t node) {
+    const EffectCheckFunction *function = &roots->function[roots->node[node].function];
+    const uint64_t *bits = effect_check_suspend_bits(roots, node);
+    uint8_t mask = (uint8_t)(bits[0] & 3u);
+    for (uint64_t p = 0; p < (uint64_t)function->parameters * 2; ++p) {
+        if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+        uint32_t parameter = (uint32_t)(p % function->parameters);
+        uint32_t source = p < function->parameters ? function->first + parameter : function->contents + parameter;
+        mask |= roots->node[source].suspend_bound;
+    }
+    return mask;
+}
+
+static XrXirStatus effect_checked_control_project(const XrXirCompileContext *memory,
+    const EffectCheckedRoots *roots, EffectControlSummary **output) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = XR_XIR_OK;
+    EffectControlSummary *summary = xir_compile_calloc(memory, 1, sizeof(*summary), &status);
+    if (!summary) return status;
+    summary->resources = memory->resources;
+    summary->functions = roots->templates;
+    summary->facts = xir_compile_calloc(memory, summary->functions, sizeof(*summary->facts), &status);
+    summary->causes = xir_compile_calloc(memory, summary->functions, sizeof(*summary->causes), &status);
+    summary->task_creation = xir_compile_calloc(memory, summary->functions, sizeof(*summary->task_creation), &status);
+    for (uint32_t f = 0; status == XR_XIR_OK && f < summary->functions; ++f) {
+        const EffectCheckFunction *function = &roots->function[f];
+        uint32_t node = function->root;
+        uint8_t mask = effect_checked_suspend_mask(roots, node);
+        summary->facts[f] = (XrXirFunctionEffects){mask & 2 ? XR_XIR_EFFECT_MAY :
+            mask & 1 ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE, (XrXirEffect)function->throws};
+        summary->task_creation[f] = roots->node[node].task_creation ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE;
+        if (!mask) continue;
+        uint32_t bit = mask & 2 ? 1 : 0;
+        const EffectCheckNode *reason = &roots->node[node];
+        XrXirEffectWitness *witness = &summary->causes[f];
+        witness->callee = UINT32_MAX;
+        witness->instruction = UINT32_MAX;
+        witness->distance = reason->suspend_distance[bit];
+        if (!(effect_check_suspend_bits(roots, node)[0] & (1u << bit))) {
+            witness->cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
+            witness->distance = 0;
+            continue;
+        }
+        uint32_t current = node;
+        for (uint32_t step = 0; step < roots->nodes; ++step) {
+            reason = &roots->node[current];
+            uint32_t call = reason->suspend_call[bit];
+            if (call != UINT32_MAX) {
+                witness->cause = XR_XIR_EFFECT_CAUSE_CALL;
+                witness->instruction = roots->call[call].instruction;
+                witness->callee = roots->function[roots->node[roots->call[call].target].function].declaration;
+                break;
+            }
+            uint32_t next = reason->suspend_reason[bit];
+            if (next == current) {
+                witness->cause = bit ? XR_XIR_EFFECT_CAUSE_SUSPEND : XR_XIR_EFFECT_CAUSE_INDIRECT;
+                witness->instruction = reason->suspend_instruction[bit];
+                break;
+            }
+            if (next >= roots->nodes) { status = XR_XIR_BAD_STRUCTURE; break; }
+            current = next;
+        }
+        if (!witness->cause) status = XR_XIR_BAD_STRUCTURE;
+    }
+    if (status != XR_XIR_OK) { xir_effect_control_free(summary); return status; }
+    *output = summary;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
+    uint32_t function, XirSuspendCauseVisitor visit, void *context) {
+    if (!effects || !effect_roots_read(effects)->control_summary || function >= effects->count || !visit)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    uint32_t node = roots->function[function].root;
+    uint8_t mask = effect_checked_suspend_mask(roots, node);
+    if (!mask) return XR_XIR_OK;
+    uint32_t bit = mask & 2 ? 1 : 0;
+    const uint64_t *bits = effect_check_suspend_bits(roots, node);
+    if (!(bits[0] & (1u << bit))) {
+        const EffectCheckFunction *body = &roots->function[function];
+        for (uint64_t p = 0; p < (uint64_t)body->parameters * 2; ++p) {
+            if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+            uint32_t parameter = (uint32_t)(p % body->parameters);
+            uint32_t source = p < body->parameters ? body->first + parameter : body->contents + parameter;
+            if (!(roots->node[source].suspend_bound & (1u << bit))) continue;
+            XirSuspendCauseStep step = {function, UINT32_MAX, function, parameter, true, true, false};
+            return visit(context, &step);
+        }
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    for (uint32_t count = 0; count < roots->nodes; ++count) {
+        const EffectCheckNode *reason = &roots->node[node];
+        uint32_t current = roots->function[reason->function].declaration;
+        uint32_t call_index = reason->suspend_call[bit];
+        uint32_t next = reason->suspend_reason[bit];
+        if (call_index != UINT32_MAX) {
+            if (call_index >= roots->calls) return XR_XIR_BAD_STRUCTURE;
+            const EffectCheckCall *call = &roots->call[call_index];
+            uint32_t callee = roots->function[roots->node[call->target].function].declaration;
+            XirSuspendCauseStep step = {current, call->instruction, callee,
+                reason->suspend_parameter[bit], next == node, reason->suspend_parameter[bit] != UINT32_MAX, false};
+            XrXirStatus status = visit(context, &step);
+            if (status != XR_XIR_OK || next == node) return status;
+        } else if (next == node) {
+            XirSuspendCauseStep step = {current, reason->suspend_instruction[bit], UINT32_MAX,
+                UINT32_MAX, true, false, bit != 0};
+            return visit(context, &step);
+        }
+        if (next >= roots->nodes) return XR_XIR_BAD_STRUCTURE;
+        node = next;
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}
+
+XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext *memory,
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     if (!xir_compile_context_valid(memory) || !input.module || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = XR_XIR_OK;
+    XrXirStatus status = effect_input_shape(memory, input);
+    if (status != XR_XIR_OK) return status;
     XrXirEffects *effects = xir_compile_calloc(memory, 1, sizeof(*effects), &status);
     if (!effects) return status;
     atomic_init(&effects->references, 1);
     effects->resources = memory->resources;
     effects->count = input.module->function_count;
     effects->outcomes_owner = xir_compile_calloc(memory, 1, sizeof(*effects->outcomes_owner), &status);
-    if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
     if (status == XR_XIR_OK) status = effect_checked_parameters(memory, input, effects);
-    if (status == XR_XIR_OK && refiner && refiner->prepare)
-        status = refiner->prepare(refiner->context, effects);
+    if (status == XR_XIR_OK && refiner && refiner->begin)
+        status = refiner->begin(refiner->context, effects);
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
-        effects->outcomes_work.contracts, input.control, &effects->checked_roots);
-    if (status == XR_XIR_OK && refiner && refiner->admit) {
-        XrXirDiagnostic diagnostic={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-        status=refiner->admit(refiner->context,input.module,effects,&diagnostic);
+        effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
+    if (status == XR_XIR_OK && refiner && refiner->prepare) {
+        XirRestrictionReceiver receiver = {effects->checked_roots, effect_check_restrictions_receive};
+        status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, &receiver);
     }
+    if (status != XR_XIR_OK) {
+        xr_xir_compile_effects_free(effects);
+        return status;
+    }
+    *output = effects;
+    return XR_XIR_OK;
+}
+
+XR_FUNC const XirExecutionOwner *xir_effects_prepared_execution(const XrXirEffects *effects) {
+    return effects && effects->outcomes_owner && !effects->final_outcomes ? effects->checked_roots : NULL;
+}
+
+XR_FUNC XirStorageFlow *xir_effects_prepared_storage(const XrXirEffects *effects) {
+    const EffectCheckedRoots *roots = xir_effects_prepared_execution(effects);
+    return roots ? roots->storage : NULL;
+}
+
+#include "xxir_effect_refinement.inc.c"
+
+XR_FUNC XrXirStatus xir_effects_defer_lifetime(const XrXirCompileContext *memory,
+    XrXirEffects *effects, const XrXirDiagnostic *diagnostic) {
+    if (!diagnostic || diagnostic->status != XR_XIR_UNRESOLVED ||
+        !xir_effects_prepared_execution(effects) ||
+        !xir_effects_context_matches(memory, effects, effects->count)) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic *pending = &effects->checked_roots->restrictions.view.pending;
+    if (pending->status == XR_XIR_OK) *pending = *diagnostic;
+    return XR_XIR_OK;
+}
+
+/* Declaration diagnostics borrow the sole closed constructor before its final
+ * ownership move. Public queries still require successful publication. */
+XR_FUNC XrXirEffectFacts xir_effects_declaration_read(const XrXirCompileContext *memory,
+    const XrXirEffects *effects, uint32_t function, XrXirEffect *task_creation) {
+    XrXirEffectFacts result = {.status=XR_XIR_BAD_STRUCTURE};
+    if (!effects || !xir_effects_context_matches(memory,effects,effects->count) || function>=effects->count)
+        return result;
+    const EffectFinalOutcomes *records=effect_roots_read(effects);
+    if (!records->control_summary || !records->root || !records->witnesses || !records->root_witnesses ||
+        !records->unresolved_witnesses || !records->task_creation) return result;
+    result.status=XR_XIR_OK; result.control=records->functions[function]; result.root=records->root[function];
+    result.suspend_witness=records->witnesses[function]; result.root_witness=records->root_witnesses[function];
+    result.unresolved_witness=records->unresolved_witnesses[function];
+    if (task_creation) *task_creation=records->task_creation[function];
+    return result;
+}
+
+static XrXirStatus effect_checked_task_transfers(const XrXirCompileContext *memory,
+    const XrXirModule *module, const EffectCheckedRoots *roots, XrCompileRequestControl *control,
+    XrXirDiagnostic *diagnostic) {
+    uint32_t progress=0;
+    for (uint32_t c=0;c<roots->calls;++c) {
+        XrXirStatus status=xir_receive_step(control,&progress);
+        if (status!=XR_XIR_OK) return status;
+        EffectCheckCall call=roots->call[c];
+        uint32_t caller=roots->node[call.output].function;
+        if (call.protocol!=8 || caller>=roots->templates) continue;
+        uint32_t callee=roots->function[roots->node[call.target].function].declaration;
+        status=xir_compile_task_transfer_verified(memory,module,callee);
+        if (status!=XR_XIR_OK) {
+            if (diagnostic) *diagnostic=(XrXirDiagnostic){status,caller,
+                roots->node[call.output].block,call.instruction,
+                status==XR_XIR_BAD_TYPE ? XR_XIR_DIAGNOSTIC_TASK_SENDABLE : XR_XIR_DIAGNOSTIC_NONE};
+            return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *memory,
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **pending, XrXirEffects **output,
+    XrXirDiagnostic *diagnostic) {
+    if (!pending || !*pending) return XR_XIR_BAD_STRUCTURE;
+    bool aliased = pending == output;
+    XrXirEffects *effects = *pending;
+    *pending = NULL;
+    XrXirStatus status = !output || aliased || *output ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    if (status == XR_XIR_OK && (!input.module || !xir_effects_context_matches(memory, effects, input.module->function_count) ||
+        !effects->outcomes_owner || effects->input_facts || !effects->checked_roots || effects->final_outcomes))
+        status = XR_XIR_BAD_STRUCTURE;
+    if (status == XR_XIR_OK && effects->checked_roots->storage) {
+        XirStorageFlowView storage = {0};
+        status = xir_storage_flow_seal(effects->checked_roots->storage, &storage);
+        if (status == XR_XIR_OK) status = xir_execution_refresh_storage(effects->checked_roots);
+        uint32_t calls = effects->checked_roots->calls;
+        EffectCheckBuild links = {.memory = memory, .roots = effects->checked_roots, .control = input.control};
+        for (uint32_t p = 0; status == XR_XIR_OK && p < effects->checked_roots->pending_count; ++p)
+            if (effects->checked_roots->pending[p].kind == EFFECT_CHECK_HIGHER_ORDER &&
+                !effect_check_link_higher_order(&links, &effects->checked_roots->pending[p])) status = links.status;
+        if (status == XR_XIR_OK && calls != effects->checked_roots->calls) status = XR_XIR_UNRESOLVED;
+    }
+    if (status == XR_XIR_OK) status = effect_input_facts_new(memory, input, &effects->input_facts);
+    if (status == XR_XIR_OK) {
+        status = xir_compile_view_affine_loans_verified(memory,input.module,effects,input.control,diagnostic);
+        if (status == XR_XIR_UNRESOLVED) {
+            XrXirDiagnostic location=diagnostic ? *diagnostic :
+                (XrXirDiagnostic){XR_XIR_UNRESOLVED,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            location.status=XR_XIR_UNRESOLVED;
+            status=xir_effects_defer_lifetime(memory,effects,&location);
+        }
+    }
+    if (status == XR_XIR_OK && !effects->checked_roots->liveness_checked) {
+        XirViewLiveRequest request={.diagnostic=diagnostic,.control=input.control};
+        status=xir_compile_view_liveness_loans_verified(memory,input.module,effects,&request);
+        if (status==XR_XIR_OK) effects->checked_roots->liveness_checked=true;
+        if (status==XR_XIR_UNRESOLVED) {
+            XrXirDiagnostic location=diagnostic ? *diagnostic :
+                (XrXirDiagnostic){XR_XIR_UNRESOLVED,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            location.status=XR_XIR_UNRESOLVED;
+            status=xir_effects_defer_lifetime(memory,effects,&location);
+        }
+    }
+    EffectCheckBuild build = {.memory = memory, .module = input.module,
+        .roots = effects->checked_roots, .control = input.control};
+    if (status == XR_XIR_OK) status = effect_check_effect_projection(&build);
+    if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
+    if (status == XR_XIR_OK) status = effect_check_close(&build);
+    if (status==XR_XIR_OK && (!refiner || !refiner->admit) &&
+        effects->checked_roots->restrictions.view.pending.status!=XR_XIR_OK)
+        status=xir_compile_view_cell_access_verified_input(memory,input,effects,diagnostic);
+    if (status == XR_XIR_OK && refiner && refiner->admit) {
+        XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=refiner->admit(refiner->context,input.module,effects,&location);
+        if (status!=XR_XIR_OK && diagnostic) *diagnostic=location;
+    }
+    if (status == XR_XIR_OK)
+        status=effect_checked_task_transfers(memory,input.module,effects->checked_roots,input.control,diagnostic);
     if (status == XR_XIR_OK) status = effect_checked_project(memory, effects);
-    if (status == XR_XIR_OK && refiner) {
+    if (status == XR_XIR_OK && refiner && refiner->update) {
         bool changed = false;
         status = refiner->update(refiner->context, effects, &changed);
         if (status == XR_XIR_OK && XR_XIR_PARANOID && changed) {
@@ -339,22 +620,40 @@ static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
         }
     }
     EffectFinalOutcomes *records = &effects->outcomes_work;
-    EffectSummaryDispatchSource dispatch = {effects->checked_roots, effect_checked_control_targets};
-    if (status == XR_XIR_OK) status = control ?
-        xir_effect_control_retain(memory, control, &records->control_summary) :
-        effect_control_summary_build_from(memory, input.module, input.control, &dispatch, &records->control_summary);
-    if (status == XR_XIR_OK && control && XR_XIR_PARANOID)
-        status = effect_control_summary_recheck(memory, input.module, control);
+    if (status == XR_XIR_OK) status = effect_checked_control_project(memory,
+        effects->checked_roots, &records->control_summary);
     if (status == XR_XIR_OK) {
         records->functions = records->control_summary->facts;
         records->witnesses = records->control_summary->causes;
         records->task_creation = records->control_summary->task_creation;
         status = xir_compile_local_errors_verify(memory, input.module, NULL);
+        if (status==XR_XIR_OK) effects->local_errors_checked=true;
     }
+    if (status == XR_XIR_OK && effects->checked_roots->restrictions.view.pending.status != XR_XIR_OK) {
+        XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=xir_compile_check_effect_declarations(memory,input,effects,&location);
+        if (status==XR_XIR_BAD_TYPE && refiner && refiner->explain)
+            refiner->explain(refiner->context,input.module,effects,&location);
+        if (status==XR_XIR_OK) {status=XR_XIR_UNRESOLVED; location=effects->checked_roots->restrictions.view.pending;}
+        if (diagnostic) *diagnostic=location;
+    }
+    if (status == XR_XIR_OK) status = effect_outcomes_publish(memory, input.module, effects);
     if (status != XR_XIR_OK) {
         xr_xir_compile_effects_free(effects);
         return status;
     }
+    effects->checked_roots->borrowed_types = NULL;
     *output = effects;
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output, XrXirDiagnostic *diagnostic) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
+    XrXirEffects *pending = NULL;
+    XrXirStatus status = xir_effects_prepare_verified_input(memory, input, refiner, &pending);
+    if (status == XR_XIR_OK)
+        status = xir_effects_finish_prepared_input(memory, input, refiner, &pending, output, diagnostic);
+    xr_xir_compile_effects_free(pending);
+    return status;
 }

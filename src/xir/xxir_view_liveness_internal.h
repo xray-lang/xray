@@ -29,6 +29,12 @@ typedef struct XrXirViewLiveEvent {
 } XrXirViewLiveEvent;
 typedef XrXirStatus (*XrXirViewLiveVisitor)(void *user,const XrXirCompileContext *context,
     const XrXirViewLiveEvent *event);
+typedef struct XirViewLiveRequest {
+    XrXirViewLiveVisitor visitor;
+    void *user;
+    XrXirDiagnostic *diagnostic;
+    XrCompileRequestControl *control;
+} XirViewLiveRequest;
 
 /* Requires complete ordinary type/structure/SSA admission of this immutable
  * module generation. All borrowed descriptors are independently recomputed.
@@ -41,6 +47,11 @@ typedef XrXirStatus (*XrXirViewLiveVisitor)(void *user,const XrXirCompileContext
  * remain separate obligations even when a value is absent from a live set. */
 XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic);
+struct XrXirEffects;
+/* Extends demand through the semantic owner's point-specific loan transport.
+ * Opaque or contextual dependencies without a current binding stay unresolved. */
+XR_FUNC XrXirStatus xir_compile_view_liveness_loans_verified(const XrXirCompileContext *,
+    const XrXirModule *, const struct XrXirEffects *, const XirViewLiveRequest *);
 /* Same immutable module and actual function ordinal; no synthetic submodule.
  * Demand alone never supplies origin, lifetime or access authority. */
 XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,

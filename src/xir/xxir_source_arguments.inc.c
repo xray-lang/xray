@@ -99,7 +99,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             uint32_t helper = (*next)++;
             if (!source_default_binding_add(ctx, node, f, p + offset, helper)) return false;
             ctx->functions[helper] = (XrXirFunction) {"$argument_default", 17, NULL, 0,
-                ctx->functions[f].parameters[p + offset], NULL, 0, NULL, 0, NULL, 0, XR_XIR_UNIT,0,NULL};
+                ctx->functions[f].parameters[p + offset], NULL, 0, NULL, 0, NULL, 0, XR_XIR_UNIT,0,NULL,0,NULL};
             SourceFunction *target = &ctx->bodies[helper];
             target->node = node; target->type_owner = body->type_owner; target->module = body->module;
             target->declaration = body->declaration; target->generic_owner = body->generic_owner;
@@ -112,6 +112,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             ctx->identities[helper].test_timeout_seconds = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
+            ctx->identities[helper].capture_owner = ctx->identities[helper].capture_count = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         }
     }

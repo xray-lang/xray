@@ -276,97 +276,215 @@ static bool source_items_prepare(SourceContext *ctx) {
     ctx->module=previous_module;
     return !xr_hir_items_errors(ctx->items)||source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"duplicate declaration name");
 }
-/* Diagnostic expansion follows the retained first cause only after rejection.
- * The Source diagnostic owns its text before the effect owner is released. */
+/* Source maps numeric parameter ordinals while its own AST is alive. */
+typedef struct SourceSuspendExplanation {
+    SourceContext *source;
+    const XrXirModule *module;
+    size_t used;
+    uint32_t parameter_source;
+    bool truncated;
+} SourceSuspendExplanation;
+
+static const char *source_suspend_parameter_name(SourceContext *ctx, uint32_t function, uint32_t parameter) {
+    if (function >= ctx->function_count) return NULL;
+    const SourceFunction *body = &ctx->bodies[function];
+    if (parameter < body->root_capture_count && body->root_capture_names)
+        return body->root_capture_names[parameter];
+    AstNode *node = body->node;
+    XrParamNode *const *parameters = NULL;
+    uint32_t count = 0;
+    if (node && (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR)) {
+        parameters = node->as.function_decl.params;
+        count = (uint32_t)node->as.function_decl.param_count;
+    } else if (node && node->type == AST_METHOD_DECL) {
+        parameters = node->as.method_decl.params;
+        count = (uint32_t)node->as.method_decl.param_count;
+    }
+    uint32_t physical = ctx->functions[function].parameter_count;
+    if (count > physical || parameter < physical - count || parameter - (physical - count) >= count) return NULL;
+    return parameters[parameter - (physical - count)]->name;
+}
+
+static XrXirStatus source_suspend_explain_step(void *context, const XirSuspendCauseStep *step) {
+    SourceSuspendExplanation *walk = context;
+    SourceContext *ctx = walk->source;
+    if (step->function >= walk->module->function_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *body = &walk->module->functions[step->function];
+    char *message = ctx->diagnostic.message;
+    size_t capacity = sizeof(ctx->diagnostic.message);
+    if (walk->truncated) return XR_XIR_OK;
+    char segment[512];
+    /* The parameter transition has already named the literal's creator. */
+    if (walk->parameter_source == step->function && !step->parameter_dependency && !step->terminal) {
+        walk->parameter_source = UINT32_MAX;
+        return XR_XIR_OK;
+    }
+    int written;
+    if (step->parameter_dependency && step->callee < walk->module->function_count) {
+        const XrXirFunction *callee = &walk->module->functions[step->callee];
+        const char *name = source_suspend_parameter_name(ctx, step->callee, step->parameter);
+        written = snprintf(segment, sizeof(segment), "%.*s via %.*s parameter `%s`%s",
+            (int)body->name_length, body->name, (int)callee->name_length, callee->name,
+            name ? name : "capture", step->terminal ? " (unqualified callable)" : " -> ");
+        walk->parameter_source = step->function;
+    } else {
+        const char *tail = step->terminal ? (step->suspending ?
+            " (suspending operation)" : " (unqualified callable)") : " -> ";
+        written = snprintf(segment, sizeof(segment), "%.*s%s",
+            (int)body->name_length, body->name, tail);
+        walk->parameter_source = UINT32_MAX;
+    }
+    if (walk->used + 4 > capacity) return XR_XIR_BAD_STRUCTURE;
+    if (written < 0 || (size_t)written >= sizeof(segment) ||
+        (size_t)written > capacity - walk->used - 4) {
+        memcpy(message + walk->used, "...", 4);
+        walk->truncated = true;
+    } else {
+        memcpy(message + walk->used, segment, (size_t)written + 1);
+        walk->used += (size_t)written;
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus source_suspend_has_parameter(void *context, const XirSuspendCauseStep *step) {
+    bool *present = context;
+    *present |= step->parameter_dependency;
+    return XR_XIR_OK;
+}
+
+/* Diagnostic text is copied before the immutable numeric owner is released. */
 static void source_effect_explain(void *context, const XrXirModule *module,
     const XrXirEffects *effects, const XrXirDiagnostic *location) {
     SourceContext *ctx = context;
-    if (ctx->diagnostic.status != XR_XIR_OK || location->reason != XR_XIR_DIAGNOSTIC_NO_SUSPEND ||
+    bool cleanup = location->reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
+    if (ctx->diagnostic.status != XR_XIR_OK ||
+        (location->reason != XR_XIR_DIAGNOSTIC_NO_SUSPEND && !cleanup) ||
         location->function >= module->function_count) return;
     uint32_t function = location->function;
-    ctx->module = ctx->bodies[function].module;
-    source_fail(ctx, ctx->bodies[function].node, location->status,
-        "declared no_suspend function may suspend or call an unqualified callable. Reason ");
-    char *message = ctx->diagnostic.message;
-    size_t used = strlen(message), capacity = sizeof(ctx->diagnostic.message);
-    uint32_t previous = UINT32_MAX;
-    for (uint32_t step = 0; step < module->function_count; ++step) {
-        XrXirEffectFacts facts = xr_xir_effects_read(effects, function);
-        if (facts.status != XR_XIR_OK || facts.control.suspend == XR_XIR_EFFECT_NONE) break;
-        const XrXirEffectWitness *cause = &facts.suspend_witness;
-        if (cause->distance >= previous) break;
-        previous = cause->distance;
-        const XrXirFunction *body = &module->functions[function];
-        const char *terminal = cause->cause == XR_XIR_EFFECT_CAUSE_CALL ? " -> " :
-            cause->cause == XR_XIR_EFFECT_CAUSE_SUSPEND ? " (suspending operation)" :
-            " (unqualified callable)";
-        size_t room = capacity - used - 4, tail = strlen(terminal);
-        if (body->name_length > room || tail > room - body->name_length) {
-            memcpy(message + used, "...", 4);
-            break;
-        }
-        memcpy(message + used, body->name, body->name_length);
-        used += body->name_length;
-        memcpy(message + used, terminal, tail + 1);
-        used += tail;
-        if (cause->cause != XR_XIR_EFFECT_CAUSE_CALL || cause->callee >= module->function_count) break;
-        function = cause->callee;
+    if (cleanup) {
+        bool parameter = false;
+        XrXirStatus status = xir_effects_suspend_trace(effects, function, source_suspend_has_parameter, &parameter);
+        if (status != XR_XIR_OK || !parameter) return;
     }
+    ctx->module = ctx->bodies[function].module;
+    source_fail(ctx, ctx->bodies[function].node, location->status, cleanup ?
+        "E0392: defer may suspend or create a task. Reason " :
+        "declared no_suspend function may suspend or call an unqualified callable. Reason ");
+    SourceSuspendExplanation walk = {ctx, module, strlen(ctx->diagnostic.message), UINT32_MAX, false};
+    XrXirStatus status = xir_effects_suspend_trace(effects, function, source_suspend_explain_step, &walk);
+    if (status != XR_XIR_OK) {
+        ctx->diagnostic.status = status;
+        memcpy(ctx->diagnostic.message, "invalid numeric suspension cause", sizeof("invalid numeric suspension cause"));
+    }
+}
+
+#include "xxir_source_escape.inc.c"
+static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, XrXirStatus status) {
+    char message[128] = {0};
+    if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
+        source_format(ctx, message, sizeof(message),
+            "constructed XIR failed checking at function %u block %u instruction %u",
+            location.function, location.block, location.instruction) != XR_DIAG_OK)
+        status = XR_XIR_BUDGET;
+    AstNode *site = NULL;
+    if (location.function < ctx->function_count) {
+        site = ctx->bodies[location.function].node;
+        ctx->module = ctx->bodies[location.function].module;
+    }
+    const char *cause = location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED ?
+        "GO target requires the current instance root execution" :
+        location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED ?
+        "GO target lacks proof for worker execution" :
+        location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
+        "declared no_suspend function may suspend or call an unqualified callable" :
+        location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
+        "E0387: an error can escape the defer body" :
+        location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
+        "E0392: defer may suspend or create a task" :
+        location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
+        "read requires storage initialized on every incoming path" :
+        location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
+        "write may overwrite already initialized const storage" :
+        location.reason == XR_XIR_DIAGNOSTIC_TASK_SENDABLE ?
+        "Task arguments and captures must satisfy Sendable" :
+        location.reason == XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE ?
+        "Cell captures cannot cross a Task boundary" : message;
+    source_fail(ctx, site, status, cause);
+    bool task_transfer=location.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE ||
+        location.reason==XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE;
+    if (task_transfer && location.function<ctx->function_count &&
+        location.instruction<ctx->functions[location.function].instruction_count &&
+        ctx->bodies[location.function].debug_points) {
+        XrXirSourceRange range=ctx->bodies[location.function].debug_points[location.instruction].range;
+        if (range.line>0) {
+            ctx->diagnostic.module=range.module;ctx->diagnostic.line=range.line;ctx->diagnostic.column=range.column;
+        }
+    }
+}
+
+static XrXirStatus source_semantic_begin(void *context, const XrXirEffects *effects) {
+    SourceContext *ctx = context;
+    XrXirStatus status = source_effect_bindings_prepare(ctx, effects);
+    if (status == XR_XIR_OK && !source_escape_prepare(ctx)) status = ctx->diagnostic.status;
+    return status;
+}
+
+static XrXirRootRefiner source_semantic_refiner(SourceContext *ctx) {
+    return (XrXirRootRefiner){.context=ctx,.update=source_root_refine,.explain=source_effect_explain,
+        .begin=source_semantic_begin,.observe=source_escape_observe,.points=source_escape_points,
+        .prepare=source_escape_finish,.admit=source_view_admit};
+}
+
+static bool source_semantic_prepare(SourceContext *ctx) {
+    XrXirDeclarations declarations;
+    XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XirEffectInput input={&module,ctx->construction,ctx->request};
+    XrXirStatus status=xir_compile_structure_verify_input(&ctx->compile,input,&location);
+    for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
+        if (ctx->bodies[f].initialization_regions)
+            status=xr_xir_compile_initialization_check(&ctx->compile,&module,f,
+                ctx->bodies[f].initialization_regions,&location);
+    if (status==XR_XIR_OK) {
+        XrXirRootRefiner refiner=source_semantic_refiner(ctx);
+        status=xir_effects_prepare_verified_input(&ctx->compile,input,&refiner,&ctx->semantic_prepare);
+    }
+    if (status==XR_XIR_OK) return true;
+    if (ctx->diagnostic.status==XR_XIR_OK) source_check_failure(ctx,location,status);
+    return false;
+}
+
+static bool source_typed_body_finish(SourceContext *ctx) {
+    XrXirStatus status=xr_hir_body_finish(ctx->typed_body,ctx->request);
+    return status==XR_XIR_OK || source_fail(ctx,NULL,status,"typed body has an unconsumed or unprojected use");
 }
 
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     if(!source_hir_body_begin(ctx))return;
-    XrXirStatus body_status=XR_XIR_OK;
     ctx->query_ready = true;
     ctx->declarations_building = true;
     bool declarations_ready = source_query_modules(ctx) && source_items_prepare(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_named_factories(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
-        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_view_prepare(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx)) {
-        body_status=xr_hir_body_finish(ctx->typed_body,ctx->request);
-        if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body has an unconsumed or unprojected use");xr_hir_body_end(ctx->typed_body);return;}
+        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_typed_body_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_view_prepare(ctx)) {
         source_release_retired_arrays(ctx);
         if (!source_quiescent_storage(ctx)){xr_hir_body_end(ctx->typed_body);return;}
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
-        XrXirRootRefiner refiner = {.context=ctx,.update=source_root_refine,.explain=source_effect_explain,
-            .prepare=source_effect_bindings_prepare,.admit=source_view_admit};
-        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &output->checked, &location);
+        XrXirRootRefiner refiner=source_semantic_refiner(ctx);
+        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &ctx->semantic_prepare, &output->checked, &location);
+#if XR_XIR_PARANOID
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
             location.function=f;
             status=xr_xir_compile_initialization_check(&ctx->compile, &built, f, ctx->bodies[f].initialization_regions, &location);
         }
+#endif
         if (status != XR_XIR_OK) {
             xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
-            char message[128] = {0};
-            if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
-                source_format(ctx, message, sizeof(message),
-                    "constructed XIR failed checking at function %u block %u instruction %u",
-                    location.function, location.block, location.instruction) != XR_DIAG_OK)
-                status = XR_XIR_BUDGET;
-            AstNode *site = NULL;
-            if (location.function < ctx->function_count) {
-                site = ctx->bodies[location.function].node;
-                ctx->module = ctx->bodies[location.function].module;
-            }
-            const char *cause = location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED ?
-                "GO target requires the current instance root execution" :
-                location.reason == XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED ?
-                "GO target lacks proof for worker execution" :
-                location.reason == XR_XIR_DIAGNOSTIC_NO_SUSPEND ?
-                "declared no_suspend function may suspend or call an unqualified callable" :
-                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_THROW ?
-                "E0387: an error can escape the defer body" :
-                location.reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND ?
-                "E0392: defer may suspend or create a task" :
-                location.reason == XR_XIR_DIAGNOSTIC_UNINITIALIZED_READ ?
-                "read requires storage initialized on every incoming path" :
-                location.reason == XR_XIR_DIAGNOSTIC_READONLY_WRITE ?
-                "write may overwrite already initialized const storage" : message;
-            source_fail(ctx, site, status, cause);
+            source_check_failure(ctx, location, status);
         }
     }
     xr_hir_body_end(ctx->typed_body);

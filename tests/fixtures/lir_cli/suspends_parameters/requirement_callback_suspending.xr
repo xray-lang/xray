@@ -1,0 +1,6 @@
+interface Apply { apply(callback: fn() -> i64) -> i64 }
+struct Token implements Apply { apply(callback: fn() -> i64) -> i64 { return callback() } }
+fn worker() -> i64 { return 7 }
+fn call<T: Apply>(value: T, callback: fn() -> i64) -> i64 { return value.apply(callback) }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return call<Token>(Token{}, fn() -> i64 { return await go worker() }) }
+print(limited())

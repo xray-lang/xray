@@ -11,7 +11,7 @@
 #include "xir/xxir_array.h"
 static void reference_array_type_policy(const XrXirCompileContext *context) {
     XrXirType first=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,second=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),third=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
-    XrXirCallableParameter fields[]={{XR_XIR_I8,0},{XR_XIR_STRING,0}};
+    XrXirCallableParameter fields[]={{XR_XIR_I8,0,0},{XR_XIR_STRING,0,0}};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=2},
         {.kind=XR_XIR_TYPE_ARRAY,.element=first},{.kind=XR_XIR_TYPE_ARRAY,.element=second}};
     XrXirTypes types={nodes,3,NULL,NULL};XrXirCtfeTypeShape shape={0};

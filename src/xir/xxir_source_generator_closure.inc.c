@@ -6,16 +6,6 @@
  *
  * xxir_source_generator_closure.inc.c - Ordinary closure factories own latent producer creation
  */
-static bool source_generator_closure_captures(SourceContext *ctx,AstNode *node,const SourceCaptureScan *scan) {
-    for(const SourceCapture *p=scan->captures;p;p=p->next) {
-        if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        uint32_t declaration=p->source->declaration;
-        if(p->source->mutable && declaration && declaration<=ctx->query.declaration_count &&
-            ctx->query.declarations[declaration-1].kind==XR_XIR_SOURCE_PARAMETER)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot retain an external ref capture");
-    }
-    return true;
-}
 static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,uint32_t producer,
     bool no_suspend,uint32_t *target) {
     if(ctx->next_closure>=ctx->closure_limit)
@@ -25,6 +15,9 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     body->node=node;body->module=original->module;body->type_owner=original->type_owner;
     body->generic_owner=original->generic_owner;body->type_parameters=original->type_parameters;
     body->type_parameter_count=original->type_parameter_count;body->parameters=original->parameters;
+    /* The shared capture parameters retain their inference classification. */
+    body->root_capture_count=original->root_capture_count;
+    body->root_captures=original->root_captures;body->root_capture_names=original->root_capture_names;
     ctx->generics[factory]=ctx->generics[producer];ctx->identities[factory]=ctx->identities[producer];
     ctx->identities[factory].promises=(no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0) |
         (ctx->identities[producer].promises&XR_XIR_FUNCTION_REST);
@@ -37,9 +30,11 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     body->declaration=declaration.declaration;
     const XrXirFunction *before=&ctx->functions[producer];
     ctx->functions[factory]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),
-        body->parameters,before->parameter_count,before->result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL};
+        body->parameters,before->parameter_count,before->result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL,0,NULL};
     ctx->functions[factory].consume_parameter_count=before->consume_parameter_count;
+    ctx->functions[factory].escaping_parameter_count=before->escaping_parameter_count;
     ctx->functions[factory].consume_parameters=before->consume_parameters;
+    ctx->functions[factory].escaping_parameters=before->escaping_parameters;
     uint32_t count=before->parameter_count,generic=ctx->generics[producer].parameter_count;
     SourceValue *arguments=count ? source_alloc(ctx,count,sizeof(*arguments)) : NULL;
     XrXirType *types=generic ? source_alloc(ctx,generic,sizeof(*types)) : NULL;

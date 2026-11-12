@@ -85,6 +85,7 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
             break;
 
         case XR_TREF_FUNCTION: {
+            if (t->parameter_escaping) tref_append(buf, pos, cap, "escaping ");
             if (t->requires_nosuspend) tref_append(buf, pos, cap, "nosuspend ");
             do { tref_append(buf, pos, cap, "fn("); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;

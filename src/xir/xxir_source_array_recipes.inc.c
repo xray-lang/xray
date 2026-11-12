@@ -101,7 +101,9 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback takes a different number of parameters");
         XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
         if (count && !parameters) return false;
-        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ};
+        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ,
+            xr_xir_callable_signature(&ctx->types,shape->parameters[i]) != NULL &&
+            !xr_xir_type_is_c_callable(&ctx->types,shape->parameters[i])};
         XrXirType expected;
         if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, shape->error_type, &expected)) return false;
         if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;
@@ -450,8 +452,8 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     XrXirType element = xr_xir_array_element(&ctx->types, array.type), tuple, result_type, cell_type;
     XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
     if (!fields) return false;
-    fields[0] = (XrXirCallableParameter) {XR_XIR_I64, 0};
-    fields[1] = (XrXirCallableParameter) {element, 0};
+    fields[0] = (XrXirCallableParameter) {XR_XIR_I64, 0,0};
+    fields[1] = (XrXirCallableParameter) {element, 0,0};
     if (!source_hir_tuple_type(ctx,fields,2,&tuple) ||
         !source_array_element_type(ctx, tuple, &result_type) ||
         !source_cell_type(ctx, result_type, &cell_type)) return false;
@@ -703,7 +705,7 @@ static bool source_array_sort_call(SourceContext *ctx,AstNode *node,SourceValue 
      * value. Its concrete signature remains visible to ordinary Source queries. */
     XrXirCallableParameter *parameters=source_alloc(ctx,2,sizeof(*parameters));
     if (!parameters) return false;
-    parameters[0]=(XrXirCallableParameter){element,XR_PARAM_READ};parameters[1]=parameters[0];
+    parameters[0]=(XrXirCallableParameter){element,XR_PARAM_READ,0};parameters[1]=parameters[0];
     XrXirType comparator;
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
         .result=XR_XIR_I64,.parameters=parameters,.parameter_count=2,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},&comparator) &&

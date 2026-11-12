@@ -151,7 +151,7 @@ static XrXirValueStatus type_receiving_node(TypeReceiving *r,uint32_t index) {
     if (status==XR_XIR_VALUE_OK) status=type_receiving_edge(r,a->result,b->result);
     for (uint32_t p=0;status==XR_XIR_VALUE_OK && p<xr_xir_type_parameter_slots(a);++p) {
 
-        if (a->parameters[p].mode!=b->parameters[p].mode) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (a->parameters[p].mode!=b->parameters[p].mode || a->parameters[p].escaping != b->parameters[p].escaping) return XR_XIR_VALUE_BAD_ARGUMENT;
         status=type_receiving_edge(r,a->parameters[p].type,b->parameters[p].type);
     }
     return status;

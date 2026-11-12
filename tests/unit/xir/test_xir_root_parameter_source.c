@@ -67,7 +67,7 @@ static void rps_template(XrXirArtifact *artifact) {
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
     const XrXirFunctionEffectContract *c=xir_effects_contract(effects,apply);
-    CHECK(c && c->parameter_count==1 && c->parameters[0].kind==1 && c->parameters[0].uses==1);
+    CHECK(c && c->parameter_count==1 && c->parameters[0].kind==1);
     CHECK(c->formula.constant_mask==0 && c->formula.term_count==1 &&
         c->formula.terms[0].kind==1 && c->formula.terms[0].index==0);
     xr_xir_compile_effects_free(effects);

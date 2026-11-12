@@ -1,0 +1,3 @@
+fn retain(data: Slice<u8>) -> fn() -> i64 {
+    return fn() -> i64 { return len(data) }
+}

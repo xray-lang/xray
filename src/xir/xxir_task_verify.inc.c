@@ -9,8 +9,7 @@
  * KEY CONCEPT:
  *   A concrete caller cannot repair missing definition-site worker bounds.
  */
-static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstruction *op,
-    XrXirCompileContext *remaining) {
+static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstruction *op) {
     const XrXirTypeNode *task = xr_xir_type_node(module->types, op->type);
     if (!xr_xir_function_has_go_role(module, (uint32_t)op->immediate) ||
         !task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
@@ -25,6 +24,17 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
                 return XR_XIR_UNSUPPORTED;
         }
     }
+    return XR_XIR_OK;
+}
+
+/* The physical GO role and exact call shape precede numeric collection.
+ * Transfer permissions follow the lifetime verdict and still use the original
+ * declaration's constraints, independently of concrete caller arguments. */
+XR_FUNC XrXirStatus xir_compile_task_transfer_verified(const XrXirCompileContext *remaining,
+    const XrXirModule *module, uint32_t callee) {
+    if (!xir_compile_context_valid(remaining) || !module || !module->functions || callee>=module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *function=&module->functions[callee];
     XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, callee, 0}};
     XrXirStatus status = xr_xir_compile_type_markers_prove(remaining, &proof, function->result,
         XR_XIR_CONSTRAINT_SENDABLE);

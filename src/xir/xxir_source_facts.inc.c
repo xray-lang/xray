@@ -62,8 +62,7 @@ static XrXirStatus source_facts_contract_match(
     uint32_t progress=0;XrXirStatus status=XR_XIR_OK;
     for (uint32_t p=0;p<stored->parameter_count;++p) {
         status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
-        if (stored->parameters[p].kind!=actual->parameters[p].kind ||
-            stored->parameters[p].uses!=actual->parameters[p].uses) return XR_XIR_BAD_STRUCTURE;
+        if (stored->parameters[p].kind!=actual->parameters[p].kind) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t t=0;t<stored->formula.term_count;++t) {
         status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
