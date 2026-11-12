@@ -531,9 +531,9 @@ static void nonescape_bound_prefix(void) {
     identities[1].capture_owner=identities[1].capture_count=0;
     XrXirInstruction local[] = {
         {.op=XR_XIR_FUNCTION_REF,.type=callable,.immediate=2},
-        {.op=XR_XIR_OWNED_LOCAL_NEW,.type=callable,.args={1}},
+        {.op=XR_XIR_LOCAL_NEW,.type=callable,.args={1}},
         {.op=XR_XIR_PLACE_WRITE,.type=XR_XIR_UNIT,.args={2,0}},
-        {.op=XR_XIR_OWNED_LOCAL_READ,.type=callable,.args={2}},
+        {.op=XR_XIR_LOCAL_READ,.type=callable,.args={2}},
         {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={4}}
     };
     blocks[1].count=5;functions[1].instructions=local;functions[1].instruction_count=5;
@@ -608,13 +608,13 @@ static void nonescape_cell_capture_contract(void) {
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
         {.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={0}}};
     XrXirBlock blocks[]={{0,1,0,0},{0,3,0,0},{0,2,0,0},{0,2,0,0}};
-    uint32_t operand=0;
+    uint32_t operands[]={0,0};
     XrXirFunction functions[]={
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
             .instructions=&done,.instruction_count=1,.error_type=XR_XIR_NEVER},
         {.name="outer",.name_length=5,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
             .blocks=&blocks[1],.block_count=1,.instructions=caller,.instruction_count=3,
-            .operands=&operand,.operand_count=1,.error_type=XR_XIR_NEVER},
+            .operands=operands,.operand_count=1,.error_type=XR_XIR_NEVER},
         {.name="reader",.name_length=6,.parameters=&cell,.parameter_count=1,.result=XR_XIR_I64,
             .blocks=&blocks[2],.block_count=1,.instructions=reader,.instruction_count=2,.error_type=XR_XIR_NEVER},
         {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[3],.block_count=1,
@@ -625,7 +625,10 @@ static void nonescape_cell_capture_contract(void) {
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     for(unsigned direct=0;direct<2;++direct) {
-        if(direct)caller[1]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,1},.immediate=2};
+        if(direct) {
+            caller[1]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={1,1},.immediate=2};
+            functions[1].operand_count=2;
+        }
         XrXirCellProvenance *proof=NULL;
         CHECK(xr_xir_compile_cell_provenance_verified(suite_context,&built,&proof,NULL)==XR_XIR_OK && proof);
         CHECK(xr_xir_cell_provenance_role(proof,2,0)==XR_XIR_CELL_PROOF_SCOPED_CAPTURE);

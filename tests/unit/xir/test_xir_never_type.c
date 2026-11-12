@@ -142,7 +142,7 @@ static void check_declaration_packet(const XrXirCompileContext *work,XrXirType e
     CHECK(xr_xir_compile_checked_read(work,old,packet.length,&received,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!received);
     size_t error_at=64+12+4+function.name_length+4+(size_t)function.parameter_count*4+
-        4+(size_t)function.consume_parameter_count*4+4;
+        4+(size_t)function.consume_parameter_count*4+4+(size_t)function.escaping_parameter_count*4+4;
     CHECK(error_at+4<=packet.length);
     for (uint32_t i=0;i<4;++i) {
         CHECK(packet.bytes[8+i]==(uint8_t)((uint32_t)XR_XIR_CHECKED_SCHEMA>>(8*i)));
@@ -380,14 +380,14 @@ static char *source_transport_text(size_t *length) {
         "export fn withDefault(x:i64=41)->i64{return x+1}\n"
         "export fn withCall(x:i64=defaultValue())->i64{return x}\n"
         "export fn withLiterals(flag:bool=true,text:string=\"owned\",value:i64=1+2)->i64{return value}\n"
-        "export fn withUnknown(f:fn()->i64=fn()->i64{return 7})->fn()->i64{return f}\n"
+        "export fn withUnknown(f:escaping fn()->i64=fn()->i64{return 7})->fn()->i64{return f}\n"
         "var seed:i64=41\nfn identity<T>(value:T)->T{return value}\n"
         "export fn makeGeneric()->fn()->i64{return fn()->i64{return identity<i64>(41)}}\n"
         "export fn makeCell(base:i64)->fn()->i64{var captured=base;return fn()->i64{return captured}}\n"
         "export fn makeSlot()->fn()->i64{return fn()->i64{return seed}}\n"
         "export fn makeText()->fn()->string{return fn()->string{return \"owned\"}}\n"
-        "export fn makeIndirect(f:fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n"
-        "export fn makeStoredIndirect(f:fn()->i64)->fn()->i64{var target=f;"
+        "export fn makeIndirect(f:escaping fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n"
+        "export fn makeStoredIndirect(f:escaping fn()->i64)->fn()->i64{var target=f;"
         "return fn()->i64{return target()}}\n"
         "export fn filterEqual()->i64{var data=[1,2,3,4];"
         "return len(data.filter(fn(x:i64)->bool{return x==2}))}\n"
@@ -412,7 +412,7 @@ static char *source_transport_text(size_t *length) {
         "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n"
         "export fn makeCounter(base:i64)->fn()->i64{var count=base;"
         "return fn()->i64{count=count+1;return count}}\n"
-        "export fn makeComposed(f:fn(i64)->i64,g:fn(i64)->i64)->fn(i64)->i64{"
+        "export fn makeComposed(f:escaping fn(i64)->i64,g:escaping fn(i64)->i64)->fn(i64)->i64{"
         "return fn(x:i64)->i64{return f(g(x))}}\n"
         "export fn writeBoolControl()->bool{var flag=false;"
         "var f=fn()->bool{flag=true;return flag};return f()}\n";
@@ -524,14 +524,14 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
 /* An external producer may declare a wider Error even for a literal body.
  * A receiving Source must preserve that declaration instead of shrinking it. */
 static void source_packet_widen_raw(XrXirCheckedPacket *packet) {
-    uint8_t pattern[23]={3,0,0,0,'r','a','w'};
+    uint8_t pattern[27]={3,0,0,0,'r','a','w'};
     for (unsigned i=0;i<4;++i) {
-        pattern[15+i]=(uint8_t)((uint32_t)XR_XIR_I64>>(8*i));
-        pattern[19+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
+        pattern[19+i]=(uint8_t)((uint32_t)XR_XIR_I64>>(8*i));
+        pattern[23+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
     }
     size_t found=0,offset=0;
     for (size_t at=64;at+sizeof(pattern)<=packet->length;++at)
-        if (!memcmp(packet->bytes+at,pattern,sizeof(pattern))) {++found;offset=at+19;}
+        if (!memcmp(packet->bytes+at,pattern,sizeof(pattern))) {++found;offset=at+23;}
     CHECK(found==1);
     for (unsigned i=0;i<4;++i) packet->bytes[offset+i]=(uint8_t)((uint32_t)XR_XIR_ERROR>>(8*i));
     XrSHA256Context digest;xr_sha256_init(&digest);
