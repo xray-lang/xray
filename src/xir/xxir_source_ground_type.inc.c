@@ -15,7 +15,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if(!source_fixed_literal_type(ctx,node,&output->type))return false;
         output->present=true;return true;
     }
-    if (node->type==AST_COPY_EXPR) return source_ground_type(ctx,node->as.unary.operand,depth+1,output);
+    if (node->type==AST_COPY_EXPR) {
+        if (!source_ground_type(ctx,node->as.unary.operand,depth+1,output)) return false;
+        return !output->present || source_copy_result_type(ctx,output->type,&output->type);
+    }
     if (node->type==AST_MOVE_EXPR) return source_ground_type(ctx,node->as.move_expr.expr,depth+1,output);
     if (node->type==AST_UNSAFE_EXPR) {
         AstNode *block=node->as.unsafe_expr.operand;

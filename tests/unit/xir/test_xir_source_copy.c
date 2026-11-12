@@ -34,7 +34,6 @@ static void source_copy_refusals(const XrXirCompileContext *context) {
         "fn value()->i64{return 1}\nexport fn bad()->i64{return copy value()}\n",
         "export fn bad()->i64{return copy 1}\n",
         "export fn bad()->i64{var x=\"text\";return copy x}\n",
-        "fn bad(view:Slice<i64>)->i64{const owned=copy view;return 0}\n",
         "class Box{value:i64;init(){this.value=1}}\nfn worker(x:Box)->i64{return x.value}\nvar x=Box();var task=go worker(copy x)\n",
         "var privateState=1\nfn worker(xs:Array<i64>)->i64{return privateState+xs[0]}\nvar xs=[41];var task=go worker(copy xs)\n"};
     XrCompileResourceStats baseline={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&baseline)==XR_COMPILE_RESOURCE_OK);
@@ -46,10 +45,29 @@ static void source_copy_refusals(const XrXirCompileContext *context) {
     CHECK(source_copy_check(&small,source_copy_fixture,&failed)==XR_XIR_BUDGET && !failed.checked && !failed.snapshot);
     xr_xir_compile_source_result_free(&failed);CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==baseline.held_bytes);
 }
+static void source_copy_borrowed(const XrXirCompileContext *context) {
+    const char *text="fn bad(view:Slice<i64>)->i64{const owned=copy view;return 0}\n";
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirSourceResult source={0};
+    CHECK(source_copy_check(context,text,&source)==XR_XIR_OK && source.checked && source.snapshot);
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    XrXirArtifact *decoded=NULL,*closed=NULL;
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded,&closed,NULL,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(decoded);
+    xr_xir_compile_artifact_free(closed);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK &&
+        after.held_bytes==before.held_bytes);
+}
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
-    source_copy_refusals(&context);char text[sizeof(source_copy_fixture)];memcpy(text,source_copy_fixture,sizeof(text));
+    source_copy_refusals(&context);source_copy_borrowed(&context);
+    char text[sizeof(source_copy_fixture)];memcpy(text,source_copy_fixture,sizeof(text));
     XrXirSourceResult source={0};CHECK(source_copy_check(&context,text,&source)==XR_XIR_OK && source.checked && source.snapshot);memset(text,'!',sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);

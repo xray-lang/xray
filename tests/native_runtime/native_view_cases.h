@@ -51,6 +51,9 @@ static void native_view_root(void *opaque) {
     xrt_view_frame_leave(child, 0);
     if (context->mode == 5) { (void)xrt_view_cell_read(frame, imported, 0); CHECK(false); }
     part = xrt_slice_i64_bind(frame, 0, part, 0);
+    XrtArray *copy = xrt_slice_i64_copy(frame, part, 0);
+    CHECK(xrt_array_i64_get(copy, 0, 0) == 22);
+    xrt_array_drop(&copy);
     CHECK(xrt_slice_i64_get(frame, part, 0, 0) == 22 && xrt_slice_i64_length(frame, part, 0) == 2);
     xrt_slice_i64_cleanup(frame, 0, 0);
     xrt_view_cell_i64_set(frame, cell, 0, 77, 0);
