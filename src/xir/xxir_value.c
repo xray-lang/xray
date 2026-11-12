@@ -1843,6 +1843,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_hash_projection.inc.c"
 #include "xxir_set_algebra.inc.c"
 #include "xxir_cell_owner.inc.c"
+#include "xxir_cell_array_owned.inc.c"
 #include "xxir_cell_read_loan.inc.c"
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"

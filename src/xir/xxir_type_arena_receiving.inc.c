@@ -13,6 +13,13 @@ static XirTypeIdentity type_identity(const XrXirTypeArena *arena,XrXirType type)
     return arena && index<arena->types.count && arena->identities ? arena->identities[index] :
         (XirTypeIdentity){arena,type};
 }
+XR_FUNC bool xir_type_arena_identity(const XrXirTypeArena *arena,
+    XrXirType type, XirTypeIdentity *output) {
+    if (!output || (uint32_t)type < XR_XIR_CONSTRUCTED_TYPE_BASE ||
+        !xr_xir_type_node(arena ? &arena->types : NULL, type)) return false;
+    *output = type_identity(arena, type);
+    return true;
+}
 XR_FUNC bool xir_type_arena_same_type(const XrXirTypeArena *left,XrXirType left_type,
     const XrXirTypeArena *right,XrXirType right_type) {
     if ((uint32_t)left_type>=XR_XIR_CONSTRUCTED_TYPE_BASE && !xr_xir_type_node(left ? &left->types : NULL,left_type)) return false;
@@ -156,11 +163,11 @@ static XrXirValueStatus type_receiving_node(TypeReceiving *r,uint32_t index) {
     }
     return status;
 }
-XR_FUNC XrXirValueStatus xir_compile_type_arena_receive(const XrXirCompileContext *context,
+static XrXirValueStatus type_arena_receive(const XrXirCompileContext *context,
     XrXirTypeArena *target,XrXirTypeArena *source,const XirTypeReceivingRoot *roots,uint32_t count) {
     if (!xir_compile_context_valid(context) || !source || !target || source==target ||
         target->received_from || target->identities || (count && !roots) ||
-        context->resources!=target->context.resources || context->resources!=source->context.resources ||
+        context->resources!=target->context.resources ||
         atomic_load_explicit(&target->references,memory_order_acquire)!=1) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (const XrXirTypeArena *previous=source;previous;previous=previous->received_from) {
 
@@ -179,10 +186,57 @@ XR_FUNC XrXirValueStatus xir_compile_type_arena_receive(const XrXirCompileContex
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<count;++i) status=type_receiving_edge(&r,roots[i].source,roots[i].target);
     while (status==XR_XIR_VALUE_OK && r.begin<r.end) status=type_receiving_node(&r,r.queue[r.begin++]);
 
+    /* Each arena allocation pins its own resource ledger. Retaining the source
+     * keeps that ledger and the complete qualified-identity lineage alive. */
     if (status==XR_XIR_VALUE_OK && !xr_xir_compile_type_arena_retain(source)) status=XR_XIR_VALUE_REFCOUNT_LIMIT;
     if (status==XR_XIR_VALUE_OK) {
         target->received_from=source;target->identities=r.identities;target->error_identity=r.error_identity;r.identities=NULL;
     }
     xr_compile_resources_free(r.identities);xr_compile_resources_free(r.queue);xr_compile_resources_free(r.map);
     return status;
+}
+
+XR_FUNC XrXirValueStatus xir_compile_type_arena_receive(const XrXirCompileContext *context,
+    XrXirTypeArena *target, XrXirTypeArena *source, const XirTypeReceivingRoot *roots, uint32_t count) {
+    if (!xir_compile_context_valid(context) || !source ||
+        context->resources != source->context.resources) return XR_XIR_VALUE_BAD_ARGUMENT;
+    return type_arena_receive(context, target, source, roots, count);
+}
+
+static bool type_arena_i64_views_catalog(const XrXirTypeArena *arena) {
+    if (!arena || arena->types.count != 6) return false;
+    const XrXirTypeNode *cell = &arena->types.nodes[4], *slice = &arena->types.nodes[5];
+    if (cell->kind != XR_XIR_TYPE_CELL || cell->element != XR_XIR_CONSTRUCTED_TYPE_BASE ||
+        slice->kind != XR_XIR_TYPE_SLICE || slice->element != XR_XIR_I64) return false;
+    static const XrXirType elements[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
+    for (uint32_t i = 0; i < 4; ++i) {
+        const XrXirTypeNode *node = &arena->types.nodes[i];
+        if (node->kind != XR_XIR_TYPE_ARRAY || node->element != elements[i]) return false;
+    }
+    return true;
+}
+XR_FUNC XrXirValueStatus xir_native_type_arena_receive_i64_array(XrXirTypeArena *target,
+    const XrXirValue *array) {
+    if (!type_arena_i64_views_catalog(target) || !xr_xir_value_valid(array)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeArena *source = xr_xir_value_arena(array);
+    const XrXirTypeNode *from = xr_xir_type_node(source ? &source->types : NULL, (XrXirType)array->type);
+    if (!from || from->kind != XR_XIR_TYPE_ARRAY || from->element != XR_XIR_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirTypeReceivingRoot root = {(XrXirType)array->type, XR_XIR_CONSTRUCTED_TYPE_BASE};
+    XrXirValueStatus status = type_arena_receive(&target->context, target,
+        (XrXirTypeArena *)source, &root, 1);
+    if (status == XR_XIR_VALUE_OK) target->native_i64_views = true;
+    return status;
+}
+XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
+    const XrXirValue *array, XrXirTypeArena **output) {
+    if (!output || *output || !type_arena_i64_views_catalog(catalog)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirTypeArena *derived = NULL;
+    XrXirValueStatus status = xr_xir_compile_type_arena_new(&catalog->context, &catalog->types, &derived);
+    if (status == XR_XIR_VALUE_OK) status = xir_native_type_arena_receive_i64_array(derived, array);
+    if (status != XR_XIR_VALUE_OK) xr_xir_compile_type_arena_drop(derived);
+    else *output = derived;
+    return status;
+}
+XR_FUNC bool xir_native_type_arena_i64_views(const XrXirTypeArena *arena) {
+    return arena && arena->native_i64_views;
 }
