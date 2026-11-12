@@ -24,49 +24,105 @@ typedef struct StorageOccurrenceQuery {
     uint32_t *index, count, capacity, index_capacity;
 } StorageOccurrenceQuery;
 
+typedef struct StorageCycleFrame {
+    uint32_t node, edge;
+    bool self;
+} StorageCycleFrame;
+
+static bool storage_index_allocation_cycles(XirStorageFlow *flow, uint32_t function) {
+    StorageFunction *row = &flow->rows[function];
+    uint32_t physical = flow->view.functions[function].physical_values;
+    uint32_t count = row->body->instruction_count, parameters = row->body->parameter_count;
+    uint64_t frames_bytes = (uint64_t) count * sizeof(StorageCycleFrame);
+    if (frames_bytes > SIZE_MAX) {
+        flow->status = XR_XIR_OVERFLOW;
+        return false;
+    }
+    uint8_t *cycles = xir_compile_calloc(&flow->memory, physical, sizeof(*cycles), &flow->status);
+    uint32_t *low = xir_compile_calloc(&flow->memory, count, sizeof(*low), &flow->status);
+    StorageCycleFrame *frames =
+        xir_compile_alloc(&flow->memory, (size_t) frames_bytes, &flow->status);
+    bool scratch = false;
+    if (!cycles || !low || !frames)
+        goto done;
+    /* Address queries borrow these arrays synchronously. Component discovery
+     * restores their visited generation before another query uses them. */
+    memset(row->visited, 0, (size_t) physical * sizeof(*row->visited));
+    scratch = true;
+    uint32_t next = 0, stacked = 0;
+    for (uint32_t start = 0; start < count && storage_step(flow); ++start) {
+        if (row->visited[start])
+            continue;
+        uint32_t depth = 1;
+        frames[0] = (StorageCycleFrame) {start, row->predecessors[start], false};
+        row->visited[start] = low[start] = ++next;
+        row->queue[stacked++] = start;
+        cycles[parameters + start] = 3;
+        while (depth && storage_step(flow)) {
+            StorageCycleFrame *frame = &frames[depth - 1];
+            uint32_t node = frame->node;
+            if (frame->edge != UINT32_MAX) {
+                StoragePredecessor edge = row->edges[frame->edge];
+                frame->edge = edge.next;
+                uint32_t target = edge.source;
+                if (target >= count) {
+                    flow->status = XR_XIR_BAD_STRUCTURE;
+                    break;
+                }
+                frame->self |= target == node;
+                if (!row->visited[target]) {
+                    row->visited[target] = low[target] = ++next;
+                    row->queue[stacked++] = target;
+                    cycles[parameters + target] = 3;
+                    frames[depth++] =
+                        (StorageCycleFrame) {target, row->predecessors[target], false};
+                } else if (cycles[parameters + target] == 3 && row->visited[target] < low[node]) {
+                    low[node] = row->visited[target];
+                }
+                continue;
+            }
+            uint32_t parent = depth > 1 ? frames[depth - 2].node : UINT32_MAX;
+            --depth;
+            if (row->visited[node] == low[node]) {
+                uint32_t end = stacked;
+                do {
+                    XR_DCHECK(stacked, "a component contains its root");
+                    --stacked;
+                } while (row->queue[stacked] != node);
+                bool repeated = end - stacked > 1 || frame->self;
+                for (uint32_t n = stacked; n < end; ++n)
+                    cycles[parameters + row->queue[n]] = repeated ? 2 : 1;
+            }
+            if (parent != UINT32_MAX && low[node] < low[parent])
+                low[parent] = low[node];
+        }
+    }
+    if (flow->status == XR_XIR_OK) {
+        row->allocation_cycles = cycles;
+        cycles = NULL;
+    }
+done:
+    if (scratch) {
+        memset(row->visited, 0, (size_t) physical * sizeof(*row->visited));
+        row->generation = 0;
+    }
+    xr_compile_resources_free(cycles);
+    xr_compile_resources_free(low);
+    xr_compile_resources_free(frames);
+    return flow->status == XR_XIR_OK;
+}
+
 static bool storage_allocation_repeats(XirStorageFlow *flow, uint32_t function,
                                        uint32_t allocation) {
     StorageFunction *row = &flow->rows[function];
     if (!row->cyclic)
         return false;
-    uint32_t physical = flow->view.functions[function].physical_values;
-    XR_DCHECK(allocation >= row->body->parameter_count && allocation < physical,
-              "allocation age belongs to this template frame");
-    if (!row->allocation_cycles) {
-        row->allocation_cycles = xir_compile_calloc(&flow->memory, physical,
-                                                    sizeof(*row->allocation_cycles), &flow->status);
-        if (!row->allocation_cycles)
-            return false;
-    }
-    if (row->allocation_cycles[allocation])
-        return row->allocation_cycles[allocation] == 2;
-    if (++row->generation == 0) {
-        memset(row->visited, 0, (size_t) physical * sizeof(*row->visited));
-        row->generation = 1;
-    }
-    uint32_t point = allocation - row->body->parameter_count;
-    uint32_t first = 0, count = 1;
-    row->queue[0] = point;
-    row->visited[point] = row->generation;
-    bool repeated = false;
-    while (first < count && !repeated && storage_step(flow)) {
-        uint32_t current = row->queue[first++];
-        for (uint32_t e = row->predecessors[current]; e != UINT32_MAX && storage_step(flow);
-             e = row->edges[e].next) {
-            StoragePredecessor edge = row->edges[e];
-            if (edge.source == point) {
-                repeated = true;
-                break;
-            }
-            if (row->visited[edge.source] == row->generation)
-                continue;
-            row->visited[edge.source] = row->generation;
-            row->queue[count++] = edge.source;
-        }
-    }
-    if (flow->status == XR_XIR_OK)
-        row->allocation_cycles[allocation] = repeated ? 2 : 1;
-    return repeated;
+    XR_DCHECK(allocation >= row->body->parameter_count &&
+                  allocation < flow->view.functions[function].physical_values,
+              "allocation belongs to this frame");
+    if (!row->allocation_cycles && !storage_index_allocation_cycles(flow, function))
+        return false;
+    return row->allocation_cycles[allocation] == 2;
 }
 
 static bool storage_repeated_cell(XirStorageFlow *flow, uint32_t function, uint32_t handle,

@@ -40,3 +40,10 @@ fn older(callback: fn() -> i64) -> fn() -> i64 {
     }
     return saved
 }
+fn unrelated(callback: fn() -> i64) -> fn() -> i64 {
+    var first = 1
+    var second = 2
+    var counter = 0
+    while (counter < 1) { counter = counter + 1 }
+    return fn() -> i64 { return first + second }
+}
