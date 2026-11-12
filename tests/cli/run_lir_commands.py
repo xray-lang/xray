@@ -56,10 +56,13 @@ def main() -> None:
                     "local_nested_callback", "nested_cell_overwrite", "local_capture_write", "owned_scalar_capture",
                     "cfn_generic_collection", "cfn_view_lifetime", "ref_forward", "escaping_ref_write", "generator_owned_cell",
                     "generator_storable_cell", "hidden_fn_value_chain", "latent_capture_creation", "opaque_callback_pure",
-                    "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls", "module_stored_callbacks")
+                    "callback_entry_pure_chain", "callback_entry_scalar_cell", "late_cell_calls", "module_stored_callbacks",
+                    "returned_environment_contract", "opaque_factory_contract")
         for name in accepted:
             checked = run("nonescape-" + name, [binary, "check", source_root / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
+        checked = run("nonescape-functional-demo", [binary, "check", root / "demos/04-functional/functional.xr"], 0)
+        assert not checked.stdout and not checked.stderr
         formatted = work / "nonescape-formatter-types.xr"
         shutil.copyfile(source_root / "formatter_nested_types.xr", formatted)
         run("nonescape-format-types", [binary, "fmt", formatted], 0)

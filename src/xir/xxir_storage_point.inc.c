@@ -229,7 +229,7 @@ static XrXirStatus storage_storable_footprint(XirStorageFlow *flow,
     if (flow->view.point_values[index].footprint_input != UINT32_MAX) return XR_XIR_OK;
     if (flow->exposure_started) return XR_XIR_BAD_STRUCTURE;
     uint32_t value = storage_aux(flow,point->function);
-    if (value == UINT32_MAX || !storage_unknown(flow,point->function,value,XR_XIR_UNIT) ||
+    if (value == UINT32_MAX || !storage_unknown_bank(flow,point->function,value,XR_XIR_UNIT,XIR_STORAGE_FOOTPRINT) ||
         !storage_relation_bank(flow,point->function,value,proxy.value,XIR_STORAGE_FOOTPRINT)) return flow->status;
     ((XirStoragePointValue *)flow->view.point_values)[index].footprint_input = value;
     return XR_XIR_OK;

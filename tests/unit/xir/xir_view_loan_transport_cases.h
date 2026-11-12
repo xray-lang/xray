@@ -61,7 +61,7 @@ static void view_loan_transport_fixture(ViewLoanTransportFixture *f) {
         f->bindings[n]=(XirStorageBinding){1,2,0,n?3:4,XIR_EXECUTION_CURRENT_ENVIRONMENT};
     }
     f->input=(XirStorageInput){.function=1,.value=2,.handle=0,.bank=XIR_STORAGE_FOOTPRINT};
-    f->unknown=(XirStorageUnknown){0,4,callable,UINT32_MAX};
+    f->unknown=(XirStorageUnknown){0,4,callable,UINT32_MAX,XIR_STORAGE_CONTENTS};
     f->facts=(XirViewLoanFacts){
         .restrictions={f->restrictions,2,f->formulas,11,NULL,0,NULL,0,{0}},
         .storage={.functions=f->storage,.function_count=2,.crossflows=f->crossflows,.crossflow_count=2,

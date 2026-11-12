@@ -174,6 +174,13 @@ static XrXirStatus restriction_capture(void *context, const XirStorageCapture *c
     if (capture->function != solver->builder->observations[solver->observation].function) return XR_XIR_BAD_STRUCTURE;
     if (capture->kind == XIR_STORAGE_CAPTURE_STORABLE_FN)
         return capture->contents == UINT32_MAX && capture->exposure == UINT32_MAX ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    if (capture->kind == XIR_STORAGE_CAPTURE_STORED_CELL) {
+        uint32_t f = capture->identity.function, v = capture->identity.value;
+        return capture->contents == UINT32_MAX && capture->exposure == UINT32_MAX &&
+            f < owner->module->function_count && v < owner->functions[f].physical_values &&
+            xr_xir_type_is_cell(owner->module->types, owner->nodes[owner->offsets[f] + v].type) ?
+                XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    }
     if (capture->contents == UINT32_MAX) return XR_XIR_UNRESOLVED;
     if (capture->kind == XIR_STORAGE_CAPTURE_FORMAL_FN || capture->kind == XIR_STORAGE_CAPTURE_HIDDEN_FN) {
         uint32_t f = capture->identity.function, p = capture->identity.value;

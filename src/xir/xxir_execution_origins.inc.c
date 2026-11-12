@@ -43,7 +43,11 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
     uint32_t results = 0;
     for (uint32_t c = 0; c < roots->calls; ++c)
         if (execution_result_call(roots,roots->call[c])) ++results;
-    edges += (uint64_t)view->unknown_count + results + view->bottom_count;
+    for (uint32_t u = 0; u < view->unknown_count; ++u)
+        if (view->unknowns[u].bank == XIR_STORAGE_CONTENTS && ++edges > UINT32_MAX) {
+            status = XR_XIR_OVERFLOW; goto done;
+        }
+    edges += (uint64_t)results + view->bottom_count;
     if (edges > UINT32_MAX) {status = XR_XIR_OVERFLOW; goto done;}
     if (nodes > SIZE_MAX / sizeof(*next.heads) || edges > SIZE_MAX / sizeof(*next.edges)) {
         status = XR_XIR_OVERFLOW; goto done;
@@ -95,10 +99,12 @@ static XrXirStatus execution_origins_receive(const XrXirCompileContext *memory,
     }
     for (uint32_t u = 0; u < view->unknown_count; ++u) {
         XirStorageUnknown unknown = view->unknowns[u];
-        if (unknown.function >= roots->templates || unknown.value >= view->functions[unknown.function].value_count ||
+        if ((uint32_t)unknown.bank > XIR_STORAGE_FOOTPRINT || unknown.function >= roots->templates ||
+            unknown.value >= view->functions[unknown.function].value_count ||
             (unknown.application != UINT32_MAX && unknown.application >= view->application_count)) {
             status = XR_XIR_BAD_STRUCTURE; goto done;
         }
+        if (unknown.bank != XIR_STORAGE_CONTENTS) continue;
         uint32_t target = next.offsets[unknown.function] + unknown.value;
         /* An entry's typed upper bound is represented by its formal input.
          * Later opaque writes have different version nodes and remain opaque. */
@@ -397,6 +403,7 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
                 capture.environment = origin.environment;
                 capture.capture_environment = origin.environment;
                 capture.entry_context = origin.entry_context;
+                capture.storable_environment = walk.footprint && origin.storable;
                 walk.status = visit(context, &capture);
                 predecessor = found = true;
             }
@@ -472,6 +479,13 @@ static XrXirStatus execution_visit_origins(const EffectCheckedRoots *roots,
     xr_compile_resources_free(walk.items);
     xr_compile_resources_free(walk.index);
     return walk.status;
+}
+
+XR_FUNC uint64_t xir_execution_storage_revision(const XirExecutionOwner *owner) {
+    /* Contents inputs precede the first receipt. Later origin edges append;
+     * binding replacements invalidate storage separately. Empty aux values
+     * add no source dependency and must not replay every application stage. */
+    return owner ? owner->storage_origins.count : 0;
 }
 
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *owner) {

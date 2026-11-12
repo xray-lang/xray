@@ -25,7 +25,10 @@ typedef struct StoragePredecessor {
 } StoragePredecessor;
 
 typedef struct StorageAddress { uint32_t first, count; bool ready; } StorageAddress;
-typedef struct StorageState { uint32_t point, handle, value, kind, order, generation; } StorageState;
+typedef struct StorageState {
+    uint32_t point, handle, value, kind, order, generation;
+    bool observes_origins;
+} StorageState;
 typedef struct StorageWork { uint32_t function, state; } StorageWork;
 typedef struct StorageIdentityLink { uint32_t identity, next; } StorageIdentityLink;
 typedef struct StorageFootprintLink { uint32_t input, next; } StorageFootprintLink;
@@ -119,6 +122,7 @@ struct XirStorageFlow {
     XrCompileRequestControl *control;
     XirStorageFlowView view;
     StorageFunction *rows;
+    uint64_t origins_revision;
     StorageWork *work;
     uint32_t work_count, work_capacity, work_first;
     StorageWork *stages;
@@ -350,7 +354,7 @@ static uint32_t storage_point(XirStorageFlow *flow, uint32_t function, uint32_t 
     uint32_t value = storage_aux(flow, function);
     if (value == UINT32_MAX) return value;
     uint32_t index = row->state_count++;
-    row->states[index] = (StorageState){point, handle, value, kind, order, 0}; row->state_index[slot] = index + 1;
+    row->states[index] = (StorageState){point, handle, value, kind, order, 0, false}; row->state_index[slot] = index + 1;
     flow->work[flow->work_count++] = (StorageWork){function, index};
     if (stage) flow->stages[flow->stage_count++] = (StorageWork){function, index};
     return value;
@@ -1369,6 +1373,7 @@ static bool storage_process_stage(XirStorageFlow *flow, uint32_t function, uint3
             StorageExecution record = flow->sites[s];
             if (!storage_site_port(flow, function, &record.site, state) || record.site.order != state.order - 1) continue;
             if (record.applications[0] == UINT32_MAX) {
+                flow->rows[function].states[state_index].observes_origins = true;
                 if (!storage_apply_opaque(flow, &record.site, function, state, input)) return false;
             } else {
                 XirExecutionPort outcome = kind == 4 ? XIR_EXECUTION_PANIC :
@@ -1770,6 +1775,18 @@ XR_FUNC XrXirStatus xir_storage_flow_link(XirStorageFlow *flow, const XirExecuti
     if (flow->status != XR_XIR_OK) return flow->status;
     uint32_t generation = flow->generation, work = flow->work_count;
     uint64_t revision = flow->revision;
+    uint64_t origins = xir_execution_storage_revision(execution);
+    if (origins != flow->origins_revision) {
+        flow->origins_revision = origins;
+        /* Known applications consume numeric bindings, and joins retain their
+         * existing source edges. Only opaque applications query ROOT origins. */
+        for (uint32_t s = 0; s < flow->stage_count && storage_step(flow); ++s) {
+            StorageWork stage = flow->stages[s];
+            StorageState *state = &flow->rows[stage.function].states[stage.state];
+            if (state->observes_origins) state->generation = 0;
+        }
+        flow->stage_first = 0;
+    }
     for (uint32_t s = 0; s < flow->site_count; ++s) flow->sites[s].active = false;
     flow->status = xir_execution_visit_captures(execution, storage_import_site, flow);
     if (flow->status == XR_XIR_OK) flow->status = xir_execution_visit_calls(execution, storage_import_site, flow);

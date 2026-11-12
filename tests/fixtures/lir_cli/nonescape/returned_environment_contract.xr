@@ -1,0 +1,18 @@
+fn makeCounter(start: i64) -> fn() -> i64 {
+    var count = start
+    return fn() -> i64 {
+        count = count + 1
+        return count
+    }
+}
+
+fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(x: i64) -> i64 { return f(g(x)) }
+}
+
+var counter = makeCounter(0)
+var doubleIt = fn(x: i64) -> i64 { return x * 2 }
+var addTen = fn(x: i64) -> i64 { return x + 10 }
+var combined = compose(doubleIt, addTen)
+print(counter())
+print(combined(5))
