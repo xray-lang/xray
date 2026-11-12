@@ -114,7 +114,7 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:29:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:49:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -126,7 +126,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:17:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: VIEW_CLEANUP is not supported by LIR lowering yet"
       }
     },
     {
@@ -138,7 +138,7 @@
       "stdout": "tests/smoke/expected/arrays.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:17:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/arrays.xr:7:5: VIEW_CLEANUP is not supported by LIR lowering yet"
       }
     },
     {
@@ -920,7 +920,7 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:29:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:49:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
