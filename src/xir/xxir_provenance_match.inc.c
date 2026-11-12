@@ -267,8 +267,11 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 if (!declared_owners[o]) continue;
                 if (actual_owners[o] > f) return XR_XIR_BAD_STRUCTURE;
                 const XrXirOrigin *parent = &c->origins[actual_owners[o] - 1];
-                if (parent->function != declared_owners[o] - 1 ||
-                    parent->argument_count != origin->argument_count) return XR_XIR_BAD_STRUCTURE;
+                if (parent->function != declared_owners[o] - 1) return XR_XIR_BAD_STRUCTURE;
+                /* Cleanup bodies inherit their owner's substitutions. Captured
+                 * functions use the type arguments on their own reference. */
+                if (o) continue;
+                if (parent->argument_count != origin->argument_count) return XR_XIR_BAD_STRUCTURE;
                 for (uint32_t a = 0; a < origin->argument_count; ++a) {
 
 
