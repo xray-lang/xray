@@ -427,7 +427,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
-    if (xr_lir_constructed_type_count(input) && !rbc_lir_fixed_point(i)) {
+    if (xr_lir_constructed_type_count(input) && !rbc_lir_fixed_point(i) &&
+        !rbc_lir_fixed_state(input, function, i)) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[p]}, &type);
@@ -614,7 +615,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (rbc_lir_array_point(c, &i) || rbc_lir_fixed_point(&i)) continue;
+            if (rbc_lir_array_point(c, &i) || rbc_lir_fixed_point(&i) ||
+                rbc_lir_fixed_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
@@ -1003,6 +1005,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
     if (rbc_lir_fixed_point(i)) return rbc_lir_aggregate_emit(c, i);
+    if (rbc_lir_fixed_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
     if(rbc_lir_array_point(c,i))return rbc_lir_array_emit(c,i);
     if (i->op == XR_LIR_CONST &&
         (c->immediates[i->result].known || c->immediates[i->result].pooled) &&

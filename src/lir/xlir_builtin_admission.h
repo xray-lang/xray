@@ -20,6 +20,13 @@ static inline bool lir_builtin_signature(XrLirType result, const XrLirType *para
     return true;
 }
 
+static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirType type) {
+    if (type < XR_LIR_TYPE_COUNT) return true;
+    XrLirTypeView view = {0};
+    return xr_lir_type_view(module, type, &view) == XR_LIR_OK &&
+        view.kind == XR_LIR_TYPE_FIXED_ARRAY && view.element == XR_LIR_U8;
+}
+
 /* Signatures and module payloads remain builtin until their physical ABI is
  * supported. Aggregate SSA values have a separately owned storage projection. */
 static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
@@ -50,7 +57,7 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
             if (type == XR_LIR_STATE_REF) {
                 XrLirStateReference shape;
                 if (xr_lir_state_reference_view(module, handle, &shape) != XR_LIR_OK ||
-                    (uint32_t)shape.payload >= XR_LIR_TYPE_COUNT ||
+                    !lir_builtin_or_fixed_type(module, shape.payload) ||
                     (uint32_t)shape.array_element >= XR_LIR_TYPE_COUNT) return false;
             } else if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
                 XrLirArrayShape shape;
@@ -62,7 +69,7 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
     XrLirStateLayout layout;
     if (xr_lir_state_layout_view(module, &layout) != XR_LIR_OK) return false;
     for (uint32_t i = 0; i < layout.slot_count; ++i)
-        if ((uint32_t)layout.slots[i].payload >= XR_LIR_TYPE_COUNT ||
+        if (!lir_builtin_or_fixed_type(module, layout.slots[i].payload) ||
             (uint32_t)layout.slots[i].array_element >= XR_LIR_TYPE_COUNT) return false;
     return true;
 }

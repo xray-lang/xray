@@ -121,3 +121,78 @@ static XrLirModule *fixed_bytecode_loop_fixture(uint32_t count, XrLirFunction *r
     OK(xr_lir_module_finish(module, NULL));
     return module;
 }
+
+static XrLirModule *fixed_bytecode_state_fixture(uint32_t count, unsigned mode, XrLirFunction *root) {
+    XrLirModule *module = NULL;
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType fixed = 0, state_type = XR_LIR_STATE;
+    OK(xr_lir_fixed_array_type(module, XR_LIR_U8, count, &fixed));
+    XrLirStateModule owner = {0};
+    XrLirStateSlot slot = {.payload = fixed, .mutable = mode != 1, .size = count, .alignment = 1};
+    XrLirStateLayout layout = {.modules = &owner, .module_count = 1, .slots = &slot, .slot_count = 1,
+        .payload_size = count, .payload_alignment = 1};
+    OK(xr_lir_set_state_layout(module, &layout));
+    XrLirFunctionSpec function = {.name = "fixed_state", .name_length = 11,
+        .parameters = &state_type, .parameter_count = 1, .result = XR_LIR_I64};
+    OK(xr_lir_declare_function(module, &function, root));
+    OK(xr_lir_define_function(module, *root));
+    OK(xr_lir_set_state_entry(module, *root));
+    XrLirBlock block = {0};
+    OK(xr_lir_add_block(module, *root, NULL, 0, &block));
+    OK(xr_lir_set_entry(module, *root, block));
+    XrLirValue state = {0};
+    OK(xr_lir_function_parameter(module, *root, 0, &state));
+    XrLirInstruction effect = {.op = XR_LIR_MODULE_BEGIN, .type = XR_LIR_UNIT,
+        .operands = &state, .operand_count = 1};
+    OK(xr_lir_emit_effect(module, block, &effect));
+    if (mode == 3)
+        for (uint32_t n = 0; n < 300; ++n)
+            (void)fixed_bytecode_value(module, block, XR_LIR_CONST, XR_LIR_I64, NULL, 0, n);
+    XrLirValue reference = fixed_bytecode_value(module, block, XR_LIR_STATE_REFERENCE, XR_LIR_STATE_REF, &state, 1, 0);
+    XrLirValue *operands = xr_malloc((size_t)count * sizeof(*operands));
+    CHECK(operands);
+    XrLirValue byte = fixed_bytecode_value(module, block, XR_LIR_CONST, XR_LIR_U8, NULL, 0, 37);
+    for (uint32_t n = 0; n < count; ++n) operands[n] = byte;
+    XrLirValue initial = fixed_bytecode_value(module, block, XR_LIR_FIXED_ARRAY_NEW, fixed, operands, count, 0);
+    XrLirValue args[] = {state, initial};
+    if (mode == 1) {
+        effect = (XrLirInstruction){.op = XR_LIR_STATE_INITIALIZE, .type = XR_LIR_UNIT,
+            .operands = args, .operand_count = 2};
+        OK(xr_lir_emit_effect(module, block, &effect));
+    } else {
+        XrLirValue initializer = fixed_bytecode_value(module, block, XR_LIR_STATE_CONSTRUCT, XR_LIR_STATE_REF, args, 2, 0);
+        if (mode != 2) {
+            (void)fixed_bytecode_value(module, block, XR_LIR_STATE_READ, fixed, &initializer, 1, 0);
+            effect = (XrLirInstruction){.op = XR_LIR_STATE_PUBLISH, .type = XR_LIR_UNIT,
+                .operands = &initializer, .operand_count = 1};
+            OK(xr_lir_emit_effect(module, block, &effect));
+        }
+    }
+    XrLirValue snapshot = {0};
+    XrLirInstruction read = {.op = XR_LIR_STATE_READ, .type = fixed, .operands = &reference, .operand_count = 1,
+        .source = {"fixed-state.xr", 14, 45, 6, 45, 12}};
+    OK(xr_lir_emit_value(module, block, &read, &snapshot));
+    if (mode != 1 && mode != 2) {
+        byte = fixed_bytecode_value(module, block, XR_LIR_CONST, XR_LIR_U8, NULL, 0, 91);
+        for (uint32_t n = 0; n < count; ++n) operands[n] = byte;
+        XrLirValue replacement = fixed_bytecode_value(module, block, XR_LIR_FIXED_ARRAY_NEW, fixed, operands, count, 0);
+        XrLirValue values[] = {reference, replacement};
+        effect = (XrLirInstruction){.op = XR_LIR_STATE_WRITE, .type = XR_LIR_UNIT,
+            .operands = values, .operand_count = 2};
+        OK(xr_lir_emit_effect(module, block, &effect));
+    }
+    xr_free(operands);
+    XrLirValue current = fixed_bytecode_value(module, block, XR_LIR_STATE_READ, fixed, &reference, 1, 0);
+    XrLirValue index = fixed_bytecode_value(module, block, XR_LIR_CONST, XR_LIR_I64, NULL, 0, count - 1), values[2];
+    XrLirValue aggregates[] = {snapshot, current};
+    for (uint32_t n = 0; n < 2; ++n) {
+        XrLirValue get[] = {aggregates[n], index};
+        byte = fixed_bytecode_value(module, block, XR_LIR_FIXED_ARRAY_GET, XR_LIR_U8, get, 2, 0);
+        values[n] = fixed_bytecode_value(module, block, XR_LIR_INTCAST, XR_LIR_I64, &byte, 1, 0);
+    }
+    XrLirValue result = fixed_bytecode_value(module, block, XR_LIR_ADD, XR_LIR_I64, values, 2, 0);
+    effect = (XrLirInstruction){.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &result, .operand_count = 1};
+    OK(xr_lir_set_terminator(module, block, &effect));
+    OK(xr_lir_module_finish(module, NULL));
+    return module;
+}

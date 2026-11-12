@@ -10,7 +10,7 @@ static uint8_t rbc_array_state(const RbcStringAdmission *s, XrRbcArrayLocation l
     return location.spill ? s->spills[location.index].state : s->state[location.index];
 }
 static void rbc_array_define(RbcStringAdmission *s, XrRbcArrayLocation location, uint8_t state, uint32_t origin) {
-    if (location.spill) s->spills[location.index] = (RbcSpillState){(uint16_t)origin, state};
+    if (location.spill) s->spills[location.index] = (RbcSpillState){origin, state};
     else { s->state[location.index] = state; s->origin[location.index] = origin; }
 }
 static bool rbc_array_destination(const RbcStringAdmission *s, XrRbcArrayLocation location) {

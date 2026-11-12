@@ -16,6 +16,16 @@ static bool rbc_lir_fixed_type(const XrLirModule *module, XrLirType type) {
         shape.kind == XR_LIR_TYPE_FIXED_ARRAY && shape.element == XR_LIR_U8 && shape.count && shape.count <= 65535;
 }
 
+static bool rbc_lir_fixed_state(const XrLirModule *module, XrLirFunction function,
+    const XrLirInstructionView *instruction) {
+    if (instruction->op == XR_LIR_STATE_READ) return instruction->type >= XR_LIR_TYPE_COUNT;
+    if ((instruction->op != XR_LIR_STATE_WRITE && instruction->op != XR_LIR_STATE_CONSTRUCT &&
+         instruction->op != XR_LIR_STATE_INITIALIZE) || instruction->operand_count != 2) return false;
+    XrLirType type = XR_LIR_TYPE_INVALID;
+    xr_lir_value_type(module, (XrLirValue){module, function.id, instruction->operands[1]}, &type);
+    return type >= XR_LIR_TYPE_COUNT;
+}
+
 static bool rbc_lir_aggregate_homes(RbcLirCompiler *c) {
     if (!xr_lir_constructed_type_count(c->input)) return true;
     uint32_t count = 0;
@@ -117,6 +127,27 @@ static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView
         uint32_t value = instruction->operands[construct ? n : 1];
         c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, value);
     }
+    return rbc_lir_aggregate_append(c, access);
+}
+
+static bool rbc_lir_aggregate_state_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
+    bool read = instruction->op == XR_LIR_STATE_READ;
+    bool construct = instruction->op == XR_LIR_STATE_CONSTRUCT;
+    XrRbcAggregateAccess access = {.operation = read ? XR_RBC_AGGREGATE_STATE_READ :
+        construct ? XR_RBC_AGGREGATE_STATE_CONSTRUCT : instruction->op == XR_LIR_STATE_INITIALIZE ?
+        XR_RBC_AGGREGATE_STATE_INITIALIZE : XR_RBC_AGGREGATE_STATE_WRITE, .count = 1};
+    if (read) access.destination = c->aggregate_home[instruction->result];
+    else access.source = c->aggregate_home[instruction->operands[1]];
+    if (construct) access.result = rbc_lir_array_location(c, instruction->result);
+    if (construct || instruction->op == XR_LIR_STATE_INITIALIZE) access.slot = (uint32_t)instruction->bits;
+    if (c->aggregate_operand_count == UINT32_MAX)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate state operands exceed bytecode indices");
+    void *storage = c->aggregate_operands;
+    if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
+        c->aggregate_operand_count + 1, sizeof(*c->aggregate_operands))) return false;
+    c->aggregate_operands = storage;
+    access.first = (uint32_t)c->aggregate_operand_count;
+    c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, instruction->operands[0]);
     return rbc_lir_aggregate_append(c, access);
 }
 

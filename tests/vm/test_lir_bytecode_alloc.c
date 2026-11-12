@@ -700,7 +700,34 @@ static void aggregate_value_compiler_failures(uint32_t count, bool dynamic, bool
     attempts = 0;
 }
 
+static void aggregate_state_compiler_failures(void) {
+    XrLirFunction root = {0};
+    XrLirModule *module = fixed_bytecode_state_fixture(17, 0, &root);
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(total > 30 && !live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    uint64_t bits = 0;
+    CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OK && bits == 128);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("aggregate State %zu allocation failures and retired LIR PASS\n", total);
+    attempts = 0;
+}
+
 int main(void) {
+    aggregate_state_compiler_failures();
     aggregate_value_compiler_failures(17, false, false);
     aggregate_value_compiler_failures(300, true, false);
     aggregate_value_compiler_failures(17, false, true);

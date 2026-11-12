@@ -36,8 +36,61 @@ static uint8_t *xr_rbc_aggregate_value(XrRbcStack *stack, const XrRbcFrame *fram
     return (uint8_t *)(stack->spills + frame->aggregate_base - 1) + value.offset;
 }
 
+static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcStack *stack,
+    XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    XrRbcAggregateAccess access = f->aggregate_accesses[index];
+    bool read = access.operation == XR_RBC_AGGREGATE_STATE_READ;
+    bool construct = access.operation == XR_RBC_AGGREGATE_STATE_CONSTRUCT;
+    bool initialize = access.operation == XR_RBC_AGGREGATE_STATE_INITIALIZE;
+    XrRbcArrayLocation operand = f->aggregate_operands[access.first];
+    XrtModuleAccess *reference = NULL;
+    if (!construct && !initialize) {
+        reference = xr_rbc_aggregate_scalar(stack, frame, operand)->state_ref;
+        xr_rbc_state_ready(reference, source);
+    }
+    if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
+    XrRbcAggregateValue value = f->aggregate_values[read ? access.destination : access.source];
+    XrRbcAggregateType type = module->aggregate_types[value.type];
+    uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
+    uint8_t lanes[16];
+    void *payload = type.count <= 16 ? lanes : bytes;
+    if (read) {
+        memcpy(payload, reference->payload, type.count);
+        if (type.count <= 16)
+            for (uint32_t n = 0; n < type.count; ++n) {
+                uint64_t bits = lanes[n];
+                memcpy(bytes + (size_t)n * sizeof(bits), &bits, sizeof(bits));
+            }
+        return XR_RBC_OK;
+    }
+    if (type.count <= 16)
+        for (uint32_t n = 0; n < type.count; ++n) {
+            uint64_t bits = 0;
+            memcpy(&bits, bytes + (size_t)n * sizeof(bits), sizeof(bits));
+            lanes[n] = (uint8_t)bits;
+        }
+    XrtModuleStatus status;
+    if (construct || initialize) {
+        XrtModuleState *state = xr_rbc_aggregate_scalar(stack, frame, operand)->state;
+        if (initialize) status = xrt_module_initialize(state, access.slot, payload);
+        else {
+            XrtModuleRef *created = NULL;
+            status = xrt_module_construct(state, access.slot, payload, &created);
+            if (!status) {
+                reference = &stack->module_accesses[(size_t)access.slot * 2];
+                status = xrt_module_reference_cache(created, reference);
+                if (!status) xr_rbc_aggregate_scalar(stack, frame, access.result)->state_ref = reference;
+            }
+        }
+    } else status = xrt_module_replace(reference->reference, payload);
+    if (status) xrt_value_failure((XrXirValueStatus)status, source);
+    return XR_RBC_OK;
+}
+
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    if (f->aggregate_accesses[index].operation >= XR_RBC_AGGREGATE_STATE_READ)
+        return xr_rbc_aggregate_state_step(module, stack, frame, f, index, source);
     if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
     XrRbcAggregateAccess access = f->aggregate_accesses[index];
     XrRbcAggregateValue value = f->aggregate_values[access.operation == XR_RBC_AGGREGATE_GET ?

@@ -150,13 +150,15 @@ typedef struct XrRbcStateAccess {
 
 typedef struct XrRbcAggregateValue { uint32_t type, offset; } XrRbcAggregateValue;
 typedef enum XrRbcAggregateOperation {
-    XR_RBC_AGGREGATE_NEW, XR_RBC_AGGREGATE_GET, XR_RBC_AGGREGATE_COPY
+    XR_RBC_AGGREGATE_NEW, XR_RBC_AGGREGATE_GET, XR_RBC_AGGREGATE_COPY,
+    XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
+    XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
     uint32_t destination, source;
     XrRbcArrayLocation result;
-    uint32_t first, count;
+    uint32_t first, count, slot;
 } XrRbcAggregateAccess;
 
 typedef struct {

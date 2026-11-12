@@ -33,7 +33,8 @@ static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
             rbc_register_kind(entry, entry->parameter_count - 1) != XR_RBC_STATE) return false;
         for (uint32_t i = 0; i < layout.slot_count; ++i)
             if (layout.slots[i].type >= layout.type_count ||
-                !xr_rbc_state_payload_kind(layout.types[layout.slots[i].type].kind)) return false;
+                (!xr_rbc_state_payload_kind(layout.types[layout.slots[i].type].kind) &&
+                 layout.types[layout.slots[i].type].kind != XRT_MODULE_FIXED_U8)) return false;
     } else if (module->state_entry) return false;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
@@ -75,6 +76,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     if (index >= function->state_access_count) return false;
     XrRbcStateAccess access = function->state_accesses[index];
     XrtModuleTypeKind kind = layout.types[layout.slots[access.slot].type].kind;
+    if (kind == XRT_MODULE_FIXED_U8 && op != XR_RBC_STATE_REFERENCE) return false;
     XrRbcRegisterKind payload = rbc_state_register_kind(kind);
     if (op == XR_RBC_STATE_INITIALIZE)
         return !(layout.slots[access.slot].flags & XRT_MODULE_SLOT_MUTABLE) &&
@@ -92,6 +94,9 @@ static uint32_t xr_rbc_state_shape(const XrRbcModule *module, uint32_t slot) {
     XrtModuleLayoutSpec layout = {0};
     if (xrt_module_layout_view(module->state_layout, &layout) != XR_XIR_VALUE_OK) return 0;
     XrtModuleSlotSpec row = layout.slots[slot];
+    /* Preserve the exact byte count through MOV, joins and typed spills. The
+     * low byte and mutable bit retain their existing scalar capability roles. */
     return ((uint32_t)layout.types[row.type].kind + 1u) |
+        (layout.types[row.type].fixed_count << 16) |
         ((row.flags & XRT_MODULE_SLOT_MUTABLE) ? 256u : 0u);
 }

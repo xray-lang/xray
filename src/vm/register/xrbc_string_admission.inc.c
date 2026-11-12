@@ -9,7 +9,7 @@
 enum { RBC_BITS, RBC_STRING_BORROWED, RBC_STRING_OWNED, RBC_CELL_BORROWED,
        RBC_CELL_OWNED, RBC_EMPTY, RBC_STATE_BORROWED, RBC_STATE_REFERENCE,
        RBC_ARRAY_REF_CELL, RBC_ARRAY_REF_STATE, RBC_ARRAY_REF_FORMAL };
-typedef struct RbcSpillState { uint16_t origin; uint8_t state; } RbcSpillState;
+typedef struct RbcSpillState { uint32_t origin; uint8_t state; } RbcSpillState;
 typedef struct RbcStringAdmission {
     const XrRbcModule *module;
     const XrRbcFunction *function;
@@ -404,7 +404,7 @@ static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
     if (v.op == XR_RBC_SPILL) {
         if (s->state[v.a] != initialized ||
             (string && s->spills[index].state != RBC_EMPTY)) return false;
-        s->spills[index] = (RbcSpillState){(uint16_t)s->origin[v.a], initialized};
+        s->spills[index] = (RbcSpillState){s->origin[v.a], initialized};
         s->state[v.a] = RBC_EMPTY;
         if (string) rbc_string_forget_borrows(s, v.a);
     } else {

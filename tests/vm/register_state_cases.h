@@ -236,13 +236,24 @@ static void test_raw_fixed_state_frontier(void) {
         .payload_alignment=1, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
     CHECK(xrt_module_layout_new(&spec, &layout) == 0);
-    uint32_t code[2];
+    uint32_t code[4];
     immediate(code, 0, XR_RBC_LOADI, 1, 0);
     emit(code, 1, XR_RBC_RET, 1, 0, 0);
-    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS};
+    XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
     XrRbcFunction function = {.code=code, .code_count=2, .register_count=2,
         .parameter_count=1, .register_kinds=kinds, .register_kind_count=2};
     XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=layout};
+    uint64_t result = 91;
+    CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && !result);
+    XrRbcStateAccess reference = {0};
+    function.state_accesses = &reference;
+    function.state_access_count = 1;
+    function.register_count = function.register_kind_count = 3;
+    function.code_count = 4;
+    immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
+    immediate(code, 1, XR_RBC_STATE_REFERENCE, 2, 0);
+    emit(code, 2, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_FIXED_U8);
+    emit(code, 3, XR_RBC_RET, 1, 0, 0);
     reject_prepare(&module, 0, NULL, 0);
     xrt_module_layout_drop(&layout);
 }
