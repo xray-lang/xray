@@ -118,7 +118,7 @@ static bool lower_view_local(LowerFunction *f, uint32_t block, uint32_t index, b
     XrXirType type = write ? xr_xir_operand_type(f->source, op->args[0]) : op->type;
     if ((!create && !read && !write) || lower_type(f->owner, type) != XR_LIR_SLICE_I64) return true;
     *handled = true;
-    uint32_t place = create ? result : op->args[0], cell;
+    uint32_t place = create ? result : op->args[0], cell = 0;
     if (!lower_cell_index(f, place, &cell)) return false;
     XrLirValue input = f->current[cell];
     if (!read && !lower_value(f, op->args[create ? 0 : 1], &input)) return false;

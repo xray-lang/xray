@@ -225,7 +225,7 @@ XRAY_API XR_NOINLINE XrtViewCell xrt_view_cell_new(XrtViewFrame token, uint32_t 
      * Taking requires the current domain; ordinary canonical copying retains
      * that input without transferring the original owner's reference. */
     if (array_owner->domain == admission.domain) {
-        view_require_status(xir_cell_new_take_prepare(VIEW_CELL_TYPE, &frame->pending,
+        view_require_status(xir_cell_new_take_prepare((XrXirType)VIEW_CELL_TYPE, &frame->pending,
             &admission, &frame->pending_cell), source);
         view_clear_cell(frame, ordinal);
         xir_cell_new_take_commit(&frame->pending_cell, &frame->pending.payload, &frame->cells[ordinal].value);
@@ -233,7 +233,7 @@ XRAY_API XR_NOINLINE XrtViewCell xrt_view_cell_new(XrtViewFrame token, uint32_t 
     } else {
         XrXirValue created = {0};
         view_require_status(xr_xir_cell_new(admission.domain, types,
-            VIEW_CELL_TYPE, &frame->pending, &admission, &created), source);
+            (XrXirType)VIEW_CELL_TYPE, &frame->pending, &admission, &created), source);
         view_clear_cell(frame, ordinal);
         frame->cells[ordinal].value = created;
         xr_xir_value_drop(&frame->pending);
