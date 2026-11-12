@@ -7,6 +7,7 @@
  * lir_fixed_lower_cases.h - Exact byte values retain evaluation and state traps
  */
 #include "lir/xlir_rebuild.h"
+#include "lir/xlir_types.h"
 #include "lir/xlir_inline.h"
 #include "lir/xlir_sccp.h"
 #include "lir/xlir_string_elide.h"
