@@ -113,6 +113,9 @@ typedef struct XirExecutionSite {
     /* An ordinary storable formal has an invocation-loan contract. Consumers
      * retain its current footprint independently of its escape permission. */
     bool invocation_contract;
+    /* A footprint branch has crossed a validated stored-value boundary.
+     * Its restriction is fixed, while captures and environment loans remain. */
+    bool storable_environment;
 } XirExecutionSite;
 
 typedef struct XirExecutionValue { uint32_t function, value, environment; } XirExecutionValue;
@@ -186,6 +189,9 @@ XR_FUNC XrXirStatus xir_execution_visit_value_footprint_in(const XirExecutionOwn
     const XirExecutionValue *, XirExecutionVisitor, void *, bool *complete, uint32_t *remainder);
 /* Construction rebinds this receiving index once after each storage round. */
 XR_FUNC XrXirStatus xir_execution_refresh_storage(XirExecutionOwner *);
+/* The append-only origin inventory can grow without adding call sites.
+ * Storage stages must consume that new inventory before final exposure. */
+XR_FUNC uint64_t xir_execution_storage_revision(const XirExecutionOwner *);
 /* Qualified substitution of this owner's symbolic receiver. Returned pending
  * projections retain their canonical index and name the originating capture
  * record in reference. Consumers key an application by both IDs and context. */

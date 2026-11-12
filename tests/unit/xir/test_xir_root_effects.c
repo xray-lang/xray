@@ -89,9 +89,13 @@ static XrXirStatus stored_environment_case(const XrXirArtifact *artifact, bool r
         bool external = false;
         for (uint32_t u = 0; u < view.unknown_count; ++u) {
             XirStorageUnknown unknown = view.unknowns[u];
+            if (unknown.function == point.function && unknown.value == point.footprint_input)
+                CHECK(unknown.bank == XIR_STORAGE_FOOTPRINT);
             external |= unknown.function == point.function && unknown.value == point.footprint_input;
         }
         if (!external) continue;
+        EffectCheckOrigins origins = effects->checked_roots->storage_origins;
+        CHECK(origins.heads[origins.offsets[point.function]+point.footprint_input] == UINT32_MAX);
         bool edge = false;
         XirStorageFlowFunction row = view.functions[point.function];
         for (uint32_t e = 0; e < row.footprint_flow_count; ++e)
@@ -824,7 +828,7 @@ static uint32_t escaping_footprint_leaf(const EffectCheckedRoots *roots) {
     CHECK(false);return UINT32_MAX;
 }
 
-static XrXirStatus unresolved_lifetime_case(bool opaque_result,bool relocate) {
+static XrXirStatus stored_lifetime_case(bool opaque_result,bool relocate) {
     XrXirType callable=XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,
@@ -899,10 +903,9 @@ static XrXirStatus unresolved_lifetime_case(bool opaque_result,bool relocate) {
     }
     if (status==XR_XIR_OK) status=xir_effects_finish_prepared_input(&effect_context,input,&refiner,
         &prepared,&effects,&diagnostic);
-    XrXirStatus expected=opaque_result?XR_XIR_UNRESOLVED:XR_XIR_OK;
-    if (status!=expected && fail_at==SIZE_MAX)
-        fprintf(stderr,"unresolved fixture status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction);
-    if (status==XR_XIR_OK) CHECK(!opaque_result && effects);
+    if (status!=XR_XIR_OK && fail_at==SIZE_MAX)
+        fprintf(stderr,"stored fixture status %u function %u instruction %u\n",status,diagnostic.function,diagnostic.instruction);
+    if (status==XR_XIR_OK) CHECK(effects);
     else CHECK(!effects);
     xr_xir_compile_effects_free(effects);
     xr_xir_compile_effects_free(prepared);
@@ -1018,26 +1021,26 @@ static void scoped_task_transfer_ownership(void) {
     printf("Scoped Task transfer: authentic group and raw external Sendable refusal PASS\n");
 }
 
-static void unresolved_lifetime_ownership(void) {
+static void stored_lifetime_ownership(void) {
     EffectMark baseline=effect_mark();
-    CHECK(unresolved_lifetime_case(false,false)==XR_XIR_OK);
+    CHECK(stored_lifetime_case(false,false)==XR_XIR_OK);
     effect_mark_check(baseline);
     attempts=0;
-    CHECK(unresolved_lifetime_case(false,true)==XR_XIR_OK);
+    CHECK(stored_lifetime_case(false,true)==XR_XIR_OK);
     size_t relocated_sites=attempts;
     effect_mark_check(baseline);
     for (size_t site=0;site<relocated_sites;++site) {
         attempts=0;injected=false;fail_at=site;
-        CHECK(unresolved_lifetime_case(false,true)==XR_XIR_OUT_OF_MEMORY && injected);
+        CHECK(stored_lifetime_case(false,true)==XR_XIR_OUT_OF_MEMORY && injected);
         fail_at=SIZE_MAX;effect_mark_check(baseline);
     }
     attempts=0;
-    CHECK(unresolved_lifetime_case(true,false)==XR_XIR_UNRESOLVED);
+    CHECK(stored_lifetime_case(true,false)==XR_XIR_OK);
     size_t sites=attempts;
     effect_mark_check(baseline);
     for (size_t site=0;site<sites;++site) {
         attempts=0;injected=false;fail_at=site;
-        CHECK(unresolved_lifetime_case(true,false)==XR_XIR_OUT_OF_MEMORY && injected);
+        CHECK(stored_lifetime_case(true,false)==XR_XIR_OUT_OF_MEMORY && injected);
         fail_at=SIZE_MAX;effect_mark_check(baseline);
     }
     printf("lifetime footprints: %zu relocated-contract and %zu opaque publication allocation failures PASS\n",
@@ -1400,7 +1403,7 @@ static void control_summary_kernel(void) {
     execution_cleanup_order();
     execution_origin_namespaces();
     restriction_owner_relocation();
-    unresolved_lifetime_ownership();
+    stored_lifetime_ownership();
     task_transfer_ownership();
     scoped_task_transfer_ownership();
     c_callable_parameter_equations();

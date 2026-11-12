@@ -186,7 +186,7 @@ static void storage_environment_guard_cases(void) {
     for (uint32_t n = 0; n < sizeof(rejected) / sizeof(rejected[0]); ++n)
         storage_environment_guard_case("borrowed-or-generic", rejected[n], STORAGE_ENVIRONMENT_CAPTURE,
             XIR_EXECUTION_REMAINDER_OPAQUE);
-    storage_environment_guard_case("opaque-callee", XR_XIR_UNIT, STORAGE_ENVIRONMENT_OPAQUE, XIR_EXECUTION_REMAINDER_OPAQUE);
+    storage_environment_guard_case("stored-result-contract", XR_XIR_UNIT, STORAGE_ENVIRONMENT_OPAQUE, 0);
     storage_environment_guard_case("unbound", XR_XIR_I64, STORAGE_ENVIRONMENT_UNBOUND, XIR_EXECUTION_REMAINDER_PARAMETER);
     storage_environment_guard_case("cycle", XR_XIR_I64, STORAGE_ENVIRONMENT_CYCLE, XIR_EXECUTION_REMAINDER_PARAMETER);
     storage_environment_guard_case("declaration-contract", XR_XIR_I64, STORAGE_ENVIRONMENT_CONTRACT, 0);

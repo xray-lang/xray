@@ -1,0 +1,4 @@
+fn wrap(factory: escaping nosuspend fn() -> nosuspend fn() -> i64) -> nosuspend fn() -> i64 {
+    const value = factory()
+    return fn() -> i64 { return value() }
+}

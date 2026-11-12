@@ -35,7 +35,7 @@ typedef struct StorageEnvironmentProof {
     uint32_t *index, *queue;
     uint32_t count, capacity, index_capacity, edge_count, edge_capacity;
     uint32_t queue_count, queue_capacity, current, remainder;
-    bool closed_values;
+    bool closed_values, restriction_contract;
 } StorageEnvironmentProof;
 
 static uint32_t storage_environment_hash(StorageEnvironmentNode node) {
@@ -95,7 +95,7 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
     StorageEnvironmentProof *proof = opaque;
     XirStorageFlow *flow = proof->flow;
     if (site->kind == XIR_EXECUTION_STORABLE) {
-        proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
+        if (!proof->restriction_contract) proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
         return XR_XIR_OK;
     }
     if (site->kind == XIR_EXECUTION_FORMAL || site->kind == XIR_EXECUTION_CAPTURE_INPUT) {
@@ -107,6 +107,10 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         XrXirStatus status = xir_execution_argument(flow->execution, site, 0, &formal);
         if (status == XR_XIR_OK) status = xir_execution_parameter(flow->execution, site, 0, &parameter);
         if (status != XR_XIR_OK) return status;
+        /* Escape permission is independent of environment completeness. The
+         * corresponding footprint input still carries the invocation loan. */
+        if (proof->restriction_contract && !parameter.hidden && parameter.escaping && !parameter.cell)
+            return XR_XIR_OK;
         if (parameter.cell || parameter.generic_storage ||
             xr_xir_type_is_c_callable(xir_execution_types(flow->execution), parameter.type)) {
             proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
@@ -122,7 +126,11 @@ static XrXirStatus storage_environment_visit(void *opaque, const XirExecutionSit
         XrXirStatus status = xir_execution_argument(flow->execution, site, p, &actual);
         if (status == XR_XIR_UNRESOLVED) { proof->remainder |= XIR_EXECUTION_REMAINDER_STORAGE; continue; }
         if (status != XR_XIR_OK) return status;
-        if (actual.cell) { proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE; continue; }
+        if (actual.cell) {
+            if (!proof->restriction_contract || !site->storable_environment)
+                proof->remainder |= XIR_EXECUTION_REMAINDER_OPAQUE;
+            continue;
+        }
         const XrXirTypes *types = xir_execution_types(flow->execution);
         if (xr_xir_type_is_c_callable(types, actual.type)) continue;
         if (!xr_xir_type_is_callable(types, actual.type)) {
@@ -146,9 +154,16 @@ static bool storage_environment_expand(StorageEnvironmentProof *proof, uint32_t 
     StorageEnvironmentNode node = proof->nodes[index];
     if (node.kind == STORAGE_ENVIRONMENT_VALUE) {
         bool complete = false; uint32_t remainder = 0;
-        XrXirStatus status = xir_execution_visit_value_environment_inputs_in(flow->execution, &node.reference,
-            storage_environment_visit, proof, &complete, &remainder);
+        XrXirStatus status = proof->restriction_contract ?
+            xir_execution_visit_value_footprint_in(flow->execution, &node.reference,
+                storage_environment_visit, proof, &complete, &remainder) :
+            xir_execution_visit_value_environment_inputs_in(flow->execution, &node.reference,
+                storage_environment_visit, proof, &complete, &remainder);
         if (status != XR_XIR_OK) { flow->status = status; return false; }
+        if (proof->restriction_contract && (remainder & XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT)) {
+            remainder &= ~XIR_EXECUTION_REMAINDER_STORABLE_ENVIRONMENT;
+            complete = !remainder;
+        }
         proof->remainder |= remainder;
         if (!complete && !remainder) proof->remainder |= XIR_EXECUTION_REMAINDER_STORAGE;
         return true;
@@ -209,8 +224,8 @@ static bool storage_environment_acyclic(StorageEnvironmentProof *proof) {
     return flow->status == XR_XIR_OK;
 }
 
-static XrXirStatus storage_hidden_environment(XirStorageFlow *flow, const XirExecutionSite *site) {
-    StorageEnvironmentProof proof = {.flow=flow, .current=UINT32_MAX};
+static XrXirStatus storage_hidden_restriction(XirStorageFlow *flow, const XirExecutionSite *site) {
+    StorageEnvironmentProof proof = {.flow=flow, .current=UINT32_MAX, .restriction_contract=true};
     XrXirStatus status = storage_environment_visit(&proof, site);
     for (uint32_t n = 0; status == XR_XIR_OK && !proof.remainder && n < proof.count; ++n) {
         proof.current = n;

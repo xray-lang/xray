@@ -91,6 +91,9 @@ typedef struct XirStorageUnknown {
     uint32_t function, value;
     XrXirType type;
     uint32_t application;
+    /* Contents unknowns participate in callable origins. Footprint unknowns
+     * retain environment loans independently of callable identity. */
+    XirStorageFlowBank bank;
 } XirStorageUnknown;
 
 typedef struct XirStorageExposureSeed { uint32_t function, value, application; } XirStorageExposureSeed;
@@ -129,7 +132,8 @@ typedef struct XirStoragePointValue {
 } XirStoragePointValue;
 typedef enum XirStorageCaptureKind {
     XIR_STORAGE_CAPTURE_CELL, XIR_STORAGE_CAPTURE_FORMAL_FN, XIR_STORAGE_CAPTURE_STORABLE_FN,
-    XIR_STORAGE_CAPTURE_HIDDEN_FN, XIR_STORAGE_CAPTURE_OPAQUE_FN, XIR_STORAGE_CAPTURE_CONTENTS_FN
+    XIR_STORAGE_CAPTURE_HIDDEN_FN, XIR_STORAGE_CAPTURE_OPAQUE_FN, XIR_STORAGE_CAPTURE_CONTENTS_FN,
+    XIR_STORAGE_CAPTURE_STORED_CELL
 } XirStorageCaptureKind;
 typedef struct XirStorageCapture {
     XirStorageReference identity;
@@ -138,7 +142,9 @@ typedef struct XirStorageCapture {
      * A storable terminal has no contents or exposure value. Known environment
      * Cells remain separate captures. An opaque carrier keeps its external
      * footprint leaf through contents and has no exposure coordinate. A
-     * contents carrier names a hidden Cell's entry environment input. */
+     * contents carrier names a hidden Cell's entry environment input. A stored
+     * Cell retains its qualified identity beyond a validated publication;
+     * its unavailable current environment has an independent opaque carrier. */
     XirStorageCaptureKind kind;
     XirStorageIdentityAge age;
 } XirStorageCapture;

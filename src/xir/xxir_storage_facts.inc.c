@@ -134,7 +134,7 @@ static bool storage_exposure_seed(XirStorageFlow *flow, uint32_t function, uint3
 }
 
 static uint32_t storage_unknown_hash(XirStorageUnknown unknown) {
-    uint32_t fields[] = {unknown.function, unknown.value, unknown.type, unknown.application};
+    uint32_t fields[] = {unknown.function, unknown.value, unknown.type, unknown.application, (uint32_t)unknown.bank};
     return xr_hash_bytes(fields, sizeof(fields));
 }
 
@@ -154,16 +154,20 @@ static bool storage_unknown_index_grow(XirStorageFlow *flow) {
     return true;
 }
 
-static bool storage_unknown(XirStorageFlow *flow, uint32_t function, uint32_t value, XrXirType type) {
+static bool storage_unknown_bank(XirStorageFlow *flow, uint32_t function, uint32_t value,
+    XrXirType type, XirStorageFlowBank bank) {
     if (flow->status != XR_XIR_OK) return false;
+    if (bank != XIR_STORAGE_CONTENTS && bank != XIR_STORAGE_FOOTPRINT) {
+        flow->status = XR_XIR_BAD_STRUCTURE; return false;
+    }
     if (!flow->unknown_index_capacity || flow->view.unknown_count >= flow->unknown_index_capacity / 2)
         if (!storage_unknown_index_grow(flow)) return false;
-    XirStorageUnknown unknown = {function, value, type, UINT32_MAX};
+    XirStorageUnknown unknown = {function, value, type, UINT32_MAX, bank};
     uint32_t slot = storage_unknown_hash(unknown) & (flow->unknown_index_capacity - 1);
     while (flow->unknown_index[slot] && storage_step(flow)) {
         XirStorageUnknown previous = flow->view.unknowns[flow->unknown_index[slot] - 1];
         if (previous.function == function && previous.value == value && previous.type == type &&
-            previous.application == unknown.application) return true;
+            previous.application == unknown.application && previous.bank == bank) return true;
         slot = (slot + 1) & (flow->unknown_index_capacity - 1);
     }
     if (flow->status != XR_XIR_OK) return false;
@@ -175,6 +179,10 @@ static bool storage_unknown(XirStorageFlow *flow, uint32_t function, uint32_t va
     flow->unknown_index[slot] = ++flow->view.unknown_count;
     ++flow->revision;
     return true;
+}
+
+static bool storage_unknown(XirStorageFlow *flow, uint32_t function, uint32_t value, XrXirType type) {
+    return storage_unknown_bank(flow, function, value, type, XIR_STORAGE_CONTENTS);
 }
 
 static uint32_t storage_cross_hash(XirStorageCrossFlow edge) {
