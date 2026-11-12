@@ -34,7 +34,7 @@ static XrXirValue key_path_map(XrXirType type, const XrXirValue *key, XrXirValue
     xr_xir_value_drop(&row); return map;
 }
 static int64_t key_path_read(XrXirValue *root, const XrXirValuePath *path, XrXirValueAdmission *admission) {
-    XrXirValuePlace place={(XrXirType)root->type,&root->payload};
+    XrXirValuePlace place={(XrXirType)root->type,&root->payload, NULL};
     XrXirValue output={0}; XrXirFaultDetail fault={0}; admission->work=1000000;
     CHECK(xr_xir_value_path_read(&place,path,admission,&output,&fault)==XR_XIR_VALUE_OK);
     CHECK(output.type==XR_XIR_I64 && !fault.code); return output.payload;
@@ -42,7 +42,7 @@ static int64_t key_path_read(XrXirValue *root, const XrXirValuePath *path, XrXir
 static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
     XrXirValueAdmission *admission, bool full) {
     XrXirValue copy={0}, replacement={XR_XIR_I64,0,99};
-    XrXirValuePlace place={(XrXirType)root->type,&copy.payload}; XrXirFaultDetail fault={0};
+    XrXirValuePlace place={(XrXirType)root->type,&copy.payload, NULL}; XrXirFaultDetail fault={0};
     CHECK(xr_xir_value_copy(root,&copy)==XR_XIR_VALUE_OK);
     admission->work=1000000; size_t begin=value_allocation_calls;
     CHECK(xr_xir_value_path_write(&place,path,&replacement,admission,&fault)==XR_XIR_VALUE_OK);
@@ -131,10 +131,10 @@ static void key_path_key_retention_failure(XrXirValue *root, XrXirValue *key,
     admission->work=1000000;
     CHECK(xr_xir_cell_new(admission->domain,(XrXirTypeArena *)admission->arena,(XrXirType)258,root,admission,&cell)==XR_XIR_VALUE_OK);
     XrXirValuePathStep step={XR_XIR_PATH_KEY,(XrXirType)257,key->payload}; XrXirValuePath path={&step,1};
-    XirObject *object=object_pointer(key); uint32_t references=atomic_load(&object->references);
+    XirObject *object=object_pointer(key); int32_t references=atomic_load(&object->references);
     size_t baseline=live; uint64_t bytes=admission->domain->stats.live_bytes;
-    uint32_t cell_refs=atomic_load(&object_pointer(&cell)->references);
-    atomic_store(&object->references,UINT32_MAX);
+    int32_t cell_refs=atomic_load(&object_pointer(&cell)->references);
+    atomic_store(&object->references,INT32_MAX);
     CHECK(xr_xir_cell_project_authorized((XrXirType)259,&cell,&path,&authority,admission,&output)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     atomic_store(&object->references,references);
     CHECK(!output.type && !output.reserved && !output.payload && live==baseline && admission->domain->stats.live_bytes==bytes);
@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
     XrXirValue missing={0}, output={0}; XrXirFaultDetail fault={0};
     CHECK(xr_xir_string_new(domain,"missing",7,&missing)==XR_XIR_VALUE_OK);
     steps[0].selector=missing.payload; admission.work=1000000;
-    XrXirValuePlace place={(XrXirType)map.type,&map.payload};
+    XrXirValuePlace place={(XrXirType)map.type,&map.payload, NULL};
     CHECK(xr_xir_value_path_read(&place,&path,&admission,&output,&fault)==XR_XIR_VALUE_BOUNDS && fault.code==431);
     steps[0].selector=stored.payload; steps[1].selector=2;
     CHECK(xr_xir_value_path_read(&place,&path,&admission,&output,&fault)==XR_XIR_VALUE_BOUNDS && fault.code==430);

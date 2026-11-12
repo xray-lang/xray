@@ -33,7 +33,7 @@ static void received_error_arrays(SourceFixtureOwner *compiler) {
     CHECK(xr_xir_enum_new(type(0),1,&scalar,1,&admission,&concrete)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_erase(&concrete,&admission,&error)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new(type(1),&error,1,&admission,&array)==XR_XIR_VALUE_OK);
-    admission.arena=target;XrXirFaultDetail fault={0};XrXirValuePlace place={type(1),&array.payload};
+    admission.arena=target;XrXirFaultDetail fault={0};XrXirValuePlace place={type(1),&array.payload, NULL};
     CHECK(xr_xir_array_get(&array,0,&admission,&read,&fault)==XR_XIR_VALUE_OK);
     CHECK(read.type==XR_XIR_ERROR && read.payload==error.payload && xr_xir_value_arena(&read)==source);
     xr_xir_value_drop(&read);

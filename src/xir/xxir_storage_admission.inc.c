@@ -42,6 +42,6 @@ static XrXirValueStatus storage_place_admission(const XrXirValuePlace *place,
     XrXirValue value={0};
     if (!xr_xir_value_from_payload(admission->arena,place->type,payload,&value)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status=storage_admission_begin(&value,admission,local);
-    if (status==XR_XIR_VALUE_OK) *storage=(XrXirValuePlace){(XrXirType)value.type,place->payload};
+    if (status==XR_XIR_VALUE_OK) *storage=(XrXirValuePlace){(XrXirType)value.type,place->payload,place->identity};
     return status;
 }

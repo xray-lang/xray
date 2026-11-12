@@ -26,7 +26,7 @@ static void recv_raw_value(unsigned kind,bool closed) {
         state==XR_XIR_CHANNEL_SENT && xr_xir_channel_recv_wait_state(recv)==XR_XIR_CHANNEL_RECV_WAIT_VALUE);
     CHECK(runtime_memory.attempts==attempts+(!closed && kind==2 ? 1u : 0u));xr_xir_value_drop(&output);
     if (!closed && kind==2) {
-        XrXirValue replacement=result_integer(99);XrXirValuePlace place={(XrXirType)RESULT_ARRAY,&message.payload};XrXirFaultDetail fault={0};
+        XrXirValue replacement=result_integer(99);XrXirValuePlace place={(XrXirType)RESULT_ARRAY,&message.payload, NULL};XrXirFaultDetail fault={0};
         CHECK(xr_xir_array_set(&place,0,&replacement,&owner.admission,&fault)==XR_XIR_VALUE_OK);
     }
     xr_xir_value_drop(&message);xr_xir_value_drop(&channel);attempts=runtime_memory.attempts;

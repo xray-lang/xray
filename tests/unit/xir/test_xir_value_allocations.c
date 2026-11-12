@@ -173,7 +173,7 @@ static void saturation(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "x", 1, &value) == XR_XIR_VALUE_OK);
     XirString *string = string_pointer(&value);
-    atomic_store(&string->object.references, UINT32_MAX);
+    atomic_store(&string->object.references, INT32_MAX);
     CHECK(xr_xir_value_copy(&value, &copy) == XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type);
     atomic_store(&string->object.references, 1);
     atomic_store(&domain->references, UINT32_MAX);
@@ -223,7 +223,7 @@ static void capture_ownership(void) {
     size_t baseline = live;
     uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
     XrXirFunctionBinding binding = {&releases,capture_release,7,values,2};
-    atomic_store(&object_pointer(values+1)->references,UINT32_MAX);
+    atomic_store(&object_pointer(values+1)->references,INT32_MAX);
     CHECK(xr_xir_function_new(domain,arena,(XrXirType)256,&binding,&admission,&output) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(!output.type && !releases && live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
     CHECK(atomic_load(&object_pointer(values)->references) == 1);
@@ -389,7 +389,7 @@ static void struct_allocation_failures(void) {
             admission.work = 100000; value_allocation_calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
             XrXirValueStatus status = mode == 0 ? xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &output) :
                 mode == 1 ? xr_xir_struct_get(&parent, 0, &admission, &output) :
-                xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) destination.type, &destination.payload}, 0, &leaf, &admission);
+                xr_xir_struct_set(&(XrXirValuePlace) {(XrXirType) destination.type, &destination.payload, NULL}, 0, &leaf, &admission);
             if (!attempt) { CHECK(status == XR_XIR_VALUE_OK); sites = value_allocation_calls; }
             else {
                 CHECK(status == XR_XIR_VALUE_OOM && !output.type && destination.payload == parent.payload);
@@ -401,8 +401,8 @@ static void struct_allocation_failures(void) {
     }
     XrXirValue rejected = {0};
     XirObject *string = object_pointer(&fields[1]);
-    uint32_t references = atomic_load(&string->references);
-    atomic_store(&string->references, UINT32_MAX); admission.work = 100000;
+    int32_t references = atomic_load(&string->references);
+    atomic_store(&string->references, INT32_MAX); admission.work = 100000;
     CHECK(xr_xir_struct_new((XrXirType)257, outer, 2, &admission, &rejected) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(!rejected.type && live == baseline);
     atomic_store(&string->references, references);
@@ -421,8 +421,8 @@ static void string_predicate_allocations(void) {
     CHECK(xr_xir_value_copy(&text, &copy) == XR_XIR_VALUE_OK);
     xr_xir_domain_drop(domain); xr_xir_value_drop(&text);
     size_t before = value_allocation_calls, allocations = live;
-    uint32_t text_references = atomic_load(&object_pointer(&copy)->references);
-    uint32_t pattern_references = atomic_load(&object_pointer(&pattern)->references);
+    int32_t text_references = atomic_load(&object_pointer(&copy)->references);
+    int32_t pattern_references = atomic_load(&object_pointer(&pattern)->references);
     fail_at = value_allocation_calls;
     bool result = false;
     CHECK(xr_xir_string_contains(&copy, &pattern, &result) && result);
@@ -607,7 +607,7 @@ static void enum_value_ownership(void) {
     fail_at = SIZE_MAX;
     CHECK(live == baseline && xr_xir_domain_stats(domain).live_bytes == bytes);
     XirObject *right = object_pointer(&values[1]);
-    atomic_store(&right->references, UINT32_MAX);
+    atomic_store(&right->references, INT32_MAX);
     CHECK(xr_xir_enum_new(type, 1, values, 2, &admission, &out) == XR_XIR_VALUE_REFCOUNT_LIMIT && !out.type);
     CHECK(atomic_load(&object_pointer(&values[0])->references) == 1);
     atomic_store(&right->references, 1);
@@ -739,8 +739,11 @@ static void domain_identity_bytes_case(void) {
     xr_xir_domain_drop(domain);
     CHECK(live == baseline);
 }
+#include "xir_signed_rc_cases.h"
 int main(int argc, char **argv) {
     if (argc != 1) {
+        if (argc == 2 && !strcmp(argv[1], "--signed-rc")) { signed_rc_cases(); return 0; }
+        if (argc == 2 && !strcmp(argv[1], "--closed-threads")) { closed_thread_cases(); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--path-replacement")) { value_path_replacement_cases(true); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--path-replacement-normal")) { value_path_replacement_cases(false); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--foreign-write-fi")) { foreign_write_fi_cases(); return 0; }
@@ -756,6 +759,7 @@ int main(int argc, char **argv) {
         if (mode >= 3) return 2;
         cross_domain_ring_case(mode, order); return 0;
     }
+    signed_rc_cases();
     retired_execution_storage();
     value_path_replacement_cases(true);value_path_cases();
     storage_pack_cases();

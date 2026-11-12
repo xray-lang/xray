@@ -35,11 +35,11 @@ static XrXirValueStatus deep_sequence(XrXirTypeArena *arena,XrXirDomain *domain,
  STEP(xr_xir_array_new((XrXirType)257,&v[0],1,&a,&v[1]));
  STEP(xr_xir_array_new((XrXirType)258,&v[1],1,&a,&v[2]));
  STEP(xr_xir_value_copy(&v[2],&v[3]));
- XrXirValuePlace outer={(XrXirType)258,&v[2].payload};
+ XrXirValuePlace outer={(XrXirType)258,&v[2].payload, NULL};
  STEP(xr_xir_array_push(&outer,&v[1],&a));CHECK(v[2].payload!=v[3].payload);
  int64_t n=0;STEP(xr_xir_array_len(&v[3],&a,&n));CHECK(n==1);
  STEP(xr_xir_array_get(&v[3],0,&a,&v[4],&fault));CHECK(v[4].payload==v[1].payload);
- XrXirValuePlace inner={(XrXirType)257,&v[4].payload};
+ XrXirValuePlace inner={(XrXirType)257,&v[4].payload, NULL};
  STEP(xr_xir_array_push(&inner,&v[0],&a));CHECK(v[4].payload!=v[1].payload);
  STEP(xr_xir_array_len(&v[1],&a,&n));CHECK(n==1);
  STEP(xr_xir_array_get(&v[4],1,&a,&v[5],&fault));CHECK(v[5].payload==v[0].payload);
@@ -48,7 +48,7 @@ static XrXirValueStatus deep_sequence(XrXirTypeArena *arena,XrXirDomain *domain,
  XrXirValue result={0};STEP(xr_xir_class_get(&v[0],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[0]),.work=10000},&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
  XrXirValue holder_fields[]={v[0],text};STEP(xr_xir_struct_new((XrXirType)259,holder_fields,2,&a,&v[6]));
  STEP(xr_xir_array_new((XrXirType)260,&v[6],1,&a,&v[7]));STEP(xr_xir_value_copy(&v[7],&v[8]));
- XrXirValuePlace holders={(XrXirType)260,&v[7].payload};STEP(xr_xir_array_push(&holders,&v[6],&a));CHECK(v[7].payload!=v[8].payload);
+ XrXirValuePlace holders={(XrXirType)260,&v[7].payload, NULL};STEP(xr_xir_array_push(&holders,&v[6],&a));CHECK(v[7].payload!=v[8].payload);
  STEP(xr_xir_array_get(&v[8],0,&a,&v[9],&fault));STEP(xr_xir_struct_get(&v[9],0,&a,&v[10]));CHECK(v[10].payload==v[0].payload);
  STEP(xr_xir_class_get(&v[10],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[10]),.work=10000},&result));CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
  done:;

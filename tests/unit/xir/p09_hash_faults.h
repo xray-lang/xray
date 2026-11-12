@@ -22,7 +22,7 @@ static void hash_fault_setup(HashFaultCase *test, unsigned operation,
     for (int64_t i = 0; i < 4; ++i) { keys[i] = integer(i); values[i] = integer(i * 7); }
     CHECK(xr_xir_map_new((XrXirType)256, keys, values, 4, &test->admission, &test->root) == XR_XIR_VALUE_OK);
     if (operation && operation != 4) CHECK(xr_xir_value_copy(&test->root, &test->alias) == XR_XIR_VALUE_OK);
-    test->place = (XrXirValuePlace){(XrXirType)256, &test->root.payload};
+    test->place = (XrXirValuePlace){(XrXirType)256, &test->root.payload, NULL};
     test->key = integer(operation ? 2 : 42); test->value = integer(91);
 }
 static XrXirValueStatus hash_fault_operation(HashFaultCase *test) {

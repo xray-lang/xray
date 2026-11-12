@@ -31,7 +31,7 @@ static XirNominalValue ***arena_empty_variants(ArenaNominalCursor *c,
             if (identity->variants[v].field_count) continue;
             XirNominalValue *value = arena_nominal_span(c, 1, sizeof(*value), _Alignof(XirNominalValue));
             if (value && ((c)->status == XR_XIR_VALUE_OK)) {
-                atomic_init(&value->object.references, 1);
+                xir_object_initialize(&value->object);
                 value->object.domain = NULL; value->object.arena = arena;
                 value->object.type = type; value->object.kind = XR_XIR_TYPE_NOMINAL;
                 value->object.release_next = NULL;

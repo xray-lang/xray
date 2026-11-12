@@ -115,6 +115,10 @@ static inline XrXirValue xr_xir_value_load(const XrXirTypeArena *arena,XrXirType
 XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
+/* The publishing thread exclusively owns the local graph until this succeeds.
+ * Complete publication precedes any cross-thread visibility. This changes RC
+ * accounting only and grants no Sendable, mutation or borrowing permission. */
+XR_FUNC XrXirValueStatus xr_xir_value_share(const XrXirValue *source);
 /* A handle transfer consumes the source and never relocates its body. */
 XR_FUNC XrXirValueStatus xr_xir_value_move(XrXirValue *source, XrXirValue *output);
 XR_FUNC void xr_xir_value_drop(XrXirValue *value);

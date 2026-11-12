@@ -111,7 +111,8 @@ XR_FUNC void xr_xir_channel_send_wait_drop(XrXirChannelSendWait *send) {
 }
 static XrXirValueStatus channel_send_wait_new(const XrXirValue *channel,const XrXirValue *message,
     XrXirValueAdmission *admission,XrXirChannelSendWait **output) {
-    XrXirValue payload={0},owner={0};XrXirValueStatus status=xr_xir_value_copy(message,&payload);
+    XrXirValue payload={0},owner={0};XrXirValueStatus status=xr_xir_value_share(message);
+    if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(message,&payload);
     if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(channel,&owner);
     bool retained=status==XR_XIR_VALUE_OK && xr_xir_domain_retain(admission->domain);
     if (status==XR_XIR_VALUE_OK && !retained) status=XR_XIR_VALUE_REFCOUNT_LIMIT;

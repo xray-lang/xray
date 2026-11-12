@@ -58,7 +58,7 @@ static XrXirValueStatus class_array_stress(XrXirTypeArena *arena,XrXirDomain *ow
  XrXirValue fields[]={{XR_XIR_BOOL,0,1},v[0],v[2]};STEP(xr_xir_class_new((XrXirType)258,fields,3,&local,&v[3]));
  STEP(xr_xir_value_copy(&v[3],&v[4]));CHECK(v[3].payload==v[4].payload);
  STEP(xr_xir_class_get(&v[3],1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[3]),.work=10000},&v[5]));STEP(xr_xir_value_copy(&v[5],&v[6]));
- XrXirValuePlace place={(XrXirType)256,&v[5].payload};STEP(xr_xir_array_push(&place,&forty_one,&local));
+ XrXirValuePlace place={(XrXirType)256,&v[5].payload, NULL};STEP(xr_xir_array_push(&place,&forty_one,&local));
  CHECK(v[5].payload!=v[6].payload);int64_t count=0;STEP(xr_xir_array_len(&v[0],&local,&count));CHECK(count==1);
  STEP(xr_xir_class_get(&v[3],1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[3]),.work=10000},&v[7]));CHECK(v[7].payload==v[0].payload);xr_xir_value_drop(&v[7]);
  STEP(xr_xir_class_set(&v[4],1,&v[5],&local));STEP(xr_xir_class_get(&v[3],1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&v[3]),.work=10000},&v[7]));CHECK(v[7].payload==v[5].payload);

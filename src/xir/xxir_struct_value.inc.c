@@ -123,11 +123,13 @@ static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace 
     if (status == XR_XIR_VALUE_OK)
         status = value_admit_summary(value, node->nominal.fields[field], admission, &domain_sensitive);
     if (status != XR_XIR_VALUE_OK) return status;
+    status = value_place_publish(place, value);
+    if (status != XR_XIR_VALUE_OK) return status;
     XrXirValue owned = {0}; status = xr_xir_value_copy(value, &owned);
     if (status != XR_XIR_VALUE_OK) return status;
     XirNominalValue *record = (XirNominalValue *) object_pointer(&destination);
     XrXirValue replacement = {0};
-    if (atomic_load_explicit(&record->object.references, memory_order_acquire) != 1 ||
+    if (value_place_shared(place) || !xir_object_unique(&record->object) ||
         (record->object.domain != admission->domain && domain_sensitive)) {
         status = xr_xir_struct_new(record->object.type, record->fields, record->count, admission, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&owned); return status; }
@@ -135,6 +137,11 @@ static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace 
     }
     XrXirValue previous = record->fields[field]; record->fields[field] = owned;
     if (replacement.type) {
+        status = value_place_publish(place, &replacement);
+        if (status != XR_XIR_VALUE_OK) {
+            xr_xir_value_drop(&replacement); xr_xir_value_drop(&previous);
+            return status;
+        }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
         xr_xir_value_drop(&destination);
     }

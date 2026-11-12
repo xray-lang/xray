@@ -21,8 +21,8 @@ static void storage_prepared_end(StoragePrepared *prepared) {
     }
     storage_pack_end(&prepared->pack);
 }
-static XrXirValueStatus storage_prepared_begin(StoragePrepared *prepared,
-    XrXirType type,const XrXirValue *value,uint32_t stride,XrXirValueAdmission *admission) {
+static XrXirValueStatus storage_prepared_storage(StoragePrepared *prepared,
+    XrXirType type,uint32_t stride,XrXirValueAdmission *admission) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *prepared = (StoragePrepared){0}; prepared->stride = stride;
     XrXirValueStatus status = storage_pack_begin(admission,type,&prepared->pack);
@@ -34,7 +34,21 @@ static XrXirValueStatus storage_prepared_begin(StoragePrepared *prepared,
         if (!prepared->bytes) { storage_pack_end(&prepared->pack); return status; }
         admission->scratch_bytes -= stride;
     }
+    return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus storage_prepared_begin(StoragePrepared *prepared,
+    XrXirType type,const XrXirValue *value,uint32_t stride,XrXirValueAdmission *admission) {
+    XrXirValueStatus status = storage_prepared_storage(prepared, type, stride, admission);
+    if (status != XR_XIR_VALUE_OK) return status;
     status = storage_pack_value(&prepared->pack, value, prepared->bytes);
+    if (status != XR_XIR_VALUE_OK) { storage_prepared_end(prepared); return status; }
+    prepared->owns = true; return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus storage_prepared_copy(StoragePrepared *prepared,
+    XrXirType type,const unsigned char *bytes,uint32_t stride,XrXirValueAdmission *admission) {
+    XrXirValueStatus status = storage_prepared_storage(prepared, type, stride, admission);
+    if (status != XR_XIR_VALUE_OK) return status;
+    status = storage_pack_copy(&prepared->pack, bytes, prepared->bytes);
     if (status != XR_XIR_VALUE_OK) { storage_prepared_end(prepared); return status; }
     prepared->owns = true; return XR_XIR_VALUE_OK;
 }

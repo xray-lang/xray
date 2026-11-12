@@ -78,12 +78,16 @@ static XrXirValueStatus view_storage_begin_operation(const XrXirValue *root,
     else status=xr_xir_cell_loan_prepare(root,parent,&output->loan.exclusive);
     if (status!=XR_XIR_VALUE_OK) goto failed;
     prepared=true;
-    if (!shared && (atomic_load_explicit(&object_pointer(&cell->value)->references,memory_order_acquire)!=1 ||
+    bool shared_owner=xir_object_references(&cell->object)<0;
+    if (!shared && (shared_owner || !xir_object_unique(object_pointer(&cell->value)) ||
         object_pointer(&cell->value)->domain!=admission->domain)) {
         const XirArray *source=(const XirArray *)object_pointer(&cell->value);
         uint64_t bytes=source->length*(uint64_t)(source->stride ? source->stride : 1u);
         if (!view_storage_work(admission,bytes)) {status=XR_XIR_VALUE_LIMIT;goto failed;}
         status=path_array_clone(&cell->value,admission,&replacement);
+        if (status!=XR_XIR_VALUE_OK) goto failed;
+        XrXirValuePlace place={(XrXirType)cell->value.type,&cell->value.payload,&cell->object};
+        status=value_place_publish(&place,&replacement);
         if (status!=XR_XIR_VALUE_OK) goto failed;
     }
     /* Nothing after this point allocates, charges work or fails. */
@@ -117,8 +121,8 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
         spec->offset<0 || spec->length<0 || spec->offset>parent->length ||
         spec->length>parent->length-spec->offset) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (spec->kind==XR_XIR_TYPE_MUT_SLICE && !parent->buffer_origin) {
-        const XirObject *array=object_pointer(&cell_read_loan_root(&parent->root)->value);
-        if (atomic_load_explicit(&array->references,memory_order_acquire)!=1 || array->domain!=admission->domain)
+        XirObject *array=object_pointer(&cell_read_loan_root(&parent->root)->value);
+        if (xir_object_count(array)!=1 || array->domain!=admission->domain)
             return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     XrXirViewStorageSpec child=*spec;child.offset+=parent->offset;
@@ -212,12 +216,12 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_set(const XrXirViewStorage *view,
     XirCell *cell=view_storage_access(view,authority,admission);
     if (!cell || !fault || view->kind!=XR_XIR_TYPE_MUT_SLICE || !cell_write_access(cell,authority))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XirObject *array=object_pointer(&cell->value);
-    if (atomic_load_explicit(&array->references,memory_order_acquire)!=1 || array->domain!=admission->domain)
+    XirObject *array=object_pointer(&cell->value);
+    if (xir_object_count(array)!=1 || array->domain!=admission->domain)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status=view_storage_index(view,index,admission,fault);
     if (status!=XR_XIR_VALUE_OK) return status;
-    XrXirValuePlace place={(XrXirType)cell->value.type,&cell->value.payload};
+    XrXirValuePlace place={(XrXirType)cell->value.type,&cell->value.payload,&cell->object};
     return xr_xir_array_set(&place,view->offset+index,value,admission,fault);
 }
 static XrXirValueStatus view_storage_copy_operation(XrXirType type,

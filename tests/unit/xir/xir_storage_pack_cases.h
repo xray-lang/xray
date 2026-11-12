@@ -52,8 +52,8 @@ static void storage_unpack_cases(XrXirValueAdmission *admission, const unsigned 
     CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_LIMIT && value_allocation_calls == begin && unit_value(&value));
     admission->scratch_bytes = 65536;
     XrXirValue leaf = {XR_XIR_STRING, 0, 0}; memcpy(&leaf.payload, bytes + 16, 8);
-    uint32_t refs = atomic_load(&object_pointer(&leaf)->references);
-    atomic_store(&object_pointer(&leaf)->references, UINT32_MAX);
+    int32_t refs = atomic_load(&object_pointer(&leaf)->references);
+    atomic_store(&object_pointer(&leaf)->references, INT32_MAX);
     CHECK(storage_unpack(span, admission, &value) == XR_XIR_VALUE_REFCOUNT_LIMIT && unit_value(&value));
     atomic_store(&object_pointer(&leaf)->references, refs);
     CHECK(admission->domain->stats.live_bytes == baseline && live == blocks && admission->scratch_bytes == 65536);
@@ -74,8 +74,8 @@ static void storage_copy_cases(StoragePack *pack, unsigned char *bytes) {
     uint64_t baseline = admission->domain->stats.live_bytes; size_t allocations = value_allocation_calls;
     XrXirValue left = {XR_XIR_STRING, 0, 0}, right = left;
     memcpy(&left.payload, bytes + 8, 8); memcpy(&right.payload, bytes + 16, 8);
-    uint32_t left_refs = atomic_load(&object_pointer(&left)->references);
-    uint32_t right_refs = atomic_load(&object_pointer(&right)->references);
+    int32_t left_refs = atomic_load(&object_pointer(&left)->references);
+    int32_t right_refs = atomic_load(&object_pointer(&right)->references);
     admission->work = 100000;
     CHECK(storage_pack_copy(pack, bytes, copied) == XR_XIR_VALUE_OK && !memcmp(bytes, copied, sizeof(copied)));
     uint64_t work = 100000 - admission->work;
@@ -87,10 +87,10 @@ static void storage_copy_cases(StoragePack *pack, unsigned char *bytes) {
         CHECK(atomic_load(&object_pointer(&left)->references) == left_refs);
         CHECK(atomic_load(&object_pointer(&right)->references) == right_refs);
     }
-    admission->work = 100000; atomic_store(&object_pointer(&right)->references, UINT32_MAX);
+    admission->work = 100000; atomic_store(&object_pointer(&right)->references, INT32_MAX);
     CHECK(storage_pack_copy(pack, bytes, copied) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(atomic_load(&object_pointer(&left)->references) == left_refs);
-    CHECK(atomic_load(&object_pointer(&right)->references) == UINT32_MAX);
+    CHECK(atomic_load(&object_pointer(&right)->references) == INT32_MAX);
     atomic_store(&object_pointer(&right)->references, right_refs);
     admission->work = work;
     CHECK(storage_pack_copy(pack, bytes, copied) == XR_XIR_VALUE_OK && !admission->work);
@@ -126,8 +126,8 @@ static void storage_pack_cases(void) {
     CHECK(xr_xir_string_view(&first, &text, &length) && length == 4 && !memcmp(text, "left", 4));
     CHECK(xr_xir_string_view(&second, &text, &length) && length == 5 && !memcmp(text, "right", 5));
     storage_pack_drop(arena, bytes);
-    uint32_t first_refs = atomic_load(&object_pointer(&strings[0])->references);
-    uint32_t second_refs = atomic_load(&object_pointer(&strings[1])->references);
+    int32_t first_refs = atomic_load(&object_pointer(&strings[0])->references);
+    int32_t second_refs = atomic_load(&object_pointer(&strings[1])->references);
     for (uint64_t work = 0; work < used_work; ++work) {
         admission.work = work; memset(bytes, 0xFF, sizeof(bytes));
         CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_LIMIT);
@@ -142,10 +142,10 @@ static void storage_pack_cases(void) {
     admission.scratch_bytes = 2 * sizeof(StoragePackFrame) - 1; size_t allocations = value_allocation_calls;
     CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_LIMIT && value_allocation_calls == allocations);
     admission.scratch_bytes = 65536;
-    atomic_store(&object_pointer(&strings[1])->references, UINT32_MAX);
+    atomic_store(&object_pointer(&strings[1])->references, INT32_MAX);
     CHECK(storage_pack(&box, bytes, &admission) == XR_XIR_VALUE_REFCOUNT_LIMIT);
     CHECK(atomic_load(&object_pointer(&strings[0])->references) == first_refs);
-    CHECK(atomic_load(&object_pointer(&strings[1])->references) == UINT32_MAX);
+    CHECK(atomic_load(&object_pointer(&strings[1])->references) == INT32_MAX);
     CHECK(domain->stats.live_bytes == baseline && live == blocks && admission.scratch_bytes == 65536);
     atomic_store(&object_pointer(&strings[1])->references, second_refs);
     StoragePack bulk = {0}; admission.work = 100000;

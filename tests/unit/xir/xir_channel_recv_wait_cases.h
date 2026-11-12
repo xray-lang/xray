@@ -85,7 +85,7 @@ static void recv_wait_typed(unsigned kind) {
     XrXirChannelRecvWait *recv=recv_wait_begin(&owner,&channel,result_types[kind]);XrXirChannelState state=XR_XIR_CHANNEL_RETRY;
     CHECK(xr_xir_channel_try_send(&channel,&message,(XrXirType)RESULT_SEND,&owner.admission,&sent,&state)==XR_XIR_VALUE_OK && state==XR_XIR_CHANNEL_SENT);
     if (kind==2) {
-        XrXirValue replacement=result_integer(99);XrXirValuePlace place={(XrXirType)RESULT_ARRAY,&message.payload};XrXirFaultDetail fault={0};
+        XrXirValue replacement=result_integer(99);XrXirValuePlace place={(XrXirType)RESULT_ARRAY,&message.payload, NULL};XrXirFaultDetail fault={0};
         CHECK(xr_xir_array_set(&place,0,&replacement,&owner.admission,&fault)==XR_XIR_VALUE_OK);
     }
     xr_xir_value_drop(&message);xr_xir_value_drop(&channel);xr_xir_value_drop(&sent);XrXirValue result=recv_wait_take(recv,0);XrXirEnumBorrow borrow={0};

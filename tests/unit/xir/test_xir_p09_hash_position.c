@@ -61,7 +61,7 @@ int main(int argc,char **argv) {
     for(unsigned i=0;i<3;++i)CHECK(xr_xir_string_new(producer,i==0?"first":i==1?"second":"third",i==0?5:i==1?6:5,strings+i)==XR_XIR_VALUE_OK);
     XrXirValue keys[]={{XR_XIR_I64,0,3},{XR_XIR_I64,0,1},{XR_XIR_I64,0,2}},map={0},set={0},optional={0},nullable={0};
     CHECK(xr_xir_map_new((XrXirType)256,keys,strings,2,&admission,&map)==XR_XIR_VALUE_OK);
-    XrXirValuePlace place={(XrXirType)256,&map.payload};bool removed=false;
+    XrXirValuePlace place={(XrXirType)256,&map.payload, NULL};bool removed=false;
     CHECK(xr_xir_hash_delete(&place,keys,&admission,&removed)==XR_XIR_VALUE_OK && removed);
     CHECK(xr_xir_map_set(&place,keys,strings+2,&admission)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_set_new((XrXirType)257,keys,3,&admission,&set)==XR_XIR_VALUE_OK);
@@ -82,7 +82,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_map_value_at(&set,0,&admission,&result,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !result.type);
     CHECK(xr_xir_hash_key_at(&map,0,NULL,&result,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !result.type);
     CHECK(xr_xir_hash_key_at(&map,0,&admission,&result,NULL)==XR_XIR_VALUE_BAD_ARGUMENT && !result.type);
-    XirObject *leaf=object_pointer(strings+1);uint32_t refs=atomic_load(&leaf->references);size_t baseline=live;atomic_store(&leaf->references,UINT32_MAX);
+    XirObject *leaf=object_pointer(strings+1);int32_t refs=atomic_load(&leaf->references);size_t baseline=live;atomic_store(&leaf->references,INT32_MAX);
     CHECK(xr_xir_map_value_at(&map,0,&admission,&result,&fault)==XR_XIR_VALUE_REFCOUNT_LIMIT && !result.type && live==baseline);atomic_store(&leaf->references,refs);
     xr_xir_domain_close(producer);xr_xir_domain_drop(producer);
     CHECK(xr_xir_map_value_at(&map,0,&admission,&result,&fault)==XR_XIR_VALUE_OK);xr_xir_value_drop(&map);

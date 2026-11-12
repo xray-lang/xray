@@ -117,15 +117,15 @@ static void algebra_value_retention(XrXirValueAdmission *admission) {
     CHECK(xr_xir_set_new((XrXirType)258, keys, 2, admission, &left) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_set_new((XrXirType)258, NULL, 0, admission, &empty) == XR_XIR_VALUE_OK);
     XirObject *first = object_pointer(keys), *last = object_pointer(keys + 1);
-    uint32_t first_refs = atomic_load(&first->references), last_refs = atomic_load(&last->references);
+    int32_t first_refs = atomic_load(&first->references), last_refs = atomic_load(&last->references);
     size_t baseline = live;
-    atomic_store(&last->references, UINT32_MAX);
+    atomic_store(&last->references, INT32_MAX);
     for (unsigned operation = 0; operation < 4; ++operation) {
         admission->work = 1000000;
         CHECK(algebra_value_operation(operation, &left, operation == 1 ? &left : &empty,
             admission, &result) == XR_XIR_VALUE_REFCOUNT_LIMIT);
         CHECK(!result.type && !result.reserved && !result.payload && live == baseline);
-        CHECK(atomic_load(&first->references) == first_refs && atomic_load(&last->references) == UINT32_MAX);
+        CHECK(atomic_load(&first->references) == first_refs && atomic_load(&last->references) == INT32_MAX);
     }
     bool relation = false; admission->work = 1000000; size_t before = value_allocation_calls;
     CHECK(xr_xir_set_is_subset(&left, &left, admission, &relation) == XR_XIR_VALUE_OK && relation && value_allocation_calls == before);

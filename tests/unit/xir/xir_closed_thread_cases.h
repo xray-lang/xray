@@ -77,6 +77,7 @@ static void closed_thread_cases(void) {
     ClosedThreadGate gate = {0}; xr_mutex_init(&gate.mutex); xr_cond_init(&gate.condition);
     ClosedThreadCase workers[2] = {{.gate=&gate},{.gate=&gate}};
     xr_thread_t threads[2] = {0};
+    CHECK(xr_xir_value_share(&text) == XR_XIR_VALUE_OK);
     for (unsigned i=0;i<2;++i) {
         CHECK(xr_xir_value_copy(&text,&workers[i].text) == XR_XIR_VALUE_OK);
         CHECK(xr_thread_create(&threads[i],closed_thread_worker,&workers[i]));

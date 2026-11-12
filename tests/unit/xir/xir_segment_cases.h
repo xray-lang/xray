@@ -168,7 +168,7 @@ static void segment_copy_failure(void) {
     CHECK(xr_xir_string_new(domain, "first", 5, &witness.arguments[0]) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain, "second", 6, &witness.arguments[1]) == XR_XIR_VALUE_OK);
     XirObject *first = object_pointer(&witness.arguments[0]), *second = object_pointer(&witness.arguments[1]);
-    atomic_store(&second->references, UINT32_MAX);
+    atomic_store(&second->references, INT32_MAX);
     XrXirType types[2] = {XR_XIR_STRING, XR_XIR_STRING};
     size_t baseline = live;
     for (unsigned large = 0; large < 2; ++large) {
@@ -182,7 +182,7 @@ static void segment_copy_failure(void) {
         CHECK(xr_xir_call_new(&config, 0, NULL, 0, &call) == XR_XIR_CALL_READY);
         CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_LIMIT && witness.cleanups == large + 1);
         CHECK(!call->segment && accounting.live_bytes == call->allocation_bytes);
-        CHECK(atomic_load(&first->references) == 1 && atomic_load(&second->references) == UINT32_MAX);
+        CHECK(atomic_load(&first->references) == 1 && atomic_load(&second->references) == INT32_MAX);
         CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY && live == baseline);
         CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
     }

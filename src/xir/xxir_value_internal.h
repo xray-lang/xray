@@ -32,7 +32,7 @@ _Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&
     "storage tags are distinct");
 
 typedef struct XirObject {
-    _Atomic(uint32_t) references;
+    _Atomic(int32_t) references;
     XrXirDomain *domain;
     XrXirTypeArena *arena;
     XrXirType type;
@@ -46,6 +46,55 @@ typedef struct XirObject {
     bool root_private;
 } XirObject;
 _Static_assert(sizeof(XirObject) == 72, "the root flag occupies existing object header padding");
+/* Positive references belong to one execution owner. A publisher changes the
+ * complete reachable graph before another thread can observe it. Relaxed
+ * loads/stores keep that branch ordinary machine reads/writes while sharing
+ * the same C11 atomic object with the negative, concurrently counted band. */
+static inline int32_t xir_object_references(const XirObject *object) {
+    return atomic_load_explicit(&object->references, memory_order_relaxed);
+}
+static inline void xir_object_initialize(XirObject *object) {
+    atomic_init(&object->references, 1);
+}
+static inline uint32_t xir_object_count(const XirObject *object) {
+    int32_t count = xir_object_references(object);
+    XR_CHECK(count != INT32_MIN, "object reference count excludes the signed overflow boundary");
+    return (uint32_t)(count < 0 ? -count : count);
+}
+static inline bool xir_object_retain(XirObject *object) {
+    int32_t count = xir_object_references(object);
+    if (count > 0) {
+        if (count == INT32_MAX) return false;
+        atomic_store_explicit(&object->references, count + 1, memory_order_relaxed);
+        return true;
+    }
+    for (;;) {
+        if (count >= 0 || count <= -INT32_MAX) return false;
+        if (atomic_compare_exchange_weak_explicit(&object->references, &count, count - 1,
+                memory_order_relaxed, memory_order_relaxed)) return true;
+    }
+}
+static inline bool xir_object_release(XirObject *object) {
+    int32_t count = xir_object_references(object);
+    if (count > 0) {
+        atomic_store_explicit(&object->references, count - 1, memory_order_relaxed);
+        return count == 1;
+    }
+    for (;;) {
+        XR_CHECK(count < 0 && count != INT32_MIN, "object reference count underflow");
+        if (atomic_compare_exchange_weak_explicit(&object->references, &count, count + 1,
+                memory_order_acq_rel, memory_order_relaxed)) return count == -1;
+    }
+}
+/* A unique shared value becomes local before its storage or caches change.
+ * Identity objects use their separate synchronization and never call this. */
+static inline bool xir_object_unique(XirObject *object) {
+    int32_t count = xir_object_references(object);
+    if (count == 1) return true;
+    if (count != -1) return false;
+    return atomic_compare_exchange_strong_explicit(&object->references, &count, 1,
+        memory_order_acquire, memory_order_relaxed);
+}
 /* The canonical String carrier. The body holds length bytes and one NUL;
  * runes caches the Unicode scalar count. Holders read it without a lease. */
 typedef struct XirString {

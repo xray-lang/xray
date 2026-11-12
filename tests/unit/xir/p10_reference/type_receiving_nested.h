@@ -21,14 +21,14 @@ static void received_nested_arrays(SourceFixtureOwner *compiler) {
     CHECK(xir_compile_type_arena_receive(&compiler->context,target,source,&root,1)==XR_XIR_VALUE_OK);
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1024*1024,&domain)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission={source,domain,NULL,NULL,UINT64_C(4000000),128*1024};
-    int32_t narrow=17;XrXirValuePlace invalid={XR_XIR_I32,&narrow};XrXirValue rejected={XR_XIR_I64,0,19};
+    int32_t narrow=17;XrXirValuePlace invalid={XR_XIR_I32,&narrow, NULL};XrXirValue rejected={XR_XIR_I64,0,19};
     CHECK(xr_xir_array_push(&invalid,&rejected,&admission)==XR_XIR_VALUE_BAD_ARGUMENT && narrow==17);
     XrXirValue scalar={XR_XIR_I64,0,41},inner={0},outer={0},incoming={0},read={0},copy={0};
     CHECK(xr_xir_array_new(type(0),&scalar,1,&admission,&inner)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new(type(1),&inner,1,&admission,&outer)==XR_XIR_VALUE_OK);
     admission.arena=target;scalar.payload=51;
     CHECK(xr_xir_array_new(type(1),&scalar,1,&admission,&incoming)==XR_XIR_VALUE_OK);
-    XrXirValuePlace place={type(2),&outer.payload};XrXirFaultDetail fault={0};
+    XrXirValuePlace place={type(2),&outer.payload, NULL};XrXirFaultDetail fault={0};
     CHECK(xr_xir_array_set(&place,0,&incoming,&admission,&fault)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_get(&outer,0,&admission,&read,&fault)==XR_XIR_VALUE_OK);
     CHECK(read.type==incoming.type && read.payload==incoming.payload && xr_xir_value_arena(&read)==target);

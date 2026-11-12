@@ -44,7 +44,7 @@ static void array_strings_and_bounds(void) {
     CHECK(xr_xir_string_new(domain, "green", 5, &elements[2]) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType) 257, elements, 2, &admission, &array) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType) 257, &array.payload};
+    XrXirValuePlace place = {(XrXirType) 257, &array.payload, NULL};
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_set(&place, 1, elements + 2, &admission, &fault) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_fault_empty(fault) && array.payload != copy.payload);
@@ -134,7 +134,7 @@ static void array_function_gates(void) {
     admission.context = &receiving_gate;
     CHECK(xr_xir_function_new(receiver, arena, (XrXirType) 256, &receiving_binding,
         &admission, &received) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType) 259, &empty.payload};
+    XrXirValuePlace place = {(XrXirType) 259, &empty.payload, NULL};
     CHECK(xr_xir_array_push(&place, &received, &admission) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_admit(&empty, (XrXirType) 259, &admission) == XR_XIR_VALUE_OK);
     admission.domain = domain; admission.context = &gate;

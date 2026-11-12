@@ -16,6 +16,9 @@
 typedef struct XrXirValuePlace {
     XrXirType type;
     void *payload;
+    /* Borrowed actual identity from the authenticated place producer. Shared
+     * identities publish prepared replacements before releasing old owners. */
+    const struct XirObject *identity;
 } XrXirValuePlace;
 /* The caller pins a real writable root and authenticates its complete loan.
  * Failure preserves the root. A current admission Domain is required; missing

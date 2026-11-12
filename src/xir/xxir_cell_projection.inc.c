@@ -192,7 +192,7 @@ static ValuePathRoute cell_projection_route(const XirCell *cell,
         (atomic_load_explicit(&((const XirClassObject *)owner)->publication_state, memory_order_acquire) &
             XIR_CLASS_ORIGIN_MODULE) != 0 : owner && ((const XirCell *)owner)->module_storage;
     const XrXirTypeArena *arena=identity ? owner->arena : ((const XirCell *)owner)->object.arena;
-    return (ValuePathRoute){prefix,*suffix,identity ? owner : NULL,published,arena,cell->object.arena};
+    return (ValuePathRoute){prefix,*suffix,identity ? owner : NULL,published,arena,cell->object.arena,owner};
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     const XrXirCellAuthority *parent, XrXirValueAdmission *admission,
@@ -215,7 +215,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     XrXirValue *root = owner->kind == XIR_OBJECT_CLASS ? &cell->value : &((XirCell *)owner)->value;
     XrXirType root_type=owner->kind==XIR_OBJECT_CLASS ? owner->type :
         xr_xir_cell_element(xr_xir_compile_type_arena_types(owner->arena),owner->type);
-    XrXirValuePlace place = {root_type,&root->payload};
+    XrXirValuePlace place = {root_type,&root->payload, NULL};
     XrXirValuePath empty = {0}; ValuePathRoute route = cell_projection_route(cell, &empty);
     ValuePathSlot slot = {0}; uint32_t count = 0;
     status = path_route_begin(&place, &route, admission, &slot, &count, fault);
@@ -256,7 +256,7 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
     XrXirValue *root = owner->kind == XIR_OBJECT_CLASS ? &cell->value : &((XirCell *)owner)->value;
     XrXirType root_type=owner->kind==XIR_OBJECT_CLASS ? owner->type :
         xr_xir_cell_element(xr_xir_compile_type_arena_types(owner->arena),owner->type);
-    XrXirValuePlace place = {root_type,&root->payload};
+    XrXirValuePlace place = {root_type,&root->payload, NULL};
     ValuePathRoute route = cell_projection_route(cell, suffix);
     if (operation->output) return value_path_read_route(&place,&route,admission,operation->output,operation->fault);
     if (!cell->projection_count && !suffix->count && !operation->append)

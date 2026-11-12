@@ -38,7 +38,7 @@ int main(void) {
     CHECK(!xr_xir_value_valid(&current)); inner->generation = generation;
     uint64_t identity = inner->identity; inner->identity = 0;
     CHECK(!xr_xir_value_valid(&current)); inner->identity = identity;
-    uint32_t references = atomic_load(&inner->object.references); atomic_store(&inner->object.references, 0);
+    int32_t references = atomic_load(&inner->object.references); atomic_store(&inner->object.references, 0);
     CHECK(!xr_xir_value_valid(&current)); atomic_store(&inner->object.references, references);
     XrXirType inner_type = inner->object.type; inner->object.type = top->object.type;
     CHECK(!xr_xir_value_valid(&current)); inner->object.type = inner_type;

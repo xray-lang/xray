@@ -68,7 +68,7 @@ static void grow_release(GrowFixture *fixture) {
 
 static XrXirValueStatus grow_push(GrowFixture *fixture) {
     XrXirValue five = {XR_XIR_I64, 0, 5};
-    XrXirValuePlace place = {(XrXirType)fixture->array.type, &fixture->array.payload};
+    XrXirValuePlace place = {(XrXirType)fixture->array.type, &fixture->array.payload, NULL};
     return xr_xir_array_push(&place, &five, &fixture->admission);
 }
 

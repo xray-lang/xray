@@ -137,7 +137,7 @@ static void sn_retained(XrXirValue held[6]) {
         sn_number(&result,7);xr_xir_value_drop(&result);
     }
     XrXirValue copy={0};XirObject *object=object_pointer(&held[1]);
-    uint32_t references=atomic_load(&object->references);atomic_store(&object->references,UINT32_MAX);
+    int32_t references=atomic_load(&object->references);atomic_store(&object->references,INT32_MAX);
     CHECK(xr_xir_value_copy(&held[1],&copy)==XR_XIR_VALUE_REFCOUNT_LIMIT && !copy.type && !copy.payload);
     atomic_store(&object->references,references);
     for (uint32_t n=0;n<6;++n) xr_xir_value_drop(&held[n]);

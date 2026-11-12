@@ -210,7 +210,7 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
                 if (status==XR_XIR_CTFE_OK) status=ctfe_value_graph_admit(run,state,&result);
                 if (status!=XR_XIR_CTFE_OK) goto done;
                 XrXirValueAdmission admission=ctfe_value_admission(state);
-                XrXirValuePlace place={frame->target,&frame->array.payload};
+                XrXirValuePlace place={frame->target,&frame->array.payload, NULL};
                 status=ctfe_value_status(xr_xir_array_push(&place,&result,&admission));
                 if (status!=XR_XIR_CTFE_OK) goto done;
                 xr_xir_value_drop(&result);

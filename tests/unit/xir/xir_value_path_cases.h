@@ -49,7 +49,7 @@ static const XrXirValuePathStep value_path_steps[] = {
     {XR_XIR_PATH_INDEX, (XrXirType)257, 0}, {XR_XIR_PATH_FIELD, (XrXirType)256, 0}};
 static int64_t value_path_number(XrXirValue *root, const XrXirValuePath *path,
     XrXirValueAdmission *admission) {
-    XrXirValuePlace place = {(XrXirType)root->type, &root->payload};
+    XrXirValuePlace place = {(XrXirType)root->type, &root->payload, NULL};
     XrXirValue result = {0}; XrXirFaultDetail fault = {0}; admission->work = 100000;
     CHECK(xr_xir_value_path_read(&place, path, admission, &result, &fault) == XR_XIR_VALUE_OK);
     CHECK(result.type == XR_XIR_I64 && !fault.code); return result.payload;
@@ -57,7 +57,7 @@ static int64_t value_path_number(XrXirValue *root, const XrXirValuePath *path,
 static void value_path_failures(XrXirValue *root, const XrXirValuePath *path,
     XrXirValueAdmission *admission) {
     XrXirValue copy = {0}, replacement = {XR_XIR_I64, 0, 99};
-    XrXirValuePlace place = {(XrXirType)root->type, &copy.payload}; XrXirFaultDetail fault = {0};
+    XrXirValuePlace place = {(XrXirType)root->type, &copy.payload, NULL}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_copy(root, &copy) == XR_XIR_VALUE_OK);
     admission->work = 100000; size_t begin = value_allocation_calls;
     CHECK(xr_xir_value_path_write(&place, path, &replacement, admission, &fault) == XR_XIR_VALUE_OK);
@@ -94,17 +94,17 @@ static void value_path_saturation(XrXirValue *root, const XrXirValuePath *path,
     XrXirValuePathStep steps[4]; memcpy(steps, path->steps, path->count * sizeof(*steps));
     steps[path->count - 1].selector = 1;
     XrXirValuePath string_path = {steps, path->count};
-    XrXirValuePlace original = {(XrXirType)root->type, &root->payload};
+    XrXirValuePlace original = {(XrXirType)root->type, &root->payload, NULL};
     XrXirValue text = {0}, copy = {0}, replacement = {XR_XIR_I64, 0, 98};
     XrXirFaultDetail fault = {0}; admission->work = 100000;
     CHECK(xr_xir_value_path_read(&original, &string_path, admission, &text, &fault) == XR_XIR_VALUE_OK);
-    XirObject *object = object_pointer(&text); uint32_t refs = atomic_load(&object->references);
+    XirObject *object = object_pointer(&text); int32_t refs = atomic_load(&object->references);
     CHECK(xr_xir_value_copy(root, &copy) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)root->type, &copy.payload};
+    XrXirValuePlace place = {(XrXirType)root->type, &copy.payload, NULL};
     size_t blocks = live; uint64_t bytes = admission->domain->stats.live_bytes;
-    atomic_store(&object->references, UINT32_MAX);
+    atomic_store(&object->references, INT32_MAX);
     CHECK(xr_xir_value_path_write(&place, path, &replacement, admission, &fault) == XR_XIR_VALUE_REFCOUNT_LIMIT);
-    CHECK(copy.payload == root->payload && atomic_load(&object->references) == UINT32_MAX);
+    CHECK(copy.payload == root->payload && atomic_load(&object->references) == INT32_MAX);
     CHECK(live == blocks && admission->domain->stats.live_bytes == bytes && admission->scratch_bytes == 65536);
     atomic_store(&object->references, refs); xr_xir_value_drop(&copy); xr_xir_value_drop(&text);
 }
@@ -116,7 +116,7 @@ static void value_path_deep(void) {
     for (uint32_t i = 0; i < 160; ++i)
         steps[i] = (XrXirValuePathStep){XR_XIR_PATH_FIELD, (XrXirType)(256 + i), 0};
     XrXirValuePath path = {steps, 160};
-    XrXirValuePlace place = {(XrXirType)root.type, &root.payload};
+    XrXirValuePlace place = {(XrXirType)root.type, &root.payload, NULL};
     XrXirValue replacement = {XR_XIR_I64, 0, 92}; XrXirFaultDetail fault = {0};
     int64_t identity = root.payload;
     CHECK(xr_xir_value_path_write(&place, &path, &replacement, &admission, &fault) == XR_XIR_VALUE_OK);
@@ -133,7 +133,7 @@ static void value_path_append(XrXirValueAdmission *admission, bool boxed) {
     XrXirValue root = value_path_root(admission, boxed), copy = {0}, item = {0}, observed = {0};
     XrXirValuePath path = {value_path_steps + (boxed ? 1 : 0), boxed ? 1 : 2};
     XrXirValuePath element = {path.steps, path.count + 1};
-    XrXirValuePlace place = {(XrXirType)root.type, &root.payload}, target = {place.type, &copy.payload};
+    XrXirValuePlace place = {(XrXirType)root.type, &root.payload, NULL}, target = {place.type, &copy.payload, NULL};
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_path_read(&place, &element, admission, &item, &fault) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&root, &copy) == XR_XIR_VALUE_OK);
@@ -204,7 +204,7 @@ static void value_path_empty(void) {
     CHECK(xr_xir_struct_new((XrXirType)258, NULL, 0, &admission, &empty) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_new((XrXirType)261, &empty, 1, &admission, &root) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&root, &copy) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)261, &copy.payload};
+    XrXirValuePlace place = {(XrXirType)261, &copy.payload, NULL};
     XrXirValuePathStep step = {XR_XIR_PATH_INDEX, (XrXirType)261, 0};
     XrXirValuePath path = {&step, 1}, root_path = {NULL, 0}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_path_write(&place, &path, &empty, &admission, &fault) == XR_XIR_VALUE_OK);
@@ -227,7 +227,7 @@ static void value_path_cases(void) {
     for (unsigned boxed = 0; boxed < 2; ++boxed) {
         XrXirValue root = value_path_root(&admission, boxed != 0), inner = {0}, output = {0};
         XrXirValuePath path = {value_path_steps + boxed, 4 - boxed};
-        XrXirValuePlace place = {(XrXirType)root.type, &root.payload}; XrXirFaultDetail fault = {0};
+        XrXirValuePlace place = {(XrXirType)root.type, &root.payload, NULL}; XrXirFaultDetail fault = {0};
         value_path_failures(&root, &path, &admission);
         value_path_saturation(&root, &path, &admission);
         XrXirValuePath prefix = {path.steps, path.count - 2};

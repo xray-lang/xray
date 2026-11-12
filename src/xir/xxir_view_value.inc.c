@@ -185,7 +185,7 @@ XR_FUNC void xr_xir_view_scope_pin_created(const XrXirValue *value,
     const XrXirCellAuthority *actual=view->storage.kind==XR_XIR_TYPE_SLICE ?
         &view->storage.loan.shared.authority : &view->storage.loan.exclusive.authority;
     XR_CHECK(view_value_kind(view->object.kind) && view->state==XIR_VIEW_ACTIVE &&
-        !view->children && atomic_load_explicit(&view->object.references,memory_order_acquire)==1 &&
+        !view->children && xir_object_unique(&view->object) &&
         cell_authority_equal(actual,authority),"only the exact newly created view enters its scope registry");
     XR_CHECK(graph_object_retain(&view->object),"a unique created view has room for one physical scope pin");
     ++view->children;*output=(XrXirViewOriginPin){view,*authority};xr_xir_value_graph_end();
@@ -302,7 +302,7 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_view_bind_root(XrXirValue *value,
         !admission_owner(admission,cell->object.arena,cell->object.domain) || !cell_access(cell,parent) ||
         !view->storage.buffer_origin || view->state!=XIR_VIEW_ACTIVE || view->children ||
         !unit_value(&view->storage.root) || view->storage.buffer_children ||
-        atomic_load_explicit(&object->references,memory_order_acquire)!=1) goto done;
+        !xir_object_unique(object)) goto done;
     XrXirValue receiver={0},storage={0};
     status=xr_xir_cell_authorized_read(owner,parent,&receiver);
     if (status==XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,0,admission,&storage);

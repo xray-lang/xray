@@ -20,7 +20,7 @@ static void storage_array_cases(XrXirValueAdmission *admission, const XrXirValue
     CHECK(xr_xir_array_get(&array, 0, admission, &result, &fault) == XR_XIR_VALUE_OK && xr_xir_value_valid(&result));
     CHECK(object_pointer(&result) != object_pointer(box)); xr_xir_value_drop(&result);
     CHECK(xr_xir_value_copy(&array, &copy) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)260, &copy.payload};
+    XrXirValuePlace place = {(XrXirType)260, &copy.payload, NULL};
     size_t begin = value_allocation_calls;
     CHECK(xr_xir_array_push(&place, box, admission) == XR_XIR_VALUE_OK);
     size_t sites = value_allocation_calls - begin;
@@ -53,7 +53,7 @@ static void storage_array_cases(XrXirValueAdmission *admission, const XrXirValue
     CHECK(xr_xir_array_new((XrXirType)261, &empty, 1, admission, &array) == XR_XIR_VALUE_OK);
     backing = (XirArray *)object_pointer(&array);
     CHECK(!backing->stride && !backing->data && backing->length == 1);
-    place = (XrXirValuePlace){(XrXirType)261, &array.payload};
+    place = (XrXirValuePlace){(XrXirType)261, &array.payload, NULL};
     for (unsigned i = 0; i < 8; ++i) CHECK(xr_xir_array_push(&place, &empty, admission) == XR_XIR_VALUE_OK);
     CHECK(!backing->data && backing->length == 9 && backing->capacity >= 9);
     CHECK(xr_xir_array_get(&array, 8, admission, &result, &fault) == XR_XIR_VALUE_OK);

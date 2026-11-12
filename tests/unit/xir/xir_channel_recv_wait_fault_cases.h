@@ -125,8 +125,8 @@ static void recv_wait_retired_and_limits(void) {
         !recv && state==XR_XIR_CHANNEL_RECV_WAIT_VALUE && runtime_memory.attempts==begin);
     CHECK(xr_xir_channel_rendezvous_recv_begin(&channel,(XrXirType)RESULT_STRING,&owner.admission,&recv,&state)==XR_XIR_VALUE_BAD_ARGUMENT &&
         !recv && state==XR_XIR_CHANNEL_RECV_WAIT_VALUE && runtime_memory.attempts==begin);
-    XirObject *object=object_pointer(&channel);uint32_t refs=atomic_load_explicit(&object->references,memory_order_relaxed);
-    atomic_store_explicit(&object->references,UINT32_MAX,memory_order_relaxed);
+    XirObject *object=object_pointer(&channel);int32_t refs=atomic_load_explicit(&object->references,memory_order_relaxed);
+    atomic_store_explicit(&object->references,INT32_MAX,memory_order_relaxed);
     CHECK(xr_xir_channel_rendezvous_recv_begin(&channel,(XrXirType)RESULT_I64,&owner.admission,&recv,&state)==XR_XIR_VALUE_REFCOUNT_LIMIT && !recv);
     atomic_store_explicit(&object->references,refs,memory_order_relaxed);
     refs=atomic_load_explicit(&owner.domain->references,memory_order_relaxed);atomic_store_explicit(&owner.domain->references,UINT32_MAX,memory_order_relaxed);

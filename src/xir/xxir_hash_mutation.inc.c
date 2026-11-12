@@ -43,10 +43,13 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
         status = hash_admit_field(value, map->value_type, admission, &sensitive);
         if (status != XR_XIR_VALUE_OK) return status;
     }
+    status = value_place_publish(place, key);
+    if (status == XR_XIR_VALUE_OK && value) status = value_place_publish(place, value);
+    if (status != XR_XIR_VALUE_OK) return status;
     size_t length = map->length + (probe.found ? 0u : 1u), capacity = 0;
     if (!hash_capacity(length, map->stride, &capacity)) return XR_XIR_VALUE_LIMIT;
     if (capacity < map->capacity) capacity = map->capacity;
-    bool unique = atomic_load_explicit(&map->object.references, memory_order_acquire) == 1;
+    bool unique = !value_place_shared(place) && xir_object_unique(&map->object);
     bool grow = length > map->capacity / 2;
     bool detach = map->object.domain != admission->domain && sensitive;
     bool inplace = unique && !detach && (!grow || map->object.domain == admission->domain);
@@ -76,6 +79,7 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
             XrXirValue result = hash_value(replacement);
             if (!probe.found)
                 status = hash_append_prepared(replacement, probe.hash, &prepared_key, &prepared_value, admission);
+            if (status == XR_XIR_VALUE_OK) status = value_place_publish(place, &result);
             if (status == XR_XIR_VALUE_OK) {
                 memcpy(place->payload, &result.payload, sizeof(result.payload));
                 xr_xir_value_drop(&current);

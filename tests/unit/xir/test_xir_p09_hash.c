@@ -41,7 +41,7 @@ static void hash_expect(const XrXirValue *map, int64_t key, int64_t expected,
 static void hash_dense_cases(XrXirValueAdmission *admission) {
     XrXirValue map = {0}, snapshot = {0};
     CHECK(xr_xir_map_new((XrXirType)256, NULL, NULL, 0, admission, &map) == XR_XIR_VALUE_OK);
-    XrXirValuePlace place = {(XrXirType)256, &map.payload};
+    XrXirValuePlace place = {(XrXirType)256, &map.payload, NULL};
     for (int64_t i = 0; i < 512; ++i) {
         XrXirValue key = integer(i), value = integer(i * 7);
         CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK);
@@ -83,7 +83,7 @@ static void hash_ieee_cases(XrXirValueAdmission *admission) {
         bool found = false;
         CHECK(xr_xir_set_contains(&set, &elements[i], admission, &found) == XR_XIR_VALUE_OK && found);
     }
-    XrXirValuePlace place = {(XrXirType)257, &set.payload}; bool removed = false;
+    XrXirValuePlace place = {(XrXirType)257, &set.payload, NULL}; bool removed = false;
     CHECK(xr_xir_hash_delete(&place, &elements[1], admission, &removed) == XR_XIR_VALUE_OK && removed);
     CHECK(xr_xir_set_contains(&set, &elements[0], admission, &removed) == XR_XIR_VALUE_OK && !removed);
     CHECK(xr_xir_set_add(&place, &elements[0], admission) == XR_XIR_VALUE_OK);
@@ -95,7 +95,7 @@ static void hash_order_cases(XrXirValueAdmission *admission) {
     for (unsigned operation = 0; operation < 3; ++operation) {
         XrXirValue map = {0}, alias = {0};
         CHECK(xr_xir_map_new((XrXirType)256, keys, values, 3, admission, &map) == XR_XIR_VALUE_OK);
-        XrXirValuePlace place = {(XrXirType)256, &map.payload};
+        XrXirValuePlace place = {(XrXirType)256, &map.payload, NULL};
         if (operation) CHECK(xr_xir_value_copy(&map, &alias) == XR_XIR_VALUE_OK);
         if (operation == 1) {
             XrXirValue replacement = integer(91);
@@ -141,7 +141,7 @@ static void hash_string_cases(XrXirValueAdmission *admission) {
     CHECK(xr_xir_hash_len(&map, admission, &length) == XR_XIR_VALUE_OK && length == 2);
     CHECK(xr_xir_map_get(&map, &keys[0], admission, &output, &found) == XR_XIR_VALUE_OK && found);
     CHECK(output.payload == values[1].payload); xr_xir_value_drop(&output);
-    XrXirValuePlace place = {(XrXirType)258, &map.payload};
+    XrXirValuePlace place = {(XrXirType)258, &map.payload, NULL};
     CHECK(xr_xir_hash_delete(&place, &keys[0], admission, &found) == XR_XIR_VALUE_OK && found);
     CHECK(xr_xir_map_get(&alias, &keys[1], admission, &output, &found) == XR_XIR_VALUE_OK && found);
     xr_xir_value_drop(&output);

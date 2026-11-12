@@ -31,7 +31,7 @@ static XrXirValueStatus buffer_storage_new(XrXirDomain *domain,int64_t bytes,
         if (zeroed && alignment) memset(storage->data,0,(size_t)bytes);
     }
     storage->length=(size_t)bytes;storage->alignment=(size_t)alignment;
-    atomic_init(&storage->object.references,1);
+    xir_object_initialize(&storage->object);
     storage->object.domain=domain;storage->object.type=XR_XIR_BUFFER_STORAGE;
     storage->object.kind=XIR_OBJECT_BUFFER_STORAGE;graph_object_initialize(&storage->object);
     xr_xir_value_object_publish(&storage->object);

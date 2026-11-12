@@ -76,7 +76,7 @@ static XrXirValueStatus compile_domain_sequence(XrCompileResources *resources, X
         {XR_XIR_I64, 0, 3}, {XR_XIR_I64, 0, 4}};
     XrXirValue integer = {XR_XIR_I64, 0, 5};
     TRY_VALUE(xr_xir_array_new((XrXirType)259, integers, 4, &admission, &values[3]));
-    XrXirValuePlace place = {(XrXirType)259, &values[3].payload};
+    XrXirValuePlace place = {(XrXirType)259, &values[3].payload, NULL};
     before_resize = xr_xir_domain_stats(domain).reallocations;
     TRY_VALUE(xr_xir_array_push(&place, &integer, &admission));
     CHECK(xr_xir_domain_stats(domain).reallocations > before_resize);
@@ -212,7 +212,7 @@ static void compile_domain_failed_growth(void) {
         int64_t payload = operation ? array.payload : text.payload;
         XrCompileResourceStats before = compile_domain_stats(resources);
         value_compile_injected = false; value_compile_fail_at = value_compile_calls;
-        XrXirValuePlace place = {(XrXirType)256, &array.payload};
+        XrXirValuePlace place = {(XrXirType)256, &array.payload, NULL};
         XrXirValue integer = {XR_XIR_I64, 0, 5};
         XrXirValueStatus status = operation ? xr_xir_array_push(&place, &integer, &admission) :
             xr_xir_string_append(&text, &suffix);

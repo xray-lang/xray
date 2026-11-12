@@ -146,8 +146,8 @@ static XrXirCallStatus instance_once(PanicProgramFixture *f, size_t fault_index,
         if (status == XR_XIR_CALL_ASSERTION) {
             expect_bytes(&held.panic.message, expected_bytes, sizeof(expected_bytes));
             XirObject *object = object_pointer(&held.panic.message);
-            uint32_t references = atomic_load(&object->references);
-            atomic_store(&object->references, UINT32_MAX);
+            int32_t references = atomic_load(&object->references);
+            atomic_store(&object->references, INT32_MAX);
             XrXirCallResult failed = {0};
             CHECK(xr_xir_instance_copy_failure(instance, &failed) == XR_XIR_CALL_LIMIT && xr_xir_call_result_empty(&failed));
             atomic_store(&object->references, references);

@@ -240,8 +240,8 @@ static void task_wait_retain_boundary(void) {
         XirTask *target = (XirTask *)(uintptr_t)witness.subject.payload;
         if (!phase) {
             CHECK(xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY);
-            uint32_t references = atomic_load_explicit(&target->object.references, memory_order_relaxed);
-            atomic_store_explicit(&target->object.references, UINT32_MAX, memory_order_relaxed);
+            int32_t references = atomic_load_explicit(&target->object.references, memory_order_relaxed);
+            atomic_store_explicit(&target->object.references, INT32_MAX, memory_order_relaxed);
             CHECK(xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY && !target->waiter_head);
             atomic_store_explicit(&target->object.references, references, memory_order_relaxed);
         } else {
@@ -330,7 +330,7 @@ static void task_wait_string(void) {
             CHECK(target->state == XIR_TASK_TERMINAL && target->outcome.status == XR_XIR_CALL_RETURNED);
             string = (XirObject *)(uintptr_t)target->outcome.value.payload;
             references = atomic_load_explicit(&string->references, memory_order_relaxed);
-            atomic_store_explicit(&string->references, UINT32_MAX, memory_order_relaxed);
+            atomic_store_explicit(&string->references, INT32_MAX, memory_order_relaxed);
         }
         XrXirValue marker = {0}, handle = {0};
         CHECK(xr_xir_string_new(domain, "", 0, &marker) == XR_XIR_VALUE_OK);
@@ -341,7 +341,7 @@ static void task_wait_string(void) {
         CHECK(xr_xir_task_executor_poll(executor, saturated ? 1 : 2) == XR_XIR_CALL_READY);
         if (saturated) {
             CHECK(target->state == XIR_TASK_TERMINAL && target->outcome.status == XR_XIR_CALL_RETURNED &&
-                atomic_load_explicit(&string->references, memory_order_relaxed) == UINT32_MAX);
+                atomic_load_explicit(&string->references, memory_order_relaxed) == INT32_MAX);
             atomic_store_explicit(&string->references, references, memory_order_relaxed);
         }
         task_fixture_drop(&fixture);

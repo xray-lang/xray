@@ -76,7 +76,7 @@ static const XrXirValuePathStep foreign_write_steps[] = {
     {XR_XIR_PATH_INDEX, (XrXirType)259, 0}, {XR_XIR_PATH_FIELD, (XrXirType)258, 0}};
 
 static XrXirValueStatus foreign_write_apply(ForeignWrite *f, unsigned mode) {
-    XrXirValuePlace place = {(XrXirType)f->root.type, &f->root.payload};
+    XrXirValuePlace place = {(XrXirType)f->root.type, &f->root.payload, NULL};
     if (!mode) return xr_xir_struct_set(&place, 0, &f->replacement, &f->local);
     XrXirValuePath path = {foreign_write_steps + (mode == 1 ? 1 : 0), mode == 1 ? 3u : 4u};
     XrXirFaultDetail fault = {0};

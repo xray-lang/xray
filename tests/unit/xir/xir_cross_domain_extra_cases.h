@@ -78,7 +78,7 @@ static void cross_domain_nested_case(unsigned order) {
     xr_xir_value_drop(&inner); xr_xir_value_drop(&none);
     CHECK(xr_xir_nullable_new((XrXirType)257, &f.function, &f.local, &some) == XR_XIR_VALUE_OK);
     const XrXirValuePathStep steps[] = {{XR_XIR_PATH_INDEX, (XrXirType)260, 0}, {XR_XIR_PATH_INDEX, (XrXirType)258, 0}};
-    const XrXirValuePath path = {steps, 2}; XrXirValuePlace place = {(XrXirType)260, &outer.payload};
+    const XrXirValuePath path = {steps, 2}; XrXirValuePlace place = {(XrXirType)260, &outer.payload, NULL};
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_value_path_write(&place, &path, &some, &f.local, &fault) == XR_XIR_VALUE_OK);
     /* The new identity edge requires every foreign copyable ancestor to move. */
@@ -117,7 +117,7 @@ static void cross_domain_set_case(unsigned order) {
     CHECK(xr_xir_string_new(f.domains[0], "new", 3, &new_text) == XR_XIR_VALUE_OK);
     XrXirValue new_fields[] = {some, new_text};
     CHECK(xr_xir_tuple_new((XrXirType)258, new_fields, 2, &f.local, &new_tuple) == XR_XIR_VALUE_OK);
-    int64_t payload = array.payload; XrXirValuePlace place = {(XrXirType)259, &array.payload};
+    int64_t payload = array.payload; XrXirValuePlace place = {(XrXirType)259, &array.payload, NULL};
     XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_set(&place, 0, &new_tuple, &f.local, &fault) == XR_XIR_VALUE_OK);
     CHECK(array.payload != payload && object_pointer(&array)->domain == f.domains[0]);

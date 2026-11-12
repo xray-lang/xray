@@ -118,7 +118,7 @@ static void task_late_outcomes(const TaskLateFixture *fixture, XrXirValue *value
     XrXirDomain *receiver = NULL; CHECK(xr_xir_domain_new(65536, &receiver) == XR_XIR_VALUE_OK);
     XrXirValue replacement = {0}; CHECK(xr_xir_string_new(receiver, "elm", 3, &replacement) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, receiver, NULL, NULL, 10000, 65536};
-    XrXirValuePlace place = {(XrXirType)first.value.type, &first.value.payload}; XrXirFaultDetail fault = {0};
+    XrXirValuePlace place = {(XrXirType)first.value.type, &first.value.payload, NULL}; XrXirFaultDetail fault = {0};
     CHECK(xr_xir_array_set(&place, 0, &replacement, &admission, &fault) == XR_XIR_VALUE_OK);
     xr_xir_domain_drop(receiver); xr_xir_value_drop(&replacement);
     task_late_metadata_only(fixture, arena);

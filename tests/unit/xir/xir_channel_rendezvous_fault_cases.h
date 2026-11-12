@@ -138,8 +138,8 @@ static void rendezvous_reference_limits(void) {
     CHECK(xr_xir_channel_receive_result(&channel,(XrXirType)RESULT_ARRAY_I64,&owner.admission,&output,&state)==XR_XIR_VALUE_REFCOUNT_LIMIT &&
         unit_value(&output) && state==XR_XIR_CHANNEL_FULL && storage->send_count==1 && storage->sequence==sequence);
     atomic_store_explicit(&send->references,2,memory_order_relaxed);
-    XirObject *payload=object_pointer(&message);uint32_t references=atomic_load_explicit(&payload->references,memory_order_relaxed);
-    atomic_store_explicit(&payload->references,UINT32_MAX,memory_order_relaxed);
+    XirObject *payload=object_pointer(&message);int32_t references=atomic_load_explicit(&payload->references,memory_order_relaxed);
+    atomic_store_explicit(&payload->references,INT32_MAX,memory_order_relaxed);
     CHECK(xr_xir_channel_receive_result(&channel,(XrXirType)RESULT_ARRAY_I64,&owner.admission,&output,&state)==XR_XIR_VALUE_REFCOUNT_LIMIT &&
         unit_value(&output) && state==XR_XIR_CHANNEL_FULL && atomic_load_explicit(&send->references,memory_order_relaxed)==2);
     atomic_store_explicit(&payload->references,references,memory_order_relaxed);

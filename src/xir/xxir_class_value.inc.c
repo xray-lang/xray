@@ -139,6 +139,10 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
         return XR_XIR_VALUE_BAD_ARGUMENT;
     status=xr_xir_value_admit(replacement,node->nominal.fields[field],admission);
     if (status != XR_XIR_VALUE_OK) return status;
+    if (xir_object_references(object) < 0) {
+        status=xr_xir_value_share(replacement);
+        if (status != XR_XIR_VALUE_OK) return status;
+    }
     XrXirLayout physical={0};
     if (!xr_xir_compile_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -152,16 +156,28 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     }
     const XrXirStorageLayout *layout=class_body_layout(object);
     unsigned char *bytes=(unsigned char *)((XirClassObject *)object+1)+layout->field_offsets[field];
-    /* Detach the old owners before publication, but defer their callbacks until
-     * the field contains the complete replacement. A callback may read it. */
+    StoragePrepared previous = {0};
+    bool shared = xir_object_references(object) < 0;
+    if (shared) {
+        status = storage_prepared_storage(&previous, prepared.pack.type, physical.size, admission);
+        if (status != XR_XIR_VALUE_OK) {
+            storage_prepared_end(&prepared); xr_xir_class_publication_drop(&publication);
+            return status;
+        }
+        if (physical.size) memcpy(previous.bytes, bytes, physical.size);
+    }
+    /* The shared parent keeps the old packed owners until the complete new
+     * field is installed. The private snapshot then consumes those owners. */
     StorageCursor cursor={0}; XirObject *pending=NULL;
     XR_CHECK(storage_cursor_init(admission->arena,(StorageSpan){prepared.pack.type,bytes},
         (StorageFrame *)prepared.pack.frames,prepared.pack.capacity,true,&cursor)==XR_XIR_VALUE_OK,
         "class overwrite reserves release traversal before publication");
     if (publication.operation) xr_xir_class_publication_commit(&publication);
-    storage_queue_release(&cursor,UINT64_MAX,&pending);
+    if (!shared) storage_queue_release(&cursor,UINT64_MAX,&pending);
     if (physical.size) memcpy(bytes,prepared.bytes,physical.size);
-    prepared.owns=false;release_pending(pending);storage_prepared_end(&prepared);
+    prepared.owns=false;
+    if (shared) { previous.owns=true; storage_prepared_end(&previous); }
+    release_pending(pending);storage_prepared_end(&prepared);
     xr_xir_class_publication_drop(&publication);
     return XR_XIR_VALUE_OK;
 }

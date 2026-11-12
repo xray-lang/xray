@@ -15,6 +15,7 @@
 #include "xir/xxir_output.h"
 #include "xir/xxir_atomic.h"
 #include "xir/xxir_type_arena.h"
+#include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,6 +154,14 @@ static void concurrent_copies(unsigned kind) {
 #else
     pthread_t threads[4];
 #endif
+    CHECK(xr_xir_value_share(&value) == XR_XIR_VALUE_OK);
+    CHECK(xir_object_references((XirObject *)(intptr_t)value.payload) < 0);
+    if (kind == 2) {
+        XrXirValue child = {0};
+        CHECK(xr_xir_cell_read(&value, &child) == XR_XIR_VALUE_OK);
+        CHECK(xir_object_references((XirObject *)(intptr_t)child.payload) < 0);
+        xr_xir_value_drop(&child);
+    }
     for (uint32_t i = 0; i < 4; ++i) {
         CHECK(xr_xir_value_copy(&value, &copies[i].value) == XR_XIR_VALUE_OK);
         copies[i].domain = domain;

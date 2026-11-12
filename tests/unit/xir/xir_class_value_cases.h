@@ -86,19 +86,19 @@ static void class_value_cases(void) {
     XrXirValue array={0},array_alias={0},element={0};
     CHECK(xr_xir_array_new((XrXirType)257,&first,1,&admission,&array)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_copy(&array,&array_alias)==XR_XIR_VALUE_OK);
-    XrXirValuePlace place={(XrXirType)257,&array.payload};
+    XrXirValuePlace place={(XrXirType)257,&array.payload, NULL};
     CHECK(xr_xir_array_push(&place,&separate,&admission)==XR_XIR_VALUE_OK && array.payload!=array_alias.payload);
     XrXirFaultDetail fault={0};
     CHECK(xr_xir_array_get(&array_alias,0,&admission,&element,&fault)==XR_XIR_VALUE_OK && element.payload==first.payload);
     CHECK(xr_xir_class_set(&element,0,&fields[0],&admission)==XR_XIR_VALUE_OK);class_value_count(&alias,40);
     xr_xir_value_drop(&element);xr_xir_value_drop(&array);xr_xir_value_drop(&array_alias);
-    XirObject *new_string=object_pointer(&label);uint32_t refs=atomic_load(&new_string->references);
-    atomic_store(&new_string->references,UINT32_MAX);
+    XirObject *new_string=object_pointer(&label);int32_t refs=atomic_load(&new_string->references);
+    atomic_store(&new_string->references,INT32_MAX);
     CHECK(xr_xir_class_set(&first,2,&label,&admission)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     atomic_store(&new_string->references,refs);
     XirObject *late_string=object_pointer(&text);refs=atomic_load(&late_string->references);
     size_t rollback_live=live;uint64_t rollback_bytes=xr_xir_domain_stats(domain).live_bytes;
-    atomic_store(&late_string->references,UINT32_MAX);
+    atomic_store(&late_string->references,INT32_MAX);
     CHECK(xr_xir_class_new((XrXirType)256,fields,3,&admission,&invalid)==XR_XIR_VALUE_REFCOUNT_LIMIT);
     atomic_store(&late_string->references,refs);
     CHECK(!invalid.type && !invalid.payload && live==rollback_live && xr_xir_domain_stats(domain).live_bytes==rollback_bytes);
@@ -144,7 +144,7 @@ static void class_array_allocation_failures(void) {
         CHECK(xr_xir_array_new((XrXirType)257,&object,1,&admission,&array)==XR_XIR_VALUE_OK);
         CHECK(xr_xir_value_copy(&array,&alias)==XR_XIR_VALUE_OK);
         size_t baseline=live;uint64_t bytes=xr_xir_domain_stats(domain).live_bytes;
-        value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValuePlace place={(XrXirType)257,&array.payload};
+        value_allocation_calls=0;fail_at=pass?pass-1:SIZE_MAX;XrXirValuePlace place={(XrXirType)257,&array.payload, NULL};
         XrXirValueStatus status=xr_xir_array_push(&place,&object,&admission);
         if(!pass){CHECK(status==XR_XIR_VALUE_OK);sites=value_allocation_calls;CHECK(sites>0);}
         else {CHECK(status==XR_XIR_VALUE_OOM && array.payload==alias.payload);

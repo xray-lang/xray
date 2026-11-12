@@ -92,7 +92,7 @@ static void task_array_guards(TaskArrayCompile *run) {
     CHECK(xr_xir_value_copy(&array, &alias) == XR_XIR_VALUE_OK);
     const XrXirValue before = array, alias_before = alias;
     const size_t blocks = runtime_live, bytes = runtime_bytes;
-    XrXirValuePlace place = {(XrXirType)array.type, &array.payload};
+    XrXirValuePlace place = {(XrXirType)array.type, &array.payload, NULL};
     const XrXirValue scalar = {XR_XIR_I64, 0, 3};
     admission = task_admission(&array);
     CHECK(xr_xir_array_set(&place, 0, &scalar, &admission, &fault) == XR_XIR_VALUE_BAD_ARGUMENT);

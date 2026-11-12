@@ -119,8 +119,8 @@ static void native_boundary_case(bool pause,unsigned finish,XrXirCallStatus reje
         CHECK(xir_call_native_throw_continue(call,&forged,w->held.frame)==XR_XIR_CALL_BAD_STATE);
         CHECK(xir_call_native_throw_copy(call,&w->held.binding,w->held.frame+1,&escaped)==XR_XIR_CALL_BAD_STATE);
         XirObject *carrier=object_pointer(&call->top->pending.value);CHECK(carrier);
-        uint32_t references=atomic_load_explicit(&carrier->references,memory_order_relaxed);
-        atomic_store_explicit(&carrier->references,UINT32_MAX,memory_order_relaxed);
+        int32_t references=atomic_load_explicit(&carrier->references,memory_order_relaxed);
+        atomic_store_explicit(&carrier->references,INT32_MAX,memory_order_relaxed);
         CHECK(xir_call_native_throw_copy(call,&w->held.binding,w->held.frame,&escaped)==XR_XIR_CALL_LIMIT && !escaped.value.type);
         CHECK(w->instance->budget.native_hold==call && !call->top->exiting);
         atomic_store_explicit(&carrier->references,references,memory_order_relaxed);
