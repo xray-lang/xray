@@ -302,11 +302,13 @@ static XrXirStatus affine_module(const XrXirCompileContext *context,
     XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint64_t fixed=sizeof(AffineCheck)+sizeof(XrXirCompileContext);
-    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
-    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
-    uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(&remaining,module->types,&types);
+    uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&types);
     if (status!=XR_XIR_OK || !types) return status;
+    uint64_t fixed=sizeof(AffineCheck)+sizeof(XrXirCompileContext)+(facts?sizeof(*facts):0);
+    if (fixed>context->limits.frame_bytes || module->types->count>context->limits.frame_bytes-fixed) {
+        xr_compile_resources_free(types);return XR_XIR_BUDGET;
+    }
+    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
     XirViewLoanTransport *transport=NULL;
     if (facts && facts->restrictions.point_count)
         status=xir_view_loan_transport_new(&remaining,module,facts,types,control,&transport);
@@ -340,10 +342,7 @@ XR_FUNC XrXirStatus xir_compile_view_affine_loans_verified(const XrXirCompileCon
     XrXirStatus status=xir_effects_view_loan_facts(context,effects,&facts);
     if (status!=XR_XIR_OK) return status;
     if (facts.restrictions.function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
-    uint64_t fixed=sizeof(facts);
-    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
-    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
-    return affine_module(&remaining,module,&facts,control,diagnostic);
+    return affine_module(context,module,&facts,control,diagnostic);
 }
 
 #include "xxir_view_liveness.inc.c"

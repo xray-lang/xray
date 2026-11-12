@@ -18,7 +18,7 @@
 #include "xir_library_compile_owner.h"
 #include "xir/xxir_specialize.c"
 
-enum { INDEX_KEYS = 12, INDEX_WIDTH = 128 };
+enum { INDEX_KEYS = 13, INDEX_WIDTH = 128 };
 typedef struct IndexFixture {
     SpecInstance keys[INDEX_KEYS];
     XrXirType types[INDEX_KEYS][INDEX_WIDTH];
@@ -27,7 +27,8 @@ static void index_fixture(IndexFixture *f) {
     memset(f,0,sizeof(*f));
     for (uint32_t k=0;k<INDEX_KEYS;++k) {
         for (uint32_t a=0;a<INDEX_WIDTH;++a) f->types[k][a]=XR_XIR_I64;
-        f->keys[k]=(SpecInstance){.declaration=0,.arguments=f->types[k],.count=INDEX_WIDTH,.owner=UINT32_MAX};
+        f->keys[k]=(SpecInstance){.declaration=0,.arguments=f->types[k],.count=INDEX_WIDTH,
+            .owner=UINT32_MAX,.capture_owner=UINT32_MAX};
     }
     f->types[1][INDEX_WIDTH-1]=XR_XIR_I32;
     f->types[2][1]=XR_XIR_I32;
@@ -37,11 +38,14 @@ static void index_fixture(IndexFixture *f) {
     f->keys[8].count=INDEX_WIDTH-2;f->types[9][0]=XR_XIR_I32;
     /* Key 10 is equal in independent storage; key 11 differs in its middle. */
     f->types[11][INDEX_WIDTH/2]=XR_XIR_I32;
+    /* Key 12 differs from key 0 only in its lexical capture owner. */
+    f->keys[12].capture_owner=0;
 }
 static uint32_t index_reference(const SpecContext *c,const SpecInstance *key) {
     for (uint32_t i=0;i<c->count;++i) {
         const SpecInstance *old=&c->instances[i];
         if (key->declaration!=old->declaration || key->owner!=old->owner ||
+            key->capture_owner!=old->capture_owner ||
             key->count!=old->count) continue;
         bool same=true;
         for (uint32_t a=0;a<key->count;++a) if (key->arguments[a]!=old->arguments[a]) same=false;
@@ -73,17 +77,21 @@ static XrXirStatus index_operation(const XrXirCompileContext *context,void *opaq
         if (c.diagnostic.status!=XR_XIR_OK) { index_drop(&c);return c.diagnostic.status; }
         CHECK(actual==expected);
     }
-    CHECK(c.count==11 && c.index_capacity==32);index_drop(&c);return XR_XIR_OK;
+    CHECK(index_reference(&c,&fixture.keys[0])==0 && index_reference(&c,&fixture.keys[12])==11);
+    CHECK(!spec_instance_equal(&c,&fixture.keys[0],&fixture.keys[12]) && c.diagnostic.status==XR_XIR_OK);
+    CHECK(c.count==12 && c.index_capacity==32);index_drop(&c);return XR_XIR_OK;
 }
 static void index_collisions(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     IndexFixture f;index_fixture(&f);SpecInstance instances[32];SpecContext c={0};c.remaining=owner.context;c.instances=instances;
-    const uint32_t bits[]={42239,47305};uint32_t hashes[2]={0};
+    /* These ordered type vectors collide with the complete four-field header. */
+    const uint32_t bits[]={18041,43105};uint32_t hashes[2]={0};
     for (uint32_t k=0;k<2;++k) {
         for (uint32_t a=0;a<INDEX_WIDTH;++a) f.types[k][a]=XR_XIR_I64;
         for (uint32_t a=0;a<32;++a) f.types[k][a]=(bits[k]&(UINT32_C(1)<<a))?XR_XIR_I32:XR_XIR_I64;
         CHECK(spec_instance_hash(&c,&f.keys[k],&hashes[k]));
     }
+    CHECK(memcmp(f.types[0],f.types[1],sizeof(f.types[0])));
     CHECK(hashes[0]==hashes[1] && index_reference(&c,&f.keys[0])==UINT32_MAX);
     CHECK(index_add(&c,&f.keys[0])==0 && index_add(&c,&f.keys[1])==1);
     CHECK(index_add(&c,&f.keys[0])==0 && index_add(&c,&f.keys[1])==1);
@@ -107,7 +115,7 @@ static void index_collisions(void) {
 static void index_prepare_growth(SpecContext *c,const XrXirCompileContext *context,SpecInstance *instances) {
     *c=(SpecContext){0};c->remaining=*context;c->instances=instances;
     for (uint32_t i=0;i<4;++i) {
-        SpecInstance key={.declaration=i,.owner=UINT32_MAX};CHECK(index_add(c,&key)==i);
+        SpecInstance key={.declaration=i,.owner=UINT32_MAX,.capture_owner=UINT32_MAX};CHECK(index_add(c,&key)==i);
     }
     CHECK(c->index_capacity==8 && c->count==4);
 }

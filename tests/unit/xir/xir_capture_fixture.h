@@ -113,8 +113,11 @@ static XrXirArtifact *capture_fixture(const XrXirCompileContext *context, bool t
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
-    CHECK(m->function_count == 6 && m->functions[2].instructions[1].immediate == 5);
-    CHECK(m->functions[5].parameters[0] == XR_XIR_STRING && !m->generics);
+    CHECK(m->function_count == 6);
+    uint32_t capture = (uint32_t)m->functions[2].instructions[1].immediate, origin = UINT32_MAX;
+    CHECK(capture < m->function_count &&
+        xr_xir_compile_specialization_origin(closed,capture,&origin) == XR_XIR_OK && origin == 5);
+    CHECK(m->functions[capture].parameters[0] == XR_XIR_STRING && !m->generics);
     const XrXirTypeNode *signature = xr_xir_callable_signature(m->types, m->functions[2].result);
     CHECK(signature && signature->flags == 8u);
     XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
