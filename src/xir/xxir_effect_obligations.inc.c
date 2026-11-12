@@ -107,7 +107,8 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
         XrXirEffectFacts fact_read=xir_effects_declaration_read(remaining,facts,f,&task);
         if (fact_read.status!=XR_XIR_OK) return fact_read.status;
         if (cleanup && task != XR_XIR_EFFECT_NONE) {
-            *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
+            *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX,
+                XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND};
             status = XR_XIR_BAD_TYPE; break;
         }
         const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);

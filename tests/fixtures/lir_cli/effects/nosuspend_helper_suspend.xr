@@ -1,0 +1,4 @@
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn leaf() -> i64 { return 7 }
+fn suspending() -> i64 { return await go leaf() }
+const limited: nosuspend fn() -> i64 = fn() -> i64 { return invoke(suspending) }

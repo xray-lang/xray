@@ -222,3 +222,25 @@ static XrXirStatus storage_hidden_environment(XirStorageFlow *flow, const XirExe
     xr_compile_resources_free(proof.index); xr_compile_resources_free(proof.queue);
     return status;
 }
+
+/* Immutable callable identities need no storage observation when every
+ * environment branch is closed. An ordinary formal's loan contract alone
+ * cannot establish this property for an ordered cleanup invocation. */
+static XrXirStatus storage_closed_value_environment(XirStorageFlow *flow,
+    XirStorageReference reference) {
+    StorageEnvironmentProof proof = {.flow=flow, .current=UINT32_MAX, .closed_values=true};
+    storage_environment_push(&proof, (StorageEnvironmentNode){
+        .reference=reference, .target=UINT32_MAX, .kind=STORAGE_ENVIRONMENT_VALUE});
+    for (uint32_t n = 0; !proof.remainder && n < proof.count && storage_step(flow); ++n) {
+        proof.current = n;
+        if (!storage_environment_expand(&proof, n)) break;
+    }
+    XrXirStatus status = flow->status;
+    if (status == XR_XIR_OK && !proof.remainder && !storage_environment_acyclic(&proof))
+        status = flow->status;
+    if (status == XR_XIR_OK && proof.remainder)
+        status = storage_reference_pending(flow, proof.remainder);
+    xr_compile_resources_free(proof.nodes); xr_compile_resources_free(proof.edges);
+    xr_compile_resources_free(proof.index); xr_compile_resources_free(proof.queue);
+    return status;
+}

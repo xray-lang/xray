@@ -86,7 +86,8 @@ def main() -> None:
                      "cfn_signature", "cfn_reference", "cfn_indirect", "cfn_storable",
                      "root_generic_identity_pure", "root_generic_forward_pure",
                      "root_generic_array_pure", "root_generic_tuple_pure",
-                     "root_generic_scalar", "root_generic_generator"):
+                     "root_generic_scalar", "root_generic_generator", "defer_helper_pure",
+                     "nosuspend_helper_pure", "cfn_helper_pure"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
@@ -154,6 +155,9 @@ def main() -> None:
             ("cfn_reject_ordinary", b"callback argument requires exact shape and an admitted advertised bound"),
             ("cfn_reject_ordinary_assignment", b"callable conversion may only weaken its outer execution contract"),
             ("cfn_reject_suspend", b"declared no_suspend function may suspend"),
+            ("defer_helper_suspend", b"via invoke parameter `callback`"),
+            ("nosuspend_helper_suspend", b"via invoke parameter `callback`"),
+            ("cfn_helper_suspend", b"via invoke parameter `callback`"),
             ("nosuspend_await", b"declared no_suspend function may suspend"),
             ("nosuspend_fixed_callable", b"declared no_suspend function may suspend"),
             ("nosuspend_chain", b"entry -> bridge -> leaf (suspending operation)"),

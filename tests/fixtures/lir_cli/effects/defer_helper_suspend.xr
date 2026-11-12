@@ -1,0 +1,5 @@
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn leaf() -> i64 { return 7 }
+fn suspending() -> i64 { return await go leaf() }
+fn probe() { const callback = suspending; defer { invoke(callback) } }
+probe()

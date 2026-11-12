@@ -12,6 +12,46 @@
 #ifndef XIR_ENTRY_FOOTPRINT_CASES_H
 #define XIR_ENTRY_FOOTPRINT_CASES_H
 
+static XrXirStatus entry_suspend_parameter_step(void *context, const XirSuspendCauseStep *step) {
+    uint32_t *count = context;
+    CHECK(!step->function && step->callee == 1 && !step->parameter &&
+        step->parameter_dependency && !step->terminal);
+    ++*count;
+    return XR_XIR_OK;
+}
+
+static void entry_suspend_parameter_ownership(void) {
+    EffectMark baseline = effect_mark();
+    uint64_t source[] = {4, 4}, target[] = {4, 4};
+    EffectCheckFunction functions[] = {
+        {.first=0,.parameters=1,.words=1,.root=1,.declaration=0,.suspend_bits=source},
+        {.first=2,.parameters=1,.words=1,.root=3,.declaration=1,.suspend_bits=target}};
+    EffectCheckNode nodes[4] = {0};
+    for (uint32_t n = 0; n < 4; ++n) {
+        nodes[n].function = n / 2;
+        nodes[n].aliases = nodes[n].calls = UINT32_MAX;
+    }
+    nodes[1].calls = 0;
+    uint32_t argument = 0;
+    EffectCheckCall call = {.target=3,.count=1,.next=UINT32_MAX,.output=1,.protocol=2};
+    EffectCheckedRoots roots = {.resources=effect_context.resources,.functions=2,.nodes=4,
+        .function=functions,.node=nodes,.call=&call,.calls=1,.argument=&argument,.arguments=1};
+    uint32_t count = 0;
+    EffectSuspendParameterTrace walk = {entry_suspend_parameter_step, &count, 0, false};
+    attempts = 0; injected = false;
+    CHECK(effect_checked_suspend_parameter_trace(&roots,1,0,&walk) == XR_XIR_OK && count == 1 && walk.emitted);
+    size_t sites = attempts;
+    effect_mark_check(baseline);
+    for (size_t site = 0; site < sites; ++site) {
+        attempts = 0; injected = false; fail_at = site;
+        walk.emitted = false;
+        CHECK(effect_checked_suspend_parameter_trace(&roots,1,0,&walk) == XR_XIR_OUT_OF_MEMORY && injected);
+        fail_at = SIZE_MAX;
+        effect_mark_check(baseline);
+    }
+    printf("symbolic suspension presentation: same-owner helper edge and %zu allocation failures PASS\n", sites);
+}
+
 static bool entry_footprint_map(const XrXirModule *module, uint32_t function,
     XirStorageRelocation *map, XrXirStatus *status) {
     const XrXirFunction *body = &module->functions[function];
@@ -104,6 +144,7 @@ static XrXirStatus entry_footprint_case(const XrXirArtifact *artifact, bool relo
 }
 
 static void entry_footprint_ownership(void) {
+    entry_suspend_parameter_ownership();
     EffectMark baseline = effect_mark();
     XrXirArtifact *artifact = root_source("entry_cell_footprints.xr",XR_XIR_OK);
     EffectMark retained = effect_mark();

@@ -371,13 +371,36 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
     summary->facts = xir_compile_calloc(memory, summary->functions, sizeof(*summary->facts), &status);
     summary->causes = xir_compile_calloc(memory, summary->functions, sizeof(*summary->causes), &status);
     summary->task_creation = xir_compile_calloc(memory, summary->functions, sizeof(*summary->task_creation), &status);
+    summary->source_nodes = xir_compile_calloc(memory, summary->functions, sizeof(*summary->source_nodes), &status);
+    for (uint32_t f = 0; status == XR_XIR_OK && f < summary->functions; ++f)
+        summary->source_nodes[f] = roots->function[f].cleanup ? UINT32_MAX : roots->function[f].root;
+    /* A cleanup's hidden parameters describe its registration captures. Its
+     * declaration obligation consumes those actual applications, while the
+     * shared function equations retain their original symbolic parameters. */
+    for (uint32_t c = 0; status == XR_XIR_OK && c < roots->calls; ++c) {
+        EffectCheckCall call = roots->call[c];
+        EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+        if (call.protocol != 4 || !callee.cleanup || call.target != callee.root ||
+            callee.declaration >= summary->functions) continue;
+        uint32_t f = callee.declaration, selected = summary->source_nodes[f];
+        if (call.count != callee.parameters || roots->node[call.output].cleanup_call != c) {
+            status = XR_XIR_BAD_STRUCTURE;
+            break;
+        }
+        uint8_t mask = effect_checked_suspend_mask(roots, call.output);
+        uint8_t previous = selected == UINT32_MAX ? 0 : effect_checked_suspend_mask(roots, selected);
+        if (selected == UINT32_MAX || ((mask & 2) && !(previous & 2)) || (!previous && mask))
+            summary->source_nodes[f] = call.output;
+        if (roots->node[call.output].task_creation) summary->task_creation[f] = XR_XIR_EFFECT_MAY;
+    }
     for (uint32_t f = 0; status == XR_XIR_OK && f < summary->functions; ++f) {
         const EffectCheckFunction *function = &roots->function[f];
-        uint32_t node = function->root;
+        uint32_t node = summary->source_nodes[f];
+        if (node == UINT32_MAX) node = summary->source_nodes[f] = function->root;
         uint8_t mask = effect_checked_suspend_mask(roots, node);
         summary->facts[f] = (XrXirFunctionEffects){mask & 2 ? XR_XIR_EFFECT_MAY :
             mask & 1 ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE, (XrXirEffect)function->throws};
-        summary->task_creation[f] = roots->node[node].task_creation ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE;
+        if (roots->node[node].task_creation) summary->task_creation[f] = XR_XIR_EFFECT_MAY;
         if (!mask) continue;
         uint32_t bit = mask & 2 ? 1 : 0;
         const EffectCheckNode *reason = &roots->node[node];
@@ -410,10 +433,86 @@ static XrXirStatus effect_checked_control_project(const XrXirCompileContext *mem
             current = next;
         }
         if (!witness->cause) status = XR_XIR_BAD_STRUCTURE;
+        if (function->cleanup) witness->instruction = UINT32_MAX;
     }
     if (status != XR_XIR_OK) { xir_effect_control_free(summary); return status; }
     *output = summary;
     return XR_XIR_OK;
+}
+
+/* Symbolic application has already closed in the shared equations. Recover
+ * intermediate helper names from those same edges when a cleanup capture
+ * supplies the eventual constant cause. No facts are changed by presentation. */
+typedef struct EffectSuspendParameterTrace {
+    XirSuspendCauseVisitor visit;
+    void *context;
+    uint32_t creator;
+    bool emitted;
+} EffectSuspendParameterTrace;
+
+static XrXirStatus effect_checked_suspend_parameter_trace(const EffectCheckedRoots *roots,
+    uint32_t node, uint32_t term, EffectSuspendParameterTrace *walk) {
+    XrXirCompileContext memory = {.resources = roots->resources};
+    XrXirStatus status = XR_XIR_OK;
+    uint32_t *scratch = xir_compile_calloc(&memory, roots->nodes, 3 * sizeof(*scratch), &status);
+    if (!scratch) return status;
+    uint32_t *queue = scratch, *visited = scratch + roots->nodes, *seen = visited + roots->nodes;
+    for (uint32_t epoch = 1; epoch <= roots->nodes; ++epoch) {
+        EffectCheckFunction function = roots->function[roots->node[node].function];
+        if (term >= (uint64_t)function.parameters * 2) { status = XR_XIR_BAD_STRUCTURE; break; }
+        uint32_t parameter = term % function.parameters;
+        uint32_t seed = term < function.parameters ? function.first + parameter : function.contents + parameter;
+        if (seen[seed]) break;
+        seen[seed] = 1;
+        uint32_t count = 1, next_node = UINT32_MAX, next_term = UINT32_MAX;
+        queue[0] = node;
+        visited[node] = epoch;
+        for (uint32_t cursor = 0; cursor < count && next_node == UINT32_MAX; ++cursor) {
+            uint32_t current = queue[cursor];
+            for (uint32_t c = roots->node[current].calls; c != UINT32_MAX; c = roots->call[c].next) {
+                EffectCheckCall call = roots->call[c];
+                EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+                if (call.fixed_effects || call.protocol == 8 ||
+                    (call.target == callee.result && !call.default_result)) continue;
+                const uint64_t *bits = effect_check_suspend_bits(roots, call.target);
+                for (uint32_t p = 0; p < callee.parameters * 2u; ++p) {
+                    if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
+                    uint32_t ordinal = p % callee.parameters;
+                    if (ordinal >= call.count) continue;
+                    uint32_t actual = roots->argument[call.first + ordinal];
+                    if (p >= callee.parameters) {
+                        EffectCheckFunction caller = roots->function[roots->node[actual].function];
+                        actual = caller.contents + actual - caller.first;
+                    }
+                    const uint64_t *argument = effect_check_suspend_bits(roots, actual);
+                    if (!(argument[(term + 2) / 64] & (UINT64_C(1) << ((term + 2) % 64)))) continue;
+                    XirSuspendCauseStep step = {walk->emitted ? function.declaration : walk->creator, call.instruction,
+                        callee.declaration, ordinal, false, true, false};
+                    status = walk->visit(walk->context, &step);
+                    walk->emitted = true;
+                    next_node = call.target;
+                    next_term = p;
+                    break;
+                }
+                if (next_node != UINT32_MAX) break;
+            }
+            for (uint32_t a = roots->node[current].aliases; next_node == UINT32_MAX &&
+                a != UINT32_MAX; a = roots->alias[a].next) {
+                EffectCheckAlias alias = roots->alias[a];
+                if (!alias.suspension || visited[alias.source] == epoch ||
+                    roots->node[alias.source].function != roots->node[current].function) continue;
+                const uint64_t *bits = effect_check_suspend_bits(roots, alias.source);
+                if (!(bits[(term + 2) / 64] & (UINT64_C(1) << ((term + 2) % 64)))) continue;
+                visited[alias.source] = epoch;
+                queue[count++] = alias.source;
+            }
+        }
+        if (status != XR_XIR_OK || next_node == UINT32_MAX) break;
+        node = next_node;
+        term = next_term;
+    }
+    xr_compile_resources_free(scratch);
+    return status;
 }
 
 XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
@@ -421,13 +520,13 @@ XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
     if (!effects || !effect_roots_read(effects)->control_summary || function >= effects->count || !visit)
         return XR_XIR_BAD_STRUCTURE;
     const EffectCheckedRoots *roots = effects->checked_roots;
-    uint32_t node = roots->function[function].root;
+    uint32_t node = effect_roots_read(effects)->control_summary->source_nodes[function];
     uint8_t mask = effect_checked_suspend_mask(roots, node);
     if (!mask) return XR_XIR_OK;
     uint32_t bit = mask & 2 ? 1 : 0;
     const uint64_t *bits = effect_check_suspend_bits(roots, node);
     if (!(bits[0] & (UINT64_C(1) << bit))) {
-        const EffectCheckFunction *body = &roots->function[function];
+        const EffectCheckFunction *body = &roots->function[roots->node[node].function];
         for (uint64_t p = 0; p < (uint64_t)body->parameters * 2; ++p) {
             if (!(bits[(p + 2) / 64] & (UINT64_C(1) << ((p + 2) % 64)))) continue;
             uint32_t parameter = (uint32_t)(p % body->parameters);
@@ -449,7 +548,18 @@ XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
             uint32_t callee = roots->function[roots->node[call->target].function].declaration;
             XirSuspendCauseStep step = {current, call->instruction, callee,
                 reason->suspend_parameter[bit], next == node, reason->suspend_parameter[bit] != UINT32_MAX, false};
-            XrXirStatus status = visit(context, &step);
+            EffectSuspendParameterTrace walk = {visit, context, current, false};
+            XrXirStatus status = XR_XIR_OK;
+            if (call->protocol == 4 && next != node && step.parameter_dependency && step.parameter < call->count) {
+                uint32_t actual = roots->argument[call->first + step.parameter];
+                EffectCheckFunction caller = roots->function[roots->node[actual].function];
+                EffectCheckFunction target = roots->function[roots->node[call->target].function];
+                uint32_t term = step.parameter;
+                if (next == caller.contents + actual - caller.first) term += target.parameters;
+                status = effect_checked_suspend_parameter_trace(roots, call->target, term, &walk);
+                if (status != XR_XIR_OK) return status;
+            }
+            if (!walk.emitted) status = visit(context, &step);
             if (status != XR_XIR_OK || next == node) return status;
         } else if (next == node) {
             XirSuspendCauseStep step = {current, reason->suspend_instruction[bit], UINT32_MAX,

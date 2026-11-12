@@ -424,10 +424,18 @@ static XrXirStatus storage_call_footprint(XirStorageFlow *flow, const XirExecuti
     XrXirType type = actual.cell ? xr_xir_cell_element(xir_execution_types(flow->execution), actual.type) : actual.type;
     if (!xr_xir_type_is_callable(xir_execution_types(flow->execution), type) ||
         xr_xir_type_is_c_callable(xir_execution_types(flow->execution), type)) return XR_XIR_BAD_STRUCTURE;
-    /* A cleanup's ordered input is distinct from the ordinary before-point.
-     * Keep it unresolved until that contextual observation is represented. */
-    if (site->kind == XIR_EXECUTION_CLEANUP_USE)
-        return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
+    if (site->kind == XIR_EXECUTION_CLEANUP_USE) {
+        /* This binding keeps the real cleanup application and order. A closed
+         * immutable value has no mutable environment to observe at that port.
+         * Cell contents still require the ordered storage input. */
+        if (actual.cell || actual.function != site->function ||
+            actual.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT)
+            return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
+        XrXirStatus status = storage_closed_value_environment(flow,
+            (XirStorageReference){actual.function, actual.value, actual.environment});
+        if (status == XR_XIR_OK) *output = actual.value;
+        return status;
+    }
     XirStorageValuePoint use = {site->function, site->instruction,
         {actual.function, actual.value, actual.environment}, XIR_STORAGE_BEFORE};
     if (actual.cell) {

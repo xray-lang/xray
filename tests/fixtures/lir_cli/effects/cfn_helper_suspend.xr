@@ -1,0 +1,5 @@
+fn invoke(callback: fn() -> i64) -> i64 { return callback() }
+fn leaf() -> i64 { return 7 }
+fn suspending() -> i64 { return await go leaf() }
+fn callback() -> i64 { return invoke(suspending) }
+const pointer: CFn<fn() -> i64> = callback

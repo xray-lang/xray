@@ -24,7 +24,7 @@ typedef struct EffectCheckFunction {
     uint32_t native_callable, capture_count, cleanup_first, cleanup_count;
     uint64_t *bits, *suspend_bits;
     uint8_t throws;
-    bool default_callback;
+    bool default_callback, cleanup;
 } EffectCheckFunction;
 
 typedef struct EffectCheckNode {
@@ -419,6 +419,7 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
             function->module = identity->module;
             function->native_callable = identity->native_callable;
             function->capture_count = identity->capture_count;
+            function->cleanup = identity->cleanup_owner != 0;
         }
         if (build->module->generics)
             function->generic_parameters = build->module->generics[f].parameter_count;
@@ -887,9 +888,11 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
             effect_check_call(build, value, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_ROOT);
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
         if (op->immediate < 0 || (uint64_t)op->immediate >= build->roots->functions) return false;
-        if (!effect_check_call(build, row.root, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_ROOT)) return false;
+        if (!effect_check_call(build, op->op == XR_XIR_CLEANUP_REGISTER ? value : row.root,
+            (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_ROOT)) return false;
         if (op->op == XR_XIR_CLEANUP_REGISTER) {
-            build->roots->node[value].cleanup_call = build->roots->node[row.root].last_call;
+            build->roots->node[value].cleanup_call = build->roots->node[value].last_call;
+            if (!effect_check_alias(build, row.root, value)) return false;
             uint32_t block = build->roots->node[value].block;
             if (block >= function->block_count) return false;
             build->roots->node[value].cleanup_parent = function->blocks[block].frontier;
@@ -2165,8 +2168,10 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
     if (roots->node[node].deferred) mask |= 2;
     for (uint32_t a = roots->node[node].aliases; a != UINT32_MAX; a = roots->alias[a].next) {
         if (!roots->alias[a].root) continue;
-        mask |= roots->node[roots->alias[a].source].closed;
-        blocked |= roots->node[roots->alias[a].source].worker_blocked;
+        const EffectCheckNode *source = &roots->node[roots->alias[a].source];
+        mask |= source->closed;
+        blocked |= source->worker_blocked;
+        if (node == root && source->cleanup_call != UINT32_MAX) access_denied |= source->access_denied;
     }
     for (uint32_t b = roots->node[node].bindings; b != UINT32_MAX; b = roots->binding[b].next) {
         uint32_t source = roots->binding[b].source;
@@ -2183,7 +2188,8 @@ static bool effect_check_evaluate(EffectCheckedRoots *roots, uint32_t node) {
     for (uint32_t c = roots->node[node].calls; c != UINT32_MAX; c = roots->call[c].next) {
         EffectCheckCall call = roots->call[c];
         EffectCheckFunction callee = roots->function[roots->node[call.target].function];
-        if (node==root && call.target==callee.root && (call.protocol==2 || call.protocol==4))
+        if (call.target==callee.root && ((node==root && (call.protocol==2 || call.protocol==4)) ||
+            (call.protocol==4 && roots->node[node].cleanup_call==c)))
             access_denied |= roots->node[call.target].access_denied;
         blocked |= roots->node[call.target].worker_blocked;
         if (call.fixed_effects) continue;

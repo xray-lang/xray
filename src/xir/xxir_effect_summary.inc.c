@@ -16,6 +16,7 @@ struct EffectControlSummary {
     XrXirFunctionEffects *facts;
     XrXirEffectWitness *causes;
     XrXirEffect *task_creation;
+    uint32_t *source_nodes;
 };
 
 
@@ -24,5 +25,6 @@ XR_FUNC void xir_effect_control_free(EffectControlSummary *summary) {
     xr_compile_resources_free(summary->facts);
     xr_compile_resources_free(summary->causes);
     xr_compile_resources_free(summary->task_creation);
+    xr_compile_resources_free(summary->source_nodes);
     xr_compile_resources_free(summary);
 }
