@@ -13,7 +13,7 @@ static void callable_composition_receiving(void) {
     for (uint32_t f = 0; f < 3; ++f)
         if (original->functions[f].capture_count) callee = f;
     CHECK(callee != UINT32_MAX);
-    for (unsigned mutation = 0; mutation < 6; ++mutation) {
+    for (unsigned mutation = 0; mutation < 7; ++mutation) {
         XrRbcModule received = *original;
         XrRbcFunction functions[3];
         XrRbcFunctionCallableParameters contracts[3];
@@ -31,6 +31,10 @@ static void callable_composition_receiving(void) {
         if (mutation == 3) row.parameter = functions[callee].parameter_count;
         if (mutation == 4) row.contract.mode = XR_PARAM_MOVE;
         if (mutation == 5) row.contract.value.type = (uint32_t)received.callable_type_count;
+        if (mutation == 6) {
+            functions[callee].register_callables = (const uint32_t *)(uintptr_t)1;
+            functions[callee].register_callable_count = 0;
+        }
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_module_prepare(&received, 0, NULL, 0,
             xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
@@ -44,5 +48,5 @@ static void callable_composition_receiving(void) {
     uint64_t bits = 0;
     CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
     xr_rbc_outcome_free(&outcome);
-    puts("owned Fn captures, actual weakening and six raw contracts survive code producer retirement");
+    puts("owned Fn captures, actual weakening and seven raw contracts survive code producer retirement");
 }

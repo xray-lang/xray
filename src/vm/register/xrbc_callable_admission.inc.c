@@ -79,6 +79,8 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             (f->environment_count ? !f->environments : f->environments != NULL) ||
             (!m->callable_type_count && (f->environment_count || f->environment_size)) ||
             f->environment_count > UINT16_MAX + 1u) return false;
+        if (f->register_callables ? f->register_callable_count != f->register_count :
+            f->register_callable_count != 0) return false;
         for (uint32_t p = 0; p < f->capture_count; ++p) {
             XrRbcCallableValue value = f->captures[p];
             if (value.kind == XR_RBC_CALLABLE_CELL) {
@@ -100,8 +102,6 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             if (value.kind != XR_RBC_CALLABLE_SCALAR || value.type == XR_POD_UNIT ||
                 !rbc_callable_value_valid(m, value, 0) || rbc_register_kind(f, p) != XR_RBC_BITS) return false;
         }
-        if (f->register_callables ? f->register_callable_count != f->register_count :
-            f->register_callable_count != 0) return false;
         for (uint32_t r = 0; r < f->register_count; ++r) {
             uint32_t type = f->register_callables ? f->register_callables[r] : 0;
             if (rbc_register_kind(f, r) == XR_RBC_FUNCTION ? !type || type > m->callable_type_count : type != 0)
