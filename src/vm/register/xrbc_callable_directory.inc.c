@@ -30,6 +30,9 @@ static bool rbc_callable_directory_valid(const XrRbcModule *module) {
         module->closure_entry_count > module->function_count || module->closure_entry_count > 65536 ||
         module->closure_signature_count != module->callable_type_count) return false;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(module->closure_types);
+    static const XrXirType elements[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
+    for (uint32_t a = 0; a < sizeof(elements) / sizeof(elements[0]); ++a)
+        if (xr_xir_array_element(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + a)) != elements[a]) return false;
     for (size_t t = 0; t < module->callable_type_count; ++t) {
         XrRbcCallableType expected = module->callable_types[t];
         const XrXirTypeNode *actual = xr_xir_callable_signature(types, module->closure_signatures[t]);
