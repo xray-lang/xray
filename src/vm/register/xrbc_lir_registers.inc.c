@@ -175,6 +175,7 @@ static XrLirType rbc_lir_value_type(RbcLirCompiler *c, uint32_t value) {
     xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,value},&type);
     return type;
 }
+#include "xrbc_lir_spill_edges.inc.c"
 static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget) {
     if (c->aggregate_home && c->aggregate_home[value] != UINT32_MAX) return true;
     if (c->slots[value] != UINT32_MAX) return true;
@@ -205,12 +206,14 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         XrLirBlock block;XrLirBlockView view;
         xr_lir_block_at(c->input,c->function,b,&block);xr_lir_block_view(c->input,block,&view);
         for (uint32_t p=0; p<view.parameter_count; ++p)
-            if (!rbc_lir_pin_value(c,view.parameters[p],budget)) return false;
+            if (!rbc_lir_spill_edge_type(c, view.parameters[p]) &&
+                !rbc_lir_pin_value(c,view.parameters[p],budget)) return false;
         for (uint32_t n=0; n<view.instruction_count; ++n) {
             XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
             for (uint32_t e=0; e<i.edge_count; ++e) {
                 for (uint32_t a=0; a<i.edges[e].argument_count; ++a)
-                    if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
+                    if (!rbc_lir_spill_edge_type(c, i.edges[e].arguments[a]) &&
+                        !rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
             if ((i.op == XR_LIR_ARRAY_BORROW ||
                 xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_BORROW_STATE ||
@@ -220,6 +223,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
              * Ordinary numeric spill homes carry no such descriptor kind. */
             if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_IMPORT &&
                 !rbc_lir_pin_value(c, i.operands[2], budget)) return false;
+            if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_CONSTRUCT &&
+                !rbc_lir_pin_value(c, i.result, budget)) return false;
         }
     }
     for(uint32_t v=1;v<=c->view.value_count;++v) {
@@ -227,7 +232,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         if(c->slots[v]!=UINT32_MAX ||
             (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF && type!=XR_LIR_STRING_REF &&
              type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE && type!=XR_LIR_VIEW_FRAME &&
-             type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64))continue;
+             type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64 && !rbc_lir_callable_type(c->input, type)))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {
@@ -244,6 +249,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                 if(!pool)++c->reference_spill_count;
             }
         }
+        if (!rbc_lir_edge_spill_homes(c, pool == 0)) return false;
     }
     c->typed_spills=true;
     c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+
@@ -286,10 +292,13 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
     XrLirBlockView target;
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
+    bool spilled = c->typed_spills && rbc_lir_spilled_edge(c, edge, &target);
+    if (spilled && emit && !rbc_lir_edge_spill_copy(c, edge, &target, false)) return false;
     uint32_t destinations[255], sources[255], count = 0;
     XrRbcRegisterKind kinds[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         if (c->aggregate_home && c->aggregate_home[edge.arguments[p]] != UINT32_MAX) continue;
+        if (spilled && rbc_lir_spill_edge_type(c, edge.arguments[p])) continue;
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];
         if (destination != source) {
             destinations[count] = destination;
@@ -332,5 +341,5 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         for (uint32_t p = 0; p < count; ++p)
             if (destinations[p] != UINT32_MAX && sources[p] == source) sources[p] = temporary;
     }
-    return true;
+    return !spilled || !emit || rbc_lir_edge_spill_copy(c, edge, &target, true);
 }

@@ -123,7 +123,34 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_array_ref_fixture.h"
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "lir_array_copy_cases.h"
+#include "lir_edge_spill_cases.h"
 #include "../lir/lir_view_fixture.h"
+#include "../lir/lir_callable_fixture.h"
+
+static void callable_compiler_failures(void) {
+    XrLirModule *module = NULL;
+    XrLirFunction root = {0};
+    callable_fixture(&module, &root);
+    XrRbcProgram *program = NULL;
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(!live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && !live_allocations && attempts >= point);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    uint64_t result = 0;
+    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("Callable bytecode compiler failure points: %zu\n", total);
+}
 
 static void view_compiler_failures(void) {
     XrLirModule *module = NULL;
@@ -602,6 +629,17 @@ static void jump_compaction(void) {
     compiler.code_count = 2;
     CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
     CHECK(rbc_lir_jump_target(&compiler, 0) == 0 && live_allocations == live);
+    const XrRbcAggregateOperation returns[] = {XR_RBC_AGGREGATE_RETURN, XR_RBC_FUNCTION_RETURN};
+    for (size_t n = 0; n < sizeof(returns) / sizeof(returns[0]); ++n) {
+        XrRbcAggregateAccess access = {.operation = returns[n]};
+        CHECK(xr_rbc_jump(&code[0], 0, 1, 2));
+        CHECK(xr_rbc_encode(&code[1], (XrRbcOperands){XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, 0}));
+        compiler.code_count = 2;
+        compiler.aggregate_accesses = &access;
+        compiler.aggregate_access_count = 1;
+        CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
+        CHECK((code[0] & 255) == XR_RBC_AGGREGATE_ACCESS && live_allocations == live);
+    }
     attempts = 0;
 }
 
@@ -788,6 +826,7 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #include "lir_string_alloc_cases.h"
 
 int main(void) {
+    typed_edge_spill_cycles();
     string_reference_compiler_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
@@ -843,6 +882,7 @@ int main(void) {
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
     view_compiler_failures();
+    callable_compiler_failures();
     display_compiler_failures();
     compiled_source_maps();
     frame_cfg_compiler_failures();

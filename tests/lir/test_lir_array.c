@@ -26,6 +26,9 @@
 #include "lir_constructed_frontier_cases.h"
 #include "lir_fixed_bytecode_cases.h"
 #include "lir_view_cases.h"
+#include "lir_callable_frontier_cases.h"
+#include "lir_callable_fixture.h"
+#include "lir_callable_execution_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -416,7 +419,8 @@ static void array_state_shapes(XrLirType element) {
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
-    array_c_fixture(name, &m, &root);
+    if (!strcmp(name, "function-reference")) callable_fixture(&m, &root);
+    else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
@@ -495,6 +499,8 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     view_receiving_owners();
+    callable_backend_frontier();
+    callable_vm_execution();
     constructed_backend_frontiers();
     fixed_bytecode_execution();
     fixed_bytecode_selected_edges();

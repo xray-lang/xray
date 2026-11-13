@@ -16,6 +16,7 @@
 #include "os/os_time.h"
 #include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
+#include "xir/xxir_scalar.h"
 #include <setjmp.h>
 #include <stdio.h>
 
@@ -183,6 +184,10 @@ XRAY_API_NORET void xrt_null_unwrap(uint32_t source_id) {
     binding->failure->kind = XRT_FAILURE_NULL_UNWRAP;
     binding->failure->detail.panic = (XrtArithmeticPanic){413, source_id};
     longjmp(*binding->target, 1);
+}
+
+XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32_t source_id) {
+    if (!xr_xir_range_valid(start, end, length)) xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
 }
 
 XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {

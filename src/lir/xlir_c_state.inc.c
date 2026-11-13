@@ -15,9 +15,10 @@ static bool c_state_point(const XrLirInstructionView *v) {
 }
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
-    if (type == XR_LIR_VIEW_CELL) return c->state_type_base + c->constructed_count;
-    if (type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count)
-        return c->state_type_base + type - XR_LIR_TYPE_COUNT;
+    if (type == XR_LIR_VIEW_CELL) return c->state_type_base + c->pod_count;
+    if (type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count &&
+        c->constructed_types[type - XR_LIR_TYPE_COUNT].pod_index != UINT32_MAX)
+        return c->state_type_base + c->constructed_types[type - XR_LIR_TYPE_COUNT].pod_index;
     XrtModuleTypeKind kind = lir_state_payload_kind(type, element);
     if (kind) return (uint32_t)kind - XRT_MODULE_UNIT;
     c_error(c, XR_LIR_C_UNSUPPORTED, "module payload has no exact runtime type");
@@ -41,9 +42,10 @@ static void c_state_layout(LirC *c) {
         c_format(c, "    {%s, 0},\n", names[kind - XRT_MODULE_UNIT]);
     for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
         XrLirTypeView shape = c->constructed_types[n].shape;
+        if (c->constructed_types[n].pod_index == UINT32_MAX) continue;
         uint32_t argument = shape.count;
         if (shape.kind == XR_LIR_TYPE_NULLABLE) argument = shape.element >= XR_LIR_TYPE_COUNT ?
-            c->state_type_base + shape.element - XR_LIR_TYPE_COUNT :
+            c->state_type_base + c->constructed_types[shape.element - XR_LIR_TYPE_COUNT].pod_index :
             (uint32_t)xr_pod_module_kind(lir_pod_scalar(shape.element)) - XRT_MODULE_UNIT;
         c_format(c, "    {%s, UINT32_C(%" PRIu32 ")},\n",
             shape.kind == XR_LIR_TYPE_NULLABLE ? "XRT_MODULE_NULLABLE" : "XRT_MODULE_FIXED_U8", argument);
@@ -71,7 +73,7 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
-        c->state_type_base + c->constructed_count + lir_state_has_view_cells(layout),
+        c->state_type_base + c->pod_count + lir_state_has_view_cells(layout),
         layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,

@@ -273,7 +273,36 @@ static void nullable_lower_failures(void) {
     printf("Nullable Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void callable_lower_failures(void) {
+    SourceFixture fixture = source_fixture("fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
+        "print(apply(fn(x:i64)->i64{return x+2},40))\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Callable Lower: %zu allocation failures preserve empty output\n", total);
+}
+
+static void range_lower_failures(void) {
+    SourceFixture fixture = source_fixture("var values=[1,2,3]\n"
+        "fn fill(start:i64,end:i64){values.fill(7,start,end)}\nfill(1,3)\nprint(values)\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts; CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Range check Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    range_lower_failures();
+    callable_lower_failures();
     nullable_lower_failures();
     unused_fixed_type_allocations();
     fixed_byte_failures();

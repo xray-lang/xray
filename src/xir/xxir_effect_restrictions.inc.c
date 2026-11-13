@@ -11,6 +11,7 @@ static void effect_check_restrictions_clear(EffectCheckRestrictions *owner) {
     xr_compile_resources_free((void *)owner->view.formulas);
     xr_compile_resources_free((void *)owner->view.inputs);
     xr_compile_resources_free((void *)owner->view.points);
+    xr_compile_resources_free((void *)owner->view.placements);
     xr_compile_resources_free(owner->intrinsic);
     xr_compile_resources_free(owner->flows);
     xr_compile_resources_free(owner->owners);
@@ -33,11 +34,57 @@ static XrXirStatus effect_check_restriction_formula(EffectCheckRestrictions *own
     return XR_XIR_OK;
 }
 
+static bool effect_check_closure_placements_valid(const EffectCheckedRoots *roots, const XirRestrictionView *view) {
+    XirStorageFlowView storage = {0};
+    if (view->placement_count && roots->storage && xir_storage_flow_view(roots->storage, &storage) != XR_XIR_OK)
+        return false;
+    for (uint32_t n = 0; n < view->placement_count; ++n) {
+        XirClosurePlacement row = view->placements[n];
+        if (row.function >= roots->templates || row.ages > 3u || row.remainder > 15u ||
+            (uint32_t)row.storage > XIR_CLOSURE_UNRESOLVED) return false;
+        const EffectCheckFunction *function = &roots->function[row.function];
+        if (row.value < function->parameters || row.value >= function->values ||
+            (row.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+                row.environment != XIR_EXECUTION_UNKNOWN_ENVIRONMENT && row.environment >= storage.application_count) ||
+            (row.storage == XIR_CLOSURE_FRAME &&
+                (row.ages != 1u || row.remainder || row.environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT))) return false;
+        bool constructor = false;
+        const EffectCheckNode *node = &roots->node[function->first + row.value];
+        for (uint32_t c = node->calls; c != UINT32_MAX; c = roots->call[c].next)
+            constructor |= roots->call[c].protocol == 1 && roots->call[c].instruction == row.value - function->parameters;
+        if (!constructor) return false;
+        if (row.constructor_call == UINT32_MAX) {
+            if (row.caller_instance != row.function || row.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+                row.entry_context != UINT32_MAX || row.ages != 1u || row.remainder || row.storage != XIR_CLOSURE_FRAME)
+                return false;
+        } else {
+            if (row.constructor_call >= roots->calls || row.caller_instance >= roots->functions ||
+                (row.entry_context != UINT32_MAX && row.entry_context >= storage.application_count)) return false;
+            const EffectCheckCall *call = &roots->call[row.constructor_call];
+            const EffectCheckFunction *caller = &roots->function[row.caller_instance];
+            if (call->protocol != 1 || roots->node[call->output].function != row.caller_instance ||
+                caller->declaration != row.function || call->instruction != row.value - function->parameters)
+                return false;
+            if (row.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+                row.environment != XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
+                XirStorageApplication app = storage.applications[row.environment];
+                if (app.target != row.caller_instance || app.declaration != row.function) return false;
+            }
+        }
+        if (n) {
+            XirClosurePlacement previous = view->placements[n - 1];
+            if (xir_closure_placement_compare(&previous, &row) >= 0) return false;
+        }
+    }
+    return true;
+}
+
 static XrXirStatus effect_check_restrictions_copy(const XrXirCompileContext *memory,
     const EffectCheckedRoots *roots, const XirRestrictionView *view, EffectCheckRestrictions *owner) {
     if (!view || view->function_count != roots->templates || !view->functions ||
         (view->formula_count && !view->formulas) || (view->input_count && !view->inputs) ||
-        (view->point_count && !view->points)) return XR_XIR_BAD_STRUCTURE;
+        (view->point_count && !view->points) || (view->placement_count && !view->placements)) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_check_closure_placements_valid(roots, view)) return XR_XIR_BAD_STRUCTURE;
     if (view->pending.status != XR_XIR_OK && (view->pending.status != XR_XIR_UNRESOLVED ||
         view->pending.function >= roots->templates || view->pending.instruction >=
             roots->function[view->pending.function].values - roots->function[view->pending.function].parameters))
@@ -60,16 +107,20 @@ static XrXirStatus effect_check_restrictions_copy(const XrXirCompileContext *mem
     if ((uint64_t)view->formula_count * sizeof(*view->formulas) > SIZE_MAX ||
         inputs > UINT32_MAX || inputs * sizeof(*view->inputs) > SIZE_MAX ||
         (uint64_t)view->point_count * sizeof(*view->points) > SIZE_MAX ||
+        (uint64_t)view->placement_count * sizeof(*view->placements) > SIZE_MAX ||
         (uint64_t)view->formula_count * sizeof(*owner->owners) > SIZE_MAX) return XR_XIR_OVERFLOW;
     owner->view = *view;
     owner->view.input_count = (uint32_t)inputs;
     owner->view.functions = NULL; owner->view.formulas = NULL; owner->view.inputs = NULL; owner->view.points = NULL;
+    owner->view.placements = NULL;
     owner->view.functions = xir_compile_calloc(memory, view->function_count, sizeof(*view->functions), &status);
     owner->view.formulas = view->formula_count ? xir_compile_copy(memory, view->formulas,
         (size_t)view->formula_count * sizeof(*view->formulas), &status) : NULL;
     owner->view.inputs = inputs ? xir_compile_alloc(memory, (size_t)inputs * sizeof(*view->inputs), &status) : NULL;
     owner->view.points = view->point_count ? xir_compile_copy(memory, view->points,
         (size_t)view->point_count * sizeof(*view->points), &status) : NULL;
+    owner->view.placements = view->placement_count ? xir_compile_copy(memory, view->placements,
+        (size_t)view->placement_count * sizeof(*view->placements), &status) : NULL;
     owner->intrinsic = values ? xir_compile_alloc(memory, (size_t)values * sizeof(*owner->intrinsic), &status) : NULL;
     owner->flows = flows ? xir_compile_alloc(memory, (size_t)flows * sizeof(*owner->flows), &status) : NULL;
     owner->owners = view->formula_count ? xir_compile_alloc(memory,

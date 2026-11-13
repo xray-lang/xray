@@ -8,6 +8,50 @@
  */
 #include "register_fixed_call_fixture.h"
 
+static void test_raw_view_cold_returns(void) {
+    for (unsigned callable = 0; callable < 2; ++callable) {
+        XrRbcRegisterKind kinds[] = {XR_RBC_VIEW_FRAME, XR_RBC_BITS};
+        XrRbcViewAccess views[] = {{.operation=XR_RBC_VIEW_FRAME_ENTER, .result={0, false}},
+            {.operation=XR_RBC_VIEW_FRAME_LEAVE, .count=1, .operands={{0, false}}}};
+        XrPodType type = xr_rbc_fixed_type(1);
+        XrRbcAggregateValue home = {0};
+        XrRbcArrayLocation operand = {1, false};
+        XrRbcAggregateAccess accesses[] = {{.operation=XR_RBC_AGGREGATE_NEW, .count=1},
+            {.operation=callable ? XR_RBC_FUNCTION_RETURN : XR_RBC_AGGREGATE_RETURN,
+                .source=callable ? 1u : 0u, .slot=callable, .count=callable}};
+        XrRbcCallableType signature = {.result={XR_RBC_CALLABLE_SCALAR, XR_POD_I64}};
+        uint32_t code[] = {fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 0),
+            fixed_call_word(XR_RBC_LOADI, 1, 0, 0, 37),
+            fixed_call_word(callable ? XR_RBC_MOV : XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, 0),
+            fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 1),
+            fixed_call_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, callable ? 0 : 1)};
+        if (callable) code[2] = fixed_call_word(XR_RBC_MOV, 1, 1, 0, 0);
+        XrRbcFunction function = {.code=code, .code_count=5, .register_count=2,
+            .register_kinds=kinds, .register_kind_count=2, .view_accesses=views, .view_access_count=2,
+            .aggregate_accesses=callable ? &accesses[1] : accesses, .aggregate_access_count=callable ? 1u : 2u,
+            .aggregate_values=callable ? NULL : &home, .aggregate_value_count=callable ? 0u : 1u,
+            .aggregate_operands=callable ? NULL : &operand, .aggregate_operand_count=callable ? 0u : 1u,
+            .aggregate_size=callable ? 0u : 8u, .aggregate_result_type=callable ? 0u : 1u,
+            .callable=callable};
+        XrRbcModule module = {.functions=&function, .function_count=1,
+            .aggregate_types=&type, .aggregate_type_count=1, .callable_types=&signature, .callable_type_count=1};
+        XrtLocationOwner *locations = NULL;
+        CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+        xr_rbc_execution_free(&execution);
+        uint64_t bits = 0;
+        const uint8_t *bytes = NULL;
+        if (callable) CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 37);
+        else CHECK(xr_rbc_outcome_aggregate(outcome, &type, &bytes) && bytes[0] == 37);
+        xr_rbc_outcome_free(&outcome); xrt_locations_release(locations);
+        CHECK(xr_rbc_jump(&code[3], 3, 4, 5));
+        reject_prepare(&module, 0, NULL, 0);
+    }
+}
+
 static void test_raw_fixed_calls(void) {
     const uint32_t counts[] = {1, 16, 17, 256, 65535};
     for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {

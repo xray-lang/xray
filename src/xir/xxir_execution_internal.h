@@ -13,6 +13,7 @@
 #ifndef XXIR_EXECUTION_INTERNAL_H
 #define XXIR_EXECUTION_INTERNAL_H
 #include "xxir.h"
+#include "xxir_closure_placement.h"
 
 typedef struct EffectCheckedRoots XirExecutionOwner;
 typedef enum XirExecutionSiteKind {
@@ -76,6 +77,8 @@ typedef struct XirRestrictionView {
     uint32_t input_count;
     const XirRestrictionPoint *points;
     uint32_t point_count;
+    const XirClosurePlacement *placements;
+    uint32_t placement_count;
     /* Unresolved permissions belong to this exact numeric generation. They
      * forbid publication even when declaration obligations have no error. */
     XrXirDiagnostic pending;

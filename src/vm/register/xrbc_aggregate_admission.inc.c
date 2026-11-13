@@ -97,18 +97,13 @@ static bool rbc_aggregate_state_valid(const XrRbcModule *module, const XrRbcFunc
          (slot.flags & XRT_MODULE_SLOT_MUTABLE) && rbc_aggregate_reference_location(f, access.result));
 }
 
-static bool rbc_aggregate_return_word(const XrRbcFunction *f, uint32_t word) {
-    return (word & 255) == XR_RBC_AGGREGATE_ACCESS && (word >> 16) < f->aggregate_access_count &&
-        f->aggregate_accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN;
-}
-
 static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
     if (access.callee >= module->function_count || access.source || access.slot ||
         access.result.index || access.result.spill || access.first > f->aggregate_argument_count ||
         access.count > f->aggregate_argument_count - access.first) return false;
     const XrRbcFunction *callee = &module->functions[access.callee];
-    if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type) ||
+    if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type && !callee->callable) ||
         access.count != callee->aggregate_parameter_count || access.window >= f->register_count ||
         callee->parameter_count != f->register_count - access.window - 1 ||
         rbc_register_kind(f, access.window) != XR_RBC_CALL_WINDOW) return false;
@@ -159,6 +154,19 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation == XR_RBC_RANGE_CHECK) {
+            if (access.count != 3 || access.first > f->aggregate_operand_count ||
+                3 > f->aggregate_operand_count - access.first || access.slot || access.source ||
+                access.destination || access.callee || access.window || access.result.index || access.result.spill)
+                return false;
+            for (uint32_t p = 0; p < 3; ++p)
+                if (!rbc_aggregate_bits_location(f, f->aggregate_operands[access.first + p])) return false;
+            continue;
+        }
+        if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_FUNCTION_RETURN) {
+            if (!rbc_callable_access_valid(module, f, access)) return false;
+            continue;
+        }
         if (access.operation == XR_RBC_STRING_LIBRARY) {
             if (!rbc_string_library_valid(f, access)) return false;
             continue;

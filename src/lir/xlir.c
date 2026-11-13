@@ -130,14 +130,16 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
     return f;
 }
 
-enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8};
+enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8, LIR_LIBRARY_RANGE=16};
 static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
 #include "xlir_view.inc.c"
 #include "xlir_display.inc.c"
+#include "xlir_callable_target.inc.c"
 #include "xlir_string.inc.c"
+#include "xlir_range.inc.c"
 #include "xlir_library.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
@@ -176,6 +178,8 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     xr_free(m->literals);
     xr_free(m->functions);
     xr_free(m->intrinsics);
+    for (uint32_t i = 0; i < m->type_count; ++i)
+        xr_free((void *)m->types[i].callable.parameters);
     xr_free(m->types);
     xr_free(m->type_index);
     xr_free(m->failure_path);
@@ -200,7 +204,8 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
         if (entry.operation && !xr_lir_internal_view_intrinsic_valid(&entry) &&
-            !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry))
+            !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry) &&
+            !xr_lir_range_intrinsic_valid(&entry))
             return XR_LIR_UNSUPPORTED;
         if (!entry.operation && (entry.result == XR_LIR_STRING_REF || entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
             entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))
@@ -539,7 +544,7 @@ static bool lir_instruction_copy(XrLirModule *m, uint32_t function, const XrLirI
         lir_fail(m, XR_LIR_INVALID_ARGUMENT);
         return false;
     }
-    if (input->op == XR_LIR_CALL) {
+    if (input->op == XR_LIR_CALL || input->op == XR_LIR_FUNCTION_REF) {
         if (!lir_function(m, input->callee)) {
             lir_fail(m, XR_LIR_INVALID_ARGUMENT);
             return false;

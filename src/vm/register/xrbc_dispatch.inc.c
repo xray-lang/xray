@@ -34,7 +34,7 @@
         xr_rbc_aggregate_step(module, stack, frame, function, aggregate_index, XR_RBC_SOURCE()); \
     if (aggregate_status != XR_RBC_OK) return aggregate_status; \
     if (aggregate_control) { \
-        if (!stack->depth) { *result = (XrRbcRegister){0}; return XR_RBC_OK; } \
+        if (!stack->depth) { *result = stack->slots[0]; return XR_RBC_OK; } \
         frame = &stack->frames[stack->depth - 1]; \
         function = &module->functions[frame->function]; \
         registers = stack->slots + frame->base; \

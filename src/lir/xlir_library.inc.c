@@ -10,7 +10,7 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     enum { string_count = sizeof(lir_string_signatures) / sizeof(*lir_string_signatures) };
-    XrLirIntrinsic entries[XR_LIR_VIEW_OP_COUNT + string_count] = {{0}};
+    XrLirIntrinsic entries[XR_LIR_VIEW_OP_COUNT + string_count + 1] = {{0}};
     uint32_t count = 0;
     for (uint32_t role = 1; (flags & LIR_LIBRARY_VIEW) && role < XR_LIR_VIEW_OP_COUNT; ++role) {
         const LirViewSignature *shape = &lir_view_signatures[role];
@@ -25,6 +25,10 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
         entries[count++] = (XrLirIntrinsic){XR_LIR_ARRAY_CATALOG_COUNT + XR_LIR_VIEW_OP_COUNT + 1 + n,
             shape->parameters, shape->count, shape->result, true, XR_LIR_STRING_OP_APPEND_OWNED + n};
     }
+    static const XrLirType range_parameters[] = {XR_LIR_I64, XR_LIR_I64, XR_LIR_I64};
+    if (flags & LIR_LIBRARY_RANGE)
+        entries[count++] = (XrLirIntrinsic){XR_LIR_ARRAY_CATALOG_COUNT + XR_LIR_VIEW_OP_COUNT + 1 + string_count,
+            range_parameters, 3, XR_LIR_UNIT, true, XR_LIR_RANGE_OP_CHECK};
     XrLirRegistry registry = {entries, count};
     status = flags & (LIR_LIBRARY_ARRAY | LIR_LIBRARY_VIEW) ? lir_array_catalog(m, &registry) :
         xr_lir_set_registry(m, &registry);

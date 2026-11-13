@@ -10,6 +10,13 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
+
+static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *accesses,
+    size_t count, uint32_t word) {
+    return (word & 255) == XR_RBC_AGGREGATE_ACCESS && accesses && (word >> 16) < count &&
+        (accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN ||
+         accesses[word >> 16].operation == XR_RBC_FUNCTION_RETURN);
+}
 #include "shared/xr_pod_state.h"
 
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };

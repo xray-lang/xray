@@ -153,6 +153,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 
 #include "xrbc_state_admission.inc.c"
 #include "xrbc_view_admission.inc.c"
+#include "xrbc_callable_admission.inc.c"
 #include "xrbc_aggregate_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
@@ -171,7 +172,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_STRING_REF ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_FUNCTION ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -192,7 +193,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     switch (op) {
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;
-        if (rbc_aggregate_return_word(function, word)) return true;
+        if (xr_rbc_aggregate_return_word(function->aggregate_accesses, function->aggregate_access_count, word)) return true;
         break;
     case XR_RBC_VIEW_ACCESS:
         if (a || index >= function->view_access_count) return false;
@@ -266,6 +267,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_CALL:
         if (a >= registers || index >= module->function_count ||
+            module->functions[index].callable ||
             module->functions[index].aggregate_parameter_count || module->functions[index].aggregate_result_type ||
             a + 1 + module->functions[index].parameter_count != registers) return false;
         break;
@@ -276,9 +278,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
             return false;
         break;
     case XR_RBC_RET:
-        return !function->aggregate_result_type && a < registers && !(word >> 16);
+        return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16);
     case XR_RBC_RET0:
-        return !function->aggregate_result_type && word == XR_RBC_RET0;
+        return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
         return false;
     }
@@ -300,8 +302,10 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
             (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
-        if (!xr_rbc_function_valid(&module->functions[f]) ||
-            !rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
+        if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
+    if (!rbc_callable_metadata_valid(module)) return XR_RBC_INVALID;
+    for (size_t f = 0; f < module->function_count; ++f)
+        if (!rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
@@ -424,6 +428,11 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
     for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
         if (function->register_kinds[p] != XR_RBC_BITS) return XR_RBC_INVALID;
+    if (function->callable) {
+        XrRbcCallableType type = module->callable_types[function->callable - 1];
+        for (size_t p = 0; p < argument_count; ++p)
+            if (!xr_rbc_callable_scalar_valid(type.parameters[p].value, arguments[p])) return XR_RBC_INVALID;
+    }
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
     execution->module = module;

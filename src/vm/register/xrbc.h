@@ -123,7 +123,7 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_STRING_CELL,
     XR_RBC_ARRAY_U8, XR_RBC_ARRAY_U64, XR_RBC_ARRAY_U8_CELL, XR_RBC_ARRAY_U64_CELL,
     XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
-    XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64, XR_RBC_STRING_REF
+    XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64, XR_RBC_STRING_REF, XR_RBC_FUNCTION
 } XrRbcRegisterKind;
 
 typedef enum XrRbcViewOperation {
@@ -173,7 +173,8 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_NULLABLE_NONE, XR_RBC_NULLABLE_SOME, XR_RBC_NULLABLE_IS_SOME, XR_RBC_NULLABLE_UNWRAP,
     XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
     XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
-    XR_RBC_AGGREGATE_DISPLAY, XR_RBC_STRING_LIBRARY, XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN
+    XR_RBC_AGGREGATE_DISPLAY, XR_RBC_STRING_LIBRARY, XR_RBC_RANGE_CHECK, XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN,
+    XR_RBC_FUNCTION_REFERENCE, XR_RBC_FUNCTION_CALL, XR_RBC_FUNCTION_RETURN
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
@@ -233,6 +234,11 @@ typedef struct {
     size_t aggregate_argument_count;
     const XrRbcViewAccess *view_accesses;
     size_t view_access_count;
+    /* Signature ordinals plus one, zero for every non-function register.
+     * These rows authenticate transports independently of untagged bits. */
+    const uint32_t *register_callables;
+    size_t register_callable_count;
+    uint32_t callable;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -252,6 +258,23 @@ typedef struct {
 } XrRbcLiteral;
 
 #include "xray_native_pod.h"
+
+typedef enum XrRbcCallableValueKind {
+    XR_RBC_CALLABLE_SCALAR, XR_RBC_CALLABLE_REFERENCE,
+    XR_RBC_CALLABLE_AGGREGATE, XR_RBC_CALLABLE_FUNCTION
+} XrRbcCallableValueKind;
+typedef struct XrRbcCallableValue { XrRbcCallableValueKind kind; uint32_t type; } XrRbcCallableValue;
+typedef struct XrRbcCallableParameter {
+    XrRbcCallableValue value;
+    uint32_t mode;
+    bool escaping;
+} XrRbcCallableParameter;
+typedef struct XrRbcCallableType {
+    const XrRbcCallableParameter *parameters;
+    uint32_t parameter_count;
+    XrRbcCallableValue result;
+    uint32_t flags;
+} XrRbcCallableType;
 
 static inline XrPodType xr_rbc_fixed_type(uint32_t count) {
     return (XrPodType){XR_POD_FIXED_U8, count, 0, {count, 1, count}};
@@ -273,6 +296,8 @@ typedef struct {
     // projection; externally supplied modules borrow it with their code.
     const XrPodType *aggregate_types;
     size_t aggregate_type_count;
+    const XrRbcCallableType *callable_types;
+    size_t callable_type_count;
 } XrRbcModule;
 
 typedef enum {

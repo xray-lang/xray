@@ -52,6 +52,7 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     return checked;
 }
 #include "xir_signal_escaping_cases.h"
+#include "xir_closure_placement_cases.h"
 
 static void captured_cell_bound_types(void) {
     EffectMark baseline = effect_mark();
@@ -752,7 +753,8 @@ static void restriction_owner_relocation(void) {
     XirRestrictionFormulaRow formulas[] = {{0}, {0}, {.constant = true, .incomplete = true}, {.count = 1}};
     XirRestrictionFunction row = {3, 4, intrinsic, &flow, 1};
     XirRestrictionPoint point = {0, 1, 1, 3, 3};
-    XirRestrictionView view = {&row, 1, formulas, 4, inputs, 1, &point, 1, {0}};
+    XirRestrictionView view = {.functions=&row, .function_count=1, .formulas=formulas,
+        .formula_count=4, .inputs=inputs, .input_count=1, .points=&point, .point_count=1};
     view.pending=(XrXirDiagnostic){XR_XIR_UNRESOLVED,0,UINT32_MAX,1,XR_XIR_DIAGNOSTIC_NONE};
     EffectMark baseline = effect_mark();
     EffectCheckedRoots *roots = NULL;
@@ -1531,6 +1533,7 @@ static void control_summary_kernel(void) {
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--control-summary")));
     effect_case_begin();
+    closure_placement_ownership();
     module_interface_lifetime();
     direct_root_equations();
     generic_resource_failures();

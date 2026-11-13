@@ -35,6 +35,7 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
         } else if (source.payload >= XR_LIR_TYPE_COUNT) {
             uint32_t ordinal = source.payload - XR_LIR_TYPE_COUNT;
+            if (program->physical_aggregates) ordinal = program->physical_aggregates[ordinal];
             if (ordinal >= program->module.aggregate_type_count || ordinal > UINT32_MAX - LIR_STATE_CONSTRUCTED_BASE) {
                 status = XR_RBC_COMPILE_UNSUPPORTED; break;
             }

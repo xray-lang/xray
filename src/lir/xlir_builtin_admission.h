@@ -11,6 +11,7 @@
 #include "xlir_array.h"
 #include "xlir_state.h"
 #include "xlir_types.h"
+#include "xlir_callable.h"
 
 static inline bool lir_builtin_signature(XrLirType result, const XrLirType *parameters,
     uint32_t count) {
@@ -29,6 +30,12 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
         xr_lir_type_layout(module, type, &layout) == XR_LIR_OK && !layout.managed;
 }
 
+static inline bool lir_definition_type(const XrLirModule *module, XrLirType type) {
+    if (lir_builtin_or_fixed_type(module, type)) return true;
+    XrLirCallableType signature;
+    return xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK;
+}
+
 /* Definitions and State use the owned Fixed projection. Intrinsic and external
  * boundaries retain their closed builtin ABI until a typed consumer exists. */
 static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
@@ -45,9 +52,9 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         XrLirFunctionView view;
         if (xr_lir_function_at(module, i, &function) != XR_LIR_OK ||
             xr_lir_function_view(module, function, &view) != XR_LIR_OK ||
-            !lir_builtin_or_fixed_type(module, view.result)) return false;
+            !lir_definition_type(module, view.result)) return false;
         for (uint32_t p = 0; p < view.parameter_count; ++p)
-            if (!lir_builtin_or_fixed_type(module, view.parameter_types[p])) return false;
+            if (!lir_definition_type(module, view.parameter_types[p])) return false;
         if (view.kind != XR_LIR_FUNCTION_DEFINITION &&
             !lir_builtin_signature(view.result, view.parameter_types, view.parameter_count)) return false;
         if (view.result == XR_LIR_ARRAY) {
