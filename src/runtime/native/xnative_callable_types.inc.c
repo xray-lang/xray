@@ -66,11 +66,16 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     size_t parameter_count = 0;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec spec = specs[t];
-        if ((uint32_t)spec.kind > XRT_CALLABLE_CELL || spec.parameter_count > 65536 ||
+        if ((uint32_t)spec.kind > XRT_CALLABLE_TUPLE_I64 || spec.parameter_count > 65536 ||
             (spec.parameter_count && !spec.parameters)) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (spec.throws) return XR_XIR_VALUE_UNSUPPORTED;
         if (spec.parameter_count > SIZE_MAX - parameter_count) return XR_XIR_VALUE_OVERFLOW;
         parameter_count += spec.parameter_count;
+        if (spec.kind == XRT_CALLABLE_TUPLE_I64) {
+            if (!spec.count || spec.count > 65536 || spec.count > SIZE_MAX - parameter_count)
+                return XR_XIR_VALUE_BAD_ARGUMENT;
+            parameter_count += spec.count;
+        }
     }
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, limit, true};
     if (limit == UINT64_MAX) limits = (XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY, 0, true};
@@ -133,6 +138,14 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
                 }
                 node->kind = XR_XIR_TYPE_FIXED_ARRAY;
                 node->parameter_count = spec.count;
+            } else if (spec.kind == XRT_CALLABLE_TUPLE_I64) {
+                if (node->element != XR_XIR_I64) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                node->kind = XR_XIR_TYPE_TUPLE;
+                node->element = XR_XIR_UNIT;
+                node->parameters = parameters + next;
+                node->parameter_count = spec.count;
+                for (uint32_t p = 0; p < spec.count; ++p)
+                    parameters[next++].type = XR_XIR_I64;
             } else if (spec.count) status = XR_XIR_VALUE_BAD_ARGUMENT;
             else node->kind = spec.kind == XRT_CALLABLE_NULLABLE ? XR_XIR_TYPE_NULLABLE : XR_XIR_TYPE_CELL;
         }

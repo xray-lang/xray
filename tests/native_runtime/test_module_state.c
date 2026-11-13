@@ -252,8 +252,10 @@ static void invalid_layouts(void) {
 #include "native_fixed_state_cases.h"
 #include "native_nullable_state_cases.h"
 #include "native_callable_state_cases.h"
+#include "native_group_state_cases.h"
 
 int main(void) {
+    native_group_state();
     callable_state_values();
     nullable_state_values(); nullable_state_invalid_shapes(); nullable_state_deep_copy(); nullable_state_allocation_failures();
     allocation_failures(); independent_lifetimes(); pending_string_failure(); invalid_layouts();

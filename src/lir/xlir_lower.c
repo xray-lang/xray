@@ -290,6 +290,17 @@ static bool lower_receive_type(Lower *, XrXirType);
 static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
     if (node && node->kind == XR_XIR_TYPE_CALLABLE) return lower_receive_callable(c, type, node);
+    if (node && node->kind == XR_XIR_TYPE_TUPLE) {
+        for (uint32_t p = 0; p < node->parameter_count; ++p)
+            if (node->parameters[p].type != XR_XIR_I64)
+                return lower_unsupported(c, "Tuple fields require the admitted I64 physical layout");
+        if (!c->constructed_types)
+            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+        if (!c->constructed_types) return false;
+        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+        return c->constructed_types[index] || lower_build(c,
+            xr_lir_tuple_i64_type(c->module, node->parameter_count, &c->constructed_types[index]));
+    }
     if (!node || (node->kind != XR_XIR_TYPE_FIXED_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return true;
     if (!c->constructed_types) {
         c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
@@ -328,6 +339,7 @@ static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CALL_INDIRECT:
         case XR_XIR_RANGE_CHECK:
+        case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_SLOT_GROUP_INIT:
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
         case XR_XIR_VIEW_GET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
@@ -635,34 +647,49 @@ static bool lower_state_constructors(Lower *c) {
         for (uint32_t i = 0; i < function->instruction_count; ++i) constructors[i] = UINT32_MAX;
         for (uint32_t i = 0; i < function->instruction_count && good; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
-            if (op->op != XR_XIR_SLOT_INIT) continue;
+            bool group = op->op == XR_XIR_SLOT_GROUP_INIT;
+            if (op->op != XR_XIR_SLOT_INIT && !group) continue;
             c->function = init;
             c->instruction = i;
-            if (op->immediate < 0 || (uint64_t)op->immediate >= d->slot_count) {
+            uint64_t packed = (uint64_t)op->immediate;
+            uint32_t first = group ? (uint32_t)(packed >> 32) : (uint32_t)packed;
+            uint32_t count = group ? (uint32_t)packed : 1;
+            if (!count || first >= d->slot_count || count > d->slot_count - first ||
+                (!group && (op->immediate < 0 || packed > UINT32_MAX)) ||
+                (group && (op->args[1] != count || op->args[0] > function->operand_count ||
+                    count > function->operand_count - op->args[0]))) {
                 good = lower_unsupported(c, "module slot publication ordinal");
                 break;
             }
-            uint32_t slot = (uint32_t)op->immediate;
-            if (d->slots[slot].module != module || published[slot]) {
-                good = lower_unsupported(c, "module slot publication owner");
-                break;
+            for (uint32_t n = 0; n < count && good; ++n) {
+                uint32_t slot = first + n;
+                if (d->slots[slot].module != module || published[slot]) {
+                    good = lower_unsupported(c, "module slot publication owner");
+                    break;
+                }
+                published[slot] = 1;
+                XrXirType payload = d->slots[slot].mutable ?
+                    xr_xir_cell_element(c->source->types, d->slots[slot].type) : d->slots[slot].type;
+                if (group && payload != XR_XIR_I64) {
+                    good = lower_unsupported(c, "module group requires I64 slot payloads");
+                    break;
+                }
+                if (!d->slots[slot].mutable) continue;
+                uint32_t value = group ? function->operands[op->args[0] + n] : op->args[0];
+                if (value < function->parameter_count ||
+                    value - function->parameter_count >= function->instruction_count) {
+                    good = lower_unsupported(c, "module Cell constructor identity");
+                    break;
+                }
+                uint32_t at = value - function->parameter_count;
+                const XrXirInstruction *constructor = &function->instructions[at];
+                if (constructor->op != XR_XIR_CELL_NEW || constructor->type != d->slots[slot].type ||
+                    constructors[at] != UINT32_MAX) {
+                    good = lower_unsupported(c, "module Cell publication without its direct constructor");
+                    break;
+                }
+                constructors[at] = slot;
             }
-            published[slot] = 1;
-            if (!d->slots[slot].mutable) continue;
-            uint32_t value = op->args[0];
-            if (value < function->parameter_count ||
-                value - function->parameter_count >= function->instruction_count) {
-                good = lower_unsupported(c, "module Cell constructor identity");
-                break;
-            }
-            uint32_t at = value - function->parameter_count;
-            const XrXirInstruction *constructor = &function->instructions[at];
-            if (constructor->op != XR_XIR_CELL_NEW || constructor->type != d->slots[slot].type ||
-                constructors[at] != UINT32_MAX) {
-                good = lower_unsupported(c, "module Cell publication without its direct constructor");
-                break;
-            }
-            constructors[at] = slot;
         }
     }
     for (uint32_t s = 0; s < d->slot_count && good; ++s)
@@ -792,7 +819,8 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
         if (!lower_known(op->op)) continue;
         if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
             op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
-            op->op == XR_XIR_FIXED_ARRAY_NEW) {
+            op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW ||
+            op->op == XR_XIR_SLOT_GROUP_INIT) {
             if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0]) {
                 lower_unsupported(c, "literal use range");
                 xr_free(uses);
@@ -1552,6 +1580,12 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
             .bits=xr_xir_fixed_array_length(c->source->types, type), .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &length, result));
     }
+    if (op->op == XR_XIR_TUPLE_FIELD) {
+        if (!lower_value(f, op->args[0], &operands[0])) return false;
+        XrLirInstruction field = {.op=XR_LIR_TUPLE_FIELD, .type=XR_LIR_I64,
+            .operands=operands, .operand_count=1, .bits=(uint64_t)op->immediate, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &field, result));
+    }
     if (op->op == XR_XIR_FIXED_ARRAY_GET) {
         if (!lower_value(f, op->args[0], &operands[0]) ||
             !lower_value(f, op->args[1], &operands[1])) return false;
@@ -1569,7 +1603,8 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     bool good = true;
     for (uint32_t a = 0; a < op->args[1] && good; ++a)
         good = lower_value(f, f->source->operands[op->args[0] + a], &elements[a]);
-    XrLirInstruction construct = {.op=XR_LIR_FIXED_ARRAY_NEW, .type=lower_type(c, op->type),
+    XrLirInstruction construct = {.op=op->op == XR_XIR_TUPLE_NEW ? XR_LIR_TUPLE_NEW : XR_LIR_FIXED_ARRAY_NEW,
+        .type=lower_type(c, op->type),
         .operands=elements, .operand_count=op->args[1], .source=lower_source(c)};
     if (good) good = lower_build(c,
         xr_lir_emit_value(c->module, f->blocks[b], &construct, result));
@@ -1629,7 +1664,8 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     if (op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME ||
         op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP)
         return lower_nullable_instruction(f, b, i);
-    if (op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
+    if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD ||
+        op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
         op->op == XR_XIR_FIXED_ARRAY_LEN) return lower_fixed_instruction(f, b, i);
     if (op->op == XR_XIR_CLOCK_NANOS) {
         XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64,
@@ -1840,11 +1876,48 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     return good;
 }
 
+static bool lower_module_group(LowerFunction *f, uint32_t block, const XrXirInstruction *op) {
+    Lower *c = f->owner;
+    uint32_t first = (uint32_t)((uint64_t)op->immediate >> 32), count = (uint32_t)op->immediate;
+    uint32_t tuple = UINT32_MAX;
+    for (uint32_t n = 0; n < count; ++n) {
+        uint32_t value = f->source->operands[op->args[0] + n];
+        if (c->source->declarations->slots[first + n].mutable) {
+            if (value < f->source->parameter_count) return lower_unsupported(c, "module group Cell constructor");
+            const XrXirInstruction *cell = &f->source->instructions[value - f->source->parameter_count];
+            if (cell->op != XR_XIR_CELL_NEW) return lower_unsupported(c, "module group Cell constructor");
+            value = cell->args[0];
+        }
+        if (value < f->source->parameter_count) return lower_unsupported(c, "module group Tuple projection");
+        const XrXirInstruction *field = &f->source->instructions[value - f->source->parameter_count];
+        if (field->op != XR_XIR_TUPLE_FIELD || field->type != XR_XIR_I64 ||
+            field->immediate != (int64_t)n || (n && field->args[0] != tuple))
+            return lower_unsupported(c, "module group requires ordered fields of one I64 Tuple");
+        tuple = field->args[0];
+        if (c->state_slots[first + n] != c->state_slots[first] + n)
+            return lower_unsupported(c, "module group lost contiguous receiving slots");
+    }
+    XrLirValue args[2] = {f->state, {0}};
+    if (!lower_value(f, tuple, &args[1])) return false;
+    XrLirTypeView shape;
+    XrLirType type = lower_type(c, xr_xir_operand_type(f->source, tuple));
+    if (xr_lir_type_view(c->module, type, &shape) != XR_LIR_OK ||
+        shape.kind != XR_LIR_TYPE_TUPLE || shape.count != count)
+        return lower_unsupported(c, "module group requires a complete I64 Tuple");
+    XrLirInstruction instruction = {.op=XR_LIR_STATE_GROUP_INITIALIZE, .type=XR_LIR_UNIT,
+        .operands=args, .operand_count=2, .bits=c->state_slots[first], .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &instruction));
+}
+
 static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, bool *handled) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
     uint32_t result = f->source->parameter_count + i;
     *handled = false;
+    if (op->op == XR_XIR_SLOT_GROUP_INIT) {
+        *handled = true;
+        return lower_module_group(f, b, op);
+    }
     if (op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_INIT ||
         op->op == XR_XIR_SLOT_PLACE) {
         *handled = true;

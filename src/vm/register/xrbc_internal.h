@@ -50,7 +50,7 @@ typedef struct XrRbcAggregateLayout {
 } XrRbcAggregateLayout;
 
 static inline bool xr_rbc_aggregate_layout(XrPodType type, XrRbcAggregateLayout *output) {
-    if (!output || (type.kind != XR_POD_FIXED_U8 && type.kind != XR_POD_NULLABLE) ||
+    if (!output || (type.kind != XR_POD_FIXED_U8 && type.kind != XR_POD_NULLABLE && type.kind != XR_POD_TUPLE_I64) ||
         !type.physical.size || !type.physical.alignment || type.physical.alignment > 8 ||
         (type.physical.alignment & (type.physical.alignment - 1))) return false;
     bool lanes = type.kind == XR_POD_FIXED_U8 && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
@@ -65,6 +65,8 @@ static inline bool xr_rbc_aggregate_type_valid(const XrRbcModule *module, uint32
     if (type.kind == XR_POD_FIXED_U8) {
         if (!type.count || type.count > 65535 || type.element) return false;
         expected = (XrPodLayout){type.count, 1, type.count};
+    } else if (type.kind == XR_POD_TUPLE_I64) {
+        if (type.element != XR_POD_I64 || !xr_pod_tuple_i64_layout(type.count, &expected)) return false;
     } else if (type.kind == XR_POD_NULLABLE && !type.count) {
         XrPodLayout payload;
         if (type.element < XR_POD_SCALAR_COUNT) {

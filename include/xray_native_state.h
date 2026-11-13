@@ -37,10 +37,11 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_FIXED_U8,
     XRT_MODULE_NULLABLE,
     XRT_MODULE_CELL_ARRAY_I64,
-    XRT_MODULE_CALLABLE
+    XRT_MODULE_CALLABLE,
+    XRT_MODULE_TUPLE_I64
 } XrtModuleTypeKind;
-/* Fixed U8 argument is its nonzero count. Nullable argument is an earlier
- * type ordinal in this catalog. Other kinds require zero. Nullable admits
+/* Fixed U8 and I64 Tuple arguments are their nonzero field counts. Nullable
+ * argument is an earlier type ordinal in this catalog. Other kinds require zero. Nullable admits
  * inline scalar, Fixed U8 and Nullable payloads with independently owned types. */
 typedef struct XrtModuleTypeSpec {
     XrtModuleTypeKind kind;
@@ -86,6 +87,12 @@ XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *, uint32_t slot,
     const void *value, XrtModuleRef **);
 XRAY_API XrtModuleStatus xrt_module_publish(XrtModuleRef *);
 XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *, uint32_t slot, const void *value);
+/* Validate the complete contiguous I64 group before publishing any slot.
+ * Mutable members must already be constructed by this initializer. The call
+ * prepares all scalar payloads in budgeted scratch before committing any
+ * publication. Failure preserves the group's prior construction state. */
+XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *, uint32_t first,
+    uint32_t count, const int64_t *values);
 XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *, uint32_t slot, XrtModuleRef **);
 XRAY_API XrtModuleStatus xrt_module_borrow(const XrtModuleRef *, const void **value);
 /* Copy finishes in empty scratch before the old value is changed. Copy failure

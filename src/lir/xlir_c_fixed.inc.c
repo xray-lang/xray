@@ -67,12 +67,14 @@ static void c_prepare_types(LirC *c) {
         }
         if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||
             xr_lir_type_layout(module, type, &owned->layout) != XR_LIR_OK ||
-            (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE) ||
+            (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE &&
+             owned->shape.kind != XR_LIR_TYPE_TUPLE) ||
             owned->layout.managed) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "constructed physical types have no native implementation");
             return;
         }
-        snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 : "XrlNullable_%" PRIu32, type);
+        snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 :
+            owned->shape.kind == XR_LIR_TYPE_TUPLE ? "XrlTuple_%" PRIu32 : "XrlNullable_%" PRIu32, type);
         owned->pod_index = c->pod_count++;
     }
     for (uint32_t f = 0; cells && f < xr_lir_function_count(module) && c_request_poll(c); ++f) {
@@ -94,6 +96,9 @@ static void c_constructed_types(LirC *c) {
             c_callable_type(c, XR_LIR_TYPE_COUNT + n);
         } else if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
             c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",
+                type->name, type->shape.count, type->name);
+        } else if (type->shape.kind == XR_LIR_TYPE_TUPLE) {
+            c_format(c, "typedef struct %s { int64_t fields[%" PRIu32 "]; } %s;\n",
                 type->name, type->shape.count, type->name);
         } else {
             XrLirTypeLayout payload;
@@ -118,13 +123,19 @@ static void c_constructed_types(LirC *c) {
 }
 
 static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {
-    if (v->op == XR_LIR_FIXED_ARRAY_NEW) {
+    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_TUPLE_NEW) {
         c_format(c, "    v%" PRIu32 " = (%s){{", v->result, c_type(c, v->type));
         for (uint32_t n = 0; n < v->operand_count && c_request_poll(c); ++n) {
             if (n) c_text(c, ", ");
             c_value(c, v->operands[n]);
         }
         c_text(c, "}};\n");
+        return;
+    }
+    if (v->op == XR_LIR_TUPLE_FIELD) {
+        c_format(c, "    v%" PRIu32 " = ", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ".fields[UINT64_C(%" PRIu64 ")];\n", v->bits);
         return;
     }
     XrLirType type = c_value_type(c, v->operands[0]);

@@ -30,7 +30,8 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
             *size = sizeof(void *); *alignment = _Alignof(void *); return true;
         }
         if (xr_lir_type_view(m, type, &view) != XR_LIR_OK ||
-            (view.kind != XR_LIR_TYPE_FIXED_ARRAY && view.kind != XR_LIR_TYPE_NULLABLE) ||
+            (view.kind != XR_LIR_TYPE_FIXED_ARRAY && view.kind != XR_LIR_TYPE_NULLABLE &&
+             view.kind != XR_LIR_TYPE_TUPLE) ||
             xr_lir_type_layout(m, type, &layout) != XR_LIR_OK || layout.managed || layout.size > UINT32_MAX) return false;
         *size = (uint32_t)layout.size;
         *alignment = layout.alignment;

@@ -18,7 +18,7 @@ typedef enum XrPodScalar {
     XR_POD_F32, XR_POD_F64, XR_POD_SCALAR_COUNT
 } XrPodScalar;
 typedef struct XrPodLayout { uint32_t size, alignment, scalar_count; } XrPodLayout;
-typedef enum XrPodTypeKind { XR_POD_FIXED_U8 = 1, XR_POD_NULLABLE } XrPodTypeKind;
+typedef enum XrPodTypeKind { XR_POD_FIXED_U8 = 1, XR_POD_NULLABLE, XR_POD_TUPLE_I64 } XrPodTypeKind;
 typedef struct XrPodType {
     XrPodTypeKind kind;
     uint32_t count;
@@ -43,6 +43,11 @@ static inline bool xr_pod_nullable_layout(XrPodLayout payload, XrPodLayout *outp
     if (size > UINT32_MAX) return false;
     XrPodLayout layout = {(uint32_t)size, payload.alignment, payload.scalar_count + 1};
     *output = layout;
+    return true;
+}
+static inline bool xr_pod_tuple_i64_layout(uint32_t count, XrPodLayout *output) {
+    if (!output || !count || count > UINT32_MAX / 8) return false;
+    *output = (XrPodLayout){count * 8, 8, count};
     return true;
 }
 

@@ -14,7 +14,8 @@ typedef enum XrtCallableValueKind {
 } XrtCallableValueKind;
 typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
 typedef enum XrtCallableShapeKind {
-    XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL
+    XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL,
+    XRT_CALLABLE_TUPLE_I64
 } XrtCallableShapeKind;
 typedef struct XrtCallableParameterSpec {
     XrtCallableValueSpec value;

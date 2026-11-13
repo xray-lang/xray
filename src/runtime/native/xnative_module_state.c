@@ -60,6 +60,7 @@ struct XrtModuleState {
     XrtModuleRef *initializers, *published;
     uint32_t construction_count, publication_count;
     uint32_t allocation_alignment;
+    uint64_t bytes, byte_limit;
     uint8_t unit;
 };
 
@@ -184,10 +185,13 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
     const XrtModuleTypeSpec *spec = &layout->types[ordinal];
     XrtModuleType *type = &types[ordinal];
     if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE &&
-        spec->kind != XRT_MODULE_CALLABLE && spec->argument) return false;
+        spec->kind != XRT_MODULE_CALLABLE && spec->kind != XRT_MODULE_TUPLE_I64 && spec->argument) return false;
     XrtModuleTypeKind kind = spec->kind;
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
+    case XRT_MODULE_TUPLE_I64:
+        if (!spec->argument || spec->argument > UINT32_MAX / 8) return false;
+        type->size = spec->argument * 8; type->alignment = 8; return true;
     case XRT_MODULE_UNIT: type->alignment = 1; return true;
     case XRT_MODULE_BOOL: case XRT_MODULE_I8: case XRT_MODULE_U8:
         type->size = type->alignment = 1; return true;
@@ -362,6 +366,8 @@ XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *layout, uint64_t 
     XrtModuleState *state = xr_calloc(1, sizeof(*state));
     if (!state) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
     state->layout = layout;
+    state->bytes = bytes;
+    state->byte_limit = limit;
     XrXirValueStatus status = module_state_allocate(state);
     if (status != XR_XIR_VALUE_OK) { xrt_module_state_drop(&state); return status; }
     *out = state;
@@ -440,6 +446,37 @@ XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *state, uint32_t s
     state->flags[slot] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
     state->publication[state->publication_count++] = slot;
     --state->remaining[spec->module];
+    return XR_XIR_VALUE_OK;
+}
+
+XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state,
+    uint32_t first, uint32_t count, const int64_t *values) {
+    if (!state || !count || !values || first >= state->layout->view.slot_count ||
+        count > state->layout->view.slot_count - first) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint32_t module = state->layout->view.slots[first].module;
+    if (state->modules[module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    for (uint32_t n = 0; n < count; ++n) {
+        uint32_t slot = first + n;
+        const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
+        uint8_t required = (spec->flags & XRT_MODULE_SLOT_MUTABLE) ? SLOT_CONSTRUCTED : 0;
+        if (spec->module != module || module_slot_type(state, slot)->kind != XRT_MODULE_I64 ||
+            state->flags[slot] != required) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    size_t bytes;
+    if (sizeof(*values) > SIZE_MAX / count) return XR_XIR_VALUE_OVERFLOW;
+    bytes = (size_t)count * sizeof(*values);
+    if (bytes > state->byte_limit - state->bytes) return XR_XIR_VALUE_MEMORY_LIMIT;
+    int64_t *prepared = xr_malloc(bytes);
+    if (!prepared) return XR_XIR_VALUE_OOM;
+    memcpy(prepared, values, bytes);
+    for (uint32_t n = 0; n < count; ++n)
+        memcpy(module_payload(state, first + n), &prepared[n], sizeof(prepared[n]));
+    xr_free(prepared);
+    for (uint32_t n = 0; n < count; ++n) {
+        state->flags[first + n] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
+        state->publication[state->publication_count++] = first + n;
+    }
+    state->remaining[module] -= count;
     return XR_XIR_VALUE_OK;
 }
 

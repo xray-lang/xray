@@ -87,6 +87,16 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    if (f->aggregate_accesses[index].operation == XR_RBC_STATE_GROUP_INITIALIZE) {
+        if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
+        XrRbcAggregateAccess access = f->aggregate_accesses[index];
+        XrRbcAggregateValue value = f->aggregate_values[access.destination];
+        XrtModuleState *state = stack->slots[frame->base + access.source].state;
+        XrtModuleStatus status = xrt_module_initialize_i64_group(state, access.slot,
+            module->aggregate_types[value.type].count, (const int64_t *)xr_rbc_aggregate_value(stack, frame, value));
+        if (status) xrt_value_failure((XrXirValueStatus)status, source);
+        return XR_RBC_OK;
+    }
     if (f->aggregate_accesses[index].operation == XR_RBC_RANGE_CHECK) {
         XrRbcAggregateAccess access = f->aggregate_accesses[index];
         int64_t arguments[3];
@@ -135,21 +145,24 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
     XR_CHECK(xr_rbc_aggregate_layout(type, &layout), "prepared aggregate has an exact physical layout");
     uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
     if (access.operation == XR_RBC_AGGREGATE_NEW) {
-        for (uint32_t n = 0; n < access.count; ++n) {
+        for (uint32_t n = 0; type.kind == XR_POD_FIXED_U8 && n < access.count; ++n) {
             XrRbcArrayLocation operand = f->aggregate_operands[access.first + n];
             if (xr_rbc_aggregate_scalar(stack, frame, operand)->bits > UINT8_MAX)
                 xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
         }
         for (uint32_t n = 0; n < access.count; ++n) {
             uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first + n])->bits;
-            if (layout.scalar_slots) memcpy(bytes + (size_t)n * sizeof(bits), &bits, sizeof(bits));
+            if (layout.scalar_slots || type.kind == XR_POD_TUPLE_I64)
+                memcpy(bytes + (size_t)n * sizeof(bits), &bits, sizeof(bits));
             else bytes[n] = (uint8_t)bits;
         }
     } else if (access.operation == XR_RBC_AGGREGATE_GET) {
-        uint64_t offset = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first])->bits;
+        uint64_t offset = type.kind == XR_POD_TUPLE_I64 ? access.slot :
+            xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first])->bits;
         if (offset >= type.count) xrt_fixed_array_bounds(source);
         uint64_t bits = 0;
-        if (layout.scalar_slots) memcpy(&bits, bytes + (size_t)offset * sizeof(bits), sizeof(bits));
+        if (layout.scalar_slots || type.kind == XR_POD_TUPLE_I64)
+            memcpy(&bits, bytes + (size_t)offset * sizeof(bits), sizeof(bits));
         else bits = bytes[(size_t)offset];
         xr_rbc_aggregate_scalar(stack, frame, access.result)->bits = bits;
     } else {

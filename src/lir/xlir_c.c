@@ -319,7 +319,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
         case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
         case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
-        case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+        case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
             c->state = true;
             break;
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
@@ -340,6 +340,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
         case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
+        case XR_LIR_TUPLE_NEW: case XR_LIR_TUPLE_FIELD:
         case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
@@ -831,7 +832,8 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_nullable_instruction(c, v);
         return;
     }
-    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
+    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET ||
+        v->op == XR_LIR_TUPLE_NEW || v->op == XR_LIR_TUPLE_FIELD) {
         c_fixed_instruction(c, v);
         return;
     }

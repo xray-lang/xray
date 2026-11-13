@@ -8,13 +8,15 @@
  */
 static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
     return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
+        instruction->op == XR_LIR_TUPLE_NEW || instruction->op == XR_LIR_TUPLE_FIELD ||
         (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP);
 }
 
 static bool rbc_lir_aggregate_type(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
     return type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(module, type, &shape) == XR_LIR_OK &&
-        (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_NULLABLE);
+        (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_NULLABLE ||
+         shape.kind == XR_LIR_TYPE_TUPLE);
 }
 
 static uint32_t rbc_lir_aggregate_ordinal(const RbcLirCompiler *c, XrLirType type) {
@@ -204,13 +206,18 @@ static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *
 static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
     if (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP)
         return rbc_lir_nullable_emit(c, instruction);
-    bool construct = instruction->op == XR_LIR_FIXED_ARRAY_NEW;
+    bool construct = instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_TUPLE_NEW;
     XrRbcAggregateAccess access = {.operation = construct ? XR_RBC_AGGREGATE_NEW : XR_RBC_AGGREGATE_GET,
         .count = construct ? instruction->operand_count : 1};
     if (construct) access.destination = c->aggregate_home[instruction->result];
     else {
         access.source = c->aggregate_home[instruction->operands[0]];
         access.result = rbc_lir_array_location(c, instruction->result);
+    }
+    if (instruction->op == XR_LIR_TUPLE_FIELD) {
+        access.count = 0;
+        access.slot = (uint32_t)instruction->bits;
+        return rbc_lir_aggregate_append(c, access);
     }
     if (c->aggregate_access_count > UINT16_MAX || c->aggregate_operand_count > UINT32_MAX - access.count)
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "aggregate operations exceed bytecode indices");

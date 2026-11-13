@@ -1,0 +1,22 @@
+fn choosePair(flag: bool, first: (i64, i64), second: (i64, i64)) -> (i64, i64) {
+    var result = first
+    if (flag) {
+        result = second
+    }
+    return result
+}
+fn rotate(count: i64) -> (i64, i64) {
+    var result = (10, 20)
+    for (var i = 0; i < count; i++) {
+        const (a, b) = result
+        result = (b, a)
+    }
+    return result
+}
+const (a, b) = choosePair(false, (17, 25), (11, 12))
+const (c, d) = choosePair(true, (17, 25), (11, 12))
+const (e, f) = rotate(7)
+print(a + b)
+print(c + d)
+print(e)
+print(f)

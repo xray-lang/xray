@@ -80,6 +80,12 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
         *output = (XrLirTypeLayout){shape.count, 1, shape.count, false};
         return true;
     }
+    if (shape.kind == XR_LIR_TYPE_TUPLE && shape.element == XR_LIR_I64) {
+        XrPodLayout layout;
+        if (!xr_pod_tuple_i64_layout(shape.count, &layout)) return false;
+        *output = (XrLirTypeLayout){layout.size, layout.alignment, layout.scalar_count, false};
+        return true;
+    }
     if (shape.kind == XR_LIR_TYPE_CALLABLE) {
         *output = (XrLirTypeLayout){0, 1, 0, true};
         return true;
@@ -174,6 +180,9 @@ XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *m, XrLirType element,
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, element, 0}, NULL, 0, output);
 }
+XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *m, uint32_t count, XrLirType *output) {
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_TUPLE, XR_LIR_I64, count}, NULL, 0, output);
+}
 
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType *signature,
     XrLirType *output) {
@@ -245,6 +254,10 @@ XR_FUNC XrLirStatus xr_lir_type_scalar(const XrLirModule *m, XrLirType type,
             *output = (XrLirScalarPart){XR_LIR_U8, offset + ordinal};
             return XR_LIR_OK;
         }
+        if (shape.kind == XR_LIR_TYPE_TUPLE) {
+            *output = (XrLirScalarPart){XR_LIR_I64, offset + (uint64_t)ordinal * 8};
+            return XR_LIR_OK;
+        }
         if (!ordinal) { *output = (XrLirScalarPart){XR_LIR_U8, offset}; return XR_LIR_OK; }
         --ordinal;
         XrLirTypeLayout payload;
@@ -278,6 +291,8 @@ XR_FUNC XrLirStatus xr_lir_import_type(XrLirModule *target, const XrLirModule *s
     XrLirType imported = type;
     if (view.kind == XR_LIR_TYPE_FIXED_ARRAY)
         status = xr_lir_fixed_array_type(target, view.element, view.count, &imported);
+    else if (view.kind == XR_LIR_TYPE_TUPLE)
+        status = xr_lir_tuple_i64_type(target, view.count, &imported);
     for (; depth && status == XR_LIR_OK; --depth) status = xr_lir_nullable_type(target, imported, &imported);
     if (status == XR_LIR_OK) *output = imported;
     return status;

@@ -27,7 +27,7 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
     XrLirTypeView view = {0};
     XrLirTypeLayout layout;
     return xr_lir_type_view(module, type, &view) == XR_LIR_OK &&
-        (view.kind == XR_LIR_TYPE_FIXED_ARRAY || view.kind == XR_LIR_TYPE_NULLABLE) &&
+        (view.kind == XR_LIR_TYPE_FIXED_ARRAY || view.kind == XR_LIR_TYPE_NULLABLE || view.kind == XR_LIR_TYPE_TUPLE) &&
         xr_lir_type_layout(module, type, &layout) == XR_LIR_OK && !layout.managed;
 }
 

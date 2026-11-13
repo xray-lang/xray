@@ -1,0 +1,14 @@
+fn pair(a: i64, b: i64) -> (i64, i64) {
+    return (a, b)
+}
+fn flip(value: (i64, i64)) -> (i64, i64) {
+    const (a, b) = value
+    return (b, a)
+}
+var (left, right) = pair(40, 2)
+print(left + right)
+left = left + 1
+print(left)
+const (first, second) = flip(pair(-17, 55))
+print(first)
+print(second)

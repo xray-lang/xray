@@ -11,7 +11,8 @@
  *   only at the actual read or write, inside its original control-flow path.
  */
 static bool c_state_point(const XrLirInstructionView *v) {
-    return v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE;
+    return (v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE) ||
+        v->op == XR_LIR_STATE_GROUP_INITIALIZE;
 }
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
@@ -52,7 +53,8 @@ static void c_state_layout(LirC *c) {
             c->state_type_base + c->constructed_types[shape.element - XR_LIR_TYPE_COUNT].pod_index :
             (uint32_t)xr_pod_module_kind(lir_pod_scalar(shape.element)) - XRT_MODULE_UNIT;
         c_format(c, "    {%s, UINT32_C(%" PRIu32 ")},\n",
-            shape.kind == XR_LIR_TYPE_NULLABLE ? "XRT_MODULE_NULLABLE" : "XRT_MODULE_FIXED_U8", argument);
+            shape.kind == XR_LIR_TYPE_NULLABLE ? "XRT_MODULE_NULLABLE" :
+            shape.kind == XR_LIR_TYPE_TUPLE ? "XRT_MODULE_TUPLE_I64" : "XRT_MODULE_FIXED_U8", argument);
     }
     if (lir_state_has_view_cells(layout)) c_text(c, "    {XRT_MODULE_CELL_ARRAY_I64, 0},\n");
     if (c->owned_entry_count)
@@ -181,6 +183,17 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
 }
 
 static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_STATE_GROUP_INITIALIZE) {
+        XrLirType type = c_value_type(c, v->operands[1]);
+        uint32_t count = c->constructed_types[type - XR_LIR_TYPE_COUNT].shape.count;
+        c_text(c, "    xrt_module_require(xrt_module_initialize_i64_group(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "), ", v->bits, count);
+        c_value(c, v->operands[1]);
+        c_text(c, ".fields)");
+        c_state_require_end(c, source);
+        return;
+    }
     if (v->op == XR_LIR_STATE_READ || v->op == XR_LIR_STATE_WRITE) {
         c_state_access(c, v, source);
         return;

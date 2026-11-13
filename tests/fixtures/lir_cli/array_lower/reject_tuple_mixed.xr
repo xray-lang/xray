@@ -1,0 +1,5 @@
+fn mixed() {
+    const (number, flag) = (42, true)
+    print(number)
+}
+mixed()

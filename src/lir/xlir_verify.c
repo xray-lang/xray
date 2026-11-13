@@ -152,10 +152,12 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
                  (xr_lir_cell_type_view(m, b, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64));
         }
+        case XR_LIR_TUPLE_NEW:
         case XR_LIR_FIXED_ARRAY_NEW: {
             XrLirTypeView shape;
             if (xr_lir_type_view(m, v->type, &shape) != XR_LIR_OK ||
-                shape.kind != XR_LIR_TYPE_FIXED_ARRAY || v->operand_count != shape.count) return false;
+                shape.kind != (v->op == XR_LIR_TUPLE_NEW ? XR_LIR_TYPE_TUPLE : XR_LIR_TYPE_FIXED_ARRAY) ||
+                v->operand_count != shape.count) return false;
             for (uint32_t p = 0; p < v->operand_count; ++p)
                 if (f->values[v->operands[p] - 1].type != shape.element) return false;
             return true;
@@ -164,6 +166,11 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             XrLirTypeView shape;
             return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
                 xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
+        }
+        case XR_LIR_TUPLE_FIELD: {
+            XrLirTypeView shape;
+            return v->type == XR_LIR_I64 && xr_lir_type_view(m, a, &shape) == XR_LIR_OK &&
+                shape.kind == XR_LIR_TYPE_TUPLE && v->bits < shape.count;
         }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
@@ -332,7 +339,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
-        v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND && !lir_view_operation(v->op) && v->bits)
+        v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
+        v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_STATE_GROUP_INITIALIZE && !lir_view_operation(v->op) && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
@@ -427,7 +435,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             d->status = XR_LIR_UNSUPPORTED;
         return XR_LIR_UNSUPPORTED;
     }
-    if (v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE ? !lir_state_instruction_types(m, f, v) :
+    if (((v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE) ||
+         v->op == XR_LIR_STATE_GROUP_INITIALIZE) ? !lir_state_instruction_types(m, f, v) :
         (lir_view_operation(v->op) ? !lir_view_instruction_types(m, f, v) : !lir_scalar_instruction_types(m, f, v)))
         goto invalid;
     if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;

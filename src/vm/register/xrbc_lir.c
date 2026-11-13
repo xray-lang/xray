@@ -243,7 +243,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
-    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_INITIALIZE:
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
@@ -535,7 +535,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT &&
         i->op != XR_LIR_FUNCTION_SCOPE_ENTER && i->op != XR_LIR_FUNCTION_SCOPE_LEAVE && i->op != XR_LIR_FUNCTION_BIND &&
         i->op != XR_LIR_STATE_READ && i->op != XR_LIR_STATE_WRITE &&
-        i->op != XR_LIR_STATE_CONSTRUCT && i->op != XR_LIR_STATE_INITIALIZE &&
+        i->op != XR_LIR_STATE_CONSTRUCT && i->op != XR_LIR_STATE_INITIALIZE && i->op != XR_LIR_STATE_GROUP_INITIALIZE &&
         i->op != XR_LIR_BR && i->op != XR_LIR_CONDBR) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
@@ -579,10 +579,11 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
     case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
-    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
         return true;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
+    case XR_LIR_TUPLE_NEW: case XR_LIR_TUPLE_FIELD:
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
@@ -1061,7 +1062,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
     case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
-    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
         return rbc_lir_state_instruction(c, i);
     case XR_LIR_CONST:
         if (c->immediates[i->result].pooled)

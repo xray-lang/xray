@@ -87,7 +87,8 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
                     (uint32_t)xr_pod_module_kind((XrPodScalar)shape.element) - XRT_MODULE_UNIT :
                     LIR_STATE_CONSTRUCTED_BASE + shape.element - XR_POD_SCALAR_COUNT;
                 types[LIR_STATE_CONSTRUCTED_BASE + t] = (XrtModuleTypeSpec){
-                    shape.kind == XR_POD_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
+                    shape.kind == XR_POD_NULLABLE ? XRT_MODULE_NULLABLE :
+                    shape.kind == XR_POD_TUPLE_I64 ? XRT_MODULE_TUPLE_I64 : XRT_MODULE_FIXED_U8, argument};
             }
             uint32_t first = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
             if (lir_state_has_view_cells(&layout)) types[first++] =
@@ -114,6 +115,9 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
 
 static bool rbc_lir_state_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t first = c->slots[i->operands[0]], result = i->result ? c->slots[i->result] : 0;
+    if (i->op == XR_LIR_STATE_GROUP_INITIALIZE)
+        return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=XR_RBC_STATE_GROUP_INITIALIZE,
+            .source=first, .destination=c->aggregate_home[i->operands[1]], .slot=(uint32_t)i->bits});
     XrLirType payload = i->type;
     if ((i->op == XR_LIR_STATE_WRITE || i->op == XR_LIR_STATE_CONSTRUCT || i->op == XR_LIR_STATE_INITIALIZE) &&
         i->operand_count == 2)

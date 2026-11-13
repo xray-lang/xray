@@ -47,11 +47,13 @@ XR_FUNC XrLirStatus xr_lir_pod_type(const XrLirModule *m, XrLirType type, XrPodT
     XrLirTypeLayout layout = {0};
     if (!output || type < XR_LIR_TYPE_COUNT || xr_lir_type_view(m, type, &shape) != XR_LIR_OK ||
         xr_lir_type_layout(m, type, &layout) != XR_LIR_OK || layout.managed || layout.size > UINT32_MAX ||
-        (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_NULLABLE))
+        (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_NULLABLE &&
+         shape.kind != XR_LIR_TYPE_TUPLE))
         return XR_LIR_UNSUPPORTED;
     uint32_t element = shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? 0 : shape.element >= XR_LIR_TYPE_COUNT ?
         XR_POD_SCALAR_COUNT + shape.element - XR_LIR_TYPE_COUNT : (uint32_t)lir_pod_scalar(shape.element);
-    *output = (XrPodType){shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? XR_POD_FIXED_U8 : XR_POD_NULLABLE,
+    *output = (XrPodType){shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? XR_POD_FIXED_U8 :
+        shape.kind == XR_LIR_TYPE_TUPLE ? XR_POD_TUPLE_I64 : XR_POD_NULLABLE,
         shape.count, element, {(uint32_t)layout.size, layout.alignment, layout.scalar_count}};
     return XR_LIR_OK;
 }

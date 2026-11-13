@@ -23,7 +23,8 @@ static void c_display_catalog(LirC *c) {
             type.element = XR_POD_SCALAR_COUNT + c->constructed_types[type.element - XR_POD_SCALAR_COUNT].pod_index;
         c_format(c, "    { %s, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32
             "), {UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")} },\n",
-            type.kind == XR_POD_NULLABLE ? "XR_POD_NULLABLE" : "XR_POD_FIXED_U8",
+            type.kind == XR_POD_NULLABLE ? "XR_POD_NULLABLE" :
+            type.kind == XR_POD_TUPLE_I64 ? "XR_POD_TUPLE_I64" : "XR_POD_FIXED_U8",
             type.count, type.element, type.physical.size, type.physical.alignment, type.physical.scalar_count);
     }
     c_text(c, "};\n\n");

@@ -59,6 +59,9 @@ static inline XrLirStatus lir_native_callable_spec(const XrLirModule *module, Xr
         if (view.kind == XR_LIR_TYPE_FIXED_ARRAY) {
             spec.kind = XRT_CALLABLE_FIXED_BYTES;
             spec.count = view.count;
+        } else if (view.kind == XR_LIR_TYPE_TUPLE) {
+            spec.kind = XRT_CALLABLE_TUPLE_I64;
+            spec.count = view.count;
         } else if (view.kind == XR_LIR_TYPE_NULLABLE) spec.kind = XRT_CALLABLE_NULLABLE;
         else if (view.kind == XR_LIR_TYPE_CELL) {
             XrLirCellType cell;
