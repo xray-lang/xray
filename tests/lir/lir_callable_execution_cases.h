@@ -36,9 +36,10 @@ static void callable_code_lease_cases(const XrRbcProgram *program) {
     CHECK(!execution && !probe.retained && !probe.released);
     probe.reject = false;
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
-    CHECK(probe.retained == 1 && !probe.released);
+    uint32_t leases = module.closure_entry_count ? 2u : 1u;
+    CHECK(probe.retained == leases && !probe.released);
     xr_rbc_execution_free(&execution);
-    CHECK(probe.released == 1);
+    CHECK(probe.released == leases);
 }
 
 static void callable_transforms(XrLirModule *module, XrLirFunction root) {
@@ -84,6 +85,8 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             XrLirFunctionData *helper = &copy->functions[1];
             CHECK(helper->callable_parameter_count == 1 && !helper->closure.callable);
             helper->callable_parameters[0].contract.escaping = true;
+            CHECK(xr_lir_verify(copy, NULL) != XR_LIR_OK);
+            reference->bits = XR_LIR_CLOSURE_OWNED;
             XrLirModule *received = NULL;
             OK(xr_lir_rebuild(copy, &received));
             CHECK(received->functions[1].callable_parameters != helper->callable_parameters);
@@ -94,7 +97,7 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
         OK(xr_lir_verify(copy, NULL));
         XrRbcProgram *program = NULL;
         XrRbcCompileStatus status = xr_rbc_compile(copy, (XrLirFunction){copy, root.id}, &program, NULL);
-        if (!scenario) {
+        if (scenario != 1) {
             CHECK(status == XR_RBC_COMPILE_OK && program);
             callable_owned_receiving(program);
             XrRbcExecution *execution = NULL;
@@ -114,7 +117,7 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             .translation_unit="frame-frontier.c"};
         XrLirCOutput output = {0};
         XrLirCStatus emitted = xr_lir_emit_c(&request, &output, NULL);
-        if (!scenario) {
+        if (scenario != 1) {
             CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
             CHECK(strstr(output.bytes, "xrt_callable_scope_new") && strstr(output.bytes, "xrl_owned_thunk_"));
             xr_lir_c_output_free(&output);

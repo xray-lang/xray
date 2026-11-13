@@ -125,6 +125,7 @@ XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *, cons
     const XrLirFunctionCallableParameter *, uint32_t, bool);
 XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *,
     const XrLirFunctionData *, const XrLirInstructionView *);
+XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *, const XrLirFunctionData *, uint32_t);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {

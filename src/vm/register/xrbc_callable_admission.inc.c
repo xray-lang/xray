@@ -40,10 +40,21 @@ static bool rbc_callable_accepts(const XrRbcModule *m, uint32_t expected, uint32
 
 #include "xrbc_callable_directory.inc.c"
 
+static bool rbc_callable_parameter_owned(const XrRbcModule *m, const XrRbcFunction *f, uint32_t parameter) {
+    if (parameter < f->capture_count && f->captures[parameter].kind == XR_RBC_CALLABLE_FUNCTION) return true;
+    if (!m->function_callable_parameters) return false;
+    XrRbcFunctionCallableParameters view = m->function_callable_parameters[f - m->functions];
+    for (uint32_t p = 0; p < view.count; ++p)
+        if (view.rows[p].parameter == parameter) return view.rows[p].contract.escaping;
+    return false;
+}
+
 static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (m->callable_type_count > UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
     if (m->callable_results ? m->callable_result_count != m->function_count : m->callable_result_count != 0) return false;
     if (m->function_scopes ? m->function_scope_count != m->function_count : m->function_scope_count != 0) return false;
+    if (m->function_callable_parameters ? m->function_callable_parameter_count != m->function_count :
+        m->function_callable_parameter_count != 0) return false;
     for (size_t t = 0; t < m->callable_type_count; ++t) {
         XrRbcCallableType type = m->callable_types[t];
         if (type.parameter_count > 65536 || (type.parameter_count && !type.parameters) ||
@@ -52,7 +63,7 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
         for (uint32_t p = 0; p < type.parameter_count; ++p) {
             XrRbcCallableParameter parameter = type.parameters[p];
             if (parameter.mode > 2u || !rbc_callable_value_valid(m, parameter.value, t) ||
-                parameter.escaping) return false;
+                (parameter.escaping && (parameter.value.kind != XR_RBC_CALLABLE_FUNCTION || parameter.mode != 0))) return false;
         }
     }
     for (size_t n = 0; n < m->function_count; ++n) {
@@ -80,6 +91,12 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
                 if (value.type != XR_POD_I64 || rbc_register_kind(f, p) != XR_RBC_I64_BINDING) return false;
                 continue;
             }
+            if (value.kind == XR_RBC_CALLABLE_FUNCTION) {
+                if (!rbc_callable_value_valid(m, value, m->callable_type_count) ||
+                    rbc_register_kind(f, p) != XR_RBC_FUNCTION || !f->register_callables ||
+                    f->register_callables[p] != value.type + 1) return false;
+                continue;
+            }
             if (value.kind != XR_RBC_CALLABLE_SCALAR || value.type == XR_POD_UNIT ||
                 !rbc_callable_value_valid(m, value, 0) || rbc_register_kind(f, p) != XR_RBC_BITS) return false;
         }
@@ -89,6 +106,19 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             uint32_t type = f->register_callables ? f->register_callables[r] : 0;
             if (rbc_register_kind(f, r) == XR_RBC_FUNCTION ? !type || type > m->callable_type_count : type != 0)
                 return false;
+        }
+        if (m->function_callable_parameters) {
+            XrRbcFunctionCallableParameters parameters = m->function_callable_parameters[n];
+            if (parameters.count > f->parameter_count || (parameters.count ? !parameters.rows : parameters.rows != NULL))
+                return false;
+            for (uint32_t p = 0; p < parameters.count; ++p) {
+                XrRbcFunctionCallableParameter row = parameters.rows[p];
+                if (row.parameter >= f->parameter_count || (p && parameters.rows[p - 1].parameter >= row.parameter) ||
+                    row.contract.mode != 0 || row.contract.value.kind != XR_RBC_CALLABLE_FUNCTION ||
+                    !rbc_callable_value_valid(m, row.contract.value, m->callable_type_count) ||
+                    rbc_register_kind(f, row.parameter) != XR_RBC_FUNCTION ||
+                    f->register_callables[row.parameter] != row.contract.value.type + 1) return false;
+            }
         }
         if (!f->callable) {
             if (f->capture_count || f->state_capture) return false;
@@ -105,7 +135,8 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             XrRbcCallableValue value = type.parameters[p].value;
             uint32_t formal = f->capture_count + p;
             if (value.kind == XR_RBC_CALLABLE_AGGREGATE || rbc_callable_value_kind(value) != rbc_register_kind(f, formal) ||
-                (value.kind == XR_RBC_CALLABLE_FUNCTION && f->register_callables[formal] != value.type + 1)) return false;
+                (value.kind == XR_RBC_CALLABLE_FUNCTION && (f->register_callables[formal] != value.type + 1 ||
+                 type.parameters[p].escaping != rbc_callable_parameter_owned(m, f, formal)))) return false;
         }
     }
     for (size_t n = 0; m->callable_type_count && n < m->function_count; ++n) {
@@ -234,12 +265,14 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
                 m->closure_targets[access.destination - 1] != access.callee || access.count != count ||
                 access.first > f->aggregate_operand_count || count > f->aggregate_operand_count - access.first) return false;
             for (uint32_t p = 0; p < count; ++p)
-                if ((callee->captures[p].kind != XR_RBC_CALLABLE_SCALAR && callee->captures[p].kind != XR_RBC_CALLABLE_CELL) ||
+                if ((callee->captures[p].kind != XR_RBC_CALLABLE_SCALAR && callee->captures[p].kind != XR_RBC_CALLABLE_CELL &&
+                     callee->captures[p].kind != XR_RBC_CALLABLE_FUNCTION) ||
                     !rbc_array_location_valid(f, f->aggregate_operands[access.first + p]) ||
                     (callee->captures[p].kind == XR_RBC_CALLABLE_CELL ?
                         (rbc_array_location_kind(f, f->aggregate_operands[access.first + p]) != XR_RBC_CAPTURED_I64_CELL &&
                          rbc_array_location_kind(f, f->aggregate_operands[access.first + p]) != XR_RBC_CAPTURED_I64_BORROW) :
-                        rbc_array_location_kind(f, f->aggregate_operands[access.first + p]) != XR_RBC_BITS)) return false;
+                        rbc_array_location_kind(f, f->aggregate_operands[access.first + p]) !=
+                            rbc_callable_value_kind(callee->captures[p]))) return false;
         } else if (count) {
             if (!access.destination || access.destination > f->environment_count || access.count != count ||
                 access.first > f->aggregate_operand_count || count > f->aggregate_operand_count - access.first ||

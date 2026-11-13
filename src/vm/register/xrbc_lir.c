@@ -447,7 +447,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     d->block = d->instruction = 0;
     for (uint32_t p = 0; p < v->callable_parameter_count; ++p) {
         XrLirCallableParameter contract = v->callable_parameters[p].contract;
-        if (contract.escaping || contract.mode != XR_PARAM_READ) {
+        if (contract.mode != XR_PARAM_READ) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                 "owned callable invocation parameters require lifetime transport", (XrLirSource){0});
             return false;
@@ -461,7 +461,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (xr_lir_closure_target_view(input, f, &closure) == XR_LIR_OK)
         for (uint32_t p = 0; p < closure.capture_count; ++p)
             if (!rbc_lir_scalar(v->parameter_types[p]) && v->parameter_types[p] != XR_LIR_I64_CELL &&
-                !rbc_lir_captured_cell(input, v->parameter_types[p])) {
+                !rbc_lir_captured_cell(input, v->parameter_types[p]) && !rbc_lir_callable_type(input, v->parameter_types[p])) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                     "captured payload has no frame bytecode carrier", (XrLirSource){0});
                 return false;
@@ -532,7 +532,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
     if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
-        i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT &&
+        i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT && i->op != XR_LIR_FUNCTION_WEAKEN &&
         i->op != XR_LIR_FUNCTION_SCOPE_ENTER && i->op != XR_LIR_FUNCTION_SCOPE_LEAVE && i->op != XR_LIR_FUNCTION_BIND &&
         i->op != XR_LIR_STATE_READ && i->op != XR_LIR_STATE_WRITE &&
         i->op != XR_LIR_STATE_CONSTRUCT && i->op != XR_LIR_STATE_INITIALIZE && i->op != XR_LIR_STATE_GROUP_INITIALIZE &&
@@ -561,12 +561,13 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             !xr_lir_callable_accepts(input, i->type, target.callable)) return false;
         for (uint32_t p = 0; p < target.capture_count; ++p)
             if (!rbc_lir_scalar(callee.parameter_types[p]) &&
+                !(i->bits == XR_LIR_CLOSURE_OWNED && rbc_lir_callable_type(input, callee.parameter_types[p])) &&
                 !rbc_lir_captured_cell(input, callee.parameter_types[p]) &&
                 (i->bits == XR_LIR_CLOSURE_OWNED || callee.parameter_types[p] != XR_LIR_I64_CELL)) return false;
         if (i->bits == XR_LIR_CLOSURE_OWNED && target.state_capture) return false;
         return true;
     }
-    case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_SCOPE_ENTER:
+    case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_WEAKEN: case XR_LIR_FUNCTION_SCOPE_ENTER:
     case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
@@ -1071,6 +1072,8 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return c->output.lengths[i->result] || rbc_lir_constant(c, result, i->bits);
     case XR_LIR_LITERAL_ADDR:
         return true;
+    case XR_LIR_FUNCTION_WEAKEN:
+        return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
     case XR_LIR_INTCAST:
         if (i->type == XR_LIR_U8) {
             uint32_t temporary = c->slot_count;
@@ -1447,6 +1450,9 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 rbc_lir_captured_cell(c->input, c->view.parameter_types[p]) ?
                 (XrRbcCallableValue){XR_RBC_CALLABLE_CELL,
                     XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + c->view.parameter_types[p] - XR_LIR_TYPE_COUNT} :
+                rbc_lir_callable_type(c->input, c->view.parameter_types[p]) ?
+                (XrRbcCallableValue){XR_RBC_CALLABLE_FUNCTION,
+                    c->literals->program->physical_callables[c->view.parameter_types[p] - XR_LIR_TYPE_COUNT]} :
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||
@@ -1568,6 +1574,9 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     for (size_t f = 0; f < program->module.function_scope_count; ++f)
         xr_free((void *)program->module.function_scopes[f].parents);
     xr_free((void *)program->module.function_scopes);
+    for (size_t f = 0; f < program->module.function_callable_parameter_count; ++f)
+        xr_free((void *)program->module.function_callable_parameters[f].rows);
+    xr_free((void *)program->module.function_callable_parameters);
     for (size_t e = 0; e < program->module.closure_entry_count; ++e)
         xr_free((void *)program->module.closure_entries[e].captures);
     xr_free((void *)program->module.closure_entries);
@@ -1830,6 +1839,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         status = rbc_lir_owned_callable(input, ids, count, p, d);
         if (status != XR_RBC_COMPILE_OK) goto done;
     }
+    status = rbc_lir_callable_parameters(input, ids, count, p);
+    if (status != XR_RBC_COMPILE_OK) goto done;
     for (uint32_t f = 0; p->module.callable_type_count && f < count; ++f) {
         XrLirFunctionView view;
         xr_lir_function_view(input, (XrLirFunction){input, ids[f]}, &view);

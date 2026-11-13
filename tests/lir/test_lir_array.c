@@ -31,6 +31,7 @@
 #include "lir_callable_factory_fixture.h"
 #include "lir_callable_factory_cases.h"
 #include "lir_callable_execution_cases.h"
+#include "lir_callable_composition_cases.h"
 #include "lir_captured_cell_cases.h"
 #include "lir_tuple_cases.h"
 
@@ -515,6 +516,7 @@ int main(int argc, char **argv) {
     view_receiving_owners();
     callable_backend_frontier();
     callable_vm_execution();
+    callable_composition_receiving();
     constructed_backend_frontiers();
     fixed_bytecode_execution();
     fixed_bytecode_selected_edges();

@@ -64,7 +64,8 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         if (!closure.callable || closure.state_capture) continue;
         bool scalars = true;
         for (uint32_t c = 0; c < closure.capture_count; ++c)
-            scalars &= rbc_lir_scalar(view.parameter_types[c]) || rbc_lir_captured_cell(input, view.parameter_types[c]);
+            scalars &= rbc_lir_scalar(view.parameter_types[c]) || rbc_lir_captured_cell(input, view.parameter_types[c]) ||
+                rbc_lir_callable_type(input, view.parameter_types[c]);
         if (!scalars) continue;
         uint32_t ordinal = (uint32_t)program->module.closure_entry_count++;
         program->closure_mapping[f] = ordinal;

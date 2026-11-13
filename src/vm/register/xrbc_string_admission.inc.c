@@ -97,12 +97,12 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
         if (rbc_function_state(state[v.b])) {
             XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
             if ((kind != XR_RBC_CALL_WINDOW && (kind != XR_RBC_FUNCTION ||
-                    s->function->register_callables[v.a] != s->origin[v.b])) ||
+                    !rbc_callable_accepts(s->module, s->function->register_callables[v.a], s->origin[v.b]))) ||
                 state[v.a] == RBC_STRING_OWNED || state[v.a] == RBC_CELL_OWNED) return false;
             state[v.a] = state[v.b];
             uint32_t *scopes = rbc_scope_state(s);
             if (scopes) scopes[v.a + 1] = scopes[v.b + 1];
-            s->origin[v.a] = s->origin[v.b];
+            s->origin[v.a] = kind == XR_RBC_FUNCTION ? s->function->register_callables[v.a] : s->origin[v.b];
             return true;
         }
         if (state[v.b] == RBC_VIEW_FRAME || state[v.b] == RBC_VIEW_CELL || state[v.b] == RBC_VIEW_SLICE) {
@@ -273,6 +273,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
         XrRbcRegisterKind kind = rbc_register_kind(callee, p);
         if (kind == XR_RBC_FUNCTION) {
             if (!rbc_function_state(s->state[v.a + 1 + p]) ||
+                (rbc_callable_parameter_owned(s->module, callee, p) && s->state[v.a + 1 + p] != RBC_FUNCTION_OWNED) ||
                 !rbc_callable_accepts(s->module, callee->register_callables[p], s->origin[v.a + 1 + p])) return false;
             continue;
         }
@@ -630,7 +631,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
         g->work.state[r] = kind == XR_RBC_BITS &&
             (!g->parameters_only || r<f->parameter_count) ? RBC_BITS : RBC_EMPTY;
         if (r < f->parameter_count && kind == XR_RBC_FUNCTION) {
-            g->work.state[r] = RBC_FUNCTION;
+            g->work.state[r] = rbc_callable_parameter_owned(g->work.module, f, r) ? RBC_FUNCTION_OWNED : RBC_FUNCTION;
             g->work.origin[r] = f->register_callables[r];
         }
         if (r < f->parameter_count && kind == XR_RBC_I64_BINDING) {

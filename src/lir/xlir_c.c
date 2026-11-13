@@ -419,7 +419,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                 } else c->seen[v->callee - 1] |= 2u;
             }
             break;
-        case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_SCOPE_ENTER:
+        case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_WEAKEN: case XR_LIR_FUNCTION_SCOPE_ENTER:
         case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND:
             break;
         default:
@@ -449,7 +449,7 @@ static void c_admit(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         for (uint32_t p = 0; p < c->view.callable_parameter_count; ++p) {
             XrLirCallableParameter contract = c->view.callable_parameters[p].contract;
-            if (contract.escaping || contract.mode != XR_PARAM_READ)
+            if (contract.mode != XR_PARAM_READ)
                 c_error(c, XR_LIR_C_UNSUPPORTED, "owned callable invocation parameters require lifetime transport");
         }
         if (!c_request_poll(c))
@@ -484,6 +484,13 @@ static void c_admit(LirC *c) {
                 c_admit_instruction(c, &v);
             }
         }
+    }
+    for (uint32_t n = 0; c->owned_entry_count && n < c->closure_count; ++n) {
+        uint32_t function = c->closure[n];
+        XrLirClosureTarget target;
+        xr_lir_closure_target_view(c->request->module, (XrLirFunction){c->request->module, function}, &target);
+        if ((c->seen[function - 1] & 2u) && target.callable && !target.capture_count && !target.state_capture)
+            c_callable_owned_target(c, function);
     }
     for (uint32_t n = 0; c->stack_environments && n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction){c->request->module, c->closure[n]};
@@ -824,7 +831,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_callable_scope_instruction(c, v);
         return;
     }
-    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
+    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN) {
         c_callable_instruction(c, v);
         return;
     }
@@ -1145,7 +1152,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
+    if (c->state || c->owned_entry_count) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
     if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
     if (c->owned_entry_count || c->callable_scopes) c_text(c, "#include \"xray_native_callable.h\"\n\n");
@@ -1174,6 +1181,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_signature(c, false);
     }
     c_callable_thunks(c);
+    c_callable_import_declarations(c);
     c_callable_owned_thunks(c);
     c_callable_state_exports(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {

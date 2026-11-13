@@ -5,6 +5,38 @@
  *
  * xrbc_callable_state.inc.c - Persistent canonical values below scoped tokens
  */
+static XrRbcStatus xr_rbc_callable_capture_value(const XrRbcModule *module, XrRbcStack *stack,
+    uint64_t token, uint32_t expected, XrXirValue *output, uint32_t source) {
+    uint32_t callee;
+    size_t environment;
+    const XrXirValue *captures;
+    if (!xr_rbc_callable_target(module, stack, token, &callee, &environment, &captures) ||
+        environment != SIZE_MAX || !rbc_callable_accepts(module, expected, module->functions[callee].callable))
+        return XR_RBC_INVALID;
+    size_t index;
+    if (token & (UINT64_C(1) << 63)) {
+        if (!xr_rbc_closure_slot(stack, token, &index)) return XR_RBC_INVALID;
+        *output = stack->closures[index];
+        return XR_RBC_OK;
+    }
+    uint32_t entry = 0;
+    while (entry < module->closure_entry_count && module->closure_targets[entry] != callee) ++entry;
+    if (entry == module->closure_entry_count) return XR_RBC_INVALID;
+    if (!xr_rbc_closure_scope_enter(stack) || !xr_rbc_closure_owner_reserve(stack)) return XR_RBC_OUT_OF_MEMORY;
+    if (!stack->closure_domain) {
+        XrXirValueStatus status = xr_xir_domain_new(UINT64_MAX, &stack->closure_domain);
+        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+    }
+    XR_DCHECK(!stack->closure_pending.type, "a materialized callable has one pending owner");
+    XrXirValueStatus status = xrt_callable_new(stack->closure_code, stack->closure_domain,
+        entry, NULL, 0, &stack->closure_pending);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+    uint64_t received = xr_rbc_closure_owner_commit(stack, stack->closure_scope_count - 1, UINT32_MAX);
+    if (!xr_rbc_closure_slot(stack, received, &index)) return XR_RBC_INVALID;
+    *output = stack->closures[index];
+    return XR_RBC_OK;
+}
+
 static XrRbcStatus xr_rbc_callable_state_step(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFunction *function, XrRbcAggregateAccess access, uint32_t source) {
     bool read = access.operation == XR_RBC_FUNCTION_STATE_READ;

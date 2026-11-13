@@ -1,0 +1,14 @@
+import {compose} from "./callable_compose_library"
+
+fn makeOffset(seed: i64) -> fn(i64) -> i64 {
+    return fn(value: i64) -> i64 { return value + seed }
+}
+fn exercise() -> i64 {
+    const combined = compose(makeOffset(10), makeOffset(2))
+    {
+        const saved = combined
+        print(saved(30))
+    }
+    return combined(31)
+}
+print(exercise())

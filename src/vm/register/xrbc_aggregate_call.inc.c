@@ -129,6 +129,13 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         for (uint32_t p = 0; p < access.count; ++p) {
             XrRbcArrayLocation location = function->aggregate_operands[access.first + p];
             uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, location)->bits;
+            XrRbcCallableValue capture = module->functions[access.callee].captures[p];
+            if (capture.kind == XR_RBC_CALLABLE_FUNCTION) {
+                XrRbcStatus status = xr_rbc_callable_capture_value(module, stack, bits,
+                    capture.type + 1, &stack->closure_arguments[p], source);
+                if (status != XR_RBC_OK) return status;
+                continue;
+            }
             if (module->functions[access.callee].captures[p].kind == XR_RBC_CALLABLE_CELL) {
                 if (!xr_rbc_captured_cell_value(module, stack, rbc_array_location_kind(function, location), bits,
                         entry.captures[p], &stack->closure_arguments[p])) return XR_RBC_INVALID;
@@ -234,6 +241,14 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         *frame = (XrRbcFrame){access.callee, 0, base,
             callee->aggregate_result_type ? access.destination : access.window,
             stack->cell_count, 0, stack->spill_count, 0};
+        for (uint32_t p = 0; owned && p < callee->capture_count; ++p) {
+            if (callee->captures[p].kind != XR_RBC_CALLABLE_FUNCTION) continue;
+            if (!xr_rbc_closure_scope_enter(stack) || !xr_rbc_closure_owner_reserve(stack)) return XR_RBC_OUT_OF_MEMORY;
+            XrXirValueStatus status = xr_xir_value_copy(&owned[p], &stack->closure_pending);
+            if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+            stack->slots[base + p].bits = xr_rbc_closure_owner_commit(stack,
+                stack->closure_scope_count - 1, UINT32_MAX);
+        }
         xr_rbc_entry_clear(stack->slots + base, &stack->entries[access.callee]);
         if (callee->reference_spill_count)
             memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));

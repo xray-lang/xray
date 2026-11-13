@@ -117,18 +117,30 @@ XR_FUNC XrXirValueStatus xrt_callable_code_new(XrXirTypeArena *arena,
     return XR_XIR_VALUE_OK;
 }
 
+static bool callable_charge(void *owner, uint64_t amount) {
+    uint64_t *remaining = owner;
+    if (amount > *remaining) return false;
+    *remaining -= amount;
+    return true;
+}
 static XrXirValueStatus callable_admit(void *owner, const XrXirFunctionBinding *binding,
     XrXirType type, uint64_t *work) {
-    (void)work;
     const XrtCallableCode *code = owner;
     if (!binding || binding->owner != code || binding->release != callable_code_release ||
         binding->entry >= code->count) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrtCallableEntry entry = code->entries[binding->entry];
     if (type != entry.type || binding->capture_count != entry.capture_count ||
         (entry.capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    for (uint32_t c = 0; c < entry.capture_count; ++c)
-        if (!xr_xir_value_argument(&binding->captures[c], code->arena, entry.captures[c]))
+    for (uint32_t c = 0; c < entry.capture_count; ++c) {
+        const XrXirValue *value = &binding->captures[c];
+        if (xr_xir_value_argument(value, code->arena, entry.captures[c])) continue;
+        uint64_t unlimited = UINT64_MAX;
+        if (xr_xir_value_arena(value) != code->arena ||
+            !xr_xir_value_argument(value, code->arena, (XrXirType)value->type) ||
+            xr_xir_callable_weakening_admit(xr_xir_compile_type_arena_types(code->arena),
+                (XrXirType)value->type, entry.captures[c], work ? work : &unlimited, callable_charge) != XR_XIR_OK)
             return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     return XR_XIR_VALUE_OK;
 }
 

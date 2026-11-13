@@ -742,6 +742,7 @@ static void native_string_misuse_aborts(void) {
 int main(void) {
     native_callable_projection();
     native_callable_owners();
+    native_callable_nested_owners();
     native_callable_scopes();
     native_f64_text_recovery();
     native_frame_cell_recovery();

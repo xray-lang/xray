@@ -184,6 +184,11 @@ XRAY_API XrtCallable *xrt_callable_scope_new(XrtCallableScope *scope, uint32_t e
     for (uint32_t p = 0; p < count; ++p) {
         body->arguments[p] = (XrXirValue){.type=(uint32_t)expected.captures[p]};
         memcpy(&body->arguments[p].payload, &captures[p], sizeof(captures[p]));
+        if (xr_xir_type_is_callable(xr_xir_compile_type_arena_types(body->group->types), expected.captures[p])) {
+            const XirObject *object = (const XirObject *)(intptr_t)body->arguments[p].payload;
+            if (!object) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+            body->arguments[p].type = (uint32_t)object->type;
+        }
     }
     XrtCallableScopeValue *received = &body->values[body->count];
     *received = (XrtCallableScopeValue){.binding=UINT32_MAX};

@@ -121,6 +121,60 @@ static void native_callable_projection(void) {
     puts("owned callable projection preserves contracts and retires a real Cell/Fn cycle");
 }
 
+static void native_callable_nested_owners(void) {
+    XrXirCallableParameter parameter = {.type=XR_XIR_I64, .mode=XR_PARAM_READ};
+    XrXirTypeNode nodes[] = {
+        {.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER, .parameters=&parameter,
+            .parameter_count=1, .result=XR_XIR_I64, .flags=XR_XIR_CALLABLE_ROOT_NONE | XR_XIR_CALLABLE_NO_SUSPEND},
+        {.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER, .parameters=&parameter,
+            .parameter_count=1, .result=XR_XIR_I64, .flags=XR_XIR_CALLABLE_ROOT_NONE}
+    };
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    XrXirTypes types = {.nodes=nodes, .count=2};
+    XrXirTypeArena *arena = NULL;
+    CHECK(xr_xir_compile_type_arena_new(&context, &types, &arena) == XR_XIR_VALUE_OK);
+    xr_compile_resources_release(context.resources);
+    XrXirType strong = (XrXirType)256, weak = (XrXirType)257;
+    XrtCallableEntry entries[] = {{strong, NULL, 0}, {weak, &weak, 1}, {weak, &strong, 1}, {weak, NULL, 0}};
+    uint32_t retired = 0;
+    NativeCallableLease *owner = xr_malloc(sizeof(*owner));
+    CHECK(owner);
+    *owner = (NativeCallableLease){1, &retired, false};
+    XrtCallableCode *code = NULL;
+    CHECK(xrt_callable_code_new(arena, entries, 4,
+        (XrtCallableLease){owner, native_callable_retain, native_callable_release}, &code) == XR_XIR_VALUE_OK);
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_root_domain_new(UINT64_MAX, &domain) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_domain_retain(domain));
+    XrXirDomainStats baseline = xr_xir_domain_stats(domain);
+    XrXirValue child = {0}, parent = {0}, ordinary = {0}, empty = {0};
+    CHECK(xrt_callable_new(code, domain, 0, NULL, 0, &child) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_new(code, domain, 1, &child, 1, &parent) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_new(code, domain, 3, NULL, 0, &ordinary) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_new(code, domain, 2, &ordinary, 1, &empty) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!empty.type && !empty.payload);
+    XrtCallableCode *borrowed = code;
+    xr_xir_value_drop(&ordinary);
+    xr_xir_value_drop(&child);
+    xrt_callable_code_drop(&code);
+    xr_xir_compile_type_arena_drop(arena);
+    native_callable_release(owner);
+    xr_xir_root_domain_release(domain);
+    CHECK(!retired);
+    const XrXirValue *captures = NULL;
+    uint32_t count = 0;
+    CHECK(xrt_callable_borrow(borrowed, &parent, 1, &captures, &count) == XR_XIR_VALUE_OK);
+    CHECK(count == 1 && captures[0].type == (uint32_t)strong);
+    CHECK(xr_xir_function_binding(&captures[0])->owner == xr_xir_function_binding(&parent)->owner);
+    CHECK(xrt_callable_borrow(borrowed, &captures[0], 0, &captures, &count) == XR_XIR_VALUE_OK && !count);
+    xr_xir_value_drop(&parent);
+    CHECK(retired == 1 && xr_xir_domain_stats(domain).live_bytes == baseline.live_bytes);
+    xr_xir_domain_drop(domain);
+    puts("canonical Fn captures preserve actual NoSuspend code and survive producer retirement");
+}
+
 static void native_callable_owners(void) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};

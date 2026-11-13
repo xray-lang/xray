@@ -950,6 +950,9 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         const XrXirFunction *target = &c->source->functions[callee];
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             XrLirType type = lower_type(c, target->parameters[p]);
+            XrLirCallableType captured;
+            if (placement == XIR_CLOSURE_OWNED && xr_lir_callable_type_view(c->module, type, &captured) == XR_LIR_OK)
+                continue;
             if (type == XR_LIR_I64_CELL) c->scalar_bindings = true;
             if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
                 type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL)
@@ -967,7 +970,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     }
     if (op->op == XR_XIR_FUNCTION_WEAKEN) {
         if (!lower_receive_type(c, xr_xir_operand_type(f, op->args[0]))) return false;
-        if (lower_type(c, xr_xir_operand_type(f, op->args[0])) != lower_type(c, op->type))
+        if (!xr_lir_callable_accepts(c->module, lower_type(c, op->type), lower_type(c, xr_xir_operand_type(f, op->args[0]))))
             return lower_unsupported(c, "function reference signature conversion");
     }
     if ((op->op == XR_XIR_DIV_INT || op->op == XR_XIR_REM_INT) &&
@@ -1692,7 +1695,14 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
             .bits=literal.id, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &owned, &f->values[result]));
     }
-    if ((op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN) &&
+    if (op->op == XR_XIR_FUNCTION_WEAKEN) {
+        XrLirValue input = {0};
+        if (!lower_value(f, op->args[0], &input)) return false;
+        XrLirInstruction weaken = {.op=XR_LIR_FUNCTION_WEAKEN, .type=lower_type(c, op->type),
+            .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &weaken, &f->values[result]));
+    }
+    if (op->op == XR_XIR_COPY &&
         !lower_managed_type(lower_type(c, op->type)))
         return lower_value(f, op->args[0], &f->values[result]);
     if (op->op == XR_XIR_FUNCTION_REF) {

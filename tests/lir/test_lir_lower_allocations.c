@@ -331,6 +331,22 @@ static void range_lower_failures(void) {
     printf("Range check Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void composition_lower_failures(void) {
+    SourceFixture fixture = source_fixture("fn compose(f:escaping fn(i64)->i64,g:escaping fn(i64)->i64)->fn(i64)->i64{"
+        "return fn(x:i64)->i64{return f(g(x))}}\n"
+        "fn make(seed:i64)->fn(i64)->i64{return fn(x:i64)->i64{return seed+x}}\n"
+        "const combined=compose(make(10),make(2))\nprint(combined(30))\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Owned Fn capture Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 static void tuple_lower_failures(void) {
     SourceFixture fixture = source_fixture("fn pair(a:i64,b:i64)->(i64,i64){return(a,b)}\n"
         "var(a,b)=pair(40,2)\nprint(a+b)\nconst(c,d)=pair(17,25)\nprint(c+d)\n");
@@ -346,6 +362,7 @@ static void tuple_lower_failures(void) {
 }
 
 int main(void) {
+    composition_lower_failures();
     tuple_lower_failures();
     range_lower_failures();
     callable_lower_failures();

@@ -136,6 +136,9 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
                 if (capture.kind == XR_RBC_CALLABLE_CELL) {
                     if (location.spill || s->state[location.index] != RBC_CAPTURED_CELL ||
                         s->origin[location.index] != capture.type) return false;
+                } else if (capture.kind == XR_RBC_CALLABLE_FUNCTION) {
+                    if (location.spill || s->state[location.index] != RBC_FUNCTION_OWNED ||
+                        !rbc_callable_accepts(s->module, capture.type + 1, s->origin[location.index])) return false;
                 } else if (rbc_array_state(s, location) != RBC_BITS) return false;
             }
         } else if (access.destination) {
@@ -176,7 +179,8 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
             uint32_t r = access.window + 1 + p;
             XrRbcCallableValue value = type.parameters[p].value;
             if (value.kind == XR_RBC_CALLABLE_FUNCTION) {
-                if (!rbc_function_state(s->state[r]) || !rbc_callable_accepts(s->module, value.type + 1, s->origin[r])) return false;
+                if (!rbc_function_state(s->state[r]) || (type.parameters[p].escaping && s->state[r] != RBC_FUNCTION_OWNED) ||
+                    !rbc_callable_accepts(s->module, value.type + 1, s->origin[r])) return false;
             } else if (!rbc_call_parameter_matches(s, r, rbc_callable_value_kind(value))) return false;
         }
         if (!rbc_bits_destination(s, access.window)) return false;

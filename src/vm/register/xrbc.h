@@ -299,6 +299,14 @@ typedef struct XrRbcCallableType {
     XrRbcCallableValue result;
     uint32_t flags;
 } XrRbcCallableType;
+typedef struct XrRbcFunctionCallableParameter {
+    uint32_t parameter;
+    XrRbcCallableParameter contract;
+} XrRbcFunctionCallableParameter;
+typedef struct XrRbcFunctionCallableParameters {
+    const XrRbcFunctionCallableParameter *rows;
+    uint32_t count;
+} XrRbcFunctionCallableParameters;
 
 static inline XrPodType xr_rbc_fixed_type(uint32_t count) {
     return (XrPodType){XR_POD_FIXED_U8, count, 0, {count, 1, count}};
@@ -345,6 +353,8 @@ typedef struct {
     // Parent zero names the activation; other ordinals are one-based here.
     const XrRbcFunctionScopes *function_scopes;
     size_t function_scope_count;
+    const XrRbcFunctionCallableParameters *function_callable_parameters;
+    size_t function_callable_parameter_count;
 } XrRbcModule;
 
 typedef enum {

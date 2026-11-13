@@ -66,7 +66,8 @@ static bool rbc_callable_directory_valid(const XrRbcModule *module) {
             (entry.capture_count ? !entry.captures : entry.captures != NULL)) return false;
         for (uint32_t p = 0; p < entry.capture_count; ++p) {
             XrXirType type;
-            if ((function->captures[p].kind != XR_RBC_CALLABLE_SCALAR && function->captures[p].kind != XR_RBC_CALLABLE_CELL) ||
+            if ((function->captures[p].kind != XR_RBC_CALLABLE_SCALAR && function->captures[p].kind != XR_RBC_CALLABLE_CELL &&
+                 function->captures[p].kind != XR_RBC_CALLABLE_FUNCTION) ||
                 !rbc_callable_canonical_type(module, function->captures[p], &type) || type != entry.captures[p]) return false;
         }
     }

@@ -138,6 +138,27 @@ static void c_callable_owned_catalog(LirC *c) {
         ", xrl_callable_entries, %" PRIu32 "};\n", count, c->owned_entry_count);
     xr_compile_resources_free(parameters);
 }
+static bool c_callable_captured_type(const LirC *c, XrLirType type) {
+    for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
+        if (!c->owned_entries[f]) continue;
+        XrLirClosureTarget target;
+        XrLirFunctionView function;
+        XrLirFunction handle = {c->request->module, f + 1};
+        xr_lir_closure_target_view(c->request->module, handle, &target);
+        xr_lir_function_view(c->request->module, handle, &function);
+        for (uint32_t p = 0; p < target.capture_count; ++p)
+            if (function.parameter_types[p] == type) return true;
+    }
+    return false;
+}
+static void c_callable_import_declarations(LirC *c) {
+    for (uint32_t t = 0; c->owned_entry_count && t < c->constructed_count; ++t) {
+        XrLirCallableType signature;
+        XrLirType type = XR_LIR_TYPE_COUNT + t;
+        if (xr_lir_callable_type_view(c->request->module, type, &signature) == XR_LIR_OK && c_callable_captured_type(c, type))
+            c_format(c, "static %s xrl_callable_import_%" PRIu32 "(XrtCallable *, uint32_t);\n", c_type(c, type), type);
+    }
+}
 static void c_callable_owned_thunks(LirC *c) {
     for (uint32_t f = 0; c->owned_entry_count && f < xr_lir_function_count(c->request->module); ++f) {
         if (!c->owned_entries[f]) continue;
@@ -157,7 +178,11 @@ static void c_callable_owned_thunks(LirC *c) {
             c_format(c, "    uint64_t bits%" PRIu32 " = xrt_callable_capture(&xrl_callable_image, environment, %" PRIu32
                 ", %" PRIu32 ", 0);\n", p, c->owned_entries[f] - 1, p);
             XrLirType type = view.parameter_types[p];
-            if (type == XR_LIR_I1 || type == XR_LIR_U8)
+            XrLirCallableType captured;
+            if (xr_lir_callable_type_view(c->request->module, type, &captured) == XR_LIR_OK)
+                c_format(c, "    %s c%" PRIu32 " = xrl_callable_import_%" PRIu32 "((XrtCallable *)(uintptr_t)bits%" PRIu32 ", 0);\n",
+                    c_type(c, type), p, type, p);
+            else if (type == XR_LIR_I1 || type == XR_LIR_U8)
                 c_format(c, "    %s c%" PRIu32 " = (%s)bits%" PRIu32 ";\n", c_type(c, type), p, c_type(c, type), p);
             else c_format(c, "    %s c%" PRIu32 ";\n    memcpy(&c%" PRIu32 ", &bits%" PRIu32 ", sizeof(c%" PRIu32 "));\n",
                 c_type(c, type), p, p, p, p);
@@ -179,7 +204,12 @@ static void c_callable_owned_reference(LirC *c, const XrLirInstructionView *v) {
         c_format(c, "    uint64_t captures[%" PRIu32 "] = {0};\n", v->operand_count);
         for (uint32_t p = 0; p < v->operand_count; ++p) {
             XrLirType type = c_value_type(c, v->operands[p]);
-            if (type == XR_LIR_I1 || type == XR_LIR_U8) {
+            XrLirCallableType captured;
+            if (xr_lir_callable_type_view(c->request->module, type, &captured) == XR_LIR_OK) {
+                c_format(c, "    captures[%" PRIu32 "] = (uint64_t)(uintptr_t)xrl_state_function_%" PRIu32 "(", p, type);
+                c_value(c, v->operands[p]);
+                c_format(c, ", xrl_scope, %" PRIu32 ");\n", source);
+            } else if (type == XR_LIR_I1 || type == XR_LIR_U8) {
                 c_format(c, "    captures[%" PRIu32 "] = ", p);
                 c_value(c, v->operands[p]);
                 c_text(c, ";\n");
@@ -196,11 +226,13 @@ static void c_callable_owned_reference(LirC *c, const XrLirInstructionView *v) {
         ", owned, owned};\n    }\n", v->operand_count, source, v->result, c_type(c, v->type), v->callee);
 }
 static void c_callable_state_exports(LirC *c) {
-    if (!c->owned_entry_count || !lir_state_has_callables(c->request->module, &c->state_layout)) return;
+    if (!c->owned_entry_count) return;
     for (uint32_t t = 0; t < c->constructed_count; ++t) {
         XrLirType type = XR_LIR_TYPE_COUNT + t;
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(c->request->module, type, &signature) != XR_LIR_OK) continue;
+        bool captured = c_callable_captured_type(c, type);
+        if (!captured && !lir_state_has_callables(c->request->module, &c->state_layout)) continue;
         c_format(c, "static XrtCallable *xrl_state_function_%" PRIu32 "(%s value, XrtCallableScope *scope, uint32_t source) {\n",
             type, c_type(c, type));
         c_text(c, "    (void)scope;\n    if (value.owner) return value.owner;\n"
@@ -214,5 +246,17 @@ static void c_callable_state_exports(LirC *c) {
                 ", NULL, 0, source);\n", f + 1, c->owned_entries[f] - 1);
         }
         c_text(c, "    xrt_module_uninitialized(source);\n}\n");
+        if (!captured) continue;
+        c_format(c, "static %s xrl_callable_import_%" PRIu32 "(XrtCallable *owned, uint32_t source) {\n", c_type(c, type), type);
+        c_text(c, "    switch (xrt_callable_entry(&xrl_callable_image, owned, source)) {\n");
+        for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
+            if (!c->owned_entries[f]) continue;
+            XrLirClosureTarget target;
+            xr_lir_closure_target_view(c->request->module, (XrLirFunction){c->request->module, f + 1}, &target);
+            if (xr_lir_callable_accepts(c->request->module, type, target.callable))
+                c_format(c, "    case %" PRIu32 ": return (%s){xrl_owned_thunk_%" PRIu32 ", owned, owned};\n",
+                    c->owned_entries[f] - 1, c_type(c, type), f + 1);
+        }
+        c_text(c, "    default: xrt_module_uninitialized(source);\n    }\n}\n");
     }
 }

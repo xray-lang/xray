@@ -49,6 +49,9 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
     }
     for (uint32_t p = 0; p < target.capture_count; ++p) {
         XrLirType type = function.parameter_types[p];
+        XrLirCallableType captured;
+        if (instruction->bits == XR_LIR_CLOSURE_OWNED &&
+            xr_lir_callable_type_view(c->request->module, type, &captured) == XR_LIR_OK) continue;
         XrLirCellType cell;
         if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64)
             continue;
@@ -61,18 +64,7 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
 
 static bool c_callable_owned_return(const LirC *c, uint32_t value) {
     const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
-    for (uint32_t steps = 0; steps < function->value_count; ++steps) {
-        const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, value);
-        if (!definition) return false;
-        if (definition->op == XR_LIR_FUNCTION_REF)
-            return definition->bits == XR_LIR_CLOSURE_OWNED || !definition->operand_count;
-        if (definition->op == XR_LIR_CALL || definition->op == XR_LIR_CALL_INDIRECT ||
-            definition->op == XR_LIR_STATE_READ) return true;
-        if ((definition->op != XR_LIR_FUNCTION_BIND && definition->op != XR_LIR_FUNCTION_SCOPE_LEAVE) ||
-            definition->operand_count != 2) return false;
-        value = definition->operands[1];
-    }
-    return false;
+    return xr_lir_internal_callable_persistent(c->request->module, function, value);
 }
 
 #include "xlir_c_callable_owned.inc.c"
@@ -129,6 +121,12 @@ static void c_callable_argument(LirC *c, uint32_t value, XrLirType expected) {
 }
 
 static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_FUNCTION_WEAKEN) {
+        c_format(c, "    v%" PRIu32 " = ", v->result);
+        c_callable_argument(c, v->operands[0], v->type);
+        c_text(c, ";\n");
+        return;
+    }
     if (v->op == XR_LIR_FUNCTION_REF) {
         if (v->bits == XR_LIR_CLOSURE_OWNED) {
             c_callable_owned_reference(c, v);

@@ -42,6 +42,10 @@ static uint32_t lir_scope_frame_floor(const XrLirModule *m, const XrLirFunctionD
         }
         if (definition->op == XR_LIR_CALL || definition->op == XR_LIR_CALL_INDIRECT ||
             definition->op == XR_LIR_STATE_READ) return 0;
+        if (definition->op == XR_LIR_FUNCTION_WEAKEN) {
+            value = definition->operands[0];
+            continue;
+        }
         if ((definition->op != XR_LIR_FUNCTION_BIND && definition->op != XR_LIR_FUNCTION_SCOPE_LEAVE) ||
             definition->operand_count != 2) return owners[value];
         value = definition->operands[1];

@@ -127,6 +127,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_view_fixture.h"
 #include "../lir/lir_callable_fixture.h"
 #include "../lir/lir_callable_factory_fixture.h"
+#include "../lir/lir_callable_composition_fixture.h"
 #include "../lir/lir_tuple_fixture.h"
 
 static void callable_factory_failures(bool scopes) {
@@ -917,6 +918,42 @@ static void aggregate_value_compiler_failures(uint32_t count, bool dynamic, bool
     attempts = 0;
 }
 
+static void composition_compiler_failures(void) {
+    XrLirModule *module = NULL;
+    XrLirFunction root = {0};
+    callable_composition_fixture(&module, &root);
+    XrRbcProgram *program = NULL;
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(total > 30 && !live_allocations);
+    for (size_t point = 1; point <= total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    size_t retained = live_allocations;
+    attempts = 0;
+    uint64_t bits = 0;
+    CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OK && bits == 42);
+    size_t runtime = attempts;
+    CHECK(live_allocations == retained);
+    for (size_t point = 1; point <= runtime; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OUT_OF_MEMORY);
+        CHECK(live_allocations == retained);
+    }
+    fail_at = SIZE_MAX;
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("Owned Fn capture compiler/runtime allocation failures: %zu/%zu PASS\n", total, runtime);
+    attempts = 0;
+}
+
 static void tuple_compiler_failures(void) {
     XrLirModule *module = tuple_fixture();
     XrLirFunction root = {module, 1};
@@ -1011,6 +1048,7 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #include "lir_string_alloc_cases.h"
 
 int main(void) {
+    composition_compiler_failures();
     tuple_compiler_failures();
     typed_edge_spill_cycles();
     string_reference_compiler_failures();

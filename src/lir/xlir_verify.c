@@ -370,7 +370,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (v->type != XR_LIR_STRING || !v->bits || v->bits > m->literal_count) goto invalid;
         return XR_LIR_OK;
     }
-    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
+    if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN) {
         if (!xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
@@ -378,6 +378,12 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
+        for (uint32_t p = 0; p < callee->callable_parameter_count; ++p) {
+            XrLirFunctionCallableParameter parameter = callee->callable_parameters[p];
+            if ((parameter.contract.escaping || parameter.parameter < callee->closure.capture_count) &&
+                parameter.parameter < v->operand_count &&
+                !xr_lir_internal_callable_persistent(m, f, v->operands[parameter.parameter])) goto invalid;
+        }
         if (!lir_signature_matches(m, f, v, callee->parameter_types, callee->parameter_count,
                                    callee->result))
             goto invalid;
