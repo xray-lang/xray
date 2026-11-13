@@ -10,8 +10,8 @@
  *   Source normalization updates an existing physical value's conversion.
  *   Constants and formal leaves remain equation inputs.
  */
-XR_FUNC XrXirStatus xir_effects_construction_weaken(const XrXirCompileContext *memory,
-    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t mask,bool may_suspend) {
+XR_FUNC XrXirStatus xir_effects_construction_value_bound(const XrXirCompileContext *memory,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t mask) {
     EffectCheckedRoots *roots = effects ? effects->checked_roots : NULL;
     if (!roots || !xir_effects_prepared_execution(effects) ||
         !xir_effects_context_matches(memory,effects,effects->count) || function >= roots->templates ||
@@ -19,24 +19,52 @@ XR_FUNC XrXirStatus xir_effects_construction_weaken(const XrXirCompileContext *m
     EffectCheckFunction row = roots->function[function];
     if (instruction >= row.values-row.parameters) return XR_XIR_BAD_STRUCTURE;
     EffectCheckNode *node = &roots->node[row.first+row.parameters+instruction];
+    if (!node->type_bound) return XR_XIR_OK;
     uint8_t bound = (mask & XR_XIR_CALLABLE_ROOT_REQUIRED ? 1u : 0u) |
         (mask & XR_XIR_CALLABLE_ROOT_UNRESOLVED ? 2u : 0u);
-    if (node->weaken && !node->refined_weaken && node->root_seed == bound) return XR_XIR_OK;
-    if (node->refined_weaken && node->bound == bound && node->suspend_bound == may_suspend) return XR_XIR_OK;
-    node->refined_weaken = true;
+    if ((!node->refined_type_bound && node->root_seed == bound) ||
+        (node->refined_type_bound && node->bound == bound)) return XR_XIR_OK;
+    node->refined_type_bound = true;
+    node->bound = bound;
+    roots->refinement_dirty = true;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_construction_conversion(const XrXirCompileContext *memory,
+    const XrXirEffects *effects,uint32_t function,uint32_t instruction,const XirEffectConversion *conversion) {
+    EffectCheckedRoots *roots = effects ? effects->checked_roots : NULL;
+    if (!roots || !xir_effects_prepared_execution(effects) ||
+        !xir_effects_context_matches(memory,effects,effects->count) || function >= roots->templates ||
+        !conversion || (conversion->operation != XR_XIR_COPY && conversion->operation != XR_XIR_FUNCTION_WEAKEN) ||
+        (conversion->root_mask & ~(XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED))) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckFunction row = roots->function[function];
+    if (instruction >= row.values-row.parameters) return XR_XIR_BAD_STRUCTURE;
+    EffectCheckNode *node = &roots->node[row.first+row.parameters+instruction];
+    if (!node->conversion) return XR_XIR_BAD_STRUCTURE;
+    bool weaken = conversion->operation == XR_XIR_FUNCTION_WEAKEN;
+    uint8_t kind = weaken ? EFFECT_CHECK_CONVERSION_WEAKEN : EFFECT_CHECK_CONVERSION_COPY;
+    uint8_t bound = weaken ? (conversion->root_mask & XR_XIR_CALLABLE_ROOT_REQUIRED ? 1u : 0u) |
+        (conversion->root_mask & XR_XIR_CALLABLE_ROOT_UNRESOLVED ? 2u : 0u) : 0;
+    bool may_suspend = weaken && conversion->may_suspend;
+    if ((!node->refined_conversion && !weaken && !node->weaken) ||
+        (node->refined_conversion == kind && node->bound == bound && node->suspend_bound == may_suspend)) return XR_XIR_OK;
+    node->refined_conversion = kind;
     node->bound = bound;
     node->suspend_bound = may_suspend;
     roots->refinement_dirty = true;
     return XR_XIR_OK;
 }
 
-static void effect_refinement_weakening(EffectCheckedRoots *roots,uint32_t function,
+static void effect_refinement_conversion(EffectCheckedRoots *roots,uint32_t function,
     uint32_t value,const EffectCheckNode *source) {
     EffectCheckFunction row = roots->function[function];
     uint8_t bound = source->bound, suspend_bound = source->suspend_bound;
+    bool weaken = source->refined_conversion == EFFECT_CHECK_CONVERSION_WEAKEN;
     uint32_t id = row.first+value;
     EffectCheckNode *node = &roots->node[id];
-    node->weaken = node->erased = true;
+    /* Only originally callable COPY/WEAKEN nodes accept conversion deltas.
+     * Generic storage erasure belongs to other nodes and remains intact. */
+    node->weaken = node->erased = weaken;
     node->bound = bound;
     node->suspend_bound = suspend_bound;
     node->root_seed = 0;
@@ -44,11 +72,11 @@ static void effect_refinement_weakening(EffectCheckedRoots *roots,uint32_t funct
         value-row.parameters,UINT32_MAX,UINT32_MAX,0});
     bool precise_suspend = node->restricted || row.default_callback;
     for (uint32_t a = node->aliases; a != UINT32_MAX; a = roots->alias[a].next) {
-        roots->alias[a].root = false;
-        roots->alias[a].suspension = precise_suspend;
+        roots->alias[a].root = !weaken;
+        roots->alias[a].suspension = !weaken || precise_suspend;
     }
     node->suspend_seed = 0;
-    if (!precise_suspend && suspend_bound)
+    if (weaken && !precise_suspend && suspend_bound)
         effect_check_suspend_seed(roots,id,suspend_bound,value-row.parameters);
 }
 
@@ -111,7 +139,13 @@ XR_FUNC XrXirStatus xir_effects_construction_close(const XrXirCompileContext *me
         EffectCheckFunction row = roots->function[f], declaration = roots->function[row.declaration];
         for (uint32_t v = row.parameters; v < row.values; ++v) {
             const EffectCheckNode *source = &roots->node[declaration.first+v];
-            if (source->refined_weaken) effect_refinement_weakening(roots,f,v,source);
+            if (source->refined_conversion) effect_refinement_conversion(roots,f,v,source);
+            if (source->refined_type_bound) {
+                uint32_t id = row.first+v;
+                roots->node[id].root_seed = 0;
+                effect_check_seed(roots,id,source->bound,(XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT,
+                    v-row.parameters,UINT32_MAX,UINT32_MAX,0});
+            }
         }
     }
     effect_refinement_reset(roots);

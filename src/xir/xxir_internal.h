@@ -100,8 +100,18 @@ XR_FUNC XrXirStatus xir_effects_construction_reference(const XrXirCompileContext
     const XrXirEffects *effects,uint32_t function,uint32_t instruction,uint32_t *output);
 /* Source emits only changed conversion metadata to its unpublished equations.
  * Closing consumes those changes on the same dependency owner. */
-XR_FUNC XrXirStatus xir_effects_construction_weaken(const XrXirCompileContext *,
-    const XrXirEffects *,uint32_t function,uint32_t instruction,uint32_t root_mask,bool may_suspend);
+typedef struct XirEffectConversion {
+    XrXirOp operation;
+    uint32_t root_mask;
+    bool may_suspend;
+} XirEffectConversion;
+XR_FUNC XrXirStatus xir_effects_construction_conversion(const XrXirCompileContext *,
+    const XrXirEffects *,uint32_t function,uint32_t instruction,const XirEffectConversion *);
+/* Only constants emitted from the actual value's callable type accept a new
+ * bound. Parameter, generic storage and independently seeded facts stay owned
+ * by their original producers. */
+XR_FUNC XrXirStatus xir_effects_construction_value_bound(const XrXirCompileContext *,
+    const XrXirEffects *,uint32_t function,uint32_t instruction,uint32_t root_mask);
 XR_FUNC XrXirStatus xir_effects_construction_close(const XrXirCompileContext *,
     const XrXirEffects *,XrCompileRequestControl *);
 /* A ledger identity guard grants no source, type or execution proof. */

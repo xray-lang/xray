@@ -13,6 +13,12 @@ static bool source_root_set(SourceContext *ctx, uint32_t function, uint32_t inst
     XrXirType type, bool *changed) {
     XrXirInstruction *op = (XrXirInstruction *)ctx->functions[function].instructions + instruction;
     if (op->type != type) { op->type = type; *changed = true; }
+    const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,type);
+    if (signature) {
+        XrXirStatus status = xir_effects_construction_value_bound(&ctx->compile,ctx->root_refinement,
+            function,instruction,signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED));
+        if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"callable value bound metadata is unavailable");
+    }
     return source_effect_value_refresh(ctx,function,instruction);
 }
 static bool source_root_join_type(SourceContext *ctx, XrXirType left,
@@ -51,11 +57,12 @@ static bool source_root_copy_bound(SourceContext *ctx, uint32_t f, uint32_t valu
         operation = XR_XIR_FUNCTION_WEAKEN;
     }
     if (op->op != operation) { op->op = operation; *changed = true; }
-    if (operation == XR_XIR_FUNCTION_WEAKEN) {
-        const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,bound);
-        XrXirStatus status = xir_effects_construction_weaken(&ctx->compile,ctx->root_refinement,f,i,
+    const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,bound);
+    if (signature) {
+        XirEffectConversion conversion = {operation,
             signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED),
-            !(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND));
+            !(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND)};
+        XrXirStatus status = xir_effects_construction_conversion(&ctx->compile,ctx->root_refinement,f,i,&conversion);
         if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"callable conversion metadata is unavailable");
     }
     return source_root_set(ctx,f,i,bound,changed);
