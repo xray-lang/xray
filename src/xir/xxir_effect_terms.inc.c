@@ -165,8 +165,8 @@ static uint32_t effect_term_hash(const XrXirTypeNode *node) {
     uint32_t hash=xr_hash_bytes(fields,sizeof(fields));
     for (uint32_t p=0;p<xr_xir_type_parameter_slots(node);++p) {
         const XrXirCallableParameter *parameter=&node->parameters[p];
-        const uint32_t fields[]={parameter->type,parameter->mode,parameter->escaping};
-        hash=xr_hash_bytes_update(hash,fields,sizeof(fields));
+        const uint32_t parameter_fields[]={parameter->type,parameter->mode,parameter->escaping};
+        hash=xr_hash_bytes_update(hash,parameter_fields,sizeof(parameter_fields));
     }
     return xr_hash_bytes_update(hash,node->nominal.arguments,
         (size_t)node->nominal.argument_count*sizeof(*node->nominal.arguments));
