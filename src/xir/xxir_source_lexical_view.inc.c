@@ -28,11 +28,14 @@ static bool source_view_lexical(SourceContext *ctx, const XirViewNormalization *
             XirLexicalEvent *event=&events[e];
             if (!source_view_value(ctx,map,parameters,&event->value)) return false;
             bool retiring=event->kind==XIR_LEXICAL_LEAVE || event->kind==XIR_LEXICAL_TEMP_END;
+            bool instruction_trigger=retiring || event->kind==XIR_LEXICAL_RETURN ||
+                event->kind==XIR_LEXICAL_BREAK || event->kind==XIR_LEXICAL_CONTINUE;
             bool value_completion=event->kind==XIR_LEXICAL_BIND || event->kind==XIR_LEXICAL_REPLACE ||
                 event->kind==XIR_LEXICAL_TAKE;
             if (event->position==XIR_LEXICAL_BLOCK_ENTRY) {
                 if (event->block>=normalization->bodies[f].block_count) return false;
-                if (retiring) {
+                /* Transfers retain their actual operation after inserted loan cleanup. */
+                if (instruction_trigger) {
                     if (!source_view_instruction(ctx,map,parameters,&event->instruction)) return false;
                     event->position=XIR_LEXICAL_BEFORE;
                 } else event->instruction=normalization->bodies[f].blocks[event->block].first;

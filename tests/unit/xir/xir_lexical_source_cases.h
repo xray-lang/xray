@@ -68,6 +68,10 @@ static void lexical_source_expectations(const XrXirArtifact *artifact) {
         }
         for (uint32_t e=0;e<directory.event_count;++e) {
             XirLexicalEvent event=directory.events[e];
+            XrXirOp operation=function->instructions[event.instruction].op;
+            if (event.kind==XIR_LEXICAL_RETURN) CHECK(operation==XR_XIR_RETURN);
+            if (event.kind==XIR_LEXICAL_BREAK || event.kind==XIR_LEXICAL_CONTINUE)
+                CHECK(operation==XR_XIR_JUMP || operation==XR_XIR_CLEANUP_LEAVE);
             returned|=event.kind==XIR_LEXICAL_RETURN && event.target==UINT32_MAX &&
                 function->instructions[event.instruction].op==XR_XIR_RETURN;
             inner|=event.kind==XIR_LEXICAL_ENTER && event.scope>1;
