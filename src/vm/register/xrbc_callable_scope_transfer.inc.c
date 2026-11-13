@@ -22,6 +22,13 @@ static uint32_t rbc_scope_current(const RbcStringAdmission *state) {
     const uint32_t *scopes = rbc_scope_state(state);
     return scopes ? scopes[0] : 0;
 }
+static bool rbc_scope_captured_cells(const XrRbcFunction *function) {
+    for (uint32_t r = 0; r < function->register_count; ++r) {
+        XrRbcRegisterKind kind = rbc_register_kind(function, r);
+        if (kind == XR_RBC_CAPTURED_I64_CELL || kind == XR_RBC_CAPTURED_I64_BORROW) return true;
+    }
+    return false;
+}
 static void rbc_scope_define(RbcStringAdmission *state, uint32_t reg, uint32_t scope) {
     uint32_t *scopes = rbc_scope_state(state);
     if (scopes) scopes[reg + 1] = scope;
@@ -58,9 +65,10 @@ static bool rbc_callable_scope_transfer(RbcStringAdmission *state, XrRbcAggregat
     }
     uint32_t receiving = access.destination;
     uint32_t borrowed = access.count ? scopes[access.source + 1] : 0;
+    bool borrowed_cells = kind == RBC_FUNCTION && rbc_scope_captured_cells(state->function);
     if (access.operation == XR_RBC_FUNCTION_SCOPE_LEAVE && access.destination == current)
         receiving = shape.parents[current - 1];
-    if (kind == RBC_FUNCTION && !rbc_scope_contains(shape, borrowed, receiving)) return false;
+    if (borrowed_cells && !rbc_scope_contains(shape, borrowed, receiving)) return false;
     if (access.operation == XR_RBC_FUNCTION_SCOPE_LEAVE) {
         if (access.destination != current) return false;
         receiving = shape.parents[current - 1];
@@ -74,7 +82,7 @@ static bool rbc_callable_scope_transfer(RbcStringAdmission *state, XrRbcAggregat
         if (state->state[r] != RBC_EMPTY && !rbc_function_state(state->state[r])) return false;
         state->state[r] = kind;
         state->origin[r] = signature;
-        scopes[r + 1] = kind == RBC_FUNCTION ? borrowed : receiving;
+        scopes[r + 1] = borrowed_cells ? borrowed : receiving;
     }
     return true;
 }

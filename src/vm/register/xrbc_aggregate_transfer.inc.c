@@ -163,7 +163,8 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
         s->state[r] = access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE || !access.destination ?
             RBC_FUNCTION_OWNED : RBC_FUNCTION;
         s->origin[r] = access.slot;
-        rbc_scope_define(s, r, s->state[r] == RBC_FUNCTION ? frame_scope : rbc_scope_current(s));
+        rbc_scope_define(s, r, s->state[r] == RBC_FUNCTION && rbc_scope_captured_cells(s->function) ?
+            frame_scope : rbc_scope_current(s));
         return true;
     }
     if (access.operation == XR_RBC_FUNCTION_CALL) {

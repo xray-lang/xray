@@ -6,15 +6,21 @@ static void callable_owned_edge_binding(void) {
     XrLirType callable = 0;
     OK(xr_lir_callable_type(c.module, &signature, &callable));
     XrLirFunction target = {0}, root = {0};
-    XrLirFunctionSpec spec = {.name="answer", .name_length=6, .result=XR_LIR_I64};
+    XrLirType capture_type = XR_LIR_I64;
+    XrLirFunctionSpec spec = {.name="answer", .name_length=6,
+        .parameters=&capture_type, .parameter_count=1, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module, &spec, &target));
-    OK(xr_lir_set_closure_target(c.module, target, (XrLirClosureTarget){callable, 0, false}));
+    OK(xr_lir_set_closure_target(c.module, target, (XrLirClosureTarget){callable, 1, false}));
     OK(xr_lir_define_function(c.module, target));
     XrLirBlock block;
     OK(xr_lir_add_block(c.module, target, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, target, block));
-    ca_return(&c, block, ca_constant(&c, block, 42));
-    spec = (XrLirFunctionSpec){.name="root", .name_length=4, .result=XR_LIR_I64};
+    XrLirValue seed;
+    OK(xr_lir_function_parameter(c.module, target, 0, &seed));
+    ca_return(&c, block, seed);
+    XrLirType condition_type = XR_LIR_I1;
+    spec = (XrLirFunctionSpec){.name="root", .name_length=4,
+        .parameters=&condition_type, .parameter_count=1, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module, &spec, &root));
     OK(xr_lir_define_function(c.module, root));
     OK(xr_lir_add_block(c.module, root, NULL, 0, &block));
@@ -23,12 +29,17 @@ static void callable_owned_edge_binding(void) {
     OK(xr_lir_add_block(c.module, root, &callable, 1, &receiving));
     XrLirValue outer = callable_fixture_scope(&c, block, (XrLirValue){0});
     XrLirValue inner = callable_fixture_scope(&c, block, outer);
+    seed = ca_constant(&c, block, 42);
     XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=callable,
-        .callee=target, .bits=XR_LIR_CLOSURE_OWNED};
-    XrLirValue value;
+        .callee=target, .bits=XR_LIR_CLOSURE_OWNED, .operands=&seed, .operand_count=1};
+    XrLirValue value, frame, condition;
     OK(xr_lir_emit_value(c.module, block, &reference, &value));
-    XrLirInstruction branch = {.op=XR_LIR_BR, .type=XR_LIR_UNIT,
-        .edge_count=1, .edges={{receiving, &value, 1}}};
+    reference.bits = XR_LIR_CLOSURE_FRAME;
+    OK(xr_lir_emit_value(c.module, block, &reference, &frame));
+    OK(xr_lir_function_parameter(c.module, root, 0, &condition));
+    XrLirInstruction branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT,
+        .operands=&condition, .operand_count=1,
+        .edge_count=2, .edges={{receiving, &value, 1}, {receiving, &frame, 1}}};
     OK(xr_lir_set_terminator(c.module, block, &branch));
     OK(xr_lir_block_parameter(c.module, receiving, 0, &value));
     XrLirValue operands[] = {outer, value};
@@ -40,16 +51,23 @@ static void callable_owned_edge_binding(void) {
     ca_return(&c, receiving, result);
     OK(xr_lir_module_finish(c.module, NULL));
     XrRbcProgram *program = NULL;
-    CHECK(xr_rbc_compile(c.module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcCompileDiagnostic diagnostic = {0};
+    XrRbcCompileStatus compiled = xr_rbc_compile(c.module, root, &program, &diagnostic);
+    if (compiled != XR_RBC_COMPILE_OK)
+        fprintf(stderr, "mixed scalar Frame/Owned edge compile=%u %s\n", (unsigned)compiled, diagnostic.message);
+    CHECK(compiled == XR_RBC_COMPILE_OK);
+    XrRbcExecution *executions[2] = {0};
+    for (uint64_t n = 0; n < 2; ++n)
+        CHECK(xr_rbc_program_prepare(program, &n, 1, &executions[n]) == XR_RBC_OK);
     xr_lir_module_destroy(c.module);
     xr_rbc_program_destroy(program);
-    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-    uint64_t bits = 0;
-    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
-    xr_rbc_execution_free(&execution);
-    xr_rbc_outcome_free(&outcome);
+    for (unsigned n = 0; n < 2; ++n) {
+        XrRbcOutcome *outcome = xr_rbc_execution_run(executions[n]);
+        uint64_t bits = 0;
+        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
+        xr_rbc_execution_free(&executions[n]);
+        xr_rbc_outcome_free(&outcome);
+    }
 }
 
 static void captured_cell_frame_raw(const XrRbcProgram *program) {
