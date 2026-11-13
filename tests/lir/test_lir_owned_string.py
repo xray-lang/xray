@@ -162,6 +162,17 @@ def main():
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
              ('loop-branches', args.source_root / 'tests/lir/programs/owned-string-loop-branches.xr', b'left0\nright1\nright2\n'),
              ('sequential', args.source_root / 'tests/lir/programs/owned-string-sequential.xr', b'L-1\nlow-1\nR3\nhigh3\n')]
+    loop_programs = [
+        ('managed-loop', 'fn repeat(n:i64)->string{var text="";var i=0;while(i<n){text="v${i}";i=i+1};return text}\nprint(repeat(2))\n',
+         b'v1\n'),
+        ('loop-alias', 'fn alias(n:i64){const text="seed${n}";var i=0;while(i<n){print(text);i=i+1}}\nalias(2)\n',
+         b'seed2\nseed2\n'),
+        ('loop-parameter', 'fn show(text:string){var i=0;while(i<2){print(text);i=i+1}}\nshow("kept")\n',
+         b'kept\nkept\n')]
+    for name, text, expected in loop_programs:
+        source = root / (name + '.xr')
+        source.write_text(text, encoding='utf-8')
+        cases.append((name, source, expected))
     frame_programs = {
         'frame-branches': ('var left="é\\0"\nvar right=""\nvar i=0\n'
             'while(i<4){if(i<2){left=left+"!"}else{right=right+"/"}\ni=i+1}\n'
@@ -174,7 +185,7 @@ def main():
             'fn recurse(n:i64)->i64{if(n==0){return len(text)}\nreturn frame(n-1)}\n'
             'print(recurse(80))\nprint(text)\n', b'405\nouter\n', 80),
     }
-    frame_drops = {'original-parameter':0}
+    frame_drops = {'original-parameter':0, 'managed-loop':0, 'loop-alias':0, 'loop-parameter':0}
     for name,(text,expected,drops) in frame_programs.items():
         source=root/(name+'.xr');source.write_text(text,encoding='utf-8')
         cases.append((name,source,expected));frame_drops[name]=drops
@@ -297,24 +308,6 @@ def main():
         child.mkdir()
         for optimization in ('Od', 'O2'):
             compile_run(child, folder / (variant + '.c'), main, optimization, b'')
-    loop = root / 'managed-loop.xr'
-    loop.write_text('fn repeat(n:i64)->string{var text="";var i=0;while(i<n){text="v${i}";i=i+1};return text}\nprint(repeat(2))\n', encoding='utf-8')
-    generated = root / 'managed-loop.c'
-    result = run('managed-loop-refusal', [args.source_driver, loop, generated])
-    assert result.returncode == 1 and not result.stdout and not generated.exists()
-    assert result.stderr.splitlines() == [b'lowering: loop-carried managed String transfer is not supported by LIR lowering yet']
-    aliases = [
-        ('loop-alias', 'fn alias(n:i64){const text="seed${n}";var i=0;while(i<n){print(text);i=i+1}}\nalias(2)\n',
-         b'String alias across blocks without owned parameters'),
-        ('loop-parameter', 'fn show(text:string){var i=0;while(i<2){print(text);i=i+1}}\nshow("kept")\n',
-         b'String parameter across a loop')]
-    for name, text, reason in aliases:
-        source = root / (name + '.xr')
-        source.write_text(text, encoding='utf-8')
-        generated = root / (name + '.c')
-        result = run(name + '-refusal', [args.source_driver, source, generated])
-        assert result.returncode == 1 and not result.stdout and not generated.exists()
-        assert reason in result.stderr, (name, result.stderr)
     folder = root / 'literal-only-loop'
     folder.mkdir()
     source = folder / 'literal-only-loop.xr'
