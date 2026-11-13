@@ -628,6 +628,16 @@ static void jump_compaction(void) {
     compiler.code_count = 2;
     CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
     CHECK(rbc_lir_jump_target(&compiler, 0) == 0 && live_allocations == live);
+    const XrRbcAggregateOperation returns[] = {XR_RBC_AGGREGATE_RETURN, XR_RBC_FUNCTION_RETURN};
+    for (size_t n = 0; n < sizeof(returns) / sizeof(returns[0]); ++n) {
+        XrRbcAggregateAccess access = {.operation = returns[n]};
+        CHECK(xr_rbc_jump(&code[0], 0, 1, 2));
+        CHECK(xr_rbc_encode(&code[1], (XrRbcOperands){XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, 0}));
+        compiler.code_count = 2;
+        compiler.aggregate_accesses = &access;
+        CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
+        CHECK((code[0] & 255) == XR_RBC_AGGREGATE_ACCESS && live_allocations == live);
+    }
     attempts = 0;
 }
 
