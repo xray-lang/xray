@@ -132,7 +132,7 @@ typedef struct XirFixedArray {
 typedef struct XirHash {
     XirObject object;
     XrXirType key_type, value_type;
-    size_t length, capacity;
+    size_t length, capacity, order_count;
     uint32_t key_offset, value_offset, stride, release_capacity;
     unsigned char *data;
 } XirHash;

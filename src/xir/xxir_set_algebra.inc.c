@@ -21,9 +21,12 @@ static XrXirValueStatus set_select(const SetSelection *selection, XirHash *resul
     XrXirLayout layout = {0};
     if (!xr_xir_compile_type_arena_layout(source->object.arena, source->key_type, &layout))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    for (size_t i = 0; i < source->length; ++i) {
-        XrXirValueStatus status = hash_charge(admission, 1);
+    for (size_t ordinal = 0; ordinal < source->length; ++ordinal) {
+        XrXirValueStatus status = hash_charge(admission,
+            hash_order_work(source->capacity) + hash_order_work(result->capacity));
         if (status != XR_XIR_VALUE_OK) return status;
+        size_t i = hash_order_entry(source, ordinal);
+        if (i == SIZE_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (selection->filtered) {
             XrXirValue key={0};
             if (!storage_leaf_value(source->object.arena,source->key_type,hash_span(source,i,false).bytes,
@@ -40,7 +43,9 @@ static XrXirValueStatus set_select(const SetSelection *selection, XirHash *resul
                 (unsigned char *)hash_span(result, index, false).bytes);
         if (status != XR_XIR_VALUE_OK) return status;
         memcpy(hash_entry(result, index), &hash, sizeof(hash));
-        hash_buckets(result)[bucket] = index + 1; ++result->length;
+        hash_buckets(result)[bucket] = index + 1;
+        hash_order_append(result, index);
+        ++result->length;
     }
     return XR_XIR_VALUE_OK;
 }

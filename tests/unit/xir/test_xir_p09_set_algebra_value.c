@@ -67,14 +67,16 @@ static void algebra_value_faults(unsigned operation, const XrXirValue *left,
     else CHECK(result.type == XR_XIR_BOOL && !result.payload);
     xr_xir_value_drop(&result); CHECK(live == baseline);
     XirHash *a = (XirHash *)object_pointer(left), *b = (XirHash *)object_pointer(right);
-    size_t size = 0; CHECK(hash_data_size(a->capacity, a->stride, &size) && size == 192);
-    unsigned char saved_a[192], saved_b[192]; memcpy(saved_a, a->data, size); memcpy(saved_b, b->data, size);
+    size_t order_a = a->order_count, order_b = b->order_count;
+    size_t size = 0; CHECK(hash_data_size(a->capacity, a->stride, &size) && size == 384);
+    unsigned char saved_a[384], saved_b[384]; memcpy(saved_a, a->data, size); memcpy(saved_b, b->data, size);
     if (full) for (size_t point = 0; point < points; ++point) {
         admission->work = initial; fail_at = value_allocation_calls + point;
         CHECK(algebra_value_operation(operation, left, right, admission, &result) == XR_XIR_VALUE_OOM && value_allocation_calls > fail_at);
         fail_at = SIZE_MAX;
         CHECK(!result.type && !result.reserved && !result.payload && live == baseline);
-        CHECK(!memcmp(saved_a, a->data, size) && !memcmp(saved_b, b->data, size));
+        CHECK(a->order_count == order_a && b->order_count == order_b &&
+            !memcmp(saved_a, a->data, size) && !memcmp(saved_b, b->data, size));
         admission->work = initial;
         CHECK(algebra_value_operation(operation, left, right, admission, &result) == XR_XIR_VALUE_OK);
         xr_xir_value_drop(&result); CHECK(live == baseline);
@@ -83,7 +85,8 @@ static void algebra_value_faults(unsigned operation, const XrXirValue *left,
         admission->work = prefix;
         CHECK(algebra_value_operation(operation, left, right, admission, &result) ==
             (prefix == exact ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT));
-        CHECK(!memcmp(saved_a, a->data, size) && !memcmp(saved_b, b->data, size));
+        CHECK(a->order_count == order_a && b->order_count == order_b &&
+            !memcmp(saved_a, a->data, size) && !memcmp(saved_b, b->data, size));
         xr_xir_value_drop(&result); CHECK(live == baseline);
     }
     printf("Set algebra operation=%u actual allocation sites=%zu exact work=%llu mode=%s input/physical preservation PASS\n",

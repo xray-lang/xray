@@ -31,7 +31,7 @@ static void map_value_probe(unsigned id,const XrXirValue *map,const XrXirValue *
     CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OK && output==expected);
     size_t points=value_allocation_calls-before;uint64_t exact=initial-admission->work;
     CHECK(exact>0 && live==baseline && admission->scratch_bytes==scratch);
-    XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0;
+    XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0,order_count=hash->order_count;
     CHECK(hash_data_size(hash->capacity,hash->stride,&bytes) && bytes<=512);
     unsigned char saved[512];if(bytes)memcpy(saved,hash->data,bytes);
     if(full)for(size_t point=0;point<points;++point) {
@@ -39,7 +39,7 @@ static void map_value_probe(unsigned id,const XrXirValue *map,const XrXirValue *
         CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OOM && value_allocation_calls>fail_at);
         fail_at=SIZE_MAX;
         CHECK(output==!expected && live==baseline && admission->scratch_bytes==scratch);
-        CHECK(!bytes || !memcmp(saved,hash->data,bytes));
+        CHECK(hash->order_count==order_count && (!bytes || !memcmp(saved,hash->data,bytes)));
         admission->work=initial;
         CHECK(xr_xir_map_contains_value(map,query,admission,&output)==XR_XIR_VALUE_OK && output==expected);
         CHECK(live==baseline && admission->scratch_bytes==scratch);
@@ -48,7 +48,8 @@ static void map_value_probe(unsigned id,const XrXirValue *map,const XrXirValue *
         admission->work=prefix;output=!expected;
         CHECK(xr_xir_map_contains_value(map,query,admission,&output)==(prefix==exact?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT));
         CHECK(output==(prefix==exact?expected:!expected));
-        CHECK(live==baseline && admission->scratch_bytes==scratch && (!bytes || !memcmp(saved,hash->data,bytes)));
+        CHECK(live==baseline && admission->scratch_bytes==scratch && hash->order_count==order_count &&
+            (!bytes || !memcmp(saved,hash->data,bytes)));
     }
     printf("Map value query=%u expected=%u allocations=%zu exact_work=%llu mode=%s input/refund PASS\n",
         id,(unsigned)expected,points,(unsigned long long)exact,full?"full":"baseline");

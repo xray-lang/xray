@@ -20,9 +20,11 @@ static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, const
     status = storage_pack_begin(admission, source->key_type, &key);
     if (status == XR_XIR_VALUE_OK) status = storage_pack_begin(admission, source->value_type, &value);
     if (status == XR_XIR_VALUE_OK) {
-        for (size_t i = 0; i < source->length; ++i) {
+        for (size_t ordinal = 0; ordinal < source->length; ++ordinal) {
+            size_t i = hash_order_entry(source, ordinal);
+            if (i == SIZE_MAX) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
             if (edit && i == edit->omit) continue;
-            status = hash_charge(admission, 1);
+            status = hash_charge(admission, hash_order_work(source->capacity) + hash_order_work(capacity));
             if (status != XR_XIR_VALUE_OK) break;
             size_t index = copy->length;
             status = storage_pack_copy(&key, hash_span(source, i, false).bytes,
@@ -39,7 +41,9 @@ static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, const
                 break;
             }
             uint64_t hash = hash_entry_hash(source, i);
-            memcpy(hash_entry(copy, index), &hash, sizeof(hash)); ++copy->length;
+            memcpy(hash_entry(copy, index), &hash, sizeof(hash));
+            hash_order_append(copy, index);
+            ++copy->length;
             status = hash_index_insert(copy, index, admission);
             if (status != XR_XIR_VALUE_OK) break;
         }
@@ -52,10 +56,17 @@ static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, const
  * ownership only after all probes and work debits have succeeded. */
 static XrXirValueStatus hash_relocate(const XirHash *source, XirHash *target,
     XrXirValueAdmission *admission) {
-    XrXirValueStatus status = hash_charge(admission, source->length);
+    uint64_t per_entry = hash_order_work(source->capacity) + hash_order_work(target->capacity) + 1;
+    if (source->length > UINT64_MAX / per_entry) return XR_XIR_VALUE_LIMIT;
+    XrXirValueStatus status = hash_charge(admission, source->length * per_entry);
     if (status != XR_XIR_VALUE_OK) return status;
     for (size_t i = 0; i < source->length; ++i) {
         memcpy(hash_entry(target, i), hash_entry(source, i), source->stride);
+    }
+    for (size_t ordinal = 0; ordinal < source->length; ++ordinal) {
+        size_t i = hash_order_entry(source, ordinal);
+        if (i == SIZE_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+        hash_order_append(target, i);
         status = hash_index_insert(target, i, admission);
         if (status != XR_XIR_VALUE_OK) return status;
     }
@@ -66,17 +77,18 @@ static XrXirValueStatus hash_grow(XirHash *map, size_t capacity, uint64_t hash,
     size_t bytes = 0, previous = 0;
     if (!hash_data_size(capacity, map->stride, &bytes) ||
         !hash_data_size(map->capacity, map->stride, &previous)) return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status = hash_charge(admission, capacity);
+    XrXirValueStatus status = hash_charge(admission, (uint64_t)capacity * 3);
     if (status != XR_XIR_VALUE_OK) return status;
     unsigned char *data = xr_xir_domain_allocate(admission->domain, bytes, &status);
     if (!data) return status;
     memset(data, 0, capacity * sizeof(uint64_t));
     XirHash backing = {.capacity = capacity, .stride = map->stride, .data = data};
+    memset(hash_order(&backing), 0, capacity * 2 * sizeof(uint64_t));
     status = hash_relocate(map, &backing, admission);
     if (status == XR_XIR_VALUE_OK) status = hash_empty_bucket(&backing, hash, admission, bucket);
     if (status != XR_XIR_VALUE_OK) { xr_xir_domain_deallocate(admission->domain, data, bytes); return status; }
     unsigned char *old = map->data;
-    map->data = data; map->capacity = capacity;
+    map->data = data; map->capacity = capacity; map->order_count = backing.order_count;
     if (old) xr_xir_domain_deallocate(admission->domain, old, previous);
     return XR_XIR_VALUE_OK;
 }

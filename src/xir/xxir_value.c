@@ -2028,7 +2028,8 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
         if (object && (object->kind==XR_XIR_TYPE_MAP || object->kind==XR_XIR_TYPE_SET)) {
             const XirHash *hash=(const XirHash *)object;bool map=object->kind==XR_XIR_TYPE_MAP;
             size_t ordinal=map?index/2:index;if (ordinal>=hash->length) return false;
-            StorageSpan span=hash_span(hash,ordinal,map && (index&1));
+            size_t entry=hash_order_entry(hash,ordinal);if (entry==SIZE_MAX) return false;
+            StorageSpan span=hash_span(hash,entry,map && (index&1));
             *output=(XrXirFormatCursor){span.bytes,hash->object.arena,span.type,true,NULL};return true;
         }
     }

@@ -20,21 +20,22 @@ static void position_faults(bool values,const XrXirValue *map,XrXirValueAdmissio
     CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OK);
     size_t points=value_allocation_calls-before;uint64_t exact=initial-admission->work;CHECK(exact && !fault.code);
     xr_xir_value_drop(&result);CHECK(live==baseline && admission->scratch_bytes==scratch);
-    XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0;
+    XirHash *hash=(XirHash *)object_pointer(map);size_t bytes=0,order_count=hash->order_count;
     CHECK(hash_data_size(hash->capacity,hash->stride,&bytes) && bytes<=512);
     unsigned char saved[512];if(bytes)memcpy(saved,hash->data,bytes);
     if(full)for(size_t point=0;point<points;++point) {
         admission->work=initial;fail_at=value_allocation_calls+point;
         CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OOM && value_allocation_calls>fail_at);fail_at=SIZE_MAX;
         CHECK(!result.type && !result.reserved && !result.payload && !fault.code && live==baseline && admission->scratch_bytes==scratch);
-        CHECK(!bytes || !memcmp(saved,hash->data,bytes));admission->work=initial;
+        CHECK(hash->order_count==order_count && (!bytes || !memcmp(saved,hash->data,bytes)));admission->work=initial;
         CHECK(position_read(values,map,0,admission,&result,&fault)==XR_XIR_VALUE_OK);xr_xir_value_drop(&result);CHECK(live==baseline);
     }
     for(uint64_t prefix=full?0:exact-1;prefix<=exact;++prefix) {
         admission->work=prefix;
         CHECK(position_read(values,map,0,admission,&result,&fault)==(prefix==exact?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT));
         if(prefix!=exact)CHECK(!result.type && !result.reserved && !result.payload);
-        xr_xir_value_drop(&result);CHECK(live==baseline && admission->scratch_bytes==scratch && (!bytes || !memcmp(saved,hash->data,bytes)));
+        xr_xir_value_drop(&result);CHECK(live==baseline && admission->scratch_bytes==scratch &&
+            hash->order_count==order_count && (!bytes || !memcmp(saved,hash->data,bytes)));
     }
     printf("hash ordinal values=%u type=%u allocations=%zu exact_work=%llu mode=%s input/refund PASS\n",(unsigned)values,map->type,points,(unsigned long long)exact,full?"full":"baseline");admission->work=initial;
 }
