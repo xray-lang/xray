@@ -211,10 +211,14 @@ XR_RBC_CASE(ADD) {
     XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
     XR_RBC_NEXT();
 }
-XR_RBC_CASE(ADDI)
+XR_RBC_CASE(ADDI) {
+    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
+    XR_RBC_REG(a) = XR_RBC_REG(b) + value;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(SUBI) {
     uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
-    XR_RBC_REG(a) = op == XR_RBC_ADDI ? XR_RBC_REG(b) + value : XR_RBC_REG(b) - value;
+    XR_RBC_REG(a) = XR_RBC_REG(b) - value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SUB) {
