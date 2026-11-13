@@ -14,6 +14,7 @@ static size_t native_array_calls, native_array_live, native_array_bytes;
 static size_t native_array_fail_at = SIZE_MAX;
 static bool native_array_injected, native_array_pending_failure;
 static void (*native_array_before_allocate)(void);
+static void (*native_array_before_free)(void);
 static bool native_array_fail(void) {
     if (native_array_before_allocate) {
         void (*observe)(void) = native_array_before_allocate;
@@ -48,6 +49,7 @@ static void *native_array_calloc(size_t count, size_t bytes) {
     void *memory = xr_calloc(count, bytes); native_array_record(memory, count * bytes); return memory;
 }
 static void native_array_free(void *pointer) {
+    if (pointer && native_array_before_free) native_array_before_free();
     if (pointer) {
         size_t n = native_array_block(pointer);
         native_array_bytes -= native_array_blocks[n].bytes;
@@ -61,6 +63,7 @@ static void *native_array_aligned(size_t bytes, size_t alignment) {
 }
 static void native_array_aligned_free(void *pointer, size_t alignment) {
     (void)alignment;
+    if (pointer && native_array_before_free) native_array_before_free();
     if (pointer) {
         size_t n = native_array_block(pointer);
         native_array_bytes -= native_array_blocks[n].bytes;

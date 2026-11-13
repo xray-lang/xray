@@ -23,7 +23,7 @@ static XrXirValueStatus hash_new(XrXirType type, const XrXirValue *keys,
     XrXirValue result = hash_value(map);
     XrXirValuePlace place = {type, &result.payload, NULL};
     for (size_t i = 0; i < count; ++i) {
-        status = hash_upsert(&place, &keys[i], values ? &values[i] : NULL, admission);
+        status = hash_upsert(&place, &keys[i], values ? &values[i] : NULL, admission, NULL);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return status; }
     }
     *output = result; return XR_XIR_VALUE_OK;

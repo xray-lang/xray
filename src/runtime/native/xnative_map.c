@@ -252,16 +252,20 @@ static bool map_mutate(XrtMap **binding, bool registered, const XrtString *key,
     }
     XrXirValue input = {XR_XIR_STRING, 0, (int64_t)(intptr_t)key};
     XrXirValue replacement = {XR_XIR_I64, 0, number}; bool removed = false;
+    XrXirValue retired = {0};
     XrXirValuePlace place = {(XrXirType)value.type, binding, NULL};
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = operation == MAP_SET ? xr_xir_map_set(&place, &input, &replacement, &admission) :
-        operation == MAP_REMOVE ? xr_xir_hash_delete(&place, &input, &admission, &removed) : xr_xir_hash_clear(&place, &admission);
+    XrXirValueStatus status = operation == MAP_SET ?
+        xr_xir_map_set_deferred(&place, &input, &replacement, &admission, &retired) :
+        operation == MAP_REMOVE ? xr_xir_hash_delete_deferred(&place, &input, &admission, &removed, &retired) :
+        xr_xir_hash_clear_deferred(&place, &admission, &retired);
     if (status == XR_XIR_VALUE_OK && registered && (int64_t)(intptr_t)*binding != previous) {
         XrtMapOwner *owner = map_find(root, previous);
         --root->map_held;
         if (!--owner->count) map_remove_owner(root, owner);
         map_adopt(root, map_value(*binding));
     }
+    xr_xir_value_drop(&retired);
     xr_xir_value_graph_end();
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
     return removed;
