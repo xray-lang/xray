@@ -1534,8 +1534,11 @@ static void control_summary_kernel(void) {
 
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--control-summary") ||
-        !strcmp(argv[1], "--lexical") || !strcmp(argv[1], "--lexical-source"))));
+        !strcmp(argv[1], "--lexical") || !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion"))));
     effect_case_begin();
+    if (argc==2 && !strcmp(argv[1],"--conversion")) {
+        conversion_owner_cases(); effect_case_end(); return 0;
+    }
     lexical_directory_ownership();
     if (argc==2 && !strcmp(argv[1],"--lexical")) { effect_case_end();return 0; }
     lexical_source_ownership();

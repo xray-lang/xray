@@ -12,6 +12,7 @@
 typedef struct ConversionPreparation {
     EffectLifetimePreparation lifetime;
     XrXirInstruction *copy;
+    bool refined;
 } ConversionPreparation;
 
 static XrXirStatus conversion_observe(void *context,const XrXirModule *module,
@@ -30,25 +31,50 @@ static XrXirStatus conversion_prepare(void *context,const XirExecutionOwner *exe
     return effect_lifetime_finish(&preparation->lifetime,execution,storage,receiver);
 }
 static XrXirStatus conversion_refine(void *context,const XrXirEffects *effects,bool *changed) {
-    XrXirInstruction *copy = ((ConversionPreparation *)context)->copy;
-    *changed = copy->op != XR_XIR_FUNCTION_WEAKEN;
+    ConversionPreparation *preparation = context;
+    XrXirInstruction *copy = preparation->copy;
+    *changed = !preparation->refined;
     if (!*changed) return XR_XIR_OK;
     XrXirRootEffects before = {0};
     XrXirStatus status = xir_effects_construction_root(&effect_context,effects,1,&before);
     if (status != XR_XIR_OK) return status;
     CHECK(!before.requires_root && !before.unresolved);
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    uint32_t caller = roots->function[1].root;
+    CHECK(!(effect_check_suspend_bits(roots,caller)[0] & 1u));
     copy->op = XR_XIR_FUNCTION_WEAKEN;
-    status = xir_effects_construction_weaken(&effect_context,effects,1,1,XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);
+    XirEffectConversion conversion = {XR_XIR_FUNCTION_WEAKEN,XR_XIR_CALLABLE_ROOT_UNRESOLVED,true};
+    status = xir_effects_construction_conversion(&effect_context,effects,1,1,&conversion);
     if (status == XR_XIR_OK) status = xir_effects_construction_close(&effect_context,effects,NULL);
     XrXirRootEffects after = {0};
     if (status == XR_XIR_OK) status = xir_effects_construction_root(&effect_context,effects,1,&after);
-    if (status == XR_XIR_OK) CHECK(!after.requires_root && after.unresolved);
+    if (status == XR_XIR_OK) {
+        CHECK(!after.requires_root && after.unresolved);
+        CHECK(effect_check_suspend_bits(roots,caller)[0] & 1u);
+    }
     if (status == XR_XIR_OK) {
         size_t allocations = attempts;
-        status = xir_effects_construction_weaken(&effect_context,effects,1,1,XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);
+        status = xir_effects_construction_conversion(&effect_context,effects,1,1,&conversion);
         if (status == XR_XIR_OK) status = xir_effects_construction_close(&effect_context,effects,NULL);
         CHECK(attempts == allocations);
     }
+    if (status == XR_XIR_OK) {
+        copy->op = XR_XIR_COPY;
+        conversion = (XirEffectConversion){.operation=XR_XIR_COPY};
+        status = xir_effects_construction_conversion(&effect_context,effects,1,1,&conversion);
+        if (status == XR_XIR_OK) status = xir_effects_construction_close(&effect_context,effects,NULL);
+        XrXirRootEffects restored = {0};
+        if (status == XR_XIR_OK) status = xir_effects_construction_root(&effect_context,effects,1,&restored);
+        if (status == XR_XIR_OK) {
+            CHECK(!restored.requires_root && !restored.unresolved);
+            CHECK(!(effect_check_suspend_bits(roots,caller)[0] & 1u));
+            size_t allocations = attempts;
+            status = xir_effects_construction_conversion(&effect_context,effects,1,1,&conversion);
+            if (status == XR_XIR_OK) status = xir_effects_construction_close(&effect_context,effects,NULL);
+            CHECK(attempts == allocations);
+        }
+    }
+    if (status == XR_XIR_OK) preparation->refined = true;
     return status;
 }
 
@@ -89,7 +115,29 @@ static XrXirStatus conversion_owner_case(void) {
     return status;
 }
 
+static void conversion_module_slots(void) {
+    const char *fixtures[] = {"module_double.xr","module_snapshot.xr"};
+    for (uint32_t i = 0; i < 2; ++i) {
+        EffectMark baseline = effect_mark();
+        XrXirArtifact *artifact = root_source(fixtures[i],XR_XIR_OK);
+        const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+        XrXirDiagnostic diagnostic = {0};
+        CHECK(xr_xir_compile_verify_effects_v2(&effect_context,module,
+            artifact->construction,artifact->checked_effects,&diagnostic) == XR_XIR_OK);
+        XrXirCheckedPacket packet = {0};
+        CHECK(xr_xir_compile_checked_write(artifact,&packet,&diagnostic) == XR_XIR_OK);
+        xr_xir_compile_artifact_free(artifact);
+        XrXirArtifact *received = NULL;
+        CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&received,&diagnostic) == XR_XIR_OK);
+        xr_xir_compile_checked_packet_free(&packet);
+        xr_xir_compile_artifact_free(received);
+        effect_mark_check(baseline);
+    }
+    printf("conversion module slots: actual reassignment and saved snapshot cold effects PASS\n");
+}
+
 static void conversion_owner_cases(void) {
+    conversion_module_slots();
     EffectMark baseline = effect_mark();
     attempts = 0; injected = false;
     CHECK(conversion_owner_case() == XR_XIR_OK);
@@ -103,7 +151,7 @@ static void conversion_owner_cases(void) {
         fail_at = SIZE_MAX;
         effect_mark_check(baseline);
     }
-    printf("conversion equations: in-owner closure and %zu allocation failures PASS\n",sites);
+    printf("conversion equations: COPY/WEAKEN/COPY R/S reclosure and %zu allocation failures PASS\n",sites);
 }
 
 #endif // XIR_EFFECT_CONVERSION_CASES_H
