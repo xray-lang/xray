@@ -595,6 +595,9 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
 
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     bool managed = rbc_managed_kind(f->result_kind) || f->array_access_count != 0 || f->view_access_count != 0;
+    bool range = false;
+    for (size_t n = 0; n < f->aggregate_access_count; ++n)
+        range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
     bool numeric_conversion = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= f->register_kinds[r] == XR_RBC_STRING || f->register_kinds[r] == XR_RBC_STRING_CELL ||
@@ -614,11 +617,11 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
         }
     }
-    if (!managed && !f->spill_count && !numeric_conversion && !f->aggregate_value_count) return XR_RBC_OK;
+    if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count) return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
         .head = UINT32_MAX, .tail = UINT32_MAX,
-        .parameters_only = numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0};
+        .parameters_only = range || numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
     if (status == XR_RBC_OK) {
         /* This initial merge remains a virtual predecessor even for a jump to

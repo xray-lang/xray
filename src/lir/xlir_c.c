@@ -198,7 +198,8 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
-    if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v)) return true;
+    if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
+        xr_lir_range_point(c->request->module, v)) return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
         v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) return true;
@@ -286,6 +287,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         }
     }
     if (c_display_point(c, v)) { c->displays = true; return; }
+    if (xr_lir_range_point(c->request->module, v)) return;
     if (xr_lir_string_role(c->request->module, v)) { c->string_library = true; return; }
     if (c_view_point(c, v)) return;
     switch (v->op) {
@@ -737,6 +739,15 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c_state_point(v)) {
         uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
         c_state_instruction(c, v, source);
+        return;
+    }
+    if (xr_lir_range_point(c->request->module, v)) {
+        c_text(c, "    xrt_range_check(");
+        for (uint32_t p = 0; p < 3; ++p) {
+            if (p) c_text(c, ", ");
+            c_value(c, v->operands[p]);
+        }
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
         return;
     }
     if (xr_lir_string_role(c->request->module, v)) {

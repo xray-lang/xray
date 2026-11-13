@@ -1276,8 +1276,10 @@ static void test_module_capabilities(void) {
 #include "register_string_library_cases.h"
 #include "register_fixed_value_cases.h"
 #include "register_fixed_call_cases.h"
+#include "register_range_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_range_checks();
     test_raw_string_references();
     test_raw_fixed_calls();
     test_raw_fixed_no_value_callee();

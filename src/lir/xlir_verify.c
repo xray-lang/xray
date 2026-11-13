@@ -352,6 +352,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
+            if (xr_lir_range_intrinsic_valid(entry)) {
+                if (!lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
+                return XR_LIR_OK;
+            }
             if (xr_lir_string_intrinsic_valid(entry)) {
                 if (!lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
                 if ((entry->operation == XR_LIR_STRING_OP_APPEND_STATE || entry->operation == XR_LIR_STRING_OP_BORROW_STATE)) {
@@ -875,7 +879,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             !shape->result_element && !shape->variadic && !shape->operation);
         if (entry->operation) {
             if (!empty || (!xr_lir_internal_view_intrinsic_valid(entry) && !xr_lir_display_intrinsic_valid(entry) &&
-                !xr_lir_string_intrinsic_valid(entry)))
+                !xr_lir_string_intrinsic_valid(entry) && !xr_lir_range_intrinsic_valid(entry)))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "view intrinsic signature is invalid");
             continue;
         }

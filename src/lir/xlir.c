@@ -130,7 +130,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
     return f;
 }
 
-enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8};
+enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8, LIR_LIBRARY_RANGE=16};
 static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
@@ -139,6 +139,7 @@ static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_display.inc.c"
 #include "xlir_callable_target.inc.c"
 #include "xlir_string.inc.c"
+#include "xlir_range.inc.c"
 #include "xlir_library.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
@@ -203,7 +204,8 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
         if (entry.operation && !xr_lir_internal_view_intrinsic_valid(&entry) &&
-            !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry))
+            !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry) &&
+            !xr_lir_range_intrinsic_valid(&entry))
             return XR_LIR_UNSUPPORTED;
         if (!entry.operation && (entry.result == XR_LIR_STRING_REF || entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
             entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))

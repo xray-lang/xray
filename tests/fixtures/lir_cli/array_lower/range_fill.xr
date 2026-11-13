@@ -1,0 +1,10 @@
+var values = [1, 2, 3, 4]
+const saved = values
+values.fill(9, 1, 3)
+print(values)
+print(saved)
+values.fill(8, 4, 4)
+print(values)
+var empty: Array<i64> = []
+empty.fill(7, 0, 0)
+print(empty)

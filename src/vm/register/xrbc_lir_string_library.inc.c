@@ -16,6 +16,10 @@ static bool rbc_lir_string_library(RbcLirCompiler *c, const XrLirInstructionView
     XrRbcAggregateAccess access = {.operation=XR_RBC_STRING_LIBRARY,
         .first=(uint32_t)c->aggregate_operand_count, .count=v->operand_count,
         .slot=xr_lir_string_role(c->input, v)};
+    if (xr_lir_range_point(c->input, v)) {
+        access.operation = XR_RBC_RANGE_CHECK;
+        access.slot = 0;
+    }
     for (uint32_t n = 0; n < v->operand_count; ++n)
         c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, v->operands[n]);
     if (v->result) access.result = rbc_lir_array_location(c, v->result);

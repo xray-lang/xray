@@ -14,6 +14,7 @@
 #include "xrbc_lir.h"
 #include "xrbc_internal.h"
 #include "lir/xlir_string.h"
+#include "lir/xlir_range.h"
 #include "xray_native_string.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_state.h"
@@ -68,7 +69,7 @@ typedef struct {
     const uint32_t *functions;
     RbcLirOutputValues output;
     RbcLirLiteralPool *literals;
-    uint32_t *slots, *spill_home;
+    uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
     uint32_t *aggregate_parameters, *aggregate_arguments;
     uint32_t scalar_parameter_count, aggregate_parameter_count;
@@ -503,7 +504,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CALL_INDIRECT: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        return xr_lir_string_role(input, i) || xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
+        return xr_lir_range_point(input, i) || xr_lir_string_role(input, i) || xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
             (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
     }
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
@@ -683,10 +684,14 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     if(rbc_lir_value_type(c,value)==XR_LIR_ARRAY) {
                         uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,value,XR_LIR_ARRAY));
                         if(!c->temporary_arrays[family])c->temporary_arrays[family]=1;
+                    } else if (rbc_lir_value_type(c, value) == XR_LIR_STRING) {
+                        if (!c->temporary_strings) c->temporary_strings = 1;
+                    } else if (rbc_lir_scalar(rbc_lir_value_type(c, value))) {
+                        if (!c->temporary_bits) c->temporary_bits = 1;
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            if (xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
@@ -826,6 +831,9 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         for(uint32_t v=1;v<=c->view.value_count;++v)
             if(c->spill_home[v]<c->reference_spill_count)
                 c->reference_spill_kinds[c->spill_home[v]]=rbc_lir_register_kind(c,v,rbc_lir_value_type(c,v));
+        for (uint32_t v = 1; c->edge_spill && v <= c->view.value_count; ++v)
+            if (c->edge_spill[v] < c->reference_spill_count)
+                c->reference_spill_kinds[c->edge_spill[v]] = rbc_lir_register_kind(c, v, rbc_lir_value_type(c, v));
     }
     for (uint32_t r = c->slot_count + c->scratch_count; r < c->register_count; ++r)
         c->register_kinds[r] = XR_RBC_CALL_WINDOW;
@@ -1111,7 +1119,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
-    if (xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
+    if (xr_lir_range_point(c->input, i) || xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
@@ -1504,7 +1512,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.blocks);
         xr_free(c.patches);
         rbc_lir_output_free(&c.output);
-        xr_free(c.slots);xr_free(c.spill_home);
+        xr_free(c.slots);xr_free(c.spill_home);xr_free(c.edge_spill);
         xr_free(c.aggregate_home);
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);

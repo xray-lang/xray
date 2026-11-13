@@ -44,7 +44,7 @@ typedef struct Lower {
     XrLirStateLayout state_layout;
     uint32_t *state_slots, **module_cells;
     uint8_t *state_required;
-    bool prints, string_prints, arrays, views, displays, string_appends;
+    bool prints, string_prints, arrays, views, displays, string_appends, ranges;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerArrayCells {
@@ -308,6 +308,7 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
 static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CALL_INDIRECT:
+        case XR_XIR_RANGE_CHECK:
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
         case XR_XIR_VIEW_GET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
@@ -836,6 +837,10 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     }
     if (op->op == XR_XIR_CONST_STRING)
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
+    if (op->op == XR_XIR_RANGE_CHECK) {
+        c->ranges = true;
+        return true;
+    }
     if (op->op == XR_XIR_TO_STRING &&
         xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f, op->args[0]))))
         c->displays = true;
@@ -1496,6 +1501,15 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
     uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_RANGE_CHECK) {
+        XrLirValue operands[3] = {{0}};
+        for (uint32_t p = 0; p < 3; ++p)
+            if (!lower_value(f, f->source->operands[op->args[0] + p], &operands[p])) return false;
+        XrLirInstruction check = {.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_UNIT,
+            .operands=operands, .operand_count=3, .source=lower_source(c)};
+        return lower_build(c, xr_lir_range_operation(c->module, &check.intrinsic)) &&
+            lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &check));
+    }
     if (op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME ||
         op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP)
         return lower_nullable_instruction(f, b, i);
@@ -2193,7 +2207,9 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.arrays = true;
         good = lower_view_state_layout(&c);
     }
-    if (good && c.string_appends)
+    if (good && c.ranges)
+        good = lower_build(&c, xr_lir_range_catalog_install(c.module, c.views, c.arrays, c.displays, c.string_appends));
+    else if (good && c.string_appends)
         good = lower_build(&c, xr_lir_string_catalog_install(c.module, c.views, c.arrays, c.displays));
     else if (good && c.displays)
         good = lower_build(&c, xr_lir_display_catalog_install(c.module, c.views, c.arrays));

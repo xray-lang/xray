@@ -85,6 +85,16 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    if (f->aggregate_accesses[index].operation == XR_RBC_RANGE_CHECK) {
+        XrRbcAggregateAccess access = f->aggregate_accesses[index];
+        int64_t arguments[3];
+        for (uint32_t p = 0; p < 3; ++p) {
+            uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first + p])->bits;
+            memcpy(&arguments[p], &bits, sizeof(bits));
+        }
+        xrt_range_check(arguments[0], arguments[1], arguments[2], source);
+        return XR_RBC_OK;
+    }
     if (f->aggregate_accesses[index].operation == XR_RBC_STRING_LIBRARY)
         return xr_rbc_string_library(module, stack, frame, f, index, source);
     if (f->aggregate_accesses[index].operation == XR_RBC_AGGREGATE_DISPLAY) {

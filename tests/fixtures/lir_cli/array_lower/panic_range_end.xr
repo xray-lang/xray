@@ -1,0 +1,2 @@
+var values = [1, 2, 3]
+values.fill(7, 0, 4)

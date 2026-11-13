@@ -134,6 +134,7 @@ XRAY_API int64_t xrt_clock_utc_offset_at(int64_t seconds, uint32_t source_id);
 #define XRT_NORETURN _Noreturn
 #endif
 XRT_NORETURN XRAY_API void xrt_arithmetic_panic(uint32_t code, uint32_t source_id);
+XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32_t source_id);
 XRT_NORETURN XRAY_API void xrt_fixed_array_bounds(uint32_t source_id);
 XRT_NORETURN XRAY_API void xrt_null_unwrap(uint32_t source_id);
 #undef XRT_NORETURN

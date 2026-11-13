@@ -930,8 +930,10 @@ static void frame_string_cells(void) {
 #include "lir_callable_type_cases.h"
 #include "lir_owned_cell_type_cases.h"
 #include "lir_string_cases.h"
+#include "lir_range_cases.h"
 
 int main(void) {
+    range_catalog_receivers();
     callable_type_owners();
     callable_type_rejections();
     string_catalog_owners();

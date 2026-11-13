@@ -123,6 +123,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_array_ref_fixture.h"
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "lir_array_copy_cases.h"
+#include "lir_edge_spill_cases.h"
 #include "../lir/lir_view_fixture.h"
 #include "../lir/lir_callable_fixture.h"
 
@@ -824,6 +825,7 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #include "lir_string_alloc_cases.h"
 
 int main(void) {
+    typed_edge_spill_cycles();
     string_reference_compiler_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);

@@ -160,6 +160,15 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (access.operation == XR_RBC_RANGE_CHECK) {
+            if (access.count != 3 || access.first > f->aggregate_operand_count ||
+                3 > f->aggregate_operand_count - access.first || access.slot || access.source ||
+                access.destination || access.callee || access.window || access.result.index || access.result.spill)
+                return false;
+            for (uint32_t p = 0; p < 3; ++p)
+                if (!rbc_aggregate_bits_location(f, f->aggregate_operands[access.first + p])) return false;
+            continue;
+        }
         if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_FUNCTION_RETURN) {
             if (!rbc_callable_access_valid(module, f, access)) return false;
             continue;
