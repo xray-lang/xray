@@ -26,6 +26,53 @@ static void native_callable_release(void *owner) {
     if (!--lease->references) { ++*lease->retired; xr_free(lease); }
 }
 
+typedef struct NativeCallableBindingContext {
+    XrXirFunctionBinding *original;
+    uint32_t visits;
+} NativeCallableBindingContext;
+
+static XrXirValueStatus native_callable_binding_admit(void *opaque,
+    const XrXirFunctionBinding *binding, XrXirType type, uint64_t *work) {
+    NativeCallableBindingContext *context = opaque;
+    (void)type;
+    (void)work;
+    CHECK(binding->owner == context->original->owner && binding->capture_count == 1);
+    ++context->visits;
+    context->original->capture_count = 0;
+    context->original->captures = NULL;
+    return XR_XIR_VALUE_OK;
+}
+
+static void native_callable_binding_snapshot(void) {
+    const XrtCallableTypeSpec spec = {.kind=XRT_CALLABLE_SIGNATURE,
+        .result={XRT_CALLABLE_SCALAR, XR_POD_I64}};
+    XrXirTypeArena *arena = NULL;
+    CHECK(xrt_callable_types_new(&spec, 1, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    XrXirType type = XR_XIR_UNIT;
+    CHECK(xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_CONSTRUCTED, 0}, 1, &type));
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(UINT64_MAX, &domain) == XR_XIR_VALUE_OK);
+    XrXirDomainStats before = xr_xir_domain_stats(domain);
+    uint32_t retired = 0;
+    NativeCallableLease *owner = xr_malloc(sizeof(*owner));
+    CHECK(owner);
+    *owner = (NativeCallableLease){1, &retired, false};
+    XrXirValue capture = {XR_XIR_I64, 0, 42}, function = {0};
+    XrXirFunctionBinding binding = {owner, native_callable_release, 7, &capture, 1};
+    NativeCallableBindingContext context = {&binding, 0};
+    XrXirValueAdmission admission = {arena, domain, native_callable_binding_admit,
+        &context, UINT64_MAX, UINT64_MAX};
+    CHECK(xr_xir_function_new(domain, arena, type, &binding, &admission, &function) == XR_XIR_VALUE_OK);
+    const XrXirFunctionBinding *received = xr_xir_function_binding(&function);
+    CHECK(context.visits == 1 && !binding.capture_count && !binding.captures);
+    CHECK(received && received->capture_count == 1 && received->captures[0].payload == 42);
+    xr_xir_value_drop(&function);
+    XrXirDomainStats after = xr_xir_domain_stats(domain);
+    CHECK(retired == 1 && after.live_bytes == before.live_bytes);
+    xr_xir_domain_drop(domain);
+    xr_xir_compile_type_arena_drop(arena);
+}
+
 static void native_callable_projection(void) {
     XrtCallableParameterSpec parameter = {{XRT_CALLABLE_CONSTRUCTED, 1}, XR_PARAM_MOVE, true};
     XrtCallableTypeSpec specs[] = {
