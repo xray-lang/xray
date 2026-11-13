@@ -252,10 +252,12 @@ def main() -> int:
         run("arrays-check", [cli, "check", source], quiet=True)
         run("arrays-vm-run", [cli, "run", source], golden=golden)
         generated = output / "program.c"
-        emitted = run("arrays-c-only", [cli, "build", source, "--c-only", "-o", generated], quiet=True)
+        emitted = run("arrays-c-only", [cli, "build", source, "--c-only", "-o", generated],
+                      golden=("Generated: " + str(generated) + "\n").encode("utf-8"))
         for name, extra in (("default", []), ("clang", ["--cc", str(compiler)])):
             executable = output / ("public-" + name)
-            compiled = run("public-" + name + "-build", [cli, "build", source, *extra, "-o", executable], quiet=True)
+            compiled = run("public-" + name + "-build", [cli, "build", source, *extra, "-o", executable],
+                           golden=("Built: " + str(executable) + "\n").encode("utf-8"))
             if compiled["okay"] and executable.is_file():
                 run("public-" + name + "-run", [executable], golden=golden)
             else:
