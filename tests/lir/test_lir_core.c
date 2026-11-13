@@ -936,6 +936,7 @@ int main(void) {
     range_catalog_receivers();
     callable_type_owners();
     callable_type_rejections();
+    callable_parameter_contracts();
     string_catalog_owners();
     string_reference_lifetime();
     nullable_type_owners();

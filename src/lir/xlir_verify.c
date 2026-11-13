@@ -635,6 +635,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)) ||
+        !xr_lir_internal_callable_parameters_valid(m, f->parameter_types, f->parameter_count,
+            f->callable_parameters, f->callable_parameter_count, false) ||
         !xr_lir_internal_closure_target_valid(m, f))
         return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)

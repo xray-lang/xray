@@ -14,6 +14,7 @@
 #ifndef XLIR_BUILDER_H
 #define XLIR_BUILDER_H
 #include "xlir.h"
+#include "xlir_callable.h"
 
 typedef struct XrLirRegistry {
     const XrLirIntrinsic *entries;
@@ -27,6 +28,10 @@ typedef struct XrLirFunctionSpec {
     XrLirType result;
     XrLirFunctionKind kind;
     XrLirExternKind extern_kind;
+    /* Sorted invocation contracts for function-valued formals. NULL selects
+     * readonly synchronous borrows. These rows never authorize code targets. */
+    const XrLirFunctionCallableParameter *callable_parameters;
+    uint32_t callable_parameter_count;
 } XrLirFunctionSpec;
 typedef struct XrLirEdge {
     XrLirBlock target;

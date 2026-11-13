@@ -120,3 +120,61 @@ static void callable_type_rejections(void) {
         xr_lir_module_destroy(m);
     }
 }
+
+static void callable_parameter_contracts(void) {
+    XrLirModule *module = NULL;
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType callable = 0;
+    XrLirCallableType signature = {.result=XR_LIR_I64};
+    OK(xr_lir_callable_type(module, &signature, &callable));
+    XrLirType parameters[] = {XR_LIR_I64, callable, callable};
+    XrLirFunctionCallableParameter rows[] = {
+        {.parameter=1, .contract={.type=callable, .escaping=true}},
+        {.parameter=2, .contract={.type=callable, .mode=XR_PARAM_MOVE, .escaping=true}}
+    };
+    XrLirFunctionSpec spec = {.name="receiver", .name_length=8, .parameters=parameters,
+        .parameter_count=3, .result=XR_LIR_UNIT, .callable_parameters=rows, .callable_parameter_count=2};
+    XrLirFunction function = {0};
+    OK(xr_lir_declare_function(module, &spec, &function));
+    CHECK(module->functions[0].callable_parameters != rows);
+    memset(rows, 0, sizeof(rows));
+    OK(xr_lir_define_function(module, function));
+    XrLirBlock block = test_block(module, function, NULL, 0);
+    OK(xr_lir_set_entry(module, function, block));
+    test_return(module, block, (XrLirValue){0});
+    OK(xr_lir_module_finish(module, NULL));
+    XrLirFunctionData *data = &module->functions[0];
+    XrLirFunctionCallableParameter *owned = data->callable_parameters;
+    for (unsigned mutation = 0; mutation < 7; ++mutation) {
+        XrLirFunctionCallableParameter saved = owned[0];
+        if (mutation == 0) owned[0].parameter = 0;
+        if (mutation == 1) owned[0].contract.type = XR_LIR_I64;
+        if (mutation == 2) owned[0].contract.array_element = XR_LIR_I64;
+        if (mutation == 3) owned[0].contract.mode = (XrParamMode)99;
+        if (mutation == 4) data->callable_parameter_count = 1;
+        if (mutation == 5) data->callable_parameters = NULL;
+        if (mutation == 6) data->callable_parameter_count = 0;
+        CHECK(xr_lir_verify(module, NULL) != XR_LIR_OK);
+        owned[0] = saved;
+        data->callable_parameters = owned;
+        data->callable_parameter_count = 2;
+    }
+    XrLirModule *copies[3] = {0};
+    OK(xr_lir_rebuild(module, &copies[0]));
+    OK(xr_lir_inline(module, &copies[1]));
+    OK(xr_lir_sccp(module, &copies[2]));
+    for (unsigned i = 0; i < 3; ++i) CHECK(copies[i]->functions[0].callable_parameters != owned);
+    xr_lir_module_destroy(module);
+    for (unsigned i = 0; i < 3; ++i) {
+        XrLirFunctionView view = {0};
+        OK(xr_lir_verify(copies[i], NULL));
+        OK(xr_lir_function_view(copies[i], (XrLirFunction){copies[i], 1}, &view));
+        CHECK(!copies[i]->functions[0].closure.callable && view.callable_parameter_count == 2);
+        CHECK(view.callable_parameters[0].parameter == 1 && view.callable_parameters[0].contract.escaping &&
+            view.callable_parameters[0].contract.type == callable && view.callable_parameters[0].contract.mode == XR_PARAM_READ);
+        CHECK(view.callable_parameters[1].parameter == 2 && view.callable_parameters[1].contract.escaping &&
+            view.callable_parameters[1].contract.type == callable && view.callable_parameters[1].contract.mode == XR_PARAM_MOVE);
+        xr_lir_module_destroy(copies[i]);
+    }
+    puts("callable formal contracts own exact rows across transforms and producer retirement");
+}

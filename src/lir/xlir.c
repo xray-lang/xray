@@ -162,6 +162,7 @@ static void lir_function_free(XrLirFunctionData *f) {
     xr_free(f->name);
     xr_free(f->parameters);
     xr_free(f->parameter_types);
+    xr_free(f->callable_parameters);
 }
 
 XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
@@ -313,6 +314,8 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         spec->result == XR_LIR_ARRAY_REF || spec->result == XR_LIR_VIEW_FRAME ||
         spec->result == XR_LIR_VIEW_CELL)
         return false;
+    if (!xr_lir_internal_callable_parameters_valid(m, spec->parameters, spec->parameter_count,
+        spec->callable_parameters, spec->callable_parameter_count, true)) return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
         if (spec->parameters[p] == XR_LIR_VIEW_FRAME || spec->parameters[p] == XR_LIR_STATE_REF || (spec->parameters[p] == XR_LIR_STATE &&
             (spec->kind != XR_LIR_FUNCTION_DEFINITION || p != spec->parameter_count - 1))) return false;
@@ -359,6 +362,25 @@ static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,
     for (uint32_t i = 0; i < f->parameter_count; ++i) {
         f->parameters[i] = i + 1;
         f->values[i] = (XrLirValueData) {.type=f->parameter_types[i], .instruction=i, .parameter=true};
+        XrLirCallableType callable;
+        f->callable_parameter_count += f->parameter_types[i] >= XR_LIR_TYPE_COUNT &&
+            xr_lir_callable_type_view(m, f->parameter_types[i], &callable) == XR_LIR_OK;
+    }
+    if (f->callable_parameter_count) {
+        f->callable_parameters = lir_allocate(m, f->callable_parameter_count, sizeof(*f->callable_parameters));
+        if (!f->callable_parameters) return false;
+        if (spec->callable_parameters) memcpy(f->callable_parameters, spec->callable_parameters,
+            (size_t)f->callable_parameter_count * sizeof(*f->callable_parameters));
+        else {
+            uint32_t next = 0;
+            for (uint32_t p = 0; p < f->parameter_count; ++p) {
+                XrLirCallableType callable;
+                if (f->parameter_types[p] < XR_LIR_TYPE_COUNT ||
+                    xr_lir_callable_type_view(m, f->parameter_types[p], &callable) != XR_LIR_OK) continue;
+                f->callable_parameters[next++] = (XrLirFunctionCallableParameter){.parameter=p,
+                    .contract={.type=f->parameter_types[p], .mode=XR_PARAM_READ}};
+            }
+        }
     }
     return true;
 }
@@ -752,7 +774,8 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *m, XrLirFunction han
     *out = (XrLirFunctionView) {f->name,        f->name_length,     f->parameter_types,
                                 f->parameters,  f->parameter_count, f->block_count,
                                 f->value_count, f->entry,           f->result,
-                                f->kind,        f->extern_kind};
+                                f->kind,        f->extern_kind,
+                                f->callable_parameters, f->callable_parameter_count};
     return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *m, XrLirFunction handle, uint32_t ordinal,

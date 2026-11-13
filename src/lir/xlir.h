@@ -146,6 +146,8 @@ typedef struct XrLirFunctionView {
     XrLirType result;
     XrLirFunctionKind kind;
     XrLirExternKind extern_kind;
+    const struct XrLirFunctionCallableParameter *callable_parameters;
+    uint32_t callable_parameter_count;
 } XrLirFunctionView;
 typedef struct XrLirBlockView {
     const uint32_t *parameters;

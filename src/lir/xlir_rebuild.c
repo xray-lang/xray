@@ -85,7 +85,8 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
         xr_lir_function_view(c->input, function, &view);
         XrLirFunctionSpec spec = {.name = view.name, .name_length = view.name_length,
             .parameters = view.parameter_types, .parameter_count = view.parameter_count,
-            .result = view.result, .kind = view.kind, .extern_kind = view.extern_kind};
+            .result = view.result, .kind = view.kind, .extern_kind = view.extern_kind,
+            .callable_parameters=view.callable_parameters, .callable_parameter_count=view.callable_parameter_count};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status == XR_LIR_OK)
             status = lir_copy_array_signature(c->input, function, c->functions[function.id]);

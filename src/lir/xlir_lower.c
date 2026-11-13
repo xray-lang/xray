@@ -965,8 +965,6 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[function];
     XR_DCHECK(c->active[function], "only executable functions enter admission");
-    if (f->escaping_parameter_count)
-        return lower_unsupported(c, "owned escaping callable parameter transport");
     if (!lower_receive_type(c, f->result)) return false;
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_I64_CELL ||
         lower_type(c, f->result) == XR_LIR_ARRAY_CELL ||
@@ -1075,17 +1073,35 @@ static bool lower_declare(Lower *c, uint32_t index) {
         return false;
     }
     memcpy(name + prefix, f->name, f->name_length);
+    uint32_t contract_count = 0;
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         parameters[p] = lower_type(c, f->parameters[p]);
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
         if (parameters[p] == XR_LIR_STRING_CELL) { parameters[p] = XR_LIR_STRING_REF; c->string_appends = true; }
+        XrLirCallableType callable;
+        contract_count += parameters[p] >= XR_LIR_TYPE_COUNT &&
+            xr_lir_callable_type_view(c->module, parameters[p], &callable) == XR_LIR_OK;
     }
     if (hidden) parameters[f->parameter_count] = XR_LIR_STATE;
+    XrLirFunctionCallableParameter *contracts = lower_alloc(c, contract_count, sizeof(*contracts));
+    if (contract_count && !contracts) { xr_free(name); xr_free(parameters); return false; }
+    uint32_t contract = 0, consumed = 0;
+    for (uint32_t p = 0; contract_count && p < f->parameter_count; ++p) {
+        XrLirCallableType callable;
+        if (parameters[p] < XR_LIR_TYPE_COUNT ||
+            xr_lir_callable_type_view(c->module, parameters[p], &callable) != XR_LIR_OK) continue;
+        while (consumed < f->consume_parameter_count && f->consume_parameters[consumed] < p) ++consumed;
+        contracts[contract++] = (XrLirFunctionCallableParameter){.parameter=p,
+            .contract={.type=parameters[p], .mode=consumed < f->consume_parameter_count &&
+                f->consume_parameters[consumed] == p ? XR_PARAM_MOVE : XR_PARAM_READ,
+                .escaping=xr_xir_function_parameter_escaping(f, p)}};
+    }
     XrLirFunctionSpec spec = {.name = name,
                               .name_length = (size_t) prefix + f->name_length,
                               .parameters = parameters,
                               .parameter_count = count,
-                              .result = lower_type(c, f->result)};
+                              .result = lower_type(c, f->result), .callable_parameters=contracts,
+                              .callable_parameter_count=contract_count};
     bool good = lower_build(c, xr_lir_declare_function(c->module, &spec, &c->functions[index]));
     if (good && spec.result == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {lower_array_element(c, f->result)};
@@ -1107,6 +1123,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
                 .capture_count=c->source->declarations->functions[index].capture_count, .state_capture=hidden != 0}));
     xr_free(name);
     xr_free(parameters);
+    xr_free(contracts);
     return good;
 }
 

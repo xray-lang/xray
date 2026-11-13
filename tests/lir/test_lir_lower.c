@@ -249,8 +249,6 @@ static void unsupported(void) {
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
     rejected("print(1)\n", true, "overflow-checks");
-    rejected("fn use(callback:escaping fn()->i64)->i64{return callback()}\n"
-        "print(use(fn()->i64{return 42}))\n", false, "owned escaping callable parameter transport");
 }
 static void fixed_division_source(const char *text, bool slot_frontier) {
     SourceFixture fixture = source_fixture(text);
@@ -927,6 +925,27 @@ static void offset_sources(void) {
     CHECK(offsets==1);xr_lir_lowered_free(&output);
 }
 static void callable_source(void) {
+    XrLirLowered declared = lower_text("fn use(callback:escaping fn()->i64)->i64{return callback()}\n"
+        "print(use(fn()->i64{return 42}))\n");
+    unsigned declared_count = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(declared.module); ++n) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(declared.module, n, &function));
+        OK(xr_lir_function_view(declared.module, function, &view));
+        for (uint32_t p = 0; p < view.callable_parameter_count; ++p) {
+            XrLirFunctionCallableParameter row = view.callable_parameters[p];
+            if (!row.contract.escaping) continue;
+            CHECK(row.parameter < view.parameter_count && row.contract.type == view.parameter_types[row.parameter]);
+            CHECK(row.contract.mode == XR_PARAM_READ);
+            XrLirClosureTarget target = {0};
+            OK(xr_lir_closure_target_view(declared.module, function, &target));
+            CHECK(!target.callable);
+            ++declared_count;
+        }
+    }
+    CHECK(declared_count == 1);
+    xr_lir_lowered_free(&declared);
     XrLirLowered binding = lower_text("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
         "f()}\nprint(answer())\n");
     unsigned binding_count = 0;

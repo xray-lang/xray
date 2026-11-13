@@ -22,7 +22,7 @@ static void callable_transforms(XrLirModule *module, XrLirFunction root) {
 }
 
 static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction root) {
-    for (unsigned scenario = 0; scenario < 2; ++scenario) {
+    for (unsigned scenario = 0; scenario < 3; ++scenario) {
         XrLirModule *copy = NULL;
         OK(xr_lir_rebuild(module, &copy));
         XrLirFunctionData *function = &copy->functions[root.id - 1];
@@ -32,11 +32,21 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             if (entry->instructions[n].view.op == XR_LIR_FUNCTION_REF) reference = &entry->instructions[n].view;
         CHECK(reference);
         if (!scenario) reference->bits = XR_LIR_CLOSURE_OWNED;
-        else {
+        else if (scenario == 1) {
             function->result = reference->type;
             XrLirInstructionView *ret = &entry->instructions[entry->instruction_count - 1].view;
             CHECK(ret->op == XR_LIR_RET && ret->operand_count == 1);
             ((uint32_t *)ret->operands)[0] = reference->result;
+        } else {
+            XrLirFunctionData *helper = &copy->functions[1];
+            CHECK(helper->callable_parameter_count == 1 && !helper->closure.callable);
+            helper->callable_parameters[0].contract.escaping = true;
+            XrLirModule *received = NULL;
+            OK(xr_lir_rebuild(copy, &received));
+            CHECK(received->functions[1].callable_parameters != helper->callable_parameters);
+            xr_lir_module_destroy(copy);
+            copy = received;
+            CHECK(copy->functions[1].callable_parameters[0].contract.escaping);
         }
         OK(xr_lir_verify(copy, NULL));
         XrRbcProgram *program = NULL;

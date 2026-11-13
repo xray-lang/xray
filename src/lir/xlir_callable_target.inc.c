@@ -6,6 +6,27 @@
  *
  * xlir_callable_target.inc.c - Authentic code signatures and capture prefixes
  */
+XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *module,
+    const XrLirType *parameters, uint32_t count, const XrLirFunctionCallableParameter *rows,
+    uint32_t row_count, bool implicit_borrows) {
+    if ((count && !parameters) || row_count > count || (rows ? !row_count : row_count != 0)) return false;
+    uint32_t next = 0;
+    for (uint32_t p = 0; p < count; ++p) {
+        XrLirCallableType signature;
+        if (parameters[p] < XR_LIR_TYPE_COUNT ||
+            xr_lir_callable_type_view(module, parameters[p], &signature) != XR_LIR_OK) continue;
+        if (!rows) {
+            if (!implicit_borrows) return false;
+            continue;
+        }
+        if (next == row_count) return false;
+        XrLirFunctionCallableParameter row = rows[next++];
+        if (row.parameter != p || row.contract.type != parameters[p] || row.contract.array_element ||
+            !xr_param_mode_is_valid(row.contract.mode)) return false;
+    }
+    return next == row_count;
+}
+
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
     const XrLirFunctionData *function) {
     XrLirClosureTarget target = function->closure;
@@ -20,11 +41,20 @@ XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
         return false;
     if (target.state_capture && function->parameter_types[function->parameter_count - 1] != XR_LIR_STATE)
         return false;
+    uint32_t contract = 0;
     for (uint32_t p = 0; p < signature.parameter_count; ++p) {
         uint32_t parameter = target.capture_count + p;
         if (signature.parameters[p].type != function->parameter_types[parameter] ||
             (xr_lir_internal_array_type(signature.parameters[p].type) &&
                 signature.parameters[p].array_element != function->values[parameter].array_element)) return false;
+        while (contract < function->callable_parameter_count &&
+            function->callable_parameters[contract].parameter < parameter) ++contract;
+        if (contract < function->callable_parameter_count &&
+            function->callable_parameters[contract].parameter == parameter) {
+            XrLirCallableParameter actual = function->callable_parameters[contract].contract;
+            if (actual.mode != signature.parameters[p].mode || actual.escaping != signature.parameters[p].escaping)
+                return false;
+        }
     }
     return true;
 }

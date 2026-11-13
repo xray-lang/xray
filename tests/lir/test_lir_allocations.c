@@ -218,7 +218,52 @@ static void type_pool_failures(void) {
         construction_sites, receiving_sites);
 }
 
+static void callable_parameter_failures(bool explicit_contracts) {
+    size_t sites = 0;
+    for (size_t point = 0; !point || point <= sites; ++point) {
+        fail_at = SIZE_MAX;
+        XrLirModule *module = NULL;
+        REQUIRE(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+        XrLirType callable = 0;
+        XrLirCallableType signature = {.result=XR_LIR_I64};
+        REQUIRE(xr_lir_callable_type(module, &signature, &callable) == XR_LIR_OK);
+        XrLirType parameters[] = {callable, XR_LIR_I64, callable};
+        XrLirFunctionCallableParameter rows[] = {
+            {.contract={.type=callable, .escaping=true}},
+            {.parameter=2, .contract={.type=callable, .mode=XR_PARAM_MOVE, .escaping=true}}
+        };
+        XrLirFunctionSpec spec = {.name="receiver", .name_length=8, .parameters=parameters,
+            .parameter_count=3, .result=XR_LIR_UNIT};
+        if (explicit_contracts) {
+            spec.callable_parameters = rows;
+            spec.callable_parameter_count = 2;
+        }
+        allocation_index = 0;
+        fail_at = point ? point - 1 : SIZE_MAX;
+        XrLirFunction function = {0};
+        XrLirStatus status = xr_lir_declare_function(module, &spec, &function);
+        if (!point) {
+            sites = allocation_index;
+            REQUIRE(status == XR_LIR_OK);
+            XrLirFunctionData *data = &module->functions[function.id - 1];
+            REQUIRE(data->callable_parameter_count == 2 && data->callable_parameters != rows);
+            memset(rows, 0, sizeof(rows));
+            REQUIRE(data->callable_parameters[0].contract.type == callable &&
+                data->callable_parameters[0].contract.escaping == explicit_contracts);
+            REQUIRE(data->callable_parameters[1].parameter == 2 &&
+                data->callable_parameters[1].contract.mode == (explicit_contracts ? XR_PARAM_MOVE : XR_PARAM_READ));
+        } else REQUIRE(status == XR_LIR_OUT_OF_MEMORY && !function.module && !function.id);
+        xr_lir_module_destroy(module);
+        REQUIRE(!live_allocations && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    printf("callable formal %s contracts cover %zu receiving allocation sites\n",
+        explicit_contracts ? "explicit" : "default", sites);
+}
+
 int main(void) {
+    callable_parameter_failures(false);
+    callable_parameter_failures(true);
     callable_import_failures(false);
     callable_import_failures(true);
     type_pool_failures();

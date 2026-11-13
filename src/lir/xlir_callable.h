@@ -30,6 +30,11 @@ typedef struct XrLirCallableParameter {
     bool escaping;
 } XrLirCallableParameter;
 
+typedef struct XrLirFunctionCallableParameter {
+    uint32_t parameter;
+    XrLirCallableParameter contract;
+} XrLirFunctionCallableParameter;
+
 typedef struct XrLirCallableType {
     const XrLirCallableParameter *parameters;
     uint32_t parameter_count;

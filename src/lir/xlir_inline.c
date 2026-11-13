@@ -211,7 +211,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
         const XrLirFunctionView *v = &c->info[f + 1].view;
         XrLirFunctionSpec spec = {.name = v->name, .name_length = v->name_length,
             .parameters = v->parameter_types, .parameter_count = v->parameter_count,
-            .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind};
+            .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind,
+            .callable_parameters=v->callable_parameters, .callable_parameter_count=v->callable_parameter_count};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
             (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);

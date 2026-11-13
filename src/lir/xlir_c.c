@@ -412,6 +412,11 @@ static void c_admit(LirC *c) {
         c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
+        for (uint32_t p = 0; p < c->view.callable_parameter_count; ++p) {
+            XrLirCallableParameter contract = c->view.callable_parameters[p].contract;
+            if (contract.escaping || contract.mode != XR_PARAM_READ)
+                c_error(c, XR_LIR_C_UNSUPPORTED, "owned callable invocation parameters require lifetime transport");
+        }
         if (!c_request_poll(c))
             return;
         c_array_admit_shapes(c);

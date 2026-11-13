@@ -413,6 +413,14 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *v, XrRbcCompileDiagnostic *d, RbcLirOutputValues *output) {
     d->function = f.id;
     d->block = d->instruction = 0;
+    for (uint32_t p = 0; p < v->callable_parameter_count; ++p) {
+        XrLirCallableParameter contract = v->callable_parameters[p].contract;
+        if (contract.escaping || contract.mode != XR_PARAM_READ) {
+            rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+                "owned callable invocation parameters require lifetime transport", (XrLirSource){0});
+            return false;
+        }
+    }
     if(v->value_count==UINT32_MAX) {
         rbc_lir_error(d,XR_RBC_COMPILE_LIMIT,"SSA index space is exhausted",(XrLirSource){0});
         return false;
