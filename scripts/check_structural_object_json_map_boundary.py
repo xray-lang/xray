@@ -142,13 +142,14 @@ def under_any_root(rel: Path, roots: tuple[str, ...]) -> bool:
 def collect(root: Path) -> dict[str, list[dict[str, object]]]:
     hits: dict[str, list[dict[str, object]]] = {rule.name: [] for rule in RULES}
     for rel, path in iter_text_files(root):
+        applicable_rules = [rule for rule in RULES if under_any_root(rel, rule.roots)]
+        if not applicable_rules:
+            continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
             continue
-        for rule in RULES:
-            if not under_any_root(rel, rule.roots):
-                continue
+        for rule in applicable_rules:
             for line_number, line in enumerate(lines, 1):
                 stripped = line.lstrip()
                 if (
