@@ -12,6 +12,7 @@
  */
 #include "xxir_nominal.h"
 #include "xxir_type_match_internal.h"
+#include "../base/xhash.h"
 
 typedef struct EffectTermMemory {
     struct EffectTermMemory *next;
@@ -36,6 +37,8 @@ typedef struct EffectTerms {
     EffectTermFrame *stack;
     XrXirType *cache;
     uint32_t stack_capacity,cache_count;
+    uint32_t *intern_index;
+    uint32_t intern_capacity;
     bool stack_claimed;
     XrXirTypeMatchScratch match;
 } EffectTerms;
@@ -94,6 +97,8 @@ static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) 
 /* Only constructor capacity lives here. Semantic descriptors and their
  * arena survive publication; type frames and matching stacks do not. */
 static void effect_terms_scratch_free(EffectTerms *pool) {
+    xr_compile_resources_free(pool->intern_index);
+    pool->intern_index=NULL;pool->intern_capacity=0;
     if (pool->match.memory || pool->match.resources) {
         xr_xir_type_match_scratch_free(&pool->match);pool->match.resources=NULL;
     }
@@ -110,10 +115,12 @@ static void effect_terms_scratch_free(EffectTerms *pool) {
 static inline XrXirStatus effect_terms_retire(const XrXirCompileContext *work,EffectTerms *pool,bool owns_scratch) {
     if (!xir_compile_context_valid(work) || !pool ||
         (owns_scratch && (pool->stack_claimed || !!pool->stack!=!!pool->stack_capacity ||
-            (!!pool->cache!=!!pool->stack)))) return XR_XIR_BAD_STRUCTURE;
+            (!!pool->cache!=!!pool->stack) || !!pool->intern_index!=!!pool->intern_capacity)))
+        return XR_XIR_BAD_STRUCTURE;
 
     if (owns_scratch) effect_terms_scratch_free(pool);
     else {
+        pool->intern_index=NULL;pool->intern_capacity=0;
         if (pool->stack) pool->stack=NULL;
         if (pool->cache) pool->cache=NULL;
         if (pool->stack_capacity) pool->stack_capacity=0;
@@ -149,11 +156,58 @@ static bool effect_term_same( const XrXirTypeNode *a, const XrXirTypeNode *b) {
         if (a->nominal.arguments[i] != b->nominal.arguments[i]) return false;
     return true;
 }
+
+/* Hash the same structural fields as equality, independently of descriptor
+ * padding and executable projections. Collisions still compare full shapes. */
+static uint32_t effect_term_hash(const XrXirTypeNode *node) {
+    const uint32_t fields[]={node->kind,node->flags,node->element,node->result,
+        node->parameter_count,node->nominal.declaration,node->nominal.argument_count};
+    uint32_t hash=xr_hash_bytes(fields,sizeof(fields));
+    for (uint32_t p=0;p<xr_xir_type_parameter_slots(node);++p) {
+        const XrXirCallableParameter *parameter=&node->parameters[p];
+        const uint32_t fields[]={parameter->type,parameter->mode,parameter->escaping};
+        hash=xr_hash_bytes_update(hash,fields,sizeof(fields));
+    }
+    return xr_hash_bytes_update(hash,node->nominal.arguments,
+        (size_t)node->nominal.argument_count*sizeof(*node->nominal.arguments));
+}
+
+static bool effect_term_index(EffectTerms *pool) {
+    if (pool->intern_index && pool->types.count<pool->intern_capacity/2) return true;
+    uint64_t capacity=pool->intern_capacity ? (uint64_t)pool->intern_capacity*2 : 32;
+    while (capacity/2<=pool->types.count) capacity*=2;
+    if (capacity>UINT32_MAX || capacity>SIZE_MAX/sizeof(uint32_t)) {
+        pool->status=XR_XIR_OVERFLOW;return false;
+    }
+    size_t bytes=(size_t)capacity*sizeof(uint32_t);
+    uint32_t *index=xir_compile_alloc(pool->remaining,bytes,&pool->status);
+    if (!index) return false;
+    memset(index,0,bytes);
+    uint32_t mask=(uint32_t)capacity-1;
+    /* Seed pools may contain distinct executable projections of one effect
+     * shape. Ascending insertion retains the original first-match ordinal. */
+    for (uint32_t i=0;i<pool->types.count;++i) {
+        const XrXirTypeNode *node=&pool->types.nodes[i];
+        uint32_t at=effect_term_hash(node)&mask;
+        while (index[at] && !effect_term_same(&pool->types.nodes[index[at]-1],node))
+            at=(at+1)&mask;
+        if (!index[at]) index[at]=i+1;
+    }
+    xr_compile_resources_free(pool->intern_index);
+    pool->intern_index=index;pool->intern_capacity=(uint32_t)capacity;
+    return true;
+}
+
 static XrXirType effect_term_intern_raw(EffectTerms *pool, XrXirTypeNode node) {
-    for (uint32_t i = 0; i < pool->types.count && pool->status == XR_XIR_OK; ++i)
-        if (effect_term_same( &pool->types.nodes[i], &node))
-            return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i);
     if (pool->status != XR_XIR_OK) return XR_XIR_UNIT;
+    if (!effect_term_index(pool)) return XR_XIR_UNIT;
+    uint32_t at=effect_term_hash(&node)&(pool->intern_capacity-1);
+    while (pool->intern_index[at]) {
+        uint32_t i=pool->intern_index[at]-1;
+        if (effect_term_same(&pool->types.nodes[i],&node))
+            return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
+        at=(at+1)&(pool->intern_capacity-1);
+    }
     uint32_t maximum = XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (pool->types.count == maximum) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; }
     if (pool->types.count >= pool->capacity) {
@@ -179,6 +233,7 @@ static XrXirType effect_term_intern_raw(EffectTerms *pool, XrXirTypeNode node) {
     }
     node.nominal.fields = NULL; node.nominal.field_count = 0;
     ((XrXirTypeNode *)pool->types.nodes)[pool->types.count] = node;
+    pool->intern_index[at]=pool->types.count+1;
     return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + pool->types.count++);
 }
 static XrXirType effect_term_intern(EffectTerms *pool,XrXirTypeNode node) {
@@ -219,21 +274,22 @@ static bool effect_term_ready(EffectTerms *pool, XrXirType type, const XrXirGene
  * substitution observes an earlier result. Child-buffer capacity is reusable. */
 static XrXirStatus effect_term_stack(EffectTerms *pool,uint32_t size) {
     if (pool->stack_claimed || pool->cache_count) return XR_XIR_BAD_STRUCTURE;
-    uint64_t bytes=(uint64_t)size*(sizeof(EffectTermFrame)+sizeof(XrXirType));
-    if (bytes>SIZE_MAX)
-        return XR_XIR_BUDGET;
     if (size>pool->stack_capacity) {
+        uint64_t capacity=pool->stack_capacity ? (uint64_t)pool->stack_capacity*2 : 8;
+        if (capacity<size) capacity=size;
+        uint64_t bytes=capacity*(sizeof(EffectTermFrame)+sizeof(XrXirType));
+        if (capacity>UINT32_MAX || bytes>SIZE_MAX) return XR_XIR_BUDGET;
         XrXirStatus status=XR_XIR_OK;
         EffectTermFrame *stack=xir_compile_alloc(pool->remaining,(size_t)bytes,&status);
         if (!stack) return status;
-        size_t frame_bytes=(size_t)size*sizeof(*stack),cache_bytes=(size_t)size*sizeof(XrXirType);
+        size_t frame_bytes=(size_t)capacity*sizeof(*stack),cache_bytes=(size_t)capacity*sizeof(XrXirType);
         uint64_t copy=(uint64_t)pool->stack_capacity*sizeof(*stack);
 
         memset(stack,0,frame_bytes+cache_bytes);
         if (copy) memcpy(stack,pool->stack,(size_t)copy);
         xr_compile_resources_free(pool->stack);
-        pool->stack=stack;pool->cache=(XrXirType *)(stack+size);
-        pool->stack_capacity=size;
+        pool->stack=stack;pool->cache=(XrXirType *)(stack+(uint32_t)capacity);
+        pool->stack_capacity=(uint32_t)capacity;
     }
     pool->stack_claimed=true;return XR_XIR_OK;
 }
@@ -341,5 +397,6 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
 
 static inline bool effect_terms_scratch_retired(const EffectTerms *pool) {
     return pool && !pool->remaining && !pool->stack && !pool->cache &&
-        !pool->stack_capacity && !pool->stack_claimed && !pool->match.memory && !pool->match.resources;
+        !pool->stack_capacity && !pool->stack_claimed && !pool->intern_index &&
+        !pool->intern_capacity && !pool->match.memory && !pool->match.resources;
 }

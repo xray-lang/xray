@@ -283,7 +283,109 @@ static void direct_root_equations(void) {
     printf("direct ROOT equations: captures, returns, %zu allocation failures and detached numeric reads PASS\n", sites);
 }
 
+static XrXirStatus effect_term_index_construct(const XrXirCompileContext *context) {
+    XrXirType arguments[]={XR_XIR_I64},first_fields[]={XR_XIR_I64},second_fields[]={XR_XIR_STRING};
+    XrXirTypeNode seeds[4]={
+        {.kind=XR_XIR_TYPE_NOMINAL,.nominal={.declaration=7,.arguments=arguments,.argument_count=1,
+            .fields=first_fields,.field_count=1}},
+        {.kind=XR_XIR_TYPE_NOMINAL,.nominal={.declaration=7,.arguments=arguments,.argument_count=1,
+            .fields=second_fields,.field_count=1}},
+        {.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_NONE,.result=XR_XIR_I64,.element=XR_XIR_NEVER},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64}};
+    XrXirTypes types={.nodes=seeds,.count=4};
+    EffectTerms owner={.remaining=context};
+    XrXirStatus status=effect_terms_seed(&owner,&types);
+    if (status!=XR_XIR_OK) goto done;
+    memset(seeds,0xCE,sizeof(seeds));arguments[0]=first_fields[0]=second_fields[0]=XR_XIR_UNIT;
+    XrXirTypeNode nominal=owner.types.nodes[1];
+    XrXirType found=effect_term_intern_raw(&owner,nominal);
+    if (owner.status!=XR_XIR_OK) goto done;
+    CHECK(found==XR_XIR_CONSTRUCTED_TYPE_BASE);
+    CHECK(owner.types.nodes[0].nominal.fields[0]==XR_XIR_I64);
+    ++nominal.nominal.declaration;
+    XrXirType declaration=effect_term_intern_raw(&owner,nominal);
+    if (owner.status!=XR_XIR_OK) goto done;
+    XrXirType changed_argument=XR_XIR_U64;
+    nominal=owner.types.nodes[0];nominal.nominal.arguments=&changed_argument;
+    XrXirType argument=effect_term_intern_raw(&owner,nominal);
+    if (owner.status!=XR_XIR_OK) goto done;
+    CHECK(declaration!=found && argument!=found && argument!=declaration);
+    XrXirType signatures[7];
+    for (uint32_t variant=0;variant<7;++variant) {
+        XrXirCallableParameter parameter={XR_XIR_CONSTRUCTED_TYPE_BASE+2,XR_PARAM_READ,false};
+        XrXirTypeNode signature={.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED,
+            .result=XR_XIR_I64,.element=XR_XIR_NEVER,.parameters=&parameter,.parameter_count=1};
+        switch (variant) {
+        case 1: signature.flags|=XR_XIR_CALLABLE_NO_SUSPEND;break;
+        case 2: signature.result=XR_XIR_U64;break;
+        case 3: parameter.mode=XR_PARAM_REF;break;
+        case 4: parameter.escaping=true;break;
+        case 5: signature.element=XR_XIR_ERROR;break;
+        case 6: signature.parameter_count=0;signature.parameters=NULL;break;
+        default: break;
+        }
+        signatures[variant]=effect_term_intern_raw(&owner,signature);
+        if (owner.status!=XR_XIR_OK) goto done;
+        for (uint32_t earlier=0;earlier<variant;++earlier) CHECK(signatures[earlier]!=signatures[variant]);
+        XrXirType repeated=effect_term_intern_raw(&owner,signature);
+        if (owner.status!=XR_XIR_OK) goto done;
+        CHECK(repeated==signatures[variant]);
+    }
+    XrXirType child=XR_XIR_I64;
+    for (uint32_t i=0;i<96;++i) {
+        XrXirTypeNode nullable={.kind=XR_XIR_TYPE_NULLABLE,.element=child};
+        XrXirType next=effect_term_intern_raw(&owner,nullable);
+        if (owner.status!=XR_XIR_OK) goto done;
+        XrXirType repeated=effect_term_intern_raw(&owner,nullable);
+        if (owner.status!=XR_XIR_OK) goto done;
+        CHECK(next!=child && repeated==next);child=next;
+    }
+    XrXirTypeNode generic={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_TYPE_PARAMETER_BASE,.parameter_span=1};
+    XrXirType source=effect_term_intern_raw(&owner,generic);
+    if (owner.status!=XR_XIR_OK) goto done;
+    for (uint32_t i=0;i<32;++i) {
+        XrXirGeneric arguments={.arguments=&child,.argument_count=1};XrXirType result=XR_XIR_UNIT;
+        status=effect_terms_substitute(&owner,source,&arguments,&result);
+        if (status!=XR_XIR_OK) goto done;
+        CHECK(xr_xir_array_element(&owner.types,result)==child);child=result;
+        CHECK(!owner.stack_claimed && !owner.cache_count);
+    }
+    EffectTerms borrowed=owner;EffectMark mark=effect_mark();
+    CHECK(effect_terms_retire(context,&borrowed,false)==XR_XIR_OK && effect_terms_scratch_retired(&borrowed));
+    effect_mark_check(mark);
+    CHECK(owner.intern_index && owner.intern_capacity);
+    CHECK(effect_terms_retire(context,&owner,true)==XR_XIR_OK && effect_terms_scratch_retired(&owner));
+    owner.remaining=context;
+    found=effect_term_intern_raw(&owner,owner.types.nodes[1]);
+    if (owner.status!=XR_XIR_OK) goto done;
+    CHECK(found==XR_XIR_CONSTRUCTED_TYPE_BASE);
+done:
+    if (status==XR_XIR_OK) status=owner.status;
+    effect_terms_free(&owner);return status;
+}
+
+static void effect_term_index_ownership(void) {
+    EffectMark mark=effect_mark();attempts=0;
+    CHECK(effect_term_index_construct(&effect_context)==XR_XIR_OK);
+    size_t sites=attempts;CHECK(sites>0);effect_mark_check(mark);
+    for (size_t point=0;point<sites;++point) {
+        attempts=0;injected=false;fail_at=point;
+        XrXirStatus status=effect_term_index_construct(&effect_context);
+        fail_at=SIZE_MAX;
+        CHECK(status==XR_XIR_OUT_OF_MEMORY && injected);effect_mark_check(mark);
+    }
+    XrCompileResourceLimits caps=effect_caps();caps.memory_mode=XR_COMPILE_MEMORY_FINITE;caps.memory_limit=128;
+    XrXirCompileContext finite=effect_owner_new(caps);uint64_t held=effect_stats(&finite).held_bytes;
+    XrXirTypeNode node={.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
+    EffectTerms owner={.types={.nodes=&node,.count=1},.remaining=&finite};
+    CHECK(effect_term_intern_raw(&owner,node)==XR_XIR_UNIT && owner.status==XR_XIR_MEMORY_LIMIT);
+    CHECK(owner.types.count==1 && !owner.intern_index && !owner.intern_capacity);
+    effect_terms_free(&owner);effect_owner_free(&finite,held);effect_mark_check(mark);
+    printf("effect term index: exact shapes, first ordinal, retired scratch and %zu allocation failures PASS\n",sites);
+}
+
 static void generic_resource_failures(void) {
+    effect_term_index_ownership();
     XrXirArtifact *artifact = root_source("root.xr", XR_XIR_OK);
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunctionEffectContract *contracts = effect_contracts_read(artifact->checked_effects);
