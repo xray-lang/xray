@@ -1279,6 +1279,7 @@ static void test_module_capabilities(void) {
 #include "register_range_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_view_cold_returns();
     test_raw_range_checks();
     test_raw_string_references();
     test_raw_fixed_calls();

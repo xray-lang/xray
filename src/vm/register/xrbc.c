@@ -193,7 +193,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     switch (op) {
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;
-        if (rbc_aggregate_return_word(function, word)) return true;
+        if (xr_rbc_aggregate_return_word(function->aggregate_accesses, function->aggregate_access_count, word)) return true;
         break;
     case XR_RBC_VIEW_ACCESS:
         if (a || index >= function->view_access_count) return false;

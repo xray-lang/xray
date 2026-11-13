@@ -92,9 +92,11 @@ static bool rbc_view_function_valid(const XrRbcFunction *f) {
             XrRbcViewOperation role = f->view_accesses[index].operation;
             if (role == XR_RBC_VIEW_FRAME_ENTER && pc) return false;
             if (role == XR_RBC_VIEW_FRAME_LEAVE && (pc + 1 == f->code_count ||
-                ((f->code[pc + 1] & 255) != XR_RBC_RET && (f->code[pc + 1] & 255) != XR_RBC_RET0))) return false;
+                ((f->code[pc + 1] & 255) != XR_RBC_RET && (f->code[pc + 1] & 255) != XR_RBC_RET0 &&
+                    !xr_rbc_aggregate_return_word(f->aggregate_accesses, f->aggregate_access_count, f->code[pc + 1])))) return false;
         }
-        if (op == XR_RBC_RET || op == XR_RBC_RET0) {
+        if (op == XR_RBC_RET || op == XR_RBC_RET0 ||
+            xr_rbc_aggregate_return_word(f->aggregate_accesses, f->aggregate_access_count, word)) {
             if (!pc || (f->code[pc - 1] & 255) != XR_RBC_VIEW_ACCESS ||
                 f->code[pc - 1] >> 16 >= f->view_access_count ||
                 f->view_accesses[f->code[pc - 1] >> 16].operation != XR_RBC_VIEW_FRAME_LEAVE) return false;

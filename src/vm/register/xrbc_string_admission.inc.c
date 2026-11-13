@@ -583,7 +583,8 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
             bool valid = v.op==XR_RBC_SPILL || v.op==XR_RBC_RELOAD ?
                 rbc_spill_transfer(&g->work,v) : rbc_string_step(&g->work,v);
             if (!valid) return false;
-            if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0 || rbc_aggregate_return_word(f, f->code[pc])) {
+            if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0 ||
+                xr_rbc_aggregate_return_word(f->aggregate_accesses, f->aggregate_access_count, f->code[pc])) {
                 for (uint32_t i=0; i<f->reference_spill_count; ++i)
                     if (g->work.spills[i].state!=RBC_EMPTY) return false;
                 return true;

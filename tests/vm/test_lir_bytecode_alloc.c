@@ -636,6 +636,7 @@ static void jump_compaction(void) {
         CHECK(xr_rbc_encode(&code[1], (XrRbcOperands){XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, 0}));
         compiler.code_count = 2;
         compiler.aggregate_accesses = &access;
+        compiler.aggregate_access_count = 1;
         CHECK(rbc_lir_compact_jumps(&compiler) && compiler.code_count == 1);
         CHECK((code[0] & 255) == XR_RBC_AGGREGATE_ACCESS && live_allocations == live);
     }

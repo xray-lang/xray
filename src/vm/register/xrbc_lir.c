@@ -1247,9 +1247,7 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         if (op == XR_RBC_JMP) {
             successors[successors_count++] = rbc_lir_jump_target(c, pc);
         } else if (op != XR_RBC_RET && op != XR_RBC_RET0 &&
-            !(op == XR_RBC_AGGREGATE_ACCESS &&
-              (c->aggregate_accesses[c->code[pc] >> 16].operation == XR_RBC_AGGREGATE_RETURN ||
-               c->aggregate_accesses[c->code[pc] >> 16].operation == XR_RBC_FUNCTION_RETURN))) {
+            !xr_rbc_aggregate_return_word(c->aggregate_accesses, c->aggregate_access_count, c->code[pc])) {
             XR_DCHECK(pc + 1 < count, "emitted fallthrough stays inside its function");
             successors[successors_count++] = pc + 1;
             if (rbc_lir_paired_jump(op)) {

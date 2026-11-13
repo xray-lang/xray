@@ -97,12 +97,6 @@ static bool rbc_aggregate_state_valid(const XrRbcModule *module, const XrRbcFunc
          (slot.flags & XRT_MODULE_SLOT_MUTABLE) && rbc_aggregate_reference_location(f, access.result));
 }
 
-static bool rbc_aggregate_return_word(const XrRbcFunction *f, uint32_t word) {
-    return (word & 255) == XR_RBC_AGGREGATE_ACCESS && (word >> 16) < f->aggregate_access_count &&
-        (f->aggregate_accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN ||
-         f->aggregate_accesses[word >> 16].operation == XR_RBC_FUNCTION_RETURN);
-}
-
 static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
     if (access.callee >= module->function_count || access.source || access.slot ||

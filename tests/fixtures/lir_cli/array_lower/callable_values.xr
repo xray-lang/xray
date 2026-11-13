@@ -6,6 +6,7 @@ fn choose(flag: bool, left: fn(i64) -> i64, right: fn(i64) -> i64, value: i64) -
 fn predicate(callback: fn() -> bool) -> bool { return callback() }
 fn byteValue(callback: fn(u8) -> u8, value: u8) -> u8 { return callback(value) }
 fn compare(callback: fn(i64) -> bool, value: i64) -> bool { return callback(value) }
+fn sample(callback: fn() -> i64) -> i64 { return callback() }
 print(apply(fn(value: i64) -> i64 { return value + 2 }, 40))
 print(choose(false, fn(value: i64) -> i64 { return value + 1 },
     fn(value: i64) -> i64 { return value + 2 }, 40))
@@ -13,3 +14,8 @@ print(predicate(fn() -> bool { return true }))
 print(byteValue(fn(value: u8) -> u8 { return value }, 255))
 print(compare(fn(value: i64) -> bool { return value > 0 }, 1))
 print(compare(fn(value: i64) -> bool { return value > 0 }, -1))
+print(sample(fn() -> i64 {
+    var values = [11, 22, 33]
+    const part: Slice<i64> = values[1:3]
+    return part[0] + len(part)
+}))
