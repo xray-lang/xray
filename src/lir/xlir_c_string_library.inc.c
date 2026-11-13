@@ -38,5 +38,18 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
         c_text(c, ", ");
         c_value(c, v->operands[1]);
     }
+    if (cursor) {
+        const XrLirInstructionView *literal = xr_lir_internal_value_definition(
+            &c->request->module->functions[c->function.id - 1], v->operands[1]);
+        const uint8_t *bytes = NULL;
+        size_t length = 0;
+        xr_lir_literal_view(c->request->module,
+            (XrLirLiteral){c->request->module, (uint32_t)literal->bits}, &bytes, &length);
+        /* A malformed raw literal fails at its original materialization before
+         * any append can consume these counts. The canonical reader is shared. */
+        XrUtf8ScanResult scan = xr_utf8_core_scan_strict(bytes, length);
+        c_format(c, ", (const char *)xrl_literal%" PRIu64 ", %zu, %zu",
+            literal->bits, length, scan.rune_count);
+    }
     c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
 }

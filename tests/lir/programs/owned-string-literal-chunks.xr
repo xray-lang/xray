@@ -1,0 +1,25 @@
+fn empty(count: i64) -> string {
+    var text = "seed"
+    var i = 0
+    while (i < count) {
+        text += ""
+        i += 1
+    }
+    return text
+}
+
+fn unicode(count: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        text += "\0é😀"
+        i += 1
+    }
+    return text
+}
+
+print(empty(0))
+print(empty(4))
+print(len(unicode(0)))
+print(unicode(2))
+print(len(unicode(2)))

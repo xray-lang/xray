@@ -23,8 +23,6 @@ typedef struct XrtStringAppendCursor {
     XrtString *string;
     const XrtString *suffix;
     XrStringCursor cursor;
-    const char *suffix_bytes;
-    size_t suffix_length, suffix_runes;
 } XrtStringAppendCursor;
 #ifdef __cplusplus
 extern "C" {
@@ -50,13 +48,15 @@ static inline void xrt_string_append_cursor_close(XrtStringAppendCursor *cursor)
     xrt_string_append_cursor_flush(cursor);
     cursor->string = NULL;
 }
+/* The compiler supplies the same literal table bytes and canonical UTF8 counts
+ * that produced suffix. Its pinned identity remains checked on every borrow. */
 static inline XrtString *xrt_string_append_cursor(XrtStringAppendCursor *cursor,
-    XrtString *current, const XrtString *suffix, uint32_t source) {
+    XrtString *current, const XrtString *suffix, const char *bytes, size_t length,
+    size_t runes, uint32_t source) {
     if (cursor->string && cursor->string == current && cursor->suffix == suffix &&
-        cursor->suffix_length < SIZE_MAX - cursor->cursor.length &&
-        cursor->cursor.length + cursor->suffix_length + 1 <= cursor->cursor.capacity) {
-        xr_string_cursor_append(&cursor->cursor, cursor->suffix_bytes,
-            cursor->suffix_length, cursor->suffix_runes);
+        length < SIZE_MAX - cursor->cursor.length &&
+        cursor->cursor.length + length + 1 <= cursor->cursor.capacity) {
+        xr_string_cursor_append(&cursor->cursor, bytes, length, runes);
         return current;
     }
     return xrt_string_append_cursor_refill(cursor, current, suffix, source);

@@ -113,9 +113,6 @@ XRAY_API XR_NOINLINE XrtString *xrt_string_append_cursor_refill(XrtStringAppendC
         xr_xir_root_string_append_cursor(root->domain, result, &cursor->cursor)) {
         cursor->string = result;
         cursor->suffix = suffix;
-        cursor->suffix_bytes = suffix->bytes;
-        cursor->suffix_length = suffix->length;
-        cursor->suffix_runes = suffix->runes;
     }
     return result;
 }

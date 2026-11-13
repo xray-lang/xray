@@ -21,6 +21,7 @@
 #include "xlir_state_projection.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
+#include "../shared/xr_utf8_core.h"
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
