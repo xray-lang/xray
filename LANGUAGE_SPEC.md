@@ -238,7 +238,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
-| `operator` | operator overloading |
+| `operator` | reserved; the language has no operator overloading |
 | `is` `as` | runtime type check / cast |
 
 `abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
@@ -1022,7 +1022,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> i64` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `equals(other: T) -> bool` and `hash() -> i64` (the parameter type of `equals` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.4 `Set<T>`
 
@@ -1938,9 +1938,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class and struct cannot define their own `==`; the equality domain of nominal types is `Equal` in §9.2. |
 | `!=` | inverse of `==` |
-| `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
+| `<` `<=` `>` `>=` | supported by numbers and strings; user types compare through `compareTo` of `Comparable` (§9.2) and cannot define these operators. |
 
 **Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔f64 promotion, or implicit signedness changes.
 
@@ -1988,7 +1988,7 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 **Special cases**:
 - An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
-- Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
+- Array/Map elements: `a[i] = v` calls the built-in setter; user types cannot define indexing.
 
 ### 3.5 Ternary `? :`
 
@@ -2258,7 +2258,7 @@ bytes[i]                // explicit byte-view index
 - Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
-- User classes: via `operator[]` overload.
+- User types: cannot define indexing; element access is provided through methods.
 
 ```xray
 var a: Array<string> = ["old"]
@@ -2433,7 +2433,7 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 yield expr                  // produce one generator value and suspend
 ```
 
-`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.5). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
 Cooperative CPU yielding uses `Task.yieldNow()` (see §10.10); bare `yield` is not an expression.
 
@@ -2441,7 +2441,7 @@ Cooperative CPU yielding uses `Task.yieldNow()` (see §10.10); bare `yield` is n
 
 yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Task.yieldNow() produces no element and returns the current task to the scheduler queue. Neither keeps a suspended call on the host C stack.
 
-hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
+hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.5). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
 
 #### 3.16.2 Generator waits and one consumer
 
@@ -2613,7 +2613,7 @@ Enum type domains and descriptor views are compiler-recognized static domains. T
 
 #### Custom iterators
 
-Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.5.
 
 #### Reference Iteration
 
@@ -3323,7 +3323,6 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
@@ -3443,56 +3442,7 @@ class Vector2 {
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
-#### 5.3.5 Operator overloading
-
-```xray
-class Vec2 {
-    x: f64
-    y: f64
-
-    init(x: f64, y: f64) {
-        this.x = x; this.y = y
-    }
-
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-
-    operator==(other: Vec2) -> bool {
-        return this.x == other.x && this.y == other.y
-    }
-
-    operator[](index: i64) -> f64 {
-        if (index == 0) { return this.x }
-        return this.y
-    }
-}
-```
-
-**Overloadable operators** (full list, source: `xparse_oop.c`):
-
-| Category | Operators | Arity | Notes |
-|--|--|--|--|
-| Binary arithmetic | `+` `-` `*` `/` `%` | 1 | A unary `-` with no parameters acts as unary minus |
-| Bitwise | `&` `\|` `^` `<<` `>>` | 1 | |
-| Comparison | `==` `!=` `<` `<=` `>` `>=` | 1 | Typically implement `==`/`!=` and `<`/`<=`/`>`/`>=` as pairs |
-| Indexing | `[]` (getter), `[]=` (setter) | 1 / 2 | The setter is `(index, value)` |
-| Unary | `!` `~` `++` `--` | 0 | |
-| Compound assignment | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
-
-```xray
-class Counter {
-    n: i64 = 0
-    operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
-    operator[](i: i64) -> i64 { return this.n + i }
-    operator[]=(i: i64, v: i64) { this.n = v - i }
-}
-```
-
-**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
-
-#### 5.3.6 `Iterator<T>` and `Iterable<T>`
+#### 5.3.5 `Iterator<T>` and `Iterable<T>`
 
 `Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
 
@@ -3519,7 +3469,7 @@ Rules:
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
-#### 5.3.7 Computed Properties
+#### 5.3.6 Computed Properties
 
 A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
 
@@ -3556,7 +3506,7 @@ Rules:
 - A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
 - Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
 
-#### 5.3.8 Worked Examples
+#### 5.3.7 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -3583,7 +3533,7 @@ fn main() {
 main()
 ```
 
-Operator overloading and named-value calls obey the contracts above, with complete implementation qualification in §17.
+Named-value calls obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.4 `struct` declaration
 
@@ -3651,7 +3601,6 @@ var c = Config{host: "localhost"}    // OK
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
-| Operator overload | ✅ | ✅ |
 | Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 
@@ -5207,11 +5156,11 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 | Interface | Meaning |
 |---|---|
 | `Comparable` | usable with `<` `<=` `>` `>=`; i64/f64/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> i64` (signature below) |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `equals(other: T) -> bool` and `hash() -> i64` (signature below) |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map (including `JSON.Object`), Set, string, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `JSON.Value` is not directly iterable. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> i64`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `equals(other: T) -> bool` and `hash() -> i64`. The parameter type of `equals` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
 ```xray
 class Token implements Hashable {
@@ -5220,7 +5169,7 @@ class Token implements Hashable {
     init(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
-    operator==(other: Token) -> bool { return this.value == other.value }
+    equals(other: Token) -> bool { return this.value == other.value }
 
     hash() -> i64 { return this.value }
 }
@@ -5229,7 +5178,7 @@ var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
+Providing only one of `equals` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
 
 #### `where` clauses
 
@@ -5272,7 +5221,7 @@ Built-in `f64` compares with IEEE `==`, which is not reflexive on NaN, so its ke
 
 Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
 
-A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+A user type's `equals` serves as its own key relation, so **it must be reflexive, symmetric, and transitive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.
@@ -8492,7 +8441,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
-| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.6 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
 
 #### System, Calls, Coroutines, and Stdlib
@@ -8860,7 +8809,6 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
@@ -8898,12 +8846,6 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
-
-OperatorToken ::= '+' | '-' | '*' | '/' | '%'
-               |  '&' | '|' | '^'
-               |  '==' | '!=' | '<' | '<=' | '>' | '>='
-               |  '[]' | '[]='
-               |  '!' | '~'
 ```
 
 > Note: this EBNF is curated for guidance. Precedence, associativity, and disambiguation are determined by the parser implementation; in case of ambiguity, treat `src/frontend/parser/xparse_*.c` as authoritative.
@@ -8951,7 +8893,7 @@ These **63 keywords** are the union of the 51 general keywords in `src/frontend/
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
-| `operator` | §5.3 |
+| `operator` | §1.5.2 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |

@@ -495,7 +495,6 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
@@ -615,56 +614,7 @@ class Vector2 {
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
-#### 5.3.5 运算符重载
-
-```xray
-class Vec2 {
-    x: f64
-    y: f64
-
-    init(x: f64, y: f64) {
-        this.x = x; this.y = y
-    }
-
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-
-    operator==(other: Vec2) -> bool {
-        return this.x == other.x && this.y == other.y
-    }
-
-    operator[](index: i64) -> f64 {
-        if (index == 0) { return this.x }
-        return this.y
-    }
-}
-```
-
-**可重载的运算符**（完整列表，源自 `xparse_oop.c`）：
-
-| 类别 | 运算符 | 参数数 | 备注 |
-|--|--|--|--|
-| 二元算术 | `+` `-` `*` `/` `%` | 1 | `-` 单参数视为一元负号 |
-| 位运算 | `&` `\|` `^` `<<` `>>` | 1 | |
-| 比较 | `==` `!=` `<` `<=` `>` `>=` | 1 | 一般成对实现 `==`/`!=`、`<`/`<=`/`>`/`>=` |
-| 下标 | `[]`（getter）`[]=`（setter） | 1 / 2 | setter 是 `(index, value)` |
-| 一元 | `!` `~` `++` `--` | 0 | |
-| 复合赋值 | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
-
-```xray
-class Counter {
-    n: i64 = 0
-    operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
-    operator[](i: i64) -> i64 { return this.n + i }
-    operator[]=(i: i64, v: i64) { this.n = v - i }
-}
-```
-
-**不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
-
-#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
+#### 5.3.5 `Iterator<T>` 与 `Iterable<T>`
 
 `Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
 
@@ -691,7 +641,7 @@ interface Iterable<T> {
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
-#### 5.3.7 计算属性
+#### 5.3.6 计算属性
 
 字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
 
@@ -728,7 +678,7 @@ fn main() {
 - 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
 - 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
 
-#### 5.3.8 完整可运行示例
+#### 5.3.7 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -755,7 +705,7 @@ fn main() {
 main()
 ```
 
-运算符重载及具名变量调用遵循上述合同，完整实现资格见 §17。
+具名变量调用遵循上述合同，完整实现资格见 §17。
 
 ### 5.4 `struct` 声明
 
@@ -823,7 +773,6 @@ var c = Config{host: "localhost"}    // OK
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
-| 运算符重载 | ✅ | ✅ |
 | 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
@@ -1749,7 +1698,6 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
@@ -1869,56 +1817,7 @@ class Vector2 {
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
-#### 5.3.5 Operator overloading
-
-```xray
-class Vec2 {
-    x: f64
-    y: f64
-
-    init(x: f64, y: f64) {
-        this.x = x; this.y = y
-    }
-
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-
-    operator==(other: Vec2) -> bool {
-        return this.x == other.x && this.y == other.y
-    }
-
-    operator[](index: i64) -> f64 {
-        if (index == 0) { return this.x }
-        return this.y
-    }
-}
-```
-
-**Overloadable operators** (full list, source: `xparse_oop.c`):
-
-| Category | Operators | Arity | Notes |
-|--|--|--|--|
-| Binary arithmetic | `+` `-` `*` `/` `%` | 1 | A unary `-` with no parameters acts as unary minus |
-| Bitwise | `&` `\|` `^` `<<` `>>` | 1 | |
-| Comparison | `==` `!=` `<` `<=` `>` `>=` | 1 | Typically implement `==`/`!=` and `<`/`<=`/`>`/`>=` as pairs |
-| Indexing | `[]` (getter), `[]=` (setter) | 1 / 2 | The setter is `(index, value)` |
-| Unary | `!` `~` `++` `--` | 0 | |
-| Compound assignment | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
-
-```xray
-class Counter {
-    n: i64 = 0
-    operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
-    operator[](i: i64) -> i64 { return this.n + i }
-    operator[]=(i: i64, v: i64) { this.n = v - i }
-}
-```
-
-**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
-
-#### 5.3.6 `Iterator<T>` and `Iterable<T>`
+#### 5.3.5 `Iterator<T>` and `Iterable<T>`
 
 `Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
 
@@ -1945,7 +1844,7 @@ Rules:
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
-#### 5.3.7 Computed Properties
+#### 5.3.6 Computed Properties
 
 A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
 
@@ -1982,7 +1881,7 @@ Rules:
 - A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
 - Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
 
-#### 5.3.8 Worked Examples
+#### 5.3.7 Worked Examples
 
 Self-contained programs that run as-is and pass `xray check` (comments show the real output).
 
@@ -2009,7 +1908,7 @@ fn main() {
 main()
 ```
 
-Operator overloading and named-value calls obey the contracts above, with complete implementation qualification in §17.
+Named-value calls obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.4 `struct` declaration
 
@@ -2077,7 +1976,6 @@ var c = Config{host: "localhost"}    // OK
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
-| Operator overload | ✅ | ✅ |
 | Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 

@@ -312,7 +312,6 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
@@ -350,12 +349,6 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
-
-OperatorToken ::= '+' | '-' | '*' | '/' | '%'
-               |  '&' | '|' | '^'
-               |  '==' | '!=' | '<' | '<=' | '>' | '>='
-               |  '[]' | '[]='
-               |  '!' | '~'
 ```
 
 > 注：以上 EBNF 为指导性整理。precedence、associativity、消歧由 parser 实现决议；遇到歧义请以 `src/frontend/parser/xparse_*.c` 为准。
@@ -671,7 +664,6 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
@@ -709,12 +701,6 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
-
-OperatorToken ::= '+' | '-' | '*' | '/' | '%'
-               |  '&' | '|' | '^'
-               |  '==' | '!=' | '<' | '<=' | '>' | '>='
-               |  '[]' | '[]='
-               |  '!' | '~'
 ```
 
 > Note: this EBNF is curated for guidance. Precedence, associativity, and disambiguation are determined by the parser implementation; in case of ambiguity, treat `src/frontend/parser/xparse_*.c` as authoritative.

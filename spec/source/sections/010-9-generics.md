@@ -100,11 +100,11 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | 接口 | 含义 |
 |---|---|
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；i64/f64/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> i64`（签名见下） |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `equals(other: T) -> bool` 与 `hash() -> i64`（签名见下） |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
 | `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
-`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> i64`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `equals(other: T) -> bool` 与 `hash() -> i64`。`equals` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
 ```xray @id=generics-hashable-contract
 class Token implements Hashable {
@@ -113,7 +113,7 @@ class Token implements Hashable {
     init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
-    operator==(other: Token) -> bool { return this.value == other.value }
+    equals(other: Token) -> bool { return this.value == other.value }
 
     hash() -> i64 { return this.value }
 }
@@ -122,7 +122,7 @@ var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
+只提供旧式 `hashCode()` 不满足契约；只提供 `equals` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
 
 #### `where` 子句
 
@@ -165,7 +165,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
 
-用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
+用户类型的 `equals` 直接充当它自己的键等价关系，因此**它必须自反、对称、传递**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
 
 **当前限制**：
 - 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
@@ -430,11 +430,11 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 | Interface | Meaning |
 |---|---|
 | `Comparable` | usable with `<` `<=` `>` `>=`; i64/f64/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> i64` (signature below) |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `equals(other: T) -> bool` and `hash() -> i64` (signature below) |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map (including `JSON.Object`), Set, string, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `JSON.Value` is not directly iterable. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> i64`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `equals(other: T) -> bool` and `hash() -> i64`. The parameter type of `equals` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
 ```xray @id=generics-hashable-contract
 class Token implements Hashable {
@@ -443,7 +443,7 @@ class Token implements Hashable {
     init(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
-    operator==(other: Token) -> bool { return this.value == other.value }
+    equals(other: Token) -> bool { return this.value == other.value }
 
     hash() -> i64 { return this.value }
 }
@@ -452,7 +452,7 @@ var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
+Providing only one of `equals` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
 
 #### `where` clauses
 
@@ -495,7 +495,7 @@ Built-in `f64` compares with IEEE `==`, which is not reflexive on NaN, so its ke
 
 Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
 
-A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+A user type's `equals` serves as its own key relation, so **it must be reflexive, symmetric, and transitive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.

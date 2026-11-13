@@ -47,7 +47,7 @@ order: 021
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
-| `operator` | §5.3 |
+| `operator` | §1.5.2 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -121,7 +121,7 @@ These **63 keywords** are the union of the 51 general keywords in `src/frontend/
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
-| `operator` | §5.3 |
+| `operator` | §1.5.2 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
