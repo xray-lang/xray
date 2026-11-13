@@ -660,6 +660,7 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
     }
     return xr_xir_compile_nominal_field_graph_verify(&c->remaining, &c->types);
 }
+#include "xxir_specialize_lexical.inc.c"
 static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     XrXirStatus allocation_status = XR_XIR_OK;
     uint64_t bytes = (uint64_t)c->count * sizeof(XrXirOrigin);
@@ -672,8 +673,12 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
         origins[f] = (XrXirOrigin) {c->instances[f].declaration, c->instances[f].arguments,
             c->instances[f].count,NULL,0};
     }
-    XrXirProvenance evidence = {c->evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE,
-        (XrXirArtifact *)c->source_artifact,origins,c->count,NULL,0,NULL,0,{0}};
+    XrXirProvenance evidence = {.kind=c->evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE,
+        .source=(XrXirArtifact *)c->source_artifact,.origins=origins,.count=c->count};
+    if (!spec_lexical(c,&evidence.lexical)) {
+        xr_compile_resources_free(origins);
+        return c->diagnostic.status==XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : c->diagnostic.status;
+    }
     if (c->evaluation) evidence.evaluation=*c->evaluation;
     const XrXirEffects *source_read=c->effects?c->effects:c->verification_effects;
     XrXirStatus status = source_read ? xr_xir_compile_provenance_copy_source_effects(

@@ -651,10 +651,34 @@ done:
     return status;
 }
 
+static XrXirStatus provenance_lexical_match(ProvenanceMatch *c) {
+    const XrXirProvenance *source=c->source->provenance;
+    const XirLexicalProgram empty={0};
+    const XirLexicalProgram *from=source ? &source->lexical : &empty;
+    const XirLexicalProgram *to=&c->instance->lexical;
+    if (!from->function_count)
+        return !to->function_count && !to->functions ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    if (from->function_count!=c->source->function_count || !from->functions ||
+        to->function_count!=c->count || !to->functions) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<c->count;++f) {
+        const XirLexicalFunction *a=&from->functions[c->origins[f].function],*b=&to->functions[f];
+        XrXirStatus status=lexical_function_coordinates_match(a,b,f,NULL);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t v=0;v<a->binding_count;++v) {
+            status=provenance_type(c,f,a->bindings[v].logical,b->bindings[v].logical);
+            if (status==XR_XIR_OK)
+                status=provenance_type(c,f,a->bindings[v].physical,b->bindings[v].physical);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus provenance_match(ProvenanceMatch *match) {
     XrXirStatus status=provenance_nominals(match);
     if (status==XR_XIR_OK) status=provenance_functions_match(match);
     if (status==XR_XIR_OK) status=provenance_declarations(match);
+    if (status==XR_XIR_OK) status=provenance_lexical_match(match);
     if (status==XR_XIR_OK) status=provenance_reachable(match);
     if (status==XR_XIR_OK) status=provenance_evaluation_root(match);
     return status;

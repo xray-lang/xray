@@ -110,6 +110,21 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
     /* This request reads the matched inventory. Copy-only prospective
      * allocation admission belongs to the actual clone, never to this read. */
     XrXirStatus status=XR_XIR_OK;uint32_t progress=0;
+    if (stored->lexical.function_count!=actual->lexical.function_count ||
+        !!stored->lexical.functions!=!!stored->lexical.function_count ||
+        !!actual->lexical.functions!=!!actual->lexical.function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<stored->lexical.function_count;++f) {
+        const XirLexicalFunction *a=&stored->lexical.functions[f],*b=&actual->lexical.functions[f];
+        status=lexical_function_coordinates_match(a,b,f,control);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t v=0;v<a->binding_count;++v) {
+            status=xir_receive_step(control,&progress);
+            if (status!=XR_XIR_OK) return status;
+            if (a->bindings[v].logical!=b->bindings[v].logical ||
+                a->bindings[v].physical!=b->bindings[v].physical) return XR_XIR_BAD_STRUCTURE;
+        }
+    }
     for (uint32_t f=0;f<stored->contract_count && status==XR_XIR_OK;++f) {
         status=xir_receive_step(control,&progress);
         if (status==XR_XIR_OK) status=source_facts_contract_match(&stored->contracts[f],&actual->contracts[f],control);

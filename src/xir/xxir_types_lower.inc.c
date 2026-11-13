@@ -35,6 +35,14 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
     XrXirProvenance *proof = (XrXirProvenance *)module->provenance;
     if (!proof) return XR_XIR_OK;
     if (!xir_effect_kind_is_closed(proof->kind)) return XR_XIR_BAD_STAGE;
+    for (uint32_t f=0;f<proof->lexical.function_count;++f) {
+        const XirLexicalFunction *row=&proof->lexical.functions[f];
+        for (uint32_t b=0;b<row->binding_count;++b) {
+            XirLexicalBinding *binding=&((XirLexicalBinding *)row->bindings)[b];
+            if (!lower_type_id(&binding->logical,map,count) ||
+                !lower_type_id(&binding->physical,map,count)) return XR_XIR_BAD_TYPE;
+        }
+    }
     for (uint32_t f = 0; f < proof->count; ++f) {
         if (control) { XrXirStatus status=lower_control_poll(control);if (status!=XR_XIR_OK) return status; }
         XrXirOrigin *origin = &proof->origins[f];

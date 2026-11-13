@@ -212,6 +212,7 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
     return copy;
 }
 
+#include "xxir_lexical.inc.c"
 #include "xxir_provenance.inc.c"
 #include "xxir_source_facts.inc.c"
 #include "xxir_provenance_match.inc.c"

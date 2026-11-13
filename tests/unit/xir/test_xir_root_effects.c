@@ -53,6 +53,7 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
 }
 #include "xir_signal_escaping_cases.h"
 #include "xir_closure_placement_cases.h"
+#include "xir_lexical_owner_cases.h"
 
 static void captured_cell_bound_types(void) {
     EffectMark baseline = effect_mark();
@@ -1531,8 +1532,11 @@ static void control_summary_kernel(void) {
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--control-summary")));
+    CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--control-summary") ||
+        !strcmp(argv[1], "--lexical"))));
     effect_case_begin();
+    lexical_directory_ownership();
+    if (argc==2 && !strcmp(argv[1],"--lexical")) { effect_case_end();return 0; }
     closure_placement_ownership();
     module_interface_lifetime();
     direct_root_equations();

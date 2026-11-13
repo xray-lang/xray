@@ -114,6 +114,30 @@ static size_t packet_span(const XrXirCheckedPacket *packet,size_t at,size_t coun
     CHECK(width && at<=packet->length && count<=(packet->length-at)/width);
     return at+count*width;
 }
+static size_t packet_lexical_size(const XrXirCheckedPacket *packet,const XirLexicalProgram *program) {
+    size_t bytes=4;
+    for (uint32_t f=0;f<program->function_count;++f) {
+        const XirLexicalFunction *row=&program->functions[f];
+        bytes=packet_span(packet,bytes,3,4);
+        bytes=packet_span(packet,bytes,row->scope_count,8);
+        bytes=packet_span(packet,bytes,row->binding_count,56);
+        bytes=packet_span(packet,bytes,row->event_count,52);
+    }
+    return bytes;
+}
+static size_t packet_lexical(const XrXirCheckedPacket *packet,size_t at,const XirLexicalProgram *program) {
+    CHECK(packet32(packet,at)==program->function_count);at=packet_span(packet,at,1,4);
+    for (uint32_t f=0;f<program->function_count;++f) {
+        const XirLexicalFunction *row=&program->functions[f];
+        CHECK(packet32(packet,at)==row->scope_count);
+        at=packet_span(packet,at+4,row->scope_count,8);
+        CHECK(packet32(packet,at)==row->binding_count);
+        at=packet_span(packet,at+4,row->binding_count,56);
+        CHECK(packet32(packet,at)==row->event_count);
+        at=packet_span(packet,at+4,row->event_count,52);
+    }
+    return at;
+}
 static CheckedPacketFunction packet_function(const XrXirCheckedPacket *packet,uint32_t index) {
     CHECK(index<packet32(packet,68));size_t at=76;
     CheckedPacketFunction row={0};

@@ -94,9 +94,14 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(derived, &packet, NULL)==XR_XIR_OK);
     /* Schema26: each origin has function/count/type arguments followed by an
        effect-argument count and (parameter,type) pairs. Binding proofs follow
-       the origin vector as count plus six u32 words per proof. */
+       the origin vector as count plus six u32 words per proof, then the
+       complete lexical directory. */
     CHECK(packet.length>=4);
-    size_t tail=4,before=0;
+    size_t lexical_bytes=packet_lexical_size(&packet,&p->lexical);
+    CHECK(lexical_bytes<=packet.length);
+    size_t lexical_offset=packet.length-lexical_bytes;
+    CHECK(packet_lexical(&packet,lexical_offset,&p->lexical)==packet.length);
+    size_t tail=lexical_bytes+4,before=0;
     CHECK((size_t)p->binding_count<=(packet.length-tail)/24);
     tail+=24*(size_t)p->binding_count;
     size_t proof_offset=packet.length-tail;

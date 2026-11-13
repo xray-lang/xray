@@ -743,6 +743,7 @@ static void checked_effect_proofs(CheckedCursor *c, XrXirProvenance *p) {
         if (c->reading) bindings[b] = proof;
     }
 }
+#include "xxir_checked_lexical.inc.c"
 static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, m->provenance ? m->provenance->kind : XR_XIR_EVIDENCE_ABSENT);
     if (c->status != XR_XIR_OK) return;
@@ -754,7 +755,9 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t eviden
     if (c->reading) { m->provenance = p; if (p) p->kind = kind; }
     if (!p) return;
     if (kind == XR_XIR_EVIDENCE_TEMPLATE) {
-        checked_effect_contracts(c, m, p); return;
+        checked_effect_contracts(c, m, p);
+        checked_lexical(c,m,p);
+        return;
     }
     XrXirArtifact *source = checked_array(c, p->source, 1, sizeof(*source), 8);
     if (c->reading) {
@@ -768,6 +771,7 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t eviden
     if (c->status != XR_XIR_OK) return;
     checked_effect_origins(c, m, p);
     checked_effect_proofs(c, p);
+    checked_lexical(c,m,p);
 }
 static void checked_module_fields(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, (uint32_t)m->linkage_kind);

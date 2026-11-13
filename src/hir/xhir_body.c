@@ -10,6 +10,7 @@
  *   Stable use indices survive growth; closing a construction ends pool access.
  */
 #include "xhir_body.h"
+#include "xhir_lexical.h"
 #include "xhir_tuple.h"
 #include "xhir_nominal.h"
 #include "xhir_nominal_source.h"
@@ -54,6 +55,8 @@ typedef struct HirBodyBinding {
     XrHirBindingInput declaration;
     char *name;
     uint32_t location;
+    uint32_t lexical_value;
+    XirLexicalBindingRole lexical_role;
     bool materialized,is_declaration;
 } HirBodyBinding;
 typedef struct HirBodyScope {XrHirBodyScope parent;XrHirBodyOrigin origin;uint32_t nominal_owner;} HirBodyScope;
@@ -263,6 +266,12 @@ XR_FUNC XrXirStatus xr_hir_body_emit(XrHirBody *body,XrHirBodyUse handle,XrXirTy
                 !!declaration.mutable!=binding->declaration.rebindable)return XR_XIR_BAD_STRUCTURE;
         } else binding->location=value;
         binding->materialized=true;
+        if (use->binding_kind == XR_HIR_BINDING_CAPTURE)
+            binding->lexical_role = XIR_LEXICAL_CAPTURE;
+        else if (binding->declaration.is_parameter &&
+            use->action.operation != XR_XIR_CELL_NEW && use->action.operation != XR_XIR_CELL_NEW_TAKE)
+            binding->lexical_role = binding->declaration.mode == XR_PARAM_REF ? XIR_LEXICAL_PARAMETER_REF :
+                binding->declaration.mode == XR_PARAM_MOVE ? XIR_LEXICAL_PARAMETER_MOVE : XIR_LEXICAL_PARAMETER_READ;
     }
     if(use->place.owner) {
         if(use->place.owner!=body||use->place.index>=body->places.count)return XR_XIR_BAD_STRUCTURE;
@@ -559,6 +568,10 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     }
     if(row->has_selector&&projection->source_operands[1]!=row->selector)return XR_XIR_BAD_STRUCTURE;
     if(row->has_field&&projection->immediate!=(int64_t)row->field)return XR_XIR_BAD_STRUCTURE;
+    if (row->binding.owner && row->initializes) {
+        HirBodyBinding *binding = &body->bindings[row->binding.index];
+        binding->lexical_value = projection->has_value ? projection->value : UINT32_MAX;
+    }
     row->projection=*projection;row->projection.source_arguments=NULL;row->projection.source_value_map=NULL;
     row->projection.default_type_arguments=NULL;
     row->projected=true;if(reason)*reason=NULL;return XR_XIR_OK;
@@ -570,3 +583,4 @@ XR_FUNC bool xr_hir_body_origin(const XrHirBody *body,uint32_t use,XrHirBodyOrig
     *out = body->uses[use].origin;
     return true;
 }
+#include "xhir_lexical.inc.c"

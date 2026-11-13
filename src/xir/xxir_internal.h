@@ -42,6 +42,11 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
     const XrXirModule *destination, const XrXirProvenance *instance,
     const XrXirEffects *source_effects,XrCompileRequestControl *control,XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
+XR_FUNC void xir_lexical_free(XirLexicalProgram *);
+XR_FUNC XrXirStatus xir_lexical_copy(const XrXirCompileContext *,
+    const XirLexicalProgram *, XirLexicalProgram *, XrCompileRequestControl *);
+XR_FUNC XrXirStatus xir_lexical_verify(const XrXirCompileContext *,
+    const XrXirModule *, const XirLexicalProgram *);
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
     const XrXirProvenance *source, XrXirProvenance **output, XrCompileRequestControl *control);
 /* Only the same specialization call supplies the fresh owning derivation.

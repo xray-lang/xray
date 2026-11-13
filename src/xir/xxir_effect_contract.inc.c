@@ -418,6 +418,8 @@ XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *
     if (!module->provenance) return XR_XIR_OK;
 
     const XrXirProvenance *p = module->provenance;
+    XrXirStatus lexical = xir_lexical_verify(context, module, &p->lexical);
+    if (lexical != XR_XIR_OK) return lexical;
     if (p->kind!=XR_XIR_EVIDENCE_EVALUATION &&
         (p->evaluation.caller || p->evaluation.instruction || p->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
     if (p->kind == XR_XIR_EVIDENCE_TEMPLATE) return effect_contract_template( module, p);

@@ -28,6 +28,7 @@ XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance) {
     xr_compile_resources_free(provenance->origins);
     xr_compile_resources_free(provenance->contracts);
     xr_compile_resources_free(provenance->bindings);
+    xir_lexical_free(&provenance->lexical);
     xr_xir_compile_artifact_free(provenance->source);
     xr_compile_resources_free(provenance);
 }
@@ -183,6 +184,8 @@ static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
         if (source->binding_count && !copy->bindings) goto failed;
         copy->binding_count = source->binding_count;
     }
+    *allocation_status = xir_lexical_copy(context, &source->lexical, &copy->lexical, control);
+    if (*allocation_status != XR_XIR_OK) goto failed;
     return copy;
 failed:
     xr_xir_compile_provenance_free(copy);

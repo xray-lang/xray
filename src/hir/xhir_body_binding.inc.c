@@ -123,7 +123,8 @@ XR_FUNC XrXirStatus xr_hir_body_binding_declare(XrHirBody *body,const XrHirBindi
     if(status==XR_XIR_OK)status=body_bytes(name,input->name,input->name_length,control);
     if(status==XR_XIR_OK){name[input->name_length]=0;status=body_binding_reserve(body,input->key,control,&slot);}
     if(status!=XR_XIR_OK){xr_compile_resources_free(name);return status;}
-    HirBodyBinding row={.declaration=*input,.name=name,.location=input->location,.is_declaration=true};
+    HirBodyBinding row={.declaration=*input,.name=name,.location=input->location,
+        .lexical_value=UINT32_MAX,.is_declaration=true};
     bool slot_binding=input->storage==XR_HIR_BODY_SLOT||input->storage==XR_HIR_BODY_UNIT_SLOT;
     if(slot_binding&&body->declarations.slots&&body->declarations.slot_count&&*body->declarations.slots&&input->location<*body->declarations.slot_count) {
         XrXirSlot canonical=(*body->declarations.slots)[input->location];
@@ -148,6 +149,7 @@ XR_FUNC XrXirStatus xr_hir_body_binding_instance(XrHirBody *body,XrHirBodyBindin
     uint32_t ignored=0;status=body_binding_reserve(body,row.declaration.key,control,&ignored);
     if(status!=XR_XIR_OK)return status;
     row.is_declaration=false;row.materialized=false;row.declaration.scope=scope;
+    row.lexical_value=UINT32_MAX;row.lexical_role=XIR_LEXICAL_LOCAL;
     body->bindings[body->binding_count]=row;*output=(XrHirBodyBinding){body,body->binding_count++};return XR_XIR_OK;
 }
 static XrXirStatus body_binding_failure(const char **reason,const char *message) {

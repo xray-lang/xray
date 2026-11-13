@@ -17,6 +17,7 @@
 
 #include "xxir.h"
 #include "xxir_effect_input_internal.h"
+#include "xxir_lexical.h"
 
 typedef enum XrXirEvidenceKind {
     XR_XIR_EVIDENCE_ABSENT = 0,
@@ -128,6 +129,7 @@ typedef struct XrXirProvenance {
     XrXirEffectBindingProof *bindings;
     uint32_t binding_count;
     XirEvaluationRoot evaluation;
+    XirLexicalProgram lexical;
 } XrXirProvenance;
 
 /* Each raw correspondence entry replays the complete order/unique/range
