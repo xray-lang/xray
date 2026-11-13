@@ -9,8 +9,46 @@
 #ifndef XNATIVE_CALLABLE_H
 #define XNATIVE_CALLABLE_H
 #include "xir/xxir_type_arena.h"
+#include "xray_native_pod.h"
 
 typedef struct XrtCallableCode XrtCallableCode;
+
+typedef enum XrtCallableValueKind {
+    XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED
+} XrtCallableValueKind;
+
+typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
+
+typedef enum XrtCallableShapeKind {
+    XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL
+} XrtCallableShapeKind;
+
+typedef struct XrtCallableParameterSpec {
+    XrtCallableValueSpec value;
+    uint32_t mode;
+    bool escaping;
+} XrtCallableParameterSpec;
+
+/* Dependencies name earlier receiving rows. Array families are I64, String,
+ * U8 and U64 in that order. Scalar IDs are XrPodScalar values. The directory
+ * describes physical storage and never grants an executable entry. */
+typedef struct XrtCallableTypeSpec {
+    XrtCallableShapeKind kind;
+    XrtCallableValueSpec element;
+    uint32_t count;
+    const XrtCallableParameterSpec *parameters;
+    uint32_t parameter_count;
+    XrtCallableValueSpec result;
+    uint32_t flags; /* NoSuspend=1 and C_ABI=2. */
+    bool throws;
+} XrtCallableTypeSpec;
+
+XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirType *);
+/* One physical pool is projected into an independently owned canonical arena.
+ * Throwing signatures remain unsupported until the complete error ABI exists.
+ * The limit covers the temporary receiving workspace and retained type arena. */
+XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *, uint32_t count,
+    uint64_t limit, XrXirTypeArena **empty);
 
 typedef struct XrtCallableEntry {
     XrXirType type;
@@ -38,6 +76,12 @@ XR_FUNC void xrt_callable_code_drop(XrtCallableCode **);
  * keep their actual canonical identities. No activation pointer is accepted. */
 XR_FUNC XrXirValueStatus xrt_callable_new(XrtCallableCode *, XrXirDomain *, uint32_t entry,
     const XrXirValue *captures, uint32_t count, XrXirValue *empty);
+/* Exact canonical Cell producers use the same arena and graph Domain as their
+ * closures. The caller closes a cycle-capable Domain at its actual owner end. */
+XR_FUNC XrXirValueStatus xrt_callable_cell_new(XrtCallableCode *, XrXirDomain *, XrXirType,
+    const XrXirValue *initial, XrXirValue *empty);
+XR_FUNC XrXirValueStatus xrt_callable_cell_write(XrtCallableCode *, XrXirDomain *, XrXirType,
+    const XrXirValue *cell, const XrXirValue *replacement);
 /* The caller retains code and value while using this synchronous borrow.
  * The returned capture vector ends with the actual canonical Fn owner. */
 XR_FUNC XrXirValueStatus xrt_callable_borrow(const XrtCallableCode *, const XrXirValue *,

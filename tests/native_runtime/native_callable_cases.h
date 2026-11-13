@@ -26,6 +26,101 @@ static void native_callable_release(void *owner) {
     if (!--lease->references) { ++*lease->retired; xr_free(lease); }
 }
 
+static void native_callable_projection(void) {
+    XrtCallableParameterSpec parameter = {{XRT_CALLABLE_CONSTRUCTED, 1}, XR_PARAM_MOVE, true};
+    XrtCallableTypeSpec specs[] = {
+        {.kind=XRT_CALLABLE_CELL, .element={XRT_CALLABLE_SCALAR, XR_POD_I64}},
+        {.kind=XRT_CALLABLE_SIGNATURE, .result={XRT_CALLABLE_SCALAR, XR_POD_I64}, .flags=1},
+        {.kind=XRT_CALLABLE_CELL, .element={XRT_CALLABLE_CONSTRUCTED, 1}},
+        {.kind=XRT_CALLABLE_SIGNATURE, .parameters=&parameter, .parameter_count=1,
+            .result={XRT_CALLABLE_CONSTRUCTED, 1}},
+        {.kind=XRT_CALLABLE_FIXED_BYTES, .element={XRT_CALLABLE_SCALAR, XR_POD_U8}, .count=17},
+        {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_CONSTRUCTED, 4}}
+    };
+    for (unsigned invalid = 0; invalid < 8; ++invalid) {
+        XrtCallableTypeSpec saved = specs[3];
+        XrtCallableParameterSpec prior = parameter;
+        if (invalid == 0) specs[3].result.type = 3;
+        if (invalid == 1) specs[3].throws = true;
+        if (invalid == 2) specs[3].flags = 128;
+        if (invalid == 3) specs[3].element.type = XR_POD_I64;
+        if (invalid == 4) specs[3].parameters = NULL;
+        if (invalid == 5) parameter.mode = 99;
+        if (invalid == 6) parameter.value.type = 3;
+        if (invalid == 7) specs[3].kind = (XrtCallableShapeKind)-1;
+        XrXirTypeArena *rejected = NULL;
+        CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &rejected) ==
+            (invalid == 1 ? XR_XIR_VALUE_UNSUPPORTED : XR_XIR_VALUE_BAD_ARGUMENT));
+        CHECK(!rejected);
+        specs[3] = saved;
+        parameter = prior;
+    }
+    XrXirTypeArena *arena = NULL;
+    CHECK(xrt_callable_types_new(specs, 6, 1, &arena) == XR_XIR_VALUE_MEMORY_LIMIT && !arena);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    size_t first_call = native_string_calls;
+    CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    size_t sites = native_string_calls - first_call;
+    xr_xir_compile_type_arena_drop(arena);
+    arena = NULL;
+    CHECK(!native_string_live && !native_string_bytes);
+    for (size_t point = 0; point < sites; ++point) {
+        native_string_fail_at = native_string_calls + point;
+        native_string_injected = false;
+        CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OOM);
+        CHECK(!arena && native_string_injected && !native_string_live && !native_string_bytes);
+    }
+    native_string_fail_at = SIZE_MAX;
+    printf("canonical callable projection receiving failures cover %zu allocation sites\n", sites);
+#endif
+    CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    memset(specs, 0, sizeof(specs));
+    memset(&parameter, 0, sizeof(parameter));
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    const XrXirTypeNode *signature = xr_xir_callable_signature(types, (XrXirType)263);
+    CHECK(signature && signature->parameters[0].mode == XR_PARAM_MOVE && signature->parameters[0].escaping &&
+        signature->parameters[0].type == 261 && signature->result == 261);
+    CHECK((signature->flags & XR_XIR_CALLABLE_ROOT_MASK) == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
+    XrXirLayout layout = {0};
+    CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)265, &layout) && layout.size == 18);
+    XrXirType capture_types[] = {(XrXirType)260, XR_XIR_I64, (XrXirType)262};
+    XrtCallableEntry entries[] = {{(XrXirType)261, capture_types, 2}, {(XrXirType)261, capture_types + 2, 1}};
+    uint32_t retired = 0;
+    NativeCallableLease *owner = xr_malloc(sizeof(*owner));
+    CHECK(owner);
+    *owner = (NativeCallableLease){1, &retired, false};
+    XrtCallableCode *code = NULL;
+    CHECK(xrt_callable_code_new(arena, entries, 2,
+        (XrtCallableLease){owner, native_callable_retain, native_callable_release}, &code) == XR_XIR_VALUE_OK);
+    XrXirDomain *domain = NULL;
+    CHECK(xr_xir_domain_new(UINT64_MAX, &domain) == XR_XIR_VALUE_OK);
+    XrXirDomainStats baseline = xr_xir_domain_stats(domain);
+    XrXirValue initial = {XR_XIR_I64, 0, 40}, integer = {0}, first = {0}, slot = {0}, cycle = {0};
+    CHECK(xrt_callable_cell_new(code, domain, (XrXirType)260, &initial, &integer) == XR_XIR_VALUE_OK);
+    XrXirValue captures[] = {integer, {XR_XIR_I64, 0, 2}};
+    CHECK(xrt_callable_new(code, domain, 0, captures, 2, &first) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_new(code, domain, (XrXirType)262, &first, &slot) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_new(code, domain, 1, &slot, 1, &cycle) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_write(code, domain, (XrXirType)262, &slot, &cycle) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_write(code, domain, (XrXirType)260, &slot, &initial) == XR_XIR_VALUE_BAD_ARGUMENT);
+    xr_xir_compile_type_arena_drop(arena);
+    xrt_callable_code_drop(&code);
+    native_callable_release(owner);
+    xr_xir_value_drop(&first);
+    xr_xir_value_drop(&integer);
+    xr_xir_value_drop(&cycle);
+    xr_xir_value_drop(&slot);
+    CHECK(!retired && xr_xir_domain_stats(domain).live_bytes > baseline.live_bytes);
+    CHECK(xr_xir_domain_close(domain) == XR_XIR_VALUE_OK);
+    XrXirDomainStats final = xr_xir_domain_stats(domain);
+    CHECK(retired == 1 && final.live_bytes == baseline.live_bytes && final.allocations == final.frees + 1);
+    xr_xir_domain_drop(domain);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    CHECK(!native_string_live && !native_string_bytes);
+#endif
+    puts("owned callable projection preserves contracts and retires a real Cell/Fn cycle");
+}
+
 static void native_callable_owners(void) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};

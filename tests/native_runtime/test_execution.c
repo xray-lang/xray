@@ -99,6 +99,7 @@ static void *native_string_realloc(void *pointer, size_t bytes) {
 #define xr_calloc(count, bytes) native_string_calloc(count, bytes)
 #define xr_free(pointer) native_string_free(pointer)
 #define xr_realloc(pointer, bytes) native_string_realloc(pointer, bytes)
+#include "base/xcompile_resources.c"
 #include "xir/xxir_value.c"
 #include "runtime/native/xnative_callable.c"
 #pragma pop_macro("xr_realloc")
@@ -738,6 +739,7 @@ static void native_string_misuse_aborts(void) {
 #include "native_callable_cases.h"
 
 int main(void) {
+    native_callable_projection();
     native_callable_owners();
     native_f64_text_recovery();
     native_frame_cell_recovery();

@@ -18,6 +18,8 @@
 #include <stdatomic.h>
 #include <string.h>
 
+#include "xnative_callable_types.inc.c"
+
 struct XrtCallableCode {
     _Atomic(uint32_t) references;
     XrXirTypeArena *arena;
@@ -147,4 +149,21 @@ XR_FUNC XrXirValueStatus xrt_callable_borrow(const XrtCallableCode *code, const 
     *captures = binding->captures;
     *count = binding->capture_count;
     return XR_XIR_VALUE_OK;
+}
+
+XR_FUNC XrXirValueStatus xrt_callable_cell_new(XrtCallableCode *code, XrXirDomain *domain,
+    XrXirType type, const XrXirValue *initial, XrXirValue *empty) {
+    if (!code || !domain || !xr_xir_type_is_cell(xr_xir_compile_type_arena_types(code->arena), type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission admission = {code->arena, domain, callable_admit, code, UINT64_MAX, UINT64_MAX};
+    return xr_xir_cell_new(domain, code->arena, type, initial, &admission, empty);
+}
+
+XR_FUNC XrXirValueStatus xrt_callable_cell_write(XrtCallableCode *code, XrXirDomain *domain,
+    XrXirType type, const XrXirValue *cell, const XrXirValue *replacement) {
+    if (!code || !domain || !xr_xir_type_is_cell(xr_xir_compile_type_arena_types(code->arena), type) ||
+        !xr_xir_value_argument(cell, code->arena, type) || !xr_xir_cell_in_domain(cell, domain))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission admission = {code->arena, domain, callable_admit, code, UINT64_MAX, UINT64_MAX};
+    return xr_xir_cell_write(cell, replacement, &admission);
 }
