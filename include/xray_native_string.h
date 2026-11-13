@@ -41,10 +41,10 @@ XRAY_API XrtString *xrt_string_append_cursor_refill(XrtStringAppendCursor *, Xrt
 #ifdef __cplusplus
 }
 #endif
-static inline void xrt_string_append_cursor_flush(XrtStringAppendCursor *cursor) {
+static inline void xrt_string_append_cursor_flush(XrtStringAppendCursor *XR_STRING_CURSOR_RESTRICT cursor) {
     if (cursor->string) xr_string_cursor_commit(&cursor->cursor);
 }
-static inline void xrt_string_append_cursor_close(XrtStringAppendCursor *cursor) {
+static inline void xrt_string_append_cursor_close(XrtStringAppendCursor *XR_STRING_CURSOR_RESTRICT cursor) {
     xrt_string_append_cursor_flush(cursor);
     cursor->string = NULL;
 }

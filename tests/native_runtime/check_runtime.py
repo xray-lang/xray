@@ -55,6 +55,7 @@ def header_clients(build, logs, libraries):
             '-pthread']
     text = ('#include "xray_native_runtime.h"\n'
             '#include "xray_native_array.h"\n'
+            '#include "xray_native_string.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'
