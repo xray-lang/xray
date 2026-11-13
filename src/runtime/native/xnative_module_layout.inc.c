@@ -138,8 +138,8 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         (spec->dependency_count && !layout->view.dependencies) || (spec->slot_count && !layout->view.slots) ||
         !layout->slot_counts) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
     if (spec->callable_type_count) {
-        uint64_t bytes = layout->bytes;
-        if (!module_charge(&bytes, spec->callable_type_count, sizeof(XrtCallableTypeSpec))) {
+        uint64_t callable_bytes = layout->bytes;
+        if (!module_charge(&callable_bytes, spec->callable_type_count, sizeof(XrtCallableTypeSpec))) {
             xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OVERFLOW;
         }
         XrtCallableTypeSpec *types = xr_calloc(spec->callable_type_count, sizeof(*types));
@@ -148,7 +148,7 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         for (uint32_t t = 0; t < spec->callable_type_count; ++t) {
             XrtCallableTypeSpec from = spec->callable_types[t];
             if ((from.parameter_count != 0) != (from.parameters != NULL) ||
-                !module_charge(&bytes, from.parameter_count, sizeof(*from.parameters))) {
+                !module_charge(&callable_bytes, from.parameter_count, sizeof(*from.parameters))) {
                 xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
             }
             types[t] = from;
@@ -157,8 +157,8 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
                 xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM;
             }
         }
-        if (bytes > spec->byte_limit) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT; }
-        layout->bytes = bytes;
+        if (callable_bytes > spec->byte_limit) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT; }
+        layout->bytes = callable_bytes;
         uint64_t arena_bytes = 0;
         status = xrt_callable_types_new_accounted(types, spec->callable_type_count,
             spec->byte_limit - bytes, &layout->callable_types, &arena_bytes);
