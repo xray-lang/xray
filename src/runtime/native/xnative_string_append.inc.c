@@ -15,18 +15,22 @@ XRAY_API XR_NOINLINE void xrt_string_cell_append(XrtString **binding, const XrtS
     XrtValueRoot *root = string_root(source);
     if (!binding || !*binding) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     root_borrow(root, suffix);
-    root_reserve(root, source);
     XrtString *previous = *binding;
     XrtStringOwner *owner = owner_find(root, previous);
     if (!owner || !owner->count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XR_CHECK(!root->pending.type && !root->pending.reserved && !root->pending.payload,
+        "String append reserves one independent pending owner");
+    if (owner->count == 1 && !owner->pinned &&
+        xr_xir_root_string_append_in_place(root->domain, previous, suffix)) return;
+    root_reserve(root, source);
+    owner = owner_find(root, previous);
+    XR_CHECK(owner && owner->count, "Root reservation preserves the actual String owner");
     /* The canonical grow operation may detach the inline body. Escaping once
      * moves a private Root block to its existing shared allocation ledger. */
     if (previous->object.root_private) {
         XrXirValueStatus escaped = xr_xir_root_string_escape(previous);
         if (escaped) xrt_value_failure(escaped, source);
     }
-    XR_CHECK(!root->pending.type && !root->pending.reserved && !root->pending.payload,
-        "String append reserves one independent pending owner");
     bool copied = owner->count != 1 || owner->pinned;
     XrXirValue current = string_value(previous), retired = {0};
     if (copied) {

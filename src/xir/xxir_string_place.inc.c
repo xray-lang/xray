@@ -9,6 +9,26 @@
  * KEY CONCEPT:
  *   Borrowing the root avoids an artificial retain, while real aliases keep COW.
  */
+static void string_append_bytes_in_place(XirString *string, const char *bytes,
+    size_t length, size_t runes) {
+    if (length == 1) string->bytes[string->length] = *bytes;
+    else memmove(string->bytes + string->length, bytes, length);
+    string->length += length;
+    string->runes += runes;
+    string->bytes[string->length] = 0;
+}
+XR_FUNC bool xr_xir_root_string_append_in_place(XrXirDomain *domain, XirString *string,
+    const XirString *suffix) {
+    XR_DCHECK(xr_xir_domain_current(domain), "the native root retains its current domain");
+    if (!domain->root || string->object.domain != domain ||
+        suffix->length >= SIZE_MAX - string->length ||
+        string->length + suffix->length + 1 > string->capacity ||
+        !xir_object_unique(&string->object)) return false;
+    /* Root domains cannot close or bind a budget. This leaf changes no graph
+     * edges, storage ownership or allocation accounting, and calls no host. */
+    string_append_bytes_in_place(string, suffix->bytes, suffix->length, suffix->runes);
+    return true;
+}
 static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
     const char *bytes, size_t length, size_t runes, XrXirValueAdmission *admission, XrXirValue *retired) {
     if (!place || place->type != XR_XIR_STRING || !place->payload || (!bytes && length) ||
@@ -47,8 +67,7 @@ static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
         size_t offset = internal ? (size_t)(address - base) : 0;
         if (total + 1 > first->capacity) status = string_resize(first, string_capacity(total + 1));
         if (status != XR_XIR_VALUE_OK) return status;
-        memmove(first->bytes + first->length, internal ? first->bytes + offset : bytes, length);
-        first->length = total; first->runes = total_runes; first->bytes[total] = 0;
+        string_append_bytes_in_place(first, internal ? first->bytes + offset : bytes, length, runes);
     } else {
         XirString *joined = NULL;
         status = string_allocate(admission->domain, total, &joined);

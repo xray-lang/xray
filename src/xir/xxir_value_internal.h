@@ -185,6 +185,12 @@ XR_FUNC void xr_xir_root_domain_release(XrXirDomain *domain);
 /* A root String that leaves its root pins its domain first; any generic
  * retain does this implicitly. Fails only at the domain reference limit. */
 XR_FUNC XrXirValueStatus xr_xir_root_string_escape(XirString *string);
+/* The native Root authenticates live canonical inputs and one unpinned guest
+ * owner before calling. Only same-domain, physically unique, in-capacity leaf
+ * writes succeed. False preserves both inputs for the ordinary transaction.
+ * No allocation, callback, retirement or budget-bound domain enters this path. */
+XR_FUNC bool xr_xir_root_string_append_in_place(XrXirDomain *domain, XirString *string,
+    const XirString *suffix);
 /* Consume one reference to a live String. An unescaped root String is freed
  * at once, an escaped one after one atomic decrement, and neither takes a
  * graph operation; other Strings use the ordinary drop. */
