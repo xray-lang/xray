@@ -33,7 +33,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`Task.all([...])`、`Task.first([...])` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
+| 内存管理 | 三色并发 tracing GC | 引用计数，无环收集器；环由静态证明、`weak` 与任务回收域三层处理。跨任务可达的对象在发布时由发布方提升为原子计数（§16.3.1） |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
 | 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 
@@ -41,7 +41,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 
 | 维度 | Rust | xray |
 |--|--|--|
-| 内存安全 | borrow checker 全面 | 推断唯一性、`move` 与 `const`/同步能力约束跨执行边界；`Slice` 等借用视图受静态生命周期限制（见 §2.4.2） |
+| 内存安全 | borrow checker 全面 | 跨任务边界只接受 Sendable 值：可复制值保留逻辑副本，class 与同步句柄共享身份（§7.4）；`ref` 是独占借用，`Slice` 等借用视图受静态生命周期限制（见 §2.4.2） |
 | 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
 | 类型推断 | Hindley-Milner 强 | 双向推断 |
 | trait | 完整 | 类似 `interface`，少功能 |
@@ -101,7 +101,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `Task.all([...])`, `Task.first([...])` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
 | `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting, no cycle collector; cycles are handled by static proof, `weak`, and the coroutine-heap bound. Published const roots and synchronized handles use a verified shared domain |
+| Memory management | concurrent tri-color tracing GC | reference counting, no cycle collector; cycles are handled by static proof, `weak`, and the task reclamation domain. Objects reachable from several tasks are promoted to atomic counting by the publisher (§16.3.1) |
 | Classes / inheritance | none (struct + interface only) | classes with inheritance |
 | Generics | since 1.18 | yes; monomorphized by concrete type or backend representation |
 
@@ -109,7 +109,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 
 | Dimension | Rust | xray |
 |--|--|--|
-| Memory safety | full borrow checker | inferred uniqueness, `move`, and const/synchronized capabilities across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions (see §2.4.2) |
+| Memory safety | full borrow checker | only Sendable values cross task boundaries: copyable values keep logical copies, classes and synchronisation handles share identity (§7.4); `ref` is an exclusive borrow, and borrowed views such as `Slice` have static lifetime restrictions (see §2.4.2) |
 | Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
 | Type inference | strong Hindley-Milner | bidirectional inference |
 | Traits | full | similar to `interface`, fewer features |

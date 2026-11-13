@@ -12,114 +12,55 @@ order: 017
 
 ### 16.1 值表示
 
-Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
+值表示属于实现。本规范不规定值的位布局、类型标签、装箱方式或字符串的物理存储；VM 寄存器与原生代码的拆箱表示由实现分别选择。语言可观察的只有值的静态类型、值语义与身份（§2.14），以及本章规定的回收与同步合同。
 
-- **Descriptor（8 字节）**：`tag: u8`、`flags: u8`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
-- **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
-- **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
-- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
+### 16.2 跨任务边界
 
-| 值类型 | 内部表示 |
-|--|--|
-| `i64` | `XR_TAG_I64` + 64-bit signed payload |
-| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
-| `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
-| `null` | `XR_TAG_NULL` + zero payload |
-| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
-| 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
+可复制且 Sendable 的值跨任务边界时保留逻辑副本：发送方与接收方此后各自修改，互不影响，不要求写 `copy` 或 `move`。Sendable class 与同步句柄跨界时共享身份，同步由对象自身保证。非 Sendable 的值在编译期拒绝（§7.4、§10.2）。因此任务之间没有隐式共享的可变状态，共享可变状态只经同步句柄。
 
-Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
-
-### 16.2 语义所有权域
-
-存储由**两个正交的轴**描述，任何一处混用都会得出错误结论：
-
-- **语义所有权域**（本节）：谁拥有这块存储、它活多久、跨执行边界时按什么规则迁移。这是**语义契约**。
-- **后端物化**（§16.2.1）：后端实际把它放在哪（内联、栈、静态数据、某个堆）。这是**实现选择**。
-
-> 真值源：`src/base/xstorage.h` 的 `XrSemanticStorageDomain`、`XrBackendMaterialization`、`XrTransferAction`。
-
-一个值恰好属于六个语义域之一：
-
-| 域 | 归属与生命周期 | 引用计数 | 典型来源 |
-|--|--|--|--|
-| **`EXEC_LOCAL`** | 当前执行体（协程）独占；随该执行体的堆一起结束 | 非原子 | 普通局部对象、字面量构造的容器与实例 |
-| **`TRANSFERABLE`** | 唯一所有权，可跨执行边界**整体移交**；移交后源侧不再可用 | 非原子 | `move` 的目标、跨协程传递的唯一值 |
-| **`CONST_SHARED`** | 已发布的不可变根，多个执行体并发只读共享 | 原子 | 发布后的 `const` 根、`freeze` 的结果 |
-| **`SYNC_SHARED`** | 受审计的并发句柄，多个执行体并发访问，同步由句柄自身保证 | 原子 | channel、mutex 等并发原语持有的值 |
-| **`MODULE_STATIC`** | 归属模块，活到模块卸载；**默认不提供并发安全性** | 按模块 owner | 顶层 `const` / `var` |
-| **`FOREIGN`** | 由 Xray 之外的分配器拥有；运行时不管理其生命周期 | 无 | FFI 指针、外部缓冲 |
-
-**域决定并发可见性与回收责任，不决定物理位置。** 例如 `EXEC_LOCAL` 的值可能被内联进持有者、放在栈上、或分配在执行堆上——三种物化都不改变"它随该协程结束"这一契约。
-
-#### 16.2.1 后端物化
-
-后端在满足语义域契约的前提下，为每个值选择一种物化：
-
-| 物化 | 含义 |
-|--|--|
-| `INLINE` | 内联在持有者的存储里，无独立地址身份 |
-| `STACK` | 函数帧上；随帧退出而失效，不可增长、不可释放 |
-| `STATIC_DATA` | 只读静态数据段（consteval 结果、字面量池） |
-| `EXEC_HEAP` | 当前执行体的堆（`XrCoroHeap`）；引用计数回收 |
-| `SYSTEM_HEAP` | 系统堆；跨执行体可见的对象走这里 |
-| `SROA` | 被标量替换后拆散到寄存器，聚合体本身不再具体存在 |
-| `EXTERNAL` | 外部分配器持有 |
-| `INVALID` | 未决定；出现在最终计划里即为内部错误 |
-
-> **改变物化不得授予更强的语义域或迁移能力。** 把一个 `EXEC_LOCAL` 的值物化到 `SYSTEM_HEAP` 不会让它变得可以跨执行体共享；反过来，把 `CONST_SHARED` 的值物化到栈上是非法的——它的域要求地址在共享期内稳定。物化是语义域的**下游**，永远不是理由。
-
-#### 16.2.2 跨执行边界的域迁移
-
-值跨越执行边界（闭包捕获进 `go`、送入 channel、作为 task 结果返回）时，由其**源域**与可变性决定一个迁移动作。这是编译期判定，不是运行时降级：
-
-| 动作 | 何时选用 | 语义 |
-|--|--|--|
-| `INLINE_COPY` | 标量、且非可变捕获 | 按值复制，两侧此后独立 |
-| `CONST_SHARE` | 源域为 `CONST_SHARED` | 共享同一不可变根，原子引用计数 |
-| `SYNC_SHARE` | 源域为 `SYNC_SHARED`，或捕获形态本身是并发句柄 | 共享同一句柄，同步由句柄保证 |
-| `MOVE_UNIQUE` | 源域为 `TRANSFERABLE` | 整体移交所有权，源侧此后不可用 |
-| `EXPLICIT_COPY` | **仅**源码写了 `copy(...)` | 物化一个独立的值再迁移 |
-| `MODULE_READ` | 源域为 `MODULE_STATIC` 且不可变 | 只读引用模块绑定 |
-| **`REJECT`** | **以上都不成立** | **编译错误** |
-
-`REJECT` 是这张表里最重要的一项：**跨执行边界没有隐式深拷贝兜底**。可变的模块绑定、可变或被重新赋值的普通捕获、没有 const/sync/move 证据的托管值，全部是编译错误而不是"悄悄拷一份"。需要独立副本时，源码必须显式写 `copy(...)`。
+物理上，跨界的值在提升点由发布方提升到共享带，已在共享带的值再次跨界是 O(1)（§16.3.1、§16.9.4）。对不含身份的值，实现也可以改用复制；两种做法都不可观察。
 
 ### 16.3 对象生命周期与回收
 
-- 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
-- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；执行局部回收域批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
-- **执行局部回收域边界（L2）**：每个物理协程拥有独立回收域。VM 用 per-coroutine Region heap 实现；hosted AOT 用 execution arena 登记仍然存活的普通 ARC 分配。无环对象仍在最后强引用处立即回收；协程结束时，回收域整体处置剩余对象图。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。跨执行发布必须先把共享或转移根的完整所有图从源域脱离；仅 MODULE_STATIC / CONST_SHARED / SYNC_SHARED 三个所有权域，以及主执行流的根回收域，可以存活到进程结束。
+- 普通对象由编译器插入的引用计数回收；最后一个强引用释放时立即进入 RC 销毁路径。本地带对象使用非原子计数，共享带对象使用原子计数（§16.3.1）；模块与运行时对象按各自 owner 的生命周期管理。
+- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；任务回收域在任务结束时断开剩余的环，为它们设定泄漏上界（L2）。开发期检测器只报告、不回收。
+- **任务回收域（L2）**：每个任务拥有一个回收域。
+  - 回收域只登记身份对象（class 实例、闭包环境、被闭包捕获的 `var` 的 cell），并且只登记 L0 判定可能成环的类型。L0 在特化之后按具体类型判断；函数类型字段、闭包捕获与尚未确定的泛型参数按“能到达任何 class”处理，无法判断时登记。
+  - 字符串、Array、Map、Set 的存储与 struct、enum 值一律不登记，即使它们处在环的路径上。值类型的存储不能指向自己，所以每个环都至少经过一个身份对象。
+  - 无环对象仍在最后一个强引用处立即回收。任务结束时，先释放该任务的全部局部根，再清空每个仍存活的已登记对象的出边（字段与它直接拥有的元素）；之后的释放由普通引用计数完成，回收域不直接释放对象。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属任务的生命周期**。
+  - 提升遍历同时把对象移出源任务的回收域（§16.3.1）。共享带上的环（例如 Channel 缓冲区里的消息持有同一通道）与主任务长期持有的环不受 L2 约束，可能留到进程结束。
 - **宿主拥有式结果的关闭边界**：执行 owner 在所有 Call/Task 排空并撤去内部根后，处置没有外部 owned 根可达的执行残余图，并把其余完整图逻辑移交同一个宿主残余 owner。逻辑脱离不要求搬动物理地址或更换分配器与累计账本；它也不授予跨执行共享权限。宿主保留的值仍可按原类型和权限读、复制与修改。只要该宿主残余 owner 还有任意外部强根，后来形成或失去外根的环都留到 owner 结束；不得在每次释放时部分收环。最后一个外部根释放后，整体处置剩余图。普通 RC 归零仍立即析构，OPEN 执行域不扫描或收环。
-- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的执行局部回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
+- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的任务回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
 - Xray 没有并发 tracing GC，也没有环收集器；函数调用与后向跳转处不保留任何 GC hook。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前执行局部回收域（VM coroutine heap 或 AOT execution arena；无当前 coroutine 时回退到 main/root 域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前任务回收域（无当前任务时回退到主任务的域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。这些统计不保证跨后端一致（§16.8）。
+- 只登记可能成环的身份对象，以及关闭时清空出边的规则，当前实现资格见 §17。
 
 #### 16.3.1 引用计数的两个带
 
 引用计数只有一个字段，用**符号**区分两个带：
 
-| 带 | 编码 | 使用者 | 原子性 |
+| 带 | 编码 | 可达范围 | 原子性 |
 |--|--|--|--|
-| coroutine-local | 正数 | 普通局部对象图 | 非原子（relaxed 快路径） |
-| shared | 负数（`N` 个引用存为 `-N`） | const 发布值、同步句柄、模块/运行时对象 | 原子 |
+| 本地带 | 正数 | 只被一个任务可达 | 非原子 |
+| 共享带 | 负数（`N` 个引用存为 `-N`） | 可被多个任务可达 | 原子 |
 
-热路径的符号测试把每个对象自动路由到正确的路径，因此两个带共存不需要额外分支。不可变的常驻对象存 sticky 值，永不参与计数。
+热路径的符号测试把每个对象路由到正确的路径：本地带的加一、减一是普通读写，共享带走原子操作。不可变的常驻对象存 sticky 值，永不参与计数。新分配的对象在本地带。
 
-**对象落在哪个带是编译期决定的**，由该分配点的存储计划确定（§2.14.2 的能力轴 + 分配域），不是运行时转换：一个存活对象不会在跨边界时被静默改带。这条是承重的——运行时改带需要与并发的非原子读改写同步，而那正是非原子带成立的前提所排除的。
+**带只在提升点单向改变，由发布方完成。** 值在另一个任务能看到之前（§16.9.4 的提升点），发布方把它可达的本地带对象翻到共享带；遍历遇到已在共享带的对象就停，因此已共享的值再次跨界是 O(1)。运行时维持两条不变量：
 
-因此跨执行边界只有两种合法形态：
+1. 本地带对象只被一个任务可达；
+2. 共享带对象只引用共享带对象。
 
-1. **共享**：值的分配计划本身就是 const-shared 或 sync-shared，从创建起就在原子带。`const` 发布值、`Channel` / `Atomic` / `Semaphore` 等受审计句柄属于此类。
-2. **转移**：`move` 把唯一根交出去，任一时刻只有一个所有者，因此非原子计数依然正确。
+**共享带的对象不写。** 值类型对象（Array、Map、Set、string 的存储）需要独占的修改时：计数为 −1（只有这一个引用），就先把这一个对象降回本地带，它引用的对象不动；否则照常写时复制，副本在本地带。修改路径本来就要读计数判断唯一，降带不增加检查。实现内部的缓存（例如字符串的哈希缓存）同样不在共享带对象上写，要么在提升时算好，要么用原子写。Sendable class 构造后字段不能重绑，本来就满足这一条；`weak` handle 随所属对象一起提升，在共享带上的读取与清空用原子操作。
 
-**第 2 条的正确性直接依赖 §2.14 的唯一性证据。** 如果一个仍有别名或存活借用的根被转移出去，两个执行上下文会同时对同一个非原子计数做读改写——那不是数据竞争而是内存损坏（重复释放或提前释放）。这就是 §2.14 把闭包捕获与堆存储都算作证据的原因：所有权判定是引用计数正确性的前提，不只是一条编程纪律。
+**实现的自由。** 对不含身份的值，实现可以用复制代替提升，例如图小于某个阈值时；整图唯一的移动值也可以留在本地带。两者都不可观察。身份类型跨界时必须共享。
 
-真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，且没有任何放宽：线程体只能触及分配计划为共享的值，或通过 `Channel` 转移进来的唯一根。
+- 共享带对象可能由任何任务释放，分配器须支持跨线程释放。
+- 逃逸分析把发布当作逃逸，栈上对象不会被提升。
 
-详见 `src/runtime/mem/`、`src/shared/xr_obj_header.h`。
+真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，没有任何放宽：线程体与回调可达的值都在提升点进入共享带（§16.9.4）。
+
+两带编码、提升与降带的当前实现资格见 §17。
 
 ### 16.4 协程调度
 
@@ -190,8 +131,18 @@ class PanicInfo {
 **回收点是精确的，且没有例外**：对象在它的最后一个强引用被释放的那一刻回收。VM 与 AOT 在这一点上给出相同的答案。
 
 - 这条承诺之所以能是全称的，是因为回收只有引用计数这一个机制。运行时没有环收集器、没有 tracing GC、没有任何"某次 GC 时"的不确定时点（任务 247）。
-- 唯一不由 RC 回收的形态是**引用环**，而它同样是确定的：环不由运行时收集，其泄漏范围由执行局部回收域边界封顶（§16.3 的 L2）；域结束时处置残余图不是环收集。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
+- 唯一不由 RC 回收的形态是**引用环**，而它同样是确定的：环不由运行时收集，其泄漏范围由任务回收域封顶（§16.3 的 L2）；任务结束时断开已登记对象的出边不是环收集。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
 - 仍**不提供**用户可见的确定性析构（destructor / finalizer / `Drop`）表面：程序不得依赖某个类型的析构钩子是否存在、以何顺序运行、或运行在哪个线程。精确的是**回收时刻**，不是"你能挂一段代码上去"。
+
+**绑定与临时值的释放时机**决定最后一个强引用何时释放：
+
+1. **作用域结束。** 局部绑定在离开作用域的每条边上释放它持有的引用：正常落出、`return`、`break`、`continue`、错误传播、panic 展开与取消，与 `defer` 是同一组边。先执行该作用域的 `defer`，再按声明逆序释放绑定。循环体每结束一轮，就是一次作用域结束。重新赋值时释放旧值。
+2. **已交出的不再释放。** 有两种情况：显式写了 `move x`；或者在每条路径上，绑定的最后一次使用都落在取得持有权的位置（初始化或赋值给另一个绑定、存入字段或容器、`move` 参数、返回、逃逸闭包捕获、`go` 实参、Channel 发送）。这时绑定不再持有值。只在部分路径上交出时，其余路径照常在作用域结束释放。这项分类按源码控制流完成，VM 与原生一致。
+3. **纯值可以更早。** 类型不含身份时，值可以在最后一次使用之后的任意位置释放。含身份指类型可达 class、同步句柄、Channel、Task、不可复制资源或函数值；泛型在特化后判断，无法判断时按含身份处理。这是优化，不影响合法性和输出；`runtime.liveBytes()` 等统计因此不保证跨后端一致。
+4. **临时值。** 没有名字的中间值在所在完整语句结束时释放，交给新所有者的除外；纯值可以更早。
+5. **参数与捕获。** READ 与 `ref` 参数是借用，不释放；`move` 参数相当于在函数入口声明的局部绑定；闭包捕获的值随闭包释放；`go` 实参由任务持有。
+
+只有含身份的值，其释放时机才能经 `weak` 或 Channel 等身份对象观察到。第 2 条使 `move x` 与隐式移动的结果相同（§2.14.5）。这些规则的当前实现资格见 §17。
 
 唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
 
@@ -228,10 +179,10 @@ class PanicInfo {
 | 1 | Channel send → recv | 第 k 次成功 `send(v)` **之前**发生的一切，happens-before 接收到 v 的那次 `recv` / `recvOr` / `tryRecv` / `for-in` 迭代**之后**发生的一切。有缓冲与无缓冲同规则 |
 | 2 | Channel recv → 后续 send（容量边） | 容量为 N 的 channel 上，第 k 次 `recv` 完成 happens-before 第 (k + N) 次 `send` 完成。这条边是把 `Channel(N)` 当信号量/限流器使用的正确性基础 |
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
-| 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
+| 4 | `go` 启动 | `go expr` 处对实参、捕获与 `move` 转移的求值，以及它们的提升（§16.9.4），happens-before 协程体的第一条语句 |
 | 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
 | 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`Task.all` / `Task.first` / `Task.firstSuccess` 对它们实际观察到的每个终态建立第 5 条边；返回时仍在运行的余任务不建立边 |
-| 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
+| 7 | `const` 发布 | 顶层 `const` 的初始化与发布，happens-before 任何执行体对该 const 的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
 | 9 | 协程域锁 | `sync.Mutex` / `sync.RwLock`：一次 unlock synchronizes-with 后续成功的 lock |
 | 10 | OS 线程域原语 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`：同上；`sys.OsOnce` 的初始化 happens-before 所有观测到其已完成的调用 |
@@ -252,19 +203,20 @@ class PanicInfo {
 
 #### 16.9.4 引用计数提升规则
 
-普通局部对象使用**协程本地非原子 RC**（§16.3）。一个对象一旦可以被两个执行体同时到达，其引用计数**必须**已经提升为原子 RC；否则并发 retain/release 是数据竞争，后果是堆损坏。
+新分配的对象在本地带，使用非原子引用计数（§16.3.1）。一个值在另一个任务能看到之前，发布方**必须**已把它可达的本地带对象提升到共享带；否则并发 retain/release 是数据竞争，后果是堆损坏。
 
-提升点是穷举的，每个提升点对可达图**深度生效**（对象自身及其可达的全部 managed 成员）：
+提升点是穷举的。每次提升遍历值可达的本地带对象，遇到已在共享带的对象即停：
 
 | 提升点 | 说明 |
 |---|---|
-| Channel `send` 的值 | 含 `move` 发送；接收方独占后仍保持原子 RC |
-| `go` / `scope` 的实参与 capture plan 成员 | 由 capture plan 静态确定 |
-| task / scope 的结果值 | 经由边 5 / 边 6 传出 |
-| `const` publish / seal 的可达图 | 一次性提升，之后图为深只读 |
-| 跨 `sys.Thread` 边界或 `CFn` 回调可达的一切 | 见 §16.9.5：这条通道当前不在安全子集内 |
+| `go` 的实参与捕获 | 在子任务的第一条语句之前完成（边 4） |
+| Channel 发送，含 `select` 的发送分支 | 含 `move` 发送。接收方取得的对象仍在共享带，第一次需要独占的修改按 §16.3.1 降带或写时复制 |
+| Task 与 `scope` 的结果 | 经由边 5 / 边 6 传出 |
+| 存入同步句柄 | `sync.Mutex`、`sync.RwLock` 在离开临界区时重新发布槽的内容；`sync.WorkQueue` 等容器在入队时 |
+| 模块 `const` 发布 | 经由边 7 |
+| `sys.Thread` 线程体与 `CFn` 回调可达的值 | 见 §16.9.5：这条通道当前不在安全子集内 |
 
-`string` 的提升在 §16.1 另有描述（短串协程本地、跨界按需提升为共享原子 RC）；那是同一规则在 `XrString` 上的实例，不是例外。
+`string` 的存储与其他值类型对象遵守同一规则，不是例外。
 
 #### 16.9.5 数据竞争自由的保证与边界
 
@@ -273,7 +225,7 @@ class PanicInfo {
 **逃逸口（穷举）**：以下能力可以引入数据竞争。它们的后果是**实现定义的，可能包含内存损坏**，证明责任在使用者：
 
 - `unsafe` 块内的一切原始内存访问
-- `Array.mutPtr()` 产生的可写原始指针（指针作为**实参**跨协程边界时不经过 capture plan 检查）
+- `Array.mutPtr()` 产生的可写原始指针（指针作为**实参**跨协程边界时不经过 Sendable 检查，也不经过提升）
 - `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
 - `sys.Thread` 的线程体
 - `CFn` C 回调体（可在任意线程被调用）
@@ -296,114 +248,55 @@ class PanicInfo {
 
 ### 16.1 Value Representation
 
-Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
+Value representation belongs to the implementation. This specification fixes no bit layout, type tag, boxing scheme or physical string storage; the VM's registers and native code each choose their own unboxed representation. What the language can observe is a value's static type, its value semantics and its identity (§2.14), together with the reclamation and synchronisation contracts of this chapter.
 
-- **Descriptor (8 bytes)**: `tag: u8`, `flags: u8`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
-- **Payload (8 bytes)**: one of `i64`, `double`, or pointer, interpreted by the tag.
-- **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
+### 16.2 Cross-Task Boundaries
 
-| Value type | Internal representation |
-|--|--|
-| `i64` | `XR_TAG_I64` + 64-bit signed payload |
-| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
-| `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
-| `null` | `XR_TAG_NULL` + zero payload |
-| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
-| Other objects | `XR_TAG_PTR` + heap type + heap pointer |
+A copyable, Sendable value crossing a task boundary keeps a logical copy: sender and receiver may then each mutate their own value without affecting the other, and neither `copy` nor `move` is required. A Sendable class or a synchronisation handle crosses with its identity shared, and the object itself provides the synchronisation. A value that is not Sendable is rejected at compile time (§7.4, §10.2). Tasks therefore share no mutable state implicitly; shared mutable state goes only through synchronisation handles.
 
-Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
-
-### 16.2 Semantic Ownership Domains
-
-Storage is described by **two orthogonal axes**. Conflating them yields wrong conclusions:
-
-- **Semantic ownership domain** (this section): who owns the storage, how long it lives, and what rule governs its migration across an execution boundary. This is a **semantic contract**.
-- **Backend materialization** (§16.2.1): where the backend actually puts it (inline, stack, static data, some heap). This is an **implementation choice**.
-
-> Source of truth: `XrSemanticStorageDomain`, `XrBackendMaterialization`, and `XrTransferAction` in `src/base/xstorage.h`.
-
-Every value belongs to exactly one of six semantic domains:
-
-| Domain | Ownership and lifetime | Reference counting | Typical origin |
-|--|--|--|--|
-| **`EXEC_LOCAL`** | Owned exclusively by the current execution (coroutine); ends with that execution's heap | Non-atomic | Ordinary local objects; containers and instances built from literals |
-| **`TRANSFERABLE`** | Unique ownership that can be **handed over whole** across an execution boundary; unusable on the source side afterwards | Non-atomic | The target of a `move`; unique values passed between coroutines |
-| **`CONST_SHARED`** | A published immutable root, read concurrently by several executions | Atomic | A published `const` root; the result of `freeze` |
-| **`SYNC_SHARED`** | An audited concurrency handle accessed by several executions, where the handle itself provides the synchronization | Atomic | Values held by channels, mutexes, and other concurrency primitives |
-| **`MODULE_STATIC`** | Owned by the module, alive until it unloads; **not concurrency-safe by default** | Per module owner | Top-level `const` / `var` |
-| **`FOREIGN`** | Owned by an allocator outside Xray; the runtime does not manage its lifetime | None | FFI pointers, external buffers |
-
-**A domain fixes concurrency visibility and reclamation responsibility, not physical location.** An `EXEC_LOCAL` value may be inlined into its holder, placed on the stack, or allocated on the execution heap — none of the three changes the contract that it ends with that coroutine.
-
-#### 16.2.1 Backend Materialization
-
-Subject to the semantic domain's contract, the backend picks one materialization per value:
-
-| Materialization | Meaning |
-|--|--|
-| `INLINE` | Inlined into the holder's storage, with no separate address identity |
-| `STACK` | On the function frame; dies with the frame, cannot grow, cannot be freed |
-| `STATIC_DATA` | Read-only static data (consteval results, literal pools) |
-| `EXEC_HEAP` | The current execution's heap (`XrCoroHeap`), reclaimed by reference counting |
-| `SYSTEM_HEAP` | The system heap; objects visible across executions live here |
-| `SROA` | Scalar-replaced into registers; the aggregate no longer exists concretely |
-| `EXTERNAL` | Held by an external allocator |
-| `INVALID` | Undecided; reaching a final plan is an internal error |
-
-> **Changing materialization must never grant a stronger semantic domain or transfer capability.** Materializing an `EXEC_LOCAL` value on the `SYSTEM_HEAP` does not make it shareable across executions; conversely, materializing a `CONST_SHARED` value on the stack is invalid, because its domain requires a stable address for as long as it is shared. Materialization is **downstream** of the semantic domain, never a justification.
-
-#### 16.2.2 Domain Migration Across Execution Boundaries
-
-When a value crosses an execution boundary (captured into `go`, sent through a channel, returned as a task result), its **source domain** and mutability select a transfer action. This is decided at compile time; it is not a runtime downgrade:
-
-| Action | Selected when | Semantics |
-|--|--|--|
-| `INLINE_COPY` | Scalar, and not a mutable capture | Copied by value; the two sides are independent afterwards |
-| `CONST_SHARE` | Source domain is `CONST_SHARED` | Shares the same immutable root under atomic reference counting |
-| `SYNC_SHARE` | Source domain is `SYNC_SHARED`, or the capture is itself a concurrency handle | Shares the same handle; the handle provides synchronization |
-| `MOVE_UNIQUE` | Source domain is `TRANSFERABLE` | Ownership is handed over whole; the source is unusable afterwards |
-| `EXPLICIT_COPY` | **Only** where the source wrote `copy(...)` | Materializes an independent value, then migrates it |
-| `MODULE_READ` | Source domain is `MODULE_STATIC` and immutable | Reads the module binding by reference |
-| **`REJECT`** | **None of the above holds** | **Compile error** |
-
-`REJECT` is the most important row: **there is no implicit deep-copy fallback across an execution boundary.** A mutable module binding, an ordinary capture that is mutable or reassigned, and a managed value with no const/sync/move evidence are all compile errors rather than a silent copy. Where an independent copy is wanted, the source must say `copy(...)`.
+Physically, the publisher promotes a crossing value to the shared band at a promotion point, and a value already in the shared band crosses again in O(1) (§16.3.1, §16.9.4). For a value without identity the implementation may copy instead; neither choice is observable.
 
 ### 16.3 Object Lifetime and Reclamation
 
-- Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
-- **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and bulk disposal of the execution-local reclamation domain bounds whatever remains (L2). The development-mode detector reports cycles; it never collects them.
-- **Execution-local reclamation-domain boundary (L2)**: every physical coroutine owns one domain. The VM realizes it as a per-coroutine Region heap; hosted AOT uses an execution arena that registers still-live ordinary ARC allocations. Acyclic objects still die immediately at their last strong reference; when the coroutine ends, the domain disposes the complete residual graph. Thus **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the coroutine that built it**. Cross-execution publication must first detach the complete owned graph of a shared or transferred root. Only `MODULE_STATIC` / `CONST_SHARED` / `SYNC_SHARED` domains and the main execution's root domain may live for the process lifetime.
+- Ordinary objects are reclaimed by compiler-inserted reference counting and enter the RC destruction path as soon as their last strong reference is released. Local-band objects use non-atomic counts, shared-band objects atomic counts (§16.3.1); module and runtime objects follow their respective owners' lifetimes.
+- **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and the task's reclamation domain breaks whatever remains when the task ends, bounding the leak (L2). The development-mode detector reports cycles; it never collects them.
+- **Task reclamation domain (L2)**: every task owns one reclamation domain.
+  - The domain registers only identity objects (class instances, closure environments, and the cells of `var` bindings captured by closures), and only of the types that L0 judges may form a cycle. L0 decides on concrete types after specialization; function-typed fields, closure captures and generic parameters not yet fixed count as "may reach any class", and an undecidable case is registered.
+  - The storage of strings, Arrays, Maps and Sets, and struct and enum values, are never registered, even when they lie on a cycle's path. Value-type storage cannot point to itself, so every cycle passes through at least one identity object.
+  - Acyclic objects still die immediately at their last strong reference. When the task ends, the domain first releases all of the task's local roots, then clears the outgoing edges (fields and directly owned elements) of every registered object still alive; ordinary reference counting performs the releases that follow, and the domain never frees an object directly. Thus **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the task that built it**.
+  - The promotion walk also removes objects from the source task's domain (§16.3.1). A cycle in the shared band (for example a message in a Channel buffer that holds the same channel) and a cycle held long-term by the main task are outside L2 and may remain until the process exits.
 - **Closure boundary for host-owned results**: after all Calls and Tasks have drained and internal roots are withdrawn, the execution owner disposes its residual graph unreachable from external owned roots and logically transfers the remaining complete graph to one host residual owner. Logical detachment need not move physical addresses or replace the allocator and cumulative ledger; it grants no cross-execution sharing permission. Retained host values remain readable, copyable, and mutable under their original types and permissions. While any external strong root of that host residual owner remains, cycles formed or orphaned later remain until the owner ends; individual releases must not collect a subset of those cycles. The last external root ends the owner and disposes the complete remaining graph. Ordinary RC zero still destroys immediately, and an OPEN execution domain neither scans nor collects cycles.
-- **This property is unusual among pure reference-counted languages**: an Rc/RefCell cycle in Rust, or a strong-reference cycle in Swift, leaks until the process exits — both allocate refcounted objects on a process-wide heap, with no boundary smaller than the process that can be dropped wholesale. Xray's execution-local reclamation domain is that boundary, so forgetting a `weak` costs a **bounded** leak rather than a permanent one. This caps the lifetime; it is not cycle collection.
+- **This property is unusual among pure reference-counted languages**: an Rc/RefCell cycle in Rust, or a strong-reference cycle in Swift, leaks until the process exits — both allocate refcounted objects on a process-wide heap, with no boundary smaller than the process that can be dropped wholesale. Xray's task reclamation domain is that boundary, so forgetting a `weak` costs a **bounded** leak rather than a permanent one. This caps the lifetime; it is not cycle collection.
 - Xray has no concurrent tracing GC and no cycle collector; no GC hooks remain at function calls or backward branches.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current execution-local reclamation domain (a VM coroutine heap or AOT execution arena), falling back to the main/root domain when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current task's reclamation domain, falling back to the main task's domain when no task is current (`import runtime`; the `mem` module carries raw-memory capabilities only). These statistics are not guaranteed to agree across backends (§16.8).
+- See §17 for the current implementation qualification of registering only possibly cyclic identity objects and of clearing their edges at close.
 
 #### 16.3.1 The two reference-count bands
 
 There is one reference-count field, and its **sign** selects between two bands:
 
-| Band | Encoding | Used by | Atomicity |
+| Band | Encoding | Reachable from | Atomicity |
 |--|--|--|--|
-| coroutine-local | positive | ordinary local object graphs | non-atomic (relaxed fast path) |
-| shared | negative (`N` references stored as `-N`) | published const values, synchronization handles, module and runtime objects | atomic |
+| local | positive | exactly one task | non-atomic |
+| shared | negative (`N` references stored as `-N`) | possibly several tasks | atomic |
 
-A sign test on the hot path routes each object to the right path automatically, so the two bands coexist without an extra branch. Immortal objects store a sticky value and never participate in counting.
+A sign test on the hot path routes each object to the right path: increments and decrements in the local band are plain loads and stores, while the shared band uses atomic operations. Immortal objects store a sticky value and never participate in counting. A newly allocated object is in the local band.
 
-**Which band an object lands in is decided at compile time**, by the storage plan of its allocation site (the capability axis of §2.14.2 plus the allocation domain); it is not a runtime conversion, and a live object is never silently re-banded when it crosses a boundary. That is load-bearing: re-banding at runtime would have to synchronize with concurrent non-atomic read-modify-writes, which is exactly what the non-atomic band assumes cannot happen.
+**A band changes only at a promotion point, in one direction, by the publisher.** Before a value becomes visible to another task (the promotion points of §16.9.4), the publisher flips the local-band objects reachable from it to the shared band; the walk stops at any object already in the shared band, so a value that is already shared crosses again in O(1). The runtime maintains two invariants:
 
-Only two shapes therefore cross an execution boundary:
+1. A local-band object is reachable from exactly one task.
+2. A shared-band object references only shared-band objects.
 
-1. **Sharing**: the value's allocation plan is const-shared or sync-shared, so it is in the atomic band from creation. Published `const` values and audited handles such as `Channel`, `Atomic`, and `Semaphore` are of this kind.
-2. **Transfer**: `move` hands over a unique root. Exactly one owner exists at any moment, so a non-atomic count stays correct.
+**Shared-band objects are not written.** When a value-type object (the storage of an Array, Map, Set or string) needs an exclusive mutation and its count is −1 (this is the only reference), that one object is first demoted to the local band while the objects it references stay where they are; otherwise the mutation copies on write as usual, and the copy is in the local band. The mutation path reads the count to test uniqueness anyway, so demotion adds no check. Internal caches (such as a string's hash cache) are not written on shared-band objects either: they are computed at promotion or written atomically. The fields of a Sendable class cannot be rebound after construction, which already satisfies this rule; a `weak` handle is promoted together with its owning object, and reads and clears of it in the shared band are atomic.
 
-**The correctness of the second shape rests directly on the uniqueness evidence in §2.14.** If a root that still has an alias or a live loan were transferred out, two execution contexts would read-modify-write one non-atomic counter — which is not a data race but memory corruption (a double free or a premature free). That is why §2.14 counts closure captures and heap stores as evidence: the ownership decision is a precondition for reference-count correctness, not merely a programming discipline.
+**Implementation freedom.** For a value without identity the implementation may copy instead of promoting, for example below a size threshold, and a moved value whose whole graph is unique may stay in the local band. Neither choice is observable. Identity types must be shared when they cross.
 
-Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: a thread body may reach only values whose allocation plan is shared, or a unique root transferred in through a `Channel`.
+- A shared-band object may be released by any task, so the allocator must support cross-thread release.
+- Escape analysis treats publication as an escape, so a stack object is never promoted.
 
-See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
+Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: every value reachable from a thread body or a callback enters the shared band at a promotion point (§16.9.4).
+
+See §17 for the current implementation qualification of the two-band encoding, promotion and demotion.
 
 ### 16.4 Coroutine Scheduling
 
@@ -474,8 +367,18 @@ Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the tr
 **The reclamation point is exact, with no exceptions**: an object is reclaimed the moment its last strong reference is released. VM and AOT give the same answer here.
 
 - The promise can be universal because reference counting is the only reclamation mechanism. There is no cycle collector, no tracing GC, and no indeterminate "some GC point" at runtime (task 247).
-- The one shape RC does not reclaim is a **reference cycle**, and that too is determinate: cycles are not collected at runtime, and what they cost is capped by the execution-local reclamation-domain boundary (L2 in §16.3). Disposing the residual graph when its domain ends is not cycle collection. Cycles are prevented by the compile-time type graph (L0) and broken explicitly with `weak` (L1); the development detector reports them and never reclaims.
+- The one shape RC does not reclaim is a **reference cycle**, and that too is determinate: cycles are not collected at runtime, and what they cost is capped by the task reclamation domain (L2 in §16.3). Clearing the outgoing edges of registered objects when a task ends is not cycle collection. Cycles are prevented by the compile-time type graph (L0) and broken explicitly with `weak` (L1); the development detector reports them and never reclaims.
 - What is still **not** offered is a user-visible deterministic destructor (destructor / finalizer / `Drop`) surface: a program must not depend on whether a type has a finalization hook, in what order such hooks run, or on which thread. What is exact is the **moment of reclamation**, not the ability to attach code to it.
+
+**Release timing of bindings and temporaries** decides when the last strong reference goes:
+
+1. **Scope end.** A local binding releases its reference on every edge that leaves its scope: normal fallthrough, `return`, `break`, `continue`, error propagation, panic unwinding and cancellation, the same set of edges as `defer`. The scope's `defer` bodies run first, then the bindings are released in reverse declaration order. Each finished loop iteration is a scope end. Reassignment releases the old value.
+2. **What was handed over is not released again.** This holds in two cases: the source wrote `move x`, or on every path the binding's last use is a position that takes ownership (initializing or assigning another binding, storing into a field or container, a `move` parameter, a return, an escaping closure capture, a `go` argument, a Channel send). The binding then no longer holds the value. Where it is handed over on only some paths, the other paths release it at scope end as usual. The classification follows source control flow, identically in the VM and native code.
+3. **Pure values may go earlier.** A value whose type has no identity may be released anywhere after its last use. A type has identity when it can reach a class, a synchronisation handle, a Channel, a Task, a noncopyable resource or a function value; a generic is judged after specialization, and an undecidable case counts as having identity. This is an optimization that changes neither legality nor output; statistics such as `runtime.liveBytes()` are therefore not guaranteed to agree across backends.
+4. **Temporaries.** An unnamed intermediate value is released at the end of its full statement unless it is handed to a new owner; a pure value may go earlier.
+5. **Parameters and captures.** READ and `ref` parameters are borrows and are not released; a `move` parameter acts as a local binding declared at function entry; values captured by a closure are released with the closure; `go` arguments are held by the task.
+
+Only for values with identity can release timing be observed, through `weak` or identity objects such as a Channel. Rule 2 gives `move x` and an implicit move the same result (§2.14.5). See §17 for the current implementation qualification of these rules.
 
 The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
 
@@ -512,10 +415,10 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 | 1 | Channel send → recv | Everything sequenced **before** the k-th successful `send(v)` happens-before everything sequenced **after** the `recv` / `recvOr` / `tryRecv` / `for-in` iteration that receives v. Buffered and unbuffered channels follow the same rule |
 | 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
 | 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
-| 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
+| 4 | `go` spawn | Evaluation of the arguments, captures and `move` transfers at the `go expr`, and their promotion (§16.9.4), happens-before the first statement of the coroutine body |
 | 5 | Task completion → terminal observation | The task body's last action happens-before operations after a waiter successfully observes that terminal outcome through `await t`, `awaitResult()`, or `poll()`; a `null` poll establishes no completion edge and does not drive the child |
 | 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `Task.all` / `Task.first` / `Task.firstSuccess` establish edge 5 for every terminal outcome they actually observe; remaining tasks still running when they return establish no edge |
-| 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
+| 7 | `const` publication | Initialisation and publication of a top-level `const` happens-before any agent's first read of that const |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |
 | 9 | Coroutine-domain locks | `sync.Mutex` / `sync.RwLock`: an unlock synchronizes-with a later successful lock |
 | 10 | OS-thread-domain primitives | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`: as above; a `sys.OsOnce` initialisation happens-before every call that observes it as complete |
@@ -530,25 +433,26 @@ The following establish **no** happens-before and must not be used to synchronis
 - `Task.yieldNow()`: a scheduling yield point, not a synchronisation point.
 - `codegen.compilerFence()`: it only prevents memory-effecting operations from moving across that compiler scheduling point. It is not a CPU fence, establishes no happens-before, and cannot repair a data race (see §12).
 - Atomic operations with `Ordering.Relaxed`: they keep that location's accesses from tearing; they order nothing with respect to other locations.
-- Object reclamation, an RC reaching zero, or a cycle-collector run: reclamation timing is not observable semantics (§16.8), so it cannot carry an ordering relation.
+- Object reclamation or an RC reaching zero: although the reclamation point is exact (§16.8), it establishes no ordering between agents and so cannot carry synchronisation.
 - The sysmon heartbeat and the `XRAY_SYSMON_CANCEL_MS` cancellation flag.
 - Time: neither `time.sleep` nor any timeout expiry establishes ordering.
 
 #### 16.9.4 Reference-count promotion rules
 
-Ordinary local objects use **coroutine-local, non-atomic RC** (§16.3). Once an object can be reached by two agents, its reference count **must** already have been promoted to atomic RC; otherwise concurrent retain/release is a data race whose consequence is heap corruption.
+A newly allocated object is in the local band and uses non-atomic reference counting (§16.3.1). Before a value becomes visible to another task, the publisher **must** already have promoted the local-band objects reachable from it to the shared band; otherwise concurrent retain/release is a data race whose consequence is heap corruption.
 
-The promotion points are exhaustive, and each applies to the reachable graph **deeply** (the object and every managed member reachable from it):
+The promotion points are exhaustive. Each promotion walks the local-band objects reachable from the value and stops at any object already in the shared band:
 
 | Promotion point | Notes |
 |---|---|
-| The value of a Channel `send` | Including a `move` send; the value stays atomically counted after the receiver takes exclusive ownership |
-| `go` / `scope` arguments and capture-plan members | Determined statically by the capture plan |
-| Task / scope result values | Delivered through edge 5 / edge 6 |
-| The reachable graph of a `const` publish / seal | Promoted once; the graph is deeply read-only afterwards |
-| Everything reachable across a `sys.Thread` boundary or from a `CFn` callback | See §16.9.5: that channel is currently outside the safe subset |
+| `go` arguments and captures | Completed before the child task's first statement (edge 4) |
+| A Channel send, including a `select` send arm | Including a `move` send. The objects the receiver obtains are still in the shared band; their first exclusive mutation demotes or copies on write as §16.3.1 describes |
+| Task and `scope` results | Delivered through edge 5 / edge 6 |
+| A store into a synchronisation handle | `sync.Mutex` and `sync.RwLock` republish the slot content when the critical section ends; containers such as `sync.WorkQueue` promote on enqueue |
+| Publication of a module `const` | Through edge 7 |
+| Values reachable from a `sys.Thread` body or a `CFn` callback | See §16.9.5: that channel is currently outside the safe subset |
 
-`string` promotion is described separately in §16.1 (short strings are coroutine-local, promoted to shared atomic RC on demand when they cross a boundary). That is this same rule instantiated for `XrString`, not an exception to it.
+String storage follows this same rule as every other value-type object; it is not an exception.
 
 #### 16.9.5 The data-race-freedom guarantee and its boundary
 
@@ -557,7 +461,7 @@ The promotion points are exhaustive, and each applies to the reachable graph **d
 **Escape hatches (exhaustive)**: the following capabilities can introduce a data race. Their consequences are **implementation-defined and may include memory corruption**; the proof obligation is the user's:
 
 - Any raw memory access inside an `unsafe` block
-- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without passing through capture-plan checking)
+- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without Sendable checking or promotion)
 - `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
 - The body of a `sys.Thread`
 - The body of a `CFn` C callback (which may be invoked on any thread)

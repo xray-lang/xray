@@ -31,7 +31,7 @@ order: 025
 | **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
-| **move** | 对推断为唯一且无存活 alias/loan 的根执行所有权转移（见 §7.3） |
+| **move** | 把绑定持有的值交给新的所有者，保证不复制，源绑定随即失效（见 §2.14.5、§7.3） |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
@@ -77,7 +77,7 @@ order: 025
 | **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
-| **move** | Ownership transfer for an inferred-unique root with no live alias/loan (see §7.3) |
+| **move** | Hands a binding's value to a new owner without copying; the source binding becomes invalid (see §2.14.5, §7.3) |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |

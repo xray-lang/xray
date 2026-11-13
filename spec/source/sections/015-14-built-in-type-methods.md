@@ -193,6 +193,7 @@ fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不�
 | `indexOf(x)` / `contains(x)` | 只读查询 |
 | `join(sep?)` | 只读 receiver，拼接为字符串 |
 | `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
+| `ref swap(i, j)` | 交换下标 `i` 与 `j` 处的两个元素，越界进入 `E0430` panic；代替把同一数组的两个元素同时以 `ref` 传入（§2.14.4）。尚未实现，实现资格见 §17 |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读快照；map/filter 的元素回调可带 index，reduce 为 `fn(U,T)->U` |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读快照；forEach 可带 index，其余为 `fn(T)->bool` 的短路查询 |
 | `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
@@ -204,7 +205,7 @@ fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不�
 
 Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
 
-Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy arr[start:end]`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -592,6 +593,7 @@ Qualification is allocation=may_heap, failures=allocation,retain,limit and owner
 | `indexOf(x)` / `contains(x)` | read-only query |
 | `join(sep?)` | read-only receiver; concatenates into a string |
 | `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
+| `ref swap(i, j)` | exchanges the elements at indexes `i` and `j`; an out-of-range index enters the `E0430` panic channel. It replaces passing two elements of one array as `ref` arguments (§2.14.4). Not implemented yet; see §17 for its implementation qualification |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read snapshot; map/filter callbacks may take an index; reduce uses `fn(U,T)->U` |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read snapshot; forEach may take an index; the others short-circuit with `fn(T)->bool` |
 | `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
@@ -603,7 +605,7 @@ Qualification is allocation=may_heap, failures=allocation,retain,limit and owner
 
 Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
 
-Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy arr[start:end]` for independent data.
 
 ### 14.8 `Map<K, V>` Methods
 

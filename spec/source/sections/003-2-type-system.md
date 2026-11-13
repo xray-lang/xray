@@ -168,7 +168,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 - 整数除法向零截断，非零余数与被除数同号；除数为零报错。任一有符号整数类型的 `MIN / -1` 按其位宽环绕为 `MIN`，`MIN % -1` 为零。
 - `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
+- 经 `JSON.Value` / 动态容器等擦除静态类型的边界后，值只保留整数数值，不保留有符号性或位宽；超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
 
 #### 2.3.2 浮点类型
 
@@ -221,7 +221,7 @@ if (len(s) != 0) { }     // OK
 
 不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
 
-底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
+底层使用引用计数（ARC），存储表示属于实现（§16.1）。跨任务边界时，string 与其他值类型一样保留逻辑副本；物理上由发布方在提升点把它提升到共享带（§16.3.1）。
 
 #### 2.3.5 `rune`
 
@@ -1076,15 +1076,25 @@ print(len(a))               // 4
 
 `ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
 
+同一次调用的全部 `ref` 实参（含 `ref` receiver）两两不得重叠，按从根开始的 place 路径判断：
+
+- 根相同，且在某一层分到不同的字段名（struct 字段或 class 字段）：不相交，接受。同一 class 对象的两个不同字段（`ref value.left`、`ref value.right`）同样不相交。
+- 根相同，路径相同或其中一条是另一条的前缀：重叠，编译错误 `E0382`。
+- 根相同，在下标处分开（`xs[i]` 与 `xs[j]`，常量下标也一样）：视为重叠，编译错误 `E0382`。交换两个元素用 `xs.swap(i, j)`（§14.7）；需要两个可写视图时，使用 §2.4.2 的显式不重叠构造。
+- 根不同，但都经同名 class 字段到达（`ref a.f` 与 `ref b.f`，`a`、`b` 可能是同一对象）：运行时检查，是同一对象时 panic。
+- 其余根不同的情况不相交。
+
+原地遍历容器写 `for (ref x in xs)`，整个循环期间独占借用该容器（§4.4）。当前实现只拒绝两个同名裸变量形式的 `ref` 实参，路径规则与运行时检查的实现资格见 §17。
+
 `Slice` 共享借用与 `MutSlice` 独占借用遵循 §2.4.2；class 字段借用还须保活对象并检查动态独占。底层 backing 共享不能成为取消这些检查的理由。反过来，普通 Array 逻辑副本不因共享 backing 自动成为借用。
 
 普通闭包的外层 `var` 捕获共享 cell，`const` 与可复制非视图的普通 READ 参数按值捕获。共享 cell 的身份不能伪装成不可逃逸的临时 loan；其存储和释放责任必须显式保留。被共享 cell 捕获的变量不能产生视图。视图捕获与借用回调的准入遵循 §2.4.2 的显式合同，不能从被调方实现或实参语法形状猜测。
 
 #### 2.14.5 消费与尚未准入的表面
 
-消费参数或值类型的消费 receiver 转移持有权和最终析构责任，适用于可复制类型（包括 Array）与不可复制资源；class 方法不声明 receiver 模式。调用是否取得持有权由声明模式决定，不由具体 ABI 决定。默认模式下，可复制值仍可保留逻辑副本供调用后使用；显式 `move x` 则保证转移而不复制，源绑定失效，重新初始化前不可再用。未被所有相关路径重新初始化的循环再次消费也必须拒绝。READ 与 `ref` 参数本身是借用，不能被消费。被拒绝的操作不能把有效源状态错误地标为已消费。
+消费参数或值类型的消费 receiver 转移持有权和最终析构责任，适用于可复制类型（包括 Array）与不可复制资源；class 方法不声明 receiver 模式。调用是否取得持有权由声明模式决定，不由具体 ABI 决定。默认模式下，可复制值仍可保留逻辑副本供调用后使用；显式 `move x` 则保证转移而不复制，源绑定失效，重新初始化前不可再用。绑定在每条路径上的最后一次使用都落在取得持有权的位置（初始化或赋值给另一个绑定、存入字段或容器、`move` 参数、返回、逃逸闭包捕获、`go` 实参、Channel 发送）时，这次使用是隐式移动：不复制，结果与显式写 `move x` 相同，释放时机见 §16.8。未被所有相关路径重新初始化的循环再次消费也必须拒绝。READ 与 `ref` 参数本身是借用，不能被消费。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-独立的 `move x` 仅接受当前函数的已初始化局部变量、局部常量或消费参数绑定；不接受字段、索引、调用结果、模块绑定或 READ/ref 参数，也不能穿过活动借用。非平凡值均可显式移动，平凡标量也允许，编译器可提示其没有收益。`copy array` 使用前缀表达式拼写，普通 Array 复制仍保留逻辑副本。通用 type-position `const T` 已删除，不产生类型身份或转换。当前声明族的实现资格见 §17；这些语言规则不授予尚未完成的消费、视图或资源入口，也不继承旧唯一根、堆逃逸终态或整个图深冻结规则。
+独立的 `move x` 仅接受当前函数的已初始化局部变量、局部常量或消费参数绑定；不接受字段、索引、调用结果、模块绑定或 READ/ref 参数，也不能穿过活动借用。非平凡值均可显式移动，平凡标量也允许，编译器可提示其没有收益。`copy array` 使用前缀表达式拼写，普通 Array 复制仍保留逻辑副本。通用 type-position `const T` 已删除，不产生类型身份或转换。当前声明族的实现资格见 §17；这些语言规则不授予尚未完成的消费、视图或资源入口。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -1315,7 +1325,7 @@ The `E` in `throws(E)` must be an error enum, a generic parameter constrained by
 - Integer division truncates toward zero; a nonzero remainder has the dividend's sign. A zero divisor faults. For every signed integer type, `MIN / -1` wraps to that type's `MIN`, and `MIN % -1` is zero.
 - `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
+- A boundary that erases the static type, such as `JSON.Value` or a dynamic container, keeps only the integer's numeric value, not its signedness or width. Across such boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
@@ -1379,7 +1389,7 @@ if (len(s) != 0) { }     // OK
 
 Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
-Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool. Cross-execution strings consume a verified storage plan; the boundary does not promote or copy them implicitly.
+Storage is reference-counted (ARC), and its representation belongs to the implementation (§16.1). Across a task boundary a string keeps a logical copy like every other value type; physically the publisher promotes it to the shared band at a promotion point (§16.3.1).
 
 #### 2.3.5 `rune`
 
@@ -2250,15 +2260,25 @@ A copy must acquire independently releasable result ownership; failure must not 
 
 `ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
 
+All `ref` arguments of one call, including a `ref` receiver, must not overlap pairwise. Overlap is judged on place paths from their roots:
+
+- Same root, and the paths diverge at some level on different field names (struct or class fields): disjoint, accepted. Two different fields of one class object (`ref value.left`, `ref value.right`) are disjoint too.
+- Same root, and the paths are equal or one is a prefix of the other: overlapping, compile error `E0382`.
+- Same root, and the paths diverge at an index (`xs[i]` and `xs[j]`, constant indexes included): treated as overlapping, compile error `E0382`. Swap two elements with `xs.swap(i, j)` (§14.7); where two writable views are needed, use the explicit non-overlapping construction of §2.4.2.
+- Different roots that both reach a class field of the same name (`ref a.f` and `ref b.f`, where `a` and `b` may be one object): checked at run time, and the same object panics.
+- Every other pair of different roots is disjoint.
+
+In-place traversal of a container is written `for (ref x in xs)` and borrows the container exclusively for the whole loop (§4.4). The current implementation rejects only two `ref` arguments that are the same bare variable; see §17 for the implementation qualification of the path rules and the run-time check.
+
 Shared `Slice` and exclusive `MutSlice` borrows follow §2.4.2. Class-field borrows additionally retain the object and check dynamic exclusivity. Sharing a backing store cannot remove these checks. Conversely, ordinary Array logical copies do not become borrows merely because they share backing storage.
 
 Ordinary closures capture outer `var` bindings through shared cells; `const` and ordinary READ parameters of copyable non-view types are captured by value. Shared-cell identity must not be disguised as a temporary non-escaping loan; its storage and release responsibilities remain explicit. Variables captured through shared cells cannot produce views. View captures and borrowing callbacks require the explicit contracts in §2.4.2, not guesses from a callee body or argument syntax.
 
 #### 2.14.5 Consumption and unadmitted surfaces
 
-A consuming parameter or value-type receiver transfers ownership and final destruction responsibility for copyable types, including Array, as well as noncopyable resources. Class methods do not declare receiver modes. The declaration determines ownership acquisition, independently of the concrete ABI. In the default mode, a copyable argument may retain a logical copy for later caller use; explicit `move x` guarantees transfer without copying and invalidates the source binding until reinitialization. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` parameters are borrows and cannot themselves be consumed. A rejected operation must not incorrectly mark a valid source as consumed.
+A consuming parameter or value-type receiver transfers ownership and final destruction responsibility for copyable types, including Array, as well as noncopyable resources. Class methods do not declare receiver modes. The declaration determines ownership acquisition, independently of the concrete ABI. In the default mode, a copyable argument may retain a logical copy for later caller use; explicit `move x` guarantees transfer without copying and invalidates the source binding until reinitialization. When a binding's last use on every path is a position that takes ownership (initializing or assigning another binding, storing into a field or container, a `move` parameter, a return, an escaping closure capture, a `go` argument, a Channel send), that use is an implicit move: nothing is copied and the result is the same as writing `move x`; §16.8 gives the release timing. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` parameters are borrows and cannot themselves be consumed. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points or inherit old unique-root, terminal heap-escape or whole-graph deep-freeze rules.
+Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points.
 
 #### 2.14.6 Struct-field copying and initialization
 

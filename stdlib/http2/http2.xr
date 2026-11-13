@@ -1254,7 +1254,7 @@ final class Exchange {
     compact() {
         if (this.pos == 0) { return }
         if (this.pos < DEFAULT_MAX_FRAME_SIZE && this.pos * 2 < len(this.buf)) { return }
-        this.buf = copy(this.buf[this.pos:len(this.buf)])
+        this.buf = copy this.buf[this.pos:len(this.buf)]
         this.pos = 0
     }
 

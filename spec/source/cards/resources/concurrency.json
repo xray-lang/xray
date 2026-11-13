@@ -40,7 +40,7 @@
     {
       "heading_level": 2,
       "heading": "Value arguments and declared consumption",
-      "markdown": "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy(array), explicit move, or unique backing. Copying stops at class and synchronization identities. Only noncopyable resources use consuming parameter declarations; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.",
+      "markdown": "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require `copy`, explicit `move`, or unique backing. Copying stops at class and synchronization identities. A consuming (`move`) parameter takes ownership of copyable values and noncopyable resources alike; `move x` guarantees no copy, and a last use at a consuming position is an implicit move with the same result. Complete go admission remains a separate obligation.",
       "fences": [
         "coro-go-forms"
       ]
@@ -69,7 +69,7 @@
     {
       "heading_level": 2,
       "heading": "Locks — explicit execution domain",
-      "markdown": "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Name synchronization handles with `const`; their audited methods provide synchronized interior mutation.\n\n```xray\nimport sync\nimport sys\n\nconst m = sync.Mutex<i64>(0)\nconst os_m = sys.OsMutex()\n```"
+      "markdown": "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Name synchronization handles with `const`; their audited methods provide synchronized interior mutation. The target `sync.Mutex<T>` interface passes a `ref T` to the body of `lock` and `tryLock` (`fn(ref T) -> U`); `sync.RwLock<T>` takes `fn(T) -> U` for `read` and `fn(ref T) -> U` for `write`; neither has `replace` (spec §10.9, not implemented yet).\n\n```xray\nimport sync\nimport sys\n\nconst m = sync.Mutex<i64>(0)\nconst os_m = sys.OsMutex()\n```"
     }
   ]
 }

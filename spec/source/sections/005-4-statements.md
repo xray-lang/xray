@@ -160,6 +160,22 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 
 enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum 实现 `Iterable`，也不会隐式构造数组或迭代器对象。`E` 必须是编译期可确定布局的具体 enum；未约束类型参数上的 `E.variants` 会被拒绝。详见 §5.6.5。
 
+#### `for (ref …)` 原地遍历
+
+```ebnf
+ForInRefStmt ::= LoopLabel? 'for' '(' (Identifier ',')? 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` 与 `for (i, ref x in xs)` 原地遍历 `Array<T>`、`[T; N]` 与 `MutSlice<T>`；Map 写 `for (k, ref v in m)`，只有值可写。
+
+- 集合表达式必须是可写 place，要求与 `ref` 实参相同（§5.2.4）。循环开始前取得它的独占借用，并完成必要的写时复制分离，只做一次。
+- 每轮的 `x` 是对当前元素的 `ref`：对它赋值或调用 `ref` 方法，即写回该元素。下标 `i` 与 Map 的键 `k` 是普通的不可变绑定。
+- 整个循环期间，循环体不能经其他路径读写被遍历的容器，也不能改变它的长度；违反时是编译错误 `E0382`。
+- `break`、`continue`、错误传播、panic 展开与取消都结束这次借用。
+- 不写 `ref` 的 for-in 仍遍历快照，语义不变。
+
+本形式尚未实现，当前实现资格见 §17。
+
 #### 自定义迭代器
 
 实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
@@ -308,7 +324,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // 退出时读取 2
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // 显式副本保持 1
     n = 2
 }                                      // 输出 saved 1，再输出 late 2
@@ -316,7 +332,7 @@ fn late_binding_and_copy() {
 
 **语义**：
 - `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
-- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy n` 或普通值绑定创建显式副本，再在块中读取该副本。
 - cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
@@ -536,6 +552,22 @@ Iteration source / yield mapping:
 
 Enum type domains and descriptor views are compiler-recognized static domains. They do not make enums conform to `Iterable`, and they do not implicitly construct arrays or iterator objects. `E` must have a compile-time-known concrete enum layout; `E.variants` on an unconstrained type parameter is rejected. See §5.6.5.
 
+#### In-place `for (ref …)`
+
+```ebnf
+ForInRefStmt ::= LoopLabel? 'for' '(' (Identifier ',')? 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` and `for (i, ref x in xs)` traverse `Array<T>`, `[T; N]` and `MutSlice<T>` in place; a Map is written `for (k, ref v in m)`, and only the value is writable.
+
+- The collection expression must be a writable place, as for a `ref` argument (§5.2.4). Before the loop starts it is borrowed exclusively and detached from shared storage if needed, once.
+- Each iteration's `x` is a `ref` to the current element: assigning to it or calling a `ref` method on it writes the element back. The index `i` and a Map key `k` are ordinary immutable bindings.
+- For the whole loop, the body may neither read nor write the traversed container through another path, nor change its length; a violation is compile error `E0382`.
+- `break`, `continue`, error propagation, panic unwinding and cancellation all end the borrow.
+- A for-in without `ref` still iterates a snapshot; its semantics are unchanged.
+
+This form is not implemented yet; see §17 for its current implementation qualification.
+
 #### Custom iterators
 
 Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
@@ -686,7 +718,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // reads 2 at exit
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // explicit copy remains 1
     n = 2
 }                                      // prints saved 1, then late 2
@@ -694,7 +726,7 @@ fn late_binding_and_copy() {
 
 **Semantics**:
 - `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
-- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy n` or an ordinary value binding and read that copy from the block.
 - A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.

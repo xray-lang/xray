@@ -212,6 +212,7 @@ Statement ::= ExprStmt
            |  ForStmt
            |  ForInStmt
            |  ForInPairStmt
+           |  ForInRefStmt
            |  MatchStmt
            |  ScopeStmt
            |  TryScopeStmt
@@ -240,6 +241,7 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInRefStmt ::= LoopLabel? 'for' '(' (Identifier ',')? 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
@@ -566,6 +568,7 @@ Statement ::= ExprStmt
            |  ForStmt
            |  ForInStmt
            |  ForInPairStmt
+           |  ForInRefStmt
            |  MatchStmt
            |  ScopeStmt
            |  TryScopeStmt
@@ -595,6 +598,7 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInRefStmt ::= LoopLabel? 'for' '(' (Identifier ',')? 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?

@@ -891,7 +891,7 @@ fn _sourceStateSnapshot(runtimeToken: i64) -> _ClusterSourceState? {
     var state: _ClusterSourceState? = null
     if (_runtimeActiveToken.load() == runtimeToken && _sourceState != null &&
         _sourceState!.runtimeToken == runtimeToken) {
-        state = copy(_sourceState)
+        state = copy _sourceState
     }
     _sourceStateLock.store(false)
     return state
@@ -1671,7 +1671,7 @@ fn _readPeerExact(runtimeToken: i64, peerGeneration: i64,
         _appendBytes(ref out, chunk)
     }
     if (len(out) != count) { return null }
-    return copy(out)
+    return copy out
 }
 
 fn _readPeerFrame(runtimeToken: i64, peerGeneration: i64,
@@ -2640,7 +2640,7 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
         var departed = _recentDepartureSnapshot(runtimeToken, nowMs)
         if (departed == null) { return }
         if (shouldJoinDiscoveredNode(selfName, connected!, departed!, candidate!, expectedHash)) {
-            var peerHost = copy(datagram!.sender.host)
+            var peerHost = copy datagram!.sender.host
             var peerPort = candidate!.port
             // End every optional-record projection before `go`: these
             // projections are borrowed places, whereas the coroutine receives

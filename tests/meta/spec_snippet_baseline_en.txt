@@ -4,5 +4,5 @@
 #
 # Empty on purpose. LANGUAGE_SPEC.md's 17 runnable fences and 1 error demo all
 # agree with the compiler as of 2026-08-28, so the English gate starts with
-# nothing forgiven. Its Chinese sibling carries four benign excerpt rows; see
-# tests/meta/spec_snippet_baseline_cn.txt.
+# nothing forgiven. Its Chinese sibling carried four benign excerpt rows until
+# 2026-11-13 and is empty as well; see tests/meta/spec_snippet_baseline_cn.txt.
