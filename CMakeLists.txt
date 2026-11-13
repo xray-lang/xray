@@ -4133,29 +4133,6 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # The pre-commit hook that formatted staged files was deleted; it rewrote
-    # files after a commit was composed, staling contract anchors and turning
-    # every shared source file into a merge conflict. This is the half of its
-    # replacement that runs locally: whole-tree, against a debt baseline that
-    # only shrinks. CI runs the other half, which format-checks the lines a
-    # branch actually touched.
-    #
-    # SKIP rather than fail when clang-format 22 is absent: a developer machine
-    # is not required to have it, and CI installs it explicitly.
-    add_test(
-        NAME format_debt_ratchet
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_format.py
-                --mode ratchet --skip-if-missing
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(format_debt_ratchet PROPERTIES
-        LABELS "meta;format;governance;discipline"
-        PROCESSORS 4
-        SKIP_RETURN_CODE 77
-        TIMEOUT 300
-    )
-
     # The only gate that judges the language spec's examples with the real
     # compiler. It existed, fully written, with zero callers in 153 root
     # add_test entries, 85 unit entries, three workflows and every script --

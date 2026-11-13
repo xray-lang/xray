@@ -258,3 +258,126 @@ jobs:
             build/scalar-*
             build/CMakeCache.txt
             build/compile_commands.json
+
+  msvc-generated-c:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: MSVC generated C11
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    - name: Configure compiler
+      run: cmake --preset default
+    - name: Build compiler and numeric regression
+      run: cmake --build build --target xray test_bits_wide_c11 --parallel 4
+    - name: Compile real generated C under MSVC
+      run: ctest --test-dir build/tests/unit/shared/bits_wide --output-on-failure
+
+  arch-lint:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    runs-on: ubuntu-latest
+    name: Frontend Architecture Lint
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run frontend architecture lint
+      run: |
+        python3 ./scripts/check_frontend_arch.py
+
+
+  xraytest-floor:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    runs-on: ubuntu-latest
+    name: Shared Test Runtime (Python floor)
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Read the declared floor
+      id: floor
+      run: |
+        version=$(sed -n 's/^set(XRAY_PYTHON_MIN_VERSION "\([0-9.]*\)".*/\1/p' CMakeLists.txt)
+        test -n "$version" || { echo "XRAY_PYTHON_MIN_VERSION not found in CMakeLists.txt" >&2; exit 1; }
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Declared Python floor: $version"
+
+    - name: Pin the supported build-host floor
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ steps.floor.outputs.version }}
+
+    - name: xraytest unit tests
+      run: |
+        python3 --version
+        cd tests/lib/tests
+        python3 -m unittest discover -s . -p 'test_*.py' -v
+
+  sanitizers:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: Current gates (ASan + UBSan + paranoid)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ASAN_OPTIONS: abort_on_error=1:detect_leaks=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Configure combined sanitizers
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DXR_XIR_PARANOID=ON
+      - name: Build current products and kernels
+        run: cmake --build build --parallel 4 --target all -- -k 0
+      - name: Verify exact CLI and current gates
+        run: python scripts/verify_current_build.py --build build --evidence sanitizer-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: current-sanitizers-${{ github.sha }}
+          path: |
+            sanitizer-evidence
+            build/CMakeCache.txt
+            build/compile_commands.json
+            build/Testing/Temporary
+
+  thread-sanitizer:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: Thread kernels (TSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Configure thread instrumentation
+        run: >-
+          cmake -S . -B build-tsan -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DENABLE_TSAN=ON -DXR_XIR_PARANOID=ON
+      - name: Build thread kernels
+        run: cmake --build build-tsan --parallel 4 --target test_os_thread_token test_xir_values test_xir_value_allocations
+      - name: Run thread kernels
+        run: |
+          ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^os_thread_token$'
+          ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^test_xir_values$'
+          timeout 60s ./build-tsan/tests/unit/test_xir_value_allocations --closed-threads > build-tsan/closed-threads.stdout 2> build-tsan/closed-threads.stderr
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thread-sanitizer-${{ github.sha }}
+          path: |
+            build-tsan/closed-threads.*
+            build-tsan/CMakeCache.txt
+            build-tsan/compile_commands.json
+            build-tsan/Testing/Temporary
