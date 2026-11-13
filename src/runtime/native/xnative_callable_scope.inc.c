@@ -6,6 +6,7 @@
  * xnative_callable_scope.inc.c - Rooted activation owners for typed C closures
  */
 #include "xnative_value.h"
+#include "xnative_module_state.h"
 
 typedef struct XrtCallableGroup {
     struct XrtCallableGroup *next;
@@ -46,10 +47,13 @@ static XrtCallableRegistry *callable_registry(uint32_t source) {
     }
     return root->callables;
 }
-static XrtCallableGroup *callable_group(XrtCallableRegistry *registry,
-    const XrtCallableImage *image, uint32_t source) {
+static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
+    const XrtCallableImage *image, XrXirTypeArena *arena, uint32_t source) {
     for (XrtCallableGroup *group = registry->groups; group; group = group->next)
-        if (group->image == image) return group;
+        if (group->image == image) {
+            if (arena && group->types != arena) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+            return group;
+        }
     if (!image || !image->entry_count || !image->entries || image->entry_count > 65536)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableGroup *group = xr_calloc(1, sizeof(*group));
@@ -59,7 +63,10 @@ static XrtCallableGroup *callable_group(XrtCallableRegistry *registry,
     registry->groups = group;
     XrtValueRoot *root = xrt_value_root_current(source);
     uint64_t limit = root->byte_limit ? root->byte_limit : UINT64_MAX;
-    callable_scope_require(xrt_callable_types_new(image->types, image->type_count, limit, &group->types), source);
+    if (arena) {
+        if (!xr_xir_compile_type_arena_retain(arena)) xrt_value_failure(XR_XIR_VALUE_REFCOUNT_LIMIT, source);
+        group->types = arena;
+    } else callable_scope_require(xrt_callable_types_new(image->types, image->type_count, limit, &group->types), source);
     size_t captures = 0;
     for (uint32_t e = 0; e < image->entry_count; ++e) {
         XrtCallableEntrySpec entry = image->entries[e];
@@ -84,7 +91,7 @@ static XrtCallableGroup *callable_group(XrtCallableRegistry *registry,
         received->capture_count = entry.capture_count;
         received->captures = entry.capture_count ? next : NULL;
         for (uint32_t p = 0; p < entry.capture_count; ++p)
-            if (!xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_SCALAR, entry.captures[p]},
+            if (!xrt_callable_type_id(entry.captures[p],
                     image->type_count, next++)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     }
     callable_scope_require(xrt_callable_code_new(group->types, group->workspace, image->entry_count,
@@ -93,6 +100,14 @@ static XrtCallableGroup *callable_group(XrtCallableRegistry *registry,
     group->workspace = NULL;
     callable_scope_require(xr_xir_domain_new(limit, &group->domain), source);
     return group;
+}
+static XrtCallableGroup *callable_group(XrtCallableRegistry *registry, const XrtCallableImage *image, uint32_t source) {
+    return callable_group_receive(registry, image, NULL, source);
+}
+XRAY_API void xrt_callable_state_prepare(XrtModuleState *state, const XrtCallableImage *image, uint32_t source) {
+    XrXirTypeArena *arena = xrt_module_state_callables(state, image);
+    if (!arena) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    (void)callable_group_receive(callable_registry(source), image, arena, source);
 }
 static void callable_scope_grow(XrtCallableScopeBody *scope, bool arguments, uint32_t count, uint32_t source) {
     uint32_t *capacity = arguments ? &scope->argument_capacity : &scope->capacity;
@@ -202,6 +217,26 @@ static XrXirValue callable_scope_value(XrtCallableGroup *group, XrtCallable *fun
         binding->entry, &captures, &count), source);
     return value;
 }
+XRAY_API uint32_t xrt_callable_entry(const XrtCallableImage *image, const XrtCallable *function, uint32_t source) {
+    if (!function) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XrtCallableGroup *group = callable_group(callable_registry(source), image, source);
+    XrXirValue value = callable_scope_value(group, (XrtCallable *)function, source);
+    return xr_xir_function_binding(&value)->entry;
+}
+XRAY_API XrtCallable *xrt_callable_scope_copy(XrtCallableScope *scope, XrtCallable *function, uint32_t source) {
+    XrtValueRoot *root = xrt_value_root_current(source);
+    if (!scope || scope != root->callable_scope || scope->root != root || !function)
+        xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XrtCallableScopeBody *body = callable_scope_body(scope, source);
+    if (body->count == UINT32_MAX) xrt_value_failure(XR_XIR_VALUE_LIMIT, source);
+    XrXirValue value = callable_scope_value(body->group, function, source);
+    callable_scope_grow(body, false, body->count + 1, source);
+    XrtCallableScopeValue *received = &body->values[body->count];
+    *received = (XrtCallableScopeValue){.binding=UINT32_MAX};
+    callable_scope_require(xr_xir_value_copy(&value, &received->value), source);
+    ++body->count;
+    return function;
+}
 XRAY_API XrtCallable *xrt_callable_scope_bind(XrtCallableScope *scope, uint32_t binding,
     XrtCallable *function, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
@@ -257,6 +292,8 @@ XRAY_API XrtCallable *xrt_callable_scope_leave(XrtCallableScope *scope, XrtCalla
     scope->body = NULL;
     return result;
 }
+#include "xnative_callable_cell.inc.c"
+
 XR_FUNC void xrt_callable_root_drain(XrtValueRoot *root) {
     XrtCallableRegistry *registry = root->callables;
     /* Automatic descriptors are synchronous borrows. A longjmp can already

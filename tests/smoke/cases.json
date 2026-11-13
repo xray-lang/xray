@@ -34,7 +34,7 @@
       "stdout": "tests/smoke/expected/functions.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:27:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/functions.xr:33:5: module slot without publication is not supported by LIR lowering yet"
       }
     },
     {
@@ -46,7 +46,7 @@
       "stdout": "tests/smoke/expected/functions.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:27:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/functions.xr:33:5: module slot without publication is not supported by LIR lowering yet"
       }
     },
     {
@@ -202,7 +202,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:27:5: FUNCTION_REF captured physical binding transport is not supported by LIR lowering yet"
       }
     },
     {
@@ -815,7 +815,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:15:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:27:5: FUNCTION_REF captured physical binding transport is not supported by LIR lowering yet"
       }
     },
     {

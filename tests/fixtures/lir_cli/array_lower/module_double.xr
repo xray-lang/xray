@@ -1,0 +1,6 @@
+var double = fn(x: i64) -> i64 { return x * 2 }
+print(double(21))
+double = fn(x: i64) -> i64 { return x + 3 }
+print(double(39))
+const saved = double
+print(saved(7))

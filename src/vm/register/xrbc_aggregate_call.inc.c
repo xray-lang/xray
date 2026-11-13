@@ -83,6 +83,8 @@ static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *
 }
 
 #include "xrbc_callable_scope.inc.c"
+#include "xrbc_captured_cell.inc.c"
+#include "xrbc_callable_state.inc.c"
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFunction *function, uint32_t index, uint32_t source, size_t pc) {
@@ -90,6 +92,16 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
     XrRbcAggregateAccess access = function->aggregate_accesses[index];
     size_t parent = stack->depth - 1;
     XrRbcFrame *frame = &stack->frames[parent];
+    if (access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) {
+        XrRbcStatus status = xr_rbc_captured_cell_step(module, stack, function, access, source);
+        if (status == XR_RBC_OK) stack->frames[parent].pc = pc;
+        return status;
+    }
+    if (access.operation >= XR_RBC_FUNCTION_STATE_READ && access.operation <= XR_RBC_FUNCTION_STATE_INITIALIZE) {
+        XrRbcStatus status = xr_rbc_callable_state_step(module, stack, function, access, source);
+        if (status == XR_RBC_OK) stack->frames[parent].pc = pc;
+        return status;
+    }
     if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND) {
         uint64_t token = access.count ? stack->slots[frame->base + access.source].bits : 0;
         XrRbcStatus status = xr_rbc_closure_scope_step(module, stack, function, access,
@@ -110,7 +122,13 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         stack->closure_arguments = storage;
         XrtCallableEntry entry = module->closure_entries[access.destination - 1];
         for (uint32_t p = 0; p < access.count; ++p) {
-            uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, function->aggregate_operands[access.first + p])->bits;
+            XrRbcArrayLocation location = function->aggregate_operands[access.first + p];
+            uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, location)->bits;
+            if (module->functions[access.callee].captures[p].kind == XR_RBC_CALLABLE_CELL) {
+                if (!xr_rbc_captured_cell_value(module, stack, rbc_array_location_kind(function, location), bits,
+                        entry.captures[p], &stack->closure_arguments[p])) return XR_RBC_INVALID;
+                continue;
+            }
             if (!xr_rbc_callable_scalar_valid(module->functions[access.callee].captures[p], bits))
                 return XR_RBC_INVALID;
             XrXirValue value = {.type=(uint32_t)entry.captures[p]};
@@ -163,6 +181,14 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             for (uint32_t p = 0; p < access.count; ++p)
                 stack->spills[first + p] = *xr_rbc_aggregate_scalar(stack, frame,
                     function->aggregate_operands[access.first + p]);
+            for (uint32_t p = 0; p < callee->capture_count; ++p) {
+                if (callee->captures[p].kind != XR_RBC_CALLABLE_CELL) continue;
+                XrRbcArrayLocation location = function->aggregate_operands[access.first + p];
+                XrXirValue value;
+                if (!xr_rbc_captured_cell_value(module, stack, rbc_array_location_kind(function, location),
+                        stack->spills[first + p].bits, (XrXirType)callee->captures[p].type, &value)) return XR_RBC_INVALID;
+                memcpy(&stack->spills[first + p].bits, &value.payload, sizeof(value.payload));
+            }
             token = ((uint64_t)(first + 1) << 1) | 1u;
         }
         stack->slots[frame->base + access.result.index].bits = token;

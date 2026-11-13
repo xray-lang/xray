@@ -12,6 +12,7 @@
 #include "xray_native_callable.h"
 
 typedef struct XrtCallableCode XrtCallableCode;
+XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *, const XrtCallableTypeSpec *, uint32_t count);
 
 XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirType *);
 /* One physical pool is projected into an independently owned canonical arena.
@@ -19,6 +20,8 @@ XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirTyp
  * The limit covers the temporary receiving workspace and retained type arena. */
 XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *, uint32_t count,
     uint64_t limit, XrXirTypeArena **empty);
+XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *, uint32_t count,
+    uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes);
 
 typedef struct XrtCallableEntry {
     XrXirType type;

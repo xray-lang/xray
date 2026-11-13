@@ -21,6 +21,7 @@
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_type_arena_internal.h"
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -191,7 +192,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_I64_BINDING ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_CAPTURED_I64_BORROW ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||

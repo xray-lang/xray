@@ -300,7 +300,9 @@ static void callable_lower_failures(void) {
         "fn make(seed:i64)->fn(i64)->i64{return fn(x:i64)->i64{return seed+x}}\n"
         "fn choose(flag:bool)->fn(i64)->i64{const outer=make(40)\n{const inner=make(50)\n"
         "if(flag){return inner}\nreturn outer}}\n"
-        "fn run(){make(0)\nconst cb=choose(true)\nprint(cb(2))}\nrun()\n"};
+        "fn run(){make(0)\nconst cb=choose(true)\nprint(cb(2))}\nrun()\n",
+        "fn makeCounter()->fn()->i64{var count=0\nreturn fn()->i64{count=count+1\nreturn count}}\n"
+        "var counter=makeCounter()\nprint(counter())\nprint(counter())\n"};
     for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
         SourceFixture fixture = source_fixture(programs[program]);
         attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));

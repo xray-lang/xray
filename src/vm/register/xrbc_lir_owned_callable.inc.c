@@ -31,7 +31,12 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         if (received != XR_LIR_OK) { status = XR_RBC_COMPILE_UNSUPPORTED; goto done; }
         next += specs[t].parameter_count;
     }
-    XrXirValueStatus built = xrt_callable_types_new(specs, count, UINT64_MAX, &program->module.closure_types);
+    XrXirTypeArena *received = xrt_module_callable_catalog(program->module.state_layout);
+    XrXirValueStatus built = XR_XIR_VALUE_OK;
+    if (received) {
+        if (!xr_xir_compile_type_arena_retain(received)) built = XR_XIR_VALUE_REFCOUNT_LIMIT;
+        else program->module.closure_types = received;
+    } else built = xrt_callable_types_new(specs, count, UINT64_MAX, &program->module.closure_types);
     if (built != XR_XIR_VALUE_OK) {
         status = built == XR_XIR_VALUE_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
             built == XR_XIR_VALUE_LIMIT || built == XR_XIR_VALUE_MEMORY_LIMIT ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_UNSUPPORTED;
@@ -58,7 +63,8 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         xr_lir_function_view(input, function, &view);
         if (!closure.callable || closure.state_capture) continue;
         bool scalars = true;
-        for (uint32_t c = 0; c < closure.capture_count; ++c) scalars &= rbc_lir_scalar(view.parameter_types[c]);
+        for (uint32_t c = 0; c < closure.capture_count; ++c)
+            scalars &= rbc_lir_scalar(view.parameter_types[c]) || rbc_lir_captured_cell(input, view.parameter_types[c]);
         if (!scalars) continue;
         uint32_t ordinal = (uint32_t)program->module.closure_entry_count++;
         program->closure_mapping[f] = ordinal;

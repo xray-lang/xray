@@ -13,6 +13,7 @@
  */
 #include "xlir_internal.h"
 #include "xlir_verify.h"
+#include "xlir_cell.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -146,8 +147,10 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         }
         case XR_LIR_FUNCTION_BIND: {
             XrLirCallableType signature;
+            XrLirCellType cell;
             return a == XR_LIR_FUNCTION_SCOPE && v->type == b && v->bits < UINT32_MAX &&
-                xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK;
+                (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
+                 (xr_lir_cell_type_view(m, b, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64));
         }
         case XR_LIR_FIXED_ARRAY_NEW: {
             XrLirTypeView shape;
@@ -178,18 +181,30 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
                 v->type == (v->op == XR_LIR_NULLABLE_IS_SOME ? XR_LIR_I1 : shape.element);
         }
-        case XR_LIR_CELL_NEW:
+        case XR_LIR_CELL_NEW: {
+            XrLirCellType cell;
+            if (xr_lir_cell_type_view(m, v->type, &cell) == XR_LIR_OK)
+                return cell.payload == XR_LIR_I64 && a == XR_LIR_I64;
             return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
                 (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING) ||
                 (v->type == XR_LIR_ARRAY_CELL && a == XR_LIR_ARRAY);
-        case XR_LIR_CELL_READ:
+        }
+        case XR_LIR_CELL_READ: {
+            XrLirCellType cell;
+            if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
+                return cell.payload == XR_LIR_I64 && v->type == XR_LIR_I64;
             return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
                 (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL) ||
                 (v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY_CELL);
-        case XR_LIR_CELL_WRITE:
+        }
+        case XR_LIR_CELL_WRITE: {
+            XrLirCellType cell;
+            if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
+                return cell.payload == XR_LIR_I64 && b == XR_LIR_I64 && v->type == XR_LIR_UNIT;
             return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
                 (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING) ||
                 (a == XR_LIR_ARRAY_CELL && b == XR_LIR_ARRAY));
+        }
         case XR_LIR_ARRAY_RETAIN: return v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY;
         case XR_LIR_ARRAY_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY;
         case XR_LIR_ARRAY_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_ARRAY_CELL;

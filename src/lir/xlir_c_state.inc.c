@@ -15,6 +15,10 @@ static bool c_state_point(const XrLirInstructionView *v) {
 }
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
+    XrLirCallableType callable;
+    if (xr_lir_callable_type_view(c->request->module, type, &callable) == XR_LIR_OK)
+        return c->state_type_base + c->pod_count + lir_state_has_view_cells(&c->state_layout) +
+            type - XR_LIR_TYPE_COUNT;
     if (type == XR_LIR_VIEW_CELL) return c->state_type_base + c->pod_count;
     if (type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count &&
         c->constructed_types[type - XR_LIR_TYPE_COUNT].pod_index != UINT32_MAX)
@@ -51,6 +55,13 @@ static void c_state_layout(LirC *c) {
             shape.kind == XR_LIR_TYPE_NULLABLE ? "XRT_MODULE_NULLABLE" : "XRT_MODULE_FIXED_U8", argument);
     }
     if (lir_state_has_view_cells(layout)) c_text(c, "    {XRT_MODULE_CELL_ARRAY_I64, 0},\n");
+    if (c->owned_entry_count)
+        for (uint32_t t = 0; t < c->constructed_count; ++t) {
+            XrLirCallableType signature;
+            bool callable = xr_lir_callable_type_view(c->request->module, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK;
+            c_format(c, "    {%s, UINT32_C(%" PRIu32 ")},\n",
+                callable ? "XRT_MODULE_CALLABLE" : "XRT_MODULE_UNIT", callable ? t : 0);
+        }
     c_text(c, "};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
     for (uint32_t i = 0; i < layout->module_count && c_request_poll(c); ++i)
@@ -73,13 +84,17 @@ static void c_state_layout(LirC *c) {
     if (layout->slot_count) c_text(c, "};\n");
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
-        c->state_type_base + c->pod_count + lir_state_has_view_cells(layout),
+        c->state_type_base + c->pod_count + lir_state_has_view_cells(layout) +
+            (c->owned_entry_count ? c->constructed_count : 0),
         layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);
-    c_format(c, "    UINT64_C(%" PRIu64 "), UINT64_MAX, UINT32_C(%" PRIu32 ")\n};\n\n",
+    c_format(c, "    UINT64_C(%" PRIu64 "), UINT64_MAX, UINT32_C(%" PRIu32 "),\n",
         layout->payload_size, layout->payload_alignment);
+    if (c->owned_entry_count)
+        c_format(c, "    xrl_callable_types, UINT32_C(%" PRIu32 ")\n};\n\n", c->constructed_count);
+    else c_text(c, "    NULL, 0\n};\n\n");
 }
 
 static void c_state_require_end(LirC *c, uint32_t source) {
@@ -112,6 +127,29 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
         return;
     }
     c_state_check_access(c, reference, source);
+    XrLirCallableType callable;
+    if (xr_lir_callable_type_view(c->request->module, shape.payload, &callable) == XR_LIR_OK) {
+        if (v->op == XR_LIR_STATE_READ) {
+            c_format(c, "    { XrtCallable *owned = xrt_callable_scope_copy(xrl_scope, "
+                "*(XrtCallable *const *)xrl_access%" PRIu32 ".payload, %" PRIu32 ");\n", reference, source);
+            c_format(c, "    switch (xrt_callable_entry(&xrl_callable_image, owned, %" PRIu32 ")) {\n", source);
+            for (uint32_t f = 0; c->owned_entry_count && f < xr_lir_function_count(c->request->module); ++f) {
+                if (!c->owned_entries[f]) continue;
+                XrLirClosureTarget target;
+                xr_lir_closure_target_view(c->request->module, (XrLirFunction){c->request->module, f + 1}, &target);
+                if (!xr_lir_callable_accepts(c->request->module, shape.payload, target.callable)) continue;
+                c_format(c, "    case %" PRIu32 ": v%" PRIu32 " = (%s){xrl_owned_thunk_%" PRIu32
+                    ", owned, owned}; break;\n", c->owned_entries[f] - 1, v->result, c_type(c, shape.payload), f + 1);
+            }
+            c_format(c, "    default: xrt_module_uninitialized(%" PRIu32 ");\n    } }\n", source);
+        } else {
+            c_format(c, "    { XrtCallable *owned = xrl_state_function_%" PRIu32 "(", shape.payload);
+            c_value(c, v->operands[1]); c_format(c, ", xrl_scope, %" PRIu32 ");\n", source);
+            c_text(c, "    xrt_module_require(xrt_module_replace("); c_value(c, reference);
+            c_text(c, ", &owned)"); c_state_require_end(c, source); c_text(c, "    }\n");
+        }
+        return;
+    }
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
         if (shape.payload >= XR_LIR_TYPE_COUNT) {
@@ -166,18 +204,27 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
     }
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_REFERENCE)
         c_format(c, "    v%" PRIu32 " = NULL;\n", v->result);
+    XrLirCallableType callable;
+    bool function = v->operand_count == 2 &&
+        xr_lir_callable_type_view(c->request->module, c_value_type(c, v->operands[1]), &callable) == XR_LIR_OK;
+    if (function) {
+        c_format(c, "    { XrtCallable *owned = xrl_state_function_%" PRIu32 "(", c_value_type(c, v->operands[1]));
+        c_value(c, v->operands[1]); c_format(c, ", xrl_scope, %" PRIu32 ");\n", source);
+    }
     c_format(c, "    xrt_module_require(%s(", operation);
     c_value(c, v->operands[0]);
     if (v->op != XR_LIR_STATE_PUBLISH) c_format(c, ", UINT32_C(%" PRIu64 ")", v->bits);
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_INITIALIZE) {
         c_text(c, ", ");
         if (v->operand_count == 1) c_text(c, "NULL");
+        else if (function) c_text(c, "&owned");
         else { c_text(c, "&"); c_value(c, v->operands[1]); }
     }
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_REFERENCE)
         c_format(c, ", &v%" PRIu32, v->result);
     c_text(c, ")");
     c_state_require_end(c, source);
+    if (function) c_text(c, "    }\n");
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_REFERENCE)
         c_state_reference_cache(c, v->result, source);
 }
@@ -185,6 +232,8 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
 static void c_state_root(LirC *c, XrLirType result) {
     const char *type = c_type(c, result);
     c_text(c, "static void xrl_invoke(void *context, XrtModuleState *state) {\n");
+    if (lir_state_has_callables(c->request->module, &c->state_layout))
+        c_text(c, "    xrt_callable_state_prepare(state, &xrl_callable_image, 0);\n");
     if (result == XR_LIR_UNIT) c_text(c, "    (void)context;\n    ");
     else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY) c_format(c, "    %s owned = ", type);
     else c_format(c, "    *(%s *)context = ", type);

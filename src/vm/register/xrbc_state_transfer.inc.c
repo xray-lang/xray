@@ -7,7 +7,8 @@
  * xrbc_state_transfer.inc.c - Capability provenance through bytecode CFGs
  */
 static bool rbc_state_payload(RbcStringAdmission *s, uint32_t slot, uint32_t kind) {
-    XrRbcRegisterKind payload = rbc_state_register_kind(kind);
+    XrRbcRegisterKind payload;
+    if (!rbc_state_register_kind(kind, &payload)) return false;
     return kind == XRT_MODULE_UNIT || (rbc_managed_kind(payload) ?
         rbc_register_kind(s->function, slot) == payload && rbc_string_state(s->state[slot]) :
         rbc_register_kind(s->function, slot) == XR_RBC_BITS && s->state[slot] == RBC_BITS);
@@ -25,7 +26,8 @@ static bool rbc_state_transfer(RbcStringAdmission *s, XrRbcOperands v) {
         if (v.op == XR_RBC_STATE_WRITE)
             return (s->origin[reference] & 1u) && rbc_state_payload(s, v.b, v.c);
         if (v.c == XRT_MODULE_UNIT) return true;
-        XrRbcRegisterKind payload = rbc_state_register_kind(v.c);
+        XrRbcRegisterKind payload;
+        if (!rbc_state_register_kind(v.c, &payload)) return false;
         if (rbc_managed_kind(payload)) {
             if (rbc_register_kind(s->function, v.a) != payload || s->state[v.a] != RBC_EMPTY) return false;
             s->state[v.a] = RBC_STRING_OWNED;

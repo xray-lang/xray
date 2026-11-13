@@ -35,10 +35,19 @@ static void c_prepare_types(LirC *c) {
         count, sizeof(*c->constructed_types), &memory))) return;
     c->constructed_types = memory;
     c->constructed_count = count;
+    bool cells = false;
     for (uint32_t n = 0; n < count && c_request_poll(c); ++n) {
         XrLirType type = XR_LIR_TYPE_COUNT + n;
         LirCConstructedType *owned = &c->constructed_types[n];
         owned->pod_index = UINT32_MAX;
+        XrLirCellType cell;
+        if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64) {
+            cells = true;
+            xr_lir_type_view(module, type, &owned->shape);
+            owned->layout = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
+            snprintf(owned->name, sizeof(owned->name), "XrlCell_%" PRIu32, type);
+            continue;
+        }
         if (xr_lir_type_view(module, type, &owned->shape) == XR_LIR_OK &&
             owned->shape.kind == XR_LIR_TYPE_CALLABLE) {
             owned->layout = (XrLirTypeLayout){24, 8, 0, true};
@@ -66,12 +75,22 @@ static void c_prepare_types(LirC *c) {
         snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 : "XrlNullable_%" PRIu32, type);
         owned->pod_index = c->pod_count++;
     }
+    for (uint32_t f = 0; cells && f < xr_lir_function_count(module) && c_request_poll(c); ++f) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        xr_lir_function_at(module, f, &function);
+        xr_lir_function_view(module, function, &view);
+        if (!lir_definition_cell_captures(module, function, &view))
+            c_error(c, XR_LIR_C_UNSUPPORTED, "owned Cells require an actual hidden capture parameter");
+    }
 }
 
 static void c_constructed_types(LirC *c) {
     for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
         const LirCConstructedType *type = &c->constructed_types[n];
-        if (type->shape.kind == XR_LIR_TYPE_CALLABLE) {
+        if (type->shape.kind == XR_LIR_TYPE_CELL) {
+            c_format(c, "typedef XrtCapturedCell *%s;\n", type->name);
+        } else if (type->shape.kind == XR_LIR_TYPE_CALLABLE) {
             c_callable_type(c, XR_LIR_TYPE_COUNT + n);
         } else if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
             c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",

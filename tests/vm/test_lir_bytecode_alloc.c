@@ -213,7 +213,7 @@ static void callable_scope_handle_reuse(void) {
 }
 
 static void callable_compiler_failures(void) {
-    for (unsigned capture = 0; capture < 4; ++capture) {
+    for (unsigned capture = 0; capture < 5; ++capture) {
         XrLirModule *module = NULL;
         XrLirFunction root = {0};
         callable_fixture_capture(&module, &root, capture);
@@ -234,7 +234,7 @@ static void callable_compiler_failures(void) {
         uint64_t result = 0;
         if (capture) {
             XrRbcFunction *functions = (XrRbcFunction *)xr_rbc_program_view(program)->functions;
-            uint32_t callee = capture == 3 ? xr_rbc_program_view(program)->closure_targets[0] :
+            uint32_t callee = capture >= 3 ? xr_rbc_program_view(program)->closure_targets[0] :
                 functions[0].environments[0].callee;
             XrRbcFunction saved = functions[callee];
             XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX] = {0};

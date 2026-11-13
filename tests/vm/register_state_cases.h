@@ -258,4 +258,31 @@ static void test_raw_fixed_state_frontier(void) {
     xrt_module_layout_drop(&layout);
 }
 
+static void test_raw_callable_state_requires_typed_transport(void) {
+    XrtCallableTypeSpec callable = {.kind=XRT_CALLABLE_SIGNATURE, .result={XRT_CALLABLE_SCALAR, XR_POD_I64}};
+    XrtModuleTypeSpec type = {XRT_MODULE_CALLABLE, 0};
+    XrtModuleSpec owner = {0};
+    XrtModuleSlotSpec slot = {.module=0, .type=0, .size=sizeof(void *), .alignment=_Alignof(void *)};
+    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&owner, .module_count=1,
+        .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
+        .byte_limit=UINT64_MAX, .callable_types=&callable, .callable_type_count=1};
+    for (unsigned mutable = 0; mutable < 2; ++mutable) {
+        slot.flags = mutable ? XRT_MODULE_SLOT_MUTABLE : 0;
+        XrtModuleLayout *layout = NULL;
+        CHECK(xrt_module_layout_new(&spec, &layout) == 0);
+        uint32_t code[4];
+        XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
+        XrRbcStateAccess access = {0, 0, 1};
+        XrRbcFunction function = {.code=code, .code_count=4, .register_count=3, .parameter_count=1,
+            .register_kinds=kinds, .register_kind_count=3, .state_accesses=&access, .state_access_count=1};
+        XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=layout};
+        immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
+        immediate(code, 1, XR_RBC_LOADI, 1, 1);
+        immediate(code, 2, mutable ? XR_RBC_STATE_CONSTRUCT : XR_RBC_STATE_INITIALIZE, mutable ? 2 : 0, 0);
+        emit(code, 3, XR_RBC_RET0, 0, 0, 0);
+        reject_prepare(&module, 0, NULL, 0);
+        xrt_module_layout_drop(&layout);
+    }
+}
+
 #endif // REGISTER_STATE_CASES_H

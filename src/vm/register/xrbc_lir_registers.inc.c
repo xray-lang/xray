@@ -236,7 +236,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         if(c->slots[v]!=UINT32_MAX ||
             (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF && type!=XR_LIR_STRING_REF &&
              type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE && type!=XR_LIR_VIEW_FRAME &&
-             type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64 && !rbc_lir_callable_type(c->input, type)))continue;
+             type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64 && !rbc_lir_callable_type(c->input, type) &&
+             !rbc_lir_captured_cell(c->input, type)))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {

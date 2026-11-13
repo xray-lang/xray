@@ -15,6 +15,7 @@
 #include "xlir_internal.h"
 #include "xlir_string_elide.h"
 #include "xlir_array.h"
+#include "xlir_cell.h"
 #include "../xir/xxir_source_query.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
@@ -34,6 +35,8 @@ typedef struct Lower {
     XrLirType *constructed_types;
     uint32_t *constructed_stack;
     XrLirType *closure_types;
+    uint8_t **owned_bindings;
+    XrLirType owned_i64_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
     uint32_t *queue, queued;
@@ -919,8 +922,6 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         const XrXirFunction *target = &c->source->functions[callee];
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             XrLirType type = lower_type(c, target->parameters[p]);
-            if (placement == XIR_CLOSURE_OWNED && type == XR_LIR_I64_CELL)
-                return lower_unsupported(c, "owned mutable function binding transport");
             if (type == XR_LIR_I64_CELL) c->scalar_bindings = true;
             if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
                 type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL)
@@ -1059,6 +1060,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     return good;
 }
 
+#include "xlir_lower_owned_bindings.inc.c"
+
 static bool lower_declare(Lower *c, uint32_t index) {
     c->function = index;
     c->instruction = UINT32_MAX;
@@ -1092,6 +1095,8 @@ static bool lower_declare(Lower *c, uint32_t index) {
     uint32_t contract_count = 0;
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         parameters[p] = lower_type(c, f->parameters[p]);
+        if (c->owned_bindings && c->owned_bindings[index] && c->owned_bindings[index][p])
+            parameters[p] = c->owned_i64_cell;
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
         if (parameters[p] == XR_LIR_STRING_CELL) { parameters[p] = XR_LIR_STRING_REF; c->string_appends = true; }
         XrLirCallableType callable;
@@ -1608,6 +1613,9 @@ static bool lower_display(LowerFunction *f, uint32_t block, XrLirValue argument,
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
+    if (op->op == XR_XIR_COPY && c->owned_bindings && c->owned_bindings[c->function] &&
+        c->owned_bindings[c->function][f->source->parameter_count + i])
+        return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
     uint32_t result = f->source->parameter_count + i;
     if (op->op == XR_XIR_RANGE_CHECK) {
         XrLirValue operands[3] = {{0}};
@@ -1663,7 +1671,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         XirClosureStorage placement = XIR_CLOSURE_UNRESOLVED;
         if (good && xr_xir_compile_closure_placement(c->request->closed, c->function, result, &placement) != XR_XIR_OK)
             good = lower_unsupported(c, "function environment placement disappeared during emission");
-        if (good && op->args[1] && placement == XIR_CLOSURE_OWNED) reference.bits = XR_LIR_CLOSURE_OWNED;
+        if (good && placement == XIR_CLOSURE_OWNED) reference.bits = XR_LIR_CLOSURE_OWNED;
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
         xr_free(captures);
         return good;
@@ -1966,7 +1974,9 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             if (!lower_value(f, op->args[0], &arguments[0]) ||
                 (!create && !read && !lower_value(f, op->args[1], &arguments[1]))) return false;
             XrLirInstruction binding = {.op=create ? XR_LIR_CELL_NEW : read ? XR_LIR_CELL_READ : XR_LIR_CELL_WRITE,
-                .type=create ? XR_LIR_I64_CELL : read ? XR_LIR_I64 : XR_LIR_UNIT, .operands=arguments,
+                .type=create ? (c->owned_bindings && c->owned_bindings[c->function] &&
+                    c->owned_bindings[c->function][result] ? c->owned_i64_cell : XR_LIR_I64_CELL) :
+                    read ? XR_LIR_I64 : XR_LIR_UNIT, .operands=arguments,
                 .operand_count=create || read ? 1u : 2u, .source=lower_source(c)};
             if (!lower_build(c, read || create ? xr_lir_emit_value(c->module, f->blocks[b], &binding, &f->values[result]) :
                 xr_lir_emit_effect(c->module, f->blocks[b], &binding))) return false;
@@ -2342,6 +2352,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (good) good = lower_mark(&c, d->entry_function);
     for (uint32_t at = 0; at < c.queued && good; ++at)
         good = lower_admit_function(&c, c.queue[at]);
+    if (good) good = lower_owned_bindings(&c);
     if (good && local)
         good = lower_local_pure(&c, selected);
     for (uint32_t s = 0; s < c.state_layout.slot_count; ++s)
@@ -2413,6 +2424,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     xr_lir_module_destroy(c.module);
     xr_free(c.functions);
     xr_free(c.closure_types);
+    if (c.owned_bindings) {
+        for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.owned_bindings[f]);
+        xr_free(c.owned_bindings);
+    }
     xr_free(c.active);
     xr_free(c.queue);
     lower_modules_free(&c);

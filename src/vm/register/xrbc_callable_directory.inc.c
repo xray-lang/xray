@@ -7,6 +7,11 @@
  */
 static bool rbc_callable_canonical_type(const XrRbcModule *module, XrRbcCallableValue value,
     XrXirType *output) {
+    if (value.kind == XR_RBC_CALLABLE_CELL) {
+        *output = (XrXirType)value.type;
+        return module->closure_types && xr_xir_cell_element(xr_xir_compile_type_arena_types(module->closure_types),
+            *output) == XR_XIR_I64;
+    }
     if (value.kind == XR_RBC_CALLABLE_SCALAR)
         return xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_SCALAR, value.type}, 0, output);
     if (value.kind == XR_RBC_CALLABLE_FUNCTION) {
@@ -61,7 +66,7 @@ static bool rbc_callable_directory_valid(const XrRbcModule *module) {
             (entry.capture_count ? !entry.captures : entry.captures != NULL)) return false;
         for (uint32_t p = 0; p < entry.capture_count; ++p) {
             XrXirType type;
-            if (function->captures[p].kind != XR_RBC_CALLABLE_SCALAR ||
+            if ((function->captures[p].kind != XR_RBC_CALLABLE_SCALAR && function->captures[p].kind != XR_RBC_CALLABLE_CELL) ||
                 !rbc_callable_canonical_type(module, function->captures[p], &type) || type != entry.captures[p]) return false;
         }
     }

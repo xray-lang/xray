@@ -35,6 +35,22 @@ XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec value, uint32_t count, Xr
     *output = type;
     return true;
 }
+XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *left, const XrtCallableTypeSpec *right, uint32_t count) {
+    if (count && (!left || !right)) return false;
+    for (uint32_t t = 0; t < count; ++t) {
+        XrtCallableTypeSpec a = left[t], b = right[t];
+        if (a.kind != b.kind || a.element.kind != b.element.kind || a.element.type != b.element.type ||
+            a.count != b.count || a.result.kind != b.result.kind || a.result.type != b.result.type ||
+            a.flags != b.flags || a.throws != b.throws || a.parameter_count != b.parameter_count ||
+            (a.parameter_count && (!a.parameters || !b.parameters))) return false;
+        for (uint32_t p = 0; p < a.parameter_count; ++p) {
+            XrtCallableParameterSpec x = a.parameters[p], y = b.parameters[p];
+            if (x.value.kind != y.value.kind || x.value.type != y.value.type || x.mode != y.mode || x.escaping != y.escaping)
+                return false;
+        }
+    }
+    return true;
+}
 
 static XrXirValueStatus callable_resource_status(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_VALUE_MEMORY_LIMIT :
@@ -42,9 +58,9 @@ static XrXirValueStatus callable_resource_status(XrCompileResourceStatus status)
         status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_VALUE_OVERFLOW : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 
-XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *specs, uint32_t count,
-    uint64_t limit, XrXirTypeArena **empty) {
-    if (!empty || *empty || (count && !specs)) return XR_XIR_VALUE_BAD_ARGUMENT;
+XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *specs, uint32_t count,
+    uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes) {
+    if (!empty || *empty || !bytes || (count && !specs)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - 4u)
         return XR_XIR_VALUE_LIMIT;
     size_t parameter_count = 0;
@@ -127,6 +143,18 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *specs
     }
     xr_compile_resources_free(parameters);
     xr_compile_resources_free(nodes);
+    if (status == XR_XIR_VALUE_OK) {
+        XrCompileResourceStats stats = {0};
+        if (xr_compile_resources_stats(context.resources, &stats) != XR_COMPILE_RESOURCE_OK) {
+            xr_xir_compile_type_arena_drop(*empty); *empty = NULL;
+            status = XR_XIR_VALUE_BAD_ARGUMENT;
+        } else *bytes = stats.held_bytes;
+    }
     xr_compile_resources_release(context.resources);
     return status;
+}
+XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *specs, uint32_t count,
+    uint64_t limit, XrXirTypeArena **empty) {
+    uint64_t bytes = 0;
+    return xrt_callable_types_new_accounted(specs, count, limit, empty, &bytes);
 }

@@ -37,9 +37,10 @@ static bool lower_lexical_needed(LowerFunction *f) {
     if (lower_callable_type(f, f->source->result)) return true;
     for (uint32_t i = 0; i < f->source->instruction_count; ++i) {
         const XrXirInstruction *op = &f->source->instructions[i];
-        if ((op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT) && lower_callable_type(f, op->type))
+        if ((op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT ||
+             op->op == XR_XIR_CELL_READ || op->op == XR_XIR_SLOT_LOAD) && lower_callable_type(f, op->type))
             return true;
-        if (op->op == XR_XIR_FUNCTION_REF && op->args[1]) {
+        if (op->op == XR_XIR_FUNCTION_REF) {
             XirClosureStorage placement;
             if (xr_xir_compile_closure_placement(f->owner->request->closed, f->owner->function,
                     f->source->parameter_count + i, &placement) == XR_XIR_OK && placement == XIR_CLOSURE_OWNED)
@@ -180,13 +181,15 @@ static bool lower_lexical_leave(LowerFunction *f, uint32_t b, XrLirValue *protec
 static bool lower_lexical_bind(LowerFunction *f, uint32_t b, const XirLexicalEvent *event) {
     LowerLexical *lexical = &f->lexical;
     const XirLexicalBinding *binding = &lexical->source.bindings[event->binding];
-    if (binding->role != XIR_LEXICAL_LOCAL || !lower_callable_type(f, binding->physical)) return true;
+    bool cell = f->owner->owned_bindings && f->owner->owned_bindings[f->owner->function] &&
+        binding->value < f->value_count && f->owner->owned_bindings[f->owner->function][binding->value];
+    if (binding->role != XIR_LEXICAL_LOCAL || (!cell && !lower_callable_type(f, binding->physical))) return true;
     uint32_t scope = binding->scope + 1;
     if (!lower_lexical_contains(lexical, scope, lexical->current) || !lexical->caps[scope].id)
         return lower_unsupported(f->owner, "function binding has no live lexical owner");
     XrLirValue operands[2] = {lexical->caps[scope], {0}}, retained = {0};
     if (!lower_value(f, event->value, &operands[1])) return false;
-    XrLirInstruction bind = {.op=XR_LIR_FUNCTION_BIND, .type=lower_type(f->owner, binding->physical),
+    XrLirInstruction bind = {.op=XR_LIR_FUNCTION_BIND, .type=cell ? f->owner->owned_i64_cell : lower_type(f->owner, binding->physical),
         .operands=operands, .operand_count=2, .bits=binding->order, .source=lower_source(f->owner)};
     if (!lower_build(f->owner, xr_lir_emit_value(f->owner->module, f->blocks[b], &bind, &retained))) return false;
     uint32_t previous = lexical->value_scopes[event->value];
@@ -244,8 +247,10 @@ static bool lower_lexical_block(LowerFunction *f, uint32_t b) {
 static void lower_lexical_value(LowerFunction *f, uint32_t i) {
     if (!f->lexical.count) return;
     const XrXirInstruction *op = &f->source->instructions[i];
-    if (!lower_callable_type(f, op->type)) return;
     uint32_t result = f->source->parameter_count + i;
+    bool cell = f->owner->owned_bindings && f->owner->owned_bindings[f->owner->function] &&
+        f->owner->owned_bindings[f->owner->function][result];
+    if (!cell && !lower_callable_type(f, op->type)) return;
     f->lexical.value_scopes[result] = op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN ?
         f->lexical.value_scopes[op->args[0]] : f->lexical.current;
 }
