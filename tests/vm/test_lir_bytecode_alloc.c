@@ -128,7 +128,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_callable_fixture.h"
 
 static void callable_compiler_failures(void) {
-    for (unsigned capture = 0; capture < 3; ++capture) {
+    for (unsigned capture = 0; capture < 4; ++capture) {
         XrLirModule *module = NULL;
         XrLirFunction root = {0};
         callable_fixture_capture(&module, &root, capture);
@@ -149,7 +149,8 @@ static void callable_compiler_failures(void) {
         uint64_t result = 0;
         if (capture) {
             XrRbcFunction *functions = (XrRbcFunction *)xr_rbc_program_view(program)->functions;
-            uint32_t callee = functions[0].environments[0].callee;
+            uint32_t callee = capture == 3 ? xr_rbc_program_view(program)->closure_targets[0] :
+                functions[0].environments[0].callee;
             XrRbcFunction saved = functions[callee];
             XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX] = {0};
             for (uint32_t r = 0; r < saved.register_count; ++r) kinds[r] = saved.register_kinds[r];

@@ -22,6 +22,7 @@
 #include "lir/xlir_view.h"
 #include "lir/xlir_display.h"
 #include "lir/xlir_builtin_admission.h"
+#include "lir/xlir_native_callable.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
@@ -37,6 +38,7 @@ struct XrRbcProgram {
     uint32_t *physical_aggregates;
     uint32_t *physical_callables;
     _Atomic(uint32_t) references;
+    uint32_t *closure_mapping;
 };
 
 static bool rbc_program_retain(void *owner) {
@@ -535,11 +537,13 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         XrLirClosureTarget target;
         XrLirFunctionView callee;
         XrLirFunction code = {input, i->callee};
-        if (i->bits != XR_LIR_CLOSURE_FRAME || xr_lir_closure_target_view(input, code, &target) != XR_LIR_OK ||
+        if (i->bits > XR_LIR_CLOSURE_OWNED || xr_lir_closure_target_view(input, code, &target) != XR_LIR_OK ||
             xr_lir_function_view(input, code, &callee) != XR_LIR_OK ||
             !xr_lir_callable_accepts(input, i->type, target.callable)) return false;
         for (uint32_t p = 0; p < target.capture_count; ++p)
-            if (!rbc_lir_scalar(callee.parameter_types[p]) && callee.parameter_types[p] != XR_LIR_I64_CELL) return false;
+            if (!rbc_lir_scalar(callee.parameter_types[p]) &&
+                (i->bits == XR_LIR_CLOSURE_OWNED || callee.parameter_types[p] != XR_LIR_I64_CELL)) return false;
+        if (i->bits == XR_LIR_CLOSURE_OWNED && target.state_capture) return false;
         return true;
     }
     case XR_LIR_CALL_INDIRECT: return true;
@@ -602,7 +606,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
 }
 
 static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *mapping,
-    uint32_t *count, XrRbcCompileDiagnostic *d) {
+    uint32_t *count, bool *owned, XrRbcCompileDiagnostic *d) {
     for (uint32_t index = 0; index < *count; ++index) {
         XrLirFunction f = {input, ids[index]};
         XrLirFunctionView v;
@@ -618,6 +622,10 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
             for (uint32_t n = 0; n < bv.instruction_count; ++n) {
                 XrLirInstructionView i;
                 xr_lir_instruction_view(input, block, n, &i);
+                if (i.op == XR_LIR_FUNCTION_REF && i.bits == XR_LIR_CLOSURE_OWNED) {
+                    if (index) goto frame_rejected;
+                    *owned = true;
+                }
                 d->block = block.id;
                 d->instruction = n + 1;
                 if (i.op == XR_LIR_FUNCTION_REF && i.operand_count) {
@@ -1505,6 +1513,13 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     xr_free((void *)program->module.aggregate_types);
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
+    xr_free(program->closure_mapping);
+    for (size_t e = 0; e < program->module.closure_entry_count; ++e)
+        xr_free((void *)program->module.closure_entries[e].captures);
+    xr_free((void *)program->module.closure_entries);
+    xr_free((void *)program->module.closure_targets);
+    xr_free((void *)program->module.closure_signatures);
+    xr_xir_compile_type_arena_drop(program->module.closure_types);
     for (size_t n = 0; n < program->module.callable_type_count; ++n)
         xr_free((void *)program->module.callable_types[n].parameters);
     xr_free((void *)program->module.callable_types);
@@ -1683,6 +1698,7 @@ static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
 }
 
 #include "xrbc_lir_callable_types.inc.c"
+#include "xrbc_lir_owned_callable.inc.c"
 
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
@@ -1747,9 +1763,14 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             "only the designated entry receives module state", (XrLirSource){0});
         goto done;
     }
-    if (!rbc_lir_closure(input, ids, mapping, &count, d)) {
+    bool owned_closures = false;
+    if (!rbc_lir_closure(input, ids, mapping, &count, &owned_closures, d)) {
         status = d->status;
         goto done;
+    }
+    if (owned_closures) {
+        status = rbc_lir_owned_callable(input, ids, count, p, d);
+        if (status != XR_RBC_COMPILE_OK) goto done;
     }
     status = rbc_lir_locations(input, ids, count, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;

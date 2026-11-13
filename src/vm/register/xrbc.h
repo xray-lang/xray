@@ -20,6 +20,7 @@
 #include "base/xdefs.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
+#include "runtime/native/xnative_callable.h"
 #include "xray_native_array.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
@@ -175,7 +176,8 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_AGGREGATE_STATE_READ, XR_RBC_AGGREGATE_STATE_WRITE,
     XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
     XR_RBC_AGGREGATE_DISPLAY, XR_RBC_STRING_LIBRARY, XR_RBC_RANGE_CHECK, XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN,
-    XR_RBC_FUNCTION_REFERENCE, XR_RBC_FUNCTION_CALL, XR_RBC_FUNCTION_RETURN
+    XR_RBC_FUNCTION_REFERENCE, XR_RBC_FUNCTION_CALL, XR_RBC_FUNCTION_RETURN,
+    XR_RBC_FUNCTION_OWNED_REFERENCE
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
@@ -320,6 +322,14 @@ typedef struct {
     // An authentic code owner can extend the entire immutable module lifetime.
     // An empty lease preserves the synchronous borrowed-module API.
     XrRbcCodeLease code_lease;
+    // Owned closures use a canonical receiving pool and dense authenticated
+    // target directory. Every target is an actual function in this module.
+    XrXirTypeArena *closure_types;
+    const XrtCallableEntry *closure_entries;
+    const uint32_t *closure_targets;
+    size_t closure_entry_count;
+    const XrXirType *closure_signatures;
+    size_t closure_signature_count;
 } XrRbcModule;
 
 typedef enum {

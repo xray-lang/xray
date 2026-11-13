@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_bytecode_cases.h"
+#include "lir_callable_owned_cases.h"
 
 typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
 
@@ -92,8 +93,20 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
         }
         OK(xr_lir_verify(copy, NULL));
         XrRbcProgram *program = NULL;
-        CHECK(xr_rbc_compile(copy, (XrLirFunction){copy, root.id}, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED);
-        CHECK(!program);
+        XrRbcCompileStatus status = xr_rbc_compile(copy, (XrLirFunction){copy, root.id}, &program, NULL);
+        if (!scenario) {
+            CHECK(status == XR_RBC_COMPILE_OK && program);
+            callable_owned_receiving(program);
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+            xr_rbc_program_destroy(program);
+            program = NULL;
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            xr_rbc_execution_free(&execution);
+            uint64_t bits = 0;
+            CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
+            xr_rbc_outcome_free(&outcome);
+        } else CHECK(status == XR_RBC_COMPILE_UNSUPPORTED && !program);
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
         XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);

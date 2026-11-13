@@ -54,6 +54,7 @@ static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, 
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, *root, block));
     XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=callable, .callee=plus};
+    if (capture == 3) reference.bits = XR_LIR_CLOSURE_OWNED;
     XrLirValue captured = {0};
     if (capture) {
         captured = ca_constant(&c, block, 1);

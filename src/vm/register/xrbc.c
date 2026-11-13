@@ -19,6 +19,8 @@
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
 #include "xray_native_view.h"
+#include "xir/xxir_value_internal.h"
+#include "xir/xxir_types.h"
 #include <float.h>
 #include <limits.h>
 #include <string.h>
@@ -77,6 +79,10 @@ typedef struct {
     // run. Neither pointer owns another stack or survives execution retirement.
     const XrRbcEntry *entries;
     uint8_t *aggregate_result;
+    XrtCallableCode *closure_code;
+    XrXirDomain *closure_domain;
+    XrXirValue *closures, *closure_arguments;
+    size_t closure_count, closure_capacity, closure_argument_capacity;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -451,6 +457,16 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         execution->code_lease = module->code_lease;
     }
     execution->module = module;
+    if (module->closure_entry_count) {
+        XrRbcCodeLease lease = module->code_lease;
+        XrXirValueStatus status = xrt_callable_code_new(module->closure_types, module->closure_entries,
+            (uint32_t)module->closure_entry_count,
+            (XrtCallableLease){lease.owner, lease.retain, lease.release}, &execution->stack.closure_code);
+        if (status != XR_XIR_VALUE_OK) {
+            xr_rbc_execution_free(&execution);
+            return status == XR_XIR_VALUE_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
+        }
+    }
     execution->pending = xr_calloc(1, sizeof(*execution->pending));
     if (module->function_count > SIZE_MAX / sizeof(*execution->entries)) {
         xr_rbc_execution_free(&execution);
@@ -516,6 +532,15 @@ static void xr_rbc_root(void *context) {
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    for (size_t n = stack->closure_count; n; --n) xr_xir_value_drop(&stack->closures[n - 1]);
+    if (stack->closure_domain) {
+        XR_CHECK(xr_xir_domain_close(stack->closure_domain) == XR_XIR_VALUE_OK,
+            "the actual closure graph owner closes before its final release");
+        xr_xir_domain_drop(stack->closure_domain);
+    }
+    xrt_callable_code_drop(&stack->closure_code);
+    xr_free(stack->closures);
+    xr_free(stack->closure_arguments);
     xr_free(stack->array_arguments);
     xr_free(stack->spills);
     xr_free(stack->cells);
