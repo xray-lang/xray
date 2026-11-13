@@ -289,8 +289,16 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
     if (okay && host->posix.arch)
         okay = native_arg(command, "-arch") && native_arg(command, host->posix.arch);
 #endif
+#if !XR_OS_WINDOWS && !XR_OS_MACOS
+    /* Admission and declaration archives reference each other. ELF linkers
+     * must rescan this closure when a later archive introduces a dependency. */
+    if (okay) okay = native_arg(command, "-Wl,--start-group");
+#endif
     for (size_t i = 0; okay && i < XRT_NATIVE_LIBRARY_COUNT; ++i)
         okay = native_arg(command, inputs->libraries[i]);
+#if !XR_OS_WINDOWS && !XR_OS_MACOS
+    if (okay) okay = native_arg(command, "-Wl,--end-group");
+#endif
     for (uint32_t i = 0; okay && i < host->library_count; ++i)
         okay = native_arg(command, host->libraries[i]);
 #if XR_OS_WINDOWS
