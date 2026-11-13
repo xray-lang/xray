@@ -51,7 +51,7 @@ def collect() -> list[tuple[Path, str]]:
 def run_case(xray: str, source: Path, expected: str) -> str | None:
     env = dict(os.environ)
     env["NO_COLOR"] = "1"
-    result = subprocess.run([xray, "check", str(source)], capture_output=True, timeout=60, env=env)
+    result = subprocess.run([xray, "check", str(source)], capture_output=True, timeout=30, env=env)
     stdout = result.stdout.decode("utf-8", errors="replace")
     stderr = result.stderr.decode("utf-8", errors="replace").replace("\r\n", "\n")
     if expected == "ok":
