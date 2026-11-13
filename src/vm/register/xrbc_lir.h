@@ -57,6 +57,10 @@ typedef struct {
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);
+// Programs containing function values supply an actual executable lease to
+// prepared executions. A successful prepare keeps that code alive after the
+// caller destroys its Program reference. Raw modules can retain a code owner
+// explicitly or keep their original immutable borrowed lifetime.
 XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *program, const uint64_t *arguments,
     size_t argument_count, XrRbcExecution **output);
 // The view and everything reachable through it borrow the program.

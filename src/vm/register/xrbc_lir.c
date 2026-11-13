@@ -26,6 +26,7 @@
 #include "base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 
 struct XrRbcProgram {
     XrRbcModule module;
@@ -35,7 +36,22 @@ struct XrRbcProgram {
     uint32_t parameter_count;
     uint32_t *physical_aggregates;
     uint32_t *physical_callables;
+    _Atomic(uint32_t) references;
 };
+
+static bool rbc_program_retain(void *owner) {
+    XrRbcProgram *program = owner;
+    uint32_t count = atomic_load_explicit(&program->references, memory_order_relaxed);
+    while (count && count != UINT32_MAX) {
+        if (atomic_compare_exchange_weak_explicit(&program->references, &count, count + 1,
+                memory_order_relaxed, memory_order_relaxed)) return true;
+    }
+    return false;
+}
+
+static void rbc_program_release(void *owner) {
+    xr_rbc_program_destroy(owner);
+}
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
@@ -1460,6 +1476,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
 
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
+    if (program->module.code_lease.owner &&
+        atomic_fetch_sub_explicit(&program->references, 1, memory_order_acq_rel) != 1) return;
     for (size_t f = 0; f < program->module.function_count; ++f) {
         xr_free((void *) program->module.functions[f].code);
         xr_free((void *) program->module.functions[f].constants);
@@ -1717,6 +1735,10 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_callable_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
+    if (p->module.callable_type_count) {
+        atomic_init(&p->references, 1);
+        p->module.code_lease = (XrRbcCodeLease){p, rbc_program_retain, rbc_program_release};
+    }
     status = rbc_lir_state_layout(input, entry, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&

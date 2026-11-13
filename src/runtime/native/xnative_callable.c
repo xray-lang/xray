@@ -8,7 +8,8 @@
  *
  * KEY CONCEPT:
  *   One immutable receiving directory owns every capture shape. Canonical Fn
- *   destruction releases its code lease after retiring the actual captures.
+ *   destruction releases its code lease after releasing capture ownership
+ *   edges. Queued child objects can finish retirement afterward.
  */
 #include "xnative_callable.h"
 #include "xir/xxir_types.h"

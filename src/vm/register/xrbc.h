@@ -293,6 +293,12 @@ static inline XrPodType xr_rbc_fixed_type(uint32_t count) {
     return (XrPodType){XR_POD_FIXED_U8, count, 0, {count, 1, count}};
 }
 
+typedef struct XrRbcCodeLease {
+    void *owner;
+    bool (*retain)(void *);
+    void (*release)(void *);
+} XrRbcCodeLease;
+
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
@@ -311,6 +317,9 @@ typedef struct {
     size_t aggregate_type_count;
     const XrRbcCallableType *callable_types;
     size_t callable_type_count;
+    // An authentic code owner can extend the entire immutable module lifetime.
+    // An empty lease preserves the synchronous borrowed-module API.
+    XrRbcCodeLease code_lease;
 } XrRbcModule;
 
 typedef enum {
@@ -340,7 +349,9 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // unreachable code. Invalid register, constant, branch, comparison, and call
 // operands reject preparation before any execution is published. Nonzero IDs
 // belong to locations. Code/descriptors/maps stay
-// immutable and borrowed until execution_free; mutating them violates this
+// immutable until execution_free. A supplied code lease is retained during
+// preparation and released by execution_free; otherwise they are borrowed.
+// Mutating any of these descriptors violates this
 // trusted in-process API. Runtime argument values, arithmetic failures and
 // stack allocation failures remain execution-time concerns. Output is empty on entry;
 // failure never publishes one.

@@ -97,6 +97,7 @@ struct XrRbcExecution {
     XrRbcStack stack;
     XrRbcOutcome *pending;
     XrtModuleState *state;
+    XrRbcCodeLease code_lease;
     bool consumed;
 };
 
@@ -292,6 +293,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 #include "xrbc_string_admission.inc.c"
 
 static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
+    XrRbcCodeLease lease = module->code_lease;
+    if (lease.owner ? !lease.retain || !lease.release : lease.retain || lease.release)
+        return XR_RBC_INVALID;
     for (size_t t = 0; t < module->aggregate_type_count; ++t) {
         XrRbcAggregateLayout layout;
         if (!xr_rbc_aggregate_type_valid(module, (uint32_t)t) ||
@@ -439,6 +443,13 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     }
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
+    if (module->code_lease.owner) {
+        if (!module->code_lease.retain(module->code_lease.owner)) {
+            xr_free(execution);
+            return XR_RBC_VALUE_FAILURE;
+        }
+        execution->code_lease = module->code_lease;
+    }
     execution->module = module;
     execution->pending = xr_calloc(1, sizeof(*execution->pending));
     if (module->function_count > SIZE_MAX / sizeof(*execution->entries)) {
@@ -551,6 +562,7 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     xrt_module_state_drop(&owned->state);
     xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
+    if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
 }
 

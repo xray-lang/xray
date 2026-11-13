@@ -1,6 +1,45 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_bytecode_cases.h"
 
+typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
+
+static bool callable_code_lease_retain(void *owner) {
+    CallableCodeLeaseProbe *probe = owner;
+    if (probe->reject) return false;
+    ++probe->retained;
+    return true;
+}
+
+static void callable_code_lease_release(void *owner) {
+    ++((CallableCodeLeaseProbe *)owner)->released;
+}
+
+static void callable_code_lease_cases(const XrRbcProgram *program) {
+    XrRbcModule module = *xr_rbc_program_view(program);
+    CallableCodeLeaseProbe probe = {0};
+    XrRbcCodeLease lease = {&probe, callable_code_lease_retain, callable_code_lease_release};
+    XrtLocationOwner *locations = xr_rbc_program_locations(program);
+    for (unsigned invalid = 0; invalid < 3; ++invalid) {
+        module.code_lease = lease;
+        if (invalid == 0) module.code_lease.owner = NULL;
+        if (invalid == 1) module.code_lease.retain = NULL;
+        if (invalid == 2) module.code_lease.release = NULL;
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_INVALID);
+        CHECK(!execution && !probe.retained && !probe.released);
+    }
+    module.code_lease = lease;
+    probe.reject = true;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_VALUE_FAILURE);
+    CHECK(!execution && !probe.retained && !probe.released);
+    probe.reject = false;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
+    CHECK(probe.retained == 1 && !probe.released);
+    xr_rbc_execution_free(&execution);
+    CHECK(probe.released == 1);
+}
+
 static void callable_transforms(XrLirModule *module, XrLirFunction root) {
     XrLirModule *rebuilt = NULL, *inlined = NULL, *folded = NULL;
     OK(xr_lir_rebuild(module, &rebuilt));
@@ -11,8 +50,11 @@ static void callable_transforms(XrLirModule *module, XrLirFunction root) {
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(folded, (XrLirFunction){folded, root.id}, &program, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(folded);
+    callable_code_lease_cases(program);
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    program = NULL;
     XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);
