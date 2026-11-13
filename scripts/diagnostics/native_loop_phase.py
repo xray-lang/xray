@@ -24,6 +24,7 @@ parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--cc', type=Path, required=True)
 parser.add_argument('--alignment', type=int, choices=(16, 32, 64), required=True)
 parser.add_argument('--objdump', type=Path, required=True)
+parser.add_argument('--workload', choices=('fib', 'loop10m', 'loop100m'), default='fib')
 parser.add_argument('--l0', action='store_true', help='One functionality sample, not formal Mac diagnostics')
 parser.add_argument('--slots', type=Path)
 args = parser.parse_args()
@@ -31,17 +32,15 @@ for name in ('root', 'build', 'baseline', 'output', 'cc', 'objdump'):
     setattr(args, name, getattr(args, name).resolve())
 args.output.mkdir(parents=True)
 HERE = Path(__file__).resolve().parent
-HEAD = '01a05d49706906273bdc6dcb34f1b7908049d23a'
 def verify_checkout(root, product_ref, identity):
     def git(*arguments):
         return subprocess.check_output(['git', '-C', str(root), *arguments], text=True).strip()
     reference = git('rev-parse', product_ref)
     actual = git('rev-parse', 'HEAD')
-    assert reference == HEAD, ('Unexpected product reference', reference)
     assert not git('status', '--porcelain=v1'), 'Checkout must be clean'
     assert identity['commit'] == actual and not identity['dirty'], 'Baseline must identify the actual clean checkout'
     assert identity['buildProfile'] == 'Release', 'Baseline must be Release'
-    dependencies = ['src', 'include', 'cmake', 'CMakeLists.txt', 'CMakePresets.json',
+    dependencies = ['src', 'include', 'stdlib', 'cmake', 'CMakeLists.txt', 'CMakePresets.json',
         'scripts/run_scalar_performance.py', 'scripts/new_path_baseline.py']
     assert not git('diff', '--no-renames', '--name-only', reference, actual, '--', *dependencies), 'Product dependency content changed'
     changed = git('diff', '--no-renames', '--name-only', reference, actual).splitlines()
@@ -49,7 +48,6 @@ def verify_checkout(root, product_ref, identity):
         'scripts/diagnostics/native_loop_phase.py',
         'scripts/diagnostics/native_loop_phase_clock.c',
         'scripts/diagnostics/native_loop_phase_clock.h',
-        'scripts/diagnostics/native_loop_phase_reference.json',
         'scripts/diagnostics/capture_reference_crash.py'}
     unexpected = [name for name in changed if not name.startswith('.github/workflows/') and name not in diagnostic_files]
     assert not unexpected, ('Changes outside diagnostic scripts/workflow metadata', unexpected)
@@ -59,22 +57,30 @@ def verify_checkout(root, product_ref, identity):
 
 baseline = json.loads(args.baseline.read_text(encoding='utf-8'))
 checkout = verify_checkout(args.root, args.product_ref, baseline['identity'])
+PRODUCT_REF = checkout['product_ref']
 sys.path.insert(0, str(args.root / 'scripts'))
 import xray_process
 from xray_process import run_child
 from xray_slot import Lease
-from new_path_baseline import LIBS
+from new_path_baseline import LIBS, FIB_C, FIB_XR, LOOP_C, LOOP_XR
 msvc = os.name == 'nt'
 suffix = '.obj' if msvc else '.o'
 exe_suffix = '.exe' if msvc else '.out'
 assert baseline['alignment'] == args.alignment
 bench = args.baseline.parent / 'bench'
 flags = baseline['nativeCompilerFlags']
-report = {'schema': 1, 'kind': 'DIAGNOSTIC_ONLY', 'head': checkout['checkout_head'], 'product_ref': HEAD, 'checkout_verification': checkout, 'alignment': args.alignment,
-    'declared_plan': {'alignments': [16, 32, 64], 'workloads': ['loop 10M', 'loop 100M'],
-        'samples_per_layout': 9, 'order': 'even native-phase,C-phase,native-original,C-original; odd reverse'},
+workloads = {'fib': ('fib(32)', 'fib', 'fib(32)', 'xrl_f3'),
+    'loop10m': ('loop 10M', 'work', 'work(10000000)', 'xrl_invoke'),
+    'loop100m': ('loop 100M', 'work', 'work(100000000)', 'xrl_invoke')}
+selected_label, reference_function, reference_call, native_function = workloads[args.workload]
+report = {'schema': 1, 'kind': 'DIAGNOSTIC_ONLY', 'head': checkout['checkout_head'], 'product_ref': PRODUCT_REF, 'checkout_verification': checkout, 'alignment': args.alignment,
+    'declared_plan': {'alignments': [args.alignment], 'workloads': [selected_label],
+        'samples_per_layout': 1 if args.l0 else 9, 'order': 'even native-phase,C-phase,native-normal,C-original; odd reverse'},
     'l0': args.l0, 'phase_order': ['root', 'work_or_callback', 'output'],
     'clock_scope': 'process CPU, user plus system; no clock overhead is subtracted',
+    'interpretation': ['Native WORK encloses the callback and its nested OUTPUT. C WORK ends before OUTPUT.',
+        'ROOT and WORK include their cold wrappers and clock calls. Whole-child CPU outside ROOT includes clock reporting, startup and exit.',
+        'Whole wall outside child CPU also includes scheduling, parent I/O and reaping. Separate sample medians do not isolate those costs.'],
     'commands': [], 'samples': [], 'origins': {}, 'code_comparison': {}}
 environment = dict(os.environ, NO_COLOR='1', PYTHONDONTWRITEBYTECODE='1')
 held_leases = []
@@ -126,8 +132,8 @@ def run(name, argv, timeout=30):
     return row, out_path.read_bytes(), err_path.read_bytes()
 
 def fixed_source(relative):
-    data = subprocess.check_output(['git', '-C', str(args.root), 'show', HEAD + ':' + relative])
-    report['origins'][relative] = {'head': HEAD, 'sha256': hashlib.sha256(data).hexdigest()}
+    data = subprocess.check_output(['git', '-C', str(args.root), 'show', PRODUCT_REF + ':' + relative])
+    report['origins'][relative] = {'head': PRODUCT_REF, 'sha256': hashlib.sha256(data).hexdigest()}
     return data.decode('utf-8')
 
 def cache_options(text):
@@ -138,14 +144,23 @@ def cache_options(text):
             result[key.split(':', 1)[0]] = value
     return result
 
-def verify_configuration(fixed, current_baseline, current_cache, compiler_version):
-    assert hashlib.sha256(compiler_version).hexdigest() == fixed['compiler_version_sha256'], 'Compiler differs from the fixed product reference'
-    assert current_baseline['nativeCompilerFlags'] == fixed['native_compiler_flags'], 'Native compiler flags changed'
-    for label, text in (('current build', current_cache), ('baseline', current_baseline['cmakeCache'])):
-        parsed = cache_options(text)
-        assert {key: parsed.get(key) for key in fixed['build_options']} == fixed['build_options'], ('Build optimization/sanitizer options changed', label)
+def verify_configuration(current_baseline, current_cache):
+    expected = cache_options(current_baseline['cmakeCache'])
+    current = cache_options(current_cache)
+    keys = ('CMAKE_BUILD_TYPE', 'CMAKE_C_FLAGS', 'CMAKE_C_FLAGS_RELEASE',
+        'ENABLE_ASAN', 'ENABLE_UBSAN', 'XR_XIR_PARANOID', 'CMAKE_C_COMPILER')
+    assert all(key in expected for key in keys), 'Baseline configuration is incomplete'
+    assert {key: current.get(key) for key in keys} == {key: expected[key] for key in keys}, 'Build differs from the baseline'
+    assert expected['CMAKE_BUILD_TYPE'] == 'Release'
+    assert all(expected[key] == 'OFF' for key in ('ENABLE_ASAN', 'ENABLE_UBSAN', 'XR_XIR_PARANOID'))
+    assert Path(current_baseline['compiler']).resolve() == args.cc, 'Native compiler path changed'
+    expected_flags = (['/nologo', '/std:c11', '/O2', '/Ob2', '/DNDEBUG', '/MT',
+        '/clang:-ffp-contract=off', f'/clang:-falign-functions={args.alignment}'] if msvc else
+        ['-std=c11', '-O2', '-DNDEBUG', '-ffp-contract=off', f'-falign-functions={args.alignment}'])
+    assert current_baseline['nativeCompilerFlags'] == expected_flags, 'Native compiler flags changed'
     libraries = {Path(name).name: value for name, value in current_baseline['libraries'].items()}
-    assert sorted(libraries) == fixed['library_names'], 'The fixed five-library inventory changed'
+    names = [name + '.lib' if msvc else 'lib' + name + '.a' for _, name in LIBS]
+    assert len(libraries) == len(current_baseline['libraries']) and sorted(libraries) == sorted(names), 'Baseline library inventory changed'
     return libraries
 
 def library_snapshot(paths, expected):
@@ -221,7 +236,7 @@ def macho_functions(path):
         if typ & 0xe0 or typ & 14 != 14 or not section:
             continue
         label = data[stroff + name:].split(b'\0', 1)[0].decode()
-        if label not in ('_xrl_invoke', '_work', '_run_bound', '_main', '_xrt_print_i64'):
+        if label not in ('_xrl_invoke', '_xrl_f3', '_fib', '_work', '_run_bound', '_main', '_xrt_print_i64'):
             continue
         entry = sections[section - 1]
         stop = next((s for s in starts if s > address), entry[2] + entry[3])
@@ -239,7 +254,8 @@ def macho_functions(path):
             if 0 <= target < i and (loop is None or i - target > loop['bytes']):
                 loop = {'address': address + target, 'bytes': i + 4 - target,
                     'sha256': hashlib.sha256(code[target:i + 4]).hexdigest()}
-        result[label] = {'address': address, 'bytes': len(code), 'sha256': hashlib.sha256(code).hexdigest(), 'loop': loop}
+        result[label] = {'address': address, 'file_offset': offset, 'mod16': address % 16,
+            'mod64': address % 64, 'bytes': len(code), 'sha256': hashlib.sha256(code).hexdigest(), 'loop': loop}
     return result
 
 def coff_code(path, wanted):
@@ -287,22 +303,38 @@ def execute():
     report['checkout_verification'] = verify_checkout(args.root, args.product_ref, baseline['identity'])
 
     report['diagnostic_files'] = {name: sha(HERE / name) for name in ('native_loop_phase.py', 'native_loop_phase_clock.c', 'native_loop_phase_clock.h')}
-    expected_objects = json.loads((HERE / 'native_loop_phase_reference.json').read_text(encoding='utf-8'))
-    report['object_manifest_sha256'] = sha(HERE / 'native_loop_phase_reference.json')
-    assert expected_objects['product_ref'] == HEAD
-    fixed = expected_objects['win32' if msvc else 'darwin'][str(args.alignment)]
+    historical = HERE / 'native_loop_phase_reference.json'
+    report['historical_reference'] = {'path': str(historical), 'sha256': sha(historical),
+        'product_ref': json.loads(historical.read_text(encoding='utf-8'))['product_ref'],
+        'role': 'Preserved historical evidence; current products are checked against the selected baseline.'}
+    shutil.copyfile(args.baseline, args.output / 'baseline-result.json')
+    report['baseline'] = {'path': str(args.baseline), 'sha256': sha(args.baseline),
+        'snapshot': str(args.output / 'baseline-result.json'),
+        'initial_samples': len(baseline['samples']), 'serial_samples': len(baseline['nativeSerialSamples'])}
+    binary = baseline['executables']['Xray']
+    assert sha(binary['path']) == binary['sha256'], 'Baseline CLI entity changed'
+    assert json.loads((args.baseline.parent / 'identity.stdout').read_text(encoding='utf-8')) == baseline['identity']
+    for command in baseline['commands']:
+        for stream in ('stdout', 'stderr'):
+            saved = command[stream]
+            assert sha(saved['path']) == saved['sha256'], ('Baseline stream changed', command['name'], stream)
     _, compiler_version, _ = run('compiler-version', [args.cc, '--version'])
     assert compiler_version == (args.baseline.parent / 'compiler-version.stdout').read_bytes(), 'Compiler differs from the current baseline'
     libraries = [args.build / directory / (name + '.lib' if msvc else 'lib' + name + '.a') for directory, name in LIBS]
     current_cache = (args.build / 'CMakeCache.txt').read_text(encoding='utf-8')
-    expected_libraries = verify_configuration(fixed, baseline, current_cache, compiler_version)
+    expected_libraries = verify_configuration(baseline, current_cache)
     assert Path(cache_options(current_cache)['CMAKE_HOME_DIRECTORY']).resolve() == args.root, 'Build belongs to another source root'
     before_libraries = library_snapshot(libraries, expected_libraries)
     report['libraries'] = {}
     for path in libraries:
         report['libraries'][path.name] = {'path': str(path), 'baseline_sha256': expected_libraries[path.name],
-            'before_sha256': before_libraries[path.name], 'historical_raw_sha256': fixed['historical_library_sha256'][path.name]}
+            'before_sha256': before_libraries[path.name]}
+    report['configuration'] = {'baseline_cache_sha256': hashlib.sha256(baseline['cmakeCache'].encode()).hexdigest(),
+        'current_cache_sha256': hashlib.sha256(current_cache.encode()).hexdigest(),
+        'native_flags': flags, 'compiler_version_sha256': hashlib.sha256(compiler_version).hexdigest(),
+        'runtime_hooks': 'Normal and phase hooks are rebuilt from the selected product using identical flags and library dependencies.'}
     execution = fixed_source('src/runtime/native/xnative_execution.c')
+    (args.output / 'execution-normal.c').write_text(execution, encoding='utf-8')
     execution = replace_once(execution, '#include "xnative_execution.h"', '#include "xnative_execution.h"\n#include "native_loop_phase_clock.h"')
     execution = replace_once(execution, '        root(context);', '        phase_begin(PHASE_WORK);\n        root(context);\n        phase_end(PHASE_WORK);')
     marker = 'XRAY_API void xrt_run_standalone('
@@ -314,6 +346,7 @@ def execute():
         '    XrtExecutionStatus phase_status = run_bound(map, &failure, root, context, &strings);\n    phase_end(PHASE_ROOT);\n    phase_report("native", phase_status == XRT_EXECUTION_COMPLETED);\n    if (phase_status == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);')
     execution = execution[:begin] + function + execution[end:]
     output = fixed_source('src/runtime/native/xnative_output.c')
+    (args.output / 'output-normal.c').write_text(output, encoding='utf-8')
     output = replace_once(output, '#include "xnative_execution.h"', '#include "xnative_execution.h"\n#include "native_loop_phase_clock.h"')
     begin, end = output.index('XRAY_API void xrt_print_i64('), output.index('XRAY_API void xrt_print_string(')
     function = output[begin:end]
@@ -325,27 +358,49 @@ def execute():
     for name, text in (('execution.c', execution), ('output.c', output)):
         (args.output / name).write_text(text, encoding='utf-8')
     clock = compile_c('phase_clock', HERE / 'native_loop_phase_clock.c')
+    normal_execution_obj = compile_c('execution-normal', args.output / 'execution-normal.c', True)
+    normal_output_obj = compile_c('output-normal', args.output / 'output-normal.c', True)
     execution_obj = compile_c('execution', args.output / 'execution.c', True)
     output_obj = compile_c('output', args.output / 'output.c', True)
+    report['rebuilt_objects'] = {str(path): sha(path) for path in
+        (clock, normal_execution_obj, normal_output_obj, execution_obj, output_obj)}
+    report['products'] = {}
     engines = {}
-    for label in ('loop 10M', 'loop 100M'):
-        stem = label.replace(' ', '_')
+    for label in (selected_label,):
+        stem = re.sub(r'\W', '_', label)
         original_obj = bench / (stem + '.native' + suffix)
         original_native = bench / (stem + '.native' + exe_suffix)
         original_c = bench / (stem + '_ref' + exe_suffix)
-        assert sha(original_obj) == expected_objects['win32' if msvc else 'darwin'][str(args.alignment)][label]['sha256'], ('Original native object changed', original_obj)
         assert sha(original_native) == baseline['products'][label]['native']['sha256']
         assert sha(original_c) == baseline['products'][label]['C']['sha256']
+        original_reference_obj = bench / (stem + '_ref' + suffix)
+        original_reference_source = bench / (stem + '_ref.c')
+        count = {'loop10m': '10000000', 'loop100m': '100000000'}.get(args.workload)
+        expected_c = FIB_C if count is None else LOOP_C.replace('@N@', count)
+        expected_xr = FIB_XR if count is None else LOOP_XR.replace('@N@', count)
+        assert original_reference_source.read_text(encoding='utf-8') == expected_c, 'Reference numerical source changed'
+        assert (bench / (stem + '.xr')).read_text(encoding='utf-8') == expected_xr, 'Original workload source changed'
+        inputs = [original_obj, original_native, original_c, original_reference_obj,
+            original_reference_source, bench / (stem + '.native.c'), bench / (stem + '.xr')]
+        originals = args.output / 'originals'
+        originals.mkdir()
+        input_hashes = {}
+        for path in inputs:
+            input_hashes[str(path)] = sha(path)
+            shutil.copyfile(path, originals / path.name)
         report['origins'][label] = {'object': str(original_obj), 'sha256': sha(original_obj),
             'baseline': str(args.baseline), 'baseline_sha256': sha(args.baseline),
-            'native_executable_sha256': sha(original_native), 'C_executable_sha256': sha(original_c)}
+            'native_executable_sha256': sha(original_native), 'C_executable_sha256': sha(original_c),
+            'inputs': input_hashes}
+        normal = link(stem + '-native-normal', [original_obj, normal_execution_obj, normal_output_obj], True)
         native = link(stem + '-native-phase', [original_obj, execution_obj, output_obj, clock], True)
-        text = (bench / (stem + '_ref.c')).read_text(encoding='utf-8')
+        text = original_reference_source.read_text(encoding='utf-8')
         prefix = text[:text.index('int main(void)')]
-        count = re.search(r'work\(([0-9]+)\)', text[text.index('int main(void)'):])[1]
+        assert re.search(r'\b' + reference_function + r'\s*\(', prefix), 'Reference numerical function missing'
+        assert reference_call in re.sub(r'\s+', '', text[text.index('int main(void)'):]), 'Reference call changed'
         text = '#include "native_loop_phase_clock.h"\n' + prefix + '''int main(void) {
     phase_reset(); phase_begin(PHASE_ROOT); phase_begin(PHASE_WORK);
-    int64_t value = work(''' + count + ''');
+    int64_t value = ''' + reference_call + ''';
     phase_end(PHASE_WORK); phase_begin(PHASE_OUTPUT);
     printf("%lld\\n", (long long)value);
     phase_end(PHASE_OUTPUT); phase_end(PHASE_ROOT); phase_report("C", 1);
@@ -355,44 +410,54 @@ def execute():
         reference = args.output / (stem + '-reference.c')
         reference.write_text(text, encoding='utf-8')
         reference_obj = compile_c(stem + '-reference', reference)
+        report['rebuilt_objects'][str(reference_obj)] = sha(reference_obj)
         reference_binary = link(stem + '-C-phase', [reference_obj, clock], False)
         engines[label] = {'native-phase': native, 'C-phase': reference_binary,
-            'native-original': original_native, 'C-original': original_c}
+            'native-normal': normal, 'C-original': original_c}
+        report['products'][label] = {name: {'path': str(path), 'sha256': sha(path)}
+            for name, path in engines[label].items()}
         comparison = {'original_native_object_unchanged': sha(original_obj) == report['origins'][label]['sha256']}
         if sys.platform == 'darwin':
             maps = {name: macho_functions(binary) for name, binary in engines[label].items()}
+            maps['native-original'] = macho_functions(original_native)
             comparison['functions'] = maps
-            comparison['native_hot_bytes_equal'] = maps['native-phase']['_xrl_invoke']['loop']['sha256'] == maps['native-original']['_xrl_invoke']['loop']['sha256']
-            comparison['native_hot_address_equal'] = maps['native-phase']['_xrl_invoke']['loop']['address'] == maps['native-original']['_xrl_invoke']['loop']['address']
-            comparison['C_hot_bytes_equal'] = maps['C-phase']['_work']['loop']['sha256'] == maps['C-original']['_work']['loop']['sha256']
-            comparison['C_hot_address_equal'] = maps['C-phase']['_work']['loop']['address'] == maps['C-original']['_work']['loop']['address']
+            for engine, symbol in (('native-normal', '_' + native_function), ('native-phase', '_' + native_function),
+                ('C-phase', '_' + reference_function)):
+                control = 'C-original' if engine == 'C-phase' else 'native-original'
+                actual, original = maps[engine][symbol], maps[control][symbol]
+                comparison[engine] = {'symbol': symbol, 'control': control,
+                    'body_bytes_equal': actual['bytes'] == original['bytes'] and actual['sha256'] == original['sha256'],
+                    'body_address_equal': actual['address'] == original['address']}
+            symbol = '_' + native_function
+            comparison['native_phase_normal_body_equal'] = (
+                maps['native-phase'][symbol]['bytes'] == maps['native-normal'][symbol]['bytes'] and
+                maps['native-phase'][symbol]['sha256'] == maps['native-normal'][symbol]['sha256'])
+            comparison['byte_comparability'] = 'Per-function results only; a mismatch grants no unchanged numerical-code claim.'
         disassemblies = {}
-        for role, path in (('native-original-object', original_obj), ('reference-original-object', bench / (stem + '_ref' + suffix)),
+        for role, path in (('native-original-object', original_obj), ('reference-original-object', original_reference_obj),
             ('reference-phase-object', reference_obj)):
             options = ['-tvV'] if args.objdump.name == 'otool' else ['-d']
             _, assembly, _ = run(stem + '-disasm-' + role, [args.objdump, *options, path])
             disassemblies[role] = assembly.decode('utf-8')
         if msvc:
-            original_work = coff_code(bench / (stem + '_ref' + suffix), 'work')
-            phase_work = coff_code(reference_obj, 'work')
+            original_work = coff_code(original_reference_obj, reference_function)
+            phase_work = coff_code(reference_obj, reference_function)
             comparison['C_work_section_bytes_equal'] = original_work == phase_work
             comparison['C_work_addresses'] = {'original': pe_locations(original_c, original_work),
                 'phase': pe_locations(reference_binary, phase_work)}
-            code = coff_code(original_obj, 'xrl_invoke')
-            assembly = disassemblies['native-original-object'].split('<xrl_invoke>:', 1)[1].split('Disassembly of section', 1)[0]
+            code = coff_code(original_obj, native_function)
+            assembly = disassemblies['native-original-object'].split('<' + native_function + '>:', 1)[1].split('Disassembly of section', 1)[0]
             back_edges = []
             for match in re.finditer(r'^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s+j\w+\s+0x([0-9a-f]+)', assembly, re.M):
                 at, target = int(match[1], 16), int(match[3], 16)
                 stop = at + len(bytes.fromhex(match[2]))
                 if target < at:
                     back_edges.append((stop - target, target, stop))
-            _, start, stop = max(back_edges)
+            _, start, stop = max(back_edges) if back_edges else (len(code), 0, len(code))
             hot = code[start:stop]
             comparison['native_hot_sha256'] = hashlib.sha256(hot).hexdigest()
             comparison['native_hot_addresses'] = {'original': pe_locations(original_native, hot), 'phase': pe_locations(native, hot)}
-            assert comparison['C_work_section_bytes_equal']
             assert all(len(values) == 1 for values in comparison['native_hot_addresses'].values())
-            assert all(len(values) == 1 for values in comparison['C_work_addresses'].values())
         report['code_comparison'][label] = comparison
     for sample in range(1 if args.l0 else 9):
         for label, row in engines.items():
@@ -402,7 +467,7 @@ def execute():
             outputs = []
             for engine in order:
                 command, out, err = run('sample-' + str(sample) + '-' + label.replace(' ', '_') + '-' + engine, [row[engine]])
-                outputs.append(out.replace(b'\r\n', b'\n'))
+                outputs.append(out.replace(b'\r\n', b'\n') if engine.startswith('C-') else out)
                 if engine.endswith('-phase'):
                     assert err.startswith(b'XR_PHASE ') and len(err.splitlines()) == 1
                     phase = json.loads(err[len(b'XR_PHASE '):])
@@ -419,19 +484,29 @@ def execute():
                     'command': command['name'], 'wall_seconds': command['wall_seconds'],
                     'child_cpu_seconds': command['child_cpu_seconds'], 'phase': command.get('phase')})
             assert len(set(outputs)) == 1
+            if args.workload == 'fib':
+                assert outputs == [b'2178309\n'] * len(order), 'Original fib golden changed'
     for label, origin in report['origins'].items():
         if 'object' in origin:
             assert sha(origin['object']) == origin['sha256']
+            for path, expected in origin['inputs'].items():
+                assert sha(path) == expected, ('Original product changed', path)
     for name, value in library_snapshot(libraries, expected_libraries).items():
         report['libraries'][name]['after_sha256'] = value
+    for path, expected in report['rebuilt_objects'].items():
+        assert sha(path) == expected, ('Diagnostic object changed', path)
+    for products in report['products'].values():
+        for product in products.values():
+            assert sha(product['path']) == product['sha256'], ('Diagnostic executable changed', product['path'])
+    report['checkout_verification_after'] = verify_checkout(args.root, args.product_ref, baseline['identity'])
     report['state'] = 'L0_PASS' if args.l0 else 'DIAGNOSTIC_COMPLETE'
     save()
 
 try:
     if args.slots:
-        with Lease(args.slots, 'heavy', payload={'task': 'diagnostic CPU phases L0', 'source': HEAD}) as heavy:
+        with Lease(args.slots, 'heavy', payload={'task': 'diagnostic CPU phases', 'source': PRODUCT_REF}) as heavy:
             held_leases.append(heavy)
-            with Lease(args.slots, 'build', payload={'task': 'diagnostic runtime direct Clang compile/link', 'source': HEAD}) as build:
+            with Lease(args.slots, 'build', payload={'task': 'diagnostic runtime direct Clang compile/link', 'source': PRODUCT_REF}) as build:
                 held_leases.append(build)
                 execute()
     else:

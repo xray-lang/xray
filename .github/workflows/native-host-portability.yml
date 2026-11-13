@@ -20,7 +20,7 @@ on:
         type: boolean
         default: false
       native_cpu_diagnostics:
-        description: Record runtime and loop CPU phases for fixed native scalar objects
+        description: Record layout16 fib CPU phases with current native objects
         type: boolean
         default: false
 
@@ -198,11 +198,11 @@ jobs:
             --build "$RUNNER_TEMP/scalar-before-build" --work build/scalar-before-performance \
             --samples 9 --cc /usr/bin/clang --alignment ${{ matrix.alignment }} --lua "$RUNNER_TEMP/scalar-lua/lua"
       - name: Diagnose runtime and loop CPU phases
-        if: always() && !cancelled() && inputs.native_cpu_diagnostics && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure')
+        if: always() && !cancelled() && inputs.native_cpu_diagnostics && matrix.alignment == 16 && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure')
         run: |
-          git fetch --depth=1 origin 01a05d49706906273bdc6dcb34f1b7908049d23a
+          git fetch --depth=1 origin 58ee897ff5bfda554169b7c1ae567c6a69eabf5f
           python -B scripts/diagnostics/native_loop_phase.py --root . \
-            --product-ref 01a05d49706906273bdc6dcb34f1b7908049d23a \
+            --product-ref 58ee897ff5bfda554169b7c1ae567c6a69eabf5f --workload fib \
             --build build --baseline build/scalar-performance/result.json \
             --output build/scalar-phase-diagnostic --cc /usr/bin/clang \
             --alignment ${{ matrix.alignment }} --objdump "$(xcrun --find otool)"
