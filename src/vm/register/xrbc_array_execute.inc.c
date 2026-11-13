@@ -73,9 +73,13 @@ static bool xr_rbc_array_mutate_owned(XrRbcStack *stack, const XrRbcFrame *frame
     return true;
 }
 
+static XR_NOINLINE XrRbcStatus xr_rbc_map_step(const XrRbcModule *, XrRbcStack *,
+    const XrRbcFrame *, const XrRbcFunction *, XrRbcArrayAccess, uint32_t);
+
 static XR_NOINLINE XrRbcStatus xr_rbc_array_step(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFrame *frame, const XrRbcFunction *function, uint32_t index, uint32_t source, size_t *pc) {
     XrRbcArrayAccess access = function->array_accesses[index];
+    if (access.kind == XR_RBC_MAP_STRING_I64) return xr_rbc_map_step(module, stack, frame, function, access, source);
     if (access.operation >= XR_RBC_ARRAY_BORROW && access.operation <= XR_RBC_ARRAY_REF_PUSH)
         return xr_rbc_array_reference_step(module, stack, frame, function, access, source);
     const XrRbcArrayLocation *locations = access.count ? function->array_operands + access.first : NULL;

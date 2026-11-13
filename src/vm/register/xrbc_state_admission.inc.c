@@ -14,6 +14,7 @@ static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
     switch (kind) {
     case XRT_MODULE_UNIT: case XRT_MODULE_BOOL: case XRT_MODULE_I64: case XRT_MODULE_F64:
         *payload = XR_RBC_BITS; return true;
+    case XRT_MODULE_MAP_STRING_I64: *payload = XR_RBC_MAP_STRING_I64; return true;
     case XRT_MODULE_STRING: *payload = XR_RBC_STRING; return true;
     case XRT_MODULE_ARRAY_I64: *payload = XR_RBC_ARRAY_I64; return true;
     case XRT_MODULE_ARRAY_STRING: *payload = XR_RBC_ARRAY_STRING; return true;
@@ -74,7 +75,9 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     if (op == XR_RBC_STATE_PUBLISH)
         return !b && !c && rbc_register_kind(function, a) == XR_RBC_STATE_REF;
     if (op == XR_RBC_STATE_READ || op == XR_RBC_STATE_WRITE) {
-        if (b >= function->register_count || !xr_rbc_state_payload_kind(c)) return false;
+        if (b >= function->register_count ||
+            (c != XRT_MODULE_UNIT && c != XRT_MODULE_BOOL && c != XRT_MODULE_I64 && c != XRT_MODULE_F64 &&
+             c != XRT_MODULE_STRING && !xr_rbc_state_array(c))) return false;
         XrRbcRegisterKind payload;
         if (!rbc_state_register_kind(c, &payload)) return false;
         if (op == XR_RBC_STATE_READ)

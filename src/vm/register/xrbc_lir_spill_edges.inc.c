@@ -8,7 +8,7 @@
  */
 static bool rbc_lir_spill_edge_type(RbcLirCompiler *c, uint32_t value) {
     XrLirType type = rbc_lir_value_type(c, value);
-    return rbc_lir_scalar(type) || type == XR_LIR_STRING || type == XR_LIR_ARRAY;
+    return rbc_lir_scalar(type) || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_STRING || type == XR_LIR_ARRAY;
 }
 
 static bool rbc_lir_edge_spill_homes(RbcLirCompiler *c, bool managed) {
@@ -21,7 +21,7 @@ static bool rbc_lir_edge_spill_homes(RbcLirCompiler *c, bool managed) {
             uint32_t value = view.parameters[p];
             XrLirType type = rbc_lir_value_type(c, value);
             if (!rbc_lir_spill_edge_type(c, value) ||
-                ((type == XR_LIR_STRING || type == XR_LIR_ARRAY) != managed)) continue;
+                ((type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_STRING || type == XR_LIR_ARRAY) != managed)) continue;
             if (!c->edge_spill) {
                 size_t count = (size_t)c->view.value_count + 1;
                 if (count > SIZE_MAX / sizeof(*c->edge_spill))

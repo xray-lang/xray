@@ -20,6 +20,7 @@
 #include "xnative_callable.h"
 #include "xir/xxir_value_place.h"
 #include "xnative_array.h"
+#include "xnative_map.h"
 #include "xnative_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_float.h"
@@ -305,6 +306,7 @@ XR_FUNC void xrt_value_root_drain(XrtValueRoot *root) {
     xrt_view_root_drain(root);
     xr_xir_value_drop(&root->pending);
     xrt_array_root_drain(root);
+    xrt_map_root_drain(root);
     for (uint32_t i = 0; i < root->table_capacity; ++i)
         if (root->table[i].string) xr_xir_string_release(root->table[i].string);
     if (root->table)

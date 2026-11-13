@@ -18,6 +18,7 @@
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
+#include "runtime/native/xnative_map.h"
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
@@ -51,6 +52,7 @@ typedef union {
     XrtModuleState *state;
     XrtModuleAccess *state_ref;
     XrtArray *array;
+    XrtMap *map;
 } XrRbcRegister;
 XR_STATIC_ASSERT(sizeof(XrRbcRegister) == 8, "physical register lanes occupy eight bytes");
 
@@ -192,7 +194,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_CAPTURED_I64_BORROW ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_MAP_STRING_I64_REF ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -299,7 +301,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
             return false;
         break;
     case XR_RBC_RET:
-        return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16);
+        return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
+            (function->result_kind == XR_RBC_BITS || rbc_direct_managed_kind(function->result_kind));
     case XR_RBC_RET0:
         return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
@@ -333,7 +336,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
-        if (!rbc_aggregate_calls_valid(module, function) || !rbc_view_module_valid(module, function)) return XR_RBC_INVALID;
+        if (!rbc_map_module_valid(module, function) || !rbc_aggregate_calls_valid(module, function) || !rbc_view_module_valid(module, function)) return XR_RBC_INVALID;
         for (size_t pc = 0; pc < function->code_count; ++pc)
             if (!xr_rbc_instruction_valid(module, function, pc)) return XR_RBC_INVALID;
         XrRbcStatus status = xr_rbc_strings_valid(module, function);
@@ -419,6 +422,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_array_execute.inc.c"
 #include "xrbc_view_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
+#include "xrbc_map_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
 /* Keep computed-goto handlers on a stable cache-line boundary as cold code grows. */
@@ -542,6 +546,8 @@ static void xr_rbc_root(void *context) {
         execution->pending->locations, &execution->pending->value, execution->entries);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_STRING)
         execution->pending->value.string = xrt_string_root_take(execution->pending->value.string);
+    if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_MAP_STRING_I64)
+        execution->pending->value.map = xrt_map_root_take(execution->pending->value.map);
     if (execution->pending->status == XR_RBC_OK && rbc_array_kind(execution->pending->result_kind))
         execution->pending->value.array = xrt_array_root_take(execution->pending->value.array);
 }
@@ -711,6 +717,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     xr_free(owned->aggregate_bytes);
     xr_free(owned->aggregate_types);
     if (owned->result_kind == XR_RBC_STRING) xrt_string_owned_drop(&owned->value.string);
+    if (owned->result_kind == XR_RBC_MAP_STRING_I64) xrt_map_owned_drop(&owned->value.map);
     if (rbc_array_kind(owned->result_kind)) xrt_array_owned_drop(&owned->value.array);
     xrt_locations_release(owned->locations);
     xr_free(owned);

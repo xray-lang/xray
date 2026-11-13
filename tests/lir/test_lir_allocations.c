@@ -266,7 +266,26 @@ static void callable_parameter_failures(bool explicit_contracts) {
         explicit_contracts ? "explicit" : "default", sites);
 }
 
+static void map_catalog_failures(void) {
+    size_t sites = 0;
+    for (size_t point = 0; !point || point <= sites; ++point) {
+        fail_at = SIZE_MAX;
+        XrLirModule *module = NULL;
+        REQUIRE(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+        allocation_index = 0;
+        fail_at = point ? point - 1 : SIZE_MAX;
+        XrLirStatus status = xr_lir_map_catalog_install(module, false, false, false, false, false);
+        if (!point) { sites = allocation_index; REQUIRE(status == XR_LIR_OK && sites); }
+        else REQUIRE(status == XR_LIR_OUT_OF_MEMORY);
+        xr_lir_module_destroy(module);
+        REQUIRE(!live_allocations && !live_bytes);
+    }
+    fail_at = SIZE_MAX;
+    printf("Map typed catalog %zu receiving allocation failures drained\n", sites);
+}
+
 int main(void) {
+    map_catalog_failures();
     callable_parameter_failures(false);
     callable_parameter_failures(true);
     callable_import_failures(false);

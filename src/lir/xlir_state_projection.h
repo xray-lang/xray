@@ -16,6 +16,7 @@
 static inline XrtModuleTypeKind lir_state_payload_kind(XrLirType type, XrLirType element) {
     if (type == XR_LIR_VIEW_CELL) return XRT_MODULE_CELL_ARRAY_I64;
     if (type == XR_LIR_STRING) return XRT_MODULE_STRING;
+    if (type == XR_LIR_MAP_STRING_I64) return XRT_MODULE_MAP_STRING_I64;
     if (type == XR_LIR_ARRAY) {
         switch (element) {
         case XR_LIR_I64: return XRT_MODULE_ARRAY_I64;

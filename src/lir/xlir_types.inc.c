@@ -232,7 +232,7 @@ XR_FUNC XrLirStatus xr_lir_type_layout(const XrLirModule *m, XrLirType type,
             layout.size = 4; layout.alignment = 4; break;
         case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: case XR_LIR_PTR:
             layout.size = 8; layout.alignment = 8; break;
-        case XR_LIR_STRING: case XR_LIR_ARRAY:
+        case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64:
             layout.size = 8; layout.alignment = 8; layout.managed = true; break;
         default: return XR_LIR_UNSUPPORTED;
         }

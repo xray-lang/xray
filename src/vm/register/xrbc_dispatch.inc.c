@@ -124,7 +124,7 @@ XR_RBC_CASE(RELOAD) {
 XR_RBC_CASE(CELL_NEW) {
     uint32_t ordinal = instruction >> 16;
     for (uint32_t skipped = frame->initialized_cells; skipped < ordinal; ++skipped)
-        if (!function->cell_kinds || !rbc_array_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
+        if (!function->cell_kinds || !rbc_indexed_cell_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
     size_t index = frame->cell_base + ordinal;
     stack->cells[index].bits = XR_RBC_REG(a);
     if (ordinal >= frame->initialized_cells) frame->initialized_cells = ordinal + 1;
@@ -193,7 +193,7 @@ XR_RBC_CASE(STRING_TAKE) {
 }
 XR_RBC_CASE(STRING_CELL_NEW) {
     for (uint32_t skipped = frame->initialized_cells; skipped < c; ++skipped)
-        if (!function->cell_kinds || !rbc_array_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
+        if (!function->cell_kinds || !rbc_indexed_cell_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
     size_t index = frame->cell_base + c;
     stack->cells[index].string = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
     if (c >= frame->initialized_cells) frame->initialized_cells = c + 1;
@@ -449,7 +449,7 @@ XR_RBC_CASE(RET0) {
     XrRbcRegister value = {0};
     if (op == XR_RBC_RET) {
         value = XR_RBC_SLOT(a);
-        if (rbc_managed_kind(function->result_kind)) XR_RBC_SLOT(a) = (XrRbcRegister){0};
+        if (rbc_direct_managed_kind(function->result_kind)) XR_RBC_SLOT(a) = (XrRbcRegister){0};
     }
     uint32_t destination = frame->destination;
     stack->cell_count = frame->cell_base;

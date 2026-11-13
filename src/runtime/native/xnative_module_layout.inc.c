@@ -109,6 +109,7 @@ XRAY_API void xrt_module_layout_drop(XrtModuleLayout **owner) {
     xr_free((void *)layout->view.dependencies); xr_free((void *)layout->view.slots);
     xr_xir_compile_type_arena_drop(layout->array_types);
     xr_xir_compile_type_arena_drop(layout->callable_types);
+    xr_xir_compile_type_arena_drop(layout->map_types);
     if (layout->view.callable_types) {
         for (uint32_t t = 0; t < layout->view.callable_type_count; ++t)
             xr_free((void *)layout->view.callable_types[t].parameters);
@@ -182,12 +183,19 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
                 status = XR_XIR_VALUE_OVERFLOW;
             if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
         }
+        if (layout->types[slot->type].copy == module_map_copy && !layout->map_types) {
+            uint64_t arena_bytes = 0;
+            status = xrt_map_types_new(spec->byte_limit - layout->bytes, &layout->map_types, &arena_bytes);
+            if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
+                status = XR_XIR_VALUE_OVERFLOW;
+            if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
+        }
         ++layout->slot_counts[slot->module];
         if (slot->size > layout->scratch_size) layout->scratch_size = slot->size;
     }
     for (uint32_t t = 0; t < spec->type_count; ++t)
-        layout->types[t].arena = layout->types[t].kind == XRT_MODULE_CALLABLE ?
-            layout->callable_types : layout->array_types;
+        layout->types[t].arena = layout->types[t].kind == XRT_MODULE_CALLABLE ? layout->callable_types :
+            layout->types[t].kind == XRT_MODULE_MAP_STRING_I64 ? layout->map_types : layout->array_types;
     uint64_t peak = layout->bytes;
     if (!module_charge(&peak, spec->module_count, 1 + 2 * sizeof(uint32_t)) || peak > spec->byte_limit) {
         xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT;

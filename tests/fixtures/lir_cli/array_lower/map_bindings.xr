@@ -1,0 +1,29 @@
+var state = #{"x": 1}
+fn add(items: ref Map<string,i64>, key:string, value:i64) { items.set(key,value) }
+fn snapshot(items:Map<string,i64>)->Map<string,i64> { return items }
+fn local(flag:bool)->Map<string,i64> {
+    var items = #{"x": 2}
+    const saved = items
+    if(flag) { items.set("x",42) } else { items.set("x",24) }
+    print(saved.get("x"))
+    add(ref items,"y",7)
+    print(items.delete("y"))
+    print(items.delete("absent"))
+    return snapshot(items)
+}
+const old = state
+add(ref state,"x",10)
+print(old.get("x"))
+print(state.get("x"))
+const answer = local(true)
+print(answer.get("x"))
+const other = local(false)
+print(other.get("x"))
+state.clear()
+print(len(state))
+print(old.get("x"))
+fn replace_key()->string { state=#{"fresh":17}; return "after" }
+state.set(replace_key(),42)
+print(state.get("fresh"))
+print(state.get("after"))
+print(state.get("x"))

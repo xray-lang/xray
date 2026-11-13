@@ -17,7 +17,7 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
     case XR_LIR_I16: case XR_LIR_U16: *size = 2; *alignment = 2; return true;
     case XR_LIR_I32: case XR_LIR_U32: case XR_LIR_F32: *size = 4; *alignment = 4; return true;
     case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: *size = 8; *alignment = 8; return true;
-    case XR_LIR_STRING: case XR_LIR_ARRAY:
+    case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64:
         *size = sizeof(void *); *alignment = _Alignof(void *); return true;
     case XR_LIR_VIEW_CELL:
         *size = 16; *alignment = 8; return true;

@@ -8,7 +8,7 @@
  */
 static bool lower_edge_copy(LowerFunction *f, XrLirBlock block, XrLirValue value, XrLirValue *out) {
     XrLirType type = lower_value_type(f, value);
-    XrLirInstruction copy = {.op = type == XR_LIR_ARRAY ? XR_LIR_ARRAY_RETAIN : XR_LIR_STRING_RETAIN,
+    XrLirInstruction copy = {.op = lower_retain_operation(type),
         .type = type, .operands = &value, .operand_count = 1, .source = lower_source(f->owner)};
     return lower_build(f->owner, xr_lir_emit_value(f->owner->module, block, &copy, out));
 }
@@ -79,7 +79,7 @@ static bool lower_selected_edge(LowerFunction *f, uint32_t from, uint32_t ordina
     if (good) good = lower_edge_owners(f, block, &selected);
     for (uint32_t i = 0; i < count && good; ++i) {
         if (!transferred[i]) {
-            XrLirInstruction drop = {.op = types[i] == XR_LIR_ARRAY ? XR_LIR_ARRAY_DROP : XR_LIR_STRING_DROP,
+            XrLirInstruction drop = {.op = lower_drop_operation(types[i]),
                 .type = XR_LIR_UNIT, .operands = &parameters[i], .operand_count = 1, .source = lower_source(c)};
             good = lower_build(c, xr_lir_emit_effect(c->module, block, &drop));
         }

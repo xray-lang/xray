@@ -36,6 +36,7 @@ def header_clients(build, logs, libraries):
     shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
     shutil.copyfile(source / 'include/xray_native_callable.h', prefix / 'include/xray_native_callable.h')
     shutil.copyfile(source / 'include/xray_native_array.h', prefix / 'include/xray_native_array.h')
+    shutil.copyfile(source / 'include/xray_native_map.h', prefix / 'include/xray_native_map.h')
     shutil.copyfile(source / 'include/xray_native_view.h', prefix / 'include/xray_native_view.h')
     shutil.copyfile(source / 'include/xray_native_pod.h', prefix / 'include/xray_native_pod.h')
     shutil.copyfile(source / 'include/xray_native_string.h', prefix / 'include/xray_native_string.h')
@@ -59,6 +60,7 @@ def header_clients(build, logs, libraries):
             '-pthread']
     text = ('#include "xray_native_runtime.h"\n'
             '#include "xray_native_array.h"\n'
+            '#include "xray_native_map.h"\n'
             '#include "xray_native_string.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
@@ -79,6 +81,14 @@ def header_clients(build, logs, libraries):
             ' if (size != 5 || bytes[4] != 55) return;\n'
             ' xrt_string_move(&moved, &copy); xrt_string_drop(&moved);\n'
             ' xrt_string_owned_drop(&copy); xrt_string_drop(&s); xrt_string_drop(&n);\n'
+            ' XrtMap *map = xrt_map_string_i64_new(NULL, NULL, 0, 0);\n'
+            ' XrtString *key = xrt_string_new("key", 3, 0);\n'
+            ' XrtMapRef reference = xrt_map_ref_local(&map, 0);\n'
+            ' xrt_map_ref_string_i64_set(reference, key, 42, 0);\n'
+            ' int64_t value = 0;\n'
+            ' if (xrt_map_length(map, 0) != 1 ||\n'
+            ' !xrt_map_string_i64_get(map, key, &value, 0) || value != 42) return;\n'
+            ' xrt_map_drop(&map); xrt_string_drop(&key);\n'
             ' text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
