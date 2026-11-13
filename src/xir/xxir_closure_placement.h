@@ -15,7 +15,9 @@ typedef struct XirClosurePlacement {
 
 /* Borrows the immutable Artifact owner. Queries never allocate, infer, link or
  * revisit a body. Failure preserves outputs. The scalar query joins all actual
- * contexts of one physical constructor for a shared code-generation body. */
+ * contexts of one physical constructor for a shared code-generation body.
+ * A specialized constructor uses its verified value correspondence and the
+ * retained source owner. Its application ordinals are never reinterpreted. */
 XR_FUNC XrXirStatus xr_xir_compile_closure_placements(const XrXirArtifact *,
     const XirClosurePlacement **output, uint32_t *count);
 XR_FUNC XrXirStatus xr_xir_compile_closure_placement(const XrXirArtifact *,

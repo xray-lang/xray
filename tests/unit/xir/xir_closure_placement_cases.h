@@ -95,8 +95,23 @@ static void closure_placement_ownership(void) {
     }
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(artifact, &packet, NULL) == XR_XIR_OK);
+    XrXirArtifact *specialized = NULL;
+    CHECK(xr_xir_compile_specialize(artifact, &specialized, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(artifact);
     artifact = NULL;
+    const XrXirModule *closed = xr_xir_compile_artifact_module(specialized);
+    uint32_t constructors = 0;
+    for (uint32_t f = 0; f < closed->function_count; ++f) {
+        const XrXirFunction *body = &closed->functions[f];
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            if (body->instructions[i].op != XR_XIR_FUNCTION_REF) continue;
+            XirClosureStorage storage = XIR_CLOSURE_UNRESOLVED;
+            CHECK(xr_xir_compile_closure_placement(specialized, f, body->parameter_count + i, &storage) == XR_XIR_OK);
+            ++constructors;
+        }
+    }
+    CHECK(constructors);
+    xr_xir_compile_artifact_free(specialized);
     CHECK(xr_xir_compile_checked_read(&effect_context, packet.bytes, packet.length, &artifact, NULL) == XR_XIR_OK);
     closure_placement_source_expectations(artifact);
     xr_xir_compile_checked_packet_free(&packet);
