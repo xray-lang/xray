@@ -194,7 +194,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:27:5: FUNCTION_REF captured physical binding transport is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:56:9: MAP_NEW is not supported by LIR lowering yet"
       }
     },
     {
@@ -807,7 +807,7 @@
       "stdout": "tests/smoke/expected/functional.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:27:5: FUNCTION_REF captured physical binding transport is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/04-functional/functional.xr:56:9: MAP_NEW is not supported by LIR lowering yet"
       }
     },
     {
