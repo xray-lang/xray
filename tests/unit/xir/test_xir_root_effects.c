@@ -1421,35 +1421,6 @@ static void root_unbound_contents_causes(void) {
 #include "xir_storage_workspace_cases.h"
 
 static void control_summary_kernel(void) {
-    storage_workspace_ownership();
-    captured_cell_bound_types();
-    stored_environment_ownership();
-    entry_footprint_ownership();
-    result_environment_ownership();
-    conversion_owner_cases();
-    callback_entry_owner_cases();
-    callback_receiver_owner_cases();
-    root_unbound_contents_causes();
-    view_loan_transport_cases();
-    control_summary_detached();
-    suspension_parameter_equations();
-    suspension_reason_order();
-    suspension_dependency_reclosure();
-    execution_cleanup_order();
-    execution_origin_namespaces();
-    restriction_owner_relocation();
-    stored_lifetime_ownership();
-    task_transfer_ownership();
-    scoped_task_transfer_ownership();
-    c_callable_parameter_equations();
-    point_request_failure();
-    execution_instance_parameters();
-    execution_storable_boundaries();
-    execution_cell_input_boundaries();
-    execution_symbolic_environment_inputs();
-    execution_callable_result_upper();
-    signal_escaping_contracts();
-    storage_environment_guard_cases();
     const uint32_t count = 8193;
     XrXirFunction *functions = xr_calloc(count, sizeof(*functions));
     XrXirInstruction (*rows)[2] = xr_calloc(count, sizeof(*rows));
@@ -1534,20 +1505,63 @@ static void control_summary_kernel(void) {
 
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--control-summary") ||
-        !strcmp(argv[1], "--lexical") || !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion"))));
+        !strcmp(argv[1], "--source-storage") || !strcmp(argv[1], "--lexical") ||
+        !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion"))));
     effect_case_begin();
     if (argc==2 && !strcmp(argv[1],"--conversion")) {
         conversion_owner_cases(); effect_case_end(); return 0;
     }
-    lexical_directory_ownership();
-    if (argc==2 && !strcmp(argv[1],"--lexical")) { effect_case_end();return 0; }
-    lexical_source_ownership();
-    if (argc==2 && !strcmp(argv[1],"--lexical-source")) { effect_case_end();return 0; }
-    closure_placement_ownership();
-    module_interface_lifetime();
-    direct_root_equations();
-    generic_resource_failures();
-    control_summary_kernel();
+    if (argc==2 && (!strcmp(argv[1],"--lexical") || !strcmp(argv[1],"--lexical-source"))) {
+        lexical_directory_ownership();
+        if (!strcmp(argv[1],"--lexical-source")) lexical_source_ownership();
+        effect_case_end(); return 0;
+    }
+    /* The aggregate preserves its original order. Each selected process owns
+     * its own ledger and retains every probe's complete failure replay. */
+    static const struct {
+        void (*run)(void);
+        bool control;
+    } probes[] = {
+        {lexical_directory_ownership,false},
+        {lexical_source_ownership,false},
+        {closure_placement_ownership,false},
+        {module_interface_lifetime,false},
+        {direct_root_equations,true},
+        {generic_resource_failures,false},
+        {storage_workspace_ownership,false},
+        {captured_cell_bound_types,false},
+        {stored_environment_ownership,false},
+        {entry_footprint_ownership,false},
+        {result_environment_ownership,false},
+        {conversion_owner_cases,false},
+        {callback_entry_owner_cases,false},
+        {callback_receiver_owner_cases,false},
+        {root_unbound_contents_causes,false},
+        {view_loan_transport_cases,false},
+        {control_summary_detached,true},
+        {suspension_parameter_equations,true},
+        {suspension_reason_order,true},
+        {suspension_dependency_reclosure,true},
+        {execution_cleanup_order,false},
+        {execution_origin_namespaces,false},
+        {restriction_owner_relocation,false},
+        {stored_lifetime_ownership,false},
+        {task_transfer_ownership,false},
+        {scoped_task_transfer_ownership,false},
+        {c_callable_parameter_equations,true},
+        {point_request_failure,false},
+        {execution_instance_parameters,false},
+        {execution_storable_boundaries,false},
+        {execution_cell_input_boundaries,false},
+        {execution_symbolic_environment_inputs,false},
+        {execution_callable_result_upper,false},
+        {signal_escaping_contracts,false},
+        {storage_environment_guard_cases,false},
+        {control_summary_kernel,true},
+    };
+    bool control_only = argc==2 && !strcmp(argv[1],"--control-summary");
+    for (size_t p=0;p<sizeof(probes)/sizeof(probes[0]);++p)
+        if (argc==1 || probes[p].control==control_only) probes[p].run();
     effect_case_end();
     return 0;
 }

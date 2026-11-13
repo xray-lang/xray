@@ -10,5 +10,6 @@ else()
     target_compile_options(test_xir_root_effects PRIVATE -Wall -Wextra -Werror)
 endif()
 add_test(NAME test_xir_control_summary_owner COMMAND test_xir_root_effects --control-summary)
-set_tests_properties(test_xir_control_summary_owner PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
+add_test(NAME test_xir_source_storage_owner COMMAND test_xir_root_effects --source-storage)
+set_tests_properties(test_xir_control_summary_owner test_xir_source_storage_owner PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;metadata;ownership;compiler-fault")
