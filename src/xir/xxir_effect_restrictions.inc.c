@@ -53,11 +53,27 @@ static bool effect_check_closure_placements_valid(const EffectCheckedRoots *root
         for (uint32_t c = node->calls; c != UINT32_MAX; c = roots->call[c].next)
             constructor |= roots->call[c].protocol == 1 && roots->call[c].instruction == row.value - function->parameters;
         if (!constructor) return false;
+        if (row.constructor_call == UINT32_MAX) {
+            if (row.caller_instance != row.function || row.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+                row.entry_context != UINT32_MAX || row.ages != 1u || row.remainder || row.storage != XIR_CLOSURE_FRAME)
+                return false;
+        } else {
+            if (row.constructor_call >= roots->calls || row.caller_instance >= roots->functions ||
+                (row.entry_context != UINT32_MAX && row.entry_context >= storage.application_count)) return false;
+            const EffectCheckCall *call = &roots->call[row.constructor_call];
+            const EffectCheckFunction *caller = &roots->function[row.caller_instance];
+            if (call->protocol != 1 || roots->node[call->output].function != row.caller_instance ||
+                caller->declaration != row.function || call->instruction != row.value - function->parameters)
+                return false;
+            if (row.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT &&
+                row.environment != XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
+                XirStorageApplication app = storage.applications[row.environment];
+                if (app.target != row.caller_instance || app.declaration != row.function) return false;
+            }
+        }
         if (n) {
             XirClosurePlacement previous = view->placements[n - 1];
-            if (previous.function > row.function || (previous.function == row.function &&
-                (previous.value > row.value || (previous.value == row.value && previous.environment >= row.environment))))
-                return false;
+            if (xir_closure_placement_compare(&previous, &row) >= 0) return false;
         }
     }
     return true;

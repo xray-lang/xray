@@ -185,7 +185,8 @@ static XrXirStatus restriction_function_occurrence(void *context, const XirStora
         occurrence->ages & (1u << XIR_STORAGE_HISTORICAL) ? XIR_CLOSURE_OWNED : XIR_CLOSURE_FRAME;
     XirStorageReference constructor = occurrence->constructor;
     solver->placements[solver->placement_count++] = (HirClosureOccurrence){
-        {constructor.function, constructor.value, constructor.environment, occurrence->ages, occurrence->remainder, storage},
+        {constructor.function, constructor.value, constructor.environment, occurrence->ages, occurrence->remainder, storage,
+            occurrence->constructor_call, occurrence->caller_instance, occurrence->entry_context},
         solver->observation};
     return XR_XIR_OK;
 }

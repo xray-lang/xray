@@ -148,7 +148,8 @@ static XrXirStatus storage_capture_function(StorageCaptureWalk *walk, const XirE
     if (site->instruction >= row->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (row->operations[site->instruction].op != XR_XIR_FUNCTION_REF) return XR_XIR_OK;
     uint32_t value = row->body->parameter_count + site->instruction;
-    XirStorageFunctionOccurrence occurrence = {.constructor={site->function, value, site->environment}, .ages=1u};
+    XirStorageFunctionOccurrence occurrence = {.constructor={site->function, value, site->environment}, .ages=1u,
+        .constructor_call=site->index, .caller_instance=site->caller_instance, .entry_context=site->entry_context};
     if (site->environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
         occurrence.ages = 0;
         occurrence.remainder = XIR_EXECUTION_REMAINDER_STORAGE;

@@ -7,11 +7,7 @@
  * xhir_closure_placement.inc.c - Publication-backed constructor storage facts
  */
 static int closure_placement_compare(const void *left, const void *right) {
-    const XirClosurePlacement *a = left, *b = right;
-    if (a->function != b->function) return a->function < b->function ? -1 : 1;
-    if (a->value != b->value) return a->value < b->value ? -1 : 1;
-    if (a->environment != b->environment) return a->environment < b->environment ? -1 : 1;
-    return 0;
+    return xir_closure_placement_compare(left, right);
 }
 
 static XirClosureStorage closure_storage_join(XirClosureStorage a, XirClosureStorage b) {
@@ -72,7 +68,8 @@ static bool closure_placements_publish(HirRestrictionSolver *solver, XrHirEscape
     for (uint32_t n = 0; n < owner->constructor_count; ++n) {
         HirEscapeConstructor constructor = owner->constructors[n];
         rows[cursor++] = (XirClosurePlacement){constructor.function, constructor.value,
-            XIR_EXECUTION_CURRENT_ENVIRONMENT, 1u, 0, XIR_CLOSURE_FRAME};
+            XIR_EXECUTION_CURRENT_ENVIRONMENT, 1u, 0, XIR_CLOSURE_FRAME,
+            UINT32_MAX, constructor.function, UINT32_MAX};
     }
     for (uint32_t n = 0; n < solver->placement_count; ++n) {
         HirClosureOccurrence occurrence = solver->placements[n];

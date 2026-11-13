@@ -162,6 +162,7 @@ typedef struct XirStorageFunctionOccurrence {
     XirStorageReference constructor;
     uint32_t ages, remainder;
     bool repeated;
+    uint32_t constructor_call, caller_instance, entry_context;
 } XirStorageFunctionOccurrence;
 typedef XrXirStatus (*XirStorageFunctionVisitor)(void *, const XirStorageFunctionOccurrence *);
 

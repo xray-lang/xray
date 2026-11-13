@@ -50,7 +50,10 @@ static void closure_placement_receiving_boundaries(const XrXirArtifact *artifact
     const EffectCheckedRoots *roots = effects->checked_roots;
     XirRestrictionView input = roots->restrictions.view;
     CHECK(input.placement_count);
-    XirClosurePlacement row = input.placements[0], original = row;
+    uint32_t observed = 0;
+    while (observed < input.placement_count && input.placements[observed].constructor_call == UINT32_MAX) ++observed;
+    CHECK(observed < input.placement_count);
+    XirClosurePlacement row = input.placements[observed], original = row;
     input.placements = &row;
     input.placement_count = 1;
     EffectMark retained = effect_mark();
@@ -60,7 +63,14 @@ static void closure_placement_receiving_boundaries(const XrXirArtifact *artifact
     CHECK(received.view.placements[0].storage == original.storage);
     effect_check_restrictions_clear(&received);
     effect_mark_check(retained);
-    for (unsigned variant = 0; variant < 7; ++variant) {
+    XirStorageFlowView storage = {0};
+    CHECK(xir_storage_flow_view(roots->storage, &storage) == XR_XIR_OK);
+    uint32_t unrelated = 0;
+    while (unrelated < storage.application_count &&
+        storage.applications[unrelated].target == original.caller_instance &&
+        storage.applications[unrelated].declaration == original.function) ++unrelated;
+    CHECK(unrelated < storage.application_count);
+    for (unsigned variant = 0; variant < 13; ++variant) {
         row = original;
         switch (variant) {
         case 0: row.function = roots->templates; break;
@@ -69,7 +79,13 @@ static void closure_placement_receiving_boundaries(const XrXirArtifact *artifact
         case 3: row.remainder = 16; break;
         case 4: row.storage = (XirClosureStorage)3; break;
         case 5: row.storage = XIR_CLOSURE_FRAME; row.ages = 2; break;
-        default: row.storage = XIR_CLOSURE_FRAME; row.environment = XIR_EXECUTION_UNKNOWN_ENVIRONMENT; break;
+        case 6: row.storage = XIR_CLOSURE_FRAME; row.environment = XIR_EXECUTION_UNKNOWN_ENVIRONMENT; break;
+        case 7: row.constructor_call = roots->calls; break;
+        case 8: row.caller_instance = roots->functions; break;
+        case 9: row.entry_context = storage.application_count; break;
+        case 10: row.environment = unrelated; break;
+        case 11: row.constructor_call = UINT32_MAX; break;
+        default: row.caller_instance = (row.caller_instance + 1) % roots->functions; break;
         }
         CHECK(effect_check_restrictions_copy(&effect_context, roots, &input, &received) == XR_XIR_BAD_STRUCTURE);
         effect_check_restrictions_clear(&received);
