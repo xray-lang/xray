@@ -1,0 +1,24 @@
+fn wrap(callback: escaping fn(i64) -> i64) -> fn(i64) -> i64 {
+    return fn(value: i64) -> i64 { return callback(value) }
+}
+fn relay(callback: escaping nosuspend fn(i64) -> i64) -> fn(i64) -> i64 {
+    const a0: fn(i64) -> i64 = callback
+    const a1: fn(i64) -> i64 = a0
+    const a2: fn(i64) -> i64 = a1
+    const a3: fn(i64) -> i64 = a2
+    const a4: fn(i64) -> i64 = a3
+    const a5: fn(i64) -> i64 = a4
+    const a6: fn(i64) -> i64 = a5
+    const a7: fn(i64) -> i64 = a6
+    const a8: fn(i64) -> i64 = a7
+    const a9: fn(i64) -> i64 = a8
+    const a10: fn(i64) -> i64 = a9
+    const a11: fn(i64) -> i64 = a10
+    const a12: fn(i64) -> i64 = a11
+    const a13: fn(i64) -> i64 = a12
+    const a14: fn(i64) -> i64 = a13
+    const a15: fn(i64) -> i64 = a14
+    return wrap(a15)
+}
+const repeated = relay(fn(value: i64) -> i64 { return value + 2 })
+print(repeated(40))

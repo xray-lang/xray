@@ -116,8 +116,9 @@ static XrXirStatus conversion_owner_case(void) {
 }
 
 static void conversion_module_slots(void) {
-    const char *fixtures[] = {"module_double.xr","module_snapshot.xr"};
-    for (uint32_t i = 0; i < 2; ++i) {
+    const char *fixtures[] = {"module_double.xr","module_snapshot.xr","callable_compose_weaken.xr",
+        "callable_alias_forward.xr"};
+    for (uint32_t i = 0; i < sizeof(fixtures)/sizeof(fixtures[0]); ++i) {
         EffectMark baseline = effect_mark();
         XrXirArtifact *artifact = root_source(fixtures[i],XR_XIR_OK);
         const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
@@ -133,7 +134,13 @@ static void conversion_module_slots(void) {
         xr_xir_compile_artifact_free(received);
         effect_mark_check(baseline);
     }
-    printf("conversion module slots: actual reassignment and saved snapshot cold effects PASS\n");
+    EffectMark baseline=effect_mark();
+    XrXirArtifact *rejected=root_source("callable_weaken_module_ref.xr",XR_XIR_BAD_TYPE);
+    CHECK(!rejected);
+    rejected=root_source("callable_weaken_strengthen.xr",XR_XIR_BAD_TYPE);
+    CHECK(!rejected);
+    effect_mark_check(baseline);
+    printf("conversion Source: module slots, escaped NoSuspend forwarding, cold effects and module ref refusal PASS\n");
 }
 
 static void conversion_owner_cases(void) {

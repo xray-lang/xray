@@ -334,8 +334,10 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     SourceValue *value=&plan->values[a+plan->value_offset];
     arguments[a].value->expected=expected;
     SourceExpressionPlan *previous_argument = ctx->effect_argument;
-    /* Function-value calls keep their declared callback boundary. */
-    bool callback = !plan->fixed_arguments && plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
+    /* Escaping parameters receive their fixed bound before shared checking. */
+    bool escaping = plan->family==SOURCE_CALL_FUNCTION &&
+        xr_xir_function_parameter_escaping(&ctx->functions[plan->declaration.function],parameter);
+    bool callback = !escaping && !plan->fixed_arguments && plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;

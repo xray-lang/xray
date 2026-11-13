@@ -1,0 +1,9 @@
+var G = [1]
+fn apply(a: ref Array<i64>, callback: escaping fn() -> i64) -> i64 {
+    a.push(2)
+    return callback()
+}
+fn forward(a: ref Array<i64>, callback: escaping nosuspend fn() -> i64) -> i64 {
+    return apply(ref a, callback)
+}
+print(forward(ref G, fn() -> i64 { return 7 }))

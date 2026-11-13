@@ -1,0 +1,6 @@
+import {compose} from "./callable_compose_library"
+fn relay(callback: escaping nosuspend fn(i64) -> i64) -> fn(i64) -> i64 {
+    return compose(callback, callback)
+}
+const repeated = relay(fn(value: i64) -> i64 { return value + 1 })
+print(repeated(40))

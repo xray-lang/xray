@@ -31,6 +31,16 @@ static XrXirStatus storage_local_reference(XirStorageFlow *flow, uint32_t functi
         if (reference.environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT)
             return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
         if (reference.environment >= flow->view.application_count) return XR_XIR_BAD_STRUCTURE;
+        const StorageFunction *row = &flow->rows[reference.function];
+        while (!cell && reference.value >= row->body->parameter_count && storage_step(flow)) {
+            uint32_t instruction = reference.value - row->body->parameter_count;
+            if (instruction >= row->observed) break;
+            StorageOperation operation = row->operations[instruction];
+            if (!storage_copy(operation.op)) break;
+            if (operation.source >= reference.value) return XR_XIR_BAD_STRUCTURE;
+            reference.value = operation.source;
+        }
+        if (flow->status != XR_XIR_OK) return flow->status;
         XirStorageApplication app = flow->view.applications[reference.environment];
         if (app.declaration != reference.function) return storage_reference_pending(flow, XIR_EXECUTION_REMAINDER_OPAQUE);
         if (app.first > flow->view.binding_count || app.count > flow->view.binding_count - app.first)
