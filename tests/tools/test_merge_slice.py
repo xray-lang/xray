@@ -37,10 +37,14 @@ if mode == 'asan':
     (pathlib.Path(build) / 'asan-ran').write_text('PASS')
 print(mode + ': PASS')
 '''
+# Keep all fixture projects on the interpreter that runs this suite.
+FIXTURE_PYTHON = Path(sys.executable).as_posix()
+FIXTURE_PYTHON = FIXTURE_PYTHON.replace("\\", "\\\\")
+FIXTURE_PYTHON = FIXTURE_PYTHON.replace('"', '\\"').replace("$", "\\$")
 CMAKE = '''cmake_minimum_required(VERSION 3.25)
 project(QueueFixture NONE)
 enable_testing()
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(Python3_EXECUTABLE "@FIXTURE_PYTHON@")
 execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 OUTPUT_VARIABLE identity OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 file(WRITE "${CMAKE_BINARY_DIR}/identity.json" "{\\\"commit\\\":\\\"${identity}\\\",\\\"dirty\\\":false}")
@@ -48,7 +52,7 @@ add_custom_target(xray COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate
 add_test(NAME actual COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" l1 "${CMAKE_BINARY_DIR}")
 add_test(NAME meta_ownership_inventory COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" metadata "${CMAKE_BINARY_DIR}")
 add_test(NAME asan_focused COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" asan "${CMAKE_BINARY_DIR}")
-'''
+'''.replace("@FIXTURE_PYTHON@", FIXTURE_PYTHON)
 
 
 class QueueTests(unittest.TestCase):
