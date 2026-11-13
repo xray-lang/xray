@@ -160,6 +160,7 @@ def main():
              ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
              ('literal-edges', args.source_root / 'tests/lir/programs/owned-string-literal-edges.xr', b'small\nbig\nsmallbig\n'),
              ('literal-cache', args.source_root / 'tests/lir/programs/owned-string-literal-cache.xr', b'0\n6\n4\n'),
+             ('append-owner-snapshot', args.source_root / 'tests/lir/programs/owned-string-cursor-boundaries.xr', b'0\n6\n4\n10\n'),
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
              ('loop-branches', args.source_root / 'tests/lir/programs/owned-string-loop-branches.xr', b'left0\nright1\nright2\n'),
              ('sequential', args.source_root / 'tests/lir/programs/owned-string-sequential.xr', b'L-1\nlow-1\nR3\nhigh3\n')]
