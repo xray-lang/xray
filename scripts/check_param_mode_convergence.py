@@ -108,27 +108,24 @@ class Hit:
     text: str
 
 
-def rel(root: Path, path: Path) -> str:
-    return path.resolve().relative_to(root.resolve()).as_posix()
-
-
 def iter_text_files(root: Path):
+    root = root.resolve()
     seen: set[Path] = set()
     for dirname in SCAN_DIRS:
         base = root / dirname
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
-            relative = Path(rel(root, path))
+            relative = path.resolve().relative_to(root)
             if any(part in SKIP_DIR_NAMES for part in relative.parts):
                 continue
             if path.is_file() and any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
                 seen.add(path)
-                yield path
+                yield path, relative.as_posix()
     for name in EXTRA_FILES:
         path = root / name
         if path.exists() and path not in seen:
-            yield path
+            yield path, path.resolve().relative_to(root).as_posix()
 
 
 def is_public_path(path: str) -> bool:
@@ -168,8 +165,7 @@ def build_inventory(root: Path) -> dict[str, list[Hit]]:
         "REMOVED_PUBLIC_SURFACE": [],
         "ALLOWED_REMOVED_SYNTAX_FIXTURE": [],
     }
-    for path in iter_text_files(root):
-        relative = rel(root, path)
+    for path, relative in iter_text_files(root):
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
