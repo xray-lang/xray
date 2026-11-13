@@ -99,6 +99,13 @@ static void native_callable_projection(void) {
     CHECK(xrt_callable_cell_new(code, domain, (XrXirType)260, &initial, &integer) == XR_XIR_VALUE_OK);
     XrXirValue captures[] = {integer, {XR_XIR_I64, 0, 2}};
     CHECK(xrt_callable_new(code, domain, 0, captures, 2, &first) == XR_XIR_VALUE_OK);
+    XrXirFunctionBinding *stored = (XrXirFunctionBinding *)xr_xir_function_binding(&first);
+    CHECK(stored);
+    const XrXirValue *inline_captures = stored->captures;
+    stored->captures = (const XrXirValue *)(uintptr_t)1;
+    CHECK(!xr_xir_value_valid(&first));
+    stored->captures = inline_captures;
+    CHECK(xr_xir_value_valid(&first));
     CHECK(xrt_callable_cell_new(code, domain, (XrXirType)262, &first, &slot) == XR_XIR_VALUE_OK);
     CHECK(xrt_callable_new(code, domain, 1, &slot, 1, &cycle) == XR_XIR_VALUE_OK);
     CHECK(xrt_callable_cell_write(code, domain, (XrXirType)262, &slot, &cycle) == XR_XIR_VALUE_OK);
