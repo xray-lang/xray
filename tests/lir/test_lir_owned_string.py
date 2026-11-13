@@ -160,7 +160,7 @@ def main():
              ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
              ('literal-edges', args.source_root / 'tests/lir/programs/owned-string-literal-edges.xr', b'small\nbig\nsmallbig\n'),
              ('literal-cache', args.source_root / 'tests/lir/programs/owned-string-literal-cache.xr', b'0\n6\n4\n'),
-             ('append-owner-snapshot', args.source_root / 'tests/lir/programs/owned-string-cursor-boundaries.xr', b'0\n6\n4\n10\n'),
+             ('append-owner-snapshot', args.source_root / 'tests/lir/programs/owned-string-cursor-boundaries.xr', b'0\n6\n4\n10\n6\n4\n802\n'),
              ('literal-chunks', args.source_root / 'tests/lir/programs/owned-string-literal-chunks.xr',
               b'seed\nseed\n0\n\0\xc3\xa9\xf0\x9f\x98\x80\0\xc3\xa9\xf0\x9f\x98\x80\n6\n'),
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
@@ -207,6 +207,9 @@ def main():
                 assert actual['rbc_reference_spills']>0
             text = generated.read_text(encoding='utf-8')
             assert '({' not in text and 'XrtString *' in text and 'xrt_string_' in text
+            if name in ('literal-cache', 'append-owner-snapshot'):
+                assert 'xrt_string_append_cursor_flush(&xrl_append)' not in text
+                assert 'xrt_string_append_cursor_close(&xrl_append)' in text
             main = folder / 'main.c'
             if name in frame_drops:
                 main.write_text('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'

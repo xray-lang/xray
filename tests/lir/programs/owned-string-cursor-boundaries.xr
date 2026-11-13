@@ -22,3 +22,4 @@ fn build(count: i64) -> string {
 
 print(len(build(0)))
 print(len(build(4)))
+print(len(build(400)))

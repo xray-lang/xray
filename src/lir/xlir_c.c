@@ -662,14 +662,10 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
     if (c->string_cursor) {
-        bool managed = false, retained = false;
-        for (uint32_t a = 0; a < edge->argument_count; ++a) {
-            XrLirType type = c_value_type(c, edge->arguments[a]);
-            managed |= type == XR_LIR_STRING || type == XR_LIR_ARRAY;
+        bool retained = false;
+        for (uint32_t a = 0; a < edge->argument_count; ++a)
             retained |= c_string_literal(c, edge->arguments[a]);
-        }
-        if (managed) c_text(c, retained ? "    xrt_string_append_cursor_close(&xrl_append);\n" :
-            "    xrt_string_append_cursor_flush(&xrl_append);\n");
+        if (retained) c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
     }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
