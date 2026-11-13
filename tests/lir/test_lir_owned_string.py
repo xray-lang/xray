@@ -220,6 +220,8 @@ def main():
             for optimization in (('Od', 'O1', 'O2', 'Ox') if mode == 'raw' else ('O2',)):
                 compile_run(folder,generated,main,optimization,expected * 2)
             if name == 'literal-cache' and mode == 'raw':
+                observation = folder / 'literal-cache-observation'
+                observation.mkdir()
                 observer = folder / 'literal-cache-observer.c'
                 observer.write_text('#include "xray_native_runtime.h"\n'
                     'unsigned observed_literals;\n'
@@ -233,7 +235,7 @@ def main():
                     ' if(xray_lir_entry()!=0 || observed_literals!=5u)return 1;\n'
                     ' if(xray_lir_entry()!=0 || observed_literals!=10u)return 2;\nreturn 0;}\n', encoding='ascii')
                 for optimization in ('Od', 'O2'):
-                    compile_run(folder, observer, observed_main, optimization, expected * 2)
+                    compile_run(observation, observer, observed_main, optimization, expected * 2)
                 records.append({'case': name, 'result': 'FIRST_USE_PER_ACTIVATION',
                                 'entryRuns': 2, 'literalCalls': 10, 'zeroIterationBodyCalls': 0})
             if name in frame_drops:
