@@ -46,7 +46,7 @@ static void hash_delete_commit(XirHash *map, const HashProbe *probe) {
     release_pending(pending);
 }
 static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirValue *key,
-    XrXirValueAdmission *admission, bool *removed) {
+    XrXirValueAdmission *admission, bool *removed, XrXirValue *retired) {
     if (!removed) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue current = {0}; XirHash *map = NULL;
     XrXirValueStatus status = hash_place_current(place, 0, admission, &current, &map);
@@ -67,9 +67,7 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
         XrXirValue replacement = hash_value(copy);
         status = value_place_publish(place, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
-        memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
-        shared_child_assert(place->identity, &replacement);
-        xr_xir_value_drop(&current);
+        hash_publish_replacement(place, &replacement, &current, retired);
     }
     *removed = true; return XR_XIR_VALUE_OK;
 }
@@ -77,10 +75,11 @@ XR_FUNC XrXirValueStatus xr_xir_hash_delete(const XrXirValuePlace *place, const 
     XrXirValueAdmission *admission, bool *removed) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_delete(place, key, admission, removed);
+    XrXirValueStatus status = hash_delete(place, key, admission, removed, NULL);
     xr_xir_value_graph_end(); return status;
 }
-static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission) {
+static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission,
+    XrXirValue *retired) {
     XrXirValue current = {0}; XirHash *map = NULL;
     XrXirValueStatus status = hash_place_current(place, 0, admission, &current, &map);
     if (status != XR_XIR_VALUE_OK || !map->length) return status;
@@ -98,15 +97,29 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
         XrXirValue replacement = hash_value(copy);
         status = value_place_publish(place, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
-        memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
-        shared_child_assert(place->identity, &replacement);
-        xr_xir_value_drop(&current);
+        hash_publish_replacement(place, &replacement, &current, retired);
     }
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_clear(place, admission);
+    XrXirValueStatus status = hash_clear(place, admission, NULL);
+    xr_xir_value_graph_end(); return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_hash_delete_deferred(const XrXirValuePlace *place, const XrXirValue *key,
+    XrXirValueAdmission *admission, bool *removed, XrXirValue *retired) {
+    if (!hash_admission_current(admission) || !hash_retired_valid(place, retired) || retired == key)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = hash_delete(place, key, admission, removed, retired);
+    xr_xir_value_graph_end(); return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_hash_clear_deferred(const XrXirValuePlace *place,
+    XrXirValueAdmission *admission, XrXirValue *retired) {
+    if (!hash_admission_current(admission) || !hash_retired_valid(place, retired))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = hash_clear(place, admission, retired);
     xr_xir_value_graph_end(); return status;
 }

@@ -95,6 +95,53 @@ static void native_map_failures_root(void *opaque) {
     *completed = true;
 }
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
+typedef struct NativeMapRetirement {
+    XrtMap *value, *previous;
+    bool observed;
+} NativeMapRetirement;
+static NativeMapRetirement *native_map_retirement;
+static void native_map_observe_retirement(void) {
+    NativeMapRetirement *probe = native_map_retirement;
+    if (probe->value == probe->previous) return;
+    native_array_before_free = NULL;
+    XrtMap *taken = xrt_map_root_take(probe->value);
+    XrtMap *restored = xrt_map_retain(taken, 1);
+    xrt_map_owned_drop(&taken);
+    CHECK(restored == probe->value);
+    probe->observed = true;
+}
+static void native_map_export_unique(void *opaque) {
+    NativeMapRetirement *probe = opaque;
+    probe->value = xrt_map_root_take(native_map_create());
+}
+static void native_map_foreign_growth(void *opaque) {
+    NativeMapRetirement *probe = opaque;
+    XrtMap *external = probe->value;
+    probe->value = xrt_map_retain(external, 1);
+    xrt_map_owned_drop(&external);
+    probe->previous = probe->value;
+    CHECK(atomic_load(&((XirObject *)probe->value)->references) == 1);
+    native_map_retirement = probe;
+    native_array_before_free = native_map_observe_retirement;
+    for (unsigned n = 0; n < 3; ++n) {
+        char text = (char)('0' + n);
+        XrtString *key = xrt_string_new(&text, 1, 1);
+        xrt_map_string_i64_set(&probe->value, key, n, 1);
+        xrt_string_drop(&key);
+    }
+    native_array_before_free = NULL;
+    native_map_retirement = NULL;
+    CHECK(probe->observed && xrt_map_length(probe->value, 1) == 5);
+    xrt_map_drop(&probe->value);
+}
+static void native_map_retirement_callback(XrtLocationOwner *locations) {
+    NativeMapRetirement probe = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(locations, &failure, native_map_export_unique, &probe) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_run_embedded(locations, &failure, native_map_foreign_growth, &probe) == XRT_EXECUTION_COMPLETED);
+    CHECK(probe.observed && !probe.value && !native_array_live && !native_array_bytes);
+    puts("Map replacement registry is published before synchronous deallocator callbacks");
+}
 static void native_map_state_mutation(void *opaque) {
     NativeMapProbe *probe = opaque;
     XrtModuleRef *reference = NULL;
@@ -158,6 +205,9 @@ static void native_map_layout_budget(XrtModuleLayoutSpec spec) {
     xrt_module_state_drop(&state);
 }
 static void native_map_cases(XrtLocationOwner *locations) {
+#if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
+    native_map_retirement_callback(locations);
+#endif
     NativeMapProbe probe = {0};
     XrtModuleTypeSpec type = {XRT_MODULE_MAP_STRING_I64, 0};
     XrtModuleSpec module = {0};

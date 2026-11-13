@@ -29,8 +29,18 @@ static XrXirValueStatus hash_append_prepared(XirHash *map, uint64_t hash,
     if (status == XR_XIR_VALUE_OK) hash_publish_prepared(map, hash, bucket, key, value);
     return status;
 }
+static void hash_publish_replacement(const XrXirValuePlace *place, const XrXirValue *replacement,
+    XrXirValue *current, XrXirValue *retired) {
+    memcpy(place->payload, &replacement->payload, sizeof(replacement->payload));
+    shared_child_assert(place->identity, replacement);
+    if (retired) { *retired = *current; *current = (XrXirValue){0}; }
+    else xr_xir_value_drop(current);
+}
+static bool hash_retired_valid(const XrXirValuePlace *place, const XrXirValue *retired) {
+    return place && unit_value(retired) && place->payload != &retired->payload;
+}
 static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirValue *key,
-    const XrXirValue *value, XrXirValueAdmission *admission) {
+    const XrXirValue *value, XrXirValueAdmission *admission, XrXirValue *retired) {
     XrXirValue current = {0}; XirHash *map = NULL;
     XrXirValueStatus status = hash_place_current(place,
         value ? XR_XIR_TYPE_MAP : XR_XIR_TYPE_SET, admission, &current, &map);
@@ -81,9 +91,7 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
                 status = hash_append_prepared(replacement, probe.hash, &prepared_key, &prepared_value, admission);
             if (status == XR_XIR_VALUE_OK) status = value_place_publish(place, &result);
             if (status == XR_XIR_VALUE_OK) {
-                memcpy(place->payload, &result.payload, sizeof(result.payload));
-                shared_child_assert(place->identity, &result);
-                xr_xir_value_drop(&current);
+                hash_publish_replacement(place, &result, &current, retired);
             } else xr_xir_value_drop(&result);
         }
     }
@@ -95,13 +103,21 @@ XR_FUNC XrXirValueStatus xr_xir_map_set(const XrXirValuePlace *place, const XrXi
     const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!value || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_upsert(place, key, value, admission);
+    XrXirValueStatus status = hash_upsert(place, key, value, admission, NULL);
     xr_xir_value_graph_end(); return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_set_add(const XrXirValuePlace *place, const XrXirValue *element,
     XrXirValueAdmission *admission) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_upsert(place, element, NULL, admission);
+    XrXirValueStatus status = hash_upsert(place, element, NULL, admission, NULL);
+    xr_xir_value_graph_end(); return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_map_set_deferred(const XrXirValuePlace *place,
+    const XrXirValue *key, const XrXirValue *value, XrXirValueAdmission *admission, XrXirValue *retired) {
+    if (!value || !hash_admission_current(admission) || !hash_retired_valid(place, retired) ||
+        retired == key || retired == value) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = hash_upsert(place, key, value, admission, retired);
     xr_xir_value_graph_end(); return status;
 }
