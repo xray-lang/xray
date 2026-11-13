@@ -65,8 +65,13 @@ static bool rbc_lir_callable_scope_emit(RbcLirCompiler *c, const XrLirInstructio
         if (instruction->result) {
             access.source = c->slots[instruction->operands[1]];
             access.result.index = c->slots[instruction->result];
-            access.slot = rbc_lir_callable_ordinal(c, instruction->type) + 1;
-            access.count = 1;
+            if (rbc_lir_captured_cell(c->input, instruction->type)) {
+                access.operation = XR_RBC_CAPTURED_CELL_BIND;
+                access.slot = XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + instruction->type - XR_LIR_TYPE_COUNT;
+            } else {
+                access.slot = rbc_lir_callable_ordinal(c, instruction->type) + 1;
+                access.count = 1;
+            }
         }
         if (instruction->op == XR_LIR_FUNCTION_BIND) access.window = (uint32_t)instruction->bits;
     }

@@ -21,6 +21,7 @@ def main() -> None:
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
+             "module_double", "module_snapshot", "module_counter", "counter_shared_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",

@@ -31,6 +31,7 @@
 #include "lir_callable_factory_fixture.h"
 #include "lir_callable_factory_cases.h"
 #include "lir_callable_execution_cases.h"
+#include "lir_captured_cell_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -505,6 +506,8 @@ int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
     callable_owned_factory_cases();
+    captured_cell_scope_join();
+    captured_cell_frame_extent();
     view_receiving_owners();
     callable_backend_frontier();
     callable_vm_execution();

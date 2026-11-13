@@ -16,7 +16,37 @@ static bool lir_scope_contains(const uint32_t *parents, uint32_t count,
 }
 static bool lir_scope_callable(const XrLirModule *m, XrLirType type) {
     XrLirCallableType signature;
+    XrLirCellType cell;
+    if (xr_lir_cell_type_view(m, type, &cell) == XR_LIR_OK) return cell.payload == XR_LIR_I64;
     return type >= XR_LIR_TYPE_COUNT && xr_lir_callable_type_view(m, type, &signature) == XR_LIR_OK;
+}
+/* Frame storage belongs to the activation, while a captured canonical Cell
+ * may retire earlier. Owner-changing operations preserve that borrow floor. */
+static uint32_t lir_scope_frame_floor(const XrLirModule *m, const XrLirFunctionData *f,
+    const uint32_t *parents, const uint32_t *owners, uint32_t value) {
+    for (uint32_t steps = 0; steps < f->value_count; ++steps) {
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, value);
+        if (!definition) return owners[value];
+        if (definition->op == XR_LIR_FUNCTION_REF) {
+            uint32_t floor = 0;
+            if (definition->bits != XR_LIR_CLOSURE_FRAME) return floor;
+            for (uint32_t p = 0; p < definition->operand_count; ++p) {
+                uint32_t capture = definition->operands[p];
+                XrLirCellType cell;
+                if (xr_lir_cell_type_view(m, f->values[capture - 1].type, &cell) != XR_LIR_OK) continue;
+                uint32_t owner = owners[capture];
+                if (lir_scope_contains(parents, f->value_count, floor, owner)) floor = owner;
+                else if (!lir_scope_contains(parents, f->value_count, owner, floor)) return UINT32_MAX;
+            }
+            return floor;
+        }
+        if (definition->op == XR_LIR_CALL || definition->op == XR_LIR_CALL_INDIRECT ||
+            definition->op == XR_LIR_STATE_READ) return 0;
+        if ((definition->op != XR_LIR_FUNCTION_BIND && definition->op != XR_LIR_FUNCTION_SCOPE_LEAVE) ||
+            definition->operand_count != 2) return owners[value];
+        value = definition->operands[1];
+    }
+    return UINT32_MAX;
 }
 static int lir_scope_binding_compare(const void *left, const void *right) {
     const uint32_t *a = left, *b = right;
@@ -72,6 +102,14 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
                 if (!lir_scope_contains(parents, f->value_count, v->operands[0], current)) goto invalid;
                 bindings[binding_count * 2] = v->operands[0];
                 bindings[binding_count++ * 2 + 1] = (uint32_t)v->bits;
+            }
+            if ((v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) && v->result) {
+                XrLirCallableType signature;
+                if (xr_lir_callable_type_view(m, v->type, &signature) == XR_LIR_OK) {
+                    uint32_t receiving = v->op == XR_LIR_FUNCTION_BIND ? v->operands[0] : current;
+                    uint32_t floor = lir_scope_frame_floor(m, f, parents, owners, v->operands[1]);
+                    if (!lir_scope_contains(parents, f->value_count, floor, receiving)) goto invalid;
+                }
             }
             if (v->result && lir_scope_callable(m, v->type))
                 owners[v->result] = v->op == XR_LIR_FUNCTION_BIND ? v->operands[0] : current;

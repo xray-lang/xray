@@ -18,7 +18,24 @@ static void callable_state_values(void) {
         .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
         .byte_limit=UINT64_MAX, .callable_types=callables, .callable_type_count=3};
     XrtModuleLayout *layout = NULL;
+    calls = 0;
     OK(xrt_module_layout_new(&spec, &layout));
+    size_t allocation_sites = calls, existing = live;
+    CHECK(layout->bytes > sizeof(*layout) && allocation_sites);
+    spec.byte_limit = layout->bytes - 1;
+    XrtModuleLayout *rejected = NULL;
+    CHECK(xrt_module_layout_new(&spec, &rejected) == XR_XIR_VALUE_MEMORY_LIMIT && !rejected);
+    CHECK(live == existing);
+    spec.byte_limit = UINT64_MAX;
+    for (size_t point = 0; point < allocation_sites; ++point) {
+        calls = 0;
+        fail_at = point;
+        injected = false;
+        CHECK(xrt_module_layout_new(&spec, &rejected) == XR_XIR_VALUE_OOM && !rejected);
+        CHECK(injected && live == existing);
+    }
+    fail_at = SIZE_MAX;
+    printf("callable State layout accounts its retained arena and preserves owners across %zu failures\n", allocation_sites);
     XrXirTypeArena *arena = xrt_module_callable_catalog(layout);
     CHECK(arena);
     XrtCallableEntry entries[] = {{(XrXirType)260, NULL, 0}, {(XrXirType)262, NULL, 0}};
@@ -28,9 +45,11 @@ static void callable_state_values(void) {
         (XrtCallableLease){&references, callable_state_retain, callable_state_release}, &code));
     XrXirDomain *domain = NULL;
     OK(xr_xir_domain_new(UINT64_MAX, &domain));
-    XrXirValue function = {0}, wrong = {0};
+    XrXirValue function = {0}, wrong = {0}, saved_function = {0};
     OK(xrt_callable_new(code, domain, 0, NULL, 0, &function));
     OK(xrt_callable_new(code, domain, 1, NULL, 0, &wrong));
+    OK(xr_xir_value_copy(&function, &saved_function));
+    XrtCallableCode *saved_code = code;
     XrtModuleState *state = NULL;
     OK(xrt_module_state_new(layout, UINT64_MAX, &state));
     XrtModuleRef *reference = NULL;
@@ -55,6 +74,12 @@ static void callable_state_values(void) {
     xrt_module_layout_drop(&layout);
     CHECK(references == 1);
     xrt_module_state_clear(state);
+    CHECK(references == 1);
+    const XrXirValue *captures = NULL;
+    uint32_t count = 0;
+    OK(xrt_callable_borrow(saved_code, &saved_function, 0, &captures, &count));
+    CHECK(!captures && !count);
+    xr_xir_value_drop(&saved_function);
     CHECK(references == 0);
     OK(xrt_module_begin(state, 0));
     xrt_module_state_drop(&state);

@@ -91,7 +91,7 @@ static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
         received->capture_count = entry.capture_count;
         received->captures = entry.capture_count ? next : NULL;
         for (uint32_t p = 0; p < entry.capture_count; ++p)
-            if (!xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_SCALAR, entry.captures[p]},
+            if (!xrt_callable_type_id(entry.captures[p],
                     image->type_count, next++)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     }
     callable_scope_require(xrt_callable_code_new(group->types, group->workspace, image->entry_count,
@@ -292,6 +292,8 @@ XRAY_API XrtCallable *xrt_callable_scope_leave(XrtCallableScope *scope, XrtCalla
     scope->body = NULL;
     return result;
 }
+#include "xnative_callable_cell.inc.c"
+
 XR_FUNC void xrt_callable_root_drain(XrtValueRoot *root) {
     XrtCallableRegistry *registry = root->callables;
     /* Automatic descriptors are synchronous borrows. A longjmp can already

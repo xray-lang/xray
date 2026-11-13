@@ -1,0 +1,11 @@
+fn makeCounter(start: i64) -> fn() -> i64 {
+    var count = start
+    return fn() -> i64 {
+        count = count + 1
+        return count
+    }
+}
+var counter = makeCounter(0)
+print(counter())
+print(counter())
+print(counter())

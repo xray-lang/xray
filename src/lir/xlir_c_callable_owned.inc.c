@@ -27,6 +27,14 @@ static void c_callable_scope_instruction(LirC *c, const XrLirInstructionView *v)
         c_text(c, ";\n");
     }
     if (v->op == XR_LIR_FUNCTION_BIND) {
+        XrLirCellType cell;
+        if (xr_lir_cell_type_view(c->request->module, v->type, &cell) == XR_LIR_OK) {
+            c_format(c, "    v%" PRIu32 " = xrt_callable_cell_scope_bind(", v->result);
+            c_value(c, scope);
+            c_format(c, ", UINT32_C(%" PRIu32 "), v%" PRIu32 ", %" PRIu32 ");\n",
+                (uint32_t)v->bits, v->result, source);
+            return;
+        }
         c_format(c, "    v%" PRIu32 ".owner = xrt_callable_scope_bind(", v->result);
         c_value(c, scope);
         c_format(c, ", UINT32_C(%" PRIu32 "), v%" PRIu32 ".owner, %" PRIu32 ");\n",
@@ -106,9 +114,14 @@ static void c_callable_owned_catalog(LirC *c) {
         xr_lir_closure_target_view(c->request->module, function, &target);
         xr_lir_function_view(c->request->module, function, &view);
         if (!target.capture_count) continue;
-        c_format(c, "static const XrPodScalar xrl_callable_captures_%" PRIu32 "[] = {", f + 1);
-        for (uint32_t p = 0; p < target.capture_count; ++p)
-            c_format(c, "%u,", (unsigned)lir_pod_scalar(view.parameter_types[p]));
+        c_format(c, "static const XrtCallableValueSpec xrl_callable_captures_%" PRIu32 "[] = {", f + 1);
+        for (uint32_t p = 0; p < target.capture_count; ++p) {
+            XrtCallableValueSpec value;
+            if (!lir_native_callable_value(view.parameter_types[p], 0, &value)) {
+                c_error(c, XR_LIR_C_UNSUPPORTED, "capture has no canonical physical type"); break;
+            }
+            c_format(c, "{%u, %" PRIu32 "},", (unsigned)value.kind, value.type);
+        }
         c_text(c, "};\n");
     }
     c_text(c, "static const XrtCallableEntrySpec xrl_callable_entries[] = {\n");

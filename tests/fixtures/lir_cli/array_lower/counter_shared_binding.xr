@@ -1,0 +1,18 @@
+fn makeShared(start: i64) -> fn() -> i64 {
+    var count = start
+    const peek = fn() -> i64 { return count }
+    print(peek())
+    const step = fn() -> i64 {
+        count = count + 1
+        return count
+    }
+    print(peek())
+    return step
+}
+var counter = makeShared(10)
+print(counter())
+print(counter())
+const saved = counter
+counter = makeShared(20)
+print(saved())
+print(counter())

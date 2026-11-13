@@ -16,7 +16,8 @@ XR_LIR_OP(FCMP, "fcmp", 2)
 XR_LIR_OP(INTCAST, "intcast", 1)
 XR_LIR_OP(ITOF, "itof", 1)
 XR_LIR_OP(FCAST, "fcast", 1)
-/* A Cell owns scalar storage in the defining ordinary function activation. */
+/* Builtin Cells name activation storage. Constructed Cell types retain their
+ * canonical binding through the explicit callable scope owner. */
 XR_LIR_OP(CELL_NEW, "cell_new", 1)
 XR_LIR_OP(CELL_READ, "cell_read", 1)
 XR_LIR_OP(CELL_WRITE, "cell_write", 2)
