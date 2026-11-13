@@ -51,7 +51,7 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，不要求 `copy(...)` 或 backing 唯一。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
+**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，无需额外复制标记。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
 ```xray @id=coro-move-argument @check
 var data = [10]
@@ -181,31 +181,7 @@ const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 
 **超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
 
-```xray @id=channel-basic-ops
-const ch = Channel<i64>(10)
-ch.send(42)                             // 阻塞发送
-var v = match (ch.recv()) {
-    Recv.Value { value } -> value
-    Recv.Closed -> -1
-    _ -> -1
-}
-
-var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match (ch.tryRecv()) {
-    Recv.Value { value: next } -> print(next)
-    Recv.Empty -> print("empty")
-    Recv.Closed -> print("closed")
-    Recv.Timeout -> print("timeout")
-}
-
-ch.send(7)
-ch.close()
-for (msg in ch) {
-    print(msg)
-}
-
-var value = ch.recvOr(-1)
-```
+完整类型及操作族的当前实现资格见 §17。
 
 **载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
@@ -251,7 +227,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 保持同一值传递合同，可复制 Sendable 值保留逻辑副本，身份类型保持身份，`move` 保证不复制。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -289,69 +265,33 @@ fn main() {
 main()
 ```
 
-```xray @id=coro-isolated-scope @check
-enum WorkerErr { Failed }
-fn worker(ok: bool) throws(WorkerErr) -> i64 {
-    if (!ok) { throw WorkerErr.Failed }
-    return 1
-}
-fn main() throws(TaskFailures<WorkerErr>) {
-    try scope(isolated) {
-        go(name: "first") worker(false)
-        go(name: "second") worker(true)
-    }
-}
-try main()
-```
+完整类型及操作族的当前实现资格见 §17。
 
 scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。默认 scope 因成员失败而取消其余成员后，主体若在等待其中某个成员时进入取消展开（§10.3），展开止于 scope 边界：scope 照常取消并 drain 其余成员，再按上表传播首个失败；这次取消不越过 scope 向外传播。scope 的隐式等待不引入取消展开。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
 
-### 10.8 `move` — 跨协程所有权转移
+### 10.8 `move` — 所有权转移
 
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。
+`move x` 保证转移时不复制，并使源绑定失效。允许的源是当前函数已初始化的局部变量、局部常量和消费参数，且不能穿过活动借用。字段、索引、调用结果、模块绑定及 READ/ref 参数不能作为源。被拒绝的移动保持源状态。
 
-**判定规则见 §2.14**：`move` 要求可重绑定的局部 `var` 根同时满足四条证据轴——绑定存活、根唯一、能力可变、无存活借用。语法上只接受标识符：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。move 后原变量在编译期标记为**已 moved**，再次引用是编译错误；被拒绝的 move 不污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
-
-跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.14 的唯一性证据，而不是另一套并发专用规则。
-
-```xray @id=coro-move-transfer
-var buf = Array<u8>(1024 * 1024)
-
-// 移交给协程
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move buf)
-// 编译错误：buf has been moved
-// print(len(buf))
-
-// 移交给 channel
-const ch = Channel<Array<u8>>(1)
-var payload = Array<u8>(4096)
-ch.send(move payload)
-// 编译错误：payload has been moved
-```
-
-详见 §7.3、§7.4 关于 `var` / `const` 能力的协程传递规则。
+可复制 Sendable 值跨任务保留逻辑副本。不可复制 Sendable 资源经消费参数转移。移动不要求对象图只有一份物理引用，接收后的修改仍遵循值语义及 COW。编译器的隐式最后使用移动与显式移动具有相同可观察结果，见 §2.14.5、§7.3 和 §16.8。当前实现资格见 §17。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式所有权转移**——通过 `const`/同步能力、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
+`const` 固定绑定及其值语义部分，可达 class 和同步句柄保持身份。共享可变身份通过其同步操作访问。协程域使用显式导入的 `sync`，OS 线程域使用 `sys.Os*`。
 
-如确需互斥锁/原子操作，运行时层面提供：
+| 原语 | 合同 |
+|--|--|
+| `Channel<T>` | 同步发送与接收 Sendable 值 |
+| `Atomic<T>` | 经受控原子方法修改内部值 |
+| `sync.Mutex<T>` | `lock<U>(body: fn(ref T) -> U) -> U`，`tryLock<U>(body: fn(ref T) -> U) -> U?` |
+| `sync.RwLock<T>` | `read<U>(body: fn(T) -> U) -> U`，`write<U>(body: fn(ref T) -> U) -> U` |
+| `sys.OsMutex` / `sys.OsRwLock` 等 | 阻塞 OS 线程的同步操作 |
 
-| 原语 | 形态 | 说明 |
-|---|---|---|
-| Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
-| `Atomic<T>` | 无锁原子包装 | 对 `i64`/`f64`/`bool` 提供 C11 原子操作 |
-| `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
-| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
-
-> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`const` 同步句柄、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
+Mutex 与 RwLock 的回调默认不逃逸。写回调的 `ref T` 指向锁内实际值，不能存储或逃逸。获得独占锁后，值遵循 §16.3.1 的独占降带或 COW 规则，在解锁前重新提升可达对象。读回调使用普通 READ 值合同。协程域回调允许挂起，等待者不阻塞 worker。panic 或取消通过清理释放锁，已经完成的修改保留，锁不引入 poisoning 状态。具体入口的当前实现资格见 §17。
 
 #### `Atomic<T>` — 无锁原子类型
 
@@ -450,33 +390,19 @@ for (i in 0..1000) {
 
 ### 10.11 并发安全模型
 
-xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5 的定理：**不含 `unsafe` 块、且不使用 §16.9.5 所列逃逸口的程序不存在数据竞争，其行为等价于某个顺序一致的交错执行（SC-DRF）**。因此在安全子集内可以按"语句交错"推理，不需要理解 happens-before 细节；本节的规则表就是这条定理的强制手段。逃逸口清单与语言级同步边定义在 §16.9。
+安全子集的数据竞争自由保证与显式逃逸口见 §16.9.5。跨任务数据传递遵循以下语言规则，各入口的当前实现资格见 §17。
 
-下列规则由编译器强制：
-
-| 规则 | 强制 |
+| 规则 | 合同 |
 |--|--|
-| 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
-| execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
-| 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
-| 已发布 `const` 值与受审计同步句柄可按 verified plan 跨协程传递/捕获 | ✅ |
-| `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
-| Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 以 `const` 命名，只有受审计方法可执行同步内部修改 | ✅ |
+| Sendable | 跨任务的完整类型满足 Sendable，可复制值保留逻辑副本，身份类型保持身份 |
+| `go` 捕获 | 不得捕获外层 `var`，需要的值作为显式参数传入 |
+| 共享可变身份 | 经 Channel、Atomic 或锁等同步操作访问 |
 
-**编译期不覆盖的部分**：
-- Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
-- §16.9.5 的逃逸口（`unsafe`、`Array.mutPtr()`、`mem.*` 裸内存、`sys.Thread` 线程体、`CFn` 回调体）不在定理的保证范围内，其数据竞争后果是实现定义的。
+#### 10.11.1 安全边界与 C 回调
 
-#### 10.11.1 模型之外：`unsafe` 与 C 回调
+裸内存访问、`Ptr<T>` / `MutPtr<T>` 的地址有效性、对齐和别名正确性仍由 `unsafe` 使用者负责。`mem.volatileLoad`、`volatileStore`、`fence` 和 `pageAlloc` 不授予所有权或同步保证。
 
-上表的保证覆盖 Xray 值的所有权与能力判定。有三处**位于模型之外**，此时义务转移给使用者，`unsafe` 不放宽任何一条已有规则、也不提供任何替代保证：
-
-- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** 操作的是裸内存，没有所有权根、没有引用计数、也没有别名判定。编译器对这些地址不做任何假设，也不为它们提供 §2.14 的任何证据。用它们构造的共享结构，其数据竞争自由由使用者负责证明。
-- **`Ptr<T>` / `MutPtr<T>`** 有借用跟踪（§2.4.2），但跟踪只到 owner 的作用域为止；解引用的地址有效性、对齐与别名正确性由 `unsafe` 块的作者承担。
-- **`CFn` C 回调可能在任意 OS 线程上发生**，包括运行时并不管理的线程。回调体只能触及：传入的标量与裸指针、分配计划为共享的值（§16.3.1）、以及通过 `Channel` 转移进来的唯一根。回调体**不得**触及调用方协程的 coroutine-local 对象图——那些对象的引用计数在非原子带，跨线程接触即内存损坏。回调体也不得假定存在当前协程、当前 worker 或可用的调度器。
-
-这三处是模型的**边界**而不是漏洞：它们在源码上都必须显式写出（`unsafe` 块、`mem` 模块导入、`CFn` 声明），因此"哪些代码不受编译期保护"始终可以从源码审计出来。
+`sys.Thread` 体与 `CFn` 回调可能运行在任意 OS 线程。可达 Xray 值遵循相同的 Sendable 与发布规则，在其他线程访问前完成 §16.9.4 的提升。裸指针的外部并发访问仍由调用方负责。外部回调不能假定存在当前协程、worker 或调度器。上述接口的安全边界与实现资格见 §16.9.5 和 §17。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -542,7 +468,7 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
+**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without an additional copying marker. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
 ```xray @id=coro-move-argument @check
 var data = [10]
@@ -672,31 +598,7 @@ The element type must be known at construction: write `Channel<T>(n)` or provide
 
 **Timeout semantics**: `ms` must be an `i64` in `0..86_400_000`; an out-of-range value raises `NumericRange` before the Channel operation. Zero milliseconds performs one queue attempt. A positive duration establishes one monotonic deadline at the first attempt; repeated waits or registration cannot extend it. The host must supply a valid clock; a failed, zero or backward reading raises `HostError` rather than becoming a timeout. A closed send returns `SendResult.Closed`; a closed and drained receive returns `Recv.Closed`. Evaluate the receiver, message and duration once in source order, including Unit message side effects, and retain those values across waits. The first atomic terminal transition arbitrates peer completion against timeout/cancellation; a committed delivery cannot be withdrawn. Both methods conservatively may suspend, including a statically zero duration.
 
-```xray @id=channel-basic-ops
-const ch = Channel<i64>(10)
-ch.send(42)                             // blocking send
-var v = match (ch.recv()) {
-    Recv.Value { value } -> value
-    Recv.Closed -> -1
-    _ -> -1
-}
-
-var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match (ch.tryRecv()) {
-    Recv.Value { value: next } -> print(next)
-    Recv.Empty -> print("empty")
-    Recv.Closed -> print("closed")
-    Recv.Timeout -> print("timeout")
-}
-
-ch.send(7)
-ch.close()
-for (msg in ch) {
-    print(msg)
-}
-
-var value = ch.recvOr(-1)
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 **Payload ownership**: `Channel<T>` requires copyable, storable, Sendable `T`. Sending an ordinary value preserves a logical copy, including independent later Array mutations. Class and synchronization handles retain their shared identity; sending does not clone identity, and `const` never substitutes for Sendable evidence.
 
@@ -742,7 +644,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; a selected send arm on a closed channel panics with `E0702`, exactly like `send`; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; a selected send arm on a closed channel panics with `E0702`, exactly like `send`; `value` follows the same value-transfer contract as `ch.send`. Copyable Sendable values preserve logical copies, identity types preserve identity, and `move` guarantees transfer without copying.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -780,69 +682,33 @@ fn main() {
 main()
 ```
 
-```xray @id=coro-isolated-scope @check
-enum WorkerErr { Failed }
-fn worker(ok: bool) throws(WorkerErr) -> i64 {
-    if (!ok) { throw WorkerErr.Failed }
-    return 1
-}
-fn main() throws(TaskFailures<WorkerErr>) {
-    try scope(isolated) {
-        go(name: "first") worker(false)
-        go(name: "second") worker(true)
-    }
-}
-try main()
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 Scope-induced child cancellation is not a failure, and independently cancelled members are not wrapped as business errors or aggregate items. Once the parent enters cancellation unwinding at a legal suspension checkpoint, scope cancels and drains members, then continues uncatchable parent cancellation; member failures are secondary diagnostics. A cancellation request alone does not mutate frames, resume positions or terminal state. After a default scope cancels its remaining members because one member failed, a body that enters cancellation unwinding while waiting on one of those members (§10.3) unwinds only to the scope boundary: the scope still cancels and drains the remaining members and then propagates the first failure under the table above; that cancellation never propagates past the scope. Implicit scope waiting starts no cancellation unwinding. Panic escaping cleanup always follows the terminal rule in §8.2.5. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task.
 
-### 10.8 `move` — cross-coroutine ownership transfer
+### 10.8 `move` — Ownership Transfer
 
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments.
+`move x` guarantees transfer without copying and invalidates the source binding. Sources are initialized local variables, local constants and consuming parameters of the current function, with no active loan crossed. Fields, indices, call results, module bindings and READ/ref parameters cannot be sources. A rejected move preserves source state.
 
-**The decision procedure is §2.14**: `move` requires a rebindable local `var` root that satisfies all four evidence axes at once — binding live, root unique, capability mutable, no live loan. Syntactically it accepts an identifier only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. After `move`, the variable is statically marked **moved**, and any later reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+Copyable Sendable values crossing tasks preserve logical copies. Noncopyable Sendable resources transfer through consuming parameters. Movement requires no single physical reference to the graph, and subsequent mutations still obey value semantics and COW. Implicit last-use movement and explicit movement have the same observable result, as specified in §2.14.5, §7.3 and §16.8. Current implementation qualification is specified in §17.
 
-A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.14, not on a separate concurrency-only rule.
+### 10.9 Synchronization Primitives
 
-```xray @id=coro-move-transfer
-var buf = Array<u8>(1024 * 1024)
+`const` fixes the binding and its value-semantic components, while reachable classes and synchronization handles retain identity. Shared mutable identities are accessed through synchronized operations. Explicitly imported `sync` serves coroutines, and `sys.Os*` serves OS-thread contexts.
 
-// hand off to a coroutine
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move buf)
-// compile error: buf has been moved
-// print(len(buf))
+| Primitive | Contract |
+|--|--|
+| `Channel<T>` | Synchronized send and receive of Sendable values |
+| `Atomic<T>` | Internal mutation through controlled atomic methods |
+| `sync.Mutex<T>` | `lock<U>(body: fn(ref T) -> U) -> U`, `tryLock<U>(body: fn(ref T) -> U) -> U?` |
+| `sync.RwLock<T>` | `read<U>(body: fn(T) -> U) -> U`, `write<U>(body: fn(ref T) -> U) -> U` |
+| `sys.OsMutex` / `sys.OsRwLock` and related types | Synchronization operations that block an OS thread |
 
-// hand off to a channel
-const ch = Channel<Array<u8>>(1)
-var payload = Array<u8>(4096)
-ch.send(move payload)
-// compile error: payload has been moved
-```
-
-See §7.3 and §7.4 for the coroutine transfer rules of `var` and `const` capabilities.
-
-### 10.9 Synchronisation primitives
-
-xray's default concurrency model favours **message passing + verified capability sharing + explicit ownership transfer**: `const`/synchronization capabilities, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
-
-When mutual exclusion or atomic operations are unavoidable, the runtime provides:
-
-| Primitive | Form | Description |
-|---|---|---|
-| Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
-| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `i64`/`f64`/`bool` |
-| `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
-| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
-
-> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, stable `const` synchronization handles, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
+Mutex and RwLock callbacks are nonescaping by default. A writing callback's `ref T` refers to the actual locked value and cannot be stored or escape. After exclusive locking, the value follows the exclusive demotion or COW rules of §16.3.1, with reachable objects re-promoted before unlock. Reading callbacks use the ordinary READ value contract. Coroutine-domain callbacks may suspend, and waiting leaves the worker available. Panic or cancellation releases the lock through cleanup, completed modifications remain, and locking introduces no poisoning state. Current entry-point qualification is specified in §17.
 
 #### `Atomic<T>` — lock-free atomic type
 
@@ -939,35 +805,21 @@ The call accepts no value or type arguments and returns unit; ordinary functions
 
 The two share a word root but are not the same suspension: `Task.yieldNow()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. Generator suspension and close follow §3.16.2–§3.16.3.
 
-### 10.11 Concurrency safety model
+### 10.11 Concurrency Safety Model
 
-xray eliminates data races at compile time through the type system. The precise statement is the theorem in §16.9.5: **a program containing no `unsafe` block and using none of the escape hatches listed in §16.9.5 has no data race, and its behaviour is equivalent to some sequentially consistent interleaving (SC-DRF)**. Inside the safe subset you may therefore reason in terms of interleaved statements without needing the happens-before detail; the rules below are how that theorem is enforced. The escape-hatch list and the language-level synchronisation edges are defined in §16.9.
+The data-race-freedom guarantee of the safe subset and its explicit escape hatches are specified in §16.9.5. Cross-task data transfer obeys the language rules below, with current entry-point qualification in §17.
 
-The compiler enforces:
-
-| Rule | Enforced |
+| Rule | Contract |
 |--|--|
-| Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
-| An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
-| Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
-| Published `const` values and audited synchronization handles may cross through a verified plan | ✅ |
-| `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
-| Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
+| Sendable | The complete cross-task type satisfies Sendable, copyable values preserve logical copies and identity types retain identity |
+| `go` captures | Outer `var` bindings cannot be captured, so required values pass as explicit arguments |
+| Shared mutable identities | Access uses synchronized operations such as Channels, Atomics or locks |
 
-**What compile-time enforcement does not cover**:
-- Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
-- The escape hatches of §16.9.5 (`unsafe`, `Array.mutPtr()`, raw `mem.*` memory, `sys.Thread` bodies, `CFn` callback bodies) sit outside the theorem's guarantee; a data race through them has implementation-defined consequences.
+#### 10.11.1 Safety Boundary and C Callbacks
 
-#### 10.11.1 Outside the model: `unsafe` and C callbacks
+Raw memory access and the address validity, alignment and aliasing of `Ptr<T>` / `MutPtr<T>` remain the responsibility of the `unsafe` author. `mem.volatileLoad`, `volatileStore`, `fence` and `pageAlloc` grant no ownership or synchronization guarantee.
 
-The guarantees above cover ownership and capability decisions for Xray values. Three places sit **outside the model**, where the obligation moves to the author. `unsafe` relaxes none of the existing rules and supplies no substitute guarantee:
-
-- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** operate on raw memory: no ownership root, no reference count, no aliasing decision. The compiler assumes nothing about those addresses and produces none of the §2.14 evidence for them. Data-race freedom of any shared structure built from them is the author's proof obligation.
-- **`Ptr<T>` / `MutPtr<T>`** are borrow-tracked (§2.4.2), but the tracking reaches only as far as the owner's scope. Address validity, alignment, and aliasing correctness at the dereference belong to the author of the `unsafe` block.
-- **A `CFn` C callback may run on any OS thread**, including threads the runtime does not manage. A callback body may reach only: the scalars and raw pointers passed in, values whose allocation plan is shared (§16.3.1), and a unique root transferred in through a `Channel`. It must **not** reach the calling coroutine's coroutine-local object graph — those objects' reference counts are in the non-atomic band, and touching them from another thread is memory corruption. A callback body must also not assume a current coroutine, a current worker, or an available scheduler.
-
-These three are the model's **boundary**, not holes in it: each has to be written explicitly in source (an `unsafe` block, a `mem` import, a `CFn` declaration), so which code runs outside compile-time protection is always auditable from the source.
+`sys.Thread` bodies and `CFn` callbacks may execute on arbitrary OS threads. Reachable Xray values obey the same Sendable and publication rules, completing promotion under §16.9.4 before another thread accesses them. External concurrent raw-pointer access remains the caller's responsibility. An external callback cannot assume a current coroutine, worker or scheduler. The safety boundaries and implementation qualification of these interfaces are specified in §16.9.5 and §17.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 

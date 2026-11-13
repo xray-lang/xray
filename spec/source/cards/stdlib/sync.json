@@ -1,5 +1,5 @@
 {
   "module": "sync",
   "summary": "Coroutine-domain synchronization primitives",
-  "lead": "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`, `Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`. These primitives may suspend the current coroutine instead of blocking an OS thread, and must be imported explicitly."
+  "lead": "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`, `Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`. These primitives may suspend the current coroutine instead of blocking an OS thread, and must be imported explicitly.\n\nThe settled lock contract uses Mutex.lock/tryLock with nonescaping fn(ref T) callbacks, RwLock.read with fn(T), and RwLock.write with fn(ref T). Callbacks may suspend. Exclusive payload preparation follows local demotion or COW, and unlock re-promotes reachable objects. Panic or cancellation unlocks through cleanup, retaining completed writes. Current implementation qualification is specified in spec §17.\n\nThe source-derived API table records the current unqualified stdlib implementation. Its replace members and READ writing-callback signatures await migration to the settled contract above under spec §17."
 }

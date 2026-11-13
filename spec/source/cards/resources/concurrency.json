@@ -26,8 +26,7 @@
       "heading_level": 2,
       "heading": "Channels: communication",
       "fences": [
-        "channel-decl-variants",
-        "channel-basic-ops"
+        "channel-decl-variants"
       ]
     },
     {
@@ -40,7 +39,7 @@
     {
       "heading_level": 2,
       "heading": "Value arguments and declared consumption",
-      "markdown": "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy(array), explicit move, or unique backing. Copying stops at class and synchronization identities. Only noncopyable resources use consuming parameter declarations; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.",
+      "markdown": "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy array, explicit move, or unique backing. Copying stops at class and synchronization identities. Consuming parameter declarations apply to copyable values and noncopyable resources; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.",
       "fences": [
         "coro-go-forms"
       ]
@@ -49,8 +48,7 @@
       "heading_level": 2,
       "heading": "Structured concurrency",
       "fences": [
-        "coro-scope",
-        "coro-isolated-scope"
+        "coro-scope"
       ],
       "markdown": "TaskFailures<E> contains only child business Error(E), never PanicInfo or Cancelled. Both scope forms drain before exit and propagate panic separately with priority. Default scope business errors are B | E; isolated uses B | TaskFailures<E>, where B is the escaping body set and E direct-child errors. No child aggregate channel exists for E=Never; B=Never and E=Never need no scope try. try scope does not protect throwing body calls. Body errors or outward return/break/continue cancel and drain both forms; pending control transfers retain their owned value, frame and valid loans. Parent cancellation already entered at a legal checkpoint wins, with secondary failures reported separately. Complete execution remains unqualified (spec 10.7)."
     },

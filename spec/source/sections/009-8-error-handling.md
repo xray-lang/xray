@@ -591,31 +591,7 @@ payload
 
 #### 模式 2：throw + catch 用于库 API
 
-```xray @run
-enum ConfigErr { Missing { field: string } }
-
-fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
-    print("port:", cfg["port"])
-}
-
-fn main() {
-    try {
-        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
-        requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
-    } catch (e: ConfigErr) {
-        match (e) {
-            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
-        }
-    }
-}
-
-try main()
-```
-```output
-port: 8080
-missing field: port
-```
+完整类型及操作族的当前实现资格见 §17。
 
 #### 模式 3：`??` 提供默认值
 
@@ -1315,31 +1291,7 @@ payload
 
 #### Pattern 2: throw + catch for library APIs
 
-```xray @run
-enum ConfigErr { Missing { field: string } }
-
-fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
-    print("port:", cfg["port"])
-}
-
-fn main() {
-    try {
-        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
-        requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
-    } catch (e: ConfigErr) {
-        match (e) {
-            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
-        }
-    }
-}
-
-try main()
-```
-```output
-port: 8080
-missing field: port
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 #### Pattern 3: `??` for default values
 

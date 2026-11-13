@@ -100,6 +100,7 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
+           |  'copy' UnaryExpr
            |  'move' UnaryExpr
            |  'await' UnaryExpr
            |  GoExpr
@@ -211,6 +212,7 @@ Statement ::= ExprStmt
            |  WhileStmt
            |  ForStmt
            |  ForInStmt
+           |  ForRefStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -240,6 +242,8 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
@@ -454,6 +458,7 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
+           |  'copy' UnaryExpr
            |  'move' UnaryExpr
            |  'await' UnaryExpr
            |  GoExpr
@@ -565,6 +570,7 @@ Statement ::= ExprStmt
            |  WhileStmt
            |  ForStmt
            |  ForInStmt
+           |  ForRefStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -595,6 +601,8 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?

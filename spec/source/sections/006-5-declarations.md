@@ -65,7 +65,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -220,6 +220,8 @@ READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保�
 
 可复制类型（包括 Array）也可声明 `move` 参数或值类型 receiver；class 方法仍不声明 receiver 模式。初始化、显式移动后使用、不可复制资源消费和活动借用均须检查，详见 §2.14.5。参数模式参与函数类型身份，不隐式互换 READ/ref/move。消费、资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
 
+消费参数在函数入口取得局部拥有式责任。隐式最后使用移动与显式 `move` 的可观察结果相同，释放顺序见 §16.8，完整实现资格见 §17。
+
 普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
 
 #### 5.2.5 rest 参数
@@ -282,7 +284,7 @@ greet()                   // 必须显式调用
 enum ConfigErr { Missing }
 
 fn loadPort(path: string) throws(ConfigErr) -> i64 {
-    if path == "" { throw ConfigErr.Missing }
+    if (path == "") { throw ConfigErr.Missing }
     return 8080
 }
 
@@ -753,28 +755,7 @@ fn main() {
 main()
 ```
 
-运算符重载（用具名变量调用）：
-
-```xray
-class Vec2 {
-    x: i64
-    y: i64
-    init(x: i64, y: i64) { this.x = x; this.y = y }
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-}
-
-fn main() {
-    var a = Vec2(1, 2)
-    var b = Vec2(3, 4)
-    var sum = a + b
-    print(sum.x)   // => 4
-    print(sum.y)   // => 6
-}
-
-main()
-```
+运算符重载及具名变量调用遵循上述合同，完整实现资格见 §17。
 
 ### 5.4 `struct` 声明
 
@@ -967,28 +948,9 @@ class Buffer implements SizedCollection<i64> {
 }
 ```
 
-#### 完整可运行示例
+#### 实现资格
 
-接口 + `implements` + 多态：
-
-```xray
-interface Shape {
-    area() -> f64
-}
-
-class Circle implements Shape {
-    r: f64
-    init(r: f64) { this.r = r }
-    area() -> f64 { return 3.14159 * this.r * this.r }
-}
-
-fn main() {
-    var s: Shape = Circle(2.0)
-    print(s.area())   // => 12.56636
-}
-
-main()
-```
+接口、`implements` 和多态遵循上述合同，完整实现资格见 §17。
 
 ### 5.6 `enum` 声明
 
@@ -1366,7 +1328,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -1521,6 +1483,8 @@ A `ref` argument must be an exactly typed writable place, not a `const`, READ pa
 
 Copyable types, including Array, may also declare `move` parameters or value-type receivers; class methods still do not declare receiver modes. Initialization, use after explicit movement, consumption of noncopyable resources and active borrows require checking; see §2.14.5. Parameter modes participate in function type identity; READ/ref/move do not implicitly interchange. See §17 for current implementation qualification of consumption, resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
 
+A consuming parameter acquires local owning responsibility at function entry. An implicit last-use move and explicit `move` have the same observable result. Release order is specified in §16.8, with complete implementation qualification in §17.
+
 Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
@@ -1583,7 +1547,7 @@ greet()                   // must be called explicitly
 enum ConfigErr { Missing }
 
 fn loadPort(path: string) throws(ConfigErr) -> i64 {
-    if path == "" { throw ConfigErr.Missing }
+    if (path == "") { throw ConfigErr.Missing }
     return 8080
 }
 
@@ -2045,28 +2009,7 @@ fn main() {
 main()
 ```
 
-Operator overloading (call with named values):
-
-```xray
-class Vec2 {
-    x: i64
-    y: i64
-    init(x: i64, y: i64) { this.x = x; this.y = y }
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-}
-
-fn main() {
-    var a = Vec2(1, 2)
-    var b = Vec2(3, 4)
-    var sum = a + b
-    print(sum.x)   // => 4
-    print(sum.y)   // => 6
-}
-
-main()
-```
+Operator overloading and named-value calls obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.4 `struct` declaration
 
@@ -2259,28 +2202,9 @@ class Buffer implements SizedCollection<i64> {
 }
 ```
 
-#### Worked Examples
+#### Implementation Qualification
 
-Interface + `implements` + polymorphism:
-
-```xray
-interface Shape {
-    area() -> f64
-}
-
-class Circle implements Shape {
-    r: f64
-    init(r: f64) { this.r = r }
-    area() -> f64 { return 3.14159 * this.r * this.r }
-}
-
-fn main() {
-    var s: Shape = Circle(2.0)
-    print(s.area())   // => 12.56636
-}
-
-main()
-```
+Interfaces, `implements` and polymorphism obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.6 `enum` declaration
 

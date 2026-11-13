@@ -520,7 +520,7 @@ fn _routeSegments(path: string) -> Array<string> {
     var clean = _routePathOnly(path)
     if (clean == "/" || len(clean) == 0) { return [] }
     if (clean.runes().nth(0) == '/') { clean = clean.slice(1) }
-    return copy(try! clean.split("/"))
+    return copy (try! clean.split("/"))
 }
 
 fn _routeWildcardName(seg: string) -> string? {
@@ -1029,10 +1029,10 @@ fn _serverListen(router: _ServerRouter, port: i64, running: Atomic<bool>) -> boo
     var listener = _serverListenSocket(port)
     if (listener == null) { return false }
 
-    // `const` publishes this one-time deep copy into Xray's read-only shared
-    // domain.  Every connection coroutine receives the same route graph with
-    // zero-copy atomic retains; later builder mutations cannot reach it.
-    const snapshot: _ServerRouter = copy(router)
+    // `const` keeps this binding fixed.
+    // `copy router` retains the same `_ServerRouter` class identity.
+    // Connections using this binding refer to that same router.
+    const snapshot: _ServerRouter = copy router
     var healthy = true
     try {
         // The watcher converts an ordinary lifecycle transition into a failing
@@ -1882,12 +1882,12 @@ fn _requestFollowRedirects(options: HttpRequestOptions) -> bool {
 }
 
 fn _requestBody(options: HttpRequestOptions) -> Array<u8> {
-    if (options.body != null) { return copy(options.body!) }
+    if (options.body != null) { return copy options.body! }
     return Array<u8>(0)
 }
 
 fn _requestHeaders(options: HttpRequestOptions) -> Headers {
-    if (options.headers != null) { return copy(options.headers!) }
+    if (options.headers != null) { return copy options.headers! }
     return Headers()
 }
 

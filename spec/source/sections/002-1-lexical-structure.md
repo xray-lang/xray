@@ -107,7 +107,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | 关键字 | 用途 |
 |--|--|
 | `var` | 可变变量声明 |
-| `const` | 稳定绑定声明；在类型位置表达深只读能力 |
+| `const` | 固定绑定及其值语义部分 |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -600,7 +600,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | Keyword | Purpose |
 |--|--|
 | `var` | mutable variable declaration |
-| `const` | stable binding declaration; deep-read-only capability in type position |
+| `const` | fixes the binding and its value-semantic components |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |

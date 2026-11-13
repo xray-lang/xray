@@ -21,9 +21,7 @@
     },
     {
       "heading": "Operations",
-      "fences": [
-        "channel-basic-ops"
-      ]
+      "markdown": "Complete operation-family admission is specified separately in spec §17."
     },
     {
       "heading": "Timed operations",

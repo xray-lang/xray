@@ -213,7 +213,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | 关键字 | 用途 |
 |--|--|
 | `var` | 可变变量声明 |
-| `const` | 稳定绑定声明；在类型位置表达深只读能力 |
+| `const` | 固定绑定及其值语义部分 |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -765,7 +765,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 - 整数除法向零截断，非零余数与被除数同号；除数为零报错。任一有符号整数类型的 `MIN / -1` 按其位宽环绕为 `MIN`，`MIN % -1` 为零。
 - `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
+- 值的机器表示属于实现。精确整数静态类型保留位宽及有符号性，动态容器与各类型族的当前实现资格见 §17。
 
 #### 2.3.2 浮点类型
 
@@ -818,7 +818,7 @@ if (len(s) != 0) { }     // OK
 
 不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
 
-底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
+字符串跨任务保留逻辑值副本，遵循 §16.2 和 §16.3.1 的 Sendable 与发布规则。当前实现资格见 §17。
 
 #### 2.3.5 `rune`
 
@@ -911,38 +911,15 @@ var c: Array<string> = []         // 显式空数组
 
 `[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
 
-定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和拥有式容器等元素类型，因此可以递归组合：
+定长数组的语言合同允许 inline struct 字段、局部变量及递归组合的元素类型。
 
-```xray
-var bytes: [u8; 4] = [1, 2, 3, 4]
-var zero: [u8; 64] = [0; 64]
-var names: [string; 2] = ["a", "b"]
-var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
-```
+完整类型及操作族的当前实现资格见 §17。
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
 
-定长数组支持 `len(array)`、索引读取、可写 place 上的索引写入和 `ref` 参数传递。借用视图按 §2.4.2 区分共享 `Slice<T>` 与独占 `MutSlice<T>`：
+定长数组支持 `len(array)`、索引读取、可写 place 上的索引写入和 `ref` 参数传递。借用视图按 §2.4.2 区分共享 `Slice<T>` 与独占 `MutSlice<T>`。
 
-```xray
-var data: [u8; 4] = [5, 6, 7, 8]
-var view: MutSlice<u8> = data[1:4]
-view[1] = 99
-```
-
-```xray
-struct Packet {
-    magic: [u8; 4]
-    payload: [u8; 128]
-}
-
-var key: [u8; 4] = [1, 2, 3, 4]
-key[1] = 9
-
-fn first(packet: Packet) -> u8 {
-    return packet.magic[0]
-}
-```
+完整类型及操作族的当前实现资格见 §17。
 
 `[T; N]` 与 `Array<T>` 语义不同：
 
@@ -993,14 +970,7 @@ main()
 5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
 6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
 
-```xray
-fn rejected() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    bytes[0] = 3                    // E0382：共享借用仍存活
-    print(view[0])
-}
-```
+完整类型及操作族的当前实现资格见 §17。
 
 ##### 跨函数：返回来源合同
 
@@ -1008,15 +978,7 @@ fn rejected() {
 
 tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
 
-```xray
-fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // 唯一候选为 data
-}
-
-fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
-    return a                        // E0384：签名中有两个候选
-}
-```
+完整类型及操作族的当前实现资格见 §17。
 
 ##### 物化拥有式副本
 
@@ -1673,6 +1635,10 @@ print(len(a))               // 4
 
 `ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
 
+同一次调用的全部 `ref` 实参与 `ref` receiver 必须两两不重叠。同根路径在同一层分叉到不同 struct 或 class 字段时不相交，路径相等或一条是另一条前缀时重叠。同根索引路径一律视为重叠，包括不同常量索引，数组交换使用 `swap(i, j)`。不同根经 class 字段到达同一对象时，在运行时检查实际对象身份，发生重叠则 panic。同一 class 对象的不同字段仍不相交。其余不同根视为不相交。
+
+`for (ref …)` 在整个循环期间独占借用容器，循环体不得经其他路径访问容器或改变其长度。普通 `for-in` 保持快照语义。重叠及冲突访问使用 `E0382`，完整路径检查、运行时别名检查与引用迭代的实现资格见 §17。
+
 `Slice` 共享借用与 `MutSlice` 独占借用遵循 §2.4.2；class 字段借用还须保活对象并检查动态独占。底层 backing 共享不能成为取消这些检查的理由。反过来，普通 Array 逻辑副本不因共享 backing 自动成为借用。
 
 普通闭包的外层 `var` 捕获共享 cell，`const` 与可复制非视图的普通 READ 参数按值捕获。共享 cell 的身份不能伪装成不可逃逸的临时 loan；其存储和释放责任必须显式保留。被共享 cell 捕获的变量不能产生视图。视图捕获与借用回调的准入遵循 §2.4.2 的显式合同，不能从被调方实现或实参语法形状猜测。
@@ -1681,7 +1647,9 @@ print(len(a))               // 4
 
 消费参数或值类型的消费 receiver 转移持有权和最终析构责任，适用于可复制类型（包括 Array）与不可复制资源；class 方法不声明 receiver 模式。调用是否取得持有权由声明模式决定，不由具体 ABI 决定。默认模式下，可复制值仍可保留逻辑副本供调用后使用；显式 `move x` 则保证转移而不复制，源绑定失效，重新初始化前不可再用。未被所有相关路径重新初始化的循环再次消费也必须拒绝。READ 与 `ref` 参数本身是借用，不能被消费。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-独立的 `move x` 仅接受当前函数的已初始化局部变量、局部常量或消费参数绑定；不接受字段、索引、调用结果、模块绑定或 READ/ref 参数，也不能穿过活动借用。非平凡值均可显式移动，平凡标量也允许，编译器可提示其没有收益。`copy array` 使用前缀表达式拼写，普通 Array 复制仍保留逻辑副本。通用 type-position `const T` 已删除，不产生类型身份或转换。当前声明族的实现资格见 §17；这些语言规则不授予尚未完成的消费、视图或资源入口，也不继承旧唯一根、堆逃逸终态或整个图深冻结规则。
+独立的 `move x` 仅接受当前函数的已初始化局部变量、局部常量或消费参数绑定；不接受字段、索引、调用结果、模块绑定或 READ/ref 参数，也不能穿过活动借用。非平凡值均可显式移动，平凡标量也允许，编译器可提示其没有收益。`copy array` 使用前缀表达式拼写，普通 Array 复制仍保留逻辑副本。通用 type-position `const T` 已删除，不产生类型身份或转换。当前声明族的实现资格见 §17；这些语言规则不授予尚未完成的消费、视图或资源入口。
+
+编译器可在每条路径的最后一次拥有式使用处隐式移动。隐式移动与显式 `move` 的可观察结果相同，绑定与临时值的释放时机见 §16.8。当前实现资格见 §17。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -2365,7 +2333,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
 - `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
-- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy x` / `move`。
+- 捕获遵循 §7.4。`go` 实参与捕获必须满足 Sendable，闭包不得捕获外层 `var`。可复制值保留逻辑副本，身份类型保持身份。借用与同步规则继续适用，当前实现资格见 §17。
 
 ### 3.13 `match` 表达式
 
@@ -2619,6 +2587,17 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
 
+#### 引用迭代
+
+```ebnf
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` 与 `for (i, ref x in xs)` 用于 Array、定长数组和 MutSlice，迭代变量独占引用实际元素。`for (k, ref v in m)` 用于 Map，键保持只读，值引用实际 entry。循环开始时独占借用整个容器并完成必要的 COW 分离，每轮引用直接写入实际元素。
+
+循环期间不能经其他路径访问容器或改变其长度。每轮引用在该轮结束时终止，`continue` 开始下一轮，整个容器借用持续到循环退出。`break`、返回、错误、panic 和取消均终止离开的借用。普通 `for-in` 仍迭代快照。引用迭代及冲突检查的当前实现资格见 §17。
+
 ### 4.5 `match` 语句
 
 ```ebnf
@@ -2763,7 +2742,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // 退出时读取 2
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // 显式副本保持 1
     n = 2
 }                                      // 输出 saved 1，再输出 late 2
@@ -2771,7 +2750,7 @@ fn late_binding_and_copy() {
 
 **语义**：
 - `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
-- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy value` 或普通值绑定创建显式副本，再在块中读取该副本。
 - cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
@@ -2893,7 +2872,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -3048,6 +3027,8 @@ READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保�
 
 可复制类型（包括 Array）也可声明 `move` 参数或值类型 receiver；class 方法仍不声明 receiver 模式。初始化、显式移动后使用、不可复制资源消费和活动借用均须检查，详见 §2.14.5。参数模式参与函数类型身份，不隐式互换 READ/ref/move。消费、资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
 
+消费参数在函数入口取得局部拥有式责任。隐式最后使用移动与显式 `move` 的可观察结果相同，释放顺序见 §16.8，完整实现资格见 §17。
+
 普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
 
 #### 5.2.5 rest 参数
@@ -3110,7 +3091,7 @@ greet()                   // 必须显式调用
 enum ConfigErr { Missing }
 
 fn loadPort(path: string) throws(ConfigErr) -> i64 {
-    if path == "" { throw ConfigErr.Missing }
+    if (path == "") { throw ConfigErr.Missing }
     return 8080
 }
 
@@ -3581,28 +3562,7 @@ fn main() {
 main()
 ```
 
-运算符重载（用具名变量调用）：
-
-```xray
-class Vec2 {
-    x: i64
-    y: i64
-    init(x: i64, y: i64) { this.x = x; this.y = y }
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-}
-
-fn main() {
-    var a = Vec2(1, 2)
-    var b = Vec2(3, 4)
-    var sum = a + b
-    print(sum.x)   // => 4
-    print(sum.y)   // => 6
-}
-
-main()
-```
+运算符重载及具名变量调用遵循上述合同，完整实现资格见 §17。
 
 ### 5.4 `struct` 声明
 
@@ -3795,28 +3755,9 @@ class Buffer implements SizedCollection<i64> {
 }
 ```
 
-#### 完整可运行示例
+#### 实现资格
 
-接口 + `implements` + 多态：
-
-```xray
-interface Shape {
-    area() -> f64
-}
-
-class Circle implements Shape {
-    r: f64
-    init(r: f64) { this.r = r }
-    area() -> f64 { return 3.14159 * this.r * this.r }
-}
-
-fn main() {
-    var s: Shape = Circle(2.0)
-    print(s.area())   // => 12.56636
-}
-
-main()
-```
+接口、`implements` 和多态遵循上述合同，完整实现资格见 §17。
 
 ### 5.6 `enum` 声明
 
@@ -4333,7 +4274,7 @@ match (p) {
 
 ## 7. 作用域与名字解析 (Scoping)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_symbol.c`、`xanalyzer_escape.c`、`xaddressability.c`、`xanalyzer_visitor_stmt.c` 与 `src/analysis/xglobal_producer.c` 的 capture/storage plan。
+
 
 ### 7.1 词法作用域与提升
 
@@ -4420,110 +4361,25 @@ XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭�
 
 此族支持不可变按值捕获与普通var共享cell捕获；未使用的外层绑定不进入环境。共享cell只允许单实例内访问，不授予Sendable或跨worker能力；强环回收仍按§17.19保持OPEN。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
 
-### 7.3 所有权与 move
+### 7.3 所有权与 `move`
 
-Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
+可复制的值通过赋值、参数和返回保留逻辑副本。身份类型的副本指向同一身份。`move x` 保证转移时不复制，并使源绑定不可再用。允许的源位置与借用限制见 §2.14.5，参数模式见 §5.2.4。
 
-```xray
-var big_buffer = Array<u8>(1024 * 1024)
+编译器可在每条路径的最后一次拥有式使用处隐式移动。隐式移动与显式 `move` 的可观察结果相同，释放时机遵循 §16.8。相关优化及完整语法的实现资格见 §17。
 
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
+### 7.4 跨任务数据传递
 
-var t2 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big_buffer)        // OK：所有权转移
+跨任务传递要求类型满足 `Sendable`。可复制的 Sendable 值保留独立的逻辑副本，Sendable class 和同步句柄保留同一身份。可复制值无需额外标记即可作为显式参数传入。`move` 可用于保证转移时不复制，不可复制的 Sendable 资源遵循消费参数规则。
 
-print(len(big_buffer))    // 编译错误：move 后访问
-```
+`go` 闭包不得捕获外层 `var`，包括只读使用。需要该值时将它作为显式参数传入。共享可变身份经 `Channel`、`Atomic`、`sync.Mutex` 或 `sync.RwLock` 的同步操作访问。模块 `const` 的初始化、发布与可达身份分别遵循 §5.1.2、§16.9 和身份类型的同步规则。
 
-**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参与初始化器（参见 §5.1.4 / §10.8）：
-
-- `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
-- `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
-- 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `var dst = move src` / `const dst = move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner 或 const 能力。
-- 函数返回统一写 `return value`。返回边终结当前 continuation，编译器对 unique local 或 `move` 参数自动发布 owner-forward proof；`return move value` 不属于公开写法。
-
-### 7.4 协程数据传递规则（避免数据竞争）
-
-"保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
-
-所有跨 execution 边界（`go` 闭包、`go` 实参、Channel send、deferred task、线程入口和导出 callback）消费同一个已验证 capture plan。合法性由值的 **storage owner、provenance、可变性与类型表示**共同决定，不由 `var` / `const` 关键字单独决定：
-
-| Capture action | 适用值 | 边界行为 |
-|---|---|---|
-| inline value | 显式 go 实参中的标量、不可变小值 | 直接复制位表示 |
-| deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
-| move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
-| module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
-| synchronized ref | Channel、Task、Atomic 等受审计稳定身份 | 保留 verified synchronized domain 的引用 |
-| reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
-
-因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
-
-`go` 闭包还有一条更强、易记的表面规则：**不得捕获任何外层 `var`，无论闭包只读还是写入，也无论当前程序只启动一个还是多个协程。** 需要的数据必须作为 `go` 的显式实参传入，并在边界写清 `copy(...)`、`move` 或同步共享能力。多个协程共享可变状态只能通过 `Channel`、`Atomic`、`sync` 锁/句柄等受审计并发原语；直接捕获修改普通 `var` 是编译错误，`unsafe` 也不能放宽。
-
-```xray
-var local = 0
-go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
-```
-
-#### 正确姿势
-
-```xray
-// 方法 1：显式复制 execution-local graph
-var arr = [1, 2, 3]
-var t = go fn(data: Array<i64>) -> i64 {
-    data.push(4)            // 拷贝上修改，不影响原值
-    return len(data)
-}(copy(arr))
-print(arr)                  // [1, 2, 3] 未变
-
-// 方法 2：const 零拷贝只读（可被捕获）
-const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> i64 {
-    return c.rate
-}(config)
-
-// 方法 3：move 转移所有权
-var big = Array<u8>(1024)
-var t3 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big)
-// big 在此处不可访问
-
-// 方法 4：Channel 通信（可被捕获）
-const ch = Channel<i64>(10)
-var t4 = go fn(c: Channel<i64>) -> i64 {
-    return match (c.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
-    }
-}(ch)
-ch.send(42)
-```
+修改值参数时，先建立可变局部绑定。该绑定持有逻辑副本，修改遵循值语义。跨任务入口和同步原语的当前实现资格见 §17。
 
 ### 7.5 内存管理与对象生命周期
 
-Xray 采用多层内存管理：
+绑定在离开作用域时按 §16.8 释放所拥有的值，已转移的绑定除外。对象的最后一份强引用释放后进入引用计数销毁路径。借用保持原 owner 的生命周期，不取得一份独立所有权。
 
-| 存储 | 机制 | 释放时机 |
-|--|--|--|
-| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
-| 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| execution-local 回收域（一般局部对象） | 编译器插入的引用计数 + VM coroutine heap / AOT execution arena | 最后强引用释放时立即回收；引用环不被收集，随 physical coroutine 结束与域内残余图一起批量处置（§16.8） |
-| 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
-| Arena（底层临时分配） | 批量释放 | arena 结束 |
-
-**内存观察点**：
-- 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
-- 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
-- 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
-- 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
-
+环的处理分三层。L0 静态排除不可能成环的类型，L1 通过 `weak` 显式断开引用，L2 在任务结束时清空已登记身份对象的拥有式出边，再由普通引用计数释放。只有可能成环的身份对象进入 L2，具体边界见 §16.3。当前实现资格见 §17。
 
 READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，保存其逻辑值快照，不执行方法体。所得函数签名只包含显式参数与返回类型，结构体泛型实参先替换；原绑定后续写入不改变快照，身份句柄仍保持其身份语义。私有/protected访问在绑定处检查，声明内部可显式返回已授权的函数值，调用者不会因此取得直接成员访问权。函数值仍受所属Instance的撤销与清理约束，不隐含Sendable/no_suspend承诺。ref/move接收者不得退化为READ绑定。
 
@@ -5114,31 +4970,7 @@ payload
 
 #### 模式 2：throw + catch 用于库 API
 
-```xray @run
-enum ConfigErr { Missing { field: string } }
-
-fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
-    print("port:", cfg["port"])
-}
-
-fn main() {
-    try {
-        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
-        requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
-    } catch (e: ConfigErr) {
-        match (e) {
-            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
-        }
-    }
-}
-
-try main()
-```
-```output
-port: 8080
-missing field: port
-```
+完整类型及操作族的当前实现资格见 §17。
 
 #### 模式 3：`??` 提供默认值
 
@@ -5604,7 +5436,7 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，不要求 `copy(...)` 或 backing 唯一。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
+**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，无需额外复制标记。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
 ```xray @check
 var data = [10]
@@ -5734,31 +5566,7 @@ const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 
 **超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
 
-```xray
-const ch = Channel<i64>(10)
-ch.send(42)                             // 阻塞发送
-var v = match (ch.recv()) {
-    Recv.Value { value } -> value
-    Recv.Closed -> -1
-    _ -> -1
-}
-
-var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match (ch.tryRecv()) {
-    Recv.Value { value: next } -> print(next)
-    Recv.Empty -> print("empty")
-    Recv.Closed -> print("closed")
-    Recv.Timeout -> print("timeout")
-}
-
-ch.send(7)
-ch.close()
-for (msg in ch) {
-    print(msg)
-}
-
-var value = ch.recvOr(-1)
-```
+完整类型及操作族的当前实现资格见 §17。
 
 **载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
@@ -5804,7 +5612,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；向已关闭 channel 的发送分支被选中时与 `send` 相同，产生 `E0702` panic；`value` 与 `ch.send` 保持同一值传递合同，可复制 Sendable 值保留逻辑副本，身份类型保持身份，`move` 保证不复制。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -5842,69 +5650,33 @@ fn main() {
 main()
 ```
 
-```xray @check
-enum WorkerErr { Failed }
-fn worker(ok: bool) throws(WorkerErr) -> i64 {
-    if (!ok) { throw WorkerErr.Failed }
-    return 1
-}
-fn main() throws(TaskFailures<WorkerErr>) {
-    try scope(isolated) {
-        go(name: "first") worker(false)
-        go(name: "second") worker(true)
-    }
-}
-try main()
-```
+完整类型及操作族的当前实现资格见 §17。
 
 scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。默认 scope 因成员失败而取消其余成员后，主体若在等待其中某个成员时进入取消展开（§10.3），展开止于 scope 边界：scope 照常取消并 drain 其余成员，再按上表传播首个失败；这次取消不越过 scope 向外传播。scope 的隐式等待不引入取消展开。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
 
-### 10.8 `move` — 跨协程所有权转移
+### 10.8 `move` — 所有权转移
 
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。
+`move x` 保证转移时不复制，并使源绑定失效。允许的源是当前函数已初始化的局部变量、局部常量和消费参数，且不能穿过活动借用。字段、索引、调用结果、模块绑定及 READ/ref 参数不能作为源。被拒绝的移动保持源状态。
 
-**判定规则见 §2.14**：`move` 要求可重绑定的局部 `var` 根同时满足四条证据轴——绑定存活、根唯一、能力可变、无存活借用。语法上只接受标识符：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。move 后原变量在编译期标记为**已 moved**，再次引用是编译错误；被拒绝的 move 不污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
-
-跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.14 的唯一性证据，而不是另一套并发专用规则。
-
-```xray
-var buf = Array<u8>(1024 * 1024)
-
-// 移交给协程
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move buf)
-// 编译错误：buf has been moved
-// print(len(buf))
-
-// 移交给 channel
-const ch = Channel<Array<u8>>(1)
-var payload = Array<u8>(4096)
-ch.send(move payload)
-// 编译错误：payload has been moved
-```
-
-详见 §7.3、§7.4 关于 `var` / `const` 能力的协程传递规则。
+可复制 Sendable 值跨任务保留逻辑副本。不可复制 Sendable 资源经消费参数转移。移动不要求对象图只有一份物理引用，接收后的修改仍遵循值语义及 COW。编译器的隐式最后使用移动与显式移动具有相同可观察结果，见 §2.14.5、§7.3 和 §16.8。当前实现资格见 §17。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式所有权转移**——通过 `const`/同步能力、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
+`const` 固定绑定及其值语义部分，可达 class 和同步句柄保持身份。共享可变身份通过其同步操作访问。协程域使用显式导入的 `sync`，OS 线程域使用 `sys.Os*`。
 
-如确需互斥锁/原子操作，运行时层面提供：
+| 原语 | 合同 |
+|--|--|
+| `Channel<T>` | 同步发送与接收 Sendable 值 |
+| `Atomic<T>` | 经受控原子方法修改内部值 |
+| `sync.Mutex<T>` | `lock<U>(body: fn(ref T) -> U) -> U`，`tryLock<U>(body: fn(ref T) -> U) -> U?` |
+| `sync.RwLock<T>` | `read<U>(body: fn(T) -> U) -> U`，`write<U>(body: fn(ref T) -> U) -> U` |
+| `sys.OsMutex` / `sys.OsRwLock` 等 | 阻塞 OS 线程的同步操作 |
 
-| 原语 | 形态 | 说明 |
-|---|---|---|
-| Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
-| `Atomic<T>` | 无锁原子包装 | 对 `i64`/`f64`/`bool` 提供 C11 原子操作 |
-| `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
-| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
-
-> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`const` 同步句柄、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
+Mutex 与 RwLock 的回调默认不逃逸。写回调的 `ref T` 指向锁内实际值，不能存储或逃逸。获得独占锁后，值遵循 §16.3.1 的独占降带或 COW 规则，在解锁前重新提升可达对象。读回调使用普通 READ 值合同。协程域回调允许挂起，等待者不阻塞 worker。panic 或取消通过清理释放锁，已经完成的修改保留，锁不引入 poisoning 状态。具体入口的当前实现资格见 §17。
 
 #### `Atomic<T>` — 无锁原子类型
 
@@ -6003,33 +5775,19 @@ for (i in 0..1000) {
 
 ### 10.11 并发安全模型
 
-xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5 的定理：**不含 `unsafe` 块、且不使用 §16.9.5 所列逃逸口的程序不存在数据竞争，其行为等价于某个顺序一致的交错执行（SC-DRF）**。因此在安全子集内可以按"语句交错"推理，不需要理解 happens-before 细节；本节的规则表就是这条定理的强制手段。逃逸口清单与语言级同步边定义在 §16.9。
+安全子集的数据竞争自由保证与显式逃逸口见 §16.9.5。跨任务数据传递遵循以下语言规则，各入口的当前实现资格见 §17。
 
-下列规则由编译器强制：
-
-| 规则 | 强制 |
+| 规则 | 合同 |
 |--|--|
-| 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
-| execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
-| 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
-| 已发布 `const` 值与受审计同步句柄可按 verified plan 跨协程传递/捕获 | ✅ |
-| `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
-| Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 以 `const` 命名，只有受审计方法可执行同步内部修改 | ✅ |
+| Sendable | 跨任务的完整类型满足 Sendable，可复制值保留逻辑副本，身份类型保持身份 |
+| `go` 捕获 | 不得捕获外层 `var`，需要的值作为显式参数传入 |
+| 共享可变身份 | 经 Channel、Atomic 或锁等同步操作访问 |
 
-**编译期不覆盖的部分**：
-- Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
-- §16.9.5 的逃逸口（`unsafe`、`Array.mutPtr()`、`mem.*` 裸内存、`sys.Thread` 线程体、`CFn` 回调体）不在定理的保证范围内，其数据竞争后果是实现定义的。
+#### 10.11.1 安全边界与 C 回调
 
-#### 10.11.1 模型之外：`unsafe` 与 C 回调
+裸内存访问、`Ptr<T>` / `MutPtr<T>` 的地址有效性、对齐和别名正确性仍由 `unsafe` 使用者负责。`mem.volatileLoad`、`volatileStore`、`fence` 和 `pageAlloc` 不授予所有权或同步保证。
 
-上表的保证覆盖 Xray 值的所有权与能力判定。有三处**位于模型之外**，此时义务转移给使用者，`unsafe` 不放宽任何一条已有规则、也不提供任何替代保证：
-
-- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** 操作的是裸内存，没有所有权根、没有引用计数、也没有别名判定。编译器对这些地址不做任何假设，也不为它们提供 §2.14 的任何证据。用它们构造的共享结构，其数据竞争自由由使用者负责证明。
-- **`Ptr<T>` / `MutPtr<T>`** 有借用跟踪（§2.4.2），但跟踪只到 owner 的作用域为止；解引用的地址有效性、对齐与别名正确性由 `unsafe` 块的作者承担。
-- **`CFn` C 回调可能在任意 OS 线程上发生**，包括运行时并不管理的线程。回调体只能触及：传入的标量与裸指针、分配计划为共享的值（§16.3.1）、以及通过 `Channel` 转移进来的唯一根。回调体**不得**触及调用方协程的 coroutine-local 对象图——那些对象的引用计数在非原子带，跨线程接触即内存损坏。回调体也不得假定存在当前协程、当前 worker 或可用的调度器。
-
-这三处是模型的**边界**而不是漏洞：它们在源码上都必须显式写出（`unsafe` 块、`mem` 模块导入、`CFn` 声明），因此"哪些代码不受编译期保护"始终可以从源码审计出来。
+`sys.Thread` 体与 `CFn` 回调可能运行在任意 OS 线程。可达 Xray 值遵循相同的 Sendable 与发布规则，在其他线程访问前完成 §16.9.4 的提升。裸指针的外部并发访问仍由调用方负责。外部回调不能假定存在当前协程、worker 或调度器。上述接口的安全边界与实现资格见 §16.9.5 和 §17。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -6671,7 +6429,9 @@ fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不�
 
 Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
 
-Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy arr[start:end]`。
+
+`Array.swap(i, j)` 在同一数组内交换两个实际元素，先完成索引检查，再执行交换。它不建立两个可能重叠的 `ref` 实参。该方法的当前实现资格见 §17。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -6915,7 +6675,7 @@ print(len(empty))           // 0
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
 - `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<u8>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
-- `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
+- `net.copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`net.copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
 
@@ -6979,8 +6739,8 @@ TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, a
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
-| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
-| `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`mem.copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
+| `sync` | 协程域同步：`Mutex.lock(fn(ref T))` / `tryLock(fn(ref T))`、`RwLock.read(fn(T))` / `write(fn(ref T))`、`Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync`；锁回调、解锁发布与实现资格见 §10.9、§17 |
 | `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`threadYield()`、`pinToCpu()`、`onSignal()`；主机 CPU 拓扑统一使用 `os.cpuCount()`，协程友好延时统一使用 `time.sleep(ms)` |
 
 ### 15.10 并行
@@ -7019,118 +6779,33 @@ quoted导入`"std/path/posix"`／`"std/path/windows"`提供独立`PosixPath`／`
 
 ## 16. 运行时模型 (Runtime Model)
 
-> 真值源：`src/runtime/`、`src/vm/`、`src/runtime/mem/`、`docs/rules/architecture.md`。
+本节定义运行时语言合同。各后端及具体类型族的当前实现资格见 §17。
 
 ### 16.1 值表示
 
-Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
+值的机器表示属于实现。标量、struct、tuple、enum、可空值和定长数组可以使用寄存器、展平槽或聚合存储，语言不规定统一的值头、标签宽度或对象大小。静态类型、整数宽度、有符号性、值语义与身份语义在各后端保持一致。
 
-- **Descriptor（8 字节）**：`tag: u8`、`flags: u8`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
-- **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
-- **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
-- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
+`string`、`Array`、`Map` 和 `Set` 的 backing 可以共享并通过写时复制保持逻辑值独立。共享的物理表示不授予共享可变状态。具体后端与类型族的当前实现资格见 §17。
 
-| 值类型 | 内部表示 |
-|--|--|
-| `i64` | `XR_TAG_I64` + 64-bit signed payload |
-| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
-| `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
-| `null` | `XR_TAG_NULL` + zero payload |
-| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
-| 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
+### 16.2 跨任务的值与身份
 
-Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
-
-### 16.2 语义所有权域
-
-存储由**两个正交的轴**描述，任何一处混用都会得出错误结论：
-
-- **语义所有权域**（本节）：谁拥有这块存储、它活多久、跨执行边界时按什么规则迁移。这是**语义契约**。
-- **后端物化**（§16.2.1）：后端实际把它放在哪（内联、栈、静态数据、某个堆）。这是**实现选择**。
-
-> 真值源：`src/base/xstorage.h` 的 `XrSemanticStorageDomain`、`XrBackendMaterialization`、`XrTransferAction`。
-
-一个值恰好属于六个语义域之一：
-
-| 域 | 归属与生命周期 | 引用计数 | 典型来源 |
-|--|--|--|--|
-| **`EXEC_LOCAL`** | 当前执行体（协程）独占；随该执行体的堆一起结束 | 非原子 | 普通局部对象、字面量构造的容器与实例 |
-| **`TRANSFERABLE`** | 唯一所有权，可跨执行边界**整体移交**；移交后源侧不再可用 | 非原子 | `move` 的目标、跨协程传递的唯一值 |
-| **`CONST_SHARED`** | 已发布的不可变根，多个执行体并发只读共享 | 原子 | 发布后的 `const` 根、`freeze` 的结果 |
-| **`SYNC_SHARED`** | 受审计的并发句柄，多个执行体并发访问，同步由句柄自身保证 | 原子 | channel、mutex 等并发原语持有的值 |
-| **`MODULE_STATIC`** | 归属模块，活到模块卸载；**默认不提供并发安全性** | 按模块 owner | 顶层 `const` / `var` |
-| **`FOREIGN`** | 由 Xray 之外的分配器拥有；运行时不管理其生命周期 | 无 | FFI 指针、外部缓冲 |
-
-**域决定并发可见性与回收责任，不决定物理位置。** 例如 `EXEC_LOCAL` 的值可能被内联进持有者、放在栈上、或分配在执行堆上——三种物化都不改变"它随该协程结束"这一契约。
-
-#### 16.2.1 后端物化
-
-后端在满足语义域契约的前提下，为每个值选择一种物化：
-
-| 物化 | 含义 |
-|--|--|
-| `INLINE` | 内联在持有者的存储里，无独立地址身份 |
-| `STACK` | 函数帧上；随帧退出而失效，不可增长、不可释放 |
-| `STATIC_DATA` | 只读静态数据段（consteval 结果、字面量池） |
-| `EXEC_HEAP` | 当前执行体的堆（`XrCoroHeap`）；引用计数回收 |
-| `SYSTEM_HEAP` | 系统堆；跨执行体可见的对象走这里 |
-| `SROA` | 被标量替换后拆散到寄存器，聚合体本身不再具体存在 |
-| `EXTERNAL` | 外部分配器持有 |
-| `INVALID` | 未决定；出现在最终计划里即为内部错误 |
-
-> **改变物化不得授予更强的语义域或迁移能力。** 把一个 `EXEC_LOCAL` 的值物化到 `SYSTEM_HEAP` 不会让它变得可以跨执行体共享；反过来，把 `CONST_SHARED` 的值物化到栈上是非法的——它的域要求地址在共享期内稳定。物化是语义域的**下游**，永远不是理由。
-
-#### 16.2.2 跨执行边界的域迁移
-
-值跨越执行边界（闭包捕获进 `go`、送入 channel、作为 task 结果返回）时，由其**源域**与可变性决定一个迁移动作。这是编译期判定，不是运行时降级：
-
-| 动作 | 何时选用 | 语义 |
-|--|--|--|
-| `INLINE_COPY` | 标量、且非可变捕获 | 按值复制，两侧此后独立 |
-| `CONST_SHARE` | 源域为 `CONST_SHARED` | 共享同一不可变根，原子引用计数 |
-| `SYNC_SHARE` | 源域为 `SYNC_SHARED`，或捕获形态本身是并发句柄 | 共享同一句柄，同步由句柄保证 |
-| `MOVE_UNIQUE` | 源域为 `TRANSFERABLE` | 整体移交所有权，源侧此后不可用 |
-| `EXPLICIT_COPY` | **仅**源码写了 `copy(...)` | 物化一个独立的值再迁移 |
-| `MODULE_READ` | 源域为 `MODULE_STATIC` 且不可变 | 只读引用模块绑定 |
-| **`REJECT`** | **以上都不成立** | **编译错误** |
-
-`REJECT` 是这张表里最重要的一项：**跨执行边界没有隐式深拷贝兜底**。可变的模块绑定、可变或被重新赋值的普通捕获、没有 const/sync/move 证据的托管值，全部是编译错误而不是"悄悄拷一份"。需要独立副本时，源码必须显式写 `copy(...)`。
+跨任务边界保留可复制 Sendable 值的逻辑副本，Sendable class 和同步句柄保持同一身份。值的后续修改互不影响，共享可变身份只能经其同步操作访问。物理复制、写时复制和引用计数带由实现选择，并满足 §16.3.1。当前跨任务实现资格见 §17。
 
 ### 16.3 对象生命周期与回收
 
-- 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
-- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；执行局部回收域批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
-- **执行局部回收域边界（L2）**：每个物理协程拥有独立回收域。VM 用 per-coroutine Region heap 实现；hosted AOT 用 execution arena 登记仍然存活的普通 ARC 分配。无环对象仍在最后强引用处立即回收；协程结束时，回收域整体处置剩余对象图。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。跨执行发布必须先把共享或转移根的完整所有图从源域脱离；仅 MODULE_STATIC / CONST_SHARED / SYNC_SHARED 三个所有权域，以及主执行流的根回收域，可以存活到进程结束。
-- **宿主拥有式结果的关闭边界**：执行 owner 在所有 Call/Task 排空并撤去内部根后，处置没有外部 owned 根可达的执行残余图，并把其余完整图逻辑移交同一个宿主残余 owner。逻辑脱离不要求搬动物理地址或更换分配器与累计账本；它也不授予跨执行共享权限。宿主保留的值仍可按原类型和权限读、复制与修改。只要该宿主残余 owner 还有任意外部强根，后来形成或失去外根的环都留到 owner 结束；不得在每次释放时部分收环。最后一个外部根释放后，整体处置剩余图。普通 RC 归零仍立即析构，OPEN 执行域不扫描或收环。
-- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的执行局部回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
-- Xray 没有并发 tracing GC，也没有环收集器；函数调用与后向跳转处不保留任何 GC hook。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前执行局部回收域（VM coroutine heap 或 AOT execution arena；无当前 coroutine 时回退到 main/root 域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+普通对象由引用计数管理。最后一份强引用释放后销毁对象，并释放其拥有的出边。借用不会延长到 owner 之外。
+
+L0 在特化后判定类型是否可能成环，L1 允许通过 `weak` 显式断环。L2 只登记可能成环的身份对象，包括 class、闭包环境和被捕获可变绑定的 cell。含未知函数值、未闭合泛型或未知捕获的身份类型保守视为可能成环。`string`、`Array`、`Map`、`Set` 的 backing 以及 struct、enum 值本身不登记。
+
+任务结束时先释放任务根，再清空已登记存活对象的拥有式出边，由普通引用计数完成销毁。发布到其他任务的登记对象在发布前脱离源任务的回收域。该机制不直接批量释放对象内存，也不提供 tracing GC。共享环和长期运行的主任务中的环不因本条获得回收保证。当前实现资格见 §17。
 
 #### 16.3.1 引用计数的两个带
 
-引用计数只有一个字段，用**符号**区分两个带：
+对象的有符号计数区分本地带与共享带。本地带用正数表示引用数，共享带用负数的幅值表示引用数。共享带使用原子 retain/release，本地带使用仅由一个任务访问的快速路径。
 
-| 带 | 编码 | 使用者 | 原子性 |
-|--|--|--|--|
-| coroutine-local | 正数 | 普通局部对象图 | 非原子（relaxed 快路径） |
-| shared | 负数（`N` 个引用存为 `-N`） | const 发布值、同步句柄、模块/运行时对象 | 原子 |
+其他任务可观察一个值之前，发布方提升其可达的本地对象，并在已共享子图处停止。提升完成后才能发布。共享值对象不可原地修改。独占拥有一个计数为 −1 的值对象时，可仅将该对象降为 +1 后修改，子对象保持原带。其余修改先建立本地 COW 副本。仍由共享父对象公开持有的子对象不因计数为 −1 自动取得独占修改资格。
 
-热路径的符号测试把每个对象自动路由到正确的路径，因此两个带共存不需要额外分支。不可变的常驻对象存 sticky 值，永不参与计数。
-
-**对象落在哪个带是编译期决定的**，由该分配点的存储计划确定（§2.14.2 的能力轴 + 分配域），不是运行时转换：一个存活对象不会在跨边界时被静默改带。这条是承重的——运行时改带需要与并发的非原子读改写同步，而那正是非原子带成立的前提所排除的。
-
-因此跨执行边界只有两种合法形态：
-
-1. **共享**：值的分配计划本身就是 const-shared 或 sync-shared，从创建起就在原子带。`const` 发布值、`Channel` / `Atomic` / `Semaphore` 等受审计句柄属于此类。
-2. **转移**：`move` 把唯一根交出去，任一时刻只有一个所有者，因此非原子计数依然正确。
-
-**第 2 条的正确性直接依赖 §2.14 的唯一性证据。** 如果一个仍有别名或存活借用的根被转移出去，两个执行上下文会同时对同一个非原子计数做读改写——那不是数据竞争而是内存损坏（重复释放或提前释放）。这就是 §2.14 把闭包捕获与堆存储都算作证据的原因：所有权判定是引用计数正确性的前提，不只是一条编程纪律。
-
-真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，且没有任何放宽：线程体只能触及分配计划为共享的值，或通过 `Channel` 转移进来的唯一根。
-
-详见 `src/runtime/mem/`、`src/shared/xr_obj_header.h`。
+身份对象、驻留缓存和 weak 句柄遵循同一发布不变量。weak 句柄在跨任务前提升，共享 weak 操作使用原子同步。共享对象可由任意线程释放。实现可以复制无身份的小值，或将整体独占移交的对象图保持本地，但可观察行为与语言合同一致。提升点见 §16.9.4，当前实现资格见 §17。
 
 ### 16.4 协程调度
 
@@ -7146,26 +6821,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - `process`（全局内置，无需 import）：进程自身信息。
 - `os`（需 `import os`）：操作系统、环境、进程控制。
 
-```xray
-// 进程自身信息 — 全局对象
-process.file              // 当前脚本路径（与 __file__ 等价）
-process.args              // Array<string>，进程命令行参数
-process.dir               // 脚本所在目录（与 __dir__ 等价）
-
-// OS / 环境 — 需 import
-import os
-os.getenv("PATH")         // 读取环境变量 -> string?
-os.environ()              // 获取全部环境变量 -> Map<string, string>
-os.exit(0)                // 退出进程
-os.getpid()               // 进程 ID
-os.getcwd()               // 当前工作目录
-os.hostname()             // 主机名
-os.tmpdir()               // 临时目录
-os.platform()             // "darwin" / "linux" / "windows"
-os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
-os.sep()                  // 路径分隔符
-os.eol()                  // 行尾
-```
+完整类型及操作族的当前实现资格见 §17。
 
 > **命名约定**：`os.*` 以 POSIX 函数名为主（`getenv` / `getcwd` / `getpid`）；不随 Node.js。Node 风格的 `process.env` 映射不提供，请用 `os.getenv(name)` / `os.environ()`。
 
@@ -7196,21 +6852,15 @@ class PanicInfo {
 
 `throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `PanicInfo`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
 
-### 16.8 对象回收与析构时机契约
+### 16.8 绑定释放与临时值生命周期
 
-**回收点是精确的，且没有例外**：对象在它的最后一个强引用被释放的那一刻回收。VM 与 AOT 在这一点上给出相同的答案。
+所有离开作用域的路径先按 LIFO 执行该作用域的 `defer`，再按声明的逆序释放仍拥有值的局部绑定。已交出所有权的绑定不再释放原值。赋值在新值安装后释放被替换的旧值。
 
-- 这条承诺之所以能是全称的，是因为回收只有引用计数这一个机制。运行时没有环收集器、没有 tracing GC、没有任何"某次 GC 时"的不确定时点（任务 247）。
-- 唯一不由 RC 回收的形态是**引用环**，而它同样是确定的：环不由运行时收集，其泄漏范围由执行局部回收域边界封顶（§16.3 的 L2）；域结束时处置残余图不是环收集。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
-- 仍**不提供**用户可见的确定性析构（destructor / finalizer / `Drop`）表面：程序不得依赖某个类型的析构钩子是否存在、以何顺序运行、或运行在哪个线程。精确的是**回收时刻**，不是"你能挂一段代码上去"。
+所有权可在拥有式存储、消费参数、返回、逃逸捕获、`go` 或发送处交出。编译器可在每条路径的最后一次拥有式使用处隐式移动，结果与显式 `move` 相同。只有部分路径交出时，其余路径仍在作用域退出时释放。不含可达身份的纯值在最后一次使用后可提前释放。class、同步句柄、Channel、Task、资源和函数值等可达身份保持上述可观察释放时机，未知泛型保守按含身份处理。
 
-唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+临时值在完整语句结束时释放，已经转移的除外。READ 和 `ref` 参数是借用，由原 owner 管理释放。消费参数在函数入口成为局部拥有式绑定，捕获随闭包环境存活，任务参数由任务拥有。最后一份强引用释放时进入普通 RC 销毁路径，环的边界见 §16.3。
 
-**`defer` 在每一条跨越其所属词法作用域的退出边上都执行**，包括：正常落出、`return`、`break`、`continue`、值错误向外传播、panic 展开，以及**协程被取消**。前端把每个注册点编译为程序点相关的静态 cleanup frontier；没有闭包、回调对象或动态运行时栈。取消不是一次外部击杀：可挂起帧仅保存定长 cleanup 区域标识与深度，调度器在该协程的 worker 上调用生成的静态 frontier，清理完成后才标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
-
-为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §4.9 / §8.3.1）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
-
-> 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
+`defer` 覆盖正常退出、返回、循环转移、错误传播、panic 和取消。当前 M2 清理体保持 NoSuspend/NoTask 义务，取消在清理期间屏蔽。后继阶段的清理效应和本节释放优化的当前实现资格见 §17。语言没有用户定义的析构或 `Drop` 回调，外部资源的显式清理使用 `defer`。
 
 ### 16.9 并发内存模型
 
@@ -7239,10 +6889,10 @@ class PanicInfo {
 | 1 | Channel send → recv | 第 k 次成功 `send(v)` **之前**发生的一切，happens-before 接收到 v 的那次 `recv` / `recvOr` / `tryRecv` / `for-in` 迭代**之后**发生的一切。有缓冲与无缓冲同规则 |
 | 2 | Channel recv → 后续 send（容量边） | 容量为 N 的 channel 上，第 k 次 `recv` 完成 happens-before 第 (k + N) 次 `send` 完成。这条边是把 `Channel(N)` 当信号量/限流器使用的正确性基础 |
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
-| 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
+| 4 | `go` 启动 | `go expr` 处对实参、capture values 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
 | 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
 | 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`Task.all` / `Task.first` / `Task.firstSuccess` 对它们实际观察到的每个终态建立第 5 条边；返回时仍在运行的余任务不建立边 |
-| 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
+| 7 | 模块 `const` 发布 | 顶层 `const` 的初始化与发布，happens-before 任何执行体对该绑定的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
 | 9 | 协程域锁 | `sync.Mutex` / `sync.RwLock`：一次 unlock synchronizes-with 后续成功的 lock |
 | 10 | OS 线程域原语 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`：同上；`sys.OsOnce` 的初始化 happens-before 所有观测到其已完成的调用 |
@@ -7261,21 +6911,21 @@ class PanicInfo {
 - sysmon 心跳与 `XRAY_SYSMON_CANCEL_MS` 取消标记。
 - 时间：`time.sleep` 与任何超时到期都不建立顺序关系。
 
-#### 16.9.4 引用计数提升规则
+#### 16.9.4 引用计数提升点
 
-普通局部对象使用**协程本地非原子 RC**（§16.3）。一个对象一旦可以被两个执行体同时到达，其引用计数**必须**已经提升为原子 RC；否则并发 retain/release 是数据竞争，后果是堆损坏。
+发布方在其他任务可观察之前完成可达本地对象的提升，已共享子图直接复用。共享可变身份在后续安装新值时也保持该不变量。提升同时使已登记对象脱离源任务回收域，计数带与独占修改规则见 §16.3.1。
 
-提升点是穷举的，每个提升点对可达图**深度生效**（对象自身及其可达的全部 managed 成员）：
+| 提升点 | 发布边界 |
+|--|--|
+| `go` 实参与捕获 | 任务开始执行前 |
+| Channel 发送，包括 `select` 发送分支 | 接收方可观察前 |
+| Task / scope 结果 | 终态结果发布前 |
+| 同步容器 | 新值对其他任务可见前，Mutex / RwLock 在解锁前重新提升 |
+| 模块 `const` | 初始化完成后的发布前 |
+| TaskLocal 提供的值 | 提供给任务前 |
+| `sys.Thread` 体与 `CFn` 可达值 | 线程或外部回调可访问前 |
 
-| 提升点 | 说明 |
-|---|---|
-| Channel `send` 的值 | 含 `move` 发送；接收方独占后仍保持原子 RC |
-| `go` / `scope` 的实参与 capture plan 成员 | 由 capture plan 静态确定 |
-| task / scope 的结果值 | 经由边 5 / 边 6 传出 |
-| `const` publish / seal 的可达图 | 一次性提升，之后图为深只读 |
-| 跨 `sys.Thread` 边界或 `CFn` 回调可达的一切 | 见 §16.9.5：这条通道当前不在安全子集内 |
-
-`string` 的提升在 §16.1 另有描述（短串协程本地、跨界按需提升为共享原子 RC）；那是同一规则在 `XrString` 上的实例，不是例外。
+这些规则不授予裸指针额外权限，§16.9.5 的安全边界继续适用。当前各发布入口的实现资格见 §17。
 
 #### 16.9.5 数据竞争自由的保证与边界
 
@@ -7284,7 +6934,7 @@ class PanicInfo {
 **逃逸口（穷举）**：以下能力可以引入数据竞争。它们的后果是**实现定义的，可能包含内存损坏**，证明责任在使用者：
 
 - `unsafe` 块内的一切原始内存访问
-- `Array.mutPtr()` 产生的可写原始指针（指针作为**实参**跨协程边界时不经过 capture plan 检查）
+- `Array.mutPtr()` 产生的可写原始指针（指针作为**实参**跨协程边界时不经过值发布检查）
 - `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
 - `sys.Thread` 的线程体
 - `CFn` C 回调体（可在任意线程被调用）
@@ -8574,7 +8224,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用（触发规则见 §2.13 N-12）|
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
-| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用冲突，包括 owner 失效、同次调用的 `ref` 路径重叠及引用迭代期间经其他路径访问容器；后两项的实现资格见 §17 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、逃逸闭包捕获、跨执行边界） |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
@@ -8583,7 +8233,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
-| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
+| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | 保留的旧分析器移动诊断编号；当前移动合同见 §2.14.5，具体入口准入见 §17|
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §4.9 / §8.3.1 |
 | `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | 闭包与捕获对象形成引用环 |
 | `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | weak 字段类型或执行域约束违规 |
@@ -8772,6 +8422,7 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
+           |  'copy' UnaryExpr
            |  'move' UnaryExpr
            |  'await' UnaryExpr
            |  GoExpr
@@ -8883,6 +8534,7 @@ Statement ::= ExprStmt
            |  WhileStmt
            |  ForStmt
            |  ForInStmt
+           |  ForRefStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -8912,6 +8564,8 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?

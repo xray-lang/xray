@@ -7,7 +7,7 @@ export struct U8x16 align(16) {
     private _lanes: [u8; 16]
 
     static fromLanes(lanes: [u8; 16]) -> U8x16 {
-        return U8x16{_lanes: copy(lanes)}
+        return U8x16{_lanes: copy lanes}
     }
 
     static splat(value: u8) -> U8x16 {
@@ -37,7 +37,7 @@ export struct U8x16 align(16) {
     }
 
     replace(lane: i64, value: u8) -> U8x16 {
-        var lanes = copy(this._lanes)
+        var lanes = copy this._lanes
         lanes[lane] = value
         return U8x16{_lanes: lanes}
     }
@@ -109,7 +109,7 @@ export struct U32x4 align(16) {
     private _lanes: [u32; 4]
 
     static fromLanes(lanes: [u32; 4]) -> U32x4 {
-        return U32x4{_lanes: copy(lanes)}
+        return U32x4{_lanes: copy lanes}
     }
 
     static splat(value: u32) -> U32x4 {
@@ -139,7 +139,7 @@ export struct U32x4 align(16) {
     }
 
     replace(lane: i64, value: u32) -> U32x4 {
-        var lanes = copy(this._lanes)
+        var lanes = copy this._lanes
         lanes[lane] = value
         return U32x4{_lanes: lanes}
     }
@@ -290,7 +290,7 @@ export struct U64x2 align(16) {
     private _lanes: [u64; 2]
 
     static fromLanes(lanes: [u64; 2]) -> U64x2 {
-        return U64x2{_lanes: copy(lanes)}
+        return U64x2{_lanes: copy lanes}
     }
 
     static splat(value: u64) -> U64x2 {
@@ -311,7 +311,7 @@ export struct U64x2 align(16) {
     }
 
     replace(lane: i64, value: u64) -> U64x2 {
-        var lanes = copy(this._lanes)
+        var lanes = copy this._lanes
         lanes[lane] = value
         return U64x2{_lanes: lanes}
     }
@@ -415,7 +415,7 @@ export struct U8x32 align(32) {
     private _lanes: [u8; 32]
 
     static fromLanes(lanes: [u8; 32]) -> U8x32 {
-        return U8x32{_lanes: copy(lanes)}
+        return U8x32{_lanes: copy lanes}
     }
 
     static load(data: Slice<u8>, offset: i64 = 0) -> U8x32 {
@@ -473,7 +473,7 @@ export struct U32x8 align(32) {
     private _lanes: [u32; 8]
 
     static fromLanes(lanes: [u32; 8]) -> U32x8 {
-        return U32x8{_lanes: copy(lanes)}
+        return U32x8{_lanes: copy lanes}
     }
 
     static splat(value: u32) -> U32x8 {
@@ -497,7 +497,7 @@ export struct U64x4 align(32) {
     private _lanes: [u64; 4]
 
     static fromLanes(lanes: [u64; 4]) -> U64x4 {
-        return U64x4{_lanes: copy(lanes)}
+        return U64x4{_lanes: copy lanes}
     }
 
     static load(data: Slice<u64>, offset: i64 = 0) -> U64x4 {
@@ -563,7 +563,7 @@ export struct U8x64 align(64) {
     private _lanes: [u8; 64]
 
     static fromLanes(lanes: [u8; 64]) -> U8x64 {
-        return U8x64{_lanes: copy(lanes)}
+        return U8x64{_lanes: copy lanes}
     }
 
     static load(data: Slice<u8>, offset: i64 = 0) -> U8x64 {
@@ -621,7 +621,7 @@ export struct U32x16 align(64) {
     private _lanes: [u32; 16]
 
     static fromLanes(lanes: [u32; 16]) -> U32x16 {
-        return U32x16{_lanes: copy(lanes)}
+        return U32x16{_lanes: copy lanes}
     }
 
     static splat(value: u32) -> U32x16 {
@@ -663,7 +663,7 @@ export struct U64x8 align(64) {
     private _lanes: [u64; 8]
 
     static fromLanes(lanes: [u64; 8]) -> U64x8 {
-        return U64x8{_lanes: copy(lanes)}
+        return U64x8{_lanes: copy lanes}
     }
 
     static load(data: Slice<u64>, offset: i64 = 0) -> U64x8 {

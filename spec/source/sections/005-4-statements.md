@@ -164,6 +164,17 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
 
+#### 引用迭代
+
+```ebnf
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` 与 `for (i, ref x in xs)` 用于 Array、定长数组和 MutSlice，迭代变量独占引用实际元素。`for (k, ref v in m)` 用于 Map，键保持只读，值引用实际 entry。循环开始时独占借用整个容器并完成必要的 COW 分离，每轮引用直接写入实际元素。
+
+循环期间不能经其他路径访问容器或改变其长度。每轮引用在该轮结束时终止，`continue` 开始下一轮，整个容器借用持续到循环退出。`break`、返回、错误、panic 和取消均终止离开的借用。普通 `for-in` 仍迭代快照。引用迭代及冲突检查的当前实现资格见 §17。
+
 ### 4.5 `match` 语句
 
 ```ebnf
@@ -308,7 +319,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // 退出时读取 2
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // 显式副本保持 1
     n = 2
 }                                      // 输出 saved 1，再输出 late 2
@@ -316,7 +327,7 @@ fn late_binding_and_copy() {
 
 **语义**：
 - `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
-- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy value` 或普通值绑定创建显式副本，再在块中读取该副本。
 - cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
@@ -540,6 +551,17 @@ Enum type domains and descriptor views are compiler-recognized static domains. T
 
 Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
 
+#### Reference Iteration
+
+```ebnf
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` and `for (i, ref x in xs)` iterate Array, fixed arrays and MutSlice with exclusive references to actual elements. `for (k, ref v in m)` iterates a Map with read-only keys and references to actual entry values. The loop exclusively borrows the entire container once and performs necessary COW detachment before iteration. Each iteration writes directly to its actual element.
+
+The body cannot access the container through another path or change its length. Each iteration reference ends with that iteration, and `continue` starts the next iteration while the container loan remains until loop exit. `break`, return, errors, panic and cancellation end the loans being exited. Ordinary `for-in` continues to iterate snapshots. Current qualification of reference iteration and conflict checks is specified in §17.
+
 ### 4.5 `match` Statement
 
 ```ebnf
@@ -686,7 +708,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // reads 2 at exit
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // explicit copy remains 1
     n = 2
 }                                      // prints saved 1, then late 2
@@ -694,7 +716,7 @@ fn late_binding_and_copy() {
 
 **Semantics**:
 - `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
-- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy value` or an ordinary value binding and read that copy from the block.
 - A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.

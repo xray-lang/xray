@@ -41,8 +41,7 @@
     {
       "heading": "scope — structured concurrency",
       "fences": [
-        "coro-scope",
-        "coro-isolated-scope"
+        "coro-scope"
       ],
       "markdown": "Default scope cancels siblings on child failure; isolated scope lets them continue. Both drain all members before exit, give panic priority on its independent channel, and never put panic in TaskFailures<E>. Let B be escaping body business errors and E direct-child declared errors. Default scope exposes B | E; isolated exposes B | TaskFailures<E>, with no child aggregate channel when E=Never. Both need no scope marker when B and E are Never. try scope marks exit propagation, not calls in its body; real try-body protection or individual call markers remain required. Abrupt body exit cancels and drains both forms, retaining owned pending control transfers and valid body lifetimes. Isolated body errors propagate directly before child business aggregates. Parent cancellation already entered at a legal checkpoint remains uncatchable. These target semantics still need compiler/runtime qualification; see spec 10.7."
     },

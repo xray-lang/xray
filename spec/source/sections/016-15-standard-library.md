@@ -46,7 +46,7 @@ order: 016
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
 - `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<u8>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
-- `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
+- `net.copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`net.copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
 
@@ -110,8 +110,8 @@ TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, a
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
-| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
-| `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`mem.copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
+| `sync` | 协程域同步：`Mutex.lock(fn(ref T))` / `tryLock(fn(ref T))`、`RwLock.read(fn(T))` / `write(fn(ref T))`、`Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync`；锁回调、解锁发布与实现资格见 §10.9、§17 |
 | `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`threadYield()`、`pinToCpu()`、`onSignal()`；主机 CPU 拓扑统一使用 `os.cpuCount()`，协程友好延时统一使用 `time.sleep(ms)` |
 
 ### 15.10 并行
@@ -190,7 +190,7 @@ The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
 - `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<u8>` buffer path for binary protocol hot loops without per-packet temporary strings.
-- `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
+- `net.copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `net.copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
 
@@ -254,8 +254,8 @@ Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` 
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
-| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
-| `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `mem.copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
+| `sync` | coroutine-domain synchronization: `Mutex.lock(fn(ref T))` / `tryLock(fn(ref T))`, `RwLock.read(fn(T))` / `write(fn(ref T))`, `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync`, with lock callbacks, unlock publication and qualification specified in §10.9 and §17 |
 | `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `threadYield()`, `pinToCpu()`, and `onSignal()`; use `os.cpuCount()` for host CPU topology and `time.sleep(ms)` for coroutine-friendly delays |
 
 ### 15.10 Parallelism

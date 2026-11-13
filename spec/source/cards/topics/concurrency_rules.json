@@ -13,7 +13,7 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "The following are settled target contracts; complete go, Task, resource, and synchronization families require separate implementation qualification under spec §17.\n\n- `const` fixes a binding and its value-semantic components, without freezing class objects or proving Sendable\n- go arguments and captures must be Sendable, checked over the complete type; COW or atomic reference counts alone are insufficient\n- a go closure may not capture any ordinary outer `var`, even for reads; pass copyable, Sendable local values explicitly and retain the caller's logical copy\n- const values and copyable non-view READ values may be captured by value when Sendable; qualified synchronization handles retain their synchronized identity\n- Array copying does not require `copy(array)` or unique backing; copying stops at class and synchronization identities\n- ref and Slice/MutSlice loans cannot enter go; noncopyable Sendable resources transfer only through declared consuming parameters\n- shared mutation requires qualified channels or synchronization objects; const, a short scope, or unsafe cannot waive the boundary requirements"
+      "markdown": "The following are settled target contracts; complete go, Task, resource, and synchronization families require separate implementation qualification under spec §17.\n\n- `const` fixes a binding and its value-semantic components, without freezing class objects or proving Sendable\n- go arguments and captures must be Sendable, checked over the complete type; COW or atomic reference counts alone are insufficient\n- a go closure may not capture any ordinary outer `var`, even for reads; pass copyable, Sendable local values explicitly and retain the caller's logical copy\n- const values and copyable non-view READ values may be captured by value when Sendable; qualified synchronization handles retain their synchronized identity\n- Array copying does not require `copy array` or unique backing; copying stops at class and synchronization identities\n- ref and Slice/MutSlice loans cannot enter go; noncopyable Sendable resources transfer only through declared consuming parameters\n- shared mutation requires qualified channels or synchronization objects; const, a short scope, or unsafe cannot waive the boundary requirements"
     },
     {
       "heading": "Typed Task waits",
@@ -31,9 +31,7 @@
     },
     {
       "heading": "Channels",
-      "fences": [
-        "channel-basic-ops"
-      ]
+      "markdown": "Complete operation-family admission is specified separately in spec §17."
     },
     {
       "heading": "Atomic",
@@ -42,6 +40,10 @@
     {
       "heading": "Synchronization handles",
       "markdown": "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts."
+    },
+    {
+      "heading": "Publication and release",
+      "markdown": "Before cross-task observation, promote reachable local objects and stop at shared subgraphs. Positive object counts are local and negative counts shared. Shared value objects remain immutable, with exclusive minus-one demotion or local COW for mutation. Release runs after scope defers, in reverse binding declaration order, excluding transferred ownership. Values with no reachable identity may release after their last use, and temporaries release at statement completion. Potentially cyclic identity objects alone enter task cycle domains. Current qualification is specified in spec §17."
     }
   ]
 }

@@ -212,7 +212,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | Keyword | Purpose |
 |--|--|
 | `var` | mutable variable declaration |
-| `const` | stable binding declaration; deep-read-only capability in type position |
+| `const` | fixes the binding and its value-semantic components |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
@@ -766,7 +766,7 @@ The `E` in `throws(E)` must be an error enum, a generic parameter constrained by
 - Integer division truncates toward zero; a nonzero remainder has the dividend's sign. A zero divisor faults. For every signed integer type, `MIN / -1` wraps to that type's `MIN`, and `MIN % -1` is zero.
 - `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
+- Machine representation is implementation-defined. Exact integer static types preserve width and signedness. Current qualification of dynamic containers and type families is specified in §17.
 
 #### 2.3.2 Floating-Point Types
 
@@ -830,7 +830,7 @@ if (len(s) != 0) { }     // OK
 
 Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
-Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool. Cross-execution strings consume a verified storage plan; the boundary does not promote or copy them implicitly.
+Strings preserve logical value copies across tasks under the Sendable and publication rules of §16.2 and §16.3.1. Current implementation qualification is specified in §17.
 
 #### 2.3.5 `rune`
 
@@ -923,38 +923,15 @@ This section defines the language contract, not implementation admission for eve
 
 `[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
 
-Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and owned-container element types, so fixed arrays compose recursively:
+The fixed-array language contract permits inline struct fields, local variables and recursively composed element types.
 
-```xray
-var bytes: [u8; 4] = [1, 2, 3, 4]
-var zero: [u8; 64] = [0; 64]
-var names: [string; 2] = ["a", "b"]
-var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
 
-Fixed arrays support `len(array)`, indexed reads, indexed writes to writable places, and `ref` parameters. Borrowed views distinguish shared `Slice<T>` from exclusive `MutSlice<T>` as specified in §2.4.2:
+Fixed arrays support `len(array)`, indexed reads, indexed writes to writable places, and `ref` parameters. Borrowed views distinguish shared `Slice<T>` from exclusive `MutSlice<T>` as specified in §2.4.2.
 
-```xray
-var data: [u8; 4] = [5, 6, 7, 8]
-var view: MutSlice<u8> = data[1:4]
-view[1] = 99
-```
-
-```xray
-struct Packet {
-    magic: [u8; 4]
-    payload: [u8; 128]
-}
-
-var key: [u8; 4] = [1, 2, 3, 4]
-key[1] = 9
-
-fn first(packet: Packet) -> u8 {
-    return packet.magic[0]
-}
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 `[T; N]` has different semantics from `Array<T>`:
 
@@ -1005,14 +982,7 @@ Let view `v` borrow owner `o`. Borrow liveness ends at last use, not at the end 
 5. A variable captured by an ordinary closure through a shared cell cannot produce a view. A closure capturing a view may be called immediately. Passing it as a parameter requires an explicit, frozen borrowing-call contract that prevents saving or returning it and guarantees completion before the call ends. Inference from the callee body cannot replace that public contract; a closure literal in argument position does not by itself prove no escape.
 6. A borrow in an ordinary call may survive suspension only while the owner remains alive and access permissions hold. Frame address stability is not such a proof. Generators initially must not save borrowed parameters.
 
-```xray
-fn rejected() {
-    var bytes: Array<u8> = [1, 2]
-    var view: Slice<u8> = bytes[:]
-    bytes[0] = 3                    // E0382: shared borrow is still live
-    print(view[0])
-}
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 ##### Across functions: return-source contracts
 
@@ -1020,15 +990,7 @@ The initial return-source rule uses the signature alone: the entire signature mu
 
 Each returned view inside a tuple / Optional attaches to that unique candidate and is checked separately for write permission. A writable result cannot originate from a read-only candidate. Returning two `MutSlice` values additionally requires an explicit non-overlapping construction contract; ordinary user functions cannot establish it merely from index arithmetic.
 
-```xray
-fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
-    return data[start:]              // data is the unique candidate
-}
-
-fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
-    return a                        // E0384: two signature candidates
-}
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 ##### Materializing an owned copy
 
@@ -1701,6 +1663,10 @@ A copy must acquire independently releasable result ownership; failure must not 
 
 `ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
 
+Every `ref` argument and `ref` receiver in one call must be pairwise non-overlapping. Same-root paths diverging into different struct or class fields at the same level are disjoint. Equal paths and prefix paths overlap. Same-root indexed paths always overlap, including different constant indices, so array exchange uses `swap(i, j)`. Different roots reaching the same object through class fields require a runtime identity check, with overlap causing a panic. Different fields of the same class object remain disjoint. Other different roots are disjoint.
+
+`for (ref …)` exclusively borrows its container for the entire loop. The body cannot access the container through another path or change its length. Ordinary `for-in` preserves snapshot semantics. Overlap and conflicting access use `E0382`. Qualification of complete path checks, runtime alias checks and reference iteration is specified in §17.
+
 Shared `Slice` and exclusive `MutSlice` borrows follow §2.4.2. Class-field borrows additionally retain the object and check dynamic exclusivity. Sharing a backing store cannot remove these checks. Conversely, ordinary Array logical copies do not become borrows merely because they share backing storage.
 
 Ordinary closures capture outer `var` bindings through shared cells; `const` and ordinary READ parameters of copyable non-view types are captured by value. Shared-cell identity must not be disguised as a temporary non-escaping loan; its storage and release responsibilities remain explicit. Variables captured through shared cells cannot produce views. View captures and borrowing callbacks require the explicit contracts in §2.4.2, not guesses from a callee body or argument syntax.
@@ -1709,7 +1675,9 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 A consuming parameter or value-type receiver transfers ownership and final destruction responsibility for copyable types, including Array, as well as noncopyable resources. Class methods do not declare receiver modes. The declaration determines ownership acquisition, independently of the concrete ABI. In the default mode, a copyable argument may retain a logical copy for later caller use; explicit `move x` guarantees transfer without copying and invalidates the source binding until reinitialization. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` parameters are borrows and cannot themselves be consumed. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points or inherit old unique-root, terminal heap-escape or whole-graph deep-freeze rules.
+Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points.
+
+The compiler may move implicitly at the last owning use on every path. Implicit movement and explicit `move` have the same observable result. Binding and temporary release timing is specified in §16.8, with current qualification in §17.
 
 #### 2.14.6 Struct-field copying and initialization
 
@@ -2393,7 +2361,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
 - `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
-- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy x` / `move` arguments.
+- Captures follow §7.4. `go` arguments and captures must satisfy Sendable, and closures cannot capture outer `var` bindings. Copyable values preserve logical copies and identity types retain identity. Loan and synchronization rules continue to apply, with current qualification in §17.
 
 ### 3.13 `match` Expression
 
@@ -2647,6 +2615,17 @@ Enum type domains and descriptor views are compiler-recognized static domains. T
 
 Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
 
+#### Reference Iteration
+
+```ebnf
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
+```
+
+`for (ref x in xs)` and `for (i, ref x in xs)` iterate Array, fixed arrays and MutSlice with exclusive references to actual elements. `for (k, ref v in m)` iterates a Map with read-only keys and references to actual entry values. The loop exclusively borrows the entire container once and performs necessary COW detachment before iteration. Each iteration writes directly to its actual element.
+
+The body cannot access the container through another path or change its length. Each iteration reference ends with that iteration, and `continue` starts the next iteration while the container loan remains until loop exit. `break`, return, errors, panic and cancellation end the loans being exited. Ordinary `for-in` continues to iterate snapshots. Current qualification of reference iteration and conflict checks is specified in §17.
+
 ### 4.5 `match` Statement
 
 ```ebnf
@@ -2793,7 +2772,7 @@ fn process() {
 fn late_binding_and_copy() {
     var n = 1
     defer { print("late", n) }        // reads 2 at exit
-    const saved = copy(n)
+    const saved = copy n
     defer { print("saved", saved) }   // explicit copy remains 1
     n = 2
 }                                      // prints saved 1, then late 2
@@ -2801,7 +2780,7 @@ fn late_binding_and_copy() {
 
 **Semantics**:
 - `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
-- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy value` or an ordinary value binding and read that copy from the block.
 - A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
@@ -2923,7 +2902,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -3078,6 +3057,8 @@ A `ref` argument must be an exactly typed writable place, not a `const`, READ pa
 
 Copyable types, including Array, may also declare `move` parameters or value-type receivers; class methods still do not declare receiver modes. Initialization, use after explicit movement, consumption of noncopyable resources and active borrows require checking; see §2.14.5. Parameter modes participate in function type identity; READ/ref/move do not implicitly interchange. See §17 for current implementation qualification of consumption, resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
 
+A consuming parameter acquires local owning responsibility at function entry. An implicit last-use move and explicit `move` have the same observable result. Release order is specified in §16.8, with complete implementation qualification in §17.
+
 Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
 #### 5.2.5 Rest parameters
@@ -3140,7 +3121,7 @@ greet()                   // must be called explicitly
 enum ConfigErr { Missing }
 
 fn loadPort(path: string) throws(ConfigErr) -> i64 {
-    if path == "" { throw ConfigErr.Missing }
+    if (path == "") { throw ConfigErr.Missing }
     return 8080
 }
 
@@ -3602,28 +3583,7 @@ fn main() {
 main()
 ```
 
-Operator overloading (call with named values):
-
-```xray
-class Vec2 {
-    x: i64
-    y: i64
-    init(x: i64, y: i64) { this.x = x; this.y = y }
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-}
-
-fn main() {
-    var a = Vec2(1, 2)
-    var b = Vec2(3, 4)
-    var sum = a + b
-    print(sum.x)   // => 4
-    print(sum.y)   // => 6
-}
-
-main()
-```
+Operator overloading and named-value calls obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.4 `struct` declaration
 
@@ -3816,28 +3776,9 @@ class Buffer implements SizedCollection<i64> {
 }
 ```
 
-#### Worked Examples
+#### Implementation Qualification
 
-Interface + `implements` + polymorphism:
-
-```xray
-interface Shape {
-    area() -> f64
-}
-
-class Circle implements Shape {
-    r: f64
-    init(r: f64) { this.r = r }
-    area() -> f64 { return 3.14159 * this.r * this.r }
-}
-
-fn main() {
-    var s: Shape = Circle(2.0)
-    print(s.area())   // => 12.56636
-}
-
-main()
-```
+Interfaces, `implements` and polymorphism obey the contracts above, with complete implementation qualification in §17.
 
 ### 5.6 `enum` declaration
 
@@ -4354,7 +4295,7 @@ match (p) {
 
 ## 7. Scoping and Name Resolution
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_symbol.c`, `xanalyzer_escape.c`, `xaddressability.c`, `xanalyzer_visitor_stmt.c`, and the capture/storage plans produced by `src/analysis/xglobal_producer.c`.
+
 
 ### 7.1 Lexical Scoping and Hoisting
 
@@ -4445,108 +4386,23 @@ Immutable value captures and ordinary var shared cells are admitted; unused exte
 
 ### 7.3 Ownership and `move`
 
-Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
+Assignment, parameters and returns preserve logical copies of copyable values. Copies of identity types refer to the same identity. `move x` guarantees transfer without copying and makes the source binding unavailable. Permitted source positions and loan restrictions are specified in §2.14.5, and parameter modes in §5.2.4.
 
-```xray
-var big_buffer = Array<u8>(1024 * 1024)
+The compiler may move implicitly at the last owning use on every path. An implicit move and explicit `move` have the same observable result, with release timing governed by §16.8. Implementation qualification for these optimizations and the complete syntax is specified in §17.
 
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(big_buffer)             // compile error: an execution-local heap value cannot cross bare
+### 7.4 Cross-Task Data Transfer
 
-var t2 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big_buffer)        // OK: ownership transferred
+Cross-task transfer requires `Sendable`. Copyable Sendable values preserve independent logical copies, while Sendable classes and synchronization handles preserve identity. Copyable values can be passed as explicit arguments without an additional marker. `move` can guarantee transfer without copying, and noncopyable Sendable resources obey consuming-parameter rules.
 
-print(len(big_buffer))    // compile error: accessed after move
-```
+A `go` closure cannot capture an outer `var`, including read-only uses. Pass the required value as an explicit argument. Shared mutable identities are accessed through synchronized operations of `Channel`, `Atomic`, `sync.Mutex` or `sync.RwLock`. Initialization, publication and reachable identities of a module `const` follow §5.1.2, §16.9 and the synchronization rules of its identity types.
 
-**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments and initializers (see §5.1.4 / §10.8):
+To mutate a value parameter, first create a mutable local binding. That binding holds a logical copy and mutations obey value semantics. Current qualification of cross-task entry points and synchronization primitives is specified in §17.
 
-- `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
-- `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
-- Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `var dst = move src` / `const dst = move src`: transfer a verifier-proven unique local `var` root to a new owner or const capability.
-- Function returns are always written `return value`. The return edge terminates the current continuation, so the compiler automatically publishes owner-forward proof for a unique local or `move` parameter; `return move value` is not a public form.
+### 7.5 Memory Management and Object Lifetime
 
-### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
+On scope exit, bindings release the values they own under §16.8, excluding bindings whose ownership has transferred. Releasing the final strong reference starts reference-counted destruction. A loan preserves its owner's lifetime and acquires no independent ownership.
 
-"Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
-
-Every cross-execution boundary (`go` closure, `go` argument, Channel send, deferred task, thread entry, and exported callback) consumes the same verified capture plan. Legality is determined jointly by the value's **storage owner, provenance, mutability, and type representation**, never by the `var` / `const` keyword alone:
-
-| Capture action | Values | Boundary behavior |
-|---|---|---|
-| inline value | scalars and small immutable values passed as explicit `go` arguments | copy the bits directly |
-| deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
-| move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
-| module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
-| synchronized ref | audited stable identities such as Channel, Task, and Atomic | retain a reference in the verified synchronized domain |
-| reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
-
-Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
-
-`go` closures additionally follow one simple, stronger surface rule: **they may not capture any outer `var`, whether they only read it or mutate it, and whether the current program launches one coroutine or many.** Pass data as explicit `go` arguments and state `copy(...)`, `move`, or an audited synchronization capability at the boundary. Mutable state shared by multiple coroutines must flow through `Channel`, `Atomic`, or audited `sync` locks/handles. Directly capturing and modifying an ordinary `var` is a compile error, and `unsafe` does not relax this rule.
-
-```xray
-var local = 0
-go fn() { local += 1 }()                 // ❌ compile error: cannot capture mutable local
-```
-
-#### Recommended patterns
-
-```xray
-// Pattern 1: explicitly copy an execution-local graph
-var arr = [1, 2, 3]
-var t = go fn(data: Array<i64>) -> i64 {
-    data.push(4)            // mutates the copy, original is unaffected
-    return len(data)
-}(copy(arr))
-print(arr)                  // [1, 2, 3] unchanged
-
-// Pattern 2: const, zero-copy read-only (capturable)
-const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> i64 {
-    return c.rate
-}(config)
-
-// Pattern 3: move ownership
-var big = Array<u8>(1024)
-var t3 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big)
-// big is inaccessible from this point
-
-// Pattern 4: Channel communication (capturable)
-const ch = Channel<i64>(10)
-var t4 = go fn(c: Channel<i64>) -> i64 {
-    return match (c.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
-    }
-}(ch)
-ch.send(42)
-```
-
-### 7.5 Memory Management and Object Lifetimes
-
-Xray uses a layered memory management strategy:
-
-| Storage | Mechanism | Reclamation |
-|--|--|--|
-| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
-| Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
-| Execution-local reclamation domain (ordinary local objects) | compiler-inserted reference counting plus a VM coroutine heap or AOT execution arena | immediately when the last strong reference is released; a reference cycle is not collected and the residual graph is disposed in bulk when the physical coroutine ends (§16.8) |
-| Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
-| Arena (low-level temporary allocations) | bulk free | at arena end |
-
-**Memory observation points**:
-- The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
-- The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
-- Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
-- No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
-
+Cycle handling has three layers. L0 statically excludes types that cannot form cycles, L1 uses `weak` to break references explicitly, and L2 clears owned outgoing edges of registered identity objects at task completion before ordinary reference counting releases them. Only potentially cyclic identity objects enter L2, under the boundaries in §16.3. Current implementation qualification is specified in §17.
 
 A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
 
@@ -5149,31 +5005,7 @@ payload
 
 #### Pattern 2: throw + catch for library APIs
 
-```xray @run
-enum ConfigErr { Missing { field: string } }
-
-fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
-    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
-    print("port:", cfg["port"])
-}
-
-fn main() {
-    try {
-        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
-        requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
-    } catch (e: ConfigErr) {
-        match (e) {
-            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
-        }
-    }
-}
-
-try main()
-```
-```output
-port: 8080
-missing field: port
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 #### Pattern 3: `??` for default values
 
@@ -5651,7 +5483,7 @@ var t3 = go fn() -> i64 {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
+**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without an additional copying marker. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
 ```xray @check
 var data = [10]
@@ -5781,31 +5613,7 @@ The element type must be known at construction: write `Channel<T>(n)` or provide
 
 **Timeout semantics**: `ms` must be an `i64` in `0..86_400_000`; an out-of-range value raises `NumericRange` before the Channel operation. Zero milliseconds performs one queue attempt. A positive duration establishes one monotonic deadline at the first attempt; repeated waits or registration cannot extend it. The host must supply a valid clock; a failed, zero or backward reading raises `HostError` rather than becoming a timeout. A closed send returns `SendResult.Closed`; a closed and drained receive returns `Recv.Closed`. Evaluate the receiver, message and duration once in source order, including Unit message side effects, and retain those values across waits. The first atomic terminal transition arbitrates peer completion against timeout/cancellation; a committed delivery cannot be withdrawn. Both methods conservatively may suspend, including a statically zero duration.
 
-```xray
-const ch = Channel<i64>(10)
-ch.send(42)                             // blocking send
-var v = match (ch.recv()) {
-    Recv.Value { value } -> value
-    Recv.Closed -> -1
-    _ -> -1
-}
-
-var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match (ch.tryRecv()) {
-    Recv.Value { value: next } -> print(next)
-    Recv.Empty -> print("empty")
-    Recv.Closed -> print("closed")
-    Recv.Timeout -> print("timeout")
-}
-
-ch.send(7)
-ch.close()
-for (msg in ch) {
-    print(msg)
-}
-
-var value = ch.recvOr(-1)
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 **Payload ownership**: `Channel<T>` requires copyable, storable, Sendable `T`. Sending an ordinary value preserves a logical copy, including independent later Array mutations. Class and synchronization handles retain their shared identity; sending does not clone identity, and `const` never substitutes for Sendable evidence.
 
@@ -5851,7 +5659,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; a selected send arm on a closed channel panics with `E0702`, exactly like `send`; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; a selected send arm on a closed channel panics with `E0702`, exactly like `send`; `value` follows the same value-transfer contract as `ch.send`. Copyable Sendable values preserve logical copies, identity types preserve identity, and `move` guarantees transfer without copying.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -5889,69 +5697,33 @@ fn main() {
 main()
 ```
 
-```xray @check
-enum WorkerErr { Failed }
-fn worker(ok: bool) throws(WorkerErr) -> i64 {
-    if (!ok) { throw WorkerErr.Failed }
-    return 1
-}
-fn main() throws(TaskFailures<WorkerErr>) {
-    try scope(isolated) {
-        go(name: "first") worker(false)
-        go(name: "second") worker(true)
-    }
-}
-try main()
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 Scope-induced child cancellation is not a failure, and independently cancelled members are not wrapped as business errors or aggregate items. Once the parent enters cancellation unwinding at a legal suspension checkpoint, scope cancels and drains members, then continues uncatchable parent cancellation; member failures are secondary diagnostics. A cancellation request alone does not mutate frames, resume positions or terminal state. After a default scope cancels its remaining members because one member failed, a body that enters cancellation unwinding while waiting on one of those members (§10.3) unwinds only to the scope boundary: the scope still cancels and drains the remaining members and then propagates the first failure under the table above; that cancellation never propagates past the scope. Implicit scope waiting starts no cancellation unwinding. Panic escaping cleanup always follows the terminal rule in §8.2.5. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task.
 
-### 10.8 `move` — cross-coroutine ownership transfer
+### 10.8 `move` — Ownership Transfer
 
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
 
-`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments.
+`move x` guarantees transfer without copying and invalidates the source binding. Sources are initialized local variables, local constants and consuming parameters of the current function, with no active loan crossed. Fields, indices, call results, module bindings and READ/ref parameters cannot be sources. A rejected move preserves source state.
 
-**The decision procedure is §2.14**: `move` requires a rebindable local `var` root that satisfies all four evidence axes at once — binding live, root unique, capability mutable, no live loan. Syntactically it accepts an identifier only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. After `move`, the variable is statically marked **moved**, and any later reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+Copyable Sendable values crossing tasks preserve logical copies. Noncopyable Sendable resources transfer through consuming parameters. Movement requires no single physical reference to the graph, and subsequent mutations still obey value semantics and COW. Implicit last-use movement and explicit movement have the same observable result, as specified in §2.14.5, §7.3 and §16.8. Current implementation qualification is specified in §17.
 
-A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.14, not on a separate concurrency-only rule.
+### 10.9 Synchronization Primitives
 
-```xray
-var buf = Array<u8>(1024 * 1024)
+`const` fixes the binding and its value-semantic components, while reachable classes and synchronization handles retain identity. Shared mutable identities are accessed through synchronized operations. Explicitly imported `sync` serves coroutines, and `sys.Os*` serves OS-thread contexts.
 
-// hand off to a coroutine
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move buf)
-// compile error: buf has been moved
-// print(len(buf))
+| Primitive | Contract |
+|--|--|
+| `Channel<T>` | Synchronized send and receive of Sendable values |
+| `Atomic<T>` | Internal mutation through controlled atomic methods |
+| `sync.Mutex<T>` | `lock<U>(body: fn(ref T) -> U) -> U`, `tryLock<U>(body: fn(ref T) -> U) -> U?` |
+| `sync.RwLock<T>` | `read<U>(body: fn(T) -> U) -> U`, `write<U>(body: fn(ref T) -> U) -> U` |
+| `sys.OsMutex` / `sys.OsRwLock` and related types | Synchronization operations that block an OS thread |
 
-// hand off to a channel
-const ch = Channel<Array<u8>>(1)
-var payload = Array<u8>(4096)
-ch.send(move payload)
-// compile error: payload has been moved
-```
-
-See §7.3 and §7.4 for the coroutine transfer rules of `var` and `const` capabilities.
-
-### 10.9 Synchronisation primitives
-
-xray's default concurrency model favours **message passing + verified capability sharing + explicit ownership transfer**: `const`/synchronization capabilities, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
-
-When mutual exclusion or atomic operations are unavoidable, the runtime provides:
-
-| Primitive | Form | Description |
-|---|---|---|
-| Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
-| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `i64`/`f64`/`bool` |
-| `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
-| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
-
-> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, stable `const` synchronization handles, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
+Mutex and RwLock callbacks are nonescaping by default. A writing callback's `ref T` refers to the actual locked value and cannot be stored or escape. After exclusive locking, the value follows the exclusive demotion or COW rules of §16.3.1, with reachable objects re-promoted before unlock. Reading callbacks use the ordinary READ value contract. Coroutine-domain callbacks may suspend, and waiting leaves the worker available. Panic or cancellation releases the lock through cleanup, completed modifications remain, and locking introduces no poisoning state. Current entry-point qualification is specified in §17.
 
 #### `Atomic<T>` — lock-free atomic type
 
@@ -6048,35 +5820,21 @@ The call accepts no value or type arguments and returns unit; ordinary functions
 
 The two share a word root but are not the same suspension: `Task.yieldNow()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. Generator suspension and close follow §3.16.2–§3.16.3.
 
-### 10.11 Concurrency safety model
+### 10.11 Concurrency Safety Model
 
-xray eliminates data races at compile time through the type system. The precise statement is the theorem in §16.9.5: **a program containing no `unsafe` block and using none of the escape hatches listed in §16.9.5 has no data race, and its behaviour is equivalent to some sequentially consistent interleaving (SC-DRF)**. Inside the safe subset you may therefore reason in terms of interleaved statements without needing the happens-before detail; the rules below are how that theorem is enforced. The escape-hatch list and the language-level synchronisation edges are defined in §16.9.
+The data-race-freedom guarantee of the safe subset and its explicit escape hatches are specified in §16.9.5. Cross-task data transfer obeys the language rules below, with current entry-point qualification in §17.
 
-The compiler enforces:
-
-| Rule | Enforced |
+| Rule | Contract |
 |--|--|
-| Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
-| An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
-| Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
-| Published `const` values and audited synchronization handles may cross through a verified plan | ✅ |
-| `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
-| Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
+| Sendable | The complete cross-task type satisfies Sendable, copyable values preserve logical copies and identity types retain identity |
+| `go` captures | Outer `var` bindings cannot be captured, so required values pass as explicit arguments |
+| Shared mutable identities | Access uses synchronized operations such as Channels, Atomics or locks |
 
-**What compile-time enforcement does not cover**:
-- Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
-- The escape hatches of §16.9.5 (`unsafe`, `Array.mutPtr()`, raw `mem.*` memory, `sys.Thread` bodies, `CFn` callback bodies) sit outside the theorem's guarantee; a data race through them has implementation-defined consequences.
+#### 10.11.1 Safety Boundary and C Callbacks
 
-#### 10.11.1 Outside the model: `unsafe` and C callbacks
+Raw memory access and the address validity, alignment and aliasing of `Ptr<T>` / `MutPtr<T>` remain the responsibility of the `unsafe` author. `mem.volatileLoad`, `volatileStore`, `fence` and `pageAlloc` grant no ownership or synchronization guarantee.
 
-The guarantees above cover ownership and capability decisions for Xray values. Three places sit **outside the model**, where the obligation moves to the author. `unsafe` relaxes none of the existing rules and supplies no substitute guarantee:
-
-- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** operate on raw memory: no ownership root, no reference count, no aliasing decision. The compiler assumes nothing about those addresses and produces none of the §2.14 evidence for them. Data-race freedom of any shared structure built from them is the author's proof obligation.
-- **`Ptr<T>` / `MutPtr<T>`** are borrow-tracked (§2.4.2), but the tracking reaches only as far as the owner's scope. Address validity, alignment, and aliasing correctness at the dereference belong to the author of the `unsafe` block.
-- **A `CFn` C callback may run on any OS thread**, including threads the runtime does not manage. A callback body may reach only: the scalars and raw pointers passed in, values whose allocation plan is shared (§16.3.1), and a unique root transferred in through a `Channel`. It must **not** reach the calling coroutine's coroutine-local object graph — those objects' reference counts are in the non-atomic band, and touching them from another thread is memory corruption. A callback body must also not assume a current coroutine, a current worker, or an available scheduler.
-
-These three are the model's **boundary**, not holes in it: each has to be written explicitly in source (an `unsafe` block, a `mem` import, a `CFn` declaration), so which code runs outside compile-time protection is always auditable from the source.
+`sys.Thread` bodies and `CFn` callbacks may execute on arbitrary OS threads. Reachable Xray values obey the same Sendable and publication rules, completing promotion under §16.9.4 before another thread accesses them. External concurrent raw-pointer access remains the caller's responsibility. An external callback cannot assume a current coroutine, worker or scheduler. The safety boundaries and implementation qualification of these interfaces are specified in §16.9.5 and §17.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
@@ -6724,7 +6482,9 @@ Qualification is allocation=may_heap, failures=allocation,retain,limit and owner
 
 Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
 
-Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy arr[start:end]` for independent data.
+
+`Array.swap(i, j)` exchanges two actual elements of one array, checking both indices before exchange. It avoids constructing two potentially overlapping `ref` arguments. Current method qualification is specified in §17.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -6970,7 +6730,7 @@ The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
 - `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<u8>` buffer path for binary protocol hot loops without per-packet temporary strings.
-- `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
+- `net.copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `net.copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
 
@@ -7034,8 +6794,8 @@ Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` 
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
 | `runtime` | `liveBytes()` `liveObjects()` `info()` |
-| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
-| `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `mem.copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
+| `sync` | coroutine-domain synchronization: `Mutex.lock(fn(ref T))` / `tryLock(fn(ref T))`, `RwLock.read(fn(T))` / `write(fn(ref T))`, `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync`, with lock callbacks, unlock publication and qualification specified in §10.9 and §17 |
 | `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `threadYield()`, `pinToCpu()`, and `onSignal()`; use `os.cpuCount()` for host CPU topology and `time.sleep(ms)` for coroutine-friendly delays |
 
 ### 15.10 Parallelism
@@ -7074,118 +6834,33 @@ Quoted `"std/path/posix"` and `"std/path/windows"` expose independent `PosixPath
 
 ## 16. Runtime Model
 
-> Source of truth: `src/runtime/`, `src/vm/`, `src/runtime/mem/`, `docs/rules/architecture.md`.
+This section defines runtime language contracts. Current qualification of each backend and type family is specified in §17.
 
 ### 16.1 Value Representation
 
-Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
+Machine representation is implementation-defined. Scalars, structs, tuples, enums, nullable values and fixed arrays may use registers, flattened slots or aggregate storage. The language specifies no universal value header, tag width or object size. Static types, integer widths, signedness, value semantics and identity semantics remain consistent across backends.
 
-- **Descriptor (8 bytes)**: `tag: u8`, `flags: u8`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
-- **Payload (8 bytes)**: one of `i64`, `double`, or pointer, interpreted by the tag.
-- **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
+The backing of `string`, `Array`, `Map` and `Set` may be shared with copy-on-write preserving independent logical values. Shared physical representation grants no shared mutable state. Current backend and type-family qualification is specified in §17.
 
-| Value type | Internal representation |
-|--|--|
-| `i64` | `XR_TAG_I64` + 64-bit signed payload |
-| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
-| `bool` | `XR_TAG_BOOL` + `0/1` payload |
-| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
-| `null` | `XR_TAG_NULL` + zero payload |
-| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
-| Other objects | `XR_TAG_PTR` + heap type + heap pointer |
+### 16.2 Values and Identities Across Tasks
 
-Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
-
-### 16.2 Semantic Ownership Domains
-
-Storage is described by **two orthogonal axes**. Conflating them yields wrong conclusions:
-
-- **Semantic ownership domain** (this section): who owns the storage, how long it lives, and what rule governs its migration across an execution boundary. This is a **semantic contract**.
-- **Backend materialization** (§16.2.1): where the backend actually puts it (inline, stack, static data, some heap). This is an **implementation choice**.
-
-> Source of truth: `XrSemanticStorageDomain`, `XrBackendMaterialization`, and `XrTransferAction` in `src/base/xstorage.h`.
-
-Every value belongs to exactly one of six semantic domains:
-
-| Domain | Ownership and lifetime | Reference counting | Typical origin |
-|--|--|--|--|
-| **`EXEC_LOCAL`** | Owned exclusively by the current execution (coroutine); ends with that execution's heap | Non-atomic | Ordinary local objects; containers and instances built from literals |
-| **`TRANSFERABLE`** | Unique ownership that can be **handed over whole** across an execution boundary; unusable on the source side afterwards | Non-atomic | The target of a `move`; unique values passed between coroutines |
-| **`CONST_SHARED`** | A published immutable root, read concurrently by several executions | Atomic | A published `const` root; the result of `freeze` |
-| **`SYNC_SHARED`** | An audited concurrency handle accessed by several executions, where the handle itself provides the synchronization | Atomic | Values held by channels, mutexes, and other concurrency primitives |
-| **`MODULE_STATIC`** | Owned by the module, alive until it unloads; **not concurrency-safe by default** | Per module owner | Top-level `const` / `var` |
-| **`FOREIGN`** | Owned by an allocator outside Xray; the runtime does not manage its lifetime | None | FFI pointers, external buffers |
-
-**A domain fixes concurrency visibility and reclamation responsibility, not physical location.** An `EXEC_LOCAL` value may be inlined into its holder, placed on the stack, or allocated on the execution heap — none of the three changes the contract that it ends with that coroutine.
-
-#### 16.2.1 Backend Materialization
-
-Subject to the semantic domain's contract, the backend picks one materialization per value:
-
-| Materialization | Meaning |
-|--|--|
-| `INLINE` | Inlined into the holder's storage, with no separate address identity |
-| `STACK` | On the function frame; dies with the frame, cannot grow, cannot be freed |
-| `STATIC_DATA` | Read-only static data (consteval results, literal pools) |
-| `EXEC_HEAP` | The current execution's heap (`XrCoroHeap`), reclaimed by reference counting |
-| `SYSTEM_HEAP` | The system heap; objects visible across executions live here |
-| `SROA` | Scalar-replaced into registers; the aggregate no longer exists concretely |
-| `EXTERNAL` | Held by an external allocator |
-| `INVALID` | Undecided; reaching a final plan is an internal error |
-
-> **Changing materialization must never grant a stronger semantic domain or transfer capability.** Materializing an `EXEC_LOCAL` value on the `SYSTEM_HEAP` does not make it shareable across executions; conversely, materializing a `CONST_SHARED` value on the stack is invalid, because its domain requires a stable address for as long as it is shared. Materialization is **downstream** of the semantic domain, never a justification.
-
-#### 16.2.2 Domain Migration Across Execution Boundaries
-
-When a value crosses an execution boundary (captured into `go`, sent through a channel, returned as a task result), its **source domain** and mutability select a transfer action. This is decided at compile time; it is not a runtime downgrade:
-
-| Action | Selected when | Semantics |
-|--|--|--|
-| `INLINE_COPY` | Scalar, and not a mutable capture | Copied by value; the two sides are independent afterwards |
-| `CONST_SHARE` | Source domain is `CONST_SHARED` | Shares the same immutable root under atomic reference counting |
-| `SYNC_SHARE` | Source domain is `SYNC_SHARED`, or the capture is itself a concurrency handle | Shares the same handle; the handle provides synchronization |
-| `MOVE_UNIQUE` | Source domain is `TRANSFERABLE` | Ownership is handed over whole; the source is unusable afterwards |
-| `EXPLICIT_COPY` | **Only** where the source wrote `copy(...)` | Materializes an independent value, then migrates it |
-| `MODULE_READ` | Source domain is `MODULE_STATIC` and immutable | Reads the module binding by reference |
-| **`REJECT`** | **None of the above holds** | **Compile error** |
-
-`REJECT` is the most important row: **there is no implicit deep-copy fallback across an execution boundary.** A mutable module binding, an ordinary capture that is mutable or reassigned, and a managed value with no const/sync/move evidence are all compile errors rather than a silent copy. Where an independent copy is wanted, the source must say `copy(...)`.
+A cross-task boundary preserves logical copies of copyable Sendable values, while Sendable classes and synchronization handles retain identity. Subsequent value mutations are independent, and shared mutable identities are accessed through synchronized operations. Physical copying, copy-on-write and reference-count bands are implementation choices subject to §16.3.1. Current cross-task qualification is specified in §17.
 
 ### 16.3 Object Lifetime and Reclamation
 
-- Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
-- **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and bulk disposal of the execution-local reclamation domain bounds whatever remains (L2). The development-mode detector reports cycles; it never collects them.
-- **Execution-local reclamation-domain boundary (L2)**: every physical coroutine owns one domain. The VM realizes it as a per-coroutine Region heap; hosted AOT uses an execution arena that registers still-live ordinary ARC allocations. Acyclic objects still die immediately at their last strong reference; when the coroutine ends, the domain disposes the complete residual graph. Thus **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the coroutine that built it**. Cross-execution publication must first detach the complete owned graph of a shared or transferred root. Only `MODULE_STATIC` / `CONST_SHARED` / `SYNC_SHARED` domains and the main execution's root domain may live for the process lifetime.
-- **Closure boundary for host-owned results**: after all Calls and Tasks have drained and internal roots are withdrawn, the execution owner disposes its residual graph unreachable from external owned roots and logically transfers the remaining complete graph to one host residual owner. Logical detachment need not move physical addresses or replace the allocator and cumulative ledger; it grants no cross-execution sharing permission. Retained host values remain readable, copyable, and mutable under their original types and permissions. While any external strong root of that host residual owner remains, cycles formed or orphaned later remain until the owner ends; individual releases must not collect a subset of those cycles. The last external root ends the owner and disposes the complete remaining graph. Ordinary RC zero still destroys immediately, and an OPEN execution domain neither scans nor collects cycles.
-- **This property is unusual among pure reference-counted languages**: an Rc/RefCell cycle in Rust, or a strong-reference cycle in Swift, leaks until the process exits — both allocate refcounted objects on a process-wide heap, with no boundary smaller than the process that can be dropped wholesale. Xray's execution-local reclamation domain is that boundary, so forgetting a `weak` costs a **bounded** leak rather than a permanent one. This caps the lifetime; it is not cycle collection.
-- Xray has no concurrent tracing GC and no cycle collector; no GC hooks remain at function calls or backward branches.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current execution-local reclamation domain (a VM coroutine heap or AOT execution arena), falling back to the main/root domain when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
+Reference counting manages ordinary objects. Releasing the final strong reference destroys the object and releases its owned outgoing edges. A loan cannot outlive its owner.
 
-#### 16.3.1 The two reference-count bands
+L0 determines potential cycles after specialization, and L1 permits explicit cycle breaking with `weak`. L2 registers only potentially cyclic identity objects, including classes, closure environments and cells of captured mutable bindings. Identity types with unknown function values, unresolved generics or unknown captures are conservatively potentially cyclic. The backing of `string`, `Array`, `Map` and `Set`, and struct or enum values themselves, are unregistered.
 
-There is one reference-count field, and its **sign** selects between two bands:
+At task completion, task roots are released first, then owned outgoing edges of registered live objects are cleared, allowing ordinary reference counting to destroy them. Registered objects published to another task leave the source task's reclamation domain before publication. This mechanism clears edges and leaves memory release to reference counting. It provides no tracing GC. Shared cycles and cycles in a long-running main task receive no reclamation guarantee from this rule. Current implementation qualification is specified in §17.
 
-| Band | Encoding | Used by | Atomicity |
-|--|--|--|--|
-| coroutine-local | positive | ordinary local object graphs | non-atomic (relaxed fast path) |
-| shared | negative (`N` references stored as `-N`) | published const values, synchronization handles, module and runtime objects | atomic |
+#### 16.3.1 The Two Reference-Count Bands
 
-A sign test on the hot path routes each object to the right path automatically, so the two bands coexist without an extra branch. Immortal objects store a sticky value and never participate in counting.
+A signed object count distinguishes local and shared bands. Positive counts encode local references, and the magnitude of a negative count encodes shared references. The shared band uses atomic retain/release, and the local band uses a fast path accessed by one task.
 
-**Which band an object lands in is decided at compile time**, by the storage plan of its allocation site (the capability axis of §2.14.2 plus the allocation domain); it is not a runtime conversion, and a live object is never silently re-banded when it crosses a boundary. That is load-bearing: re-banding at runtime would have to synchronize with concurrent non-atomic read-modify-writes, which is exactly what the non-atomic band assumes cannot happen.
+Before another task can observe a value, the publisher promotes reachable local objects, stopping at already-shared subgraphs. Publication follows completed promotion. Shared value objects are immutable. An exclusively owned value object with count −1 may be demoted to +1 for mutation, leaving its children in their existing bands. Other mutations first create a local COW copy. A child still publicly owned by a shared parent gains no exclusive mutation permission solely from a count of −1.
 
-Only two shapes therefore cross an execution boundary:
-
-1. **Sharing**: the value's allocation plan is const-shared or sync-shared, so it is in the atomic band from creation. Published `const` values and audited handles such as `Channel`, `Atomic`, and `Semaphore` are of this kind.
-2. **Transfer**: `move` hands over a unique root. Exactly one owner exists at any moment, so a non-atomic count stays correct.
-
-**The correctness of the second shape rests directly on the uniqueness evidence in §2.14.** If a root that still has an alias or a live loan were transferred out, two execution contexts would read-modify-write one non-atomic counter — which is not a data race but memory corruption (a double free or a premature free). That is why §2.14 counts closure captures and heap stores as evidence: the ownership decision is a precondition for reference-count correctness, not merely a programming discipline.
-
-Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: a thread body may reach only values whose allocation plan is shared, or a unique root transferred in through a `Channel`.
-
-See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
+Identity objects, intern caches and weak handles obey the same publication invariant. Weak handles are promoted before crossing tasks, and shared weak operations use atomic synchronization. Shared objects may be released on any thread. An implementation may copy identity-free small values or keep a wholly exclusive transferred graph local, while preserving the observable language contract. Promotion points are specified in §16.9.4, and current qualification in §17.
 
 ### 16.4 Coroutine Scheduling
 
@@ -7201,26 +6876,7 @@ See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
 - `process` (global builtin, no import required): self-process information.
 - `os` (requires `import os`): operating system, environment, process control.
 
-```xray
-// Self-process information — global object
-process.file              // current script path (equivalent to __file__)
-process.args              // Array<string>, process command-line arguments
-process.dir               // script directory (equivalent to __dir__)
-
-// OS / environment — requires import
-import os
-os.getenv("PATH")         // read environment variable -> string?
-os.environ()              // get all environment variables -> Map<string, string>
-os.exit(0)                // exit the process
-os.getpid()               // process ID
-os.getcwd()               // current working directory
-os.hostname()             // host name
-os.tmpdir()               // temporary directory
-os.platform()             // "darwin" / "linux" / "windows"
-os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
-os.sep()                  // path separator
-os.eol()                  // end-of-line
-```
+Current implementation qualification of complete type and operation families is specified in §17.
 
 > **Naming convention**: `os.*` follows POSIX function names (`getenv` / `getcwd` / `getpid`); it does not track Node.js. Node-style `process.env` mapping is not provided — use `os.getenv(name)` / `os.environ()`.
 
@@ -7251,21 +6907,15 @@ Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the tr
 
 `throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `PanicInfo`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
 
-### 16.8 Object Reclamation & Finalizer Timing Contract
+### 16.8 Binding Release and Temporary Lifetimes
 
-**The reclamation point is exact, with no exceptions**: an object is reclaimed the moment its last strong reference is released. VM and AOT give the same answer here.
+Every scope-exit path first runs that scope's `defer` bodies in LIFO order, then releases still-owning local bindings in reverse declaration order. A binding that transferred ownership no longer releases the transferred value. Assignment installs the new value before releasing the replaced value.
 
-- The promise can be universal because reference counting is the only reclamation mechanism. There is no cycle collector, no tracing GC, and no indeterminate "some GC point" at runtime (task 247).
-- The one shape RC does not reclaim is a **reference cycle**, and that too is determinate: cycles are not collected at runtime, and what they cost is capped by the execution-local reclamation-domain boundary (L2 in §16.3). Disposing the residual graph when its domain ends is not cycle collection. Cycles are prevented by the compile-time type graph (L0) and broken explicitly with `weak` (L1); the development detector reports them and never reclaims.
-- What is still **not** offered is a user-visible deterministic destructor (destructor / finalizer / `Drop`) surface: a program must not depend on whether a type has a finalization hook, in what order such hooks run, or on which thread. What is exact is the **moment of reclamation**, not the ability to attach code to it.
+Ownership can transfer into owning storage, a consuming parameter, a return, an escaping capture, `go` or a send. The compiler may move implicitly at the last owning use on every path, with the same result as explicit `move`. When only some paths transfer ownership, the remaining paths release at scope exit. Values with no reachable identity may be released after their last use. Reachable identities such as classes, synchronization handles, Channels, Tasks, resources and function values preserve the observable release timing above. Unknown generics conservatively count as containing identity.
 
-The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+Temporaries are released at the end of the complete statement unless transferred. READ and `ref` parameters are loans whose original owners manage release. A consuming parameter becomes an owning local at function entry, captures live with the closure environment, and task arguments are owned by the task. Releasing the final strong reference starts ordinary RC destruction, with cycle boundaries specified in §16.3.
 
-**`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
-
-For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §4.9 / §8.3.1). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
-
-> Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
+`defer` covers normal exit, return, loop transfers, error propagation, panic and cancellation. Current M2 cleanup bodies retain NoSuspend/NoTask obligations, with cancellation masked during cleanup. Qualification of later cleanup effects and the release optimizations in this section is specified in §17. The language has no user-defined destructor or `Drop` callback. Explicit cleanup of external resources uses `defer`.
 
 ### 16.9 Concurrency Memory Model
 
@@ -7294,10 +6944,10 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 | 1 | Channel send → recv | Everything sequenced **before** the k-th successful `send(v)` happens-before everything sequenced **after** the `recv` / `recvOr` / `tryRecv` / `for-in` iteration that receives v. Buffered and unbuffered channels follow the same rule |
 | 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
 | 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
-| 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
+| 4 | `go` spawn | Evaluation of the arguments, capture values and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
 | 5 | Task completion → terminal observation | The task body's last action happens-before operations after a waiter successfully observes that terminal outcome through `await t`, `awaitResult()`, or `poll()`; a `null` poll establishes no completion edge and does not drive the child |
 | 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `Task.all` / `Task.first` / `Task.firstSuccess` establish edge 5 for every terminal outcome they actually observe; remaining tasks still running when they return establish no edge |
-| 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
+| 7 | Module `const` publication | Initialization and publication of a top-level `const` happens-before any agent's first read of that binding |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |
 | 9 | Coroutine-domain locks | `sync.Mutex` / `sync.RwLock`: an unlock synchronizes-with a later successful lock |
 | 10 | OS-thread-domain primitives | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`: as above; a `sys.OsOnce` initialisation happens-before every call that observes it as complete |
@@ -7312,25 +6962,25 @@ The following establish **no** happens-before and must not be used to synchronis
 - `Task.yieldNow()`: a scheduling yield point, not a synchronisation point.
 - `codegen.compilerFence()`: it only prevents memory-effecting operations from moving across that compiler scheduling point. It is not a CPU fence, establishes no happens-before, and cannot repair a data race (see §12).
 - Atomic operations with `Ordering.Relaxed`: they keep that location's accesses from tearing; they order nothing with respect to other locations.
-- Object reclamation, an RC reaching zero, or a cycle-collector run: reclamation timing is not observable semantics (§16.8), so it cannot carry an ordering relation.
+- Object reclamation or an RC reaching zero establishes no synchronization edge. The release timing in §16.8 therefore cannot carry a cross-agent ordering relation.
 - The sysmon heartbeat and the `XRAY_SYSMON_CANCEL_MS` cancellation flag.
 - Time: neither `time.sleep` nor any timeout expiry establishes ordering.
 
-#### 16.9.4 Reference-count promotion rules
+#### 16.9.4 Reference-Count Promotion Points
 
-Ordinary local objects use **coroutine-local, non-atomic RC** (§16.3). Once an object can be reached by two agents, its reference count **must** already have been promoted to atomic RC; otherwise concurrent retain/release is a data race whose consequence is heap corruption.
+The publisher promotes reachable local objects before another task can observe them, reusing already-shared subgraphs. Shared mutable identities preserve this invariant when installing new values later. Promotion also removes registered objects from the source task's reclamation domain. Count bands and exclusive mutation follow §16.3.1.
 
-The promotion points are exhaustive, and each applies to the reachable graph **deeply** (the object and every managed member reachable from it):
+| Promotion point | Publication boundary |
+|--|--|
+| `go` arguments and captures | Before the task begins execution |
+| Channel sends, including `select` send arms | Before the receiver can observe the value |
+| Task / scope results | Before publication of the terminal result |
+| Synchronized containers | Before another task can observe the new value, with Mutex / RwLock re-promotion before unlock |
+| Module `const` | Before publication after initialization |
+| Values provided by TaskLocal | Before provision to the task |
+| Reachable values of `sys.Thread` bodies and `CFn` callbacks | Before access by the thread or external callback |
 
-| Promotion point | Notes |
-|---|---|
-| The value of a Channel `send` | Including a `move` send; the value stays atomically counted after the receiver takes exclusive ownership |
-| `go` / `scope` arguments and capture-plan members | Determined statically by the capture plan |
-| Task / scope result values | Delivered through edge 5 / edge 6 |
-| The reachable graph of a `const` publish / seal | Promoted once; the graph is deeply read-only afterwards |
-| Everything reachable across a `sys.Thread` boundary or from a `CFn` callback | See §16.9.5: that channel is currently outside the safe subset |
-
-`string` promotion is described separately in §16.1 (short strings are coroutine-local, promoted to shared atomic RC on demand when they cross a boundary). That is this same rule instantiated for `XrString`, not an exception to it.
+These rules grant no additional raw-pointer permission. The safety boundary in §16.9.5 continues to apply. Current qualification of each publication entry point is specified in §17.
 
 #### 16.9.5 The data-race-freedom guarantee and its boundary
 
@@ -7339,7 +6989,7 @@ The promotion points are exhaustive, and each applies to the reachable graph **d
 **Escape hatches (exhaustive)**: the following capabilities can introduce a data race. Their consequences are **implementation-defined and may include memory corruption**; the proof obligation is the user's:
 
 - Any raw memory access inside an `unsafe` block
-- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without passing through capture-plan checking)
+- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without passing through value-publication checking)
 - `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
 - The body of a `sys.Thread`
 - The body of a `CFn` C callback (which may be invoked on any thread)
@@ -8799,7 +8449,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
-| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | borrow conflict, including owner invalidation, overlapping `ref` paths in one call and container access through another path during reference iteration, with qualification of the latter two in §17 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, escaping closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
@@ -8808,7 +8458,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
-| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
+| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | reserved legacy analyzer move diagnostic, with the current movement contract in §2.14.5 and entry-point qualification in §17 |
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
 | `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | Closure and captured object form a reference cycle |
 | `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | Invalid weak field type or execution domain |
@@ -8997,6 +8647,7 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
+           |  'copy' UnaryExpr
            |  'move' UnaryExpr
            |  'await' UnaryExpr
            |  GoExpr
@@ -9108,6 +8759,7 @@ Statement ::= ExprStmt
            |  WhileStmt
            |  ForStmt
            |  ForInStmt
+           |  ForRefStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -9138,6 +8790,8 @@ ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Id
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?

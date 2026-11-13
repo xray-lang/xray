@@ -35,7 +35,8 @@
         "stmt-for-c",
         "stmt-for-in",
         "stmt-for-pairs"
-      ]
+      ],
+      "markdown": "Ordinary for-in holds a logical snapshot. The settled reference-iteration contract uses for (ref x in xs) or for (i, ref x in xs) for Array, fixed arrays and MutSlice, and for (k, ref v in m) for Map values with read-only keys. It borrows the container once, detaches COW before iteration and writes actual elements. Other-path container access and length changes conflict. Each iteration ref ends at iteration exit, while the container loan ends at loop exit. Current implementation qualification is specified in spec §17."
     },
     {
       "heading": "match",

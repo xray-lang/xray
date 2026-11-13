@@ -8,7 +8,7 @@ order: 008
 
 ## 7. 作用域与名字解析 (Scoping)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_symbol.c`、`xanalyzer_escape.c`、`xaddressability.c`、`xanalyzer_visitor_stmt.c` 与 `src/analysis/xglobal_producer.c` 的 capture/storage plan。
+
 
 ### 7.1 词法作用域与提升
 
@@ -95,110 +95,25 @@ XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭�
 
 此族支持不可变按值捕获与普通var共享cell捕获；未使用的外层绑定不进入环境。共享cell只允许单实例内访问，不授予Sendable或跨worker能力；强环回收仍按§17.19保持OPEN。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
 
-### 7.3 所有权与 move
+### 7.3 所有权与 `move`
 
-Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
+可复制的值通过赋值、参数和返回保留逻辑副本。身份类型的副本指向同一身份。`move x` 保证转移时不复制，并使源绑定不可再用。允许的源位置与借用限制见 §2.14.5，参数模式见 §5.2.4。
 
-```xray
-var big_buffer = Array<u8>(1024 * 1024)
+编译器可在每条路径的最后一次拥有式使用处隐式移动。隐式移动与显式 `move` 的可观察结果相同，释放时机遵循 §16.8。相关优化及完整语法的实现资格见 §17。
 
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
+### 7.4 跨任务数据传递
 
-var t2 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big_buffer)        // OK：所有权转移
+跨任务传递要求类型满足 `Sendable`。可复制的 Sendable 值保留独立的逻辑副本，Sendable class 和同步句柄保留同一身份。可复制值无需额外标记即可作为显式参数传入。`move` 可用于保证转移时不复制，不可复制的 Sendable 资源遵循消费参数规则。
 
-print(len(big_buffer))    // 编译错误：move 后访问
-```
+`go` 闭包不得捕获外层 `var`，包括只读使用。需要该值时将它作为显式参数传入。共享可变身份经 `Channel`、`Atomic`、`sync.Mutex` 或 `sync.RwLock` 的同步操作访问。模块 `const` 的初始化、发布与可达身份分别遵循 §5.1.2、§16.9 和身份类型的同步规则。
 
-**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参与初始化器（参见 §5.1.4 / §10.8）：
-
-- `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
-- `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
-- 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `var dst = move src` / `const dst = move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner 或 const 能力。
-- 函数返回统一写 `return value`。返回边终结当前 continuation，编译器对 unique local 或 `move` 参数自动发布 owner-forward proof；`return move value` 不属于公开写法。
-
-### 7.4 协程数据传递规则（避免数据竞争）
-
-"保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
-
-所有跨 execution 边界（`go` 闭包、`go` 实参、Channel send、deferred task、线程入口和导出 callback）消费同一个已验证 capture plan。合法性由值的 **storage owner、provenance、可变性与类型表示**共同决定，不由 `var` / `const` 关键字单独决定：
-
-| Capture action | 适用值 | 边界行为 |
-|---|---|---|
-| inline value | 显式 go 实参中的标量、不可变小值 | 直接复制位表示 |
-| deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
-| move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
-| module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
-| synchronized ref | Channel、Task、Atomic 等受审计稳定身份 | 保留 verified synchronized domain 的引用 |
-| reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
-
-因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
-
-`go` 闭包还有一条更强、易记的表面规则：**不得捕获任何外层 `var`，无论闭包只读还是写入，也无论当前程序只启动一个还是多个协程。** 需要的数据必须作为 `go` 的显式实参传入，并在边界写清 `copy(...)`、`move` 或同步共享能力。多个协程共享可变状态只能通过 `Channel`、`Atomic`、`sync` 锁/句柄等受审计并发原语；直接捕获修改普通 `var` 是编译错误，`unsafe` 也不能放宽。
-
-```xray
-var local = 0
-go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
-```
-
-#### 正确姿势
-
-```xray
-// 方法 1：显式复制 execution-local graph
-var arr = [1, 2, 3]
-var t = go fn(data: Array<i64>) -> i64 {
-    data.push(4)            // 拷贝上修改，不影响原值
-    return len(data)
-}(copy(arr))
-print(arr)                  // [1, 2, 3] 未变
-
-// 方法 2：const 零拷贝只读（可被捕获）
-const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> i64 {
-    return c.rate
-}(config)
-
-// 方法 3：move 转移所有权
-var big = Array<u8>(1024)
-var t3 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big)
-// big 在此处不可访问
-
-// 方法 4：Channel 通信（可被捕获）
-const ch = Channel<i64>(10)
-var t4 = go fn(c: Channel<i64>) -> i64 {
-    return match (c.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
-    }
-}(ch)
-ch.send(42)
-```
+修改值参数时，先建立可变局部绑定。该绑定持有逻辑副本，修改遵循值语义。跨任务入口和同步原语的当前实现资格见 §17。
 
 ### 7.5 内存管理与对象生命周期
 
-Xray 采用多层内存管理：
+绑定在离开作用域时按 §16.8 释放所拥有的值，已转移的绑定除外。对象的最后一份强引用释放后进入引用计数销毁路径。借用保持原 owner 的生命周期，不取得一份独立所有权。
 
-| 存储 | 机制 | 释放时机 |
-|--|--|--|
-| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
-| 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
-| execution-local 回收域（一般局部对象） | 编译器插入的引用计数 + VM coroutine heap / AOT execution arena | 最后强引用释放时立即回收；引用环不被收集，随 physical coroutine 结束与域内残余图一起批量处置（§16.8） |
-| 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
-| Arena（底层临时分配） | 批量释放 | arena 结束 |
-
-**内存观察点**：
-- 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
-- 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
-- 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
-- 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
-
+环的处理分三层。L0 静态排除不可能成环的类型，L1 通过 `weak` 显式断开引用，L2 在任务结束时清空已登记身份对象的拥有式出边，再由普通引用计数释放。只有可能成环的身份对象进入 L2，具体边界见 §16.3。当前实现资格见 §17。
 
 READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，保存其逻辑值快照，不执行方法体。所得函数签名只包含显式参数与返回类型，结构体泛型实参先替换；原绑定后续写入不改变快照，身份句柄仍保持其身份语义。私有/protected访问在绑定处检查，声明内部可显式返回已授权的函数值，调用者不会因此取得直接成员访问权。函数值仍受所属Instance的撤销与清理约束，不隐含Sendable/no_suspend承诺。ref/move接收者不得退化为READ绑定。
 
@@ -209,7 +124,7 @@ READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，�
 
 ## 7. Scoping and Name Resolution
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_symbol.c`, `xanalyzer_escape.c`, `xaddressability.c`, `xanalyzer_visitor_stmt.c`, and the capture/storage plans produced by `src/analysis/xglobal_producer.c`.
+
 
 ### 7.1 Lexical Scoping and Hoisting
 
@@ -300,108 +215,23 @@ Immutable value captures and ordinary var shared cells are admitted; unused exte
 
 ### 7.3 Ownership and `move`
 
-Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
+Assignment, parameters and returns preserve logical copies of copyable values. Copies of identity types refer to the same identity. `move x` guarantees transfer without copying and makes the source binding unavailable. Permitted source positions and loan restrictions are specified in §2.14.5, and parameter modes in §5.2.4.
 
-```xray
-var big_buffer = Array<u8>(1024 * 1024)
+The compiler may move implicitly at the last owning use on every path. An implicit move and explicit `move` have the same observable result, with release timing governed by §16.8. Implementation qualification for these optimizations and the complete syntax is specified in §17.
 
-var t = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(big_buffer)             // compile error: an execution-local heap value cannot cross bare
+### 7.4 Cross-Task Data Transfer
 
-var t2 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big_buffer)        // OK: ownership transferred
+Cross-task transfer requires `Sendable`. Copyable Sendable values preserve independent logical copies, while Sendable classes and synchronization handles preserve identity. Copyable values can be passed as explicit arguments without an additional marker. `move` can guarantee transfer without copying, and noncopyable Sendable resources obey consuming-parameter rules.
 
-print(len(big_buffer))    // compile error: accessed after move
-```
+A `go` closure cannot capture an outer `var`, including read-only uses. Pass the required value as an explicit argument. Shared mutable identities are accessed through synchronized operations of `Channel`, `Atomic`, `sync.Mutex` or `sync.RwLock`. Initialization, publication and reachable identities of a module `const` follow §5.1.2, §16.9 and the synchronization rules of its identity types.
 
-**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments and initializers (see §5.1.4 / §10.8):
+To mutate a value parameter, first create a mutable local binding. That binding holds a logical copy and mutations obey value semantics. Current qualification of cross-task entry points and synchronization primitives is specified in §17.
 
-- `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
-- `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
-- Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `var dst = move src` / `const dst = move src`: transfer a verifier-proven unique local `var` root to a new owner or const capability.
-- Function returns are always written `return value`. The return edge terminates the current continuation, so the compiler automatically publishes owner-forward proof for a unique local or `move` parameter; `return move value` is not a public form.
+### 7.5 Memory Management and Object Lifetime
 
-### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
+On scope exit, bindings release the values they own under §16.8, excluding bindings whose ownership has transferred. Releasing the final strong reference starts reference-counted destruction. A loan preserves its owner's lifetime and acquires no independent ownership.
 
-"Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
-
-Every cross-execution boundary (`go` closure, `go` argument, Channel send, deferred task, thread entry, and exported callback) consumes the same verified capture plan. Legality is determined jointly by the value's **storage owner, provenance, mutability, and type representation**, never by the `var` / `const` keyword alone:
-
-| Capture action | Values | Boundary behavior |
-|---|---|---|
-| inline value | scalars and small immutable values passed as explicit `go` arguments | copy the bits directly |
-| deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
-| move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
-| module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
-| synchronized ref | audited stable identities such as Channel, Task, and Atomic | retain a reference in the verified synchronized domain |
-| reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
-
-Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
-
-`go` closures additionally follow one simple, stronger surface rule: **they may not capture any outer `var`, whether they only read it or mutate it, and whether the current program launches one coroutine or many.** Pass data as explicit `go` arguments and state `copy(...)`, `move`, or an audited synchronization capability at the boundary. Mutable state shared by multiple coroutines must flow through `Channel`, `Atomic`, or audited `sync` locks/handles. Directly capturing and modifying an ordinary `var` is a compile error, and `unsafe` does not relax this rule.
-
-```xray
-var local = 0
-go fn() { local += 1 }()                 // ❌ compile error: cannot capture mutable local
-```
-
-#### Recommended patterns
-
-```xray
-// Pattern 1: explicitly copy an execution-local graph
-var arr = [1, 2, 3]
-var t = go fn(data: Array<i64>) -> i64 {
-    data.push(4)            // mutates the copy, original is unaffected
-    return len(data)
-}(copy(arr))
-print(arr)                  // [1, 2, 3] unchanged
-
-// Pattern 2: const, zero-copy read-only (capturable)
-const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> i64 {
-    return c.rate
-}(config)
-
-// Pattern 3: move ownership
-var big = Array<u8>(1024)
-var t3 = go fn(b: Array<u8>) -> i64 {
-    return process(b)
-}(move big)
-// big is inaccessible from this point
-
-// Pattern 4: Channel communication (capturable)
-const ch = Channel<i64>(10)
-var t4 = go fn(c: Channel<i64>) -> i64 {
-    return match (c.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
-    }
-}(ch)
-ch.send(42)
-```
-
-### 7.5 Memory Management and Object Lifetimes
-
-Xray uses a layered memory management strategy:
-
-| Storage | Mechanism | Reclamation |
-|--|--|--|
-| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
-| Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
-| Execution-local reclamation domain (ordinary local objects) | compiler-inserted reference counting plus a VM coroutine heap or AOT execution arena | immediately when the last strong reference is released; a reference cycle is not collected and the residual graph is disposed in bulk when the physical coroutine ends (§16.8) |
-| Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
-| Arena (low-level temporary allocations) | bulk free | at arena end |
-
-**Memory observation points**:
-- The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
-- The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
-- Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
-- No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
-
+Cycle handling has three layers. L0 statically excludes types that cannot form cycles, L1 uses `weak` to break references explicitly, and L2 clears owned outgoing edges of registered identity objects at task completion before ordinary reference counting releases them. Only potentially cyclic identity objects enter L2, under the boundaries in §16.3. Current implementation qualification is specified in §17.
 
 A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
 
