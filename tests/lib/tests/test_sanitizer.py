@@ -57,7 +57,9 @@ class AsanEntryPointTest(unittest.TestCase):
     def _run_full(self, root: Path, events: list[str], tree_problem=None) -> int:
         build_dir = root / "build-asan"
         build_dir.mkdir()
-        (build_dir / asan_runner.platform.exe_name("xray")).write_bytes(b"binary")
+        binary = build_dir / asan_runner.platform.exe_name("xray")
+        binary.write_bytes(b"binary")
+        binary.chmod(0o755)
         ok = sanitizer.proc.ProcResult(
             argv=("ctest",), returncode=0, stdout=b"", stderr=b"", timed_out=False)
 
@@ -295,6 +297,7 @@ class CacheInspectionTest(unittest.TestCase):
         compiler.write_text("binary\n", encoding="utf-8")
         with (mock.patch.object(sanitizer.shutil, "which", return_value=None),
               mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer.platform, "EXE_SUFFIX", ".exe"),
               mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
             self.assertEqual(Path(sanitizer.resolve_compiler_command("clang")), compiler)
 
@@ -305,6 +308,7 @@ class CacheInspectionTest(unittest.TestCase):
         compiler.write_text("binary\n", encoding="utf-8")
         with (mock.patch.object(sanitizer.shutil, "which", return_value=None),
               mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer.platform, "EXE_SUFFIX", ".exe"),
               mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
             self.assertEqual(
                 Path(sanitizer.resolve_compiler_command("clang-cl")), compiler)

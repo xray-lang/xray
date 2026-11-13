@@ -15,6 +15,7 @@ result is cached per-process: a suite asks the same question many times.
 from __future__ import annotations
 
 import hashlib
+import ntpath
 import os
 import re
 import shutil
@@ -441,7 +442,7 @@ def capture_msvc_link_map(
 
 
 def _c_compiler_driver(path: str) -> str:
-    name = Path(path).name.lower()
+    name = (ntpath.basename(path) if platform.IS_WINDOWS else Path(path).name).lower()
     if name in ("cl", "cl.exe", "clang-cl", "clang-cl.exe"):
         return CC_DRIVER_MSVC
     if "zig" in name:
@@ -506,7 +507,7 @@ def find_c_syntax_compiler() -> "CCompiler | None":
 
 
 def _symbol_dumper_driver(path: str) -> "str | None":
-    name = Path(path).name.lower()
+    name = (ntpath.basename(path) if platform.IS_WINDOWS else Path(path).name).lower()
     if name in ("dumpbin", "dumpbin.exe"):
         return SYMBOL_DUMPER_DUMPBIN
     if name in ("llvm-nm", "llvm-nm.exe"):
