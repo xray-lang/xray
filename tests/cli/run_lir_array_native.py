@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("--compiler", action="append", default=[])
     parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
-    cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose",
+    cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding", "tuple_values", "tuple_flow",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",

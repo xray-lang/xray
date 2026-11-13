@@ -225,6 +225,28 @@ static void c_callable_owned_reference(LirC *c, const XrLirInstructionView *v) {
     c_format(c, ", %" PRIu32 ", %" PRIu32 ");\n    v%" PRIu32 " = (%s){xrl_owned_thunk_%" PRIu32
         ", owned, owned};\n    }\n", v->operand_count, source, v->result, c_type(c, v->type), v->callee);
 }
+static bool c_callable_state_type(const LirC *c, XrLirType type) {
+    const XrLirModule *module = c->request->module;
+    if (!c->state_layout.slot_count) return false;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (!c->seen[f]) continue;
+        const XrLirFunctionData *function = &module->functions[f];
+        for (uint32_t b = 0; b < function->block_count; ++b)
+            for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
+                const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
+                if (v->operand_count != 2) continue;
+                if ((v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_INITIALIZE) &&
+                    function->values[v->operands[1] - 1].type == type) return true;
+                if (v->op == XR_LIR_STATE_WRITE) {
+                    XrLirStateReference shape = {0};
+                    if (xr_lir_state_reference_view(module,
+                        (XrLirValue){module, f + 1, v->operands[0]}, &shape) == XR_LIR_OK &&
+                        shape.payload == type) return true;
+                }
+            }
+    }
+    return false;
+}
 static void c_callable_state_exports(LirC *c) {
     if (!c->owned_entry_count) return;
     for (uint32_t t = 0; t < c->constructed_count; ++t) {
@@ -232,7 +254,7 @@ static void c_callable_state_exports(LirC *c) {
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(c->request->module, type, &signature) != XR_LIR_OK) continue;
         bool captured = c_callable_captured_type(c, type);
-        if (!captured && !lir_state_has_callables(c->request->module, &c->state_layout)) continue;
+        if (!captured && !c_callable_state_type(c, type)) continue;
         c_format(c, "static XrtCallable *xrl_state_function_%" PRIu32 "(%s value, XrtCallableScope *scope, uint32_t source) {\n",
             type, c_type(c, type));
         c_text(c, "    (void)scope;\n    if (value.owner) return value.owner;\n"
