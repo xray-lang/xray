@@ -24,6 +24,20 @@ static XrRbcRegisterKind rbc_callable_value_kind(XrRbcCallableValue value) {
         value.kind == XR_RBC_CALLABLE_FUNCTION ? XR_RBC_FUNCTION : XR_RBC_BITS;
 }
 
+static bool rbc_callable_accepts(const XrRbcModule *m, uint32_t expected, uint32_t actual) {
+    if (!m->callable_types || !expected || !actual ||
+        expected > m->callable_type_count || actual > m->callable_type_count) return false;
+    const XrRbcCallableType *a = &m->callable_types[expected - 1], *b = &m->callable_types[actual - 1];
+    if (a->parameter_count != b->parameter_count || a->result.kind != b->result.kind || a->result.type != b->result.type ||
+        (a->flags & 2u) != (b->flags & 2u) || ((a->flags & 1u) && !(b->flags & 1u))) return false;
+    for (uint32_t p = 0; p < a->parameter_count; ++p) {
+        XrRbcCallableParameter x = a->parameters[p], y = b->parameters[p];
+        if (x.value.kind != y.value.kind || x.value.type != y.value.type ||
+            x.mode != y.mode || x.escaping != y.escaping) return false;
+    }
+    return true;
+}
+
 static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (m->callable_type_count > UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
     for (size_t t = 0; t < m->callable_type_count; ++t) {
@@ -76,7 +90,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
         access.destination || access.result.spill) return false;
     if (access.operation == XR_RBC_FUNCTION_REFERENCE)
         return !access.source && !access.window && access.callee < m->function_count &&
-            m->functions[access.callee].callable == access.slot &&
+            rbc_callable_accepts(m, access.slot, m->functions[access.callee].callable) &&
             access.result.index < f->register_count && rbc_register_kind(f, access.result.index) == XR_RBC_FUNCTION &&
             f->register_callables[access.result.index] == access.slot;
     XrRbcCallableType type = m->callable_types[access.slot - 1];

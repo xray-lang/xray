@@ -45,6 +45,9 @@ typedef struct XrLirClosureTarget {
  * Query slices borrow their module and never outlive it. */
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *, const XrLirCallableType *, XrLirType *);
 XR_FUNC XrLirStatus xr_lir_callable_type_view(const XrLirModule *, XrLirType, XrLirCallableType *);
+/* Call operands can forget NoSuspend. All other signature components, including
+ * parameter modes, escape contracts and the C ABI bit, remain exact. */
+XR_FUNC bool xr_lir_callable_accepts(const XrLirModule *, XrLirType expected, XrLirType actual);
 /* Captures are the declaration's ordered prefix. A hidden State parameter,
  * when present, remains its final parameter and is bound by the environment.
  * Setting this metadata never turns an ordinary function ID into a value. */

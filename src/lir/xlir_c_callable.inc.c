@@ -49,6 +49,14 @@ static void c_callable_thunks(LirC *c) {
     }
 }
 
+static void c_callable_argument(LirC *c, uint32_t value, XrLirType expected) {
+    if (c_value_type(c, value) == expected) { c_value(c, value); return; }
+    c_format(c, "(%s){", c_type(c, expected));
+    c_value(c, value); c_text(c, ".invoke, ");
+    c_value(c, value); c_text(c, ".environment, ");
+    c_value(c, value); c_text(c, ".owner}");
+}
+
 static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
         c_format(c, "    v%" PRIu32 " = (%s){xrl_thunk_%" PRIu32 ", NULL, NULL};\n",
@@ -61,9 +69,11 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
     c_text(c, ".invoke(");
     c_value(c, v->operands[0]);
     c_text(c, ".environment");
+    XrLirCallableType signature;
+    xr_lir_callable_type_view(c->request->module, c_value_type(c, v->operands[0]), &signature);
     for (uint32_t p = 1; p < v->operand_count && c_request_poll(c); ++p) {
         c_text(c, ", ");
-        c_value(c, v->operands[p]);
+        c_callable_argument(c, v->operands[p], signature.parameters[p - 1].type);
     }
     c_text(c, ");\n");
 }

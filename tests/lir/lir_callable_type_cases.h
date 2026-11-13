@@ -20,11 +20,31 @@ static void callable_type_owners(void) {
     shape.flags = XR_LIR_CALLABLE_NO_SUSPEND;
     OK(xr_lir_callable_type(source, &shape, &restricted));
     CHECK(restricted != ordinary);
+    CHECK(xr_lir_callable_accepts(source, ordinary, restricted));
+    CHECK(!xr_lir_callable_accepts(source, restricted, ordinary));
+    for (unsigned n = 0; n < 4; ++n) {
+        XrLirCallableParameter changed = parameter;
+        XrLirCallableType wrong = shape;
+        wrong.parameters = &changed;
+        if (n == 0) changed.type = XR_LIR_U64;
+        if (n == 1) changed.mode = XR_PARAM_MOVE;
+        if (n == 2) wrong.result = XR_LIR_U64;
+        if (n == 3) wrong.flags |= XR_LIR_CALLABLE_C_ABI;
+        XrLirType different = 0;
+        OK(xr_lir_callable_type(source, &wrong, &different));
+        CHECK(!xr_lir_callable_accepts(source, ordinary, different));
+    }
     shape.flags = 0;
     parameter.type = ordinary;
     parameter.escaping = true;
     OK(xr_lir_callable_type(source, &shape, &escaping));
     CHECK(escaping != ordinary);
+    parameter.escaping = false;
+    XrLirType nonescaping = 0;
+    OK(xr_lir_callable_type(source, &shape, &nonescaping));
+    CHECK(!xr_lir_callable_accepts(source, escaping, nonescaping));
+    CHECK(!xr_lir_callable_accepts(source, nonescaping, escaping));
+    parameter.escaping = true;
     shape.result = restricted;
     OK(xr_lir_callable_type(source, &shape, &nested));
     parameter.type = XR_LIR_U64;

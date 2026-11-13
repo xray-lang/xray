@@ -86,7 +86,7 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
             uint32_t r = access.window + 1 + p;
             XrRbcCallableValue value = type.parameters[p].value;
             if (value.kind == XR_RBC_CALLABLE_FUNCTION) {
-                if (s->state[r] != RBC_FUNCTION || s->origin[r] != value.type + 1) return false;
+                if (s->state[r] != RBC_FUNCTION || !rbc_callable_accepts(s->module, value.type + 1, s->origin[r])) return false;
             } else if (!rbc_call_parameter_matches(s, r, rbc_callable_value_kind(value))) return false;
         }
         if (!rbc_bits_destination(s, access.window)) return false;

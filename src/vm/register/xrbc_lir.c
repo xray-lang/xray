@@ -499,7 +499,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         XrLirClosureTarget target;
         return !i->operand_count && xr_lir_closure_target_view(input,
             (XrLirFunction){input, i->callee}, &target) == XR_LIR_OK &&
-            !target.capture_count && !target.state_capture && target.callable == i->type;
+            !target.capture_count && !target.state_capture && xr_lir_callable_accepts(input, i->type, target.callable);
     }
     case XR_LIR_CALL_INDIRECT: return true;
     case XR_LIR_CALL_INTRINSIC: {

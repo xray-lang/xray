@@ -238,7 +238,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
         XrRbcRegisterKind kind = rbc_register_kind(callee, p);
         if (kind == XR_RBC_FUNCTION) {
             if (s->state[v.a + 1 + p] != RBC_FUNCTION ||
-                s->origin[v.a + 1 + p] != callee->register_callables[p]) return false;
+                !rbc_callable_accepts(s->module, callee->register_callables[p], s->origin[v.a + 1 + p])) return false;
             continue;
         }
         if (rbc_register_kind(f, v.a + 1 + p) != XR_RBC_CALL_WINDOW ||

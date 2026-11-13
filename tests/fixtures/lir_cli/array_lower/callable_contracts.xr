@@ -1,0 +1,3 @@
+fn use(callback: fn(i64) -> i64, value: i64) -> i64 { return callback(value) }
+fn relay(callback: nosuspend fn(i64) -> i64, value: i64) -> i64 { return use(callback, value) }
+print(relay(fn(value: i64) -> i64 { return value + 2 }, 40))

@@ -51,11 +51,11 @@ static bool lir_array_intrinsic_call(const XrLirModule *m, const XrLirFunctionDa
     return true;
 }
 
-static bool lir_array_intrinsic_signature(const XrLirFunctionData *f,
+static bool lir_array_intrinsic_signature(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const XrLirIntrinsic *entry, const XrLirArrayIntrinsic *shape) {
     if (!entry->scalar_sync || !xr_lir_internal_array_intrinsic_valid(entry, shape)) return false;
     if (!shape->variadic)
-        return lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result);
+        return lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result);
     if (v->type != entry->result) return false;
     for (uint32_t p = 0; p < v->operand_count; ++p)
         if (f->values[v->operands[p] - 1].type != entry->parameters[0]) return false;

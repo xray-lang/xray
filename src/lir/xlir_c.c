@@ -903,6 +903,8 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, ";\n");
             break;
         case XR_LIR_CALL: {
+            XrLirFunctionView callee;
+            xr_lir_function_view(c->request->module, (XrLirFunction){c->request->module, v->callee}, &callee);
             c_text(c, "    ");
             if (v->result)
                 c_format(c, "v%" PRIu32 " = ", v->result);
@@ -925,7 +927,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 if (a)
                     c_text(c, ", ");
                 if (string_output && a == 1) c_text(c, "(size_t)");
-                c_value(c, v->operands[a]);
+                c_callable_argument(c, v->operands[a], callee.parameter_types[a]);
             }
             if (c_runtime_call(c, v)) {
                 uint32_t id = c_located(&v->source) ? ++c->location_cursor : 0;

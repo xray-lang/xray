@@ -112,12 +112,13 @@ static bool lir_constant_valid(XrLirType type, uint64_t bits) {
     return false;
 }
 
-static bool lir_signature_matches(const XrLirFunctionData *f, const XrLirInstructionView *v,
+static bool lir_signature_matches(const XrLirModule *m, const XrLirFunctionData *f, const XrLirInstructionView *v,
                                   const XrLirType *parameters, uint32_t count, XrLirType result) {
     if (v->operand_count != count || v->type != result)
         return false;
     for (uint32_t i = 0; i < count; ++i)
-        if (f->values[v->operands[i] - 1].type != parameters[i])
+        if (f->values[v->operands[i] - 1].type != parameters[i] &&
+            !xr_lir_callable_accepts(m, parameters[i], f->values[v->operands[i] - 1].type))
             return false;
     return true;
 }
@@ -339,7 +340,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
-        if (!lir_signature_matches(f, v, callee->parameter_types, callee->parameter_count,
+        if (!lir_signature_matches(m, f, v, callee->parameter_types, callee->parameter_count,
                                    callee->result))
             goto invalid;
         if (callee->kind == XR_LIR_FUNCTION_EXTERNAL && callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING &&
@@ -353,11 +354,11 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             if (entry->id != v->intrinsic)
                 continue;
             if (xr_lir_range_intrinsic_valid(entry)) {
-                if (!lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
+                if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
                 return XR_LIR_OK;
             }
             if (xr_lir_string_intrinsic_valid(entry)) {
-                if (!lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
+                if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
                 if ((entry->operation == XR_LIR_STRING_OP_APPEND_STATE || entry->operation == XR_LIR_STRING_OP_BORROW_STATE)) {
                     XrLirStateReference shape = f->values[v->operands[0] - 1].state_reference;
                     if (shape.payload != XR_LIR_STRING || !shape.mutable) goto invalid;
@@ -372,13 +373,13 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             }
             if (entry->operation) {
                 if (!xr_lir_internal_view_intrinsic_valid(entry) ||
-                    !lir_signature_matches(f, v, entry->parameters, entry->parameter_count, entry->result) ||
+                    !lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result) ||
                     !lir_view_instruction_types(m, f, v)) goto invalid;
                 return XR_LIR_OK;
             }
             const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
             if (shape) {
-                if (!lir_array_intrinsic_signature(f, v, entry, shape) ||
+                if (!lir_array_intrinsic_signature(m, f, v, entry, shape) ||
                     !xr_lir_internal_array_instruction(m, f, v)) goto invalid;
                 return XR_LIR_OK;
             }
@@ -386,7 +387,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             for (uint32_t p = 0; p < entry->parameter_count; ++p)
                 cell |= entry->parameters[p] >= XR_LIR_I64_CELL;
             if (cell || !entry->scalar_sync ||
-                !lir_signature_matches(f, v, entry->parameters, entry->parameter_count,
+                !lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count,
                                        entry->result))
                 goto invalid;
             return XR_LIR_OK;

@@ -20,6 +20,12 @@ static bool lir_callable_result_matches(const XrLirCallableType *a, const XrLirC
     return true;
 }
 
+XR_FUNC bool xr_lir_callable_accepts(const XrLirModule *module, XrLirType expected, XrLirType actual) {
+    XrLirCallableType a, b;
+    return xr_lir_callable_type_view(module, expected, &a) == XR_LIR_OK &&
+        xr_lir_callable_type_view(module, actual, &b) == XR_LIR_OK && lir_callable_result_matches(&a, &b);
+}
+
 XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
@@ -50,7 +56,8 @@ XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *m,
             return false;
         for (uint32_t p = 0; p < signature.parameter_count; ++p) {
             const XrLirValueData *argument = &f->values[v->operands[p + 1] - 1];
-            if (argument->type != signature.parameters[p].type ||
+            if ((argument->type != signature.parameters[p].type &&
+                    !xr_lir_callable_accepts(m, signature.parameters[p].type, argument->type)) ||
                 (xr_lir_internal_array_type(argument->type) &&
                     argument->array_element != signature.parameters[p].array_element)) return false;
         }

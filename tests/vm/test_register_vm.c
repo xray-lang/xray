@@ -1277,8 +1277,10 @@ static void test_module_capabilities(void) {
 #include "register_fixed_value_cases.h"
 #include "register_fixed_call_cases.h"
 #include "register_range_cases.h"
+#include "register_callable_contract_cases.h"
 
 int main(int argc, char **argv) {
+    test_raw_callable_contracts();
     test_raw_view_cold_returns();
     test_raw_range_checks();
     test_raw_string_references();
