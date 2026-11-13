@@ -17,8 +17,8 @@ typedef struct XrtStringRef {
     XrtString **cell;
     XrtModuleAccess state;
 } XrtStringRef;
-/* Compiler-local borrow. Generated code closes it before every observation or
- * runtime interaction, and commits before selected-edge owner transfers. */
+/* Compiler-local borrow. Pure owner moves preserve it. Generated code commits
+ * or closes it before observations, runtime interaction or storage replacement. */
 typedef struct XrtStringAppendCursor {
     XrtString *string;
     const XrtString *suffix;
