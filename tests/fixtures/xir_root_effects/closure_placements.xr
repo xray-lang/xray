@@ -1,0 +1,64 @@
+fn apply(callback: fn() -> i64) -> i64 { return callback() }
+
+fn placementLocal(seed: i64) -> i64 {
+    const callback = fn() -> i64 { return seed + 1 }
+    return apply(callback)
+}
+
+fn placementReturn(seed: i64) -> fn() -> i64 {
+    var current = seed
+    return fn() -> i64 { current = current + 1; return current }
+}
+
+fn placementNested(seed: i64) -> i64 {
+    const inner = fn() -> i64 { return seed + 2 }
+    const outer = fn() -> i64 { return inner() + 3 }
+    return apply(outer)
+}
+
+fn placementChoose(flag: bool, seed: i64) -> i64 {
+    const left = fn() -> i64 { return seed + 4 }
+    const right = fn() -> i64 { return seed + 5 }
+    const selected = flag ? left : right
+    return apply(selected)
+}
+
+fn placementStore(seed: i64) -> i64 {
+    const callbacks = [fn() -> i64 { return seed + 6 }]
+    return callbacks[0]()
+}
+
+fn placementLoop(limit: i64) -> i64 {
+    var previous = fn() -> i64 { return -1 }
+    var index: i64 = 0
+    var total: i64 = 0
+    while (index < limit) {
+        const captured = index
+        const current = fn() -> i64 { return captured }
+        if (index > 0) { total = total + previous() }
+        previous = current
+        index = index + 1
+    }
+    return total
+}
+
+fn placementLoopLocal(limit: i64) -> i64 {
+    var index: i64 = 0
+    var total: i64 = 0
+    while (index < limit) {
+        const captured = index
+        const callback = fn() -> i64 { return captured }
+        total = total + apply(callback)
+        index = index + 1
+    }
+    return total
+}
+
+print(placementLocal(10))
+var counter = placementReturn(20)
+print(counter())
+print(placementNested(30))
+print(placementChoose(true, 40))
+print(placementStore(50))
+print(placementLoop(4))
+print(placementLoopLocal(4))

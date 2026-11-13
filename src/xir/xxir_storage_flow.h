@@ -154,7 +154,23 @@ typedef struct XirStorageCapture {
     XirStorageCaptureKind kind;
     XirStorageIdentityAge age;
 } XirStorageCapture;
+
+/* Constructor identity and age come from the same qualified occurrence walk
+ * used by capture observations. A zero age mask retains an unresolved context.
+ * This observation supplies no escape or effect permission. */
+typedef struct XirStorageFunctionOccurrence {
+    XirStorageReference constructor;
+    uint32_t ages, remainder;
+    bool repeated;
+} XirStorageFunctionOccurrence;
+typedef XrXirStatus (*XirStorageFunctionVisitor)(void *, const XirStorageFunctionOccurrence *);
+
 typedef XrXirStatus (*XirStorageCaptureVisitor)(void *, const XirStorageCapture *);
+typedef struct XirStorageCaptureObservers {
+    void *context;
+    XirStorageCaptureVisitor capture;
+    XirStorageFunctionVisitor function;
+} XirStorageCaptureObservers;
 enum {
     XIR_STORAGE_QUERY_CONTENTS = 1u,
     XIR_STORAGE_QUERY_EXPOSURE = 2u,
@@ -234,7 +250,7 @@ XR_FUNC XrXirStatus xir_storage_flow_point_value(XirStorageFlow *, const XirStor
  * Each callback observes a Cell reference at this use, including older heap
  * instances retained across a backedge. It never freezes creation contents. */
 XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *, const XirStorageValuePoint *,
-    uint32_t banks, XirStorageCaptureVisitor, void *);
+    uint32_t banks, const XirStorageCaptureObservers *);
 XR_FUNC XrXirStatus xir_storage_flow_expose_value(XirStorageFlow *, const XirStorageValuePoint *);
 /* Storing a carrier in exposed storage exposes its reachable environment only
  * when the store completes. Condition names the destination's prior exposure. */

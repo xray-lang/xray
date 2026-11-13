@@ -63,7 +63,7 @@ static void view_loan_transport_fixture(ViewLoanTransportFixture *f) {
     f->input=(XirStorageInput){.function=1,.value=2,.handle=0,.bank=XIR_STORAGE_FOOTPRINT};
     f->unknown=(XirStorageUnknown){0,4,callable,UINT32_MAX,XIR_STORAGE_CONTENTS};
     f->facts=(XirViewLoanFacts){
-        .restrictions={f->restrictions,2,f->formulas,11,NULL,0,NULL,0,{0}},
+        .restrictions={.functions=f->restrictions, .function_count=2, .formulas=f->formulas, .formula_count=11},
         .storage={.functions=f->storage,.function_count=2,.crossflows=f->crossflows,.crossflow_count=2,
             .applications=f->applications,.application_count=2,.bindings=f->bindings,.binding_count=2,
             .inputs=&f->input,.input_count=1,.unknowns=&f->unknown}};
@@ -169,7 +169,8 @@ static void view_loan_affine_availability(ViewLoanAffineCase kind) {
     uint32_t hidden_values = functions[1].parameter_count + 1;
     XirRestrictionFunction rows[] = {{5,6,intrinsic,flows,2}, {hidden_values,hidden_values,intrinsic+6,NULL,0}};
     XirRestrictionPoint point = {.function=0, .instruction=2, .value=1, .formula=5, .carrier=5};
-    XirRestrictionView view = {rows,2,formulas,6+hidden_values,NULL,0,no_points ? NULL : &point,no_points ? 0u : 1u,{0}};
+    XirRestrictionView view = {.functions=rows, .function_count=2, .formulas=formulas,
+        .formula_count=6+hidden_values, .points=no_points ? NULL : &point, .point_count=no_points ? 0u : 1u};
     CHECK(effect_check_restrictions_receive(roots, &view) == XR_XIR_OK);
     XrXirEffects effects = {.resources=effect_context.resources, .count=2, .checked_roots=roots};
     XrXirDiagnostic diagnostic = {0};

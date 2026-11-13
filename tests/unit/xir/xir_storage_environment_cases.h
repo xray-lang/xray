@@ -156,7 +156,7 @@ static void storage_environment_guard_case(const char *name, XrXirType captured,
         uint32_t captures = 0;
         XirStorageValuePoint point = {3, 0, {3, 0, XIR_EXECUTION_CURRENT_ENVIRONMENT}, XIR_STORAGE_BEFORE};
         status = xir_storage_flow_visit_value_captures(roots->storage, &point, XIR_STORAGE_QUERY_CONTENTS,
-            storage_environment_capture_oracle, &captures);
+            &(XirStorageCaptureObservers){.context=&captures, .capture=storage_environment_capture_oracle});
         remainder = xir_storage_flow_remainder(roots->storage);
         if (expected_remainder && status == XR_XIR_UNRESOLVED && (remainder & expected_remainder)) tested = true;
         else {

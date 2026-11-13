@@ -89,6 +89,8 @@ typedef struct StorageCaptureWalk {
     uint32_t count, capacity, index_capacity, remainder;
     XirStorageReference current_proxy, current_reference;
     XirStorageValuePoint point;
+    XirStorageFunctionVisitor function_visit;
+    void *function_context;
     bool complete, current_storable;
 } StorageCaptureWalk;
 
@@ -138,9 +140,39 @@ static bool storage_capture_push(StorageCaptureWalk *walk, StorageCaptureItem it
     return true;
 }
 
+static XrXirStatus storage_capture_function(StorageCaptureWalk *walk, const XirExecutionSite *site) {
+    if (!walk->function_visit || site->protocol != 1) return XR_XIR_OK;
+    XirStorageFlow *flow = walk->flow;
+    if (site->function >= flow->view.function_count) return XR_XIR_BAD_STRUCTURE;
+    const StorageFunction *row = &flow->rows[site->function];
+    if (site->instruction >= row->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (row->operations[site->instruction].op != XR_XIR_FUNCTION_REF) return XR_XIR_OK;
+    uint32_t value = row->body->parameter_count + site->instruction;
+    XirStorageFunctionOccurrence occurrence = {.constructor={site->function, value, site->environment}, .ages=1u};
+    if (site->environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT) {
+        occurrence.ages = 0;
+        occurrence.remainder = XIR_EXECUTION_REMAINDER_STORAGE;
+    }
+    occurrence.repeated = storage_allocation_repeats(flow, site->function, value);
+    if (flow->status != XR_XIR_OK) return flow->status;
+    if (occurrence.repeated) {
+        occurrence.ages = 0;
+        if (site->function == walk->point.function && site->environment == XIR_EXECUTION_CURRENT_ENVIRONMENT) {
+            uint32_t saved_remainder = flow->request_remainder;
+            XrXirStatus status = storage_occurrence_ages(flow, &walk->point, value, value, &occurrence.ages);
+            if (status != XR_XIR_OK && status != XR_XIR_UNRESOLVED) return status;
+            if (status == XR_XIR_UNRESOLVED) occurrence.remainder = flow->request_remainder;
+            flow->request_remainder = saved_remainder;
+        } else occurrence.remainder = XIR_EXECUTION_REMAINDER_STORAGE;
+    }
+    return walk->function_visit(walk->function_context, &occurrence);
+}
+
 static XrXirStatus storage_capture_arguments(void *opaque, const XirExecutionSite *capture) {
     StorageCaptureWalk *walk = opaque;
     XirStorageFlow *flow = walk->flow;
+    XrXirStatus observed = storage_capture_function(walk, capture);
+    if (observed != XR_XIR_OK) return observed;
     if (capture->kind == XIR_EXECUTION_STORABLE) {
         if (capture->argument_count || capture->receiver_function >= flow->view.function_count ||
             capture->receiver_value >= flow->view.functions[capture->receiver_function].value_count ||
@@ -340,33 +372,36 @@ static void storage_capture_clear(StorageCaptureWalk *walk) {
 }
 
 XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, const XirStorageValuePoint *point,
-    uint32_t banks, XirStorageCaptureVisitor visit, void *context) {
-    if (!point || !visit || !banks || (banks & ~XIR_STORAGE_QUERY_ALL) ||
+    uint32_t banks, const XirStorageCaptureObservers *observers) {
+    if (!flow || !point || !observers || (!observers->capture && !observers->function) || !banks ||
+        (observers->function && flow->sealed) || (banks & ~XIR_STORAGE_QUERY_ALL) ||
         !storage_valid_point(flow, point->function, point->instruction, point->point))
         return XR_XIR_BAD_STRUCTURE;
     if (flow->status != XR_XIR_OK) return flow->status;
     flow->request_remainder = 0;
-    StorageCaptureWalk walk = {.flow=flow, .complete=true};
+    StorageCaptureWalk walk = {.flow=flow, .complete=true,
+        .function_visit=observers->function, .function_context=observers->context};
     XrXirStatus status = storage_capture_collect(&walk, point);
     flow->request_remainder |= walk.remainder;
     for (uint32_t n = 0; status == XR_XIR_OK && n < walk.count; ++n) {
+        if (!observers->capture) continue;
         if (walk.items[n].kind == STORAGE_CARRIER_FN) continue;
         if (walk.items[n].retained) {
             XirStorageCapture stored = {.identity=walk.items[n].reference,.function=point->function,
                 .contents=UINT32_MAX,.exposure=UINT32_MAX,.kind=XIR_STORAGE_CAPTURE_STORED_CELL,.age=walk.items[n].age};
-            status = visit(context,&stored);
+            status = observers->capture(observers->context,&stored);
             continue;
         }
         if (walk.items[n].kind == STORAGE_CARRIER_OPAQUE) {
             XirStorageCapture opaque = {.identity=walk.items[n].reference,.function=point->function,
                 .contents=walk.items[n].reference.value,.exposure=UINT32_MAX,.kind=XIR_STORAGE_CAPTURE_OPAQUE_FN};
-            status = visit(context,&opaque);
+            status = observers->capture(observers->context,&opaque);
             continue;
         }
         if (walk.items[n].kind == STORAGE_CARRIER_STORABLE) {
             XirStorageCapture stored = {.identity=walk.items[n].reference, .function=point->function,
                 .contents=UINT32_MAX, .exposure=UINT32_MAX, .kind=XIR_STORAGE_CAPTURE_STORABLE_FN};
-            status = visit(context, &stored);
+            status = observers->capture(observers->context, &stored);
             continue;
         }
         if (walk.items[n].kind == STORAGE_CARRIER_FORMAL || walk.items[n].kind == STORAGE_CARRIER_HIDDEN ||
@@ -376,7 +411,7 @@ XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, 
                 .exposure=UINT32_MAX, .kind=walk.items[n].kind == STORAGE_CARRIER_CONTENTS ?
                     XIR_STORAGE_CAPTURE_CONTENTS_FN : walk.items[n].kind == STORAGE_CARRIER_HIDDEN ?
                         XIR_STORAGE_CAPTURE_HIDDEN_FN : XIR_STORAGE_CAPTURE_FORMAL_FN};
-            status = visit(context, &formal);
+            status = observers->capture(observers->context, &formal);
             continue;
         }
         XirStorageCapture capture = {.identity=walk.items[n].reference, .function=point->function,
@@ -385,7 +420,7 @@ XR_FUNC XrXirStatus xir_storage_flow_visit_value_captures(XirStorageFlow *flow, 
         status = xir_storage_flow_reference(flow, &observation,
             banks & XIR_STORAGE_QUERY_CONTENTS ? &capture.contents : NULL,
             banks & XIR_STORAGE_QUERY_EXPOSURE ? &capture.exposure : NULL);
-        if (status == XR_XIR_OK) status = visit(context, &capture);
+        if (status == XR_XIR_OK) status = observers->capture(observers->context, &capture);
     }
     storage_capture_clear(&walk);
     return status;
@@ -496,7 +531,7 @@ static XrXirStatus storage_call_footprint(XirStorageFlow *flow, const XirExecuti
         proxy.value, XIR_STORAGE_FOOTPRINT)) return flow->status;
     StorageCallFootprint point = {flow, site->function, proxy.value};
     status = xir_storage_flow_visit_value_captures(flow, &use, XIR_STORAGE_QUERY_CONTENTS,
-        storage_call_footprint_capture, &point);
+        &(XirStorageCaptureObservers){.context=&point, .capture=storage_call_footprint_capture});
     if (status == XR_XIR_OK) *output = proxy.value;
     return status;
 }

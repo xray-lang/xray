@@ -130,6 +130,10 @@ static XrXirStatus effect_relocation_restrictions(const XrXirCompileContext *mem
         point->value = effect_relocation_value(relocation, point->function, point->value);
         point->carrier = effect_relocation_value(relocation, point->function, point->carrier);
     }
+    for (uint32_t n = 0; status == XR_XIR_OK && n < owner->view.placement_count; ++n) {
+        XirClosurePlacement *placement = (XirClosurePlacement *)owner->view.placements + n;
+        placement->value = effect_relocation_value(relocation, placement->function, placement->value);
+    }
     if (owner->view.pending.status == XR_XIR_UNRESOLVED)
         owner->view.pending.instruction = effect_relocation_instruction(relocation,
             owner->view.pending.function, owner->view.pending.instruction);

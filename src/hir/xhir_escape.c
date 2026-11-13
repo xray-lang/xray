@@ -40,6 +40,7 @@ typedef struct HirEscapeUse {
     XirStoragePointKind point;
 } HirEscapeUse;
 typedef struct HirEscapeCapture { uint32_t source, result; } HirEscapeCapture;
+typedef struct HirEscapeConstructor { uint32_t function, value; } HirEscapeConstructor;
 typedef struct HirEscapeObservation {
     uint32_t function, instruction, value;
     XirStoragePointKind point;
@@ -57,9 +58,11 @@ typedef struct HirEscape {
     HirEscapeEdge *edges;
     HirEscapeUse *uses;
     HirEscapeCapture *captures;
+    HirEscapeConstructor *constructors;
     uint32_t *offsets;
     uint32_t count, edge_count, edge_capacity, progress;
     uint32_t use_count, use_capacity, capture_count, capture_capacity;
+    uint32_t constructor_count, constructor_capacity;
     XrXirStatus status;
 } HirEscape;
 
@@ -88,6 +91,7 @@ XR_FUNC void xr_hir_escape_facts_free(XrHirEscapeFacts *facts) {
     xr_compile_resources_free((void *)facts->view.formulas);
     xr_compile_resources_free((void *)facts->view.inputs);
     xr_compile_resources_free((void *)facts->view.points);
+    xr_compile_resources_free((void *)facts->view.placements);
     xr_compile_resources_free(facts);
 }
 
@@ -269,6 +273,13 @@ static const char *escape_argument_reason(HirEscape *owner, uint32_t f,
 static bool escape_record_captures(HirEscape *owner, uint32_t f, uint32_t i, const XrXirInstruction *op) {
     if (op->op != XR_XIR_FUNCTION_REF) return true;
     const XrXirFunction *body = &owner->module->functions[f];
+    if (owner->constructor_count == owner->constructor_capacity) {
+        HirEscapeConstructor *grown = xir_compile_array_grow(owner->memory, owner->constructors,
+            owner->constructor_count, sizeof(*grown), &owner->constructor_capacity, &owner->status);
+        if (!grown) return false;
+        owner->constructors = grown;
+    }
+    owner->constructors[owner->constructor_count++] = (HirEscapeConstructor){f, body->parameter_count + i};
     uint32_t result = owner->offsets[f] + body->parameter_count + i;
     for (uint32_t a = 0; a < op->args[1] && escape_poll(owner); ++a) {
         uint32_t value = body->operands[op->args[0] + a];
@@ -412,6 +423,7 @@ XR_FUNC void xr_hir_escape_builder_free(XrHirEscapeBuilder *builder) {
     xr_compile_resources_free(builder->graph.offsets);
     xr_compile_resources_free(builder->graph.uses);
     xr_compile_resources_free(builder->graph.captures);
+    xr_compile_resources_free(builder->graph.constructors);
     xr_compile_resources_free(builder);
 }
 
