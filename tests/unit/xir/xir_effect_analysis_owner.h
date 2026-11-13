@@ -27,17 +27,17 @@ static XrXirCompileContext effect_context;
 static XrCompileResourceStats effect_baseline;
 static EffectMark effect_mark(void) { return (EffectMark){live, live_bytes}; }
 static void effect_mark_check(EffectMark mark) { CHECK(live == mark.blocks && live_bytes == mark.bytes); }
-static size_t effect_index_home(const void *pointer) {
-    return (size_t)xr_hash_int((int64_t)(uintptr_t)pointer) & 65535;
+static size_t effect_index_home(uintptr_t address) {
+    return (size_t)xr_hash_int((int64_t)address) & 65535;
 }
-static size_t effect_index_find(const void *pointer) {
-    size_t slot = effect_index_home(pointer);
+static size_t effect_index_find(uintptr_t address) {
+    size_t slot = effect_index_home(address);
     for (size_t scanned = 0; ; ++scanned) {
         CHECK(scanned < 65536);
         uint32_t record = effect_block_index[slot];
         if (!record) return slot;
         CHECK(record <= live);
-        if (effect_blocks[record - 1].pointer == pointer) return slot;
+        if ((uintptr_t)effect_blocks[record - 1].pointer == address) return slot;
         slot = (slot + 1) & 65535;
     }
 }
@@ -47,7 +47,7 @@ static void effect_index_erase(size_t hole) {
     for (size_t next = (hole + 1) & 65535, scanned = 0; effect_block_index[next];
          next = (next + 1) & 65535, ++scanned) {
         CHECK(scanned < 65536 && effect_block_index[next] <= live);
-        size_t home = effect_index_home(effect_blocks[effect_block_index[next] - 1].pointer);
+        size_t home = effect_index_home((uintptr_t)effect_blocks[effect_block_index[next] - 1].pointer);
         bool stays = hole <= next ? hole < home && home <= next : hole < home || home <= next;
         if (!stays) { effect_block_index[hole] = effect_block_index[next]; hole = next; }
     }
@@ -58,7 +58,7 @@ static void *effect_malloc(size_t bytes) {
     void *p = xr_malloc(bytes);
     if (p) {
         CHECK(live < 32768 && bytes <= SIZE_MAX - live_bytes);
-        size_t slot = effect_index_find(p); CHECK(!effect_block_index[slot]);
+        size_t slot = effect_index_find((uintptr_t)p); CHECK(!effect_block_index[slot]);
         effect_blocks[live] = (EffectAllocation){p, bytes};
         effect_block_index[slot] = (uint32_t)live + 1; ++live; live_bytes += bytes;
     }
@@ -66,13 +66,13 @@ static void *effect_malloc(size_t bytes) {
 }
 static void effect_free(void *p) {
     if (!p) return;
-    size_t slot = effect_index_find(p); uint32_t record = effect_block_index[slot];
+    size_t slot = effect_index_find((uintptr_t)p); uint32_t record = effect_block_index[slot];
     CHECK(record && record <= live);
     size_t i = (size_t)record - 1;
     CHECK(effect_blocks[i].bytes <= live_bytes);
     effect_index_erase(slot); live_bytes -= effect_blocks[i].bytes;
     if (i != live - 1) {
-        size_t moved = effect_index_find(effect_blocks[live - 1].pointer);
+        size_t moved = effect_index_find((uintptr_t)effect_blocks[live - 1].pointer);
         CHECK(effect_block_index[moved] == live);
         effect_blocks[i] = effect_blocks[live - 1]; effect_block_index[moved] = (uint32_t)i + 1;
     }

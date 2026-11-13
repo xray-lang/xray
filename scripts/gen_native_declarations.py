@@ -1827,7 +1827,7 @@ def render(root):
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
     lines += render_unicode_callable(root, decoder)
     return {'src/shared/xprelude_source.inc.c': render_prelude_source(root),
-            'src/shared/xnative_declarations.inc.c': '\n'.join(lines)}
+            'src/shared/xnative_declarations.inc.c': '\n'.join(lines) + '\n'}
 
 
 def main():
