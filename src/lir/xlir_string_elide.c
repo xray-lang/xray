@@ -8,15 +8,17 @@
  *
  * KEY CONCEPT:
  *   Verified LIR retires every owned String exactly once inside its defining
- *   block, through a drop or the terminator, and an incoming parameter stays
- *   valid until its call returns. A retain and its source therefore each have
- *   one known end. When the earlier end is a plain drop, the later owner can
+ *   block, through a drop, an owned append or the terminator. An incoming
+ *   parameter stays valid until its call returns. A retain and its source each
+ *   have one known end. When the earlier end is a plain drop, the later owner can
  *   carry the source's reference instead of a fresh one. Every operand other
- *   than a drop, a String result or an edge argument borrows, so substituting
- *   the source for the copy only lengthens borrows the source already covers.
+ *   than a drop, an owned append receiver, a String result or an edge argument
+ *   borrows, so substituting the source for the copy only lengthens borrows the
+ *   source already covers.
  */
 #include "xlir_string_elide.h"
 #include "xlir_rebuild_internal.h"
+#include "xlir_string.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -28,7 +30,7 @@ typedef struct {
     uint8_t *omit;     // flat instructions the projection removes
     uint8_t *borrowed; // incoming parameters, valid until the call returns
     uint32_t *root;    // the value whose reference an elided copy shares
-    uint32_t *end;     // one-based ordinal of an owner's drop or terminator
+    uint32_t *end;     // one-based ordinal of an owner's consuming instruction
 } Elide;
 
 static void *elide_storage(uint64_t count, size_t size) {
@@ -80,7 +82,9 @@ static void elide_block(Elide *c, uint32_t id) {
     XR_DCHECK(last > 0, "verified blocks end in a terminator");
     for (uint32_t n = 0; n < last; ++n) {
         XrLirInstructionView v = elide_view(c, block, n);
-        if (v.op == XR_LIR_STRING_DROP || (v.op == XR_LIR_RET && v.operand_count))
+        if (v.op == XR_LIR_STRING_DROP ||
+            xr_lir_string_role(c->input, &v) == XR_LIR_STRING_OP_APPEND_OWNED ||
+            (v.op == XR_LIR_RET && v.operand_count))
             c->end[v.operands[0]] = n + 1;
         for (uint32_t e = 0; e < v.edge_count; ++e)
             for (uint32_t a = 0; a < v.edges[e].argument_count; ++a)
