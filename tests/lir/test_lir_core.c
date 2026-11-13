@@ -767,8 +767,9 @@ static void string_loop_owners(void) {
         }
         XrLirValue one=test_constant(m,body,XR_LIR_I64,1),next=test_binary(m,body,XR_LIR_ADD,iteration,one,XR_LIR_PREDICATE_NONE);
         test_branch(m,body,header,&next,1);test_return(m,done,iteration);
-        CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
-        if(!attack)OK(xr_lir_module_finish(m,NULL));
+        bool invalid = attack == 1 || attack == 2;
+        CHECK(xr_lir_verify(m,NULL)==(invalid?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
+        if(!invalid)OK(xr_lir_module_finish(m,NULL));
         xr_lir_module_destroy(m);
     }
 }
@@ -928,10 +929,13 @@ static void frame_string_cells(void) {
 #include "lir_display_cases.h"
 #include "lir_callable_type_cases.h"
 #include "lir_owned_cell_type_cases.h"
+#include "lir_string_cases.h"
 
 int main(void) {
     callable_type_owners();
     callable_type_rejections();
+    string_catalog_owners();
+    string_reference_lifetime();
     nullable_type_owners();
     nullable_type_rejections();
     display_catalog_owners();

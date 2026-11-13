@@ -29,6 +29,13 @@ XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place
  * Validation and copying debit the same finite work and preserve failed roots. */
 XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *place,
     const char *bytes, size_t length, XrXirValueAdmission *admission);
+/* The caller publishes its actual binding before releasing a replaced owner.
+ * Retired must be a distinct empty Unit value. Failure preserves both outputs.
+ * In-place growth returns an empty retired value and acquires no extra owner. */
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_deferred(const XrXirValuePlace *,
+    const XrXirValue *, XrXirValueAdmission *, XrXirValue *retired);
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8_deferred(const XrXirValuePlace *,
+    const char *, size_t, XrXirValueAdmission *, XrXirValue *retired);
 typedef enum XrXirValuePathKind {
     XR_XIR_PATH_FIELD,
     XR_XIR_PATH_INDEX,

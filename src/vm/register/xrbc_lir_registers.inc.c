@@ -212,7 +212,10 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                 for (uint32_t a=0; a<i.edges[e].argument_count; ++a)
                     if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
-            if (i.op == XR_LIR_ARRAY_BORROW && !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
+            if ((i.op == XR_LIR_ARRAY_BORROW ||
+                xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_BORROW_STATE ||
+                xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_APPEND_STATE) &&
+                !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
             /* The view import ABI consumes an actual State reference register.
              * Ordinary numeric spill homes carry no such descriptor kind. */
             if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_IMPORT &&
@@ -222,7 +225,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     for(uint32_t v=1;v<=c->view.value_count;++v) {
         XrLirType type=rbc_lir_value_type(c,v);
         if(c->slots[v]!=UINT32_MAX ||
-            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF &&
+            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF && type!=XR_LIR_STRING_REF &&
              type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE && type!=XR_LIR_VIEW_FRAME &&
              type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64 && !rbc_lir_callable_type(c->input, type)))continue;
         if (!rbc_lir_pin_value(c,v,budget)) return false;

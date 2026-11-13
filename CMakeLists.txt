@@ -1339,7 +1339,7 @@ endforeach()
 string(APPEND _native_link_header "};\n#endif\n")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_native_link_paths.h" CONTENT "${_native_link_header}")
 install(FILES include/xray_native_runtime.h include/xray_native_state.h include/xray_native_array.h
-    include/xray_native_view.h include/xray_native_pod.h include/xray_export.h
+    include/xray_native_view.h include/xray_native_pod.h include/xray_native_string.h include/xray_export.h
     DESTINATION lib/xray/native/include COMPONENT XrayRuntime)
 
 if(BUILD_TESTS)

@@ -1,0 +1,18 @@
+fn build(count:i64,piece:string)->string {
+    var text=""
+    var i=0
+    while(i<count){text+=piece;i+=1}
+    const before=text
+    var j=0
+    while(j<3){text+="y";j+=1}
+    print(before)
+    return text
+}
+print(build(4,"x"))
+fn digits(count:i64)->string {
+    var text=""
+    var i=0
+    while(i<count){text+="${i}";i+=1}
+    return text
+}
+print(digits(4))

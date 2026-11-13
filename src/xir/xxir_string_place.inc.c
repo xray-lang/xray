@@ -10,9 +10,10 @@
  *   Borrowing the root avoids an artificial retain, while real aliases keep COW.
  */
 static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
-    const char *bytes, size_t length, size_t runes, XrXirValueAdmission *admission) {
+    const char *bytes, size_t length, size_t runes, XrXirValueAdmission *admission, XrXirValue *retired) {
     if (!place || place->type != XR_XIR_STRING || !place->payload || (!bytes && length) ||
-        !admission || !xr_xir_domain_current(admission->domain))
+        !admission || !xr_xir_domain_current(admission->domain) || !unit_value(retired) ||
+        place->payload == &retired->payload)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue owned = {XR_XIR_STRING, 0, 0};
     memcpy(&owned.payload, place->payload, sizeof(owned.payload));
@@ -59,26 +60,26 @@ static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
             status = value_place_publish(place, &result);
             if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return status; }
             memcpy(place->payload, &result.payload, sizeof(result.payload));
-            xr_xir_value_drop_graph_operation(&owned);
+            *retired = owned;
             owned = result;
         }
     }
     if (status == XR_XIR_VALUE_OK) memcpy(place->payload, &owned.payload, sizeof(owned.payload));
     return status;
 }
-XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place,
-    const XrXirValue *suffix, XrXirValueAdmission *admission) {
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_deferred(const XrXirValuePlace *place,
+    const XrXirValue *suffix, XrXirValueAdmission *admission, XrXirValue *retired) {
     xr_xir_value_graph_begin();
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
     if (xr_xir_value_argument(suffix, NULL, XR_XIR_STRING)) {
         XirString *string = string_pointer(suffix);
-        status = string_place_append_bytes(place, string->bytes, string->length, string->runes, admission);
+        status = string_place_append_bytes(place, string->bytes, string->length, string->runes, admission, retired);
     }
     xr_xir_value_graph_end();
     return status;
 }
-XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *place,
-    const char *bytes, size_t length, XrXirValueAdmission *admission) {
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8_deferred(const XrXirValuePlace *place,
+    const char *bytes, size_t length, XrXirValueAdmission *admission, XrXirValue *retired) {
     xr_xir_value_graph_begin();
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
     if ((!bytes && length) || length == SIZE_MAX || !admission ||
@@ -88,8 +89,23 @@ XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *
     if (!xr_xir_domain_is_compile(admission->domain) && (!xr_xir_domain_work(admission->domain, length + 1))) { status = XR_XIR_VALUE_LIMIT; goto done; }
     XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)bytes, length);
     status = scan.error == XR_UTF8_OK ?
-        string_place_append_bytes(place, bytes, length, scan.rune_count, admission) : XR_XIR_VALUE_BAD_UTF8;
+        string_place_append_bytes(place, bytes, length, scan.rune_count, admission, retired) : XR_XIR_VALUE_BAD_UTF8;
 done:
     xr_xir_value_graph_end();
+    return status;
+}
+
+XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place,
+    const XrXirValue *suffix, XrXirValueAdmission *admission) {
+    XrXirValue retired = {0};
+    XrXirValueStatus status = xr_xir_string_place_append_deferred(place, suffix, admission, &retired);
+    xr_xir_value_drop(&retired);
+    return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *place,
+    const char *bytes, size_t length, XrXirValueAdmission *admission) {
+    XrXirValue retired = {0};
+    XrXirValueStatus status = xr_xir_string_place_append_utf8_deferred(place, bytes, length, admission, &retired);
+    xr_xir_value_drop(&retired);
     return status;
 }

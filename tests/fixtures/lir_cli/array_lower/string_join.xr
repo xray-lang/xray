@@ -1,0 +1,17 @@
+fn words()->string {
+    const parts=["a","","Ω\0"]
+    const separator="|"
+    const result=parts.join(separator)
+    print(separator)
+    return result
+}
+print(words())
+const empty:Array<string>=[]
+print(empty.join("|"))
+const integers=[-17,0,8]
+print(integers.join("|"))
+const bytes:Array<u8>=[0,128,255]
+print(bytes.join("|"))
+const wideWords:Array<u64>=[0,18446744073709551615]
+print(wideWords.join("|"))
+print(["a","b"].join())

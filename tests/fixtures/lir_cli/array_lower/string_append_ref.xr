@@ -1,0 +1,18 @@
+var published="q"
+fn leaf(value:ref string){value+="r"}
+fn relay(value:ref string){leaf(ref value)}
+fn local()->string {
+    var text="a"
+    const old=text
+    relay(ref text)
+    print(old)
+    return text
+}
+fn actual(value:ref string){
+    relay(ref value)
+    published+="m"
+    value+="s"
+}
+print(local())
+actual(ref published)
+print(published)

@@ -81,23 +81,29 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
     return XR_RBC_OK;
 }
 
+#include "xrbc_string_library.inc.c"
+
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    if (f->aggregate_accesses[index].operation == XR_RBC_STRING_LIBRARY)
+        return xr_rbc_string_library(module, stack, frame, f, index, source);
     if (f->aggregate_accesses[index].operation == XR_RBC_AGGREGATE_DISPLAY) {
         XrRbcAggregateAccess access = f->aggregate_accesses[index];
         const void *bytes;
         size_t size;
-        uint8_t boolean = 0;
+        uint64_t scalar = 0;
         if (access.slot >= XR_POD_SCALAR_COUNT) {
             XrRbcAggregateValue value = f->aggregate_values[access.source];
             bytes = xr_rbc_aggregate_value(stack, frame, value);
             size = module->aggregate_types[value.type].physical.size;
         } else {
             uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first])->bits;
-            if (bits > 1) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
-            boolean = (uint8_t)bits;
-            bytes = &boolean;
-            size = sizeof(boolean);
+            if ((access.slot == XR_POD_BOOL && bits > 1) ||
+                (access.slot == XR_POD_U8 && bits > UINT8_MAX))
+                xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+            scalar = bits;
+            bytes = &scalar;
+            size = access.slot == XR_POD_BOOL || access.slot == XR_POD_U8 ? 1u : sizeof(scalar);
         }
         XrtString *text = xrt_pod_display(module->aggregate_types, (uint32_t)module->aggregate_type_count,
             access.slot, bytes, size, source);

@@ -1,0 +1,16 @@
+fn consume(a:string,b:string,c:string,d:string,
+           e:string,f:string,g:string,h:string,
+           i:string,j:string,k:string,l:string,
+           m:string,n:string,o:string,p:string){print(a)}
+fn repeat(a:string,b:string,c:string,d:string,
+          e:string,f:string,g:string,h:string,
+          i:string,j:string,k:string,l:string,
+          m:string,n:string,o:string,p:string){
+    var iteration=0
+    while(iteration<2){
+        consume(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
+        iteration+=1
+    }
+}
+repeat("x","x","x","x","x","x","x","x",
+       "x","x","x","x","x","x","x","x")

@@ -811,8 +811,10 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 }
 
 #include "lir_display_alloc_cases.h"
+#include "lir_string_alloc_cases.h"
 
 int main(void) {
+    string_reference_compiler_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();

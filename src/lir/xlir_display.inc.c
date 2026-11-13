@@ -7,7 +7,7 @@
  * xlir_display.inc.c - Shared qualification and physical catalog projection
  */
 XR_FUNC bool xr_lir_display_type(const XrLirModule *m, XrLirType type) {
-    if (type == XR_LIR_I1) return true;
+    if (type == XR_LIR_I1 || type == XR_LIR_U8 || type == XR_LIR_U64) return true;
     bool nullable = false;
     while (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape = {0};
@@ -39,20 +39,8 @@ XR_FUNC XrLirStatus xr_lir_display_operation(const XrLirModule *m, uint32_t *out
     return XR_LIR_UNSUPPORTED;
 }
 XR_FUNC XrLirStatus xr_lir_display_catalog_install(XrLirModule *m, bool views, bool arrays) {
-    XrLirStatus status = lir_writable(m);
-    if (status != XR_LIR_OK) return status;
-    XrLirIntrinsic entries[XR_LIR_VIEW_OP_COUNT] = {{0}};
-    uint32_t count = 0;
-    for (uint32_t role = 1; views && role < XR_LIR_VIEW_OP_COUNT; ++role) {
-        const LirViewSignature *shape = &lir_view_signatures[role];
-        entries[count++] = (XrLirIntrinsic){XR_LIR_ARRAY_CATALOG_COUNT + role,
-            shape->parameters, shape->count, shape->result, true, role};
-    }
-    entries[count++] = (XrLirIntrinsic){XR_LIR_ARRAY_CATALOG_COUNT + XR_LIR_VIEW_OP_COUNT,
-        NULL, 0, XR_LIR_STRING, true, XR_LIR_INTRINSIC_DISPLAY};
-    XrLirRegistry registry = {entries, count};
-    status = arrays || views ? lir_array_catalog(m, &registry) : xr_lir_set_registry(m, &registry);
-    return status == XR_LIR_OK ? status : lir_fail(m, status);
+    return lir_library_catalog(m, (views ? LIR_LIBRARY_VIEW : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
+        LIR_LIBRARY_DISPLAY);
 }
 XR_FUNC XrLirStatus xr_lir_pod_type(const XrLirModule *m, XrLirType type, XrPodType *output) {
     XrLirTypeView shape = {0};

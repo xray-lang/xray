@@ -31,7 +31,7 @@ static void c_display_catalog(LirC *c) {
 static void c_display_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     XrLirType type = c_value_type(c, v->operands[0]);
     uint32_t encoded = type >= XR_LIR_TYPE_COUNT ?
-        XR_POD_SCALAR_COUNT + c->constructed_types[type - XR_LIR_TYPE_COUNT].pod_index : XR_POD_BOOL;
+        XR_POD_SCALAR_COUNT + c->constructed_types[type - XR_LIR_TYPE_COUNT].pod_index : lir_pod_scalar(type);
     c_format(c, "    v%" PRIu32 " = xrt_pod_display(%s, UINT32_C(%" PRIu32
         "), UINT32_C(%" PRIu32 "), &", v->result,
         c->pod_count ? "xrl_display_types" : "NULL", c->pod_count, encoded);

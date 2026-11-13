@@ -1468,7 +1468,7 @@ static void test_typed_spill_copy_cycle(void) {
     xr_rbc_program_destroy(program);
 }
 
-static void test_publication_admission(void) {
+static void test_backward_owned_dag(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType text_type=XR_LIR_STRING;
     XrLirFunction f=test_function(m,"backward_owned_dag",NULL,0,XR_LIR_I64);
     XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,&text_type,1),producer=test_block(m,f,NULL,0);
@@ -1479,11 +1479,22 @@ static void test_publication_admission(void) {
     XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_value(m,join,&op,&length));frame_drop(m,join,value,false);test_return(m,join,length);
     OK(xr_lir_module_finish(m,NULL));
-    // Valid LIR can exceed the retained physical managed-backedge boundary.
+    // Physical instruction order can run backward through an acyclic graph.
     XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
-    CHECK(xr_rbc_compile(m,f,&program,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program && diagnostic.status==XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(strstr(diagnostic.message,"runtime admission"));xr_lir_module_destroy(m);
+    CHECK(xr_rbc_compile(m,f,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    CHECK(program && diagnostic.status==XR_RBC_COMPILE_OK);
+    const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
+    CHECK(physical->register_kind_count==physical->register_count &&
+        physical->reference_spill_count<=physical->spill_count);
+    uint32_t string_homes=0;
+    for(uint32_t slot=0;slot<physical->register_count;++slot)
+        string_homes+=physical->register_kinds[slot]==XR_RBC_STRING;
+    for(uint32_t slot=0;slot<physical->reference_spill_count;++slot)
+        CHECK(physical->reference_spill_kinds[slot]==XR_RBC_STRING);
+    CHECK(string_homes || physical->reference_spill_count);
+    xr_lir_module_destroy(m);
+    CHECK(run(program,NULL,0)==5);
+    xr_rbc_program_destroy(program);
 }
 
 #include "lir_bytecode_state_cases.h"
@@ -1496,7 +1507,7 @@ int main(void) {
     test_f64_constant_spills_and_phi();
     test_many_spilled_conditions();
     test_typed_spill_copy_cycle();
-    test_publication_admission();
+    test_backward_owned_dag();
     test_frame_cell_aliases();
     test_scalar_spill_branches();
     test_scalar_spills();

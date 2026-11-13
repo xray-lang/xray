@@ -13,6 +13,8 @@
  */
 
 #include "xrbc_internal.h"
+#include "lir/xlir_string.h"
+#include "xray_native_string.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
