@@ -9,6 +9,8 @@
 static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, unsigned capture) {
     CArrayFixture c = {0};
     OK(xr_lir_module_create(NULL, &c.module));
+    XrLirType captured_cell = 0;
+    if (capture == 4) OK(xr_lir_cell_type(c.module, (XrLirCellType){XR_LIR_I64, 0}, &captured_cell));
     XrLirCallableParameter parameter = {.type=XR_LIR_I64};
     XrLirCallableType shape = {.parameters=&parameter, .parameter_count=1, .result=XR_LIR_I64};
     XrLirType callable = 0;
@@ -16,6 +18,7 @@ static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, 
     XrLirFunction plus = {0}, twice = {0};
     XrLirType scalars[] = {XR_LIR_I64, XR_LIR_I64};
     if (capture == 2) scalars[0] = XR_LIR_I64_CELL;
+    if (capture == 4) scalars[0] = captured_cell;
     XrLirFunctionSpec spec = {.name="plus_one", .name_length=8,
         .parameters=scalars, .parameter_count=capture ? 2u : 1u, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module, &spec, &plus));
@@ -30,7 +33,7 @@ static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, 
     XrLirValue increment = {0};
     if (capture) {
         OK(xr_lir_function_parameter(c.module, plus, 0, &increment));
-        if (capture == 2) increment = ca_value(&c, block, XR_LIR_CELL_READ, XR_LIR_I64, &increment, 1);
+        if (capture == 2 || capture == 4) increment = ca_value(&c, block, XR_LIR_CELL_READ, XR_LIR_I64, &increment, 1);
     }
     else increment = ca_constant(&c, block, 1);
     ca_return(&c, block, ca_binary(&c, block, XR_LIR_ADD, input, increment));
@@ -54,11 +57,12 @@ static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, 
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, *root, block));
     XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=callable, .callee=plus};
-    if (capture == 3) reference.bits = XR_LIR_CLOSURE_OWNED;
+    if (capture >= 3) reference.bits = XR_LIR_CLOSURE_OWNED;
     XrLirValue captured = {0};
     if (capture) {
         captured = ca_constant(&c, block, 1);
         if (capture == 2) captured = ca_value(&c, block, XR_LIR_CELL_NEW, XR_LIR_I64_CELL, &captured, 1);
+        if (capture == 4) captured = ca_value(&c, block, XR_LIR_CELL_NEW, captured_cell, &captured, 1);
         reference.operands = &captured;
         reference.operand_count = 1;
     }
