@@ -1,4 +1,57 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+static void callable_owned_edge_binding(void) {
+    CArrayFixture c = {0};
+    OK(xr_lir_module_create(NULL, &c.module));
+    XrLirCallableType signature = {.result=XR_LIR_I64};
+    XrLirType callable = 0;
+    OK(xr_lir_callable_type(c.module, &signature, &callable));
+    XrLirFunction target = {0}, root = {0};
+    XrLirFunctionSpec spec = {.name="answer", .name_length=6, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &spec, &target));
+    OK(xr_lir_set_closure_target(c.module, target, (XrLirClosureTarget){callable, 0, false}));
+    OK(xr_lir_define_function(c.module, target));
+    XrLirBlock block;
+    OK(xr_lir_add_block(c.module, target, NULL, 0, &block));
+    OK(xr_lir_set_entry(c.module, target, block));
+    ca_return(&c, block, ca_constant(&c, block, 42));
+    spec = (XrLirFunctionSpec){.name="root", .name_length=4, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &spec, &root));
+    OK(xr_lir_define_function(c.module, root));
+    OK(xr_lir_add_block(c.module, root, NULL, 0, &block));
+    OK(xr_lir_set_entry(c.module, root, block));
+    XrLirBlock receiving;
+    OK(xr_lir_add_block(c.module, root, &callable, 1, &receiving));
+    XrLirValue outer = callable_fixture_scope(&c, block, (XrLirValue){0});
+    XrLirValue inner = callable_fixture_scope(&c, block, outer);
+    XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=callable,
+        .callee=target, .bits=XR_LIR_CLOSURE_OWNED};
+    XrLirValue value;
+    OK(xr_lir_emit_value(c.module, block, &reference, &value));
+    XrLirInstruction branch = {.op=XR_LIR_BR, .type=XR_LIR_UNIT,
+        .edge_count=1, .edges={{receiving, &value, 1}}};
+    OK(xr_lir_set_terminator(c.module, block, &branch));
+    OK(xr_lir_block_parameter(c.module, receiving, 0, &value));
+    XrLirValue operands[] = {outer, value};
+    XrLirInstruction bind = {.op=XR_LIR_FUNCTION_BIND, .type=callable, .operands=operands, .operand_count=2};
+    OK(xr_lir_emit_value(c.module, receiving, &bind, &value));
+    (void)callable_fixture_leave(&c, receiving, inner, (XrLirValue){0}, XR_LIR_UNIT);
+    XrLirValue result = ca_value(&c, receiving, XR_LIR_CALL_INDIRECT, XR_LIR_I64, &value, 1);
+    (void)callable_fixture_leave(&c, receiving, outer, (XrLirValue){0}, XR_LIR_UNIT);
+    ca_return(&c, receiving, result);
+    OK(xr_lir_module_finish(c.module, NULL));
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(c.module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    xr_lir_module_destroy(c.module);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    uint64_t bits = 0;
+    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+}
+
 static void captured_cell_frame_raw(const XrRbcProgram *program) {
     const XrRbcModule *original = xr_rbc_program_view(program);
     CHECK(original->function_count == 2);

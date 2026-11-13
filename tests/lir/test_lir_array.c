@@ -508,6 +508,7 @@ int main(int argc, char **argv) {
     callable_owned_factory_cases();
     captured_cell_scope_join();
     captured_cell_frame_extent();
+    callable_owned_edge_binding();
     view_receiving_owners();
     callable_backend_frontier();
     callable_vm_execution();

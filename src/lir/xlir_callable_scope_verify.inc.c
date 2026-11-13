@@ -66,6 +66,11 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
     uint32_t *bindings = outgoing + f->block_count;
     size_t binding_count = 0;
     parents[0] = 0;
+    bool captured_cells = false;
+    for (uint32_t v = 0; v < f->value_count && !captured_cells; ++v) {
+        XrLirCellType cell;
+        captured_cells = xr_lir_cell_type_view(m, f->values[v].type, &cell) == XR_LIR_OK;
+    }
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (lir_scope_callable(m, f->parameter_types[p])) owners[f->parameters[p]] = 0;
     uint32_t bad_block = 0, bad_instruction = 0;
@@ -103,7 +108,7 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
                 bindings[binding_count * 2] = v->operands[0];
                 bindings[binding_count++ * 2 + 1] = (uint32_t)v->bits;
             }
-            if ((v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) && v->result) {
+            if (captured_cells && (v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) && v->result) {
                 XrLirCallableType signature;
                 if (xr_lir_callable_type_view(m, v->type, &signature) == XR_LIR_OK) {
                     uint32_t receiving = v->op == XR_LIR_FUNCTION_BIND ? v->operands[0] : current;
