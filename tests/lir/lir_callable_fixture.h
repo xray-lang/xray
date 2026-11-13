@@ -75,4 +75,3 @@ static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, 
 static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
     callable_fixture_capture(output, root, false);
 }
-
