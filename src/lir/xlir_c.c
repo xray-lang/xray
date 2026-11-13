@@ -399,6 +399,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else {
                 c->stack_environments |= v->bits == XR_LIR_CLOSURE_FRAME && v->operand_count != 0;
                 c_visit(c, v->callee);
+                if (!v->operand_count && lir_state_has_callables(c->request->module, &c->state_layout))
+                    c_callable_owned_target(c, v->callee);
                 if (v->bits == XR_LIR_CLOSURE_OWNED) {
                     c_callable_owned_target(c, v->callee);
                     c->runtime = true;
@@ -1136,6 +1138,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     }
     c_callable_thunks(c);
     c_callable_owned_thunks(c);
+    c_callable_state_exports(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);

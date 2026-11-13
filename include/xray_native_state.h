@@ -13,6 +13,7 @@
 #ifndef XRAY_NATIVE_STATE_H
 #define XRAY_NATIVE_STATE_H
 #include "xray_native_runtime.h"
+#include "xray_native_callable.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -35,7 +36,8 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64,
     XRT_MODULE_FIXED_U8,
     XRT_MODULE_NULLABLE,
-    XRT_MODULE_CELL_ARRAY_I64
+    XRT_MODULE_CELL_ARRAY_I64,
+    XRT_MODULE_CALLABLE
 } XrtModuleTypeKind;
 /* Fixed U8 argument is its nonzero count. Nullable argument is an earlier
  * type ordinal in this catalog. Other kinds require zero. Nullable admits
@@ -62,6 +64,8 @@ typedef struct XrtModuleLayoutSpec {
     uint32_t slot_count;
     uint64_t payload_size, byte_limit;
     uint32_t payload_alignment;
+    const XrtCallableTypeSpec *callable_types;
+    uint32_t callable_type_count;
 } XrtModuleLayoutSpec;
 
 /* Input arrays are copied. Runtime-selected copy/drop callbacks and their type

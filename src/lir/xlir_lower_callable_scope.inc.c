@@ -37,9 +37,10 @@ static bool lower_lexical_needed(LowerFunction *f) {
     if (lower_callable_type(f, f->source->result)) return true;
     for (uint32_t i = 0; i < f->source->instruction_count; ++i) {
         const XrXirInstruction *op = &f->source->instructions[i];
-        if ((op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT) && lower_callable_type(f, op->type))
+        if ((op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INDIRECT ||
+             op->op == XR_XIR_CELL_READ || op->op == XR_XIR_SLOT_LOAD) && lower_callable_type(f, op->type))
             return true;
-        if (op->op == XR_XIR_FUNCTION_REF && op->args[1]) {
+        if (op->op == XR_XIR_FUNCTION_REF) {
             XirClosureStorage placement;
             if (xr_xir_compile_closure_placement(f->owner->request->closed, f->owner->function,
                     f->source->parameter_count + i, &placement) == XR_XIR_OK && placement == XIR_CLOSURE_OWNED)

@@ -53,6 +53,7 @@ typedef struct XrtCallableScope {
     uint64_t identity;
 } XrtCallableScope;
 typedef struct XirFunction XrtCallable;
+struct XrtModuleState;
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,11 @@ XRAY_API XrtCallable *xrt_callable_scope_bind(XrtCallableScope *, uint32_t bindi
 XRAY_API XrtCallable *xrt_callable_scope_leave(XrtCallableScope *, XrtCallable *result, uint32_t source);
 XRAY_API uint64_t xrt_callable_capture(const XrtCallableImage *, const XrtCallable *,
     uint32_t entry, uint32_t capture, uint32_t source);
+/* A persistent slot owns the canonical object independently. Reading it creates
+ * a temporary owner in the actual receiving scope before exposing its handle. */
+XRAY_API XrtCallable *xrt_callable_scope_copy(XrtCallableScope *, XrtCallable *, uint32_t source);
+XRAY_API uint32_t xrt_callable_entry(const XrtCallableImage *, const XrtCallable *, uint32_t source);
+XRAY_API void xrt_callable_state_prepare(struct XrtModuleState *, const XrtCallableImage *, uint32_t source);
 #ifdef __cplusplus
 }
 #endif

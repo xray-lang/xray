@@ -31,7 +31,12 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         if (received != XR_LIR_OK) { status = XR_RBC_COMPILE_UNSUPPORTED; goto done; }
         next += specs[t].parameter_count;
     }
-    XrXirValueStatus built = xrt_callable_types_new(specs, count, UINT64_MAX, &program->module.closure_types);
+    XrXirTypeArena *received = xrt_module_callable_catalog(program->module.state_layout);
+    XrXirValueStatus built = XR_XIR_VALUE_OK;
+    if (received) {
+        if (!xr_xir_compile_type_arena_retain(received)) built = XR_XIR_VALUE_REFCOUNT_LIMIT;
+        else program->module.closure_types = received;
+    } else built = xrt_callable_types_new(specs, count, UINT64_MAX, &program->module.closure_types);
     if (built != XR_XIR_VALUE_OK) {
         status = built == XR_XIR_VALUE_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
             built == XR_XIR_VALUE_LIMIT || built == XR_XIR_VALUE_MEMORY_LIMIT ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_UNSUPPORTED;

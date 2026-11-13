@@ -520,6 +520,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT &&
         i->op != XR_LIR_FUNCTION_SCOPE_ENTER && i->op != XR_LIR_FUNCTION_SCOPE_LEAVE && i->op != XR_LIR_FUNCTION_BIND &&
+        i->op != XR_LIR_STATE_READ && i->op != XR_LIR_STATE_WRITE &&
+        i->op != XR_LIR_STATE_CONSTRUCT && i->op != XR_LIR_STATE_INITIALIZE &&
         i->op != XR_LIR_BR && i->op != XR_LIR_CONDBR) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
@@ -1782,6 +1784,9 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         goto done;
     }
     bool owned_closures = false;
+    XrLirStateLayout state_layout = {0};
+    if (xr_lir_state_layout_view(input, &state_layout) == XR_LIR_OK)
+        owned_closures = lir_state_has_callables(input, &state_layout);
     if (!rbc_lir_closure(input, ids, mapping, &count, &owned_closures, d)) {
         status = d->status;
         goto done;

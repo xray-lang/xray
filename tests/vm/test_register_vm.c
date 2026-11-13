@@ -1306,6 +1306,7 @@ int main(int argc, char **argv) {
     test_raw_array_cell_mutation_failure();
     test_raw_array_cell_move_entry();
     test_raw_state_deferred_publication();
+    test_raw_callable_state_requires_typed_transport();
     test_raw_state_spill_transport();
     test_raw_state_spill_shapes();
     test_raw_state_bool_bits();

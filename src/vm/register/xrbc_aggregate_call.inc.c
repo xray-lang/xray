@@ -83,6 +83,7 @@ static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *
 }
 
 #include "xrbc_callable_scope.inc.c"
+#include "xrbc_callable_state.inc.c"
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFunction *function, uint32_t index, uint32_t source, size_t pc) {
@@ -90,6 +91,11 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
     XrRbcAggregateAccess access = function->aggregate_accesses[index];
     size_t parent = stack->depth - 1;
     XrRbcFrame *frame = &stack->frames[parent];
+    if (access.operation >= XR_RBC_FUNCTION_STATE_READ && access.operation <= XR_RBC_FUNCTION_STATE_INITIALIZE) {
+        XrRbcStatus status = xr_rbc_callable_state_step(module, stack, function, access, source);
+        if (status == XR_RBC_OK) stack->frames[parent].pc = pc;
+        return status;
+    }
     if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND) {
         uint64_t token = access.count ? stack->slots[frame->base + access.source].bits : 0;
         XrRbcStatus status = xr_rbc_closure_scope_step(module, stack, function, access,

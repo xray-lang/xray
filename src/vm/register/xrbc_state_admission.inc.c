@@ -10,16 +10,21 @@
  *   One retained runtime layout supplies payload kinds and mutability. Raw
  *   scalar bits never establish a state or reference capability.
  */
-static bool xr_rbc_state_payload_kind(uint32_t kind) {
-    return kind == XRT_MODULE_UNIT || kind == XRT_MODULE_BOOL || kind == XRT_MODULE_I64 ||
-        kind == XRT_MODULE_F64 || kind == XRT_MODULE_STRING ||
-        xr_rbc_state_array(kind);
+static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
+    switch (kind) {
+    case XRT_MODULE_UNIT: case XRT_MODULE_BOOL: case XRT_MODULE_I64: case XRT_MODULE_F64:
+        *payload = XR_RBC_BITS; return true;
+    case XRT_MODULE_STRING: *payload = XR_RBC_STRING; return true;
+    case XRT_MODULE_ARRAY_I64: *payload = XR_RBC_ARRAY_I64; return true;
+    case XRT_MODULE_ARRAY_STRING: *payload = XR_RBC_ARRAY_STRING; return true;
+    case XRT_MODULE_ARRAY_U8: *payload = XR_RBC_ARRAY_U8; return true;
+    case XRT_MODULE_ARRAY_U64: *payload = XR_RBC_ARRAY_U64; return true;
+    default: return false;
+    }
 }
-
-static XrRbcRegisterKind rbc_state_register_kind(uint32_t kind) {
-    return kind == XRT_MODULE_STRING ? XR_RBC_STRING : kind == XRT_MODULE_ARRAY_I64 ? XR_RBC_ARRAY_I64 :
-        kind == XRT_MODULE_ARRAY_STRING ? XR_RBC_ARRAY_STRING : kind == XRT_MODULE_ARRAY_U8 ? XR_RBC_ARRAY_U8 :
-        kind == XRT_MODULE_ARRAY_U64 ? XR_RBC_ARRAY_U64 : XR_RBC_BITS;
+static bool xr_rbc_state_payload_kind(uint32_t kind) {
+    XrRbcRegisterKind payload;
+    return rbc_state_register_kind(kind, &payload);
 }
 
 static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
@@ -36,6 +41,7 @@ static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
                 (!xr_rbc_state_payload_kind(layout.types[layout.slots[i].type].kind) &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_FIXED_U8 &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_NULLABLE &&
+                 layout.types[layout.slots[i].type].kind != XRT_MODULE_CALLABLE &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_CELL_ARRAY_I64)) return false;
     } else if (module->state_entry) return false;
     for (size_t f = 0; f < module->function_count; ++f) {
@@ -68,7 +74,8 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
         return !b && !c && rbc_register_kind(function, a) == XR_RBC_STATE_REF;
     if (op == XR_RBC_STATE_READ || op == XR_RBC_STATE_WRITE) {
         if (b >= function->register_count || !xr_rbc_state_payload_kind(c)) return false;
-        XrRbcRegisterKind payload = rbc_state_register_kind(c);
+        XrRbcRegisterKind payload;
+        if (!rbc_state_register_kind(c, &payload)) return false;
         if (op == XR_RBC_STATE_READ)
             return rbc_register_kind(function, b) == XR_RBC_STATE_REF &&
                 (c == XRT_MODULE_UNIT ? !a : rbc_register_kind(function, a) == payload);
@@ -78,8 +85,8 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     if (index >= function->state_access_count) return false;
     XrRbcStateAccess access = function->state_accesses[index];
     XrtModuleTypeKind kind = layout.types[layout.slots[access.slot].type].kind;
-    if ((kind == XRT_MODULE_FIXED_U8 || kind == XRT_MODULE_NULLABLE || kind == XRT_MODULE_CELL_ARRAY_I64) && op != XR_RBC_STATE_REFERENCE) return false;
-    XrRbcRegisterKind payload = rbc_state_register_kind(kind);
+    XrRbcRegisterKind payload = XR_RBC_BITS;
+    if (op != XR_RBC_STATE_REFERENCE && !rbc_state_register_kind(kind, &payload)) return false;
     if (op == XR_RBC_STATE_INITIALIZE)
         return !(layout.slots[access.slot].flags & XRT_MODULE_SLOT_MUTABLE) &&
             !access.state && rbc_register_kind(function, a) == XR_RBC_STATE &&

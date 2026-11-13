@@ -33,6 +33,9 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         uint32_t type;
         if (source.payload == XR_LIR_VIEW_CELL) {
             type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
+        } else if (rbc_lir_callable_type(input, source.payload)) {
+            type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count +
+                lir_state_has_view_cells(&layout) + source.payload - XR_LIR_TYPE_COUNT;
         } else if (source.payload >= XR_LIR_TYPE_COUNT) {
             uint32_t ordinal = source.payload - XR_LIR_TYPE_COUNT;
             if (program->physical_aggregates) ordinal = program->physical_aggregates[ordinal];
@@ -47,8 +50,30 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             source.mutable ? XRT_MODULE_SLOT_MUTABLE : 0, source.offset, source.size, source.alignment};
     }
     if (status == XR_RBC_COMPILE_OK) {
+        uint32_t callable_count = 0, parameter_capacity = 0;
+        for (uint32_t s = 0; s < layout.slot_count; ++s)
+            if (rbc_lir_callable_type(input, layout.slots[s].payload))
+                callable_count = xr_lir_constructed_type_count(input);
+        XrtCallableTypeSpec *callables = callable_count ? xr_calloc(callable_count, sizeof(*callables)) : NULL;
+        XrtCallableParameterSpec *parameters = NULL;
+        for (uint32_t t = 0; t < callable_count; ++t) {
+            XrLirCallableType signature;
+            if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK &&
+                signature.parameter_count > parameter_capacity) parameter_capacity = signature.parameter_count;
+        }
+        if (parameter_capacity) parameters = xr_calloc(parameter_capacity, sizeof(*parameters));
+        if ((callable_count && !callables) || (parameter_capacity && !parameters)) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
+        for (uint32_t t = 0; t < callable_count && status == XR_RBC_COMPILE_OK; ++t) {
+            if (lir_native_callable_spec(input, XR_LIR_TYPE_COUNT + t, parameters, parameter_capacity, &callables[t]) != XR_LIR_OK) {
+                status = XR_RBC_COMPILE_UNSUPPORTED; break;
+            }
+            uint32_t count = callables[t].parameter_count;
+            callables[t].parameters = count ? xr_malloc((size_t)count * sizeof(*parameters)) : NULL;
+            if (count && !callables[t].parameters) { status = XR_RBC_COMPILE_OUT_OF_MEMORY; break; }
+            if (count) memcpy((void *)callables[t].parameters, parameters, (size_t)count * sizeof(*parameters));
+        }
         uint64_t type_count = (uint64_t)LIR_STATE_CONSTRUCTED_BASE + program->module.aggregate_type_count +
-            lir_state_has_view_cells(&layout);
+            lir_state_has_view_cells(&layout) + callable_count;
         XrtModuleTypeSpec *types = NULL;
         if (type_count > UINT32_MAX / 2 || type_count > SIZE_MAX / sizeof(*types)) status = XR_RBC_COMPILE_LIMIT;
         else if (!(types = xr_malloc((size_t)type_count * sizeof(*types)))) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
@@ -64,17 +89,23 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
                 types[LIR_STATE_CONSTRUCTED_BASE + t] = (XrtModuleTypeSpec){
                     shape.kind == XR_POD_NULLABLE ? XRT_MODULE_NULLABLE : XRT_MODULE_FIXED_U8, argument};
             }
-            if (lir_state_has_view_cells(&layout)) types[type_count - 1] =
+            uint32_t first = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
+            if (lir_state_has_view_cells(&layout)) types[first++] =
                 (XrtModuleTypeSpec){XRT_MODULE_CELL_ARRAY_I64, 0};
+            for (uint32_t t = 0; t < callable_count; ++t) types[first + t] = (XrtModuleTypeSpec){
+                callables && callables[t].kind == XRT_CALLABLE_SIGNATURE ? XRT_MODULE_CALLABLE : XRT_MODULE_UNIT,
+                callables && callables[t].kind == XRT_CALLABLE_SIGNATURE ? t : 0};
         }
         XrtModuleLayoutSpec spec = {types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
-            layout.payload_alignment};
+            layout.payload_alignment, callables, callable_count};
         XrXirValueStatus copied = status == XR_RBC_COMPILE_OK ?
             xrt_module_layout_new(&spec, &program->module.state_layout) : XR_XIR_VALUE_OK;
         if (copied != XR_XIR_VALUE_OK) status = copied == XR_XIR_VALUE_OOM ?
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID;
         xr_free(types);
+        for (uint32_t t = 0; callables && t < callable_count; ++t) xr_free((void *)callables[t].parameters);
+        xr_free(callables); xr_free(parameters);
     }
     xr_free(modules); xr_free(slots);
     return status == XR_RBC_COMPILE_OK ? status :
@@ -83,6 +114,19 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
 
 static bool rbc_lir_state_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t first = c->slots[i->operands[0]], result = i->result ? c->slots[i->result] : 0;
+    XrLirType payload = i->type;
+    if ((i->op == XR_LIR_STATE_WRITE || i->op == XR_LIR_STATE_CONSTRUCT || i->op == XR_LIR_STATE_INITIALIZE) &&
+        i->operand_count == 2)
+        xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[1]}, &payload);
+    if (rbc_lir_callable_type(c->input, payload)) {
+        XrRbcAggregateOperation operation = i->op == XR_LIR_STATE_READ ? XR_RBC_FUNCTION_STATE_READ :
+            i->op == XR_LIR_STATE_WRITE ? XR_RBC_FUNCTION_STATE_WRITE :
+            i->op == XR_LIR_STATE_CONSTRUCT ? XR_RBC_FUNCTION_STATE_CONSTRUCT : XR_RBC_FUNCTION_STATE_INITIALIZE;
+        return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=operation, .source=first,
+            .destination=(uint32_t)i->bits, .window=i->operand_count == 2 ? c->slots[i->operands[1]] : 0,
+            .slot=c->literals->program->physical_callables[payload - XR_LIR_TYPE_COUNT] + 1,
+            .result={result, false}});
+    }
     if (i->op == XR_LIR_MODULE_BEGIN || i->op == XR_LIR_MODULE_READY)
         return rbc_lir_emit(c, i->op == XR_LIR_MODULE_BEGIN ? XR_RBC_MODULE_BEGIN : XR_RBC_MODULE_READY,
             first, 0, 0, (int64_t)i->bits);

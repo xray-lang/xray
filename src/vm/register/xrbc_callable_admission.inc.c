@@ -123,8 +123,43 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     return rbc_callable_directory_valid(m);
 }
 
+static uint32_t rbc_callable_state_type(const XrRbcModule *module, uint32_t type) {
+    const XrXirTypeArena *arena = NULL;
+    XrXirType signature;
+    if (!xrt_module_callable_signature(module->state_layout, type, &arena, &signature)) return 0;
+    for (size_t t = 0; t < module->closure_signature_count; ++t)
+        if (xir_type_arena_same_type(arena, signature, module->closure_types, module->closure_signatures[t]))
+            return (uint32_t)t + 1;
+    return 0;
+}
+static bool rbc_callable_state_valid(const XrRbcModule *m, const XrRbcFunction *f, XrRbcAggregateAccess access) {
+    bool read = access.operation == XR_RBC_FUNCTION_STATE_READ;
+    bool construct = access.operation == XR_RBC_FUNCTION_STATE_CONSTRUCT;
+    bool initialize = access.operation == XR_RBC_FUNCTION_STATE_INITIALIZE;
+    if (!m->state_layout || !access.slot || access.slot > m->callable_type_count ||
+        access.first || access.count || access.callee || access.result.spill || access.source >= f->register_count)
+        return false;
+    if (read) return !access.destination && !access.window && access.result.index < f->register_count &&
+        rbc_register_kind(f, access.source) == XR_RBC_STATE_REF &&
+        rbc_register_kind(f, access.result.index) == XR_RBC_FUNCTION &&
+        f->register_callables[access.result.index] == access.slot;
+    if (access.window >= f->register_count || rbc_register_kind(f, access.window) != XR_RBC_FUNCTION ||
+        f->register_callables[access.window] != access.slot) return false;
+    if (!construct && !initialize) return !access.destination && !access.result.index &&
+        rbc_register_kind(f, access.source) == XR_RBC_STATE_REF;
+    XrtModuleLayoutSpec layout = {0};
+    if (xrt_module_layout_view(m->state_layout, &layout) || access.destination >= layout.slot_count ||
+        rbc_register_kind(f, access.source) != XR_RBC_STATE) return false;
+    XrtModuleSlotSpec slot = layout.slots[access.destination];
+    return rbc_callable_state_type(m, slot.type) == access.slot &&
+        (initialize ? !(slot.flags & XRT_MODULE_SLOT_MUTABLE) && !access.result.index :
+         (slot.flags & XRT_MODULE_SLOT_MUTABLE) && access.result.index < f->register_count &&
+         rbc_register_kind(f, access.result.index) == XR_RBC_STATE_REF);
+}
 static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
+    if (access.operation >= XR_RBC_FUNCTION_STATE_READ && access.operation <= XR_RBC_FUNCTION_STATE_INITIALIZE)
+        return rbc_callable_state_valid(m, f, access);
     if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND) {
         XrRbcFunctionScopes scopes = rbc_function_scopes(m, f);
         if (!access.destination || access.destination > scopes.count || access.first || access.callee || access.result.spill)

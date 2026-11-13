@@ -21,6 +21,7 @@
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_type_arena_internal.h"
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>

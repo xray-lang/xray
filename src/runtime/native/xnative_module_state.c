@@ -14,7 +14,9 @@
 #include "xnative_string.h"
 #include "xnative_array.h"
 #include "xnative_module_cell.h"
+#include "xnative_callable.h"
 #include "xir/xxir_type_arena_internal.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_value_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
@@ -31,6 +33,7 @@ struct XrtModuleType {
     XrtModuleCopy copy;
     XrtModuleDrop drop;
     const XrXirTypeArena *arena;
+    XrXirType callable;
     const XrtModuleType *element;
 };
 struct XrtModuleLayout {
@@ -41,6 +44,7 @@ struct XrtModuleLayout {
     uint64_t bytes;
     uint32_t scratch_size;
     XrXirTypeArena *array_types;
+    XrXirTypeArena *callable_types;
 };
 enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
 enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
@@ -142,10 +146,45 @@ static XrXirValueStatus module_nullable_copy(const XrtModuleType *type, const vo
 static XrXirValueStatus module_cell_copy(const XrtModuleType *, const void *, void *);
 static void module_cell_drop(const XrtModuleType *, void *);
 
+static bool module_callable_charge(void *owner, uint64_t amount) {
+    uint64_t *remaining = owner;
+    if (amount > *remaining) return false;
+    *remaining -= amount;
+    return true;
+}
+static XrXirValueStatus module_callable_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirObject *object = NULL;
+    memcpy(&object, source, sizeof(object));
+    if (!object) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue value = {.type=(uint32_t)object->type, .payload=(int64_t)(intptr_t)object};
+    uint64_t work = UINT64_MAX;
+    if (xr_xir_value_arena(&value) != type->arena ||
+        !xr_xir_value_argument(&value, type->arena, (XrXirType)value.type) ||
+        xr_xir_callable_weakening_admit(xr_xir_compile_type_arena_types(type->arena),
+            (XrXirType)value.type, type->callable, &work, module_callable_charge) != XR_XIR_OK ||
+        !xr_xir_function_binding(&value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue received = {0};
+    XrXirValueStatus status = xr_xir_value_copy(&value, &received);
+    if (status == XR_XIR_VALUE_OK) memcpy(empty, &object, sizeof(object));
+    return status;
+}
+static void module_callable_drop(const XrtModuleType *type, void *storage) {
+    (void)type;
+    XirObject *object = NULL;
+    memcpy(&object, storage, sizeof(object));
+    memset(storage, 0, sizeof(object));
+    if (object) {
+        XrXirValue value = {.type=(uint32_t)object->type, .payload=(int64_t)(intptr_t)object};
+        xr_xir_value_drop(&value);
+    }
+}
+
 static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
     const XrtModuleTypeSpec *spec = &layout->types[ordinal];
     XrtModuleType *type = &types[ordinal];
-    if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE && spec->argument) return false;
+    if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE &&
+        spec->kind != XRT_MODULE_CALLABLE && spec->argument) return false;
     XrtModuleTypeKind kind = spec->kind;
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
@@ -178,6 +217,13 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
         type->size = sizeof(XrXirValue); type->alignment = _Alignof(XrXirValue);
         type->copy = module_cell_copy; type->drop = module_cell_drop;
         return true;
+    case XRT_MODULE_CALLABLE:
+        if (spec->argument >= layout->callable_type_count ||
+            layout->callable_types[spec->argument].kind != XRT_CALLABLE_SIGNATURE) return false;
+        type->size = sizeof(void *); type->alignment = _Alignof(void *);
+        type->copy = module_callable_copy; type->drop = module_callable_drop;
+        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + spec->argument);
+        return true;
     case XRT_MODULE_FIXED_U8:
         if (!spec->argument || spec->argument > 65535) return false;
         type->size = spec->argument;
@@ -205,6 +251,22 @@ static void *module_copy_array(const void *source, uint32_t count, size_t size) 
 static void *module_payload(const XrtModuleState *state, uint32_t slot) {
     uint64_t offset = state->layout->view.slots[slot].offset;
     return state->payload ? state->payload + (size_t)offset : (void *)&state->unit;
+}
+XR_FUNC bool xrt_module_callable_signature(const XrtModuleLayout *layout, uint32_t type,
+    const XrXirTypeArena **arena, XrXirType *signature) {
+    if (!layout || type >= layout->view.type_count || !arena || !signature ||
+        layout->types[type].kind != XRT_MODULE_CALLABLE) return false;
+    *arena = layout->types[type].arena;
+    *signature = layout->types[type].callable;
+    return true;
+}
+XR_FUNC XrXirTypeArena *xrt_module_callable_catalog(const XrtModuleLayout *layout) {
+    return layout ? layout->callable_types : NULL;
+}
+XR_FUNC XrXirTypeArena *xrt_module_state_callables(const XrtModuleState *state, const XrtCallableImage *image) {
+    if (!state || !image || image->type_count != state->layout->view.callable_type_count ||
+        !xrt_callable_specs_equal(image->types, state->layout->view.callable_types, image->type_count)) return NULL;
+    return state->layout->callable_types;
 }
 
 static const XrtModuleType *module_slot_type(const XrtModuleState *state, uint32_t slot) {

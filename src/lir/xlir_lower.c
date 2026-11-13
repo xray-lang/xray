@@ -1663,7 +1663,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         XirClosureStorage placement = XIR_CLOSURE_UNRESOLVED;
         if (good && xr_xir_compile_closure_placement(c->request->closed, c->function, result, &placement) != XR_XIR_OK)
             good = lower_unsupported(c, "function environment placement disappeared during emission");
-        if (good && op->args[1] && placement == XIR_CLOSURE_OWNED) reference.bits = XR_LIR_CLOSURE_OWNED;
+        if (good && placement == XIR_CLOSURE_OWNED) reference.bits = XR_LIR_CLOSURE_OWNED;
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
         xr_free(captures);
         return good;

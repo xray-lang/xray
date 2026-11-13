@@ -182,3 +182,24 @@ static void c_callable_owned_reference(LirC *c, const XrLirInstructionView *v) {
     c_format(c, ", %" PRIu32 ", %" PRIu32 ");\n    v%" PRIu32 " = (%s){xrl_owned_thunk_%" PRIu32
         ", owned, owned};\n    }\n", v->operand_count, source, v->result, c_type(c, v->type), v->callee);
 }
+static void c_callable_state_exports(LirC *c) {
+    if (!c->owned_entry_count || !lir_state_has_callables(c->request->module, &c->state_layout)) return;
+    for (uint32_t t = 0; t < c->constructed_count; ++t) {
+        XrLirType type = XR_LIR_TYPE_COUNT + t;
+        XrLirCallableType signature;
+        if (xr_lir_callable_type_view(c->request->module, type, &signature) != XR_LIR_OK) continue;
+        c_format(c, "static XrtCallable *xrl_state_function_%" PRIu32 "(%s value, XrtCallableScope *scope, uint32_t source) {\n",
+            type, c_type(c, type));
+        c_text(c, "    (void)scope;\n    if (value.owner) return value.owner;\n"
+            "    if (value.environment) xrt_module_uninitialized(source);\n");
+        for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
+            if (!c->owned_entries[f] || !(c->seen[f] & 2u)) continue;
+            XrLirClosureTarget target;
+            xr_lir_closure_target_view(c->request->module, (XrLirFunction){c->request->module, f + 1}, &target);
+            if (target.capture_count || target.state_capture || !xr_lir_callable_accepts(c->request->module, type, target.callable)) continue;
+            c_format(c, "    if (value.invoke == xrl_thunk_%" PRIu32 ") return xrt_callable_scope_new(scope, %" PRIu32
+                ", NULL, 0, source);\n", f + 1, c->owned_entries[f] - 1);
+        }
+        c_text(c, "    xrt_module_uninitialized(source);\n}\n");
+    }
+}
