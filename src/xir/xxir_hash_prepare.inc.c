@@ -7,6 +7,10 @@
  * xxir_hash_prepare.inc.c - Private typed hash backing and bounded probes
  */
 typedef struct HashProbe { uint64_t hash; size_t bucket, entry; bool found; } HashProbe;
+static XrXirValueStatus key_hash_graph_operation(const XrXirValue *value,
+    XrXirValueAdmission *admission, uint64_t *output);
+static XrXirValueStatus key_equal_graph_operation(const XrXirValue *left,
+    const XrXirValue *right, XrXirValueAdmission *admission, bool *output);
 static bool hash_admission_current(const XrXirValueAdmission *admission) {
     return admission && admission->arena && admission->domain && admission_domain_current(admission);
 }
@@ -26,7 +30,7 @@ static XrXirValueStatus hash_admit(const XrXirValue *value, uint32_t kind,
         (XrXirType)value->type);
     if (!node || (kind ? node->kind != kind :
         (node->kind != XR_XIR_TYPE_MAP && node->kind != XR_XIR_TYPE_SET))) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType)value->type, admission);
+    XrXirValueStatus status = value_admit_summary(value, (XrXirType)value->type, admission, NULL);
     if (status == XR_XIR_VALUE_OK) *out = (XirHash *)object_pointer(value);
     return status;
 }
@@ -74,7 +78,7 @@ static XrXirValueStatus hash_probe(const XirHash *map, const XrXirValue *key,
     XrXirValueAdmission *admission, HashProbe *out) {
     if (!key || key->type != (uint32_t)map->key_type) return XR_XIR_VALUE_BAD_ARGUMENT;
     HashProbe probe = {0};
-    XrXirValueStatus status = xr_xir_key_hash(key, admission, &probe.hash);
+    XrXirValueStatus status = key_hash_graph_operation(key, admission, &probe.hash);
     if (status != XR_XIR_VALUE_OK) return status;
     if (!map->capacity) { *out = probe; return XR_XIR_VALUE_OK; }
     size_t mask = map->capacity - 1;
@@ -93,7 +97,7 @@ static XrXirValueStatus hash_probe(const XirHash *map, const XrXirValue *key,
             XrXirValue stored={0};
             if (!storage_leaf_value(map->object.arena,map->key_type,
                 hash_span(map,probe.entry,false).bytes,layout.size,&stored)) return XR_XIR_VALUE_BAD_ARGUMENT;
-            status = xr_xir_key_equal(&stored, key, admission, &probe.found);
+            status = key_equal_graph_operation(&stored, key, admission, &probe.found);
             if (status != XR_XIR_VALUE_OK) return status;
             if (probe.found) { *out = probe; return XR_XIR_VALUE_OK; }
         }

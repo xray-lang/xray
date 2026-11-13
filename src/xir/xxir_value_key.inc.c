@@ -29,19 +29,16 @@ static XrXirValueStatus key_charge(XrXirValueAdmission *admission, uint64_t work
     admission->work -= work;
     return xr_xir_domain_work(admission->domain, work) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT;
 }
-XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
+/* The caller owns a graph operation and has checked the exact builtin key,
+ * output pointer and current admission domain. Value bytes remain validated. */
+static XrXirValueStatus key_hash_graph_operation(const XrXirValue *value,
     XrXirValueAdmission *admission, uint64_t *output) {
-    if (!value || !output || !admission || !xr_xir_domain_current(admission->domain))
-        return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_key_builtin_type((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
-    xr_xir_value_graph_begin();
-    XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_value_valid(value)) goto done;
+    if (!xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirString *string = value->type == XR_XIR_STRING ? string_pointer(value) : NULL;
     uint64_t length = string ? (uint64_t)string->length : 8;
-    if (length == UINT64_MAX) { status = XR_XIR_VALUE_LIMIT; goto done; }
-    status = key_charge(admission, length + 1);
-    if (status != XR_XIR_VALUE_OK) goto done;
+    if (length == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
+    XrXirValueStatus status = key_charge(admission, length + 1);
+    if (status != XR_XIR_VALUE_OK) return status;
     if (string) *output = xr_hash_bytes64(string->bytes, string->length);
     else {
         uint64_t bits = key_scalar_bits(value);
@@ -49,7 +46,30 @@ XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
         for (unsigned i = 0; i < 8; ++i) bytes[i] = (uint8_t)(bits >> (i * 8));
         *output = xr_hash_bytes64(bytes, sizeof(bytes));
     }
-done:
+    return status;
+}
+/* Both values have the same sealed builtin key type and a live outer graph
+ * operation. Equality still validates both payloads and charges actual work. */
+static XrXirValueStatus key_equal_graph_operation(const XrXirValue *left,
+    const XrXirValue *right, XrXirValueAdmission *admission, bool *output) {
+    if (!xr_xir_value_valid(left) || !xr_xir_value_valid(right)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirString *a = left->type == XR_XIR_STRING ? string_pointer(left) : NULL;
+    XirString *b = a ? string_pointer(right) : NULL;
+    uint64_t length = a && a->length == b->length ? (uint64_t)a->length : 0;
+    if (length == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
+    XrXirValueStatus status = key_charge(admission, length + 1);
+    if (status == XR_XIR_VALUE_OK)
+        *output = a ? a->length == b->length && (!length || !memcmp(a->bytes, b->bytes, (size_t)length)) :
+            key_scalar_bits(left) == key_scalar_bits(right);
+    return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
+    XrXirValueAdmission *admission, uint64_t *output) {
+    if (!value || !output || !admission || !xr_xir_domain_current(admission->domain))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_key_builtin_type((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = key_hash_graph_operation(value, admission, output);
     xr_xir_value_graph_end();
     return status;
 }
@@ -59,17 +79,7 @@ XR_FUNC XrXirValueStatus xr_xir_key_equal(const XrXirValue *left,
         left->type != right->type) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_key_builtin_type((XrXirType)left->type)) return XR_XIR_VALUE_UNSUPPORTED;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_value_valid(left) || !xr_xir_value_valid(right)) goto done;
-    XirString *a = left->type == XR_XIR_STRING ? string_pointer(left) : NULL;
-    XirString *b = a ? string_pointer(right) : NULL;
-    uint64_t length = a && a->length == b->length ? (uint64_t)a->length : 0;
-    if (length == UINT64_MAX) { status = XR_XIR_VALUE_LIMIT; goto done; }
-    status = key_charge(admission, length + 1);
-    if (status == XR_XIR_VALUE_OK)
-        *output = a ? a->length == b->length && (!length || !memcmp(a->bytes, b->bytes, (size_t)length)) :
-            key_scalar_bits(left) == key_scalar_bits(right);
-done:
+    XrXirValueStatus status = key_equal_graph_operation(left, right, admission, output);
     xr_xir_value_graph_end();
     return status;
 }
