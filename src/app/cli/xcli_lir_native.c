@@ -365,6 +365,12 @@ XR_FUNC int xr_cli_lir_native(XrCompileResources *resources, const XrCliNativeOp
         goto cleanup;
     }
     request.compiler = choice.compiler;
+#if !XR_OS_WINDOWS && (XRT_NATIVE_ASAN || XRT_NATIVE_UBSAN)
+    /* Instrumented runtime archives use the configured compiler by default.
+     * Explicit provider and compiler preferences keep their selected driver. */
+    if (!request.compiler && choice.selector == XR_TOOLCHAIN_SELECTOR_AUTO)
+        request.compiler = XRT_NATIVE_BUILD_COMPILER;
+#endif
 #if XR_OS_WINDOWS
     if (choice.selector == XR_TOOLCHAIN_SELECTOR_GCC) {
         fputs("GCC is unavailable on this host\n", stderr);
