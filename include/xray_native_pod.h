@@ -31,7 +31,8 @@ static inline bool xr_pod_scalar_layout(XrPodScalar scalar, XrPodLayout *output)
     static const uint8_t sizes[] = {0, 1, 1, 2, 4, 8, 1, 2, 4, 8, 4, 8};
     if (!output || (uint32_t)scalar >= XR_POD_SCALAR_COUNT) return false;
     uint32_t size = sizes[scalar];
-    *output = (XrPodLayout){size, size ? size : 1, size != 0};
+    XrPodLayout layout = {size, size ? size : 1, size != 0};
+    *output = layout;
     return true;
 }
 static inline bool xr_pod_nullable_layout(XrPodLayout payload, XrPodLayout *output) {
@@ -40,7 +41,8 @@ static inline bool xr_pod_nullable_layout(XrPodLayout payload, XrPodLayout *outp
     uint64_t size = (uint64_t)payload.alignment + payload.size;
     size = (size + payload.alignment - 1) & ~(uint64_t)(payload.alignment - 1);
     if (size > UINT32_MAX) return false;
-    *output = (XrPodLayout){(uint32_t)size, payload.alignment, payload.scalar_count + 1};
+    XrPodLayout layout = {(uint32_t)size, payload.alignment, payload.scalar_count + 1};
+    *output = layout;
     return true;
 }
 
