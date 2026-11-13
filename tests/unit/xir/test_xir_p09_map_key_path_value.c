@@ -49,7 +49,7 @@ static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
     uint64_t work=1000000-admission->work; size_t points=value_allocation_calls-begin;
     CHECK(points>2 && work>1 && key_path_read(&copy,path,admission)==99);
     CHECK(key_path_read(root,path,admission)==11); xr_xir_value_drop(&copy);
-    XirHash *map=(XirHash *)object_pointer(root); size_t bytes=0;
+    XirHash *map=(XirHash *)object_pointer(root); size_t bytes=0,order_count=map->order_count;
     CHECK(hash_data_size(map->capacity,map->stride,&bytes) && bytes<=512);
     unsigned char saved[512]; memcpy(saved,map->data,bytes);
     XrXirValue row={256,0,0};memcpy(&row.payload,hash_span(map,0,true).bytes,sizeof(row.payload));
@@ -63,7 +63,7 @@ static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
         CHECK(xr_xir_value_path_write(&place,path,&replacement,admission,&fault)==XR_XIR_VALUE_OOM);
         fail_at=SIZE_MAX;
         CHECK(copy.payload==root->payload && live==blocks && admission->domain->stats.live_bytes==live_bytes);
-        CHECK(!memcmp(saved,map->data,bytes) && admission->scratch_bytes==65536);
+        CHECK(map->order_count==order_count && !memcmp(saved,map->data,bytes) && admission->scratch_bytes==65536);
         CHECK(!memcmp(saved_items,array->data,sizeof(saved_items)));
         xr_xir_value_drop(&copy);
     }
@@ -73,7 +73,8 @@ static void key_path_cow(XrXirValue *root, const XrXirValuePath *path,
             (prefix==work?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT));
         CHECK(prefix==work || copy.payload==root->payload);
         xr_xir_value_drop(&copy);
-        CHECK(live==blocks && admission->domain->stats.live_bytes==live_bytes && !memcmp(saved,map->data,bytes));
+        CHECK(live==blocks && admission->domain->stats.live_bytes==live_bytes && map->order_count==order_count &&
+            !memcmp(saved,map->data,bytes));
         CHECK(!memcmp(saved_items,array->data,sizeof(saved_items)));
     }
     printf("Map key path allocations=%zu work=%llu mode=%s original backing and retry PASS\n",

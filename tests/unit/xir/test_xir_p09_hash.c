@@ -28,7 +28,7 @@ static XrXirValue hash_test_key(const XirHash *map, size_t index) {
     XrXirLayout layout = {0};
     CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout));
     XrXirValue value = {0};
-    CHECK(storage_leaf_value(map->object.arena, map->key_type, hash_span(map, index, false).bytes, layout.size, &value));
+    CHECK(storage_leaf_value(map->object.arena, map->key_type, hash_span(map, hash_order_entry(map, index), false).bytes, layout.size, &value));
     return value;
 }
 static void hash_expect(const XrXirValue *map, int64_t key, int64_t expected,
@@ -49,7 +49,7 @@ static void hash_dense_cases(XrXirValueAdmission *admission) {
     int64_t length = -1;
     CHECK(xr_xir_hash_len(&map, admission, &length) == XR_XIR_VALUE_OK && length == 512);
     XirHash *storage = (XirHash *)object_pointer(&map);
-    CHECK(storage->stride == 24 && storage->key_offset == 8 && storage->value_offset == 16);
+    CHECK(storage->stride == 32 && storage->key_offset == 16 && storage->value_offset == 24);
     int64_t root = map.payload; size_t before = value_allocation_calls; fail_at = value_allocation_calls;
     XrXirValue key = integer(3), value = integer(-1);
     CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK && map.payload == root && value_allocation_calls == before);
@@ -109,6 +109,11 @@ static void hash_order_cases(XrXirValueAdmission *admission) {
         for (size_t i = 0; i < storage->length; ++i) {
             XrXirValue stored = hash_test_key(storage, i);
             CHECK(stored.payload == expected[i]);
+            XrXirFormatCursor root = {0}, child = {0};
+            XrXirValue formatted = {0};
+            CHECK(xr_xir_value_format_cursor(&map, &root) &&
+                xr_xir_value_format_child(&root, (uint32_t)i * 2, &child) &&
+                xr_xir_value_format_leaf(&child, &formatted) && formatted.payload == expected[i]);
         }
         if (operation != 1) {
             CHECK(xr_xir_map_set(&place, &keys[0], &values[0], admission) == XR_XIR_VALUE_OK);
@@ -125,6 +130,124 @@ static void hash_order_cases(XrXirValueAdmission *admission) {
         }
         xr_xir_value_drop(&alias); xr_xir_value_drop(&map);
     }
+}
+static void hash_order_path_case(XrXirValueAdmission *admission) {
+    XrXirValue keys[] = {{XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}, {XR_XIR_I64, 0, 3}};
+    XrXirValue values[] = {{XR_XIR_I64, 0, 7}, {XR_XIR_I64, 0, 14}, {XR_XIR_I64, 0, 21}};
+    XrXirValue map = {0}, alias = {0}, replacement = integer(99);
+    CHECK(xr_xir_map_new((XrXirType)256, keys, values, 3, admission, &map) == XR_XIR_VALUE_OK);
+    XrXirValuePlace place = {(XrXirType)256, &map.payload, NULL};
+    bool removed = false;
+    CHECK(xr_xir_hash_delete(&place, keys, admission, &removed) == XR_XIR_VALUE_OK && removed);
+    CHECK(xr_xir_value_copy(&map, &alias) == XR_XIR_VALUE_OK);
+    XrXirValuePathStep step = {XR_XIR_PATH_KEY, (XrXirType)256, 3};
+    XrXirValuePath path = {&step, 1};
+    XrXirFaultDetail fault = {0};
+    CHECK(xr_xir_value_path_write(&place, &path, &replacement, admission, &fault) == XR_XIR_VALUE_OK);
+    hash_expect(&map, 2, 14, true, admission);
+    hash_expect(&map, 3, 99, true, admission);
+    hash_expect(&alias, 3, 21, true, admission);
+    xr_xir_value_drop(&alias); xr_xir_value_drop(&map);
+}
+static void hash_order_collision_case(XrXirValueAdmission *admission) {
+    XrXirValue keys[4], values[4];
+    size_t count = 0;
+    for (int64_t candidate = 0; count < 4; ++candidate) {
+        XrXirValue key = integer(candidate); uint64_t hash = 0;
+        CHECK(xr_xir_key_hash(&key, admission, &hash) == XR_XIR_VALUE_OK);
+        if ((hash & 7) != 7) continue;
+        keys[count] = key; values[count] = integer(candidate * 7); ++count;
+    }
+    for (size_t removed_index = 0; removed_index < 4; ++removed_index) {
+        XrXirValue map = {0}; bool removed = false;
+        CHECK(xr_xir_map_new((XrXirType)256, keys, values, 4, admission, &map) == XR_XIR_VALUE_OK);
+        XrXirValuePlace place = {(XrXirType)256, &map.payload, NULL};
+        XirHash *storage = (XirHash *)object_pointer(&map);
+        CHECK(storage->capacity == 8 && hash_buckets(storage)[7] && hash_buckets(storage)[0] &&
+            hash_buckets(storage)[1] && hash_buckets(storage)[2]);
+        CHECK(xr_xir_hash_delete(&place, &keys[removed_index], admission, &removed) == XR_XIR_VALUE_OK && removed);
+        size_t ordinal = 0;
+        for (size_t i = 0; i < 4; ++i) {
+            hash_expect(&map, keys[i].payload, values[i].payload, i != removed_index, admission);
+            if (i != removed_index) CHECK(hash_test_key(storage, ordinal++).payload == keys[i].payload);
+        }
+        xr_xir_value_drop(&map);
+    }
+    puts("Hash wrapping collision clusters preserve moved-last buckets and insertion order PASS");
+}
+static void hash_order_compaction_prefixes(XrXirValuePlace *place, XrXirValue *key,
+    XrXirValue *value, XrXirValueAdmission *admission) {
+    XrXirValue current = {(uint32_t)place->type, 0, 0};
+    memcpy(&current.payload, place->payload, sizeof(current.payload));
+    XirHash *map = (XirHash *)object_pointer(&current);
+    unsigned char bytes[2048]; size_t size = 0;
+    CHECK(map->length == 15 && map->capacity == 32 && map->order_count == 32 &&
+        hash_data_size(map->capacity, map->stride, &size) && size <= sizeof(bytes));
+    memcpy(bytes, map->data, size);
+    unsigned char *data = map->data;
+    uint64_t work = admission->work;
+    size_t before = value_allocation_calls;
+    uint64_t prefix = 0;
+    for (;; ++prefix) {
+        admission->work = prefix;
+        XrXirValueStatus status = xr_xir_map_set(place, key, value, admission);
+        if (status == XR_XIR_VALUE_OK) break;
+        CHECK(status == XR_XIR_VALUE_LIMIT && !memcmp(place->payload, &current.payload, sizeof(current.payload)) &&
+            map->length == 15 && map->capacity == 32 && map->order_count == 32 &&
+            map->data == data && !memcmp(bytes, data, size) && value_allocation_calls == before);
+        CHECK(prefix < 1024);
+    }
+    CHECK(map->length == 16 && map->order_count == 16 && value_allocation_calls == before);
+    admission->work = work;
+    printf("Hash allocation-free order compaction all %llu work prefixes preserve full backing PASS\n",
+        (unsigned long long)prefix);
+}
+static void hash_order_reuse_case(XrXirValueAdmission *admission) {
+    XrXirValue map = {0};
+    CHECK(xr_xir_map_new((XrXirType)256, NULL, NULL, 0, admission, &map) == XR_XIR_VALUE_OK);
+    XrXirValuePlace place = {(XrXirType)256, &map.payload, NULL};
+    for (int64_t i = 0; i < 16; ++i) {
+        XrXirValue key = integer(i), value = integer(i * 7);
+        CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK);
+    }
+    XirHash *storage = (XirHash *)object_pointer(&map);
+    CHECK(storage->capacity == 32 && storage->order_count == 16);
+    size_t before = value_allocation_calls;
+    fail_at = before;
+    bool checked_compaction = false;
+    for (int64_t step = 0; step < 512; ++step) {
+        XrXirValue key = integer(step), value = integer((step + 16) * 7);
+        bool removed = false;
+        CHECK(xr_xir_hash_delete(&place, &key, admission, &removed) == XR_XIR_VALUE_OK && removed);
+        key.payload = step + 16;
+        if (!checked_compaction && storage->order_count == storage->capacity) {
+            hash_order_compaction_prefixes(&place, &key, &value, admission);
+            checked_compaction = true;
+        } else CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK);
+        for (int64_t ordinal = 0; ordinal < 16; ++ordinal) {
+            XrXirValue read = {0}; XrXirFaultDetail fault = {0};
+            CHECK(xr_xir_hash_key_at(&map, ordinal, admission, &read, &fault) == XR_XIR_VALUE_OK &&
+                read.payload == step + 1 + ordinal && !fault.code);
+        }
+        CHECK(storage->length == 16 && storage->capacity == 32 &&
+            hash_order_tree(storage)[storage->capacity - 1] == 16);
+    }
+    CHECK(checked_compaction && value_allocation_calls == before);
+    fail_at = SIZE_MAX;
+    for (int64_t i = 512; i < 528; ++i) {
+        XrXirValue key = integer(i); bool removed = false;
+        CHECK(xr_xir_hash_delete(&place, &key, admission, &removed) == XR_XIR_VALUE_OK && removed);
+    }
+    CHECK(!storage->length && !storage->order_count && !hash_order_tree(storage)[31]);
+    XrXirValue key = integer(99), value = integer(42);
+    CHECK(xr_xir_map_set(&place, &key, &value, admission) == XR_XIR_VALUE_OK);
+    hash_expect(&map, 99, 42, true, admission);
+    CHECK(storage->length == 1 && storage->order_count == 1 && hash_order_entry(storage, 0) == 0);
+    size_t bytes = 0, high = (SIZE_MAX >> 1) + 1;
+    CHECK(!hash_data_size(SIZE_MAX, storage->stride, &bytes) &&
+        !hash_data_size(high, storage->stride, &bytes) && hash_order_work(high) <= sizeof(size_t) * 8 + 1);
+    xr_xir_value_drop(&map);
+    puts("Hash ordinal ranks, 512 allocation-free churn steps, empty reuse and size extremes PASS");
 }
 static void hash_string_cases(XrXirValueAdmission *admission) {
     XrXirDomain *producer = NULL; XrXirValue keys[3] = {{0}}, values[3] = {{0}}, map = {0}, alias = {0};
@@ -167,6 +290,9 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000000, 1048576};
     hash_dense_cases(&admission); hash_ieee_cases(&admission); hash_string_cases(&admission); hash_order_cases(&admission);
+    hash_order_path_case(&admission);
+    hash_order_collision_case(&admission);
+    hash_order_reuse_case(&admission);
     if (argc == 2 && !strcmp(argv[1], "full")) hash_faults(arena, domain);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && !value_compile_live && !value_compile_bytes);

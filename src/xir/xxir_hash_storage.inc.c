@@ -4,11 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_hash_storage.inc.c - Sealed dense entries and indirect hash buckets
+ * xxir_hash_storage.inc.c - Dense owners with independent insertion order
  *
  * KEY CONCEPT:
  *   Buckets name dense entries, so ownership traversal ignores spare capacity.
- *   Keys and values use their own compact target-bound storage layouts.
+ *   A separate ordinal index preserves order when deletion fills a dense hole.
  */
 typedef struct HashLayout {
     XrXirType key, value;
@@ -25,7 +25,7 @@ static XrXirValueStatus hash_layout(const XrXirTypeArena *arena, XrXirType type,
         !xr_xir_compile_type_arena_layout(arena, value, &value_layout) ||
         !key_layout.alignment || !value_layout.alignment || key_layout.alignment > 8 || value_layout.alignment > 8)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    uint64_t key_offset = (UINT64_C(8) + key_layout.alignment - 1) & ~(uint64_t)(key_layout.alignment - 1);
+    uint64_t key_offset = (UINT64_C(16) + key_layout.alignment - 1) & ~(uint64_t)(key_layout.alignment - 1);
     uint64_t value_offset = (key_offset + key_layout.size + value_layout.alignment - 1) &
         ~(uint64_t)(value_layout.alignment - 1);
     uint64_t stride = (value_offset + value_layout.size + 7) & ~UINT64_C(7);
@@ -35,7 +35,7 @@ static XrXirValueStatus hash_layout(const XrXirTypeArena *arena, XrXirType type,
     return XR_XIR_VALUE_OK;
 }
 static bool hash_data_size(size_t capacity, uint32_t stride, size_t *out) {
-    uint64_t unit = (uint64_t)stride + sizeof(uint64_t);
+    uint64_t unit = (uint64_t)stride + 3 * sizeof(uint64_t);
     if (capacity > SIZE_MAX / unit) return false;
     *out = (size_t)(capacity * unit); return true;
 }
@@ -45,8 +45,9 @@ static bool hash_storage_valid(const XirHash *map) {
         map->key_type == layout.key && map->value_type == layout.value &&
         map->key_offset == layout.key_offset && map->value_offset == layout.value_offset &&
         map->stride == layout.stride && map->release_capacity == layout.release_capacity &&
-        ((!map->capacity && !map->length) || (map->capacity >= 8 &&
-         !(map->capacity & (map->capacity - 1)) && map->length <= map->capacity / 2)) &&
+        ((!map->capacity && !map->length && !map->order_count) || (map->capacity >= 8 &&
+         !(map->capacity & (map->capacity - 1)) && map->length <= map->capacity / 2 &&
+         map->length <= map->order_count && map->order_count <= map->capacity)) &&
         map->length <= INT64_MAX && hash_data_size(map->capacity, map->stride, &bytes) &&
         ((map->capacity != 0) == (map->data != NULL));
 }
@@ -55,3 +56,4 @@ static unsigned char *hash_entry(const XirHash *map, size_t index) {
     XR_CHECK(index < map->capacity, "hash entry requires reserved dense capacity");
     return map->data + map->capacity * sizeof(uint64_t) + index * map->stride;
 }
+#include "xxir_hash_order.inc.c"

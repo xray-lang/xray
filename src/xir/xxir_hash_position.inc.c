@@ -15,9 +15,14 @@ static XrXirValueStatus hash_position(const XrXirValue *container, int64_t index
     if (status == XR_XIR_VALUE_OK && (index < 0 || (uint64_t)index >= map->length)) {
         *fault = (XrXirFaultDetail){XR_XIR_PANIC_BOUNDS, 0, index, (int64_t)map->length}; status = XR_XIR_VALUE_BOUNDS;
     }
-    if (status == XR_XIR_VALUE_OK) status = hash_charge(admission, 1);
+    size_t entry = SIZE_MAX;
+    if (status == XR_XIR_VALUE_OK) status = hash_charge(admission, hash_order_work(map->capacity));
+    if (status == XR_XIR_VALUE_OK) {
+        entry = hash_order_entry(map, (size_t)index);
+        if (entry == SIZE_MAX) status = XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     if (status == XR_XIR_VALUE_OK && (!value || map->value_type != XR_XIR_UNIT))
-        status = storage_unpack(hash_span(map, (size_t)index, value), admission, output);
+        status = storage_unpack(hash_span(map, entry, value), admission, output);
     xr_xir_value_graph_end(); return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_key_at(const XrXirValue *container, int64_t index,

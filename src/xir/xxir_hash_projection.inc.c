@@ -50,8 +50,10 @@ static XrXirValueStatus hash_projection(const XrXirValue *container, XrXirType a
         packing = status == XR_XIR_VALUE_OK;
     }
     for (size_t i = 0; status == XR_XIR_VALUE_OK && i < map->length; ++i) {
-        XrXirValue item = {0}; status = hash_charge(admission, 1);
-        if (status == XR_XIR_VALUE_OK) status = hash_projection_item(map, i, element, projection, admission, &item);
+        XrXirValue item = {0}; status = hash_charge(admission, hash_order_work(map->capacity));
+        size_t entry = status == XR_XIR_VALUE_OK ? hash_order_entry(map, i) : SIZE_MAX;
+        if (status == XR_XIR_VALUE_OK && entry == SIZE_MAX) status = XR_XIR_VALUE_BAD_ARGUMENT;
+        if (status == XR_XIR_VALUE_OK) status = hash_projection_item(map, entry, element, projection, admission, &item);
         /* The private destination has no external alias. Pack each admitted
          * item once instead of repeatedly walking its growing prefix. */
         if (status == XR_XIR_VALUE_OK) status = storage_pack_value(&pack, &item, array_slot(array, i));

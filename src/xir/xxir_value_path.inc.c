@@ -245,9 +245,15 @@ static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
             return XR_XIR_VALUE_BOUNDS;
         }
         if (write) {
+            const XirHash *previous = map;
             status = path_unique(slot, write, admission);
             if (status != XR_XIR_VALUE_OK) return status;
             value = path_handle(*slot); map = (XirHash *)object_pointer(&value);
+            if (map != previous) {
+                status = hash_probe(map, &key, admission, &probe);
+                if (status != XR_XIR_VALUE_OK) return status;
+                if (!probe.found) return XR_XIR_VALUE_BAD_ARGUMENT;
+            }
         }
         *slot = (ValuePathSlot){map->value_type, (unsigned char *)hash_span(map, probe.entry, true).bytes,
             true, slot->private_storage, map->object.arena};

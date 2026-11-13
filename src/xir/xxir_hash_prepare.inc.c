@@ -49,7 +49,7 @@ static XrXirValueStatus hash_allocate(XrXirType type, size_t capacity,
     uint64_t header = sizeof(XirHash) + (uint64_t)layout.release_capacity * sizeof(StorageFrame);
     size_t bytes = 0;
     if (header > SIZE_MAX || !hash_data_size(capacity, layout.stride, &bytes)) return XR_XIR_VALUE_LIMIT;
-    status = hash_charge(admission, (uint64_t)capacity + 1);
+    status = hash_charge(admission, (uint64_t)capacity * 3 + 1);
     if (status != XR_XIR_VALUE_OK) return status;
     XirHash *map = (XirHash *)constructed_allocate(admission->domain,
         (XrXirTypeArena *)admission->arena, type, (size_t)header, &status);
@@ -57,11 +57,12 @@ static XrXirValueStatus hash_allocate(XrXirType type, size_t capacity,
     map->key_type = layout.key; map->value_type = layout.value;
     map->key_offset = layout.key_offset; map->value_offset = layout.value_offset;
     map->stride = layout.stride; map->release_capacity = layout.release_capacity;
-    map->length = 0; map->capacity = capacity; map->data = NULL;
+    map->length = 0; map->capacity = capacity; map->order_count = 0; map->data = NULL;
     if (bytes) {
         map->data = xr_xir_domain_allocate(admission->domain, bytes, &status);
         if (!map->data) { constructed_discard(&map->object, (size_t)header); return status; }
         memset(map->data, 0, capacity * sizeof(uint64_t));
+        memset(hash_order(map), 0, capacity * 2 * sizeof(uint64_t));
     }
     xr_xir_value_object_publish(&map->object); *out = map;
     return XR_XIR_VALUE_OK;

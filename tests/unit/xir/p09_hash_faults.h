@@ -39,7 +39,8 @@ static void hash_fault_unchanged(HashFaultCase *test, int64_t root, const unsign
     const unsigned char *data, size_t size) {
     CHECK(test->root.payload == root);
     XirHash *map = (XirHash *)object_pointer(&test->root);
-    CHECK(map->length == 4 && map->capacity == 8 && map->data == data && !memcmp(data, bytes, size));
+    CHECK(map->length == 4 && map->capacity == 8 && map->order_count == 4 &&
+        map->data == data && !memcmp(data, bytes, size));
     if (test->operation && test->operation != 4) CHECK(test->alias.payload == root);
     test->admission.work = 1000000;
     for (int64_t i = 0; i < 4; ++i) hash_expect(&test->root, i, i * 7, true, &test->admission);
@@ -54,8 +55,8 @@ static void hash_faults(XrXirTypeArena *arena, XrXirDomain *domain) {
         if (operation == 4) CHECK(!sites);
         for (size_t site = 0; site < sites; ++site) {
             HashFaultCase test; hash_fault_setup(&test, operation, arena, domain);
-            XirHash *map = (XirHash *)object_pointer(&test.root); unsigned char bytes[256]; size_t size = 0;
-            CHECK(hash_data_size(map->capacity, map->stride, &size) && size == sizeof(bytes));
+            XirHash *map = (XirHash *)object_pointer(&test.root); unsigned char bytes[512]; size_t size = 0;
+            CHECK(hash_data_size(map->capacity, map->stride, &size) && size <= sizeof(bytes));
             memcpy(bytes, map->data, size); unsigned char *data = map->data; int64_t root = test.root.payload;
             uint64_t requested = xr_xir_domain_stats(domain).allocations;
             before = value_allocation_calls; fail_at = before + site;
@@ -67,12 +68,13 @@ static void hash_faults(XrXirTypeArena *arena, XrXirDomain *domain) {
         }
         for (uint64_t prefix = 0; prefix <= exact; ++prefix) {
             HashFaultCase test; hash_fault_setup(&test, operation, arena, domain);
-            XirHash *map = (XirHash *)object_pointer(&test.root); unsigned char bytes[256];
-            memcpy(bytes, map->data, sizeof(bytes)); unsigned char *data = map->data; int64_t root = test.root.payload;
+            XirHash *map = (XirHash *)object_pointer(&test.root); unsigned char bytes[512]; size_t size = 0;
+            CHECK(hash_data_size(map->capacity, map->stride, &size) && size <= sizeof(bytes));
+            memcpy(bytes, map->data, size); unsigned char *data = map->data; int64_t root = test.root.payload;
             test.admission.work = prefix;
             XrXirValueStatus status = hash_fault_operation(&test);
             CHECK(status == (prefix == exact ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT));
-            if (prefix < exact) hash_fault_unchanged(&test, root, bytes, data, sizeof(bytes));
+            if (prefix < exact) hash_fault_unchanged(&test, root, bytes, data, size);
             hash_fault_finish(&test);
         }
         printf("hash operation%u actual physical sites=%zu local work=%llu all prefixes PASS\n",

@@ -20,6 +20,7 @@ static void hash_publish_prepared(XirHash *map, uint64_t hash, size_t bucket,
     hash_buckets(map)[bucket] = index + 1;
     hash_transfer(key, map, index, false);
     if (value->owns) hash_transfer(value, map, index, true);
+    hash_order_append(map, index);
     ++map->length;
 }
 static XrXirValueStatus hash_append_prepared(XirHash *map, uint64_t hash,
@@ -63,6 +64,13 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
     bool grow = length > map->capacity / 2;
     bool detach = map->object.domain != admission->domain && sensitive;
     bool inplace = unique && !detach && (!grow || map->object.domain == admission->domain);
+    if (!probe.found) {
+        uint64_t work = hash_order_work(capacity);
+        if (inplace && !grow && map->order_count == map->capacity)
+            work += (uint64_t)map->capacity * 4;
+        status = hash_charge(admission, work);
+        if (status != XR_XIR_VALUE_OK) return status;
+    }
     StoragePrepared prepared_key = {0}, prepared_value = {0};
     if (!probe.found) {
         status = hash_prepare_field(&prepared_key, key, map->key_type, admission);
