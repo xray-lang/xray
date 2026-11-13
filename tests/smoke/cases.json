@@ -29,25 +29,17 @@
       "id": "demos/01-basics/functions.xr",
       "path": "demos/01-basics/functions.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/functions.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:33:5: module slot without publication is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functions.txt"
     },
     {
       "id": "native:demos/01-basics/functions.xr",
       "path": "demos/01-basics/functions.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/functions.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/functions.xr:33:5: module slot without publication is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functions.txt"
     },
     {
       "id": "demos/01-basics/hello.xr",
