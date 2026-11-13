@@ -899,11 +899,37 @@ static void offset_sources(void) {
     }
     CHECK(offsets==1);xr_lir_lowered_free(&output);
 }
+static void callable_source(void) {
+    XrLirLowered output = lower_text("fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
+        "print(apply(fn(x:i64)->i64{return x+2},40))\n");
+    unsigned references = 0, invocations = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(output.module); ++n) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, n, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView body;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView instruction;
+                OK(xr_lir_instruction_view(output.module, block, i, &instruction));
+                references += instruction.op == XR_LIR_FUNCTION_REF;
+                invocations += instruction.op == XR_LIR_CALL_INDIRECT;
+            }
+        }
+    }
+    CHECK(references == 1 && invocations == 1);
+    xr_lir_lowered_free(&output);
+}
 #include "lir_lower_array_cases.h"
 #include "lir_fixed_lower_cases.h"
 #include "lir_view_lower_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
+    callable_source();
     view_cold_checked_sources(argv[1]);
     fixed_sources();
     array_sources();

@@ -207,7 +207,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_INITIALIZE:
-    case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INTRINSIC:
+    case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
     case XR_LIR_ICMP: return source == XR_LIR_U8 || i->predicate == XR_LIR_EQ || i->predicate == XR_LIR_NE;
