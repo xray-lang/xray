@@ -19,6 +19,7 @@
 #include "xlir_internal.h"
 #include "xlir_state.h"
 #include "xlir_state_projection.h"
+#include "xlir_native_callable.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -50,7 +51,9 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, string_cursor, stack_environments;
+    uint32_t *owned_entries, owned_entry_count;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library;
+    bool string_cursor, stack_environments, callable_scopes;
     XrLirStateLayout state_layout;
 } LirC;
 
@@ -134,7 +137,7 @@ static const char *c_builtin_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
         NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **",
-        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **", "XrtArrayRef", "XrtViewFrame", "XrtViewCell", "XrtSliceI64", "XrtStringRef"};
+        "XrtModuleState *", "XrtModuleRef *", "XrtArray *", "XrtArray **", "XrtArrayRef", "XrtViewFrame", "XrtViewCell", "XrtSliceI64", "XrtStringRef", "XrtCallableScope *"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -279,6 +282,20 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
+    XrLirCallableType signature;
+    if (c_callable_owned_point(v) || c_callable_scope_point(v) ||
+        ((v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INDIRECT) &&
+         xr_lir_callable_type_view(c->request->module, v->type, &signature) == XR_LIR_OK) ||
+        (v->op == XR_LIR_RET && xr_lir_callable_type_view(c->request->module, c->view.result, &signature) == XR_LIR_OK))
+        c->seen[c->function.id - 1] |= 16u;
+    if (c_callable_scope_point(v)) {
+        c->callable_scopes = c->runtime = true;
+        if (c_located(&v->source)) {
+            if (c->location_count == UINT32_MAX)
+                c_error(c, XR_LIR_C_OVERFLOW, "source location count exceeds 32 bits");
+            else ++c->location_count;
+        }
+    }
     if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_view_point(c, v) ||
         (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
@@ -380,12 +397,21 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             if (!c_callable_frame_target(c, v))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "captured environments require native lifetime transport");
             else {
-                c->stack_environments |= v->operand_count != 0;
+                c->stack_environments |= v->bits == XR_LIR_CLOSURE_FRAME && v->operand_count != 0;
                 c_visit(c, v->callee);
-                c->seen[v->callee - 1] |= 2u;
+                if (v->bits == XR_LIR_CLOSURE_OWNED) {
+                    c_callable_owned_target(c, v->callee);
+                    c->runtime = true;
+                    if (c_located(&v->source)) {
+                        if (c->location_count == UINT32_MAX)
+                            c_error(c, XR_LIR_C_OVERFLOW, "source location count exceeds 32 bits");
+                        else ++c->location_count;
+                    }
+                } else c->seen[v->callee - 1] |= 2u;
             }
             break;
-        case XR_LIR_CALL_INDIRECT:
+        case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_SCOPE_ENTER:
+        case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND:
             break;
         default:
             c_error(c, XR_LIR_C_UNSUPPORTED, "operation has no admitted portable C implementation");
@@ -496,7 +522,8 @@ static void c_locations(LirC *c) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_view_point(c, &v) &&
-                     !c_arithmetic_point(c, &v) && v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
+                     !c_arithmetic_point(c, &v) && !c_callable_owned_point(&v) && !c_callable_scope_point(&v) &&
+                     v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -571,10 +598,13 @@ static void c_declarations(LirC *c) {
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction;
             xr_lir_instruction_view(c->request->module, block, n, &instruction);
-            if (instruction.op == XR_LIR_FUNCTION_REF && instruction.operand_count)
+            if (instruction.op == XR_LIR_FUNCTION_REF && instruction.bits == XR_LIR_CLOSURE_FRAME && instruction.operand_count)
                 c_format(c, "    XrlEnv_%" PRIu32 " xrl_env%" PRIu32 ";\n", instruction.callee, instruction.result);
         }
     }
+    if ((c->owned_entry_count || c->callable_scopes) && (c->seen[c->function.id - 1] & 16u))
+        c_text(c, "    XrtCallableScope xrl_scope_storage;\n    XrtCallableScope *xrl_scope = &xrl_scope_storage;\n"
+            "    xrt_callable_scope_enter(xrl_scope, &xrl_callable_image, 0);\n");
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
             return;
@@ -587,6 +617,8 @@ static void c_declarations(LirC *c) {
                 c_string_literal(c, id) ? " = NULL" : "");
             c_format(c, "    (void)&v%" PRIu32 ";\n", id);
         }
+        if (c_value_type(c, id) == XR_LIR_FUNCTION_SCOPE)
+            c_format(c, "    XrtCallableScope xrl_scope_storage_%" PRIu32 ";\n", id);
         if (c_value_type(c, id) == XR_LIR_STATE_REF) {
             c_format(c, "    XrtModuleAccess xrl_access%" PRIu32 ";\n", id);
             c_format(c, "    (void)&xrl_access%" PRIu32 ";\n", id);
@@ -766,6 +798,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c->string_cursor && !scalar && v->op != XR_LIR_BR && v->op != XR_LIR_CONDBR &&
         v->op != XR_LIR_STRING_LITERAL && !literal_drop && !c_string_cursor_append(c, v))
         c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
+    if (c_callable_scope_point(v)) {
+        c_callable_scope_instruction(c, v);
+        return;
+    }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
         c_callable_instruction(c, v);
         return;
@@ -975,6 +1011,16 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    }\n");
             break;
         case XR_LIR_RET:
+            if ((c->owned_entry_count || c->callable_scopes) && (c->seen[c->function.id - 1] & 16u)) {
+                XrLirCallableType signature;
+                if (xr_lir_callable_type_view(c->request->module, c->view.result, &signature) == XR_LIR_OK) {
+                    c_format(c, "    { %s result = ", c_type(c, c->view.result));
+                    c_value(c, v->operands[0]);
+                    c_text(c, ";\n    result.owner = xrt_callable_scope_leave(xrl_scope, result.owner, 0);\n    return result; }\n");
+                    break;
+                }
+                c_text(c, "    (void)xrt_callable_scope_leave(xrl_scope, NULL, 0);\n");
+            }
             c_text(c, "    return");
             if (v->operand_count) {
                 c_text(c, " ");
@@ -1063,6 +1109,10 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
     if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
+    if (c->owned_entry_count || c->callable_scopes) c_text(c, "#include \"xray_native_callable.h\"\n\n");
+    if (c->callable_scopes && !c->owned_entry_count)
+        c_text(c, "static const XrtCallableImage xrl_callable_image = {0};\n\n");
+    if (c->owned_entry_count) c_text(c, "#include <string.h>\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (root_result == XR_LIR_STRING)
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
@@ -1070,6 +1120,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_text(c, "extern XrtArray *xrt_array_root_take(XrtArray *array);\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
     c_constructed_types(c);
+    c_callable_owned_catalog(c);
     c_display_catalog(c);
     c_locations(c);
     c_literals(c);
@@ -1084,6 +1135,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_signature(c, false);
     }
     c_callable_thunks(c);
+    c_callable_owned_thunks(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -1161,6 +1213,11 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     }
     if (!c_request_poll(&c))
         return c.status;
+    XrLirCallableType callable_result;
+    if (xr_lir_callable_type_view(request->module, entry.result, &callable_result) == XR_LIR_OK) {
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "standalone callable results require an external outcome owner");
+        return c.status;
+    }
 #if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
     XrLirDiagnostic invalid;
     XrLirStatus status = xr_lir_verify(request->module, &invalid);
@@ -1232,6 +1289,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.fixed_divisors);
     xr_compile_resources_free(c.used_literals);
     xr_compile_resources_free(c.constructed_types);
+    xr_compile_resources_free(c.owned_entries);
     return c.status;
 }
 

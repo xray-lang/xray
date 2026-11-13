@@ -737,10 +737,12 @@ static void native_string_misuse_aborts(void) {
 #endif
 
 #include "native_callable_cases.h"
+#include "native_callable_scope_cases.h"
 
 int main(void) {
     native_callable_projection();
     native_callable_owners();
+    native_callable_scopes();
     native_f64_text_recovery();
     native_frame_cell_recovery();
     native_shared_strings();

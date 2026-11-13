@@ -664,6 +664,7 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         *output = (XrLirValue) {m, handle.function, f->value_count};
     }
     block->instructions[block->instruction_count++] = instruction;
+    if (input->op == XR_LIR_FUNCTION_SCOPE_ENTER) ++f->scope_count;
     block->terminated = terminal;
     XR_DCHECK(block->instruction_count <= block->instruction_capacity, "instruction capacity");
     return XR_LIR_OK;
@@ -775,7 +776,7 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *m, XrLirFunction han
                                 f->parameters,  f->parameter_count, f->block_count,
                                 f->value_count, f->entry,           f->result,
                                 f->kind,        f->extern_kind,
-                                f->callable_parameters, f->callable_parameter_count};
+                                f->callable_parameters, f->callable_parameter_count, f->scope_count};
     return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *m, XrLirFunction handle, uint32_t ordinal,

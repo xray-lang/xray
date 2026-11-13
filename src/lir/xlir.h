@@ -54,6 +54,7 @@ enum XrLirBuiltinType {
     XR_LIR_VIEW_CELL,
     XR_LIR_SLICE_I64,
     XR_LIR_STRING_REF,
+    XR_LIR_FUNCTION_SCOPE,
     XR_LIR_TYPE_COUNT
 };
 
@@ -148,6 +149,7 @@ typedef struct XrLirFunctionView {
     XrLirExternKind extern_kind;
     const struct XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
+    uint32_t scope_count;
 } XrLirFunctionView;
 typedef struct XrLirBlockView {
     const uint32_t *parameters;

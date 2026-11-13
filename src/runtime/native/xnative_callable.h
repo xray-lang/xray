@@ -9,39 +9,9 @@
 #ifndef XNATIVE_CALLABLE_H
 #define XNATIVE_CALLABLE_H
 #include "xir/xxir_type_arena.h"
-#include "xray_native_pod.h"
+#include "xray_native_callable.h"
 
 typedef struct XrtCallableCode XrtCallableCode;
-
-typedef enum XrtCallableValueKind {
-    XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED
-} XrtCallableValueKind;
-
-typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
-
-typedef enum XrtCallableShapeKind {
-    XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL
-} XrtCallableShapeKind;
-
-typedef struct XrtCallableParameterSpec {
-    XrtCallableValueSpec value;
-    uint32_t mode;
-    bool escaping;
-} XrtCallableParameterSpec;
-
-/* Dependencies name earlier receiving rows. Array families are I64, String,
- * U8 and U64 in that order. Scalar IDs are XrPodScalar values. The directory
- * describes physical storage and never grants an executable entry. */
-typedef struct XrtCallableTypeSpec {
-    XrtCallableShapeKind kind;
-    XrtCallableValueSpec element;
-    uint32_t count;
-    const XrtCallableParameterSpec *parameters;
-    uint32_t parameter_count;
-    XrtCallableValueSpec result;
-    uint32_t flags; /* NoSuspend=1 and C_ABI=2. */
-    bool throws;
-} XrtCallableTypeSpec;
 
 XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirType *);
 /* One physical pool is projected into an independently owned canonical arena.
@@ -86,4 +56,6 @@ XR_FUNC XrXirValueStatus xrt_callable_cell_write(XrtCallableCode *, XrXirDomain 
  * The returned capture vector ends with the actual canonical Fn owner. */
 XR_FUNC XrXirValueStatus xrt_callable_borrow(const XrtCallableCode *, const XrXirValue *,
     uint32_t entry, const XrXirValue **captures, uint32_t *count);
+struct XrtValueRoot;
+XR_FUNC void xrt_callable_root_drain(struct XrtValueRoot *);
 #endif // XNATIVE_CALLABLE_H

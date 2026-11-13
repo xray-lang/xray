@@ -283,7 +283,16 @@ static void callable_lower_failures(void) {
         "fn sample(cb:fn()->i64)->i64{return cb()}\n"
         "fn answer(seed:i64)->i64{var value=seed\nconst first=fn()->i64{value=value+1\nreturn value}\n"
         "const second=fn()->i64{return value}\nconst result=sample(first)\nvalue=value+2\n"
-        "return result+sample(second)}\nprint(answer(40))\n"};
+        "return result+sample(second)}\nprint(answer(40))\n",
+        ("fn make(seed:i64)->fn(i64)->i64{return fn(x:i64)->i64{return seed+x}}\n"
+         "fn exercise(){const f=make(40)\nconst g=make(50)\nprint(f(2))\nprint(g(2))\nprint(f(3))}\nexercise()\n"),
+        "fn make(seed:i64)->fn(i64)->i64{return fn(x:i64)->i64{return seed+x}}\n"
+        "fn run(limit:i64)->i64{var n=0\nvar total=0\nwhile(n<limit){const cb=make(n)\n"
+        "n=n+1\nif(n==2){continue}\ntotal=total+cb(1)\nif(n==4){break}}\nreturn total}\nprint(run(6))\n",
+        "fn make(seed:i64)->fn(i64)->i64{return fn(x:i64)->i64{return seed+x}}\n"
+        "fn choose(flag:bool)->fn(i64)->i64{const outer=make(40)\n{const inner=make(50)\n"
+        "if(flag){return inner}\nreturn outer}}\n"
+        "fn run(){make(0)\nconst cb=choose(true)\nprint(cb(2))}\nrun()\n"};
     for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
         SourceFixture fixture = source_fixture(programs[program]);
         attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));

@@ -177,7 +177,8 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_AGGREGATE_STATE_CONSTRUCT, XR_RBC_AGGREGATE_STATE_INITIALIZE,
     XR_RBC_AGGREGATE_DISPLAY, XR_RBC_STRING_LIBRARY, XR_RBC_RANGE_CHECK, XR_RBC_AGGREGATE_CALL, XR_RBC_AGGREGATE_RETURN,
     XR_RBC_FUNCTION_REFERENCE, XR_RBC_FUNCTION_CALL, XR_RBC_FUNCTION_RETURN,
-    XR_RBC_FUNCTION_OWNED_REFERENCE
+    XR_RBC_FUNCTION_OWNED_REFERENCE, XR_RBC_FUNCTION_SCOPE_RETURN,
+    XR_RBC_FUNCTION_SCOPE_ENTER, XR_RBC_FUNCTION_SCOPE_LEAVE, XR_RBC_FUNCTION_BIND
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
@@ -189,6 +190,10 @@ typedef struct XrRbcAggregateAccess {
 typedef struct XrRbcEnvironment {
     uint32_t callee, offset, producer;
 } XrRbcEnvironment;
+typedef struct XrRbcFunctionScopes {
+    const uint32_t *parents;
+    uint32_t count;
+} XrRbcFunctionScopes;
 
 typedef struct {
     const uint32_t *code;
@@ -330,6 +335,12 @@ typedef struct {
     size_t closure_entry_count;
     const XrXirType *closure_signatures;
     size_t closure_signature_count;
+    const uint32_t *callable_results;
+    size_t callable_result_count;
+    // A scope cap projects into this owned directory, outside scalar registers.
+    // Parent zero names the activation; other ordinals are one-based here.
+    const XrRbcFunctionScopes *function_scopes;
+    size_t function_scope_count;
 } XrRbcModule;
 
 typedef enum {

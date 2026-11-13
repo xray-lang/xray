@@ -163,6 +163,7 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
             c->slots[rbc_lir_group(r, c->view.parameters[p])] = physical++;
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX) continue;
+        if (c->scope_home && c->scope_home[v] != UINT32_MAX) continue;
         uint32_t group = rbc_lir_group(r, v);
         if (c->slots[group] == UINT32_MAX) c->slots[group] = c->slot_count++;
     }
@@ -178,6 +179,7 @@ static XrLirType rbc_lir_value_type(RbcLirCompiler *c, uint32_t value) {
 #include "xrbc_lir_spill_edges.inc.c"
 static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget) {
     if (c->aggregate_home && c->aggregate_home[value] != UINT32_MAX) return true;
+    if (c->scope_home && c->scope_home[value] != UINT32_MAX) return true;
     if (c->slots[value] != UINT32_MAX) return true;
     if (c->slot_count == budget)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"resident control values and cell handles exceed register capacity");
@@ -241,7 +243,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         for(uint32_t v=1;v<=c->view.value_count;++v) {
             if(c->slots[v]!=UINT32_MAX || c->output.literals[v] || c->output.lengths[v])continue;
             XrLirType type=rbc_lir_value_type(c,v);
-            if (type >= XR_LIR_TYPE_COUNT) continue;
+            if (type >= XR_LIR_TYPE_COUNT || type == XR_LIR_FUNCTION_SCOPE) continue;
             if((type==XR_LIR_STRING || type==XR_LIR_ARRAY)!=(pool==0))continue;
             if(c->slot_count<budget)c->slots[v]=c->slot_count++;
             else {

@@ -89,6 +89,7 @@ typedef struct {
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
+    uint32_t *scope_home;
     uint32_t *aggregate_parameters, *aggregate_arguments;
     uint32_t scalar_parameter_count, aggregate_parameter_count;
     size_t aggregate_argument_count, aggregate_argument_capacity;
@@ -245,6 +246,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
 #include "xrbc_lir_array.inc.c"
 #include "xrbc_lir_view.inc.c"
 #include "xrbc_lir_aggregate.inc.c"
+#include "xrbc_lir_callable_scope.inc.c"
 
 static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstructionView *i) {
     if (i->op != XR_LIR_CALL) return false;
@@ -454,7 +456,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY &&
          v->result != XR_LIR_SLICE_I64 &&
-         !rbc_lir_scalar(v->result) && !rbc_lir_aggregate_type(input, v->result))) {
+         !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
             rbc_lir_value_source(input, f, v, 0, d));
@@ -480,7 +482,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
-             type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 &&
+             type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 && type != XR_LIR_FUNCTION_SCOPE &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
              !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
@@ -517,6 +519,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT &&
+        i->op != XR_LIR_FUNCTION_SCOPE_ENTER && i->op != XR_LIR_FUNCTION_SCOPE_LEAVE && i->op != XR_LIR_FUNCTION_BIND &&
         i->op != XR_LIR_BR && i->op != XR_LIR_CONDBR) {
         for (uint32_t p = 0; p < i->operand_count; ++p) {
             XrLirType type = XR_LIR_TYPE_INVALID;
@@ -546,7 +549,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         if (i->bits == XR_LIR_CLOSURE_OWNED && target.state_capture) return false;
         return true;
     }
-    case XR_LIR_CALL_INDIRECT: return true;
+    case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_SCOPE_ENTER:
+    case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
         return xr_lir_range_point(input, i) || xr_lir_string_role(input, i) || xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
@@ -623,7 +627,6 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 XrLirInstructionView i;
                 xr_lir_instruction_view(input, block, n, &i);
                 if (i.op == XR_LIR_FUNCTION_REF && i.bits == XR_LIR_CLOSURE_OWNED) {
-                    if (index) goto frame_rejected;
                     *owned = true;
                 }
                 d->block = block.id;
@@ -763,7 +766,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     }
                 }
             uint64_t strings=0,bits=0,refs=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            if (rbc_lir_callable_scope_point(&i) || xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
@@ -857,7 +860,8 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         XrLirType type = XR_LIR_TYPE_INVALID;
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, v}, &type);
-        if (c->output.literals[v] || c->output.lengths[v] || rbc_lir_aggregate_type(c->input, type)) continue;
+        if (c->output.literals[v] || c->output.lengths[v] || rbc_lir_aggregate_type(c->input, type) ||
+            type == XR_LIR_FUNCTION_SCOPE) continue;
         XrRbcRegisterKind kind = rbc_lir_register_kind(c, v, type);
         uint32_t slot = c->slots[v];
         if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
@@ -1091,11 +1095,17 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return rbc_lir_emit(c,op,result,c->slots[i->operands[0]],c->slots[i->operands[1]],0);
     }
     case XR_LIR_FUNCTION_REF: case XR_LIR_CALL_INDIRECT: return rbc_lir_callable_emit(c, i);
+    case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND:
+        return rbc_lir_callable_scope_emit(c, i);
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
     case XR_LIR_RET:
         {
+            if (c->literals->program->module.closure_entry_count && !rbc_lir_aggregate_type(c->input, c->view.result))
+                return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=XR_RBC_FUNCTION_SCOPE_RETURN,
+                    .source=i->operand_count ? c->slots[i->operands[0]] : 0, .count=i->operand_count,
+                    .slot=rbc_lir_callable_type(c->input, c->view.result) ? rbc_lir_callable_ordinal(c, c->view.result) + 1 : 0});
             XrLirClosureTarget target = {0};
             if (xr_lir_closure_target_view(c->input, c->function, &target) == XR_LIR_OK && target.callable)
                 return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=XR_RBC_FUNCTION_RETURN,
@@ -1194,6 +1204,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (rbc_lir_callable_scope_point(i)) return rbc_lir_callable_scope_emit(c, i);
     if (xr_lir_range_point(c->input, i) || xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
@@ -1401,7 +1412,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 (XrRbcCallableValue){XR_RBC_CALLABLE_BINDING, XR_POD_I64} :
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
-    if (!rbc_lir_aggregate_homes(c) || !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
+    if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||
+        !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "block table exceeds address space");
@@ -1461,7 +1473,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
         .result_kind=c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
-            c->view.result == XR_LIR_SLICE_I64 ? XR_RBC_SLICE_I64 : XR_RBC_BITS,
+            c->view.result == XR_LIR_SLICE_I64 ? XR_RBC_SLICE_I64 :
+            rbc_lir_callable_type(c->input, c->view.result) ? XR_RBC_FUNCTION : XR_RBC_BITS,
         .view_accesses=c->view_accesses, .view_access_count=c->view_access_count,
         .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count,
         .aggregate_values=c->aggregate_values, .aggregate_value_count=c->aggregate_value_count,
@@ -1514,6 +1527,10 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
     xr_free(program->closure_mapping);
+    xr_free((void *)program->module.callable_results);
+    for (size_t f = 0; f < program->module.function_scope_count; ++f)
+        xr_free((void *)program->module.function_scopes[f].parents);
+    xr_free((void *)program->module.function_scopes);
     for (size_t e = 0; e < program->module.closure_entry_count; ++e)
         xr_free((void *)program->module.closure_entries[e].captures);
     xr_free((void *)program->module.closure_entries);
@@ -1612,6 +1629,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         rbc_lir_output_free(&c.output);
         xr_free(c.slots);xr_free(c.spill_home);xr_free(c.edge_spill);
         xr_free(c.aggregate_home);
+        xr_free(c.scope_home);
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
         xr_free(c.view_constants);
@@ -1771,6 +1789,17 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (owned_closures) {
         status = rbc_lir_owned_callable(input, ids, count, p, d);
         if (status != XR_RBC_COMPILE_OK) goto done;
+    }
+    for (uint32_t f = 0; p->module.callable_type_count && f < count; ++f) {
+        XrLirFunctionView view;
+        xr_lir_function_view(input, (XrLirFunction){input, ids[f]}, &view);
+        if (!rbc_lir_callable_type(input, view.result)) continue;
+        if (!p->module.callable_results) {
+            p->module.callable_results = xr_calloc(count, sizeof(*p->module.callable_results));
+            if (!p->module.callable_results) { status = XR_RBC_COMPILE_OUT_OF_MEMORY; goto done; }
+            p->module.callable_result_count = count;
+        }
+        ((uint32_t *)p->module.callable_results)[f] = p->physical_callables[view.result - XR_LIR_TYPE_COUNT] + 1;
     }
     status = rbc_lir_locations(input, ids, count, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;

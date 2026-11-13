@@ -13,6 +13,7 @@
  */
 #include "xnative_callable.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_value_internal.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdatomic.h>
@@ -167,3 +168,5 @@ XR_FUNC XrXirValueStatus xrt_callable_cell_write(XrtCallableCode *code, XrXirDom
     XrXirValueAdmission admission = {code->arena, domain, callable_admit, code, UINT64_MAX, UINT64_MAX};
     return xr_xir_cell_write(cell, replacement, &admission);
 }
+
+#include "xnative_callable_scope.inc.c"

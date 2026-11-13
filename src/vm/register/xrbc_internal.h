@@ -15,9 +15,14 @@ static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *acce
     size_t count, uint32_t word) {
     return (word & 255) == XR_RBC_AGGREGATE_ACCESS && accesses && (word >> 16) < count &&
         (accesses[word >> 16].operation == XR_RBC_AGGREGATE_RETURN ||
-         accesses[word >> 16].operation == XR_RBC_FUNCTION_RETURN);
+         accesses[word >> 16].operation == XR_RBC_FUNCTION_RETURN ||
+         accesses[word >> 16].operation == XR_RBC_FUNCTION_SCOPE_RETURN);
 }
 #include "shared/xr_pod_state.h"
+
+static inline XrRbcFunctionScopes rbc_function_scopes(const XrRbcModule *module, const XrRbcFunction *function) {
+    return module->function_scopes ? module->function_scopes[function - module->functions] : (XrRbcFunctionScopes){0};
+}
 
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };

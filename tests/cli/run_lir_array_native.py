@@ -19,7 +19,9 @@ def main() -> None:
     parser.add_argument("--compiler", action="append", default=[])
     parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
-    cases = ("callable_values", "callable_contracts", "callable_frames", "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
+    cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned",
+             "factory_bindings", "factory_loop", "factory_transfer_temporaries",
+             "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -112,11 +114,13 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_bool", "reject_nested", "reject_nullable_managed"):
+    for name in ("reject_bool", "reject_nested", "reject_nullable_managed", "reject_owned_binding"):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
-        diagnostic = b"Nullable payload has no inline POD layout" if name == "reject_nullable_managed" else b"module slot payload type is not supported"
+        diagnostic = (b"owned mutable function binding extent" if name == "reject_owned_binding" else
+                      b"Nullable payload has no inline POD layout" if name == "reject_nullable_managed" else
+                      b"module slot payload type is not supported")
         if out or diagnostic not in err:
             failures.append((name, "unsupported payload", out, err))
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)

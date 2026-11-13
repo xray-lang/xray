@@ -23,6 +23,7 @@
 #include "xir/xxir_types.h"
 #include <float.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(_M_FP_FAST) || defined(__FAST_MATH__) || \
@@ -54,6 +55,12 @@ XR_STATIC_ASSERT(sizeof(XrRbcRegister) == 8, "physical register lanes occupy eig
 
 #include "xrbc_entry.inc.c"
 
+typedef struct XrRbcClosureScope { size_t depth, first; uint32_t id; } XrRbcClosureScope;
+typedef struct XrRbcClosureOwner {
+    size_t next;
+    uint32_t generation, binding;
+} XrRbcClosureOwner;
+
 typedef struct {
     size_t function, pc, base;
     uint32_t destination;
@@ -83,6 +90,11 @@ typedef struct {
     XrXirDomain *closure_domain;
     XrXirValue *closures, *closure_arguments;
     size_t closure_count, closure_capacity, closure_argument_capacity;
+    XrRbcClosureOwner *closure_owners;
+    size_t closure_owner_capacity, closure_free;
+    XrRbcClosureScope *closure_scopes;
+    size_t closure_scope_count, closure_scope_capacity;
+    XrXirValue closure_pending;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -176,7 +188,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
          function->register_kind_count != 0) ||
         (function->cell_kinds ? function->cell_kind_count != function->cell_count :
          function->cell_kind_count != 0) ||
-        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_SLICE_I64 &&
+        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
         if ((unsigned)function->register_kinds[i] > XR_RBC_I64_BINDING ||
@@ -195,6 +207,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     uint32_t a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     uint32_t index = word >> 16, registers = function->register_count;
     size_t remaining = function->code_count - pc;
+    if (module->closure_entry_count && (op == XR_RBC_RET || op == XR_RBC_RET0)) return false;
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
@@ -435,7 +448,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
-    if (function->result_kind == XR_RBC_SLICE_I64 || function->capture_count || function->state_capture ||
+    if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION ||
+        function->capture_count || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
         (!inject_state && function->parameter_count &&
@@ -532,6 +546,9 @@ static void xr_rbc_root(void *context) {
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_xir_value_drop(&stack->closure_pending);
+    while (stack->closure_scope_count)
+        xr_rbc_closure_scope_drop(stack, --stack->closure_scope_count);
     for (size_t n = stack->closure_count; n; --n) xr_xir_value_drop(&stack->closures[n - 1]);
     if (stack->closure_domain) {
         XR_CHECK(xr_xir_domain_close(stack->closure_domain) == XR_XIR_VALUE_OK,
@@ -540,7 +557,9 @@ static void xr_rbc_stack_free(XrRbcStack *stack) {
     }
     xrt_callable_code_drop(&stack->closure_code);
     xr_free(stack->closures);
+    xr_free(stack->closure_owners);
     xr_free(stack->closure_arguments);
+    xr_free(stack->closure_scopes);
     xr_free(stack->array_arguments);
     xr_free(stack->spills);
     xr_free(stack->cells);

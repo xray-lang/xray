@@ -49,6 +49,16 @@ typedef struct XrLirClosureTarget {
     bool state_capture;
 } XrLirClosureTarget;
 
+/* FUNCTION_SCOPE_ENTER borrows an optional parent scope operand and produces
+ * a local scope handle. No parent means the current function activation.
+ * FUNCTION_SCOPE_LEAVE consumes that scope and optionally keeps one Fn value
+ * into its parent before retirement, producing that same exact Fn type.
+ * FUNCTION_BIND receives an independent owner in its first scope operand;
+ * its second operand and result have the same Fn type. bits names the local
+ * binding identity, ordered by declaration within that scope. Scope handles
+ * cannot be parameters, results or edge data. One BIND producer declares one
+ * key in that scope. Updating a captured Cell keeps that Cell's own identity. */
+
 /* Construction copies the complete signature and preserves output on failure.
  * Constructed dependencies must already belong to this receiving module.
  * Query slices borrow their module and never outlive it. */

@@ -42,6 +42,8 @@ static bool rbc_callable_accepts(const XrRbcModule *m, uint32_t expected, uint32
 
 static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (m->callable_type_count > UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
+    if (m->callable_results ? m->callable_result_count != m->function_count : m->callable_result_count != 0) return false;
+    if (m->function_scopes ? m->function_scope_count != m->function_count : m->function_scope_count != 0) return false;
     for (size_t t = 0; t < m->callable_type_count; ++t) {
         XrRbcCallableType type = m->callable_types[t];
         if (type.parameter_count > 65536 || (type.parameter_count && !type.parameters) ||
@@ -55,6 +57,12 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     }
     for (size_t n = 0; n < m->function_count; ++n) {
         const XrRbcFunction *f = &m->functions[n];
+        XrRbcFunctionScopes scopes = rbc_function_scopes(m, f);
+        if (scopes.count > f->code_count || (scopes.count ? !scopes.parents : scopes.parents != NULL)) return false;
+        for (uint32_t p = 0; p < scopes.count; ++p)
+            if (scopes.parents[p] > scopes.count || scopes.parents[p] == p + 1) return false;
+        uint32_t result = m->callable_results ? m->callable_results[n] : 0;
+        if (f->result_kind == XR_RBC_FUNCTION ? !result || result > m->callable_type_count : result != 0) return false;
         if (f->capture_count > f->parameter_count || f->parameter_count > f->register_count ||
             (f->capture_count ? !f->captures : f->captures != NULL) ||
             (f->environment_count ? !f->environments : f->environments != NULL) ||
@@ -117,6 +125,34 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
 
 static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
+    if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND) {
+        XrRbcFunctionScopes scopes = rbc_function_scopes(m, f);
+        if (!access.destination || access.destination > scopes.count || access.first || access.callee || access.result.spill)
+            return false;
+        if (access.operation == XR_RBC_FUNCTION_SCOPE_ENTER)
+            return access.source == scopes.parents[access.destination - 1] && !access.result.index &&
+                !access.count && !access.slot && !access.window;
+        if (access.operation == XR_RBC_FUNCTION_BIND ? access.count != 1 || access.window == UINT32_MAX :
+                access.count > 1 || access.window != 0) return false;
+        if (!access.count) return !access.source && !access.result.index && !access.slot;
+        return access.source < f->register_count && access.result.index < f->register_count &&
+            rbc_register_kind(f, access.source) == XR_RBC_FUNCTION &&
+            rbc_register_kind(f, access.result.index) == XR_RBC_FUNCTION && access.slot &&
+            f->register_callables[access.source] == access.slot && f->register_callables[access.result.index] == access.slot;
+    }
+    if (access.operation == XR_RBC_FUNCTION_SCOPE_RETURN) {
+        uint32_t result = m->callable_results ? m->callable_results[f - m->functions] : 0;
+        if (access.slot != result || access.first || access.destination || access.callee || access.window ||
+            access.result.index || access.result.spill || access.count > 1) return false;
+        if (f->callable) {
+            XrRbcCallableValue declared = m->callable_types[f->callable - 1].result;
+            if (declared.kind == XR_RBC_CALLABLE_SCALAR && declared.type == XR_POD_UNIT)
+                return !access.count && !access.source;
+            if (access.count != 1) return false;
+        }
+        if (!access.count) return !access.source && f->result_kind == XR_RBC_BITS;
+        return access.source < f->register_count && rbc_register_kind(f, access.source) == f->result_kind;
+    }
     if (access.operation == XR_RBC_FUNCTION_RETURN) {
         if (!f->callable || access.slot != f->callable || access.first || access.destination ||
             access.callee || access.window || access.result.index || access.result.spill) return false;
@@ -132,7 +168,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
         const XrRbcFunction *callee = &m->functions[access.callee];
         uint32_t count = callee->capture_count + callee->state_capture;
         if (access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE) {
-            if (f != m->functions || callee->state_capture || !access.destination ||
+            if (callee->state_capture || !access.destination ||
                 access.destination > m->closure_entry_count ||
                 m->closure_targets[access.destination - 1] != access.callee || access.count != count ||
                 access.first > f->aggregate_operand_count || count > f->aggregate_operand_count - access.first) return false;

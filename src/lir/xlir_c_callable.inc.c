@@ -27,9 +27,10 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
     XrLirClosureTarget target = {0};
     XrLirFunctionView function = {0};
     XrLirFunction callee = {c->request->module, instruction->callee};
-    if (instruction->bits != XR_LIR_CLOSURE_FRAME ||
+    if (instruction->bits > XR_LIR_CLOSURE_OWNED ||
         xr_lir_closure_target_view(c->request->module, callee, &target) != XR_LIR_OK ||
         xr_lir_function_view(c->request->module, callee, &function) != XR_LIR_OK) return false;
+    if (instruction->bits == XR_LIR_CLOSURE_OWNED && target.state_capture) return false;
     if (instruction->operand_count) {
         if (c->block != c->view.entry) return false;
         if (!(c->seen[c->function.id - 1] & 4u)) {
@@ -49,10 +50,13 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
     for (uint32_t p = 0; p < target.capture_count; ++p) {
         XrLirType type = function.parameter_types[p];
         if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
-            type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL) return false;
+            type != XR_LIR_U64 && type != XR_LIR_F64 &&
+            (instruction->bits == XR_LIR_CLOSURE_OWNED || type != XR_LIR_I64_CELL)) return false;
     }
     return true;
 }
+
+#include "xlir_c_callable_owned.inc.c"
 
 static void c_callable_environment(LirC *c, uint32_t function, const XrLirFunctionView *view,
     XrLirClosureTarget target) {
@@ -107,6 +111,10 @@ static void c_callable_argument(LirC *c, uint32_t value, XrLirType expected) {
 
 static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
+        if (v->bits == XR_LIR_CLOSURE_OWNED) {
+            c_callable_owned_reference(c, v);
+            return;
+        }
         if (v->operand_count) {
             c_format(c, "    xrl_env%" PRIu32 " = (XrlEnv_%" PRIu32 "){", v->result, v->callee);
             for (uint32_t p = 0; p < v->operand_count; ++p) {

@@ -69,3 +69,7 @@ XR_LIR_OP(VIEW_FRAME_LEAVE, "view_frame_leave", 1)
 /* Function values bind an exact code declaration and its actual environment. */
 XR_LIR_OP(FUNCTION_REF, "function_ref", -1)
 XR_LIR_OP(CALL_INDIRECT, "call_indirect", -1)
+/* Scope handles borrow one actual synchronous lexical or temporary owner. */
+XR_LIR_OP(FUNCTION_SCOPE_ENTER, "function_scope_enter", -1)
+XR_LIR_OP(FUNCTION_SCOPE_LEAVE, "function_scope_leave", -1)
+XR_LIR_OP(FUNCTION_BIND, "function_bind", 2)

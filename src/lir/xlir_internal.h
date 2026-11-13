@@ -63,6 +63,7 @@ typedef struct XrLirFunctionData {
     uint32_t block_count, block_capacity;
     XrLirValueData *values;
     uint32_t value_count, value_capacity;
+    uint32_t scope_count;
 } XrLirFunctionData;
 typedef struct XrLirLiteralData {
     uint8_t *bytes;

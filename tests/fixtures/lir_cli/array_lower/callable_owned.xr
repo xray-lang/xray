@@ -1,0 +1,11 @@
+fn make(seed:i64)->fn(i64)->i64 {
+    return fn(value:i64)->i64 { return seed+value }
+}
+fn exercise() {
+    const first=make(40)
+    const second=make(50)
+    print(first(2))
+    print(second(2))
+    print(first(3))
+}
+exercise()

@@ -1,0 +1,9 @@
+fn make(seed: i64) -> fn(i64) -> i64 {
+    return fn(value: i64) -> i64 { return seed + value }
+}
+
+fn exercise() {
+    var callback = make(40)
+    print(callback(2))
+}
+exercise()

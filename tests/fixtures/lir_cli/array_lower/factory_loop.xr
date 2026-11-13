@@ -1,0 +1,21 @@
+fn make(seed: i64) -> fn(i64) -> i64 {
+    return fn(value: i64) -> i64 { return seed + value }
+}
+
+fn exercise(limit: i64) -> i64 {
+    var index: i64 = 0
+    var total: i64 = 0
+    while (index < limit) {
+        const callback = make(index * 10)
+        index = index + 1
+        if (index == 2) { continue }
+        total = total + callback(1)
+        if (index == 4) { break }
+    }
+    return total
+}
+
+print(exercise(0))
+print(exercise(1))
+print(exercise(3))
+print(exercise(6))

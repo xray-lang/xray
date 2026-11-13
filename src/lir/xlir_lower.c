@@ -20,9 +20,11 @@
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_closure_placement.h"
+#include "../xir/xxir_lexical.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct Lower {
@@ -53,6 +55,17 @@ typedef struct LowerArrayCells {
     uint8_t *use, *define, *live;
     uint32_t count;
 } LowerArrayCells;
+typedef struct LowerLexicalTemporary {
+    uint32_t statement, scope;
+} LowerLexicalTemporary;
+typedef struct LowerLexical {
+    XirLexicalFunction source;
+    XrLirValue *caps;
+    LowerLexicalTemporary *temporaries;
+    uint32_t *parents, *before, *after, *entries, *next;
+    uint32_t *incoming, *outgoing, *term_scope, *term_target, *value_scopes;
+    uint32_t count, temporary_count, current;
+} LowerLexical;
 typedef struct LowerFunction {
     Lower *owner;
     const XrXirFunction *source;
@@ -73,6 +86,7 @@ typedef struct LowerFunction {
     uint32_t *view_slots, *view_cells;
     uint32_t view_slot_count, view_cell_count;
     bool view_needed;
+    LowerLexical lexical;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
@@ -898,13 +912,15 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             placement == XIR_CLOSURE_UNRESOLVED)
             return lower_unsupported(c, "unresolved function environment placement");
         uint32_t callee = (uint32_t)op->immediate;
-        if (op->args[1] && placement != XIR_CLOSURE_FRAME)
-            return lower_unsupported(c, "owned function environment transport");
+        if (op->args[1] && placement != XIR_CLOSURE_FRAME && placement != XIR_CLOSURE_OWNED)
+            return lower_unsupported(c, "function environment storage is not executable");
         if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0])
             return lower_unsupported(c, "function capture operand range");
         const XrXirFunction *target = &c->source->functions[callee];
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             XrLirType type = lower_type(c, target->parameters[p]);
+            if (placement == XIR_CLOSURE_OWNED && type == XR_LIR_I64_CELL)
+                return lower_unsupported(c, "owned mutable function binding transport");
             if (type == XR_LIR_I64_CELL) c->scalar_bindings = true;
             if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
                 type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL)
@@ -1128,6 +1144,18 @@ static bool lower_declare(Lower *c, uint32_t index) {
 }
 
 static void lower_function_free(LowerFunction *f) {
+    xr_free(f->lexical.caps);
+    xr_free(f->lexical.temporaries);
+    xr_free(f->lexical.parents);
+    xr_free(f->lexical.before);
+    xr_free(f->lexical.after);
+    xr_free(f->lexical.entries);
+    xr_free(f->lexical.next);
+    xr_free(f->lexical.incoming);
+    xr_free(f->lexical.outgoing);
+    xr_free(f->lexical.term_scope);
+    xr_free(f->lexical.term_target);
+    xr_free(f->lexical.value_scopes);
     xr_free(f->frame_bindings);
     xr_free(f->view_module_refs);
     xr_free(f->view_slots);
@@ -1506,6 +1534,7 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
               "SSA values remain in their defining output function");
     return true;
 }
+#include "xlir_lower_callable_scope.inc.c"
 static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -1631,6 +1660,10 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         if (hidden) captures[op->args[1]] = f->state;
         XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=lower_type(c, op->type),
             .callee=c->functions[callee], .operands=captures, .operand_count=count, .source=lower_source(c)};
+        XirClosureStorage placement = XIR_CLOSURE_UNRESOLVED;
+        if (good && xr_xir_compile_closure_placement(c->request->closed, c->function, result, &placement) != XR_XIR_OK)
+            good = lower_unsupported(c, "function environment placement disappeared during emission");
+        if (good && op->args[1] && placement == XIR_CLOSURE_OWNED) reference.bits = XR_LIR_CLOSURE_OWNED;
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
         xr_free(captures);
         return good;
@@ -1899,6 +1932,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
     XR_DCHECK(f->reachable[b] && f->blocks[b].id, "only created reachable blocks receive bodies");
     const XrXirBlock *block = &f->source->blocks[b];
     c->block = b;
+    if (!lower_lexical_block(f, b)) return false;
     uint32_t position = f->phis[b];
     if (f->cell_count)
         memset(f->current, 0, (size_t) f->cell_count * sizeof(*f->current));
@@ -1918,6 +1952,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
     for (uint32_t i = block->first + f->phis[b]; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
+        if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
         bool handled;
@@ -1963,7 +1998,10 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             uint32_t cell = f->array_values[result];
             f->current[cell] = f->values[result];
         }
+        lower_lexical_value(f, i);
+        if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.after[i])) return false;
     }
+    if (!lower_lexical_finish_body(f, b)) return false;
     if (f->cell_count)
         memcpy(&f->states[(size_t) b * f->cell_count], f->current,
                (size_t) f->cell_count * sizeof(*f->current));
@@ -2142,6 +2180,8 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     }
     if (good) good = lower_selected_edges(f, b, &instruction);
     if (good) good = lower_managed_release_block(f, b, &instruction);
+    if (good) good = lower_lexical_terminator(f, b,
+        term->op == XR_XIR_RETURN && lower_callable_type(f, f->source->result) ? &value : NULL);
     if (good && term->op == XR_XIR_RETURN) good = lower_view_leave(f, b, &value);
     if (good)
         good = lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &instruction));
@@ -2158,7 +2198,8 @@ static bool lower_function(Lower *c, uint32_t index) {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
-                lower_cell_inventory(&f) && lower_view_inventory(&f) && lower_liveness(&f) && lower_blocks(&f);
+                lower_cell_inventory(&f) && lower_lexical_inventory(&f) &&
+                lower_view_inventory(&f) && lower_liveness(&f) && lower_blocks(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function, p, &f.values[p]));
     if (lower_hidden_state(c, index) && good)

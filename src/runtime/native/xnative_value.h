@@ -19,6 +19,8 @@ typedef struct XrtStringOwner XrtStringOwner;
 typedef struct XrtStringLiteral XrtStringLiteral;
 typedef struct XrtArrayOwner XrtArrayOwner;
 typedef struct XrtViewRegistry XrtViewRegistry;
+typedef struct XrtCallableRegistry XrtCallableRegistry;
+typedef struct XrtCallableScope XrtCallableScope;
 
 typedef struct XrtValueRoot {
     XrXirDomain *domain;
@@ -33,6 +35,9 @@ typedef struct XrtValueRoot {
     uint64_t array_held;
     XrXirValue pending;
     XrtViewRegistry *views;
+    XrtCallableRegistry *callables;
+    XrtCallableScope *callable_scope;
+    uint64_t callable_identity;
 } XrtValueRoot;
 
 typedef struct XrtValueBinding {
@@ -52,6 +57,7 @@ static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
     return !root->domain && !root->table && !root->literals && !root->held &&
         !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
         !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
-        !root->array_held && !root->views && !root->pending.type && !root->pending.reserved && !root->pending.payload;
+        !root->array_held && !root->views && !root->callables && !root->callable_scope &&
+        !root->pending.type && !root->pending.reserved && !root->pending.payload;
 }
 #endif // XNATIVE_VALUE_H

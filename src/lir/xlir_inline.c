@@ -105,7 +105,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
                 uint64_t scratch = inline_scratch(&v);
                 if (scratch > info->scratch) info->scratch = scratch;
                 info->returns |= v.op == XR_LIR_RET;
-                info->cell_storage |= v.op == XR_LIR_CELL_NEW;
+                info->cell_storage |= v.op == XR_LIR_CELL_NEW || v.op == XR_LIR_FUNCTION_SCOPE_ENTER;
                 if (v.op != XR_LIR_CALL) continue;
                 if (c->edge_count == SIZE_MAX) return XR_LIR_OUT_OF_MEMORY;
                 ++c->edge_count;

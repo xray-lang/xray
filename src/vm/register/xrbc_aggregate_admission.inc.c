@@ -163,7 +163,7 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
                 if (!rbc_aggregate_bits_location(f, f->aggregate_operands[access.first + p])) return false;
             continue;
         }
-        if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_FUNCTION_OWNED_REFERENCE) {
+        if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_FUNCTION_BIND) {
             if (!rbc_callable_access_valid(module, f, access)) return false;
             continue;
         }

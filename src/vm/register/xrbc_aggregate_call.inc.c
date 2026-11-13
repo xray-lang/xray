@@ -25,13 +25,24 @@ static bool xr_rbc_callable_arguments_valid(const XrRbcModule *module, const XrR
     return true;
 }
 
+static bool xr_rbc_closure_slot(const XrRbcStack *stack, uint64_t token, size_t *output) {
+    uint32_t ordinal = (uint32_t)(token >> 1);
+    uint32_t generation = (uint32_t)((token >> 33) & UINT32_C(0x3fffffff));
+    if (!(token & (UINT64_C(1) << 63)) || (token & 1u) || !ordinal || !generation ||
+        (size_t)ordinal > stack->closure_count ||
+        stack->closure_owners[ordinal - 1].generation != generation || !stack->closures[ordinal - 1].type)
+        return false;
+    *output = (size_t)ordinal - 1;
+    return true;
+}
+
 static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *stack,
     uint64_t token, uint32_t *callee, size_t *environment, const XrXirValue **owned) {
     *owned = NULL;
     if (token & (UINT64_C(1) << 63)) {
-        uint64_t index = (token & ~(UINT64_C(1) << 63)) >> 1;
-        if ((token & 1u) || !index || index - 1 >= stack->closure_count) return false;
-        const XrXirValue *value = &stack->closures[index - 1];
+        size_t index;
+        if (!xr_rbc_closure_slot(stack, token, &index)) return false;
+        const XrXirValue *value = &stack->closures[index];
         const XrXirFunctionBinding *binding = xr_xir_function_binding(value);
         uint32_t count;
         if (!binding || binding->entry >= module->closure_entry_count ||
@@ -71,20 +82,29 @@ static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *
     return false;
 }
 
+#include "xrbc_callable_scope.inc.c"
+
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *module, XrRbcStack *stack,
     const XrRbcFunction *function, uint32_t index, uint32_t source, size_t pc) {
     (void)source;
     XrRbcAggregateAccess access = function->aggregate_accesses[index];
     size_t parent = stack->depth - 1;
     XrRbcFrame *frame = &stack->frames[parent];
+    if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND) {
+        uint64_t token = access.count ? stack->slots[frame->base + access.source].bits : 0;
+        XrRbcStatus status = xr_rbc_closure_scope_step(module, stack, function, access,
+            access.count ? &token : NULL, source);
+        if (status == XR_RBC_OK) {
+            if (access.count) stack->slots[frame->base + access.result.index].bits = token;
+            frame->pc = pc;
+        }
+        return status;
+    }
     if (access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE) {
-        if (!stack->closure_code || stack->closure_count >= (UINT64_C(1) << 62) - 1u)
-            return XR_RBC_INVALID;
-        void *storage = stack->closures;
-        if (!xr_rbc_grow(&storage, &stack->closure_capacity,
-                stack->closure_count + 1, sizeof(*stack->closures))) return XR_RBC_OUT_OF_MEMORY;
-        stack->closures = storage;
-        storage = stack->closure_arguments;
+        if (!stack->closure_code) return XR_RBC_INVALID;
+        if (!xr_rbc_closure_scope_enter(stack) || !xr_rbc_closure_owner_reserve(stack))
+            return XR_RBC_OUT_OF_MEMORY;
+        void *storage = stack->closure_arguments;
         if (!xr_rbc_grow(&storage, &stack->closure_argument_capacity,
                 access.count, sizeof(*stack->closure_arguments))) return XR_RBC_OUT_OF_MEMORY;
         stack->closure_arguments = storage;
@@ -101,20 +121,23 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             XrXirValueStatus status = xr_xir_domain_new(UINT64_MAX, &stack->closure_domain);
             if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
         }
-        XrXirValue *result = &stack->closures[stack->closure_count];
-        *result = (XrXirValue){0};
+        XR_DCHECK(!stack->closure_pending.type, "one pending constructor is independently rooted");
         XrXirValueStatus status = xrt_callable_new(stack->closure_code, stack->closure_domain,
-            access.destination - 1, access.count ? stack->closure_arguments : NULL, access.count, result);
+            access.destination - 1, access.count ? stack->closure_arguments : NULL, access.count, &stack->closure_pending);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
         stack->slots[frame->base + access.result.index].bits =
-            (UINT64_C(1) << 63) | ((uint64_t)(++stack->closure_count) << 1);
+            xr_rbc_closure_owner_commit(stack, stack->closure_scope_count - 1, UINT32_MAX);
         frame->pc = pc;
         return XR_RBC_OK;
     }
-    if (access.operation == XR_RBC_FUNCTION_RETURN) {
+    if (access.operation == XR_RBC_FUNCTION_RETURN || access.operation == XR_RBC_FUNCTION_SCOPE_RETURN) {
         XrRbcRegister result = access.count ? stack->slots[frame->base + access.source] : (XrRbcRegister){0};
-        if (!xr_rbc_callable_scalar_valid(module->callable_types[access.slot - 1].result, result.bits))
+        if (function->callable && !xr_rbc_callable_scalar_valid(module->callable_types[function->callable - 1].result, result.bits))
             return XR_RBC_INVALID;
+        XrRbcStatus status = xr_rbc_closure_scope_return(module, stack,
+            function->result_kind == XR_RBC_FUNCTION ? &result.bits : NULL,
+            function->result_kind == XR_RBC_FUNCTION ? access.slot : 0, source);
+        if (status != XR_RBC_OK) return status;
         if (parent) stack->slots[stack->frames[parent - 1].base + frame->destination] = result;
         else stack->slots[0] = result;
         stack->cell_count = frame->cell_base;
@@ -212,6 +235,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         xr_rbc_aggregate_pack(type, bytes, stack->aggregate_result);
         stack->slots[0] = (XrRbcRegister){0};
     }
+    XrRbcStatus status = xr_rbc_closure_scope_return(module, stack, NULL, 0, source);
+    if (status != XR_RBC_OK) return status;
     stack->cell_count = frame->cell_base;
     stack->spill_count = frame->spill_base;
     --stack->depth;

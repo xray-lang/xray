@@ -113,8 +113,12 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
         XrLirCRequest request = {.module=copy, .entry={copy, root.id}, .resources=resources,
             .translation_unit="frame-frontier.c"};
         XrLirCOutput output = {0};
-        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED);
-        CHECK(!output.bytes && !output.length);
+        XrLirCStatus emitted = xr_lir_emit_c(&request, &output, NULL);
+        if (!scenario) {
+            CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
+            CHECK(strstr(output.bytes, "xrt_callable_scope_new") && strstr(output.bytes, "xrl_owned_thunk_"));
+            xr_lir_c_output_free(&output);
+        } else CHECK(emitted == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(copy);
     }
@@ -133,6 +137,17 @@ static void callable_vm_execution(void) {
     captured_program = NULL;
     xr_lir_module_destroy(captured);
     callable_fixture_capture(&captured, &captured_root, 2);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=captured, .entry=captured_root, .resources=resources,
+        .translation_unit="mutable-frame.c"};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
+    CHECK(strstr(output.bytes, "int64_t * c0;") && strstr(output.bytes, "int64_t xrl_cell"));
+    CHECK(!strstr(output.bytes, "xrt_callable_cell_new") && !strstr(output.bytes, "xrt_callable_scope_new"));
+    xr_lir_c_output_free(&output);
+    xr_compile_resources_release(resources);
     callable_transforms(captured, captured_root);
     CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
     callable_frame_receiving(captured_program);

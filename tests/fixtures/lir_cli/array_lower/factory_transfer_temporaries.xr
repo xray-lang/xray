@@ -1,0 +1,27 @@
+var made: i64 = 0
+
+fn make(seed: i64) -> fn(i64) -> i64 {
+    made = made + 1
+    return fn(value: i64) -> i64 { return seed + value }
+}
+
+fn choose(inner_result: bool, seed: i64) -> fn(i64) -> i64 {
+    const outer = make(seed)
+    {
+        const inner = make(seed + 10)
+        if (inner_result) { return inner }
+        return outer
+    }
+}
+
+fn exercise() {
+    make(100)
+    const selected = choose(true, 30)
+    const other = choose(false, 50)
+    print(selected(2))
+    print(other(3))
+    make(200)
+    print(made)
+    print(selected(4))
+}
+exercise()

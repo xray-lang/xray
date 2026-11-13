@@ -16,11 +16,12 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
-                                             "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64", "string_ref"};
+                                             "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64", "string_ref", "function_scope"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -135,6 +136,19 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
+        case XR_LIR_FUNCTION_SCOPE_ENTER:
+            return v->type == XR_LIR_FUNCTION_SCOPE && v->operand_count <= 1 &&
+                (!v->operand_count || a == XR_LIR_FUNCTION_SCOPE);
+        case XR_LIR_FUNCTION_SCOPE_LEAVE: {
+            XrLirCallableType signature;
+            return a == XR_LIR_FUNCTION_SCOPE && (v->operand_count == 1 ? v->type == XR_LIR_UNIT :
+                v->operand_count == 2 && v->type == b && xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK);
+        }
+        case XR_LIR_FUNCTION_BIND: {
+            XrLirCallableType signature;
+            return a == XR_LIR_FUNCTION_SCOPE && v->type == b && v->bits < UINT32_MAX &&
+                xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK;
+        }
         case XR_LIR_FIXED_ARRAY_NEW: {
             XrLirTypeView shape;
             if (xr_lir_type_view(m, v->type, &shape) != XR_LIR_OK ||
@@ -303,7 +317,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
-        v->op != XR_LIR_FUNCTION_REF && !lir_view_operation(v->op) && v->bits)
+        v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND && !lir_view_operation(v->op) && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
@@ -420,8 +434,9 @@ static bool lir_definition(const XrLirFunctionData *f, uint8_t *seen, uint32_t v
 }
 
 static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t *seen,
-                                   XrLirDiagnostic *d) {
+                                   bool *scopes, XrLirDiagnostic *d) {
     const XrLirFunctionData *f = &m->functions[index];
+    uint32_t scope_count = 0;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!lir_definition(f, seen, f->parameters[p], f->parameter_types[p], 0, p, true))
             return xr_lir_internal_error(d, "function parameter definition is inconsistent",
@@ -436,6 +451,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         for (uint32_t p = 0; p < block->parameter_count; ++p) {
             uint32_t id = block->parameters[p];
             if (!id || id > f->value_count ||
+                f->values[id - 1].type == XR_LIR_FUNCTION_SCOPE ||
                 !xr_lir_internal_type_valid(m, f->values[id - 1].type, false) ||
                 !lir_definition(f, seen, id, f->values[id - 1].type, b + 1, p, true))
                 return xr_lir_internal_error(d, "block parameter definition is inconsistent",
@@ -443,6 +459,9 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
+            *scopes |= v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE ||
+                v->op == XR_LIR_FUNCTION_BIND;
+            scope_count += v->op == XR_LIR_FUNCTION_SCOPE_ENTER;
             if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_ARRAY_CELL)
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
@@ -469,6 +488,8 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                                          index + 1, b + 1, i + 1, &v->source);
         }
     }
+    if (scope_count != f->scope_count)
+        return xr_lir_internal_error(d, "scope producer count is inconsistent", index + 1, 0, 0, NULL);
     for (uint32_t v = 0; v < f->value_count; ++v)
         if (!seen[v])
             return xr_lir_internal_error(d, "value has no definition", index + 1, 0, 0, NULL);
@@ -630,6 +651,7 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
 }
 
 static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
+    if (f->result == XR_LIR_FUNCTION_SCOPE) return false;
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(m, f->result, true) ||
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_REF || f->result == XR_LIR_STRING_CELL ||
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
@@ -640,7 +662,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         !xr_lir_internal_closure_target_valid(m, f))
         return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false))
+        if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false) ||
+            f->parameter_types[p] == XR_LIR_FUNCTION_SCOPE)
             return false;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->defined || f->block_count || f->entry) return false;
@@ -847,6 +870,8 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
     return XR_LIR_OK;
 }
 
+#include "xlir_callable_scope_verify.inc.c"
+
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     if (d)
         memset(d, 0, sizeof(*d));
@@ -933,7 +958,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "LIR verifier allocation failed");
         if (seen)
             memset(seen, 0, f->value_count);
-        XrLirStatus status = lir_definitions(m, index, seen, d);
+        bool scopes = false;
+        XrLirStatus status = lir_definitions(m, index, seen, &scopes, d);
         if (status == XR_LIR_OK && !lir_view_function_shape(m, f))
             status = xr_lir_internal_error(d, "view activation or return shape is invalid", index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
@@ -948,6 +974,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
                                   index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
             status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
+        if (status == XR_LIR_OK && scopes)
+            status = lir_callable_scopes(m, f, index + 1, &graph, d);
         xr_free(seen);
         if (status == XR_LIR_OK) {
             lir_graph_dominators(&graph);

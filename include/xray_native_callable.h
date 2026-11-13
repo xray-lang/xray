@@ -1,0 +1,78 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xray_native_callable.h - Typed canonical closures in synchronous scopes
+ */
+#ifndef XRAY_NATIVE_CALLABLE_H
+#define XRAY_NATIVE_CALLABLE_H
+#include "xray_native_pod.h"
+
+typedef enum XrtCallableValueKind {
+    XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED
+} XrtCallableValueKind;
+typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
+typedef enum XrtCallableShapeKind {
+    XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL
+} XrtCallableShapeKind;
+typedef struct XrtCallableParameterSpec {
+    XrtCallableValueSpec value;
+    uint32_t mode;
+    bool escaping;
+} XrtCallableParameterSpec;
+/* Dependencies name earlier receiving rows. Array families are I64, String,
+ * U8 and U64. Shape metadata grants no executable address. */
+typedef struct XrtCallableTypeSpec {
+    XrtCallableShapeKind kind;
+    XrtCallableValueSpec element;
+    uint32_t count;
+    const XrtCallableParameterSpec *parameters;
+    uint32_t parameter_count;
+    XrtCallableValueSpec result;
+    uint32_t flags; /* NoSuspend=1 and C_ABI=2. */
+    bool throws;
+} XrtCallableTypeSpec;
+typedef struct XrtCallableEntrySpec {
+    uint32_t type;
+    const XrPodScalar *captures;
+    uint32_t capture_count;
+} XrtCallableEntrySpec;
+/* Compiler-emitted image spans remain immutable and live for the process.
+ * Canonical types and entry vectors are independently received by the root. */
+typedef struct XrtCallableImage {
+    const XrtCallableTypeSpec *types;
+    uint32_t type_count;
+    const XrtCallableEntrySpec *entries;
+    uint32_t entry_count;
+} XrtCallableImage;
+typedef struct XrtCallableScope {
+    const XrtCallableImage *image;
+    struct XrtCallableScope *parent;
+    void *root, *body;
+    uint64_t identity;
+} XrtCallableScope;
+typedef struct XirFunction XrtCallable;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+/* Scopes follow actual synchronous activations. A result takes an independent
+ * owner in the parent before the returning scope retires. Failure drains the
+ * same rooted scopes without visiting expired automatic C storage. */
+XRAY_API void xrt_callable_scope_enter(XrtCallableScope *, const XrtCallableImage *, uint32_t source);
+XRAY_API XrtCallable *xrt_callable_scope_new(XrtCallableScope *, uint32_t entry,
+    const uint64_t *captures, uint32_t count, uint32_t source);
+/* A declaration keeps its independent owner after the producing statement
+ * retires. Replacing that binding first receives the new owner, then releases
+ * the old one. Binding keys follow declaration order within their scope.
+ * A NULL value records a nonowning function and retires any previous owner. */
+XRAY_API XrtCallable *xrt_callable_scope_bind(XrtCallableScope *, uint32_t binding,
+    XrtCallable *, uint32_t source);
+XRAY_API XrtCallable *xrt_callable_scope_leave(XrtCallableScope *, XrtCallable *result, uint32_t source);
+XRAY_API uint64_t xrt_callable_capture(const XrtCallableImage *, const XrtCallable *,
+    uint32_t entry, uint32_t capture, uint32_t source);
+#ifdef __cplusplus
+}
+#endif
+#endif // XRAY_NATIVE_CALLABLE_H

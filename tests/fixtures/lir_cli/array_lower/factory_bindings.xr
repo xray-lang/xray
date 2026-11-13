@@ -1,0 +1,22 @@
+fn make(seed: i64) -> fn(i64) -> i64 {
+    return fn(value: i64) -> i64 { return seed + value }
+}
+
+fn use(callback: fn(i64) -> i64) -> i64 {
+    var total: i64 = 0
+    {
+        const alias = callback
+        total = alias(1)
+        { const second = alias; total = total + second(2) }
+    }
+    return total + callback(3)
+}
+
+fn exercise() {
+    const first = make(40)
+    { const second = make(50); print(second(2)) }
+    print(first(2))
+    print(use(first))
+    print(first(4))
+}
+exercise()
