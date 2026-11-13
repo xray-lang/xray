@@ -1,0 +1,8 @@
+struct Holder { callback: fn(i64) -> i64 }
+struct Plain { count: i64 }
+
+fn lexicalFnField(value: Holder) -> Holder { return value }
+fn lexicalScalarField(value: Plain) -> Plain { return value }
+fn lexicalFnCell(callback: fn(i64) -> i64) {
+    var saved = callback
+}

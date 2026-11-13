@@ -171,7 +171,46 @@ static void lexical_source_expectations(const XrXirArtifact *artifact) {
     }
 }
 
+static void lexical_selective_expectations(const XrXirArtifact *artifact) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    uint32_t scalar=root_find(module,"lexicalScalarField");
+    XirLexicalFunction row={.scope_count=99};
+    CHECK(xr_xir_compile_lexical_function(artifact,scalar,&row)==XR_XIR_UNRESOLVED);
+    CHECK(row.scope_count==99 && !row.scopes && !row.bindings && !row.events);
+    uint32_t field=root_find(module,"lexicalFnField"),cell=root_find(module,"lexicalFnCell");
+    CHECK(xr_xir_compile_lexical_function(artifact,field,&row)==XR_XIR_OK &&
+        row.scope_count && row.binding_count && row.event_count);
+    CHECK(xr_xir_compile_lexical_function(artifact,cell,&row)==XR_XIR_OK &&
+        row.scope_count && row.binding_count && row.event_count);
+    bool actual_cell=false;
+    for (uint32_t b=0;b<row.binding_count;++b) {
+        XrXirType physical=row.bindings[b].physical;
+        actual_cell|=row.bindings[b].rebindable && xr_xir_type_is_cell(module->types,physical) &&
+            xr_xir_type_is_callable(module->types,xr_xir_cell_element(module->types,physical));
+    }
+    CHECK(actual_cell);
+}
+
+static void lexical_selective_ownership(void) {
+    EffectMark baseline=effect_mark();
+    XrXirArtifact *source=root_source("lexical_containers.xr",XR_XIR_OK),*closed=NULL,*cold=NULL;
+    lexical_selective_expectations(source);
+    XrXirCheckedPacket packet={0};
+    CHECK(xr_xir_compile_checked_write(source,&packet,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source,&closed,NULL,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(source);
+    lexical_selective_expectations(closed);
+    xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_checked_read(&effect_context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);
+    lexical_selective_expectations(cold);
+    xr_xir_compile_artifact_free(cold);
+    effect_mark_check(baseline);
+    puts("Lexical optional scalar rows, callable containers and cold specialization PASS");
+}
+
 static void lexical_source_ownership(void) {
+    lexical_selective_ownership();
     EffectMark baseline=effect_mark();
     XrXirArtifact *source=root_source("lexical_scopes.xr",XR_XIR_OK);
     lexical_source_expectations(source);

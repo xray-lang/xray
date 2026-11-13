@@ -11,6 +11,7 @@ typedef struct SourceLexicalMaps {
     uint32_t scope_count, binding_count;
 } SourceLexicalMaps;
 #include "xxir_source_lexical_flow.inc.c"
+#include "xxir_source_lexical_need.inc.c"
 
 static bool source_lexical_scopes(SourceContext *ctx, XirLexicalFunction *functions,
     SourceLexicalMaps *maps) {
@@ -154,6 +155,8 @@ static bool source_lexical_events(SourceContext *ctx, uint32_t f,
 
 static bool source_lexical_prepare(SourceContext *ctx) {
     if (ctx->effect_evidence->lexical.function_count) return true;
+    SourceLexicalNeed need;
+    if (!source_lexical_need_prepare(ctx,&need)) return false;
     SourceLexicalMaps maps={0};
     if (!xr_hir_body_lexical_counts(ctx->typed_body,&maps.scope_count,&maps.binding_count))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical facts lost their typed body owner");
@@ -165,6 +168,13 @@ static bool source_lexical_prepare(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical declarations lost their emitted identity");
     for (uint32_t f=0;f<ctx->function_count;++f) {
         if (!source_request_poll(ctx,NULL)) return false;
+        bool required=source_lexical_function_needed(&need,f);
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        if (!required) {
+            functions[f]=(XirLexicalFunction){0};
+            ctx->bodies[f].lexical=functions[f];
+            continue;
+        }
         if (ctx->bodies[f].checked_library) {
             functions[f]=ctx->bodies[f].lexical;
             continue;
