@@ -121,25 +121,17 @@
       "id": "demos/02-collections/arrays.xr",
       "path": "demos/02-collections/arrays.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/arrays.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:48:5: FUNCTION_REF is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/arrays.txt"
     },
     {
       "id": "native:demos/02-collections/arrays.xr",
       "path": "demos/02-collections/arrays.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/arrays.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/arrays.xr:48:5: FUNCTION_REF is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/arrays.txt"
     },
     {
       "id": "demos/02-collections/json_processing.xr",
