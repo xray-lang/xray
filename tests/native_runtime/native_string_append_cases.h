@@ -14,7 +14,7 @@ static void native_string_append_in_capacity(void *opaque) {
     unsigned scenario = *(const unsigned *)opaque;
     XrtString *value = xrt_string_new("a", 1, 1);
     XrtString *suffix = xrt_string_literal("x", 1, 1);
-    XrtString *original = value;
+    XrtString *initial_value = value;
     XrXirValue borrowed = {XR_XIR_STRING, 0, (int64_t)(intptr_t)value}, saved = {0};
     if (scenario) OK(xr_xir_value_share(&borrowed));
     if (scenario == 2) OK(xr_xir_value_copy(&borrowed, &saved));
@@ -28,14 +28,14 @@ static void native_string_append_in_capacity(void *opaque) {
     string_equals(value, "ax", 2);
     if (scenario != 2) {
         XrXirDomainStats after = xr_xir_domain_stats(domain);
-        CHECK(value == original && xir_object_references(&value->object) == 1);
+        CHECK(value == initial_value && xir_object_references(&value->object) == 1);
         CHECK(after.allocations == before.allocations && after.reallocations == before.reallocations &&
             after.live_bytes == before.live_bytes);
         value = xrt_string_append_owned(value, value, 1);
-        CHECK(value == original);
+        CHECK(value == initial_value);
         string_equals(value, "axax", 4);
     } else {
-        CHECK(value != original);
+        CHECK(value != initial_value);
         string_equals((XrtString *)(intptr_t)saved.payload, "a", 1);
         CHECK(value->object.graph_registered && !value->object.root_private);
         XrtString *joined = value;
