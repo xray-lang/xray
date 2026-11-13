@@ -344,8 +344,8 @@ static XrXirStatus effect_term_index_construct(const XrXirCompileContext *contex
     XrXirType source=effect_term_intern_raw(&owner,generic);
     if (owner.status!=XR_XIR_OK) goto done;
     for (uint32_t i=0;i<32;++i) {
-        XrXirGeneric arguments={.arguments=&child,.argument_count=1};XrXirType result=XR_XIR_UNIT;
-        status=effect_terms_substitute(&owner,source,&arguments,&result);
+        XrXirGeneric substitution_arguments={.arguments=&child,.argument_count=1};XrXirType result=XR_XIR_UNIT;
+        status=effect_terms_substitute(&owner,source,&substitution_arguments,&result);
         if (status!=XR_XIR_OK) goto done;
         CHECK(xr_xir_array_element(&owner.types,result)==child);child=result;
         CHECK(!owner.stack_claimed && !owner.cache_count);
