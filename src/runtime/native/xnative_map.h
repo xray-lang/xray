@@ -17,6 +17,12 @@
 #include "xnative_value.h"
 #include "xir/xxir_type_arena.h"
 XR_FUNC XrXirValueStatus xrt_map_types_new(uint64_t limit, XrXirTypeArena **, uint64_t *bytes);
+/* Borrowed catalog owned by this execution. Receiving catalogs retain it. */
+XR_FUNC const XrXirTypeArena *xrt_map_root_types(uint32_t source);
+XR_FUNC XrXirValueStatus xrt_map_root_types_ensure(const XrXirTypeArena **empty_borrow);
+/* Bind before this Root creates any Map catalog. A different prior identity
+ * remains intact and is rejected. Success owns one actual arena pin. */
+XR_FUNC XrXirValueStatus xrt_map_root_bind_types(const XrXirTypeArena *);
 XR_FUNC XrXirValueStatus xrt_map_owned_copy(const XrtMap *, const XrXirTypeArena *, XrtMap **empty);
 XR_FUNC XrtMap *xrt_map_root_take(XrtMap *);
 XR_FUNC XrtMap *xrt_map_publish_pending(uint32_t source);

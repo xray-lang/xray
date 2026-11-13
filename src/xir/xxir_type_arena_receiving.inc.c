@@ -227,6 +227,26 @@ XR_FUNC XrXirValueStatus xir_native_type_arena_receive_i64_array(XrXirTypeArena 
     if (status == XR_XIR_VALUE_OK) target->native_i64_views = true;
     return status;
 }
+XR_FUNC XrXirValueStatus xir_native_type_arena_receive_string_i64_map(XrXirTypeArena *target,
+    XrXirType type, const XrXirTypeArena *source) {
+    if (!target || !source || source->types.count != 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *from = xr_xir_type_node(&source->types, XR_XIR_CONSTRUCTED_TYPE_BASE);
+    const XrXirTypeNode *to = xr_xir_type_node(&target->types, type);
+    if (!from || !to || from->kind != XR_XIR_TYPE_MAP || to->kind != XR_XIR_TYPE_MAP ||
+        from->element != XR_XIR_STRING || to->element != XR_XIR_STRING ||
+        from->result != XR_XIR_I64 || to->result != XR_XIR_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirTypeReceivingRoot root = {XR_XIR_CONSTRUCTED_TYPE_BASE, type};
+    return type_arena_receive(&target->context, target, (XrXirTypeArena *)source, &root, 1);
+}
+XR_FUNC const XrXirTypeArena *xir_native_type_arena_string_i64_map_source(const XrXirTypeArena *catalog,
+    XrXirType type) {
+    const XrXirTypeArena *source = catalog ? catalog->received_from : NULL;
+    if (!source || source->types.count != 1 || !xir_type_arena_same_type(catalog, type,
+            source, XR_XIR_CONSTRUCTED_TYPE_BASE)) return NULL;
+    const XrXirTypeNode *node = xr_xir_type_node(&source->types, XR_XIR_CONSTRUCTED_TYPE_BASE);
+    return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64 ?
+        source : NULL;
+}
 XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
     const XrXirValue *array, XrXirTypeArena **output) {
     if (!output || *output || !type_arena_i64_views_catalog(catalog)) return XR_XIR_VALUE_BAD_ARGUMENT;

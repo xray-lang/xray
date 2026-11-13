@@ -204,7 +204,9 @@ static void native_map_layout_budget(XrtModuleLayoutSpec spec) {
     xrt_module_layout_drop(&layout);
     xrt_module_state_drop(&state);
 }
+#include "native_map_captured_cases.h"
 static void native_map_cases(XrtLocationOwner *locations) {
+    native_map_captured_cases(locations);
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
     native_map_retirement_callback(locations);
 #endif

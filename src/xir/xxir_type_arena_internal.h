@@ -25,6 +25,12 @@ XR_FUNC bool xir_type_arena_identity(const XrXirTypeArena *, XrXirType, XirTypeI
  * types remain new. Target allocations own their ledger and retain the source. */
 XR_FUNC XrXirValueStatus xir_native_type_arena_receive_i64_array(XrXirTypeArena *target,
     const XrXirValue *array);
+/* The native Map producer owns this exact single-row source catalog. The
+ * private receiving catalog binds only its Map leaf before publication. */
+XR_FUNC XrXirValueStatus xir_native_type_arena_receive_string_i64_map(XrXirTypeArena *target,
+    XrXirType type, const XrXirTypeArena *source);
+/* Borrowed through the receiving catalog's existing owning source edge. */
+XR_FUNC const XrXirTypeArena *xir_native_type_arena_string_i64_map_source(const XrXirTypeArena *, XrXirType);
 /* Derived directories charge the base catalog's existing finite ledger. A
  * failed receive releases the unpublished directory and preserves output. */
 XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
