@@ -21,6 +21,10 @@
 
 #include "xnative_callable_types.inc.c"
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4200) /* C11 flexible array member */
+#endif
 struct XrtCallableCode {
     _Atomic(uint32_t) references;
     XrXirTypeArena *arena;
@@ -28,6 +32,9 @@ struct XrtCallableCode {
     uint32_t count;
     XrtCallableEntry entries[];
 };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 static void callable_code_release(void *owner) {
     XrtCallableCode *code = owner;
