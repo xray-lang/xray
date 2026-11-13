@@ -91,12 +91,13 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         bool ok = source_block_functions(ctx, node);
         for (int i = 0; ok && i < node->as.block.count; ++i)
             ok = statement(ctx, node->as.block.statements[i], false);
-        --ctx->depth; --body->lexical_depth; ctx->locals=saved;ctx->scope=scope;source_hir_scope_leave(ctx,typed_scope);
+        --ctx->depth; --body->lexical_depth; ctx->locals=saved;ctx->scope=scope;
         if (ok && !ctx->returned && body->frontier != entry) {
             ok = source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CLEANUP_LEAVE, XR_XIR_UNIT, {0}, {body->block_count}, entry, {0}}, NULL);
             body->frontier = entry;
             if (ok) ok = begin_block(ctx);
         } else body->frontier = entry;
+        source_hir_scope_leave(ctx,typed_scope);
         return ok;
     }
     default: return source_fail_syntax(ctx, node, "statement");
@@ -120,7 +121,15 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
         ctx->debug_entry=true;
         ctx->debug_jump_entry=node->type==AST_BREAK_STMT || node->type==AST_CONTINUE_STMT || node->type==AST_THROW_STMT;
     }
-    bool ok=source_statement_body(ctx,node,top);
+    bool temporary = node && !ctx->returned &&
+        (node->type==AST_VAR_DECL || node->type==AST_CONST_DECL ||
+         node->type==AST_DESTRUCTURE_DECL || node->type==AST_DESTRUCTURE_ASSIGN ||
+         node->type==AST_EXPR_STMT || node->type==AST_INC || node->type==AST_DEC ||
+         node->type==AST_RETURN_STMT || node->type==AST_THROW_STMT || node->type==AST_YIELD_STMT);
+    SourceLexicalTemporary *parent=ctx->bodies[ctx->function].lexical_temporary;
+    bool ok=(!temporary || source_lexical_temporary(ctx,node,true)) && source_statement_body(ctx,node,top);
+    if (ok && temporary && !ctx->returned) ok=source_lexical_temporary(ctx,node,false);
+    ctx->bodies[ctx->function].lexical_temporary=parent;
     ctx->debug_point=saved;ctx->debug_function=function;
     ctx->debug_entry=entry;ctx->debug_jump_entry=jump_entry;return ok;
 }

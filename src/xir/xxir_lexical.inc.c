@@ -6,6 +6,7 @@
  *
  * xxir_lexical.inc.c - Receive lexical numeric directories into each Artifact
  */
+#include "xxir_instruction_flow.h"
 static XrXirStatus lexical_vector_shape(const XrXirCompileContext *context,
     const void *data, uint32_t count, size_t element) {
     if (!!data != !!count) return XR_XIR_BAD_STRUCTURE;
@@ -143,8 +144,9 @@ static bool lexical_binding_valid(const XrXirModule *module, uint32_t function,
         if (!xr_xir_type_is_cell(module->types, physical) ||
             xr_xir_cell_element(module->types, physical) != binding->logical) return false;
     } else if (binding->logical != physical) return false;
-    if (binding->role == XIR_LEXICAL_LOCAL)
-        return binding->value==UINT32_MAX || binding->value>=body->parameter_count;
+    /* An immutable local may bind the same SSA value as its initializer,
+     * including an incoming parameter. Declaration role remains independent. */
+    if (binding->role == XIR_LEXICAL_LOCAL) return true;
     if (binding->value >= body->parameter_count) return false;
     uint32_t captures = module->declarations && module->declarations->functions ?
         module->declarations->functions[function].capture_count : 0;
@@ -156,6 +158,53 @@ static bool lexical_binding_valid(const XrXirModule *module, uint32_t function,
     return binding->role == XIR_LEXICAL_PARAMETER_READ ? binding->mode == XR_PARAM_READ :
         binding->role == XIR_LEXICAL_PARAMETER_REF ? binding->mode == XR_PARAM_REF :
         binding->mode == XR_PARAM_MOVE;
+}
+
+typedef struct LexicalOutcome {
+    const XrXirFunction *function;
+    const XirLexicalEvent *event;
+    bool found;
+} LexicalOutcome;
+
+static XrXirStatus lexical_outcome_edge(void *opaque,const XirInstructionFlowEdge *edge) {
+    LexicalOutcome *outcome=opaque;
+    const XirLexicalEvent *event=outcome->event;
+    uint32_t frontier=edge->target_block==UINT32_MAX ? 0 :
+        outcome->function->blocks[edge->target_block].frontier;
+    if (edge->ordinal==event->ordinal && frontier==event->target_frontier &&
+        (edge->target_block==UINT32_MAX)==(event->target==UINT32_MAX))
+        outcome->found=true;
+    return XR_XIR_OK;
+}
+
+static bool lexical_event_outcome(const XrXirFunction *function,const XirLexicalEvent *event) {
+    if (!function->instructions) return false;
+    const XrXirInstruction *op=&function->instructions[event->instruction];
+    bool panic=event->position==XIR_LEXICAL_PANIC_EDGE;
+    bool invoke=op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_DEFAULT;
+    if (event->position==XIR_LEXICAL_ERROR_EDGE &&
+        (invoke ? event->ordinal!=1 :
+         (op->op!=XR_XIR_CLEANUP_ERROR && op->op!=XR_XIR_JUMP && op->op!=XR_XIR_THROW) ||
+            event->ordinal!=0)) return false;
+    if (event->position==XIR_LEXICAL_NORMAL_EDGE && invoke && event->ordinal!=0) return false;
+    if (panic ? event->kind!=XIR_LEXICAL_PANIC :
+        event->position==XIR_LEXICAL_ERROR_EDGE ? event->kind!=XIR_LEXICAL_THROW :
+        event->kind!=XIR_LEXICAL_LEAVE && event->kind!=XIR_LEXICAL_BREAK &&
+            event->kind!=XIR_LEXICAL_CONTINUE) return false;
+    LexicalOutcome outcome={function,event,false};
+    XrXirStatus status=xr_xir_instruction_flow_visit(function,event->instruction,event->block,
+        panic ? XIR_INSTRUCTION_FLOW_PANIC : XIR_INSTRUCTION_FLOW_TARGET,lexical_outcome_edge,&outcome);
+    if (status!=XR_XIR_OK) return false;
+    XirInstructionFlowPoint point={function,op,event->instruction,event->block};
+    if (panic && xr_xir_instruction_cleanup_exit(op->op)) {
+        status=xr_xir_cleanup_panic_edges(&point,true,lexical_outcome_edge,&outcome);
+        if (status!=XR_XIR_OK) return false;
+    } else if (panic && !function->blocks[event->block].panic &&
+        xr_xir_instruction_has_panic_port(op->op) && !event->ordinal && !event->target_frontier &&
+        event->target==UINT32_MAX) outcome.found=true;
+    if (!panic && op->op==XR_XIR_THROW && event->position==XIR_LEXICAL_ERROR_EDGE &&
+        !event->ordinal && !event->target_frontier && event->target==UINT32_MAX) outcome.found=true;
+    return outcome.found;
 }
 
 static bool lexical_event_valid(const XrXirFunction *function,
@@ -173,8 +222,18 @@ static bool lexical_event_valid(const XrXirFunction *function,
     if (event->position == XIR_LEXICAL_BLOCK_ENTRY && event->instruction != block->first)
         return false;
     if (event->position < XIR_LEXICAL_NORMAL_EDGE && event->ordinal) return false;
+    if (event->frontier!=block->frontier || !function->instructions) return false;
+    if ((event->frontier && function->instructions[event->frontier-1].op!=XR_XIR_CLEANUP_REGISTER) ||
+        (event->target_frontier && function->instructions[event->target_frontier-1].op!=XR_XIR_CLEANUP_REGISTER))
+        return false;
+    if (event->position>=XIR_LEXICAL_NORMAL_EDGE && !lexical_event_outcome(function,event)) return false;
     XrXirType ignored;
     if (event->value != UINT32_MAX && !lexical_value_type(function, event->value, &ignored)) return false;
+    if (event->value!=UINT32_MAX && event->value>=function->parameter_count) {
+        uint32_t definition=event->value-function->parameter_count;
+        if (definition>event->instruction ||
+            (definition==event->instruction && event->position!=XIR_LEXICAL_AFTER)) return false;
+    }
     if ((event->kind == XIR_LEXICAL_BIND || event->kind == XIR_LEXICAL_REPLACE ||
         event->kind == XIR_LEXICAL_TAKE) && event->binding == UINT32_MAX) return false;
     if ((event->kind == XIR_LEXICAL_TEMP_BEGIN || event->kind == XIR_LEXICAL_TEMP_END) &&
@@ -189,6 +248,14 @@ static bool lexical_event_valid(const XrXirFunction *function,
     if ((event->kind==XIR_LEXICAL_BIND || event->kind==XIR_LEXICAL_REPLACE ||
         event->kind==XIR_LEXICAL_TAKE) &&
         directory->bindings[event->binding].scope!=event->target) return false;
+    if (event->kind==XIR_LEXICAL_BIND &&
+        directory->bindings[event->binding].value!=event->value) return false;
+    const XrXirInstruction *op=&function->instructions[event->instruction];
+    if (event->kind==XIR_LEXICAL_RETURN &&
+        (event->position>=XIR_LEXICAL_NORMAL_EDGE || op->op!=XR_XIR_RETURN ||
+         event->value!=(function->result==XR_XIR_UNIT ? UINT32_MAX : op->args[0]))) return false;
+    if ((event->kind==XIR_LEXICAL_BREAK || event->kind==XIR_LEXICAL_CONTINUE) &&
+        op->op!=XR_XIR_JUMP && op->op!=XR_XIR_CLEANUP_LEAVE) return false;
     return true;
 }
 

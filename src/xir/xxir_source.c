@@ -13,6 +13,7 @@
 #include "xxir_display.h"
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
+#include "../hir/xhir_lexical.h"
 #include "../hir/xhir_escape.h"
 #include "../hir/xhir_tuple.h"
 #include "../hir/xhir_nominal.h"
@@ -169,7 +170,11 @@ typedef struct SourceInstructionRecipe {
     uint32_t owner, value;
     SourceRootValue root;
     XrXirSourceDebugPoint debug;
+    uint32_t lexical_scope, lexical_statement, lexical_parent_statement;
 } SourceInstructionRecipe;
+typedef struct SourceLexicalInstruction {
+    uint32_t scope,statement,parent_statement;
+} SourceLexicalInstruction;
 typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime, panic_scope; } SourceBlockRecipe;
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
 typedef struct SourceThrowRecipe {
@@ -212,9 +217,24 @@ typedef struct SourceHirProjection {
     XrXirType type;
     bool instruction,has_value,defaulted;
 } SourceHirProjection;
+typedef struct SourceLexicalEvent {
+    struct SourceLexicalEvent *next;
+    XirLexicalEvent event;
+    uint32_t offset;
+} SourceLexicalEvent;
+
+typedef struct SourceLexicalTemporary {
+    struct SourceLexicalTemporary *parent;
+    uint32_t statement;
+} SourceLexicalTemporary;
 typedef struct SourceFunction {
     XrHirBodyScope typed_scope;
     SourceHirProjection *typed_projections;
+    SourceLexicalEvent *lexical_events;
+    SourceLexicalTemporary *lexical_temporary;
+    XirLexicalFunction lexical;
+    SourceLexicalInstruction *lexical_instructions;
+    bool lexical_unresolved;
     AstNode *node, *type_owner;
     bool checked_library;
     const XrXirFunctionEffectContract *library_effect;
@@ -268,7 +288,7 @@ typedef struct SourceFunction {
     XrXirInitializationRegion *initialization_regions, *initialization_parent;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
-typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
+typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; XrHirBodyScope lexical_scope; } SourceLoop;
 typedef struct SourceTaskScope {
     struct SourceTaskScope *parent; uint32_t function; SourceValue group; SourceLocalHandler *handler;
     XrXirType body_error;
@@ -895,6 +915,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     return source_fail_feature(ctx, NULL, XR_XIR_BAD_TYPE, feature);
 }
 #include "xxir_source_local_errors.inc.c"
+static bool source_hir_current_scope(SourceContext *, XrHirBodyScope *);
+#include "xxir_source_lexical_events.inc.c"
 #include "xxir_source_region_emit.inc.c"
 static bool begin_block(SourceContext *ctx) {
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -916,6 +938,8 @@ static bool begin_block(SourceContext *ctx) {
 #include "xxir_source_debug_bindings.inc.c"
 static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
+    XrHirBodyScope lexical_scope = {0};
+    if (!source_hir_current_scope(ctx, &lexical_scope)) return false;
     if (body->count>UINT32_MAX-ctx->functions[ctx->function].parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source region value identity exhausted");
     if (body->region_sealed) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region is sealed");
@@ -938,13 +962,21 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
     if (result) *result = (SourceValue) {.id=ctx->functions[ctx->function].parameter_count + body->count, .type=op.type,.place={0}};
     uint32_t environment=0;
     if (!source_debug_environment(ctx,&environment)) return false;
+    if (op.op==XR_XIR_RETURN && !source_lexical_event(ctx,(XirLexicalEvent){
+        .kind=XIR_LEXICAL_RETURN,.scope=lexical_scope.index,.target=UINT32_MAX,
+        .binding=UINT32_MAX,.value=ctx->functions[ctx->function].result==XR_XIR_UNIT ? UINT32_MAX : op.args[0]}))
+        return false;
     body->recipes[body->count] = (SourceInstructionRecipe) {
         op,
         ctx->function,
         ctx->functions[ctx->function].parameter_count + body->count,
         {0, op.type, UINT32_MAX},
         ctx->debug_function == ctx->function ? ctx->debug_point
-                                             : (XrXirSourceDebugPoint) {.flags = 0}};
+                                             : (XrXirSourceDebugPoint) {.flags = 0},
+        lexical_scope.index,
+        body->lexical_temporary ? body->lexical_temporary->statement : 0,
+        body->lexical_temporary && body->lexical_temporary->parent ?
+            body->lexical_temporary->parent->statement : 0};
     body->recipes[body->count].debug.environment=environment;
     if (ctx->debug_function==ctx->function && ctx->debug_entry && (op.op!=XR_XIR_JUMP || ctx->debug_jump_entry)) {
         body->recipes[body->count].debug.flags=XR_XIR_SOURCE_DEBUG_ENTRY;
@@ -2156,9 +2188,11 @@ static bool scoped_statement(SourceContext *ctx, AstNode *node) {
 static bool source_if(SourceContext *ctx, AstNode *node) {
     SourceValue condition;
     SourceExpressionPlan *condition_plan=source_plan_collect(ctx,node->as.if_stmt.condition,(SourceExpectedType){0});
-    if (!condition_plan || !source_plan_complete(ctx,condition_plan,&condition)) return false;
+    if (!condition_plan || !source_lexical_temporary(ctx,node->as.if_stmt.condition,true) ||
+        !source_plan_complete(ctx,condition_plan,&condition)) return false;
     XrHirBoolean typed;
-    if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_IF,&condition,&typed)) return false;
+    if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_IF,&condition,&typed) ||
+        !source_lexical_temporary(ctx,node->as.if_stmt.condition,false)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch = body->count, yes = body->block_count;
@@ -2214,8 +2248,11 @@ static bool source_increment(SourceContext *ctx, AstNode *node) {
 static bool source_step(SourceContext *ctx, AstNode *node) {
     if (!node) return true;
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    if (node->type == AST_INC || node->type == AST_DEC) return source_increment(ctx, node);
-    SourceValue ignored; return expression(ctx, node, &ignored);
+    if (!source_lexical_temporary(ctx,node,true)) return false;
+    SourceValue ignored;
+    bool ok=node->type == AST_INC || node->type == AST_DEC ?
+        source_increment(ctx,node) : expression(ctx,node,&ignored);
+    return ok && source_lexical_temporary(ctx,node,false);
 }
 static bool check_dead_step(SourceContext *ctx, AstNode *node) {
     if (!node) return true;
@@ -2253,15 +2290,17 @@ static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_no
     SourceValue condition;SourceExpressionPlan *condition_plan=NULL;
     if (condition_node) {
         condition_plan=source_plan_collect(ctx,condition_node,(SourceExpectedType){0});
-        if (!condition_plan || !source_plan_complete(ctx,condition_plan,&condition)) return false;
+        if (!condition_plan || !source_lexical_temporary(ctx,condition_node,true) ||
+            !source_plan_complete(ctx,condition_plan,&condition)) return false;
     }
     else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}}, &condition)) return false;
     XrHirBoolean typed;
     if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_LOOP,&condition,&typed)) return false;
+    if (condition_node && !source_lexical_temporary(ctx,condition_node,false)) return false;
     uint32_t branch = body->count, entry = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0, {0}}, NULL) || !begin_block(ctx) ||
         (condition_plan && !source_condition_enter(ctx,condition_plan,true))) return false;
-    SourceLoop loop = {ctx->loop, NULL, NULL, body->frontier}; ctx->loop = &loop;
+    SourceLoop loop = {ctx->loop, NULL, NULL, body->frontier, body->typed_scope}; ctx->loop = &loop;
     bool ok = scoped_statement(ctx, loop_body); ctx->loop = loop.parent;
     if (!ok) return false;
     ctx->facts = header_facts;ctx->epochs=header_epochs;
@@ -2301,6 +2340,11 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     *patch = (SourcePatch) {*head, ctx->bodies[ctx->function].count}; *head = patch;
     ctx->returned = true;
     bool leaving = ctx->bodies[ctx->function].frontier != target;
+    XirLexicalEvent event = {.kind=stop ? XIR_LEXICAL_BREAK : XIR_LEXICAL_CONTINUE,
+        .scope=ctx->bodies[ctx->function].typed_scope.index,
+        .target=ctx->loop->lexical_scope.index, .binding=UINT32_MAX, .value=UINT32_MAX,
+        .target_frontier=target, .statement=ctx->debug_point.statement};
+    if (!source_lexical_event(ctx, event)) return false;
     return source_recipe_record(ctx, (XrXirInstruction) {leaving ? XR_XIR_CLEANUP_LEAVE : XR_XIR_JUMP,
         XR_XIR_UNIT, {0}, {0}, leaving ? target : 0, {0}}, NULL);
 }

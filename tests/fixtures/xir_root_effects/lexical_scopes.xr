@@ -1,0 +1,59 @@
+fn lexicalBlocks(value: i64) -> i64 {
+    const first = value + 1
+    { var middle = first; middle = middle + 1; print(middle) }
+    return first
+}
+
+fn lexicalLoop(limit: i64) -> i64 {
+    var total: i64 = 0
+    for (var index: i64 = 0; index < limit; index = index + 1) {
+        if (index == 1) { continue }
+        if (index == 4) { break }
+        const item = index + 2
+        total = total + item
+    }
+    return total
+}
+
+fn lexicalCleanup(value: i64) -> i64 {
+    defer { print(value) }
+    { const inner = value + 1; defer { print(inner) }; print(inner) }
+    return value
+}
+
+fn lexicalGeneric<T>(value: T) -> T { const copy = value; return copy }
+
+fn lexicalFactory(seed: i64) -> fn() -> i64 {
+    var current = seed
+    return fn() -> i64 { current = current + 1; return current }
+}
+
+fn lexicalFnExtents(seed: i64) -> i64 {
+    lexicalFactory(seed)
+    { const callback = lexicalFactory(seed + 1); print(callback()) }
+    return seed
+}
+
+fn lexicalView(seed: i64) -> i64 {
+    var values = [seed, 2, 3]
+    { const part: Slice<i64> = values[:]; len(part) }
+    return seed
+}
+
+fn lexicalPanic(seed: i64) -> i64 {
+    defer { print(seed) }
+    try { const inner = seed + 1; assert(seed > 0, "seed"); return inner }
+    catch panic { return seed }
+}
+
+fn lexicalPlanned(value: i64) -> i64 { return match (value) { 0 -> 1, _ -> value } }
+
+fn lexicalEmpty() {}
+fn lexicalUnit() { const local = lexicalEmpty() }
+
+fn lexicalBorrow(value: ref i64) -> i64 { const old = value; value = value + 1; return old }
+fn lexicalMove(value: move Array<i64>) -> i64 { const local = copy value; return local[0] }
+
+print(lexicalBlocks(7))
+print(lexicalLoop(5))
+print(lexicalGeneric(9))

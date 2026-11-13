@@ -18,6 +18,9 @@ typedef struct SourceMatchPlan {
 /* Pattern declarations own lexical identity before any runtime payload exists. */
 static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan) {
     if (plan->match || !plan->left->type_ready) return true;
+    /* Planned arm declarations are reused by selected execution paths. Their
+     * lexical activation correspondence remains unavailable to this producer. */
+    ctx->bodies[ctx->function].lexical_unresolved=true;
     AstNode *node=plan->syntax;MatchExprNode *match=&node->as.match_expr;
     if (match->arm_count<=0 || (uint32_t)match->arm_count>UINT32_MAX/2)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match requires arms and a scrutinee");

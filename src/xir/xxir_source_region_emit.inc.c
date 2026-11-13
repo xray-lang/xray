@@ -53,11 +53,12 @@ typedef struct SourceRegionOutput {
     XrXirBlock *blocks;
     uint32_t *operands;
     XrXirSourceDebugPoint *points;
+    SourceLexicalInstruction *lexical_instructions;
 } SourceRegionOutput;
 static bool source_region_output_allocate(SourceContext *ctx,
     const SourceFunction *body,SourceRegionOutput *output) {
     /* All published arrays share one arena owner and retain distinct views. */
-    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0,point_offset=0;
+    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0,point_offset=0,scope_offset=0;
     if (!source_region_span(&output_bytes,body->count,sizeof(XrXirInstruction),
             _Alignof(XrXirInstruction),&instruction_offset) ||
         !source_region_span(&output_bytes,body->block_count,sizeof(XrXirBlock),
@@ -65,7 +66,9 @@ static bool source_region_output_allocate(SourceContext *ctx,
         !source_region_span(&output_bytes,body->operand_count,sizeof(uint32_t),
             _Alignof(uint32_t),&operand_offset) ||
         !source_region_span(&output_bytes,body->count,sizeof(XrXirSourceDebugPoint),
-            _Alignof(XrXirSourceDebugPoint),&point_offset)) {
+            _Alignof(XrXirSourceDebugPoint),&point_offset) ||
+        !source_region_span(&output_bytes,body->count,sizeof(SourceLexicalInstruction),
+            _Alignof(SourceLexicalInstruction),&scope_offset)) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source region output size exhausted");
     }
     unsigned char *storage=output_bytes ? source_alloc(ctx,1,output_bytes) : NULL;
@@ -74,6 +77,7 @@ static bool source_region_output_allocate(SourceContext *ctx,
     output->blocks=body->block_count ? (XrXirBlock *)(storage+block_offset) : NULL;
     output->operands=body->operand_count ? (uint32_t *)(storage+operand_offset) : NULL;
     output->points=body->count ? (XrXirSourceDebugPoint *)(storage+point_offset) : NULL;
+    output->lexical_instructions=body->count ? (SourceLexicalInstruction *)(storage+scope_offset) : NULL;
     return true;
 }
 #include "xxir_source_region_seal.inc.c"
@@ -214,6 +218,9 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 !source_region_id(map,value_count,root_values[emitted].peer,&root_values[emitted].peer)) goto invalid;
         }
         views.points[emitted]=body->recipes[i].debug;
+        views.lexical_instructions[emitted] = (SourceLexicalInstruction){
+            body->recipes[i].lexical_scope,body->recipes[i].lexical_statement,
+            body->recipes[i].lexical_parent_statement};
         instructions[emitted++]=op;
       }
     }
@@ -221,6 +228,35 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     output->instructions=instructions;output->instruction_count=body->count;
     output->blocks=emitted_blocks;output->block_count=body->block_count;
     output->operands=operands;output->operand_count=body->operand_count;
+    if (seal) {
+        body->lexical_instructions = views.lexical_instructions;
+        for (SourceLexicalEvent *record=body->lexical_events;record;record=record->next) {
+            XirLexicalEvent *event=&record->event;
+            uint32_t block;
+            if (!source_region_id(blocks,body->block_count,event->block,&block)) goto invalid;
+            XrXirBlock position=emitted_blocks[block];
+            if (record->offset>position.count || !position.count) goto invalid;
+            event->block=block;
+            if (!record->offset) {
+                event->instruction=position.first;
+                event->position=XIR_LEXICAL_BLOCK_ENTRY;
+            } else if (record->offset<position.count) {
+                event->instruction=position.first+record->offset;
+                event->position=XIR_LEXICAL_BEFORE;
+            } else {
+                event->instruction=position.first+position.count-1;
+                event->position=XIR_LEXICAL_AFTER;
+            }
+            if (event->value!=UINT32_MAX && !source_region_id(map,value_count,event->value,&event->value)) goto invalid;
+            uint32_t *frontiers[]={&event->frontier,&event->target_frontier};
+            for (uint32_t a=0;a<2;++a) if (*frontiers[a]) {
+                uint32_t value;
+                if (*frontiers[a]>body->count ||
+                    !source_region_id(map,value_count,parameters+*frontiers[a]-1,&value)) goto invalid;
+                *frontiers[a]=value-parameters+1;
+            }
+        }
+    }
     if(seal)for(SourceHirProjection *use=body->typed_projections;use;use=use->next) {
         uint32_t value=UINT32_MAX,block=UINT32_MAX,recipe=UINT32_MAX;
         if(use->has_value&&!source_region_id(map,value_count,use->value,&value))goto invalid;

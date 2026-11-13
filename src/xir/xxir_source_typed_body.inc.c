@@ -16,19 +16,39 @@ static XrHirBodyOrigin source_hir_origin(SourceContext *ctx,AstNode *node,uint32
     return (XrHirBodyOrigin){ctx->function,ctx->module,node?node->node_id:0,binding,
         range.line,range.column,range.end_line,range.end_column};
 }
+static bool source_hir_scope_root(SourceContext *ctx) {
+    SourceFunction *function=&ctx->bodies[ctx->function];
+    if (function->typed_scope.owner) return true;
+    XrHirBodyScope root={0};
+    XrXirStatus status=xr_hir_body_scope(ctx->typed_body,(XrHirBodyScope){0},
+        source_hir_origin(ctx,function->node,0),ctx->request,&root);
+    if (status!=XR_XIR_OK)return source_fail(ctx,function->node,status,"typed function scope receive failed");
+    function->typed_scope=root;
+    return source_lexical_event(ctx,(XirLexicalEvent){.kind=XIR_LEXICAL_ENTER,
+        .scope=root.index,.target=UINT32_MAX,.binding=UINT32_MAX,.value=UINT32_MAX});
+}
 static bool source_hir_scope_enter(SourceContext *ctx,AstNode *node,XrHirBodyScope *previous) {
+    if (!source_hir_scope_root(ctx)) return false;
     SourceFunction *function=&ctx->bodies[ctx->function];*previous=function->typed_scope;
     XrHirBodyScope scope={0};XrXirStatus status=xr_hir_body_scope(ctx->typed_body,*previous,
         source_hir_origin(ctx,node,0),ctx->request,&scope);
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"typed scope receive failed");
-    function->typed_scope=scope;return true;
+    function->typed_scope=scope;
+    return source_lexical_event(ctx, (XirLexicalEvent){.kind=XIR_LEXICAL_ENTER,
+        .scope=scope.index, .target=previous->owner ? previous->index : UINT32_MAX,
+        .binding=UINT32_MAX, .value=UINT32_MAX});
 }
 static void source_hir_scope_leave(SourceContext *ctx,XrHirBodyScope previous) {
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!ctx->returned && body->typed_scope.owner && ctx->diagnostic.status == XR_XIR_OK)
+        source_lexical_event(ctx, (XirLexicalEvent){.kind=XIR_LEXICAL_LEAVE,
+            .scope=body->typed_scope.index, .target=previous.owner ? previous.index : UINT32_MAX,
+            .binding=UINT32_MAX, .value=UINT32_MAX});
     ctx->bodies[ctx->function].typed_scope=previous;
 }
 static bool source_hir_current_scope(SourceContext *ctx,XrHirBodyScope *output) {
     SourceFunction *function=&ctx->bodies[ctx->function];
-    if(!function->typed_scope.owner){XrHirBodyScope previous={0};if(!source_hir_scope_enter(ctx,function->node,&previous))return false;}
+    if(!source_hir_scope_root(ctx))return false;
     *output=function->typed_scope;return true;
 }
 static bool source_history_binding_lookup(SourceContext *,const SourceName *,SourceBindingAccessor,uint32_t *);
@@ -45,7 +65,7 @@ static bool source_hir_binding_register(SourceContext *ctx,SourceName *symbol,Xr
     if(lookup!=XR_XIR_OK)return source_fail(ctx,symbol->node,lookup,"typed declaration lookup interrupted");
     if(found){symbol->binding_function=binding_function;symbol->typed_binding=*out;return true;}
     SourceFunction *function=&ctx->bodies[ctx->function];
-    if(binding_function!=UINT32_MAX&&!function->typed_scope.owner) {XrHirBodyScope previous={0};if(!source_hir_scope_enter(ctx,function->node,&previous))return false;}
+    if(binding_function!=UINT32_MAX&&!source_hir_scope_root(ctx))return false;
     XrXirType physical=symbol->type;
     if(symbol->mutable&&!symbol->direct_borrowed&&!source_cell_type(ctx,symbol->type,&physical))return false;
     size_t length=source_text_size(ctx,symbol->name);if(ctx->diagnostic.status!=XR_XIR_OK)return false;
@@ -131,7 +151,8 @@ static bool source_hir_binding_emitted(SourceContext *ctx,const XrHirBindingActi
     *projection=(SourceHirProjection){function->typed_projections,action->use,id,instruction?id:UINT32_MAX,
         function->block_count?function->current_block.identity:UINT32_MAX,checked.formal,checked.argument,type,
         instruction,value&&value->type!=XR_XIR_UNIT&&value->id!=UINT32_MAX,false};
-    function->typed_projections=projection;return true;
+    function->typed_projections=projection;
+    return source_lexical_binding_event(ctx, action, value);
 }
 static bool source_hir_discard_to(SourceContext *ctx,const SourceHirProjection *stop) {
     SourceFunction *body=&ctx->bodies[ctx->function];
@@ -143,7 +164,7 @@ static bool source_hir_discard_to(SourceContext *ctx,const SourceHirProjection *
 }
 static bool source_hir_place_check(SourceContext *ctx,AstNode *node,XrHirPlaceInput input,XrHirPlaceAction *action) {
     SourceFunction *function=&ctx->bodies[ctx->function];
-    if(!function->typed_scope.owner){XrHirBodyScope previous={0};if(!source_hir_scope_enter(ctx,function->node,&previous))return false;}
+    if(!source_hir_scope_root(ctx))return false;
     input.types=&ctx->types;input.scope=function->typed_scope;input.origin=source_hir_origin(ctx,node,0);
     const char *reason=NULL;XrXirStatus status=xr_hir_body_place(ctx->typed_body,&input,ctx->request,action,&reason);
     return status==XR_XIR_OK||source_fail(ctx,node,status,reason?reason:"typed place has no current owner");

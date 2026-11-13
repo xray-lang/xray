@@ -570,7 +570,8 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(row->has_field&&projection->immediate!=(int64_t)row->field)return XR_XIR_BAD_STRUCTURE;
     if (row->binding.owner && row->initializes) {
         HirBodyBinding *binding = &body->bindings[row->binding.index];
-        binding->lexical_value = projection->has_value ? projection->value : UINT32_MAX;
+        binding->lexical_value = projection->has_value ? projection->value :
+            binding->lexical_role!=XIR_LEXICAL_LOCAL ? binding->location : UINT32_MAX;
     }
     row->projection=*projection;row->projection.source_arguments=NULL;row->projection.source_value_map=NULL;
     row->projection.default_type_arguments=NULL;

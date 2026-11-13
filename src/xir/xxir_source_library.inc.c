@@ -376,6 +376,24 @@ static bool source_library_effect(SourceContext *ctx, const XrXirModule *library
         if (!source_library_type(ctx,map->unit,original->values[v].declared_type,
             &((XrXirRootValueIdentity *)owned->values)[v].declared_type)) return false;
     ctx->bodies[target].library_effect = owned;
+    if (evidence->lexical.function_count) {
+        if (evidence->lexical.function_count != library->function_count || !evidence->lexical.functions)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library lexical owner is invalid");
+        XirLexicalFunction lexical=evidence->lexical.functions[source];
+        lexical.scopes=source_library_bytes(ctx,lexical.scopes,lexical.scope_count,sizeof(*lexical.scopes));
+        lexical.bindings=source_library_bytes(ctx,lexical.bindings,lexical.binding_count,sizeof(*lexical.bindings));
+        lexical.events=source_library_bytes(ctx,lexical.events,lexical.event_count,sizeof(*lexical.events));
+        if ((lexical.scope_count && !lexical.scopes) || (lexical.binding_count && !lexical.bindings) ||
+            (lexical.event_count && !lexical.events)) return false;
+        for (uint32_t b=0;b<lexical.binding_count;++b) {
+            XirLexicalBinding *binding=&((XirLexicalBinding *)lexical.bindings)[b];
+            if (!source_library_type(ctx,map->unit,binding->logical,&binding->logical) ||
+                !source_library_type(ctx,map->unit,binding->physical,&binding->physical)) return false;
+            binding->key.function=target;
+            binding->key.module=ctx->identities[target].module;
+        }
+        ctx->bodies[target].lexical=lexical;
+    }
     return true;
 }
 

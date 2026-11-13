@@ -43,6 +43,14 @@ static void lexical_directory_ownership(void) {
     xir_lexical_free(&copy);
     binding.key.node=11;scopes[1].node=11;events[2].value=0;
     effect_mark_check(baseline);
+    XrXirType unit_parameter=XR_XIR_UNIT;
+    XrXirFunction unit_function={.parameters=&unit_parameter,.parameter_count=1};
+    XrXirModule unit_module={.functions=&unit_function,.function_count=1,.stage=XR_XIR_CHECKED};
+    XirLexicalBinding unit_binding={.key={.function=0},.scope=0,.value=0,
+        .logical=XR_XIR_UNIT,.physical=XR_XIR_UNIT,.mode=XR_PARAM_READ,.role=XIR_LEXICAL_PARAMETER_READ};
+    XirLexicalFunction unit_row={.scopes=scopes,.scope_count=1,.bindings=&unit_binding,.binding_count=1};
+    XirLexicalProgram unit_program={&unit_row,1};
+    CHECK(xir_lexical_verify(&effect_context,&unit_module,&unit_program)==XR_XIR_OK);
     for (size_t point=0;point<sites;++point) {
         attempts=0;injected=false;fail_at=point;
         CHECK(xir_lexical_copy(&effect_context,&input,&copy,NULL)==XR_XIR_OUT_OF_MEMORY &&
@@ -50,7 +58,7 @@ static void lexical_directory_ownership(void) {
         fail_at=SIZE_MAX;
         effect_mark_check(baseline);
     }
-    for (unsigned variant=0;variant<8;++variant) {
+    for (unsigned variant=0;variant<10;++variant) {
         XirLexicalScope bad_scopes[]={scopes[0],scopes[1]};
         XirLexicalBinding bad_binding=binding;
         XirLexicalEvent bad_events[]={events[0],events[1],events[2]};
@@ -64,10 +72,14 @@ static void lexical_directory_ownership(void) {
         case 4:bad_binding.role=XIR_LEXICAL_PARAMETER_READ;break;
         case 5:bad_events[1].binding=1;break;
         case 6:bad_events[2].instruction=2;break;
-        default:bad_events[0].ordinal=1;break;
+        case 7:bad_events[0].ordinal=1;break;
+        case 8:bad_events[0].position=XIR_LEXICAL_NORMAL_EDGE;
+            bad_events[0].ordinal=UINT32_MAX;break;
+        default:bad_events[0].position=XIR_LEXICAL_PANIC_EDGE;
+            bad_events[0].kind=XIR_LEXICAL_PANIC;break;
         }
         CHECK(xir_lexical_verify(&effect_context,&module,&bad_program)==XR_XIR_BAD_STRUCTURE);
         effect_mark_check(baseline);
     }
-    puts("Lexical directory owned copy, query, retirement, 4 FI and 8 malformed controls PASS");
+    puts("Lexical directory owned copy, query, retirement, 4 FI and 10 malformed controls PASS");
 }

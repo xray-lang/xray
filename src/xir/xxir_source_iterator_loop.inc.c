@@ -69,7 +69,7 @@ static bool source_iterator_loop(SourceContext *ctx,AstNode *node,SourceValue it
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{more.id},{entry},0,{0}},NULL) || !begin_block(ctx)) return false;
     SourceValue element;
     if(!source_iterator_consume(ctx,node,iterator,(SourceValue){0},XR_XIR_ITERATOR_NEXT,&element)) return false;
-    SourceLoop loop={ctx->loop,NULL,NULL,body->frontier};ctx->loop=&loop;
+    SourceLoop loop={ctx->loop,NULL,NULL,body->frontier,body->typed_scope};ctx->loop=&loop;
     bool ok=source_for_in_body(ctx,node,(SourceValue){0},element);ctx->loop=loop.parent;
     if(!ok || (!ctx->returned && !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{head},0,{0}},NULL)) ||
         !patch_exits(ctx,loop.continues,head)) return false;

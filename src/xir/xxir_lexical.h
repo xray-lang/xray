@@ -64,6 +64,11 @@ typedef enum XirLexicalEventKind {
     XIR_LEXICAL_TEMP_END
 } XirLexicalEventKind;
 
+/* BIND names the physical binding value. REPLACE writes logical Cell
+ * contents while its physical Cell identity stays live. TAKE similarly
+ * extracts Cell contents, or transfers the named value for a non-Cell
+ * binding. A borrow declaration never acquires a local owning edge. */
+
 /* Position names the trigger. A transfer keeps its actual result before any
  * retirement, then retires crossed scopes after their existing user cleanups.
  * instruction is a zero-based instruction ordinal without parameters. value

@@ -49,6 +49,7 @@ static bool source_catch_pattern_type(SourceContext *ctx, AstNode *pattern, XrXi
     return source_nominal_apply(ctx, owner, arguments.refs, arguments.count, type);
 }
 static bool source_catch_pattern(SourceContext *ctx, AstNode *root, XrXirType *type, SourceMatchArm *arm) {
+    ctx->bodies[ctx->function].lexical_unresolved=true;
     uint32_t count = 1;
     AstNode **alternatives = &root;
     if (root->type == AST_PATTERN_MULTI) {

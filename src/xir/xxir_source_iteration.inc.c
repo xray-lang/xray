@@ -62,7 +62,7 @@ static bool source_counter_open(SourceContext *ctx, SourceValue first, SourceVal
     uint32_t entry = body->block_count;
     counter->branch = body->count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{condition.id},{entry,0},0,{0}},NULL) || !begin_block(ctx)) return false;
-    counter->loop = (SourceLoop){ctx->loop,NULL,NULL,body->frontier}; ctx->loop = &counter->loop;
+    counter->loop = (SourceLoop){ctx->loop,NULL,NULL,body->frontier,body->typed_scope}; ctx->loop = &counter->loop;
     return true;
 }
 /* Leaves the loop through the exit block that continue-free paths, breaks and the bound test all reach. */

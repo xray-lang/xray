@@ -310,6 +310,7 @@ static bool source_view_effect_contract(SourceContext *ctx,uint32_t f,const XirV
     return true;
 }
 
+#include "xxir_source_lexical_view.inc.c"
 static bool source_view_effects(SourceContext *ctx,const XirViewNormalization *n,
     SourceFunction *bodies,XrXirProvenance **output) {
     *output=NULL;
@@ -324,6 +325,7 @@ static bool source_view_effects(SourceContext *ctx,const XirViewNormalization *n
     for (uint32_t f=0;f<ctx->function_count;++f)
         if (!source_request_poll(ctx,NULL) ||
             !source_view_effect_contract(ctx,f,n,bodies+f,evidence->contracts+f)) return false;
+    if (!source_view_lexical(ctx,n,evidence)) return false;
     *output=evidence;
     return true;
 }
