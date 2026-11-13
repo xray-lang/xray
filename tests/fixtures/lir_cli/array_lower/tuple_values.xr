@@ -12,3 +12,9 @@ print(left)
 const (first, second) = flip(pair(-17, 55))
 print(first)
 print(second)
+var storedPair = pair(10, 20)
+const (beforeFirst, beforeSecond) = storedPair
+print(beforeFirst + beforeSecond)
+storedPair = flip(storedPair)
+const (afterFirst, afterSecond) = storedPair
+print(afterFirst * 100 + afterSecond)
