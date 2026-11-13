@@ -14,7 +14,7 @@ XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
     if (function->kind != XR_LIR_FUNCTION_DEFINITION ||
         xr_lir_callable_type_view(m, target.callable, &signature) != XR_LIR_OK ||
         target.capture_count > function->parameter_count ||
-        target.state_capture > function->parameter_count - target.capture_count ||
+        (uint32_t)target.state_capture > function->parameter_count - target.capture_count ||
         signature.parameter_count != function->parameter_count - target.capture_count - target.state_capture ||
         signature.result != function->result || signature.result_element != function->array_result)
         return false;

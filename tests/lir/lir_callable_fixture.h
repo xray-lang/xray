@@ -56,4 +56,3 @@ static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
     OK(xr_lir_module_finish(c.module, NULL));
     *output = c.module;
 }
-
