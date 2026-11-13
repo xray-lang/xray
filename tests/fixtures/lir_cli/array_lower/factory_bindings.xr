@@ -18,5 +18,15 @@ fn exercise() {
     print(first(2))
     print(use(first))
     print(first(4))
+    const outer = make(40)
+    { const inner = outer; print(inner(2)) }
+    print(outer(3))
+    var index: i64 = 0
+    while (index < 3) {
+        const inner = outer
+        print(inner(index))
+        index = index + 1
+    }
+    print(outer(4))
 }
 exercise()
