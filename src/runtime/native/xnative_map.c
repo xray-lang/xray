@@ -14,6 +14,8 @@
 #include "xnative_map.h"
 #include "xir/xxir_map.h"
 #include "xir/xxir_value_internal.h"
+#include "xir/xxir_cell_owner_internal.h"
+#include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
 #include "base/xhash.h"
 #include <string.h>
@@ -55,14 +57,43 @@ static bool map_shape(const XrXirValue *value) {
         xr_xir_compile_type_arena_types(xr_xir_value_arena(value)), (XrXirType)value->type);
     return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64;
 }
+static XrXirValueStatus map_root_types_ensure(XrtValueRoot *root) {
+    if (!root) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (root->map_types) return XR_XIR_VALUE_OK;
+    uint64_t bytes = 0;
+    return xrt_map_types_new(UINT64_MAX, &root->map_types, &bytes);
+}
 static XrXirValueAdmission map_admission(XrtValueRoot *root, uint32_t source) {
-    if (!root->map_types) {
-        uint64_t bytes = 0;
-        XrXirValueStatus status = xrt_map_types_new(UINT64_MAX, &root->map_types, &bytes);
-        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
-    }
+    XrXirValueStatus status = map_root_types_ensure(root);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
     return (XrXirValueAdmission){root->map_types, xrt_value_root_domain(root, source),
         NULL, NULL, UINT64_MAX, UINT64_MAX};
+}
+XR_FUNC const XrXirTypeArena *xrt_map_root_types(uint32_t source) {
+    const XrXirTypeArena *types = NULL;
+    XrXirValueStatus status = xrt_map_root_types_ensure(&types);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+    return types;
+}
+XR_FUNC XrXirValueStatus xrt_map_root_types_ensure(const XrXirTypeArena **output) {
+    if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtValueRoot *root = xrt_value_root_active();
+    XrXirValueStatus status = map_root_types_ensure(root);
+    if (status == XR_XIR_VALUE_OK) *output = root->map_types;
+    return status;
+}
+XR_FUNC XrXirValueStatus xrt_map_root_bind_types(const XrXirTypeArena *types) {
+    XrtValueRoot *root = xrt_value_root_active();
+    const XrXirTypes *view = xr_xir_compile_type_arena_types(types);
+    const XrXirTypeNode *node = xr_xir_type_node(view, XR_XIR_CONSTRUCTED_TYPE_BASE);
+    if (!root || !view || view->count != 1 || !node || node->kind != XR_XIR_TYPE_MAP ||
+        node->element != XR_XIR_STRING || node->result != XR_XIR_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (root->map_types)
+        return xir_type_arena_same_type(root->map_types, XR_XIR_CONSTRUCTED_TYPE_BASE,
+            types, XR_XIR_CONSTRUCTED_TYPE_BASE) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_compile_type_arena_retain((XrXirTypeArena *)types)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    root->map_types = (XrXirTypeArena *)types;
+    return XR_XIR_VALUE_OK;
 }
 static size_t map_slot(int64_t payload, uint32_t capacity) {
     return xr_hash_bytes(&payload, sizeof(payload)) & (capacity - 1);

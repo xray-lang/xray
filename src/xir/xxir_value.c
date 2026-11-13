@@ -1817,7 +1817,7 @@ static XrXirValueStatus cell_value_place_storage(const XrXirValue *cell,
     if (holder->projection_count || !cell_write_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType type = xr_xir_cell_element(xr_xir_compile_type_arena_types(holder->object.arena),holder->object.type);
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
-    if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) &&
+    if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) && !xr_xir_type_is_map(types, type) &&
         !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = (XrXirValuePlace) {type, &holder->value.payload, &holder->object};
     return XR_XIR_VALUE_OK;
