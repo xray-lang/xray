@@ -592,7 +592,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
                 binding_count += f->aggregate_accesses[n].operation == XR_RBC_FUNCTION_BIND;
         size_t bytes = rows * homes;
         if (binding_count > (SIZE_MAX - bytes) / (2 * sizeof(uint32_t))) return XR_RBC_OUT_OF_MEMORY;
-        g->aggregates = xr_calloc(1, bytes + binding_count * 2 * sizeof(uint32_t));
+        g->aggregates = xr_calloc(bytes + binding_count * 2 * sizeof(uint32_t), 1);
         if (!g->aggregates) return XR_RBC_OUT_OF_MEMORY;
         if (binding_count) {
             uint32_t *bindings = (uint32_t *)(g->aggregates + bytes);
