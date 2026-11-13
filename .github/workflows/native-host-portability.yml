@@ -337,7 +337,14 @@ jobs:
       - name: Build current products and kernels
         run: cmake --build build --parallel 4 --target all -- -k 0
       - name: Verify exact CLI and current gates
+        id: current
         run: python scripts/verify_current_build.py --build build --evidence sanitizer-evidence
+      - name: Diagnose the original Array native build after a gate failure
+        if: failure() && steps.current.outcome == 'failure'
+        run: >-
+          python -B scripts/diagnostics/native_array_build.py --root . --build build
+          --cli build/xray --expected-head "$GITHUB_SHA"
+          --output build/sanitizer-array-diagnostic
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -347,6 +354,14 @@ jobs:
             build/CMakeCache.txt
             build/compile_commands.json
             build/Testing/Temporary
+            build/sanitizer-array-diagnostic
+            build/xray
+            build/generated/xray_native_link_paths.h
+            build/src/runtime/native/libxray_native_runtime.a
+            build/src/xir/libxray_xir_scalar.a
+            build/src/xir/libxray_xir_admission.a
+            build/src/xir/libxray_xir_declarations.a
+            build/src/base/libxray_compile_resources.a
 
   thread-sanitizer:
     if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
