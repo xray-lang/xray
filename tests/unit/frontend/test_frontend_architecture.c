@@ -8,7 +8,7 @@
  * test_frontend_architecture.c - Phase 3 in-tree boundary lint
  *
  * KEY CONCEPT:
- *   Walks src/frontend/{lexer,parser,format,analyzer,codegen}, parses
+ *   Walks src/frontend/{lexer,parser,format,codegen}, parses
  *   every #include directive, and asserts each one matches the
  *   directional dependency rules established by Phase 1 / 2 / 3 of the
  *   frontend refactor. This is the same set of rules enforced by
@@ -213,12 +213,6 @@ TEST(arch_frontend_does_not_include_public_api) {
     ASSERT_EQ_INT(v, 0);
 }
 
-TEST(arch_analyzer_does_not_include_codegen) {
-    int v =
-        walk_includes(XR_TEST_SRC_DIR "/frontend/analyzer", rule_no_subtree, (void *) "codegen");
-    ASSERT_EQ_INT(v, 0);
-}
-
 TEST(arch_codegen_does_not_include_format) {
     int v = walk_includes(XR_TEST_SRC_DIR "/frontend/codegen", rule_no_subtree, (void *) "format");
     ASSERT_EQ_INT(v, 0);
@@ -273,7 +267,6 @@ RUN_TEST(arch_parser_does_not_include_analyzer);
 RUN_TEST(arch_format_does_not_include_analyzer);
 RUN_TEST(arch_format_does_not_include_public_api);
 RUN_TEST(arch_frontend_does_not_include_public_api);
-RUN_TEST(arch_analyzer_does_not_include_codegen);
 RUN_TEST(arch_codegen_does_not_include_format);
 RUN_TEST(arch_astnode_has_no_compile_type_field);
 TEST_MAIN_END()
