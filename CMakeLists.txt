@@ -1137,6 +1137,14 @@ add_custom_target(regen-language-docs
 # in sync with spec source without manual developer intervention.
 set(_spec_source "${CMAKE_CURRENT_SOURCE_DIR}/spec/source")
 if(IS_DIRECTORY "${_spec_source}/cards")
+    file(GLOB_RECURSE _spec_render_inputs CONFIGURE_DEPENDS
+        "${_spec_source}/sections/*.md"
+        "${_spec_source}/cards/*.json"
+        "${_spec_source}/knowledge/*.md")
+    # Refresh projections when inputs change in an existing Ninja tree.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${_spec_render_inputs}
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py")
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
