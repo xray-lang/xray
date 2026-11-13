@@ -635,7 +635,13 @@ int main(int argc, char **argv) {
             STARTUPINFOW startup = {0}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESTDHANDLES;
             startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE); startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE); startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
             PROCESS_INFORMATION info = {0}; CHECK(CreateProcessW(self, command, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &startup, &info));
-            FILE *file = fopen(argv[2], "wb"); CHECK(file); fprintf(file, "%lu", info.dwProcessId); CHECK(!fclose(file));
+            char temporary[MAX_PATH];
+            int length = snprintf(temporary, sizeof(temporary), "%s.%lu.tmp", argv[2], GetCurrentProcessId());
+            CHECK(length > 0 && (size_t)length < sizeof(temporary));
+            FILE *file = fopen(temporary, "wb"); CHECK(file);
+            CHECK(fprintf(file, "%lu", info.dwProcessId) > 0); CHECK(!fclose(file));
+            /* The cancellation observer sees only a closed, complete PID file. */
+            CHECK(MoveFileExA(temporary, argv[2], 0));
             CHECK(CloseHandle(info.hThread)); CHECK(CloseHandle(info.hProcess)); return 0;
         }
         if (!strcmp(argv[1], "--exit")) return 0;
