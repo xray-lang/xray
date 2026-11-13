@@ -5,7 +5,9 @@ add_library(xray_xir STATIC xxir_specialize.c)
 add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_types.c xxir_view_affine.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
 add_dependencies(xray_xir_declarations gen-native-type-defs gen-semantic-owners gen-target-query-registry gen-core-spec)
 target_include_directories(xray_xir_declarations PUBLIC ${PROJECT_SOURCE_DIR}/src)
-target_link_libraries(xray_xir_declarations PUBLIC xray_compile_resources)
+# Type/view operations use the borrow and effect validators that also consume
+# declarations. Link both static archives to closure in unoptimized builds.
+target_link_libraries(xray_xir_declarations PUBLIC xray_compile_resources xray_xir_admission)
 target_link_libraries(xray_xir_admission PUBLIC xray_xir_declarations)
 target_include_directories(xray_xir_admission PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir PUBLIC xray_xir_admission)
