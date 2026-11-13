@@ -12,6 +12,7 @@
 #include "base/xchecks.h"
 
 static size_t attempts, fail_at = SIZE_MAX;
+static uint32_t observed_callable_scopes;
 typedef struct LowerBlock { void *pointer; size_t bytes; } LowerBlock;
 static LowerBlock observed_lower_blocks[1024];
 static size_t lower_live, lower_bytes;
@@ -52,6 +53,13 @@ static XrLirStatus run(const SourceFixture *fixture) {
     if (status == XR_LIR_OK) {
         CHECK(output.module && output.entry.id);
         OK(xr_lir_verify(output.module, NULL));
+        observed_callable_scopes = 0;
+        for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+            XrLirFunctionView view;
+            OK(xr_lir_function_view(output.module, (XrLirFunction){output.module, f + 1}, &view));
+            CHECK(view.scope_count <= UINT32_MAX - observed_callable_scopes);
+            observed_callable_scopes += view.scope_count;
+        }
     } else {
         CHECK(!output.module && !output.entry.id);
         CHECK(failure.diagnostic.status == status && failure.diagnostic.message[0]);
@@ -296,6 +304,7 @@ static void callable_lower_failures(void) {
     for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
         SourceFixture fixture = source_fixture(programs[program]);
         attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+        CHECK(program < 3 ? observed_callable_scopes == 0 : observed_callable_scopes > 0);
         size_t total = attempts;
         CHECK(total > 10);
         for (size_t point = 0; point < total; ++point) {

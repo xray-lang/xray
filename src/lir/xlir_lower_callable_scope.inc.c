@@ -108,6 +108,10 @@ static bool lower_lexical_index(LowerFunction *f) {
 static bool lower_lexical_inventory(LowerFunction *f) {
     LowerLexical *lexical = &f->lexical;
     bool needed = lower_lexical_needed(f);
+    bool borrowed_callable = false;
+    for (uint32_t p = 0; p < f->source->parameter_count && !needed; ++p)
+        borrowed_callable |= lower_callable_type(f, f->source->parameters[p]);
+    if (!needed && !borrowed_callable) return true;
     XrXirStatus status = xr_xir_compile_lexical_function(f->owner->request->closed,
         f->owner->function, &lexical->source);
     if (status != XR_XIR_OK) return !needed || lower_unsupported(f->owner, "owned function lexical extent is unresolved");
