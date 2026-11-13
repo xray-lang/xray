@@ -148,6 +148,8 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
                 XrRbcArrayLocation location = s->function->aggregate_operands[access.first + p];
                 uint8_t state = rbc_array_state(s, location);
                 XrRbcRegisterKind kind = rbc_array_location_kind(s->function, location);
+                const XrRbcFunction *callee = &s->module->functions[access.callee];
+                if (p < callee->capture_count && callee->captures[p].kind == XR_RBC_CALLABLE_FUNCTION) return false;
                 if (kind == XR_RBC_CAPTURED_I64_CELL || kind == XR_RBC_CAPTURED_I64_BORROW) {
                     if (location.spill || state != RBC_CAPTURED_CELL ||
                         s->origin[location.index] != s->module->functions[access.callee].captures[p].type) return false;

@@ -279,6 +279,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
                 f->environments[access.destination - 1].callee != access.callee) return false;
             for (uint32_t p = 0; p < count; ++p) {
                 XrRbcArrayLocation location = f->aggregate_operands[access.first + p];
+                if (p < callee->capture_count && callee->captures[p].kind == XR_RBC_CALLABLE_FUNCTION) return false;
                 if (p < callee->capture_count && callee->captures[p].kind == XR_RBC_CALLABLE_CELL) {
                     if (!rbc_array_location_valid(f, location) ||
                         (rbc_array_location_kind(f, location) != XR_RBC_CAPTURED_I64_CELL &&

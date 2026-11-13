@@ -1,5 +1,51 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_composition_fixture.h"
+static void callable_frame_function_capture_rejected(const XrRbcProgram *program) {
+    const XrRbcModule *original = xr_rbc_program_view(program);
+    XrRbcModule module = *original;
+    XrRbcFunction functions[3];
+    memcpy(functions, original->functions, sizeof(functions));
+    const XrRbcFunction *root = &original->functions[0];
+    XrRbcAggregateAccess *accesses = xr_malloc(root->aggregate_access_count * sizeof(*accesses));
+    XrRbcArrayLocation *operands = xr_malloc(root->aggregate_operand_count * sizeof(*operands));
+    uint32_t *code = xr_malloc(root->code_count * sizeof(*code));
+    CHECK(accesses && operands && code);
+    memcpy(accesses, root->aggregate_accesses, root->aggregate_access_count * sizeof(*accesses));
+    memcpy(operands, root->aggregate_operands, root->aggregate_operand_count * sizeof(*operands));
+    memcpy(code, root->code, root->code_count * sizeof(*code));
+    uint32_t reference = UINT32_MAX, bits = UINT32_MAX;
+    for (uint32_t a = 0; a < root->aggregate_access_count; ++a)
+        if (accesses[a].operation == XR_RBC_FUNCTION_OWNED_REFERENCE) reference = a;
+    for (size_t pc = 0; pc < root->code_count; ++pc)
+        if ((code[pc] & 255) == XR_RBC_LOADI) bits = (code[pc] >> 8) & 255;
+    CHECK(reference != UINT32_MAX && bits != UINT32_MAX);
+    uint32_t capture = operands[accesses[reference].first].index;
+    bool replaced = false;
+    for (size_t pc = 0; pc < root->code_count; ++pc)
+        if ((code[pc] & 255) == XR_RBC_MOV && ((code[pc] >> 8) & 255) == capture) {
+            CHECK(xr_rbc_encode(&code[pc], (XrRbcOperands){.op=XR_RBC_LOADI, .a=bits, .immediate=2}));
+            replaced = true;
+        }
+    CHECK(replaced);
+    accesses[reference].operation = XR_RBC_FUNCTION_REFERENCE;
+    accesses[reference].destination = 1;
+    operands[accesses[reference].first] = (XrRbcArrayLocation){bits, false};
+    XrRbcEnvironment environment = {accesses[reference].callee, 0, reference};
+    functions[0].environments = &environment;
+    functions[0].environment_count = 1;
+    functions[0].environment_size = 8;
+    functions[0].aggregate_accesses = accesses;
+    functions[0].aggregate_operands = operands;
+    functions[0].code = code;
+    module.functions = functions;
+    XrRbcExecution *execution = NULL;
+    XrRbcStatus status = xr_rbc_module_prepare(&module, 0, NULL, 0,
+        xr_rbc_program_locations(program), &execution);
+    if (status != XR_RBC_INVALID) fprintf(stderr, "Frame Fn capture from BITS prepare=%u\n", (unsigned)status);
+    xr_rbc_execution_free(&execution);
+    CHECK(status == XR_RBC_INVALID);
+    xr_free(code); xr_free(operands); xr_free(accesses);
+}
 static void callable_composition_receiving(void) {
     XrLirModule *module = NULL;
     XrLirFunction root = {0};
@@ -7,6 +53,7 @@ static void callable_composition_receiving(void) {
     callable_transforms(module, root);
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    callable_frame_function_capture_rejected(program);
     const XrRbcModule *original = xr_rbc_program_view(program);
     CHECK(original->function_count == 3 && original->function_callable_parameter_count == 3);
     uint32_t callee = UINT32_MAX;
