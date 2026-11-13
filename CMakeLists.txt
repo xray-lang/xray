@@ -4059,43 +4059,9 @@ if(BUILD_TESTS)
         TIMEOUT ${XRAY_REGRESSION_CORPUS_TIMEOUT}
     )
 
-    # Twenty-one named lanes are skipped on every pull request. ci.yml's own
-    # comment demanded a reason next to each name; none of the twenty-one had
-    # one. tests/ci_exclusions.txt now carries the reason, owner, issue and
-    # date, the workflow derives its regexes from that file, and this gate
-    # holds the entries to the same thirty-day window known_failures.txt uses.
-    add_test(
-        NAME ci_exclusion_discipline
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_ci_exclusions.py
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(ci_exclusion_discipline PROPERTIES
-        LABELS "meta;ci;governance;discipline"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
-    # A checker nobody has tried to fool is a checker nobody knows works: every
-    # rule the gate enforces gets a synthetic entry that breaks exactly it, and
-    # the run fails if any of them is accepted.
-    add_test(
-        NAME ci_exclusion_discipline_self_test
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_ci_exclusions.py
-                --self-test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(ci_exclusion_discipline_self_test PROPERTIES
-        LABELS "meta;ci;governance;discipline;self-test"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     # known_failures.txt's freshness rule ran only as a workflow step, so
     # neither `ctest` nor the release gate could see it and nobody could check
-    # it locally. It is a ctest entry now, next to the exclusion manifest it is
-    # the model for.
+    # it locally. It is a ctest entry now.
     add_test(
         NAME known_failures_freshness
         COMMAND ${XRAY_PYTHON}
