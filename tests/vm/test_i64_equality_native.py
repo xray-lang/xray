@@ -7,6 +7,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -67,7 +70,7 @@ int main(void) {
         for source, obj in zip(('gateway.c', 'adapter.c'), objects):
             run('compile-' + source, [args.compiler, *flags, '/c', work / source, '/Fo:' + str(obj)])
         executable = work / 'native.exe'
-        run('link', [args.compiler, *flags, *objects, *args.library, '/Fe:' + str(executable),
+        run('link', [args.compiler, *flags, *objects, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable),
                      '/link', '/INCREMENTAL:NO'])
     else:
         flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto',
@@ -77,7 +80,7 @@ int main(void) {
         for source, obj in zip(('gateway.c', 'adapter.c'), objects):
             run('compile-' + source, [args.compiler, *flags, '-c', work / source, '-o', obj])
         executable = work / 'native'
-        run('link', [args.compiler, *flags, *objects, *args.library,
+        run('link', [args.compiler, *flags, *objects, *archive_link_arguments(args.library, driver=args.kind),
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-lm', '-o', executable])
     assert run('native', [executable]) == b'2\n'

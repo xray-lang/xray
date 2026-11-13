@@ -6,6 +6,10 @@ import os
 import platform
 import re
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
 
 
 def fixed_c_cases(args, root):
@@ -51,13 +55,13 @@ def fixed_c_cases(args, root):
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/O2', '/W4', '/WX', crt,
-                       '/I' + str(args.include), client, *args.library, '/Fe:' + str(binary)]
+                       '/I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(binary)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi', '/clang:-fsanitize=undefined',
                             '/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-pedantic',
-                       '-I' + str(args.include), client, *args.library, '-lm', '-pthread', '-o', binary]
+                       '-I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '-lm', '-pthread', '-o', binary]
             command += ['-Wl,-dead_strip' if platform.system() == 'Darwin' else '-Wl,--gc-sections']
             if args.asan: command += ['-fsanitize=address,undefined', '-g']
         execute(name + '-compile', command)

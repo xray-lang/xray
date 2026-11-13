@@ -9,6 +9,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -62,7 +65,7 @@ def main():
             compiled = run('compile-' + source.stem + '-' + optimization, command, folder)
             assert compiled.returncode == 0, folder
             objects.append(obj)
-        command = [args.compiler, *flags, *objects, *args.library]
+        command = [args.compiler, *flags, *objects, *archive_link_arguments(args.library, driver=args.kind)]
         command += ['/Fe:' + str(executable)] if args.kind == 'msvc' else [
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-pthread', '-o', executable]
@@ -116,14 +119,14 @@ def main():
                      '/I'+str(args.include),'/I'+str(args.source_root/'src')]
             if args.asan: flags += ['/fsanitize=address','/clang:-fsanitize=undefined']
             command = [args.compiler,*flags,'/c',observer,'/Fo:'+str(obj)]
-            link = [args.compiler,'/nologo',crt,obj,*args.library,'/Fe:'+str(exe)]
+            link = [args.compiler,'/nologo',crt,obj,*archive_link_arguments(args.library, driver=args.kind),'/Fe:'+str(exe)]
             if args.asan: link += ['/fsanitize=address','/clang:-fsanitize=undefined','/link','/INCREMENTAL:NO']
         else:
             flags = ['-std=c11','-Wall','-Wextra','-Werror','-pedantic','-O2',
                      '-I'+str(args.include),'-I'+str(args.source_root/'src')]
             if args.asan: flags += ['-fsanitize=address,undefined']
             command = [args.compiler,*flags,'-c',observer,'-o',obj]
-            link = [args.compiler,*flags,obj,*args.library,
+            link = [args.compiler,*flags,obj,*archive_link_arguments(args.library, driver=args.kind),
                 ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
                 '-pthread','-o',exe]
         result = run('normal-frame-compile',command,folder);assert result.returncode==0,folder

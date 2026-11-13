@@ -9,6 +9,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def run(command, cwd):
     command = [str(x) for x in command]
@@ -564,7 +567,7 @@ def main():
                             for source, obj in zip((gateway, host), objects)]
                 link = [args.compiler, *flags, *objects]
                 if output:
-                    link += [*args.library,
+                    link += [*archive_link_arguments(args.library, driver=args.kind),
                         ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
                         '-pthread']
                 link += ['-o', executable]

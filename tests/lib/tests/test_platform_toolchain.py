@@ -48,6 +48,42 @@ class PlatformTest(unittest.TestCase):
         self.assertTrue((root / "tests" / "lib" / "xraytest").is_dir())
 
 
+class ArchiveLinkArgumentsTest(unittest.TestCase):
+    def test_elf_archives_rescan_without_changing_input_entities(self):
+        archives = [Path("native runtime/libcore.a"), Path("native runtime/libtypes.a")]
+        original = list(archives)
+        with mock.patch.object(platform, "IS_WINDOWS", False), \
+                mock.patch.object(platform, "IS_DARWIN", False):
+            arguments = toolchain.archive_link_arguments(archives, driver=toolchain.CC_DRIVER_GNU)
+        self.assertEqual(arguments, ["-Wl,--start-group", *map(str, archives), "-Wl,--end-group"])
+        self.assertEqual(archives, original)
+
+    def test_windows_and_darwin_preserve_archive_arguments(self):
+        archives = ["native runtime/core.lib", "native runtime/types.lib"]
+        for windows, darwin, driver in (
+                (True, False, toolchain.CC_DRIVER_MSVC),
+                (True, False, toolchain.CC_DRIVER_GNU),
+                (False, True, toolchain.CC_DRIVER_GNU)):
+            with self.subTest(windows=windows, darwin=darwin, driver=driver), \
+                    mock.patch.object(platform, "IS_WINDOWS", windows), \
+                    mock.patch.object(platform, "IS_DARWIN", darwin):
+                self.assertEqual(toolchain.archive_link_arguments(archives, driver=driver), archives)
+
+    def test_empty_archives_add_no_linker_options(self):
+        with mock.patch.object(platform, "IS_WINDOWS", False), \
+                mock.patch.object(platform, "IS_DARWIN", False):
+            self.assertEqual(toolchain.archive_link_arguments([], driver=toolchain.CC_DRIVER_GNU), [])
+
+    def test_system_libraries_and_sanitizers_follow_the_archive_group(self):
+        archives = ["runtime.a", "scalar.a", "admission.a", "declarations.a", "resources.a"]
+        system = ["-lm", "-pthread", "-fsanitize=address,undefined"]
+        with mock.patch.object(platform, "IS_WINDOWS", False), \
+                mock.patch.object(platform, "IS_DARWIN", False):
+            arguments = toolchain.archive_link_arguments(archives, driver=toolchain.CC_DRIVER_GNU) + system
+        self.assertEqual(arguments[1:6], archives)
+        self.assertEqual(arguments[6:], ["-Wl,--end-group", *system])
+
+
 class ToolchainProbeTest(unittest.TestCase):
     def setUp(self):
         toolchain.reset_probe_cache()

@@ -7,6 +7,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def run(command, cwd):
     command = [str(x) for x in command]
@@ -55,7 +58,7 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt,
-                       '/I' + str(args.include), harness, *args.library, '/Fe:' + str(executable)]
+                       '/I' + str(args.include), harness, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -63,7 +66,7 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), harness, *args.library,
+                       '-I' + str(args.include), harness, *archive_link_arguments(args.library, driver=args.kind),
                            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
                            '-pthread', '-o', executable]
             if args.asan:

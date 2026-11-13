@@ -6,7 +6,11 @@ import json
 import os
 import platform
 import subprocess
+import sys
 import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
 
 
 def run(command, cwd, expected_exit=0):
@@ -85,14 +89,14 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/O2', '/W4', '/WX', crt,
-                       '/I' + str(args.include), client, *args.library, '/Fe:' + str(binary)]
+                       '/I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(binary)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower(): command += ['/clang:-fsanitize=undefined']
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-pedantic',
-                       '-I' + str(args.include), client, *args.library, '-lm', '-pthread', '-o', binary]
+                       '-I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '-lm', '-pthread', '-o', binary]
             command += ['-Wl,-dead_strip' if platform.system() == 'Darwin' else '-Wl,--gc-sections']
             if args.asan: command += ['-fsanitize=address,undefined', '-g']
         run(command, work)

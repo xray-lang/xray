@@ -8,6 +8,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -129,7 +132,7 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt,
-                       '/I' + str(args.include), adapter, *args.library, '/Fe:' + str(executable)]
+                       '/I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -138,7 +141,7 @@ def main():
         else:
             strip = '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, *args.library, strip, '-pthread', '-o', executable]
+                       '-I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), strip, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         invoke(folder, 'compile-c', command)

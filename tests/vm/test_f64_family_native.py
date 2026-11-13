@@ -13,6 +13,9 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lir'))
 from test_lir_carriers_native import _f64_profile, _f64_reject, _f64_options
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def adapter(mode, cpp=False):
     public = mode == 'public'
@@ -209,7 +212,7 @@ def main():
         for src, obj in zip(sources, objects):
             run('compile-' + src.name, compile_command(compiler, options, src, obj), folder)
         executable = folder / ('native.exe' if args.kind == 'msvc' else 'native')
-        command = [compiler, *[option for option in options if option != '/EHsc'], *objects, *libraries]
+        command = [compiler, *[option for option in options if option != '/EHsc'], *objects, *archive_link_arguments(libraries, driver=args.kind)]
         command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else [
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-lm', '-o', executable]

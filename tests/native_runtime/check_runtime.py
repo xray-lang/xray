@@ -10,6 +10,9 @@ import sys
 import shutil
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 
 def header_clients(build, logs, libraries):
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$',
@@ -87,10 +90,10 @@ def header_clients(build, logs, libraries):
         if msvc:
             command = [compiler, *flags, '/std:' + language,
                        '/I' + str(include), ('/Tc' if language == 'c11' else '/Tp') + str(client),
-                       *libraries, *system_libraries, '/Fe:' + str(executable), *link]
+                       *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '/Fe:' + str(executable), *link]
         else:
             command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
-                       '-I' + str(include), client, '-x', 'none', *libraries, *system_libraries, '-o', executable, *link]
+                       '-I' + str(include), client, '-x', 'none', *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
         compile_log.write_bytes(compiled.stdout + compiled.stderr)

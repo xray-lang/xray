@@ -12,6 +12,9 @@ from test_lir_c_native import run
 from test_lir_carriers_native import _f64_profile, _f64_reject
 from test_lir_fixed_c_native import fixed_c_cases
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 MODULE_CALL_CLOSURES = {
     'closure-chain': ('fn leaf(n:i64)->i64{return n+1}\n'
         'fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n'
@@ -238,7 +241,7 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/W4', '/WX', '/O2', crt,
-                       '/I' + str(args.include), adapter, *args.library, '/Fe:' + str(executable)]
+                       '/I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -246,7 +249,7 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, *args.library,
+                       '-I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind),
                            ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
                            '-pthread', '-o', executable]
             if args.asan:

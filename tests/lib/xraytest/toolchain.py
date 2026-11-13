@@ -122,6 +122,18 @@ class CCompiler:
         return argv
 
 
+def archive_link_arguments(archives: Sequence, *, driver: str) -> list[str]:
+    """Format validated archives for the selected host linker.
+
+    ELF validation archives have reciprocal dependencies and need rescanning.
+    Windows and Darwin retain the caller's existing archive order.
+    """
+    arguments = [str(archive) for archive in archives]
+    if arguments and driver != CC_DRIVER_MSVC and not platform.IS_WINDOWS and not platform.IS_DARWIN:
+        return ["-Wl,--start-group", *arguments, "-Wl,--end-group"]
+    return arguments
+
+
 _DUMPBIN_SYMBOL_RE = re.compile(
     r"^\s*[0-9A-F]+\s+[0-9A-F]+\s+"
     r"(?P<section>UNDEF|SECT[0-9A-F]+|ABS)\s+.*?\|\s*(?P<symbol>\S.*)$",

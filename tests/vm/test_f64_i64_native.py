@@ -12,6 +12,9 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lir'))
 from test_lir_carriers_native import _f64_profile, _f64_reject, _f64_options
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 MODES = ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp')
 PANIC = b'[Uncaught Panic] E0422: numeric conversion is out of range\n'
 HOST_ALIVE = b'HOST_ALIVE\r\n' if os.name == 'nt' else b'HOST_ALIVE\n'
@@ -188,7 +191,7 @@ def main():
         executable = work/(name+('.exe' if args.kind == 'msvc' else ''))
         options = [flag for flag in flags(cpp) if flag != '/EHsc']
         compiler = args.cxx_compiler if cpp else args.compiler
-        command = [compiler,*options,*objects,*args.library]
+        command = [compiler,*options,*objects,*archive_link_arguments(args.library, driver=args.kind)]
         command += ['/Fe:'+str(executable),'/link','/INCREMENTAL:NO'] if args.kind == 'msvc' else [
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-lm','-pthread','-o',executable]

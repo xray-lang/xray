@@ -12,6 +12,9 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.toolchain import archive_link_arguments
+
 MODES = ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp')
 
 
@@ -120,13 +123,13 @@ def compile_command(args, source, executable):
             command += ['/fsanitize=address', '/Zi']
             if 'clang' in args.compiler.name.lower():
                 command += ['/clang:-fsanitize=undefined']
-        command += ['/link', *args.library]
+        command += ['/link', *archive_link_arguments(args.library, driver=args.kind)]
         if args.asan:
             command += ['/INCREMENTAL:NO']
     else:
         command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
                    '-O2', '-fno-lto', '-I' + str(args.include),
-                   '-I' + str(args.source_root / 'src'), source, *args.library,
+                   '-I' + str(args.source_root / 'src'), source, *archive_link_arguments(args.library, driver=args.kind),
                        ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
                        '-pthread', '-o', executable]
         if args.asan:
