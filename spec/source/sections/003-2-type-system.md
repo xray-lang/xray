@@ -1036,7 +1036,7 @@ print(len(a))               // 4
 
 #### 2.14.4 place 借用与捕获
 
-`ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
+`ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。借出模块级 `var` 或其一部分时，被调方以及它会调用、创建、派发或迭代的函数，和它收到并可能调用的函数值，都不得按名字读写该绑定；无法确定调用会执行的全部代码时同样拒绝。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
 
 同一次调用的全部 `ref` 实参与 `ref` receiver 必须两两不重叠。同根路径在同一层分叉到不同 struct 或 class 字段时不相交，路径相等或一条是另一条前缀时重叠。下标不能证明不相交，包括不同的常量下标：只在下标处不同的同根路径视为重叠，数组交换使用 `swap(i, j)`；下标之后又分叉到不同字段的路径不相交，例如 `items[0].a` 与 `items[1].b`。不同根经 class 字段到达同一对象时，在运行时检查实际对象身份，发生重叠则 panic。同一 class 对象的不同字段仍不相交。其余不同根视为不相交。
 
@@ -2178,7 +2178,7 @@ A copy must acquire independently releasable result ownership; failure must not 
 
 #### 2.14.4 Place borrows and captures
 
-`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
+`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. When a call lends a module-level `var` or part of it, neither the callee nor any function it calls, creates, dispatches to or iterates, nor any function value it receives and may invoke, may read or write that binding by name; a call whose executed code cannot be fully determined is rejected as well. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
 
 Every `ref` argument and `ref` receiver in one call must be pairwise non-overlapping. Same-root paths diverging into different struct or class fields at the same level are disjoint. Equal paths and prefix paths overlap. An index never proves disjointness, even between different constants: same-root paths that differ only at indices overlap, so array exchange uses `swap(i, j)`; paths that split into different fields after an index are disjoint, such as `items[0].a` and `items[1].b`. Different roots reaching the same object through class fields require a runtime identity check, with overlap causing a panic. Different fields of the same class object remain disjoint. Other different roots are disjoint.
 

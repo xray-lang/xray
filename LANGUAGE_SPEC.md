@@ -1661,7 +1661,7 @@ A copy must acquire independently releasable result ownership; failure must not 
 
 #### 2.14.4 Place borrows and captures
 
-`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
+`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. When a call lends a module-level `var` or part of it, neither the callee nor any function it calls, creates, dispatches to or iterates, nor any function value it receives and may invoke, may read or write that binding by name; a call whose executed code cannot be fully determined is rejected as well. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
 
 Every `ref` argument and `ref` receiver in one call must be pairwise non-overlapping. Same-root paths diverging into different struct or class fields at the same level are disjoint. Equal paths and prefix paths overlap. An index never proves disjointness, even between different constants: same-root paths that differ only at indices overlap, so array exchange uses `swap(i, j)`; paths that split into different fields after an index are disjoint, such as `items[0].a` and `items[1].b`. Different roots reaching the same object through class fields require a runtime identity check, with overlap causing a panic. Different fields of the same class object remain disjoint. Other different roots are disjoint.
 
@@ -8398,7 +8398,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
-| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | borrow conflict, including owner invalidation, overlapping `ref` paths in one call and container access through another path during reference iteration, with qualification of the latter two in §17 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | borrow conflict, including owner invalidation, overlapping `ref` paths in one call, a callee reaching a lent module binding and container access through another path during reference iteration, with qualification of path overlap and reference iteration in §17 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, escaping closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
