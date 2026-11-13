@@ -31,17 +31,23 @@ static void closure_placement_source_expectations(const XrXirArtifact *artifact)
 }
 
 static XrXirStatus closure_placement_receive_case(const XrXirArtifact *artifact) {
-    XrXirEffects *effects = NULL;
-    XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xir_effects_infer_lifetimes_input(&effect_context,
-        (XirEffectInput){&artifact->module, artifact->construction, NULL}, &effects, &diagnostic);
+    const XrXirEffects *effects = artifact->program_final ? artifact->program_final : artifact->checked_effects;
+    const EffectCheckedRoots *roots = effects->checked_roots;
+    const XirRestrictionView *input = &roots->restrictions.view;
+    EffectCheckRestrictions received = {0};
+    XrXirStatus status = effect_check_restrictions_copy(&effect_context, roots, input, &received);
     if (status == XR_XIR_OK) {
-        XrXirArtifact borrowed = *artifact;
-        borrowed.checked_effects = effects;
-        borrowed.program_final = NULL;
-        closure_placement_source_expectations(&borrowed);
+        CHECK(received.view.placement_count == input->placement_count);
+        CHECK(received.view.placements != input->placements);
+        for (uint32_t i = 0; i < input->placement_count; ++i) {
+            const XirClosurePlacement *source = &input->placements[i];
+            const XirClosurePlacement *copy = &received.view.placements[i];
+            CHECK(xir_closure_placement_compare(source, copy) == 0);
+            CHECK(source->ages == copy->ages && source->remainder == copy->remainder &&
+                source->storage == copy->storage);
+        }
     }
-    xr_xir_compile_effects_free(effects);
+    effect_check_restrictions_clear(&received);
     return status;
 }
 
