@@ -740,6 +740,7 @@ static void native_string_misuse_aborts(void) {
 #include "native_callable_scope_cases.h"
 
 int main(void) {
+    native_callable_binding_snapshot();
     native_callable_projection();
     native_callable_owners();
     native_callable_nested_owners();

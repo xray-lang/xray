@@ -1603,7 +1603,10 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
     XrXirValue *output) {
     if (!admission_owner(admission, arena, domain) || !unit_value(output) ||
         !xr_xir_type_is_callable(xr_xir_compile_type_arena_types(arena), type) ||
-        !binding || !binding->owner || !binding->release ||
+        !binding) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirFunctionBinding received = *binding;
+    binding = &received;
+    if (!binding->owner || !binding->release ||
         (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
     size_t capture_bytes = binding->capture_count;
     if (capture_bytes > (SIZE_MAX - sizeof(XirFunction)) / sizeof(XrXirValue))
