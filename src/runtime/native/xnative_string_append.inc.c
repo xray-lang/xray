@@ -10,21 +10,24 @@ static XrXirValueAdmission string_append_admission(XrtValueRoot *root, uint32_t 
     return (XrXirValueAdmission){NULL, root_domain(root, source), NULL, NULL, UINT64_MAX, UINT64_MAX};
 }
 
-XRAY_API XR_NOINLINE void xrt_string_cell_append(XrtString **binding, const XrtString *suffix,
-    uint32_t source) {
-    XrtValueRoot *root = string_root(source);
-    if (!binding || !*binding) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+static XR_AINLINE bool root_append_in_place(XrtValueRoot *root, XrtString *previous,
+    const XrtString *suffix, uint32_t source) {
     root_borrow(root, suffix);
+    XrtStringOwner *owner = owner_find(root, previous);
+    if (!owner || !owner->count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XR_CHECK(!root->pending.type && !root->pending.reserved && !root->pending.payload,
+        "String append reserves one independent pending owner");
+    return owner->count == 1 && !owner->pinned &&
+        xr_xir_root_string_append_in_place(root->domain, previous, suffix);
+}
+static XR_NOINLINE void string_cell_append_transaction(XrtValueRoot *root, XrtString **binding,
+    const XrtString *suffix, uint32_t source) {
+    root_reserve(root, source);
     XrtString *previous = *binding;
     XrtStringOwner *owner = owner_find(root, previous);
     if (!owner || !owner->count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XR_CHECK(!root->pending.type && !root->pending.reserved && !root->pending.payload,
         "String append reserves one independent pending owner");
-    if (owner->count == 1 && !owner->pinned &&
-        xr_xir_root_string_append_in_place(root->domain, previous, suffix)) return;
-    root_reserve(root, source);
-    owner = owner_find(root, previous);
-    XR_CHECK(owner && owner->count, "Root reservation preserves the actual String owner");
     /* The canonical grow operation may detach the inline body. Escaping once
      * moves a private Root block to its existing shared allocation ledger. */
     if (previous->object.root_private) {
@@ -74,9 +77,26 @@ XRAY_API XR_NOINLINE void xrt_string_cell_append(XrtString **binding, const XrtS
     xr_xir_value_graph_end();
 }
 
+/* Only the cold path exposes this temporary binding's address. The ordinary
+ * owned entry needs no transaction frame or address-exposed local. */
+static XR_NOINLINE XrtString *string_owned_append_transaction(XrtValueRoot *root,
+    XrtString *current, const XrtString *suffix, uint32_t source) {
+    string_cell_append_transaction(root, &current, suffix, source);
+    return current;
+}
+XRAY_API XR_NOINLINE void xrt_string_cell_append(XrtString **binding, const XrtString *suffix,
+    uint32_t source) {
+    XrtValueRoot *root = string_root(source);
+    if (!binding || !*binding) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    if (!root_append_in_place(root, *binding, suffix, source))
+        string_cell_append_transaction(root, binding, suffix, source);
+}
 XRAY_API XR_NOINLINE XrtString *xrt_string_append_owned(XrtString *current,
     const XrtString *suffix, uint32_t source) {
-    xrt_string_cell_append(&current, suffix, source);
+    XrtValueRoot *root = string_root(source);
+    if (!current) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    if (!root_append_in_place(root, current, suffix, source))
+        return string_owned_append_transaction(root, current, suffix, source);
     return current;
 }
 

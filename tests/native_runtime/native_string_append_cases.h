@@ -50,6 +50,37 @@ static void native_string_append_in_capacity(void *opaque) {
     xr_xir_value_drop(&saved);
     xrt_string_drop(&value);
 }
+#if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
+static XrtString **string_append_binding, **string_append_replacement;
+static bool string_append_reservation_observed;
+static void string_append_reservation_callback(void) {
+    xrt_string_drop(string_append_binding);
+    xrt_string_move(string_append_binding, string_append_replacement);
+    string_append_reservation_observed = true;
+}
+static void native_string_append_after_reservation(void *opaque) {
+    (void)opaque;
+    XrtString *value = xrt_string_new("old", 3, 1);
+    XrtString *replacement = xrt_string_new("new", 3, 1);
+    const char *bytes = " plus a suffix that exceeds the inline capacity";
+    XrtString *suffix = xrt_string_literal(bytes, strlen(bytes), 1);
+    XrtString *padding[5];
+    for (size_t i = 0; i < 5; ++i) padding[i] = xrt_string_new("pad", 3, 1);
+    XrtValueRoot *root = xrt_value_root_current(1);
+    CHECK(root->table_capacity == 16 && root->table_count == 8);
+    string_append_binding = &value;
+    string_append_replacement = &replacement;
+    string_append_reservation_observed = false;
+    native_array_before_allocate = string_append_reservation_callback;
+    xrt_string_cell_append(&value, suffix, 1);
+    CHECK(string_append_reservation_observed && !replacement && !native_array_before_allocate);
+    static const char expected[] = "new plus a suffix that exceeds the inline capacity";
+    string_equals(value, expected, sizeof(expected) - 1);
+    string_append_binding = string_append_replacement = NULL;
+    for (size_t i = 0; i < 5; ++i) xrt_string_drop(&padding[i]);
+    xrt_string_drop(&value);
+}
+#endif
 static void native_string_append_root(void *opaque) {
     StringAppendProbe *probe = opaque;
     const char *seed = "a long original string to force self-append growth";
@@ -73,6 +104,11 @@ static void native_string_append_cases(XrtLocationOwner *locations) {
         CHECK(xrt_run_embedded(locations, &failure, native_string_append_in_capacity,
             &scenario) == XRT_EXECUTION_COMPLETED);
     }
+#if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
+    XrtExecutionFailure callback_failure = {0};
+    CHECK(xrt_run_embedded(locations, &callback_failure, native_string_append_after_reservation,
+        NULL) == XRT_EXECUTION_COMPLETED);
+#endif
     for (uint32_t scenario = 0; scenario < 16; ++scenario) {
         StringAppendProbe probe = {.snapshot=(scenario & 1) != 0, .pinned=(scenario & 2) != 0,
             .self=(scenario & 4) != 0, .empty=(scenario & 8) != 0};

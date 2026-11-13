@@ -13,7 +13,13 @@ static NativeArrayBlock native_array_blocks[256];
 static size_t native_array_calls, native_array_live, native_array_bytes;
 static size_t native_array_fail_at = SIZE_MAX;
 static bool native_array_injected, native_array_pending_failure;
+static void (*native_array_before_allocate)(void);
 static bool native_array_fail(void) {
+    if (native_array_before_allocate) {
+        void (*observe)(void) = native_array_before_allocate;
+        native_array_before_allocate = NULL;
+        observe();
+    }
     if (native_array_calls++ != native_array_fail_at) return false;
     native_array_injected = true;
     XrtValueRoot *root = xrt_value_root_active();
