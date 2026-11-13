@@ -109,6 +109,7 @@ static XrXirValueStatus crypto_fill_storage(const XrXirValue *value,const XrXirC
         }
         status=path_write_publish(&write);
         if(root_changed)*root=root_after;
+        shared_child_assert(owner, root);
     }
     xr_xir_value_drop(&previous_leaf);
     xr_xir_value_drop(&replacement);path_write_end(&write,&local);xr_xir_class_publication_drop(&publication);

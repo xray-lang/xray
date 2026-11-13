@@ -82,6 +82,7 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
             if (status == XR_XIR_VALUE_OK) status = value_place_publish(place, &result);
             if (status == XR_XIR_VALUE_OK) {
                 memcpy(place->payload, &result.payload, sizeof(result.payload));
+                shared_child_assert(place->identity, &result);
                 xr_xir_value_drop(&current);
             } else xr_xir_value_drop(&result);
         }

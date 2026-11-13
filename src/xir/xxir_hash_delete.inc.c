@@ -68,6 +68,7 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
         status = value_place_publish(place, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
+        shared_child_assert(place->identity, &replacement);
         xr_xir_value_drop(&current);
     }
     *removed = true; return XR_XIR_VALUE_OK;
@@ -98,6 +99,7 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
         status = value_place_publish(place, &replacement);
         if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&replacement); return status; }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
+        shared_child_assert(place->identity, &replacement);
         xr_xir_value_drop(&current);
     }
     return XR_XIR_VALUE_OK;

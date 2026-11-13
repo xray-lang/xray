@@ -88,12 +88,16 @@ static XrXirValueStatus path_write_publish(ValuePathWrite *write) {
         StoragePrepared *prepared = &item->prepared;
         if (prepared->stride) memcpy(item->publish, prepared->bytes, prepared->stride);
         prepared->owns = false;
+        shared_storage_assert(object_pointer(&item->owner), item->admission.arena,
+            ((StorageSpan){prepared->pack.type, item->publish}),
+            (StorageFrame *)prepared->pack.frames, prepared->pack.capacity);
     }
     XrXirValue previous = {0};
     if (write->candidate.type) {
         previous.type = write->candidate.type;
         memcpy(&previous.payload, write->publish, sizeof(previous.payload));
         memcpy(write->publish, &write->candidate.payload, sizeof(write->candidate.payload));
+        shared_child_assert(write->identity, &write->candidate);
         write->candidate = (XrXirValue){0};
     }
     xr_xir_value_drop(&previous);
@@ -314,6 +318,7 @@ static XrXirValueStatus path_storage_store(ValuePathSlot slot,
         if (status != XR_XIR_VALUE_OK) return status;
         if (publication) xr_xir_class_publication_commit(publication);
         memcpy(slot.bytes, &owned.payload, sizeof(owned.payload));
+        shared_child_assert(identity, &owned);
         xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;
     }
     XrXirLayout layout = {0};
@@ -328,7 +333,10 @@ static XrXirValueStatus path_storage_store(ValuePathSlot slot,
     if (publication) xr_xir_class_publication_commit(publication);
     storage_queue_release(&cursor, UINT64_MAX, &pending);
     if (layout.size) memcpy(slot.bytes, prepared.bytes, layout.size);
-    prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
+    prepared.owns = false;
+    shared_storage_assert(identity, admission->arena, ((StorageSpan){slot.type, slot.bytes}),
+        (StorageFrame *)prepared.pack.frames, prepared.pack.capacity);
+    release_pending(pending); storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus path_store(ValuePathSlot slot,const XrXirValue *value,

@@ -188,11 +188,13 @@ static XrXirValueStatus channel_send_to_waiter(XirChannel *channel,XrXirValue *o
     if (recv->raw) {
         XR_CHECK(!record && unit_value(&recv->closed) && !recv->taken,"bare receive owns no wrapper or consumed result");
         recv->result=*owned;*owned=(XrXirValue){0};
+        shared_child_assert(&channel->object, &recv->result);
     } else {
         XR_CHECK(record && !record->object.graph_registered && unit_value(&record->fields[0]) &&
             record->object.arena==admission->arena && record->count==1 && record->variant==0,
             "receive publication owns exact unpublished native storage in the admitted Channel arena");
         record->fields[0]=*owned;*owned=(XrXirValue){0};
+        shared_child_assert(&channel->object, &record->fields[0]);
         xr_xir_value_object_publish(&record->object);recv->result=(XrXirValue){(uint32_t)record->object.type,0,0};
         memcpy(&recv->result.payload,&record,sizeof(record));recv->reservation=NULL;
     }

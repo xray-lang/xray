@@ -369,6 +369,7 @@ XR_FUNC void xir_cell_new_take_commit(XirCellNewTake *prepared,void *source_payl
         (source_payload || unit_value(&prepared->value)),
         "construction commit preserves its exact source word and unpublished Cell");
     cell->value=prepared->value;cell->initialized=true;
+    shared_child_assert(&cell->object, &cell->value);
     if(source_payload)memset(source_payload,0,sizeof(payload));
     xr_xir_value_object_publish(&cell->object);
     *output=(XrXirValue){cell->object.type,0,(int64_t)(uintptr_t)cell};

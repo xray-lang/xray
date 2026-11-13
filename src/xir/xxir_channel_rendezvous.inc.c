@@ -153,6 +153,7 @@ static XrXirValueStatus channel_rendezvous_send_begin(const XrXirValue *value,co
             send->previous=channel->send_tail;
             if (channel->send_tail) channel->send_tail->next=send;else channel->send_head=send;
             channel->send_tail=send;++channel->send_count;channel_changed(channel);outcome=XR_XIR_CHANNEL_SEND_WAIT_PENDING;
+            shared_child_assert(&channel->object, &send->message);
         }
         channel_unlock(channel);
     }

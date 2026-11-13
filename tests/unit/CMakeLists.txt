@@ -297,6 +297,19 @@ set_tests_properties(test_xir_panic_carrier_wire_vector PROPERTIES LABELS "unit;
 add_executable(test_xir_values xir/test_xir_values.c)
 target_link_libraries(test_xir_values PRIVATE xray_xir_scalar)
 
+add_executable(test_xir_signed_object_rc xir/test_xir_signed_object_rc.c)
+target_link_libraries(test_xir_signed_object_rc PRIVATE xray_xir_scalar)
+target_include_directories(test_xir_signed_object_rc PRIVATE ${XRAY_COMMON_INCLUDES})
+set_target_properties(test_xir_signed_object_rc PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_xir_signed_object_rc PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_signed_object_rc PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_signed_object_rc COMMAND test_xir_signed_object_rc)
+set_tests_properties(test_xir_signed_object_rc PROPERTIES TIMEOUT 30 PROCESSORS 8
+    LABELS "unit;xir;ownership;concurrency;tsan")
+
 
 
 set(XIR_PROGRAM_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_program_fixture.c)
@@ -307,6 +320,7 @@ set(XIR_PROGRAM_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_program_fixt
 if(NOT WIN32)
     find_package(Threads REQUIRED)
     target_link_libraries(test_xir_values PRIVATE Threads::Threads)
+    target_link_libraries(test_xir_signed_object_rc PRIVATE Threads::Threads)
 endif()
 add_executable(test_xir_array_grow_budget xir/test_xir_array_grow_budget.c)
 target_include_directories(test_xir_array_grow_budget PRIVATE "${CMAKE_SOURCE_DIR}/src")

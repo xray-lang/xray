@@ -255,6 +255,7 @@ XR_FUNC XrXirValueStatus xr_xir_channel_select_commit(XrXirChannelSelect *select
                     XR_CHECK(xr_channel_buffer_push(&channel->buffer,&slot),"a selected buffered send commits only its observed free slot");
                     XR_CHECK(unit_value(channel_slots(channel)+slot),"a selected free slot has no previous owner");
                     channel_slots(channel)[slot]=select->candidate;select->candidate=(XrXirValue){0};channel_changed(channel);
+                    shared_child_assert(&channel->object, &channel_slots(channel)[slot]);
                 } else if(channel) {
                     uint32_t slot=UINT32_MAX;
                     XR_CHECK(xr_channel_buffer_pop(&channel->buffer,&slot),"one selected frontier still owns its prepared message");

@@ -1768,6 +1768,7 @@ static XrXirValueStatus cell_write_storage(const XrXirValue *cell, const XrXirVa
         xr_xir_class_publication_commit(&publication);
     }
     XrXirValue previous = target->value; target->value = replacement;target->initialized=true;
+    shared_child_assert(&target->object, &target->value);
     xr_xir_value_drop(&previous); xr_xir_class_publication_drop(&publication);
     return XR_XIR_VALUE_OK;
 }

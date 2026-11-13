@@ -112,6 +112,7 @@ static XrXirValueStatus channel_send_operation(const XrXirValue *value, XrXirVal
             XR_CHECK(xr_channel_buffer_push(&channel->buffer, &slot), "validated channel enqueue cannot fail");
             XR_CHECK(unit_value(&channel_slots(channel)[slot]), "empty channel slot owns no value");
             channel_slots(channel)[slot] = *owned; *owned = (XrXirValue){0};
+            shared_child_assert(&channel->object, &channel_slots(channel)[slot]);
             channel_changed(channel); outcome = XR_XIR_CHANNEL_SENT;
         }
         channel_unlock(channel);

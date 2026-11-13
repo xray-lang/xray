@@ -91,7 +91,10 @@ static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
             owned = result;
         }
     }
-    if (status == XR_XIR_VALUE_OK) memcpy(place->payload, &owned.payload, sizeof(owned.payload));
+    if (status == XR_XIR_VALUE_OK) {
+        memcpy(place->payload, &owned.payload, sizeof(owned.payload));
+        shared_child_assert(place->identity, &owned);
+    }
     return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_string_place_append_deferred(const XrXirValuePlace *place,

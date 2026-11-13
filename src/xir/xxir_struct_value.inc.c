@@ -143,6 +143,7 @@ static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace 
             return status;
         }
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));
+        shared_child_assert(place->identity, &replacement);
         xr_xir_value_drop(&destination);
     }
     xr_xir_value_drop(&previous); return XR_XIR_VALUE_OK;

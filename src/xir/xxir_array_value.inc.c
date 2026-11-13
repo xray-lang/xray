@@ -396,6 +396,7 @@ static XrXirValueStatus array_mutate(const XrXirValuePlace *place, int64_t index
     }
     if (mutation->publication) xr_xir_class_publication_commit(mutation->publication);
     memcpy(place->payload, &result.payload, sizeof(result.payload));
+    shared_child_assert(place->identity, &result);
     if (unique) array->length = 0;
     xr_xir_value_drop(&current);
     release_pending(pending); storage_prepared_end(&prepared);

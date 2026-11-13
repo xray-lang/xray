@@ -10,6 +10,12 @@
  *   Only local objects lend scratch links under the residual graph lock.
  *   Every fallible root-domain pin precedes the first reference-band change.
  */
+#if XR_XIR_PARANOID
+#include "xxir_value_shared_assert.inc.c"
+#else
+#define shared_child_assert(parent, value) ((void)0)
+#define shared_storage_assert(parent, arena, span, frames, capacity) ((void)0)
+#endif
 typedef struct ObjectShare {
     XirObject *first, *last;
     XrXirValueStatus status;

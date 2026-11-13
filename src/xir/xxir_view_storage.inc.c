@@ -93,6 +93,7 @@ static XrXirValueStatus view_storage_begin_operation(const XrXirValue *root,
     /* Nothing after this point allocates, charges work or fails. */
     XrXirValue old={0};
     if (replacement.type) {old=cell->value;cell->value=replacement;replacement=(XrXirValue){0};}
+    shared_child_assert(&cell->object, &cell->value);
     if (shared) xr_xir_cell_read_loan_commit(root,&output->loan.shared,&spec->authority,read_parent);
     else xr_xir_cell_loan_commit(root,&output->loan.exclusive,&spec->authority);
     output->element=element;output->offset=spec->offset;output->length=spec->length;output->kind=spec->kind;

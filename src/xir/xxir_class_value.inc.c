@@ -176,6 +176,8 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     if (!shared) storage_queue_release(&cursor,UINT64_MAX,&pending);
     if (physical.size) memcpy(bytes,prepared.bytes,physical.size);
     prepared.owns=false;
+    shared_storage_assert(object, admission->arena, ((StorageSpan){prepared.pack.type, bytes}),
+        (StorageFrame *)prepared.pack.frames, prepared.pack.capacity);
     if (shared) { previous.owns=true; storage_prepared_end(&previous); }
     release_pending(pending);storage_prepared_end(&prepared);
     xr_xir_class_publication_drop(&publication);
