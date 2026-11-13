@@ -371,13 +371,13 @@ main()
 3. 重新绑定、销毁、消费或其他使借用失效的操作被拒绝（`E0382`）。操作效应必须反映 COW 分离与重定位；不得把 Array 元素替换一概标为地址稳定。
 4. 视图仅可用于局部、参数、返回及 tuple / Optional 包装；包装继承全部借用限制。视图不得进入普通集合、用户聚合、模块存储或 `go` 等跨执行边界，不得借 `as` 擦除限制（`E0383`）。
 5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
-6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
+6. 根在当前帧内的借用可以跨挂起，但须始终保活 owner 并维持访问权限；帧地址稳定不能代替这些证明。根不在当前帧时（class 字段、模块变量、被闭包以共享 cell 捕获的变量，以及经它们到达的元素与字段），借用存活期间不得经过可能挂起的调用或 `await`，也不得把这类位置的 `ref` 或视图传给可能挂起的函数；同步原语交给回调的借用除外，例如 `Mutex.lock` 的 body。生成器首版不得保存借用参数。
 
 完整类型及操作族的当前实现资格见 §17。
 
 ##### 跨函数：返回来源合同
 
-返回视图的来源首版只由签名确定：整个签名必须恰有一个视图输入或 `ref` 输入候选；`ref` receiver 也计入候选。零候选或多个候选均拒绝（`E0384`），即使函数体始终返回某一个参数；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
+返回视图的来源首版只由签名确定。先看参数：视图参数与 `ref` 参数是候选，恰有一个时它就是来源，多于一个时拒绝（`E0384`）。没有参数候选时，receiver 是来源：只读 receiver 可作 `Slice` 的来源，`ref` receiver 可作 `Slice` 与 `MutSlice` 的来源；也没有 receiver 时拒绝（`E0384`）。即使函数体始终返回某一个参数，也不从函数体推导来源；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
 
 tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
 
@@ -413,7 +413,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> i64` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `equals(other: T) -> bool` 与 `hash() -> i64` 的自定义类型（`equals` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.4 `Set<T>`
 
@@ -1497,13 +1497,13 @@ Let view `v` borrow owner `o`. Borrow liveness ends at last use, not at the end 
 3. Rebinding, destruction, consumption, or other invalidation of a live borrow is rejected (`E0382`). Operation effects must account for COW detachment and relocation; Array element replacement is not unconditionally address-stable.
 4. Views are allowed only in locals, parameters, returns, and tuple / Optional wrappers. Wrappers inherit every borrow restriction. Views cannot enter ordinary collections, user aggregates, module storage, or execution boundaries such as `go`, and `as` cannot erase these restrictions (`E0383`).
 5. A variable captured by an ordinary closure through a shared cell cannot produce a view. A closure capturing a view may be called immediately. Passing it as a parameter requires an explicit, frozen borrowing-call contract that prevents saving or returning it and guarantees completion before the call ends. Inference from the callee body cannot replace that public contract; a closure literal in argument position does not by itself prove no escape.
-6. A borrow in an ordinary call may survive suspension only while the owner remains alive and access permissions hold. Frame address stability is not such a proof. Generators initially must not save borrowed parameters.
+6. A borrow whose root is in the current frame may survive suspension only while the owner remains alive and access permissions hold; frame address stability is not such a proof. When the root is not in the current frame (a class field, a module variable, a variable captured by a shared cell, or an element or field reached through one), the borrow may not stay live across a call or `await` that may suspend, and such a place may not be passed by `ref` or as a view to a function that may suspend. Borrows a synchronization primitive hands to its callback, such as the body of `Mutex.lock`, are exempt. Generators initially must not save borrowed parameters.
 
 Current implementation qualification of complete type and operation families is specified in §17.
 
 ##### Across functions: return-source contracts
 
-The initial return-source rule uses the signature alone: the entire signature must contain exactly one view input or `ref` input candidate. A `ref` receiver counts as a candidate. Zero or multiple candidates are rejected (`E0384`), even if the body always returns one particular parameter. Neither body inference nor a static-storage exception supplies a cross-module source contract. Returning a view of a local value is also invalid.
+The initial return-source rule uses the signature alone. Parameters come first: view parameters and `ref` parameters are candidates; exactly one is the source, and more than one is rejected (`E0384`). With no parameter candidate, the receiver is the source: a read receiver may be the source of a `Slice`, and a `ref` receiver of a `Slice` or a `MutSlice`; with no receiver either, the signature is rejected (`E0384`). The body is never consulted, even if it always returns one particular parameter, and neither body inference nor a static-storage exception supplies a cross-module source contract. Returning a view of a local value is also invalid.
 
 Each returned view inside a tuple / Optional attaches to that unique candidate and is checked separately for write permission. A writable result cannot originate from a read-only candidate. Returning two `MutSlice` values additionally requires an explicit non-overlapping construction contract; ordinary user functions cannot establish it merely from index arithmetic.
 
@@ -1539,7 +1539,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> i64` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `equals(other: T) -> bool` and `hash() -> i64` (the parameter type of `equals` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.4 `Set<T>`
 

@@ -203,9 +203,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | 运算符 | 语义 |
 |--|--|
-| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
+| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class 与 struct 不能自定义 `==`，名义类型的相等域见 §9.2 的 `Equal`。 |
 | `!=` | `==` 的反 |
-| `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
+| `<` `<=` `>` `>=` | 数值与字符串支持；用户类型经 `Comparable` 的 `compareTo` 比较（§9.2），不能自定义这些运算符。 |
 
 **与 JS / C 的区别**：xray 的 `==` 不做 string↔number 转换，也不做整数↔浮点或符号变化的隐式提升。
 
@@ -253,7 +253,7 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 **特殊**：
 - 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
-- 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
+- 数组/Map 元素：`a[i] = v` 调用内置 setter；用户类型不能定义下标。
 
 ### 3.5 三元 `? :`
 
@@ -523,7 +523,7 @@ bytes[i]                // 显式 byte 视图索引
 - 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
-- 自定义类：通过 `operator[]` 重载。
+- 用户类型：不能定义下标；以方法提供元素访问。
 
 ```xray @id=array-read-receiver-snapshot
 var a: Array<string> = ["old"]
@@ -698,7 +698,7 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 yield expr                  // 生成器产出一个值并挂起
 ```
 
-`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.5）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
 协作让出 CPU 使用 `Task.yieldNow()`（见 §10.10）；裸 `yield` 不是表达式。
 
@@ -706,7 +706,7 @@ yield expr                  // 生成器产出一个值并挂起
 
 yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Task.yieldNow()没有元素，只把当前任务交回调度器队列。两者都不会在宿主C栈上保留待恢复调用。
 
-hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
+hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.5报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
 #### 3.16.2 生成器等待与单消费者
 
@@ -921,9 +921,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class and struct cannot define their own `==`; the equality domain of nominal types is `Equal` in §9.2. |
 | `!=` | inverse of `==` |
-| `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
+| `<` `<=` `>` `>=` | supported by numbers and strings; user types compare through `compareTo` of `Comparable` (§9.2) and cannot define these operators. |
 
 **Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔f64 promotion, or implicit signedness changes.
 
@@ -971,7 +971,7 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 **Special cases**:
 - An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
-- Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
+- Array/Map elements: `a[i] = v` calls the built-in setter; user types cannot define indexing.
 
 ### 3.5 Ternary `? :`
 
@@ -1241,7 +1241,7 @@ bytes[i]                // explicit byte-view index
 - Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
-- User classes: via `operator[]` overload.
+- User types: cannot define indexing; element access is provided through methods.
 
 ```xray @id=array-read-receiver-snapshot
 var a: Array<string> = ["old"]
@@ -1416,7 +1416,7 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 yield expr                  // produce one generator value and suspend
 ```
 
-`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.5). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
 Cooperative CPU yielding uses `Task.yieldNow()` (see §10.10); bare `yield` is not an expression.
 
@@ -1424,7 +1424,7 @@ Cooperative CPU yielding uses `Task.yieldNow()` (see §10.10); bare `yield` is n
 
 yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Task.yieldNow() produces no element and returns the current task to the scheduler queue. Neither keeps a suspended call on the host C stack.
 
-hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
+hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.5). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
 
 #### 3.16.2 Generator waits and one consumer
 

@@ -1,5 +1,5 @@
 // anchor: collection-iterator-exhausted
-// §5.3.6 applies to every built-in Iterator<T>, not just the generator one:
+// §5.3.5 applies to every built-in Iterator<T>, not just the generator one:
 // in-contract traversal yields the elements, and a pull past the end is E0432
 // in both backends. The wrong answer used to differ by iterator kind -- 0 for
 // an array iterator, null handed back through the non-nullable `rune` result

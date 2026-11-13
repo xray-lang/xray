@@ -162,7 +162,7 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 #### 自定义迭代器
 
-实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
+实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.5。
 
 #### 引用迭代
 
@@ -549,7 +549,7 @@ Enum type domains and descriptor views are compiler-recognized static domains. T
 
 #### Custom iterators
 
-Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.5.
 
 #### Reference Iteration
 

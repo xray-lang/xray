@@ -147,7 +147,7 @@ order: 019
 | `E0422` | `XR_ERR_OVERFLOW` | 算术溢出或数值转换越界（含 NaN / 无穷大转整数） |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
-| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.6 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
 
 #### 系统、调用、coroutine 与 stdlib
@@ -351,7 +351,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
-| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.6 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
 
 #### System, Calls, Coroutines, and Stdlib

@@ -89,7 +89,7 @@ class PanicInfo {
 
 临时值在完整语句结束时释放，已经转移的除外。READ 和 `ref` 参数是借用，由原 owner 管理释放。消费参数在函数入口成为局部拥有式绑定，捕获随闭包环境存活，任务参数由任务拥有。最后一份强引用释放时进入普通 RC 销毁路径，环的边界见 §16.3。
 
-`defer` 覆盖正常退出、返回、循环转移、错误传播、panic 和取消。当前 M2 清理体保持 NoSuspend/NoTask 义务，取消在清理期间屏蔽。后继阶段的清理效应和本节释放优化的当前实现资格见 §17。语言没有用户定义的析构或 `Drop` 回调，外部资源的显式清理使用 `defer`。
+`defer` 覆盖正常退出、返回、循环转移、错误传播、panic 和取消。当前 M2 清理体保持 NoSuspend/NoTask 义务，取消在清理期间屏蔽。后继阶段的清理效应和本节释放优化的当前实现资格见 §17。语言没有用户定义的析构或 `Drop` 回调。标准库的资源句柄，以及用户以 C 释放函数包装的资源，由运行时在最后一个引用释放时关闭；这是运行时内部的类型析构，不运行 Xray 代码。句柄在引用环中时，于任务结束、回收域断环后关闭；在共享带上时，由最后释放它的任务在其线程上关闭。需要按顺序清理或取得关闭失败结果时，使用 `defer` 与显式 `close()`。资源句柄的当前实现资格见 §17。
 
 ### 16.9 并发内存模型
 
@@ -263,7 +263,7 @@ Ownership can transfer into owning storage, a consuming parameter, a return, an 
 
 Temporaries are released at the end of the complete statement unless transferred. READ and `ref` parameters are loans whose original owners manage release. A consuming parameter becomes an owning local at function entry, captures live with the closure environment, and task arguments are owned by the task. Releasing the final strong reference starts ordinary RC destruction, with cycle boundaries specified in §16.3.
 
-`defer` covers normal exit, return, loop transfers, error propagation, panic and cancellation. Current M2 cleanup bodies retain NoSuspend/NoTask obligations, with cancellation masked during cleanup. Qualification of later cleanup effects and the release optimizations in this section is specified in §17. The language has no user-defined destructor or `Drop` callback. Explicit cleanup of external resources uses `defer`.
+`defer` covers normal exit, return, loop transfers, error propagation, panic and cancellation. Current M2 cleanup bodies retain NoSuspend/NoTask obligations, with cancellation masked during cleanup. Qualification of later cleanup effects and the release optimizations in this section is specified in §17. The language has no user-defined destructor or `Drop` callback. Standard-library resource handles, and resources a user wraps with a C release function, are closed by the runtime when their last reference is released; this is a runtime-internal type destructor and runs no Xray code. A handle inside a reference cycle closes when its task ends and the reclamation domain breaks the cycle; a handle in the shared band closes on the thread of the task that releases it last. Cleanup that must run in order, or that needs the result of closing, uses `defer` with an explicit `close()`. Current qualification of resource handles is specified in §17.
 
 ### 16.9 Concurrency Memory Model
 

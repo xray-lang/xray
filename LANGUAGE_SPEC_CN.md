@@ -239,7 +239,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
-| `operator` | 运算符重载 |
+| `operator` | 保留字；语言不提供运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
 `abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
@@ -968,13 +968,13 @@ main()
 3. 重新绑定、销毁、消费或其他使借用失效的操作被拒绝（`E0382`）。操作效应必须反映 COW 分离与重定位；不得把 Array 元素替换一概标为地址稳定。
 4. 视图仅可用于局部、参数、返回及 tuple / Optional 包装；包装继承全部借用限制。视图不得进入普通集合、用户聚合、模块存储或 `go` 等跨执行边界，不得借 `as` 擦除限制（`E0383`）。
 5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
-6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
+6. 根在当前帧内的借用可以跨挂起，但须始终保活 owner 并维持访问权限；帧地址稳定不能代替这些证明。根不在当前帧时（class 字段、模块变量、被闭包以共享 cell 捕获的变量，以及经它们到达的元素与字段），借用存活期间不得经过可能挂起的调用或 `await`，也不得把这类位置的 `ref` 或视图传给可能挂起的函数；同步原语交给回调的借用除外，例如 `Mutex.lock` 的 body。生成器首版不得保存借用参数。
 
 完整类型及操作族的当前实现资格见 §17。
 
 ##### 跨函数：返回来源合同
 
-返回视图的来源首版只由签名确定：整个签名必须恰有一个视图输入或 `ref` 输入候选；`ref` receiver 也计入候选。零候选或多个候选均拒绝（`E0384`），即使函数体始终返回某一个参数；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
+返回视图的来源首版只由签名确定。先看参数：视图参数与 `ref` 参数是候选，恰有一个时它就是来源，多于一个时拒绝（`E0384`）。没有参数候选时，receiver 是来源：只读 receiver 可作 `Slice` 的来源，`ref` receiver 可作 `Slice` 与 `MutSlice` 的来源；也没有 receiver 时拒绝（`E0384`）。即使函数体始终返回某一个参数，也不从函数体推导来源；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
 
 tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
 
@@ -1010,7 +1010,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> i64` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `equals(other: T) -> bool` 与 `hash() -> i64` 的自定义类型（`equals` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.4 `Set<T>`
 
@@ -1910,9 +1910,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 | 运算符 | 语义 |
 |--|--|
-| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
+| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class 与 struct 不能自定义 `==`，名义类型的相等域见 §9.2 的 `Equal`。 |
 | `!=` | `==` 的反 |
-| `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
+| `<` `<=` `>` `>=` | 数值与字符串支持；用户类型经 `Comparable` 的 `compareTo` 比较（§9.2），不能自定义这些运算符。 |
 
 **与 JS / C 的区别**：xray 的 `==` 不做 string↔number 转换，也不做整数↔浮点或符号变化的隐式提升。
 
@@ -1960,7 +1960,7 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 **特殊**：
 - 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
-- 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
+- 数组/Map 元素：`a[i] = v` 调用内置 setter；用户类型不能定义下标。
 
 ### 3.5 三元 `? :`
 
@@ -2230,7 +2230,7 @@ bytes[i]                // 显式 byte 视图索引
 - 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
-- 自定义类：通过 `operator[]` 重载。
+- 用户类型：不能定义下标；以方法提供元素访问。
 
 ```xray
 var a: Array<string> = ["old"]
@@ -2405,7 +2405,7 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 yield expr                  // 生成器产出一个值并挂起
 ```
 
-`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.5）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
 协作让出 CPU 使用 `Task.yieldNow()`（见 §10.10）；裸 `yield` 不是表达式。
 
@@ -2413,7 +2413,7 @@ yield expr                  // 生成器产出一个值并挂起
 
 yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Task.yieldNow()没有元素，只把当前任务交回调度器队列。两者都不会在宿主C栈上保留待恢复调用。
 
-hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
+hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.5报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
 #### 3.16.2 生成器等待与单消费者
 
@@ -2585,7 +2585,7 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 #### 自定义迭代器
 
-实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
+实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.5。
 
 #### 引用迭代
 
@@ -3302,7 +3302,6 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
@@ -3422,56 +3421,7 @@ class Vector2 {
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
-#### 5.3.5 运算符重载
-
-```xray
-class Vec2 {
-    x: f64
-    y: f64
-
-    init(x: f64, y: f64) {
-        this.x = x; this.y = y
-    }
-
-    operator+(other: Vec2) -> Vec2 {
-        return Vec2(this.x + other.x, this.y + other.y)
-    }
-
-    operator==(other: Vec2) -> bool {
-        return this.x == other.x && this.y == other.y
-    }
-
-    operator[](index: i64) -> f64 {
-        if (index == 0) { return this.x }
-        return this.y
-    }
-}
-```
-
-**可重载的运算符**（完整列表，源自 `xparse_oop.c`）：
-
-| 类别 | 运算符 | 参数数 | 备注 |
-|--|--|--|--|
-| 二元算术 | `+` `-` `*` `/` `%` | 1 | `-` 单参数视为一元负号 |
-| 位运算 | `&` `\|` `^` `<<` `>>` | 1 | |
-| 比较 | `==` `!=` `<` `<=` `>` `>=` | 1 | 一般成对实现 `==`/`!=`、`<`/`<=`/`>`/`>=` |
-| 下标 | `[]`（getter）`[]=`（setter） | 1 / 2 | setter 是 `(index, value)` |
-| 一元 | `!` `~` `++` `--` | 0 | |
-| 复合赋值 | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
-
-```xray
-class Counter {
-    n: i64 = 0
-    operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
-    operator[](i: i64) -> i64 { return this.n + i }
-    operator[]=(i: i64, v: i64) { this.n = v - i }
-}
-```
-
-**不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
-
-#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
+#### 5.3.5 `Iterator<T>` 与 `Iterable<T>`
 
 `Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
 
@@ -3498,7 +3448,7 @@ interface Iterable<T> {
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
-#### 5.3.7 计算属性
+#### 5.3.6 计算属性
 
 字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
 
@@ -3535,7 +3485,7 @@ fn main() {
 - 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
 - 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
 
-#### 5.3.8 完整可运行示例
+#### 5.3.7 完整可运行示例
 
 以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
 
@@ -3562,7 +3512,7 @@ fn main() {
 main()
 ```
 
-运算符重载及具名变量调用遵循上述合同，完整实现资格见 §17。
+具名变量调用遵循上述合同，完整实现资格见 §17。
 
 ### 5.4 `struct` 声明
 
@@ -3630,7 +3580,6 @@ var c = Config{host: "localhost"}    // OK
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
-| 运算符重载 | ✅ | ✅ |
 | 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
@@ -5165,11 +5114,11 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | 接口 | 含义 |
 |---|---|
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；i64/f64/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> i64`（签名见下） |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `equals(other: T) -> bool` 与 `hash() -> i64`（签名见下） |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
 | `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
-`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> i64`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `equals(other: T) -> bool` 与 `hash() -> i64`。`equals` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
 ```xray
 class Token implements Hashable {
@@ -5178,7 +5127,7 @@ class Token implements Hashable {
     init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
-    operator==(other: Token) -> bool { return this.value == other.value }
+    equals(other: Token) -> bool { return this.value == other.value }
 
     hash() -> i64 { return this.value }
 }
@@ -5187,7 +5136,7 @@ var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
+只提供旧式 `hashCode()` 不满足契约；只提供 `equals` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
 
 #### `where` 子句
 
@@ -5230,7 +5179,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
 
-用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
+用户类型的 `equals` 直接充当它自己的键等价关系，因此**它必须自反、对称、传递**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
 
 **当前限制**：
 - 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
@@ -6860,7 +6809,7 @@ class PanicInfo {
 
 临时值在完整语句结束时释放，已经转移的除外。READ 和 `ref` 参数是借用，由原 owner 管理释放。消费参数在函数入口成为局部拥有式绑定，捕获随闭包环境存活，任务参数由任务拥有。最后一份强引用释放时进入普通 RC 销毁路径，环的边界见 §16.3。
 
-`defer` 覆盖正常退出、返回、循环转移、错误传播、panic 和取消。当前 M2 清理体保持 NoSuspend/NoTask 义务，取消在清理期间屏蔽。后继阶段的清理效应和本节释放优化的当前实现资格见 §17。语言没有用户定义的析构或 `Drop` 回调，外部资源的显式清理使用 `defer`。
+`defer` 覆盖正常退出、返回、循环转移、错误传播、panic 和取消。当前 M2 清理体保持 NoSuspend/NoTask 义务，取消在清理期间屏蔽。后继阶段的清理效应和本节释放优化的当前实现资格见 §17。语言没有用户定义的析构或 `Drop` 回调。标准库的资源句柄，以及用户以 C 释放函数包装的资源，由运行时在最后一个引用释放时关闭；这是运行时内部的类型析构，不运行 Xray 代码。句柄在引用环中时，于任务结束、回收域断环后关闭；在共享带上时，由最后释放它的任务在其线程上关闭。需要按顺序清理或取得关闭失败结果时，使用 `defer` 与显式 `close()`。资源句柄的当前实现资格见 §17。
 
 ### 16.9 并发内存模型
 
@@ -8267,7 +8216,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0422` | `XR_ERR_OVERFLOW` | 算术溢出或数值转换越界（含 NaN / 无穷大转整数） |
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
-| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.6 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
 
 #### 系统、调用、coroutine 与 stdlib
@@ -8634,7 +8583,6 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
@@ -8672,12 +8620,6 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
-
-OperatorToken ::= '+' | '-' | '*' | '/' | '%'
-               |  '&' | '|' | '^'
-               |  '==' | '!=' | '<' | '<=' | '>' | '>='
-               |  '[]' | '[]='
-               |  '!' | '~'
 ```
 
 > 注：以上 EBNF 为指导性整理。precedence、associativity、消歧由 parser 实现决议；遇到歧义请以 `src/frontend/parser/xparse_*.c` 为准。
@@ -8725,7 +8667,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
-| `operator` | §5.3 |
+| `operator` | §1.5.2 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |

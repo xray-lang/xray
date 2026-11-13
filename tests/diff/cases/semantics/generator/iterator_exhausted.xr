@@ -1,5 +1,5 @@
 // anchor: generator-iterator-exhausted
-// §5.3.6: the pull protocol is two-step. hasNext() is the exhaustion test and
+// §5.3.5: the pull protocol is two-step. hasNext() is the exhaustion test and
 // next() is typed T, not T?, so pulling a generator past its last yield is a
 // contract violation (E0432) in both backends -- not the int zero value the
 // unguarded pull used to hand back.

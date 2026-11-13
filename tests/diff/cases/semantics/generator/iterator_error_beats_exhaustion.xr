@@ -1,7 +1,7 @@
 // anchor: generator-iterator-error-beats-exhaustion
 // A generator that ends by throwing is not an exhausted iterator. The pull that
 // observes the failure must report the producer's own error, not the E0432
-// contract violation, in both backends -- otherwise enforcing §5.3.6 would
+// contract violation, in both backends -- otherwise enforcing §5.3.5 would
 // swallow the diagnosis a failing generator owes its consumer.
 
 enum GenErr {

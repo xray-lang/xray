@@ -69,8 +69,8 @@
         "go arguments and captures must be Sendable; ordinary outer var captures are forbidden even for reads",
         "`Channel<T>` requires copyable, storable, Sendable payloads; ref and Slice/MutSlice loans cannot cross go boundaries",
         "`Atomic<T>`: lock-free atomic ops for `i64`/`f64`/`bool` (name with `const`)",
-        "Consuming parameters and value-type receivers transfer ownership according to their declaration, for copyable values and noncopyable resources",
-        "Type-position const T is removed. Prefix copy value and move value follow spec §2.14.5 and current qualification in §17",
+        "Consuming (`move`) parameters take ownership of copyable values and noncopyable resources; the declaration decides transfer, `move x` guarantees no copy, and a last use at a consuming position is an implicit move",
+        "Type-position const T is removed; an explicit copy is the prefix expression `copy x`, never a call; current qualification follows spec §17",
         "These target contracts do not certify complete new-XIR go, Task, resource, or synchronization support; declaration-family qualification remains required"
       ]
     },

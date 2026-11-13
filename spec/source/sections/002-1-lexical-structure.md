@@ -133,7 +133,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
-| `operator` | 运算符重载 |
+| `operator` | 保留字；语言不提供运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
 `abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
@@ -626,7 +626,7 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
-| `operator` | operator overloading |
+| `operator` | reserved; the language has no operator overloading |
 | `is` `as` | runtime type check / cast |
 
 `abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
