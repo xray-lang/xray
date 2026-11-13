@@ -47,7 +47,8 @@ static inline bool xr_pod_nullable_layout(XrPodLayout payload, XrPodLayout *outp
 }
 static inline bool xr_pod_tuple_i64_layout(uint32_t count, XrPodLayout *output) {
     if (!output || !count || count > UINT32_MAX / 8) return false;
-    *output = (XrPodLayout){count * 8, 8, count};
+    XrPodLayout layout = {count * 8, 8, count};
+    *output = layout;
     return true;
 }
 
