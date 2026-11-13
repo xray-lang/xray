@@ -1,0 +1,20 @@
+// Different roots reaching one class field stay disjoint when the paths split
+// at different fields below it, even if the roots are one object.
+struct Pair {
+    x: i64
+    y: i64
+}
+final class Outer {
+    pair: Pair
+    init() { this.pair = Pair{x: 1, y: 2} }
+}
+fn both(first: ref i64, second: ref i64) {
+    first = 3
+    second = 4
+}
+fn run(a: Outer, b: Outer) { both(ref a.pair.x, ref b.pair.y) }
+fn main() {
+    const o = Outer()
+    run(o, o)
+}
+main()

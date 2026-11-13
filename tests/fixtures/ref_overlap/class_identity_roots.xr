@@ -1,0 +1,17 @@
+// Different roots reaching one class field may be one object: needs an identity check.
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    left += 1
+    right += 1
+    return left + right
+}
+final class Holder {
+    left: i64
+    right: i64
+    init() { this.left = 40; this.right = 90 }
+}
+fn run(a: Holder, b: Holder) -> i64 { return inner(ref a.left, ref b.left) }
+fn main() {
+    const h = Holder()
+    print(run(h, h))
+}
+main()

@@ -1,0 +1,10 @@
+// The same bare binding twice overlaps.
+fn bump(x: ref i64, y: ref i64) {
+    x = x + 1
+    y = y + 1
+}
+fn main() {
+    var n = 1
+    bump(ref n, ref n)
+}
+main()

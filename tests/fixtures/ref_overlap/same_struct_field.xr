@@ -1,0 +1,17 @@
+// The same struct field path twice overlaps.
+struct Pair {
+    a: Array<i64>
+    b: Array<i64>
+}
+fn appendAll(dst: ref Array<i64>, src: ref Array<i64>) {
+    var i = 0
+    while (i < len(src)) {
+        dst.push(src[i])
+        i = i + 1
+    }
+}
+fn main() {
+    var p = Pair{a: [1], b: [2]}
+    appendAll(ref p.a, ref p.a)
+}
+main()

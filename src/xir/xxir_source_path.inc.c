@@ -28,6 +28,30 @@ static bool source_path_nodes(SourceContext *ctx, AstNode *node, AstNode **steps
         *root = visible_name(ctx,node->type == AST_THIS_EXPR ? "this" : node->as.variable.name);
     return true;
 }
+/* One declared step of a place: the element of an indexed container or the
+ * field of a struct or class. An undeclared step leaves the type UNIT. */
+static bool source_path_step_type(SourceContext *ctx, AstNode *step, XrXirType *type) {
+    if (step->type == AST_INDEX_GET) {
+        *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) :
+            xr_xir_type_is_map(&ctx->types,*type) ? xr_xir_map_element(&ctx->types,*type) : XR_XIR_UNIT;
+        return true;
+    }
+    const XrXirTypeNode *container = xr_xir_type_node(&ctx->types,*type);
+    if (!container || (!xr_xir_type_is_struct(&ctx->types,*type) && !xr_xir_type_is_class(&ctx->types,*type))) {
+        *type = XR_XIR_UNIT; return true;
+    }
+    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[container->nominal.declaration];
+    SourceSubstitution substitution = {container->nominal.arguments,container->nominal.argument_count};
+    *type = XR_XIR_UNIT;
+    const char *name = step->as.member_access.name;
+    for (uint32_t f = 0; f < decl->field_count; ++f) {
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        const XrXirNominalField *field = &decl->fields[f];
+        if (source_text_size(ctx, name) == field->name.length && source_span_same(ctx, NULL, name, field->name.bytes, field->name.length))
+            return source_substitute(ctx,&substitution,field->type,0,type);
+    }
+    return true;
+}
 /* Method selection inspects declarations without evaluating a receiver or index.
  * Actual place construction independently checks access and records references. */
 static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type) {
@@ -37,28 +61,7 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
     if (!root || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT)) return true;
     *type = source_symbol_type(ctx, root);
     while (count) {
-        AstNode *step = steps[--count];
-        if (step->type == AST_INDEX_GET) {
-            *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) :
-                xr_xir_type_is_map(&ctx->types,*type) ? xr_xir_map_element(&ctx->types,*type) : XR_XIR_UNIT;
-        } else {
-            const XrXirTypeNode *container = xr_xir_type_node(&ctx->types,*type);
-            if (!container || (!xr_xir_type_is_struct(&ctx->types,*type) && !xr_xir_type_is_class(&ctx->types,*type))) {
-                *type = XR_XIR_UNIT; return true;
-            }
-            const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[container->nominal.declaration];
-            SourceSubstitution substitution = {container->nominal.arguments,container->nominal.argument_count};
-            *type = XR_XIR_UNIT;
-            const char *name = step->as.member_access.name;
-            for (uint32_t f = 0; f < decl->field_count; ++f) {
-                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-                const XrXirNominalField *field = &decl->fields[f];
-                if (source_text_size(ctx, name) == field->name.length && source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) {
-                    if (!source_substitute(ctx,&substitution,field->type,0,type)) return false;
-                    break;
-                }
-            }
-        }
+        if (!source_path_step_type(ctx,steps[--count],type)) return false;
         if (*type == XR_XIR_UNIT) return true;
     }
     return true;

@@ -17,7 +17,7 @@ static const AccessSourceCase access_source_cases[] = {
     {"class_access_worker_return_formal.xr",41,false,false},
     {"class_access_worker_array_cow.xr",4240,false,false},
     {"class_access_worker_carrier_unknown.xr",0,true,false},
-    {"class_access_same_owner.xr",0,false,true},
+    {"class_access_same_owner.xr",41,false,false},
     {"class_access_worker_module_alias.xr",0,true,false},
     {"class_access_worker_ref_array.xr",42853,false,false}};
 enum { ACCESS_SOURCE_CASE_COUNT=sizeof(access_source_cases)/sizeof(access_source_cases[0]) };

@@ -3159,6 +3159,19 @@ if(BUILD_TESTS)
         TIMEOUT 600
     )
 
+    # Exclusive ref places of one call: path overlap is decided by `check`.
+    add_test(
+        NAME ref_overlap_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_ref_overlap_tests.py
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ref_overlap_cli PROPERTIES
+        LABELS "cli;frontend;negative"
+        TIMEOUT 120
+    )
+
     add_test(
         NAME resume_chunk_shape_cli
         COMMAND ${XRAY_PYTHON}

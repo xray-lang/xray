@@ -1,0 +1,19 @@
+// Different roots may name one class object, but different fields of it are disjoint.
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    left += 1
+    right += 1
+    return left + right
+}
+final class Holder {
+    left: i64
+    right: i64
+    init() { this.left = 0; this.right = 0 }
+    collide(alias: Holder) -> i64 { return inner(ref this.left, ref alias.right) }
+}
+fn pair(a: Holder, b: Holder) -> i64 { return inner(ref a.left, ref b.right) }
+fn main() {
+    const h = Holder()
+    print(pair(h, h))
+    print(h.collide(h))
+}
+main()

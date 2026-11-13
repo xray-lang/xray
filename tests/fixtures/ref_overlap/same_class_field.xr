@@ -1,0 +1,16 @@
+// One field of one class object twice overlaps.
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    left += 1
+    right += 1
+    return left + right
+}
+final class Holder {
+    left: i64
+    right: i64
+    init() { this.left = 40; this.right = 90 }
+}
+fn main() {
+    const value = Holder()
+    print(inner(ref value.left, ref value.left))
+}
+main()

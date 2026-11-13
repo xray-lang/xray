@@ -1,0 +1,14 @@
+// A ref receiver and a ref argument naming the same binding overlap.
+struct Box {
+    value: i64
+    ref collide(other: ref Box) -> i64 {
+        this.value += 1
+        other.value += 1
+        return this.value
+    }
+}
+fn main() {
+    var storage = Box{value: 0}
+    print(storage.collide(ref storage))
+}
+main()

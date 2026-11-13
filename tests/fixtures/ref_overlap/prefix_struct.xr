@@ -1,0 +1,14 @@
+// A whole struct and one of its fields overlap: one path is a prefix of the other.
+struct Pair {
+    a: i64
+    b: i64
+}
+fn touch(field: ref i64, whole: ref Pair) {
+    field = 1
+    whole = Pair{a: 2, b: 3}
+}
+fn main() {
+    var p = Pair{a: 0, b: 0}
+    touch(ref p.a, ref p)
+}
+main()

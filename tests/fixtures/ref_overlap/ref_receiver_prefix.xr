@@ -1,0 +1,13 @@
+// A ref receiver contains a ref argument that selects one of its fields.
+struct Box {
+    value: i64
+    ref absorb(other: ref i64) {
+        this.value = this.value + other
+        other = 0
+    }
+}
+fn main() {
+    var b = Box{value: 1}
+    b.absorb(ref b.value)
+}
+main()

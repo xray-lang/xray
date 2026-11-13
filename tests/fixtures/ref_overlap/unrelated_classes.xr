@@ -1,0 +1,19 @@
+// Objects of unrelated classes are never one object, even with a same-named field.
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    left += 1
+    right += 1
+    return left + right
+}
+final class Meter {
+    value: i64
+    init() { this.value = 1 }
+}
+final class Gauge {
+    value: i64
+    init() { this.value = 2 }
+}
+fn read(m: Meter, g: Gauge) -> i64 { return inner(ref m.value, ref g.value) }
+fn main() {
+    print(read(Meter(), Gauge()))
+}
+main()

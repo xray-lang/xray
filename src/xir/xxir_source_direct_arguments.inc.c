@@ -17,6 +17,8 @@ typedef struct SourceDirectRequest {
     const SourceValue *receiver;
     SourceExpectedType expected_result;
     bool fixed_generic_values;
+    /* The place syntax of a ref receiver, NULL for a value receiver. */
+    AstNode *reference_receiver;
 } SourceDirectRequest;
 typedef struct SourceDirectArguments {
     SourceSubstitution substitution;
@@ -30,6 +32,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     const SourceDirectRequest *request, SourceDirectArguments *output) {
     *output = (SourceDirectArguments){0};
     SourceCallSyntax syntax;if (!source_call_syntax(ctx,node,&syntax)) return false;
+    syntax.reference_receiver=request->reference_receiver;
     const SourceCallSyntax *call=&syntax;
     uint32_t index = request->function, offset = request->receiver ? 1 : 0;
     XrXirFunction function = ctx->functions[index];

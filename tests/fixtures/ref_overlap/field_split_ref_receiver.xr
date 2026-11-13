@@ -1,0 +1,20 @@
+// A ref receiver and a ref argument that split at different fields are disjoint.
+struct Box {
+    value: i64
+    ref absorb(other: ref i64) {
+        this.value = this.value + other
+        other = 0
+    }
+}
+struct Two {
+    left: Box
+    right: Box
+}
+fn main() {
+    var t = Two{left: Box{value: 1}, right: Box{value: 2}}
+    t.left.absorb(ref t.right.value)
+    var b = Box{value: 3}
+    var n = 4
+    b.absorb(ref n)
+}
+main()

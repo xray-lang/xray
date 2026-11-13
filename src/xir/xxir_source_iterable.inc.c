@@ -53,7 +53,7 @@ static bool source_iteration_factory(SourceContext *ctx,AstNode *node,
             xr_xir_cell_element(&ctx->types,receiver.type) : receiver.type;
         SourceName *method=source_method_find(ctx,receiver_type,"iterator");
         if(!method) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"for-in requires an iterator method returning Iterator");
-        if(!source_method_call(ctx,call,receiver,method,(SourceExpectedType){0},iterator)) return false;
+        if(!source_method_call(ctx,call,receiver,NULL,method,(SourceExpectedType){0},iterator)) return false;
         if(xr_xir_type_is_cell(&ctx->types,receiver.type) &&
             !source_fact_push(ctx,source_ref_binding(ctx,node->as.for_in_stmt.collection),0)) return false;
     }

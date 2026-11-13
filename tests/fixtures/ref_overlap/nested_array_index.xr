@@ -1,0 +1,13 @@
+// Two refs to one nested array element overlap.
+fn appendAll(dst: ref Array<i64>, src: ref Array<i64>) {
+    var i = 0
+    while (i < len(src)) {
+        dst.push(src[i])
+        i = i + 1
+    }
+}
+fn main() {
+    var grid: Array<Array<i64>> = [[1], [2]]
+    appendAll(ref grid[0], ref grid[0])
+}
+main()

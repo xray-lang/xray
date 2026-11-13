@@ -111,8 +111,10 @@ static bool source_class_method_reference(SourceContext *ctx,AstNode *node,Sourc
         source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_CLASS_METHOD_REF,.type=signature,
             .args={receiver.id},.immediate=method->index},value);
 }
+/* `reference_receiver` is the receiver's place syntax when the method borrows
+ * it as a ref receiver, NULL when the receiver is an ordinary value. */
 static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue receiver,
-    SourceName *method, SourceExpectedType result_context, SourceValue *value) {
+    AstNode *reference_receiver, SourceName *method, SourceExpectedType result_context, SourceValue *value) {
     const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
     if (!identity) return false;
     if (identity->method_kind == XR_XIR_STATIC_METHOD)
@@ -121,7 +123,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         if(node->as.call_expr.type_arg_count)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"virtual class method requires a closed declaration");
         if(identity->member_access && ctx->identities[ctx->function].nominal_owner!=identity->nominal_owner)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method requires its declaration owner");
-        SourceDirectRequest direct={method->index,{0},&receiver,result_context,false};
+        SourceDirectRequest direct={method->index,{0},&receiver,result_context,false,reference_receiver};
         SourceDirectArguments prepared={0};SourceValue bound;
         if(!source_direct_arguments(ctx,node,&direct,&prepared)||prepared.receiver_count!=1||!prepared.count||
             !source_class_method_reference(ctx,node->as.call_expr.callee,prepared.values[0],method,&bound))return false;
@@ -149,7 +151,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         xr_xir_cell_element(&ctx->types,receiver.type) : receiver.type;
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types,receiver_type);
     SourceDirectRequest direct = {method->index,
-        {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context,false};
+        {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context,false,reference_receiver};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirOp kind=(identity->promises & XR_XIR_FUNCTION_GENERATOR) ? XR_XIR_GENERATOR_NEW : XR_XIR_CALL;
@@ -169,7 +171,7 @@ static bool source_ref_method_call(SourceContext *ctx, AstNode *node, AstNode *o
     if (!symbol) return source_fail(ctx,object,XR_XIR_BAD_TYPE,"ref receiver does not name a binding");
     SourceValue receiver;
     if (!source_reference_place(ctx,object,&receiver)) return false;
-    return source_method_call(ctx,node,receiver,method,result_context,value) && source_fact_push(ctx,symbol,0);
+    return source_method_call(ctx,node,receiver,object,method,result_context,value) && source_fact_push(ctx,symbol,0);
 }
 static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArguments *type_arguments,
     SourceExpectedType expected, SourceValue *value) {

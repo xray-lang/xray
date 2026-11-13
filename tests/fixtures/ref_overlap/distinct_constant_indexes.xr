@@ -1,0 +1,11 @@
+// An index never proves two places disjoint, even for different constants.
+fn bump(x: ref i64, y: ref i64) {
+    x = x + 1
+    y = y + 1
+}
+fn main() {
+    var xs = [1, 2]
+    bump(ref xs[0], ref xs[1])
+    print(xs[0])
+}
+main()

@@ -12,7 +12,8 @@
  */
 #include "xxir_type_inference.h"
 /* The parser's construction spelling is not declaration authority. Both
- * syntax forms expose their authentic argument lists to the same call worker. */
+ * syntax forms expose their authentic argument lists to the same call worker.
+ * A ref receiver's place joins the call's exclusive ref places. */
 typedef struct SourceCallSyntax {
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
@@ -20,6 +21,7 @@ typedef struct SourceCallSyntax {
     XrTypeRef **type_args;
     int type_arg_count;
     struct SourceCallExpansion *expanded;
+    AstNode *reference_receiver;
 } SourceCallSyntax;
 static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax *output) {
     *output=(SourceCallSyntax){0};
@@ -28,13 +30,13 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
         const CallExprNode *call=&node->as.call_expr;
         if (call->default_arg_count)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call arity or type arguments are not admitted");
-        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count,NULL};
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count,NULL,NULL};
     } else if (node->type==AST_NEW_EXPR && !node->as.new_expr.is_type_namespace) {
         const NewExprNode *call=&node->as.new_expr;
-        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count,NULL};
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,call->type_args,call->type_arg_count,NULL,NULL};
     } else if(node->type==AST_SUPER_CALL && !node->as.super_call.method_name) {
         const SuperCallNode *call=&node->as.super_call;
-        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,NULL,0,NULL};
+        *output=(SourceCallSyntax){call->arguments,call->arg_accesses,call->arg_count,NULL,0,NULL,NULL};
     } else return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"direct call requires its authentic syntax");
     if (output->arg_count<0 || output->arg_count>65536 || output->type_arg_count<0 ||
         output->type_arg_count>65536 || (output->arg_count && !output->arguments) ||
@@ -228,7 +230,8 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
     return true;
 }
 /* A ref argument transports the binding's stable Cell owner. The common
- * call admission establishes actual exclusive access after argument preparation. */
+ * call admission establishes actual exclusive access after argument preparation;
+ * its place must not overlap the ref receiver or any earlier ref argument. */
 static bool source_reference_argument_syntax(SourceContext *ctx, uint32_t index,
     const bool *references, const SourceReferencePlan *plan,const SourceCallSyntax *call,SourceValue *value) {
     AstNode *argument=source_call_argument_syntax(call,index);
@@ -238,12 +241,11 @@ static bool source_reference_argument_syntax(SourceContext *ctx, uint32_t index,
     SourceName *symbol=source_ref_binding(ctx,argument);
     if (!symbol) return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument does not name a binding");
     if(!source_hir_reference(ctx,argument,symbol,root!=argument,"ref argument requires a mutable stored binding"))return false;
+    if (call->reference_receiver && !source_reference_disjoint(ctx,call->reference_receiver,argument)) return false;
     for (uint32_t earlier=0;earlier<index;++earlier) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        AstNode *previous=source_call_argument_syntax(call,earlier);
-        if (argument->type==AST_VARIABLE && references[earlier] && previous->type==AST_VARIABLE &&
-            visible_name(ctx,previous->as.variable.name)==symbol)
-            return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref arguments of one call must not alias");
+        if (references[earlier] &&
+            !source_reference_disjoint(ctx,source_call_argument_syntax(call,earlier),argument)) return false;
     }
     XrNameSpan marker = root->type == AST_THIS_EXPR ? root->as.this_expr.access_marker_span :
         root->as.variable.access_marker_span;

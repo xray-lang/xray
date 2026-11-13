@@ -1,3 +1,4 @@
+// Computed index selectors never prove two elements of one array disjoint.
 var root: Array<i64> = [0, 0]
 var bodies: i64 = 0
 var picks: i64 = 0

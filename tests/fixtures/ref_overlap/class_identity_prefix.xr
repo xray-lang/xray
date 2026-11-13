@@ -1,0 +1,19 @@
+// A class field and a field inside it overlap when the two roots are one object.
+struct Pair {
+    x: i64
+    y: i64
+}
+final class Outer {
+    pair: Pair
+    init() { this.pair = Pair{x: 1, y: 2} }
+}
+fn touch(slot: ref Pair, n: ref i64) {
+    n = 3
+    slot = Pair{x: 4, y: 5}
+}
+fn run(a: Outer, b: Outer) { touch(ref a.pair, ref b.pair.x) }
+fn main() {
+    const o = Outer()
+    run(o, o)
+}
+main()

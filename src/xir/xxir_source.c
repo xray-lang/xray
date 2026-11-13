@@ -1181,6 +1181,7 @@ static bool source_reference_place(SourceContext *ctx, AstNode *node, SourceValu
 static bool source_reference_place_planned(SourceContext *ctx, AstNode *node,
     const SourceReferencePlan *plan, SourceValue *cell);
 static bool source_reference_effects(SourceContext *ctx, AstNode *node, SourceReferencePlan **output);
+static bool source_reference_disjoint(SourceContext *ctx, AstNode *earlier, AstNode *later);
 #include "xxir_source_flow.inc.c"
 static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
     XrXirDeclarationContext callee, SourceSubstitution substitution) {
@@ -1277,6 +1278,7 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
 #include "xxir_source_path_prelude.inc.c"
 #include "xxir_source_record.inc.c"
 #include "xxir_source_path.inc.c"
+#include "xxir_source_ref_overlap.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal) {
     if (ctx->diagnostic.status != XR_XIR_OK) return false;
@@ -1363,7 +1365,7 @@ static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue inpu
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
-    SourceDirectRequest direct={target->index,{0},NULL,result_context,false};
+    SourceDirectRequest direct={target->index,{0},NULL,result_context,false,NULL};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?
@@ -1528,7 +1530,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_requirement_call(ctx,node,receiver,result_context,value);
             if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
-                if (member_method) return source_method_call(ctx, node, receiver, member_method, result_context, value);
+                if (member_method) return source_method_call(ctx, node, receiver, NULL, member_method, result_context, value);
                 if (!source_struct_get_value(ctx, callee, receiver, &indirect) ||
                     !source_query_expression(ctx, callee, indirect.type) ||
                     !source_root_query_record(ctx,indirect.id,ctx->query.expression_count - 1,true,false)) return false;
@@ -1545,7 +1547,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     if (target && target->kind == SOURCE_FUNCTION && !selected.method)
         return source_function_call(ctx,node,binding,target,result_context,value);
     if (target && target->kind == SOURCE_FUNCTION) {
-        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context,false};
+        SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context,false,NULL};
         SourceDirectArguments prepared = {0};
         if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
         XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?

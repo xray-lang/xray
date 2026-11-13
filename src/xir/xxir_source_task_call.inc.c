@@ -143,7 +143,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     SourceDirectArguments prepared = {0};
     uint32_t function=target ? target->index : UINT32_MAX;
     if (target) {
-        SourceDirectRequest direct = {function, {0}, NULL, child, true};
+        SourceDirectRequest direct = {function, {0}, NULL, child, true, NULL};
         if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
     } else if (!source_go_value_arguments(ctx,call,&function,&prepared)) return false;
     XrXirType error;

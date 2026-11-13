@@ -1,0 +1,20 @@
+// A base and a derived class object may be one object.
+fn inner(left: ref i64, right: ref i64) -> i64 {
+    left += 1
+    right += 1
+    return left + right
+}
+class Base {
+    value: i64
+    init() { this.value = 1 }
+}
+class Derived extends Base {
+    extra: i64
+    init() { super(); this.extra = 2 }
+}
+fn run(d: Derived, b: Base) -> i64 { return inner(ref d.value, ref b.value) }
+fn main() {
+    const d = Derived()
+    print(run(d, d))
+}
+main()
