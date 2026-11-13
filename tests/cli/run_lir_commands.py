@@ -321,7 +321,7 @@ def main() -> None:
     for library in args.runtime_library:
         shutil.copy2(library, runtime / library.name)
     for header in ("xray_native_runtime.h", "xray_native_state.h", "xray_native_array.h", "xray_native_view.h", "xray_native_pod.h", "xray_native_string.h",
-                   "xray_string_cursor.h", "xray_export.h"):
+                   "xray_string_cursor.h", "xray_native_callable.h", "xray_export.h"):
         shutil.copy2(root / "include" / header, runtime / "include" / header)
     array_header = runtime / "include/xray_native_array.h"
     hidden_header = array_header.with_suffix(".hidden")
