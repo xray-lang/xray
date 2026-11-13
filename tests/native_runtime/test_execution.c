@@ -11,10 +11,12 @@
  *   dispatch. No standalone global is supplied to satisfy this executable.
  */
 #include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_callable.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_compile_domain.h"
 #include "xir/xxir_output.h"
+#include "xir/xxir_types.h"
 #include "vm/register/xrbc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,6 +100,7 @@ static void *native_string_realloc(void *pointer, size_t bytes) {
 #define xr_free(pointer) native_string_free(pointer)
 #define xr_realloc(pointer, bytes) native_string_realloc(pointer, bytes)
 #include "xir/xxir_value.c"
+#include "runtime/native/xnative_callable.c"
 #pragma pop_macro("xr_realloc")
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_calloc")
@@ -732,7 +735,10 @@ static void native_string_misuse_aborts(void) {
 }
 #endif
 
+#include "native_callable_cases.h"
+
 int main(void) {
+    native_callable_owners();
     native_f64_text_recovery();
     native_frame_cell_recovery();
     native_shared_strings();
