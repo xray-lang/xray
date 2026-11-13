@@ -75,7 +75,7 @@ workloads = {'fib': ('fib(32)', 'fib', 'fib(32)', 'xrl_f3'),
 selected_label, reference_function, reference_call, native_function = workloads[args.workload]
 report = {'schema': 1, 'kind': 'DIAGNOSTIC_ONLY', 'head': checkout['checkout_head'], 'product_ref': PRODUCT_REF, 'checkout_verification': checkout, 'alignment': args.alignment,
     'declared_plan': {'alignments': [args.alignment], 'workloads': [selected_label],
-        'samples_per_layout': 1 if args.l0 else 9, 'order': 'even native-phase,C-phase,native-normal,C-original; odd reverse'},
+        'samples_per_layout': 1 if args.l0 else 9, 'order': 'even native-phase,C-phase,native-normal,C-original,native-original; odd reverse'},
     'l0': args.l0, 'phase_order': ['root', 'work_or_callback', 'output'],
     'clock_scope': 'process CPU, user plus system; no clock overhead is subtracted',
     'interpretation': ['Native WORK encloses the callback and its nested OUTPUT. C WORK ends before OUTPUT.',
@@ -413,13 +413,12 @@ def execute():
         report['rebuilt_objects'][str(reference_obj)] = sha(reference_obj)
         reference_binary = link(stem + '-C-phase', [reference_obj, clock], False)
         engines[label] = {'native-phase': native, 'C-phase': reference_binary,
-            'native-normal': normal, 'C-original': original_c}
+            'native-normal': normal, 'C-original': original_c, 'native-original': original_native}
         report['products'][label] = {name: {'path': str(path), 'sha256': sha(path)}
             for name, path in engines[label].items()}
         comparison = {'original_native_object_unchanged': sha(original_obj) == report['origins'][label]['sha256']}
         if sys.platform == 'darwin':
             maps = {name: macho_functions(binary) for name, binary in engines[label].items()}
-            maps['native-original'] = macho_functions(original_native)
             comparison['functions'] = maps
             for engine, symbol in (('native-normal', '_' + native_function), ('native-phase', '_' + native_function),
                 ('C-phase', '_' + reference_function)):
