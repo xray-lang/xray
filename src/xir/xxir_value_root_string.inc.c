@@ -128,7 +128,10 @@ static void root_string_recycle(XirString *string) {
     XR_CHECK(private_bytes >= root->block_bytes, "a root ledger covers every unescaped block");
     atomic_store_explicit(&ledger->private_bytes, private_bytes - root->block_bytes, memory_order_relaxed);
     size_t index = root_block_class(root->block_bytes);
-    if (index < ROOT_CACHE_CLASSES && ledger->cached[index] < ROOT_CACHE_DEPTH) {
+    /* A class only grows while it is below the depth, so "not full" is "not
+     * equal". Sanitized builds keep no cache: the depth is zero, and an
+     * unsigned "below zero" test is a GCC type-limits error there. */
+    if (index < ROOT_CACHE_CLASSES && ledger->cached[index] != (uint32_t)ROOT_CACHE_DEPTH) {
         XirRootBlock *block = (XirRootBlock *)(void *)root;
         block->next = ledger->cache[index];
         ledger->cache[index] = block;
