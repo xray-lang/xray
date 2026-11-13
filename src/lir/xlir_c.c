@@ -49,7 +49,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, string_cursor;
     XrLirStateLayout state_layout;
 } LirC;
 
@@ -197,6 +197,7 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
+static bool c_string_literal(LirC *, uint32_t);
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
@@ -530,6 +531,13 @@ static bool c_string_literal(LirC *c, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
     return definition && definition->op == XR_LIR_STRING_LITERAL;
 }
+static void c_prepare_string_cursor(LirC *c) {
+    c->string_cursor = false;
+    const XrLirFunctionData *f = &c->request->module->functions[c->function.id - 1];
+    for (uint32_t b = 0; b < f->block_count && !c->string_cursor; ++b)
+        for (uint32_t i = 0; i < f->blocks[b].instruction_count && !c->string_cursor; ++i)
+            c->string_cursor = c_string_cursor_append(c, &f->blocks[b].instructions[i].view);
+}
 static void c_string_owner(LirC *c, uint32_t id) {
     if (c_string_literal(c, id)) {
         c_text(c, "xrt_string_retain(");
@@ -538,6 +546,8 @@ static void c_string_owner(LirC *c, uint32_t id) {
     } else c_value(c, id);
 }
 static void c_declarations(LirC *c) {
+    if (c->string_cursor)
+        c_text(c, "    XrtStringAppendCursor xrl_append = {0};\n    (void)&xrl_append;\n");
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
             return;
@@ -650,6 +660,16 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
+    if (c->string_cursor) {
+        bool managed = false, retained = false;
+        for (uint32_t a = 0; a < edge->argument_count; ++a) {
+            XrLirType type = c_value_type(c, edge->arguments[a]);
+            managed |= type == XR_LIR_STRING || type == XR_LIR_ARRAY;
+            retained |= c_string_literal(c, edge->arguments[a]);
+        }
+        if (managed) c_text(c, retained ? "    xrt_string_append_cursor_close(&xrl_append);\n" :
+            "    xrt_string_append_cursor_flush(&xrl_append);\n");
+    }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
@@ -715,6 +735,14 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
+    /* Only nontrapping scalar work and selected-edge moves preserve the
+     * exclusive borrow. Every other operation commits before it can observe,
+     * alias, replace or retire the current owner. */
+    bool scalar = v->op >= XR_LIR_CONST && v->op <= XR_LIR_FCAST && !c_arithmetic_point(c, v);
+    bool literal_drop = v->op == XR_LIR_STRING_DROP && c_string_literal(c, v->operands[0]);
+    if (c->string_cursor && !scalar && v->op != XR_LIR_BR && v->op != XR_LIR_CONDBR &&
+        v->op != XR_LIR_STRING_LITERAL && !literal_drop && !c_string_cursor_append(c, v))
+        c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT) {
         c_callable_instruction(c, v);
         return;
@@ -768,9 +796,12 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             xr_lir_literal_view(c->request->module, literal, &bytes, &length);
             /* The unique SSA home keeps this Root-pinned borrow for the call.
              * Materializing at first execution preserves empty-loop behavior. */
-            c_format(c, "    if (!v%" PRIu32 ")\n        v%" PRIu32
+            c_format(c, "    if (!v%" PRIu32 ") {\n", v->result);
+            if (c->string_cursor) c_text(c, "        xrt_string_append_cursor_close(&xrl_append);\n");
+            c_format(c, "        v%" PRIu32
                 " = xrt_string_literal((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
-                v->result, v->result, v->bits, length, string_source);
+                v->result, v->bits, length, string_source);
+            c_text(c, "    }\n");
             break;
         }
         case XR_LIR_STRING_F64:
@@ -1036,6 +1067,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
         c_prepare_divisors(c);
+        c_prepare_string_cursor(c);
         c_signature(c, true);
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);

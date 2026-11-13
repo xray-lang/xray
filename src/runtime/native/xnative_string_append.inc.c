@@ -100,6 +100,26 @@ XRAY_API XR_NOINLINE XrtString *xrt_string_append_owned(XrtString *current,
     return current;
 }
 
+XRAY_API XR_NOINLINE XrtString *xrt_string_append_cursor_refill(XrtStringAppendCursor *cursor,
+    XrtString *current, const XrtString *suffix, uint32_t source) {
+    if (!cursor) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    xrt_string_append_cursor_close(cursor);
+    *cursor = (XrtStringAppendCursor){0};
+    XrtString *result = xrt_string_append_owned(current, suffix, source);
+    XrtValueRoot *root = string_root(source);
+    XrtStringOwner *owner = owner_find(root, result);
+    XrtStringOwner *literal = owner_find(root, suffix);
+    if (owner && owner->count == 1 && !owner->pinned && literal && literal->pinned &&
+        xr_xir_root_string_append_cursor(root->domain, result, &cursor->cursor)) {
+        cursor->string = result;
+        cursor->suffix = suffix;
+        cursor->suffix_bytes = suffix->bytes;
+        cursor->suffix_length = suffix->length;
+        cursor->suffix_runes = suffix->runes;
+    }
+    return result;
+}
+
 static XrtString *string_ref_current(XrtStringRef reference, uint32_t source) {
     if (reference.cell) {
         if (reference.state.reference) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);

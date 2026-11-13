@@ -51,6 +51,8 @@ static bool c_array_move_pair(LirC *c, const XrLirInstructionView *v,
     bool read = v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY && next->op == XR_LIR_ARRAY_CELL_DROP;
     if (!create && !read) return false;
     if (!c_request_poll(c)) return true;
+    if (c->string_cursor)
+        c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
     if (c_located(&v->source)) ++c->location_cursor;
     /* The adjacent verified DROP consumes that actual owner. Transfer its one
      * canonical reference into or out of the Cell without creating a copy. */

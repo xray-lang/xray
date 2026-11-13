@@ -11,11 +11,19 @@
  */
 static void string_append_bytes_in_place(XirString *string, const char *bytes,
     size_t length, size_t runes) {
-    if (length == 1) string->bytes[string->length] = *bytes;
-    else memmove(string->bytes + string->length, bytes, length);
-    string->length += length;
-    string->runes += runes;
-    string->bytes[string->length] = 0;
+    XrStringCursor cursor = {string->bytes, string->length, string->runes, string->capacity,
+        &string->length, &string->runes};
+    xr_string_cursor_append(&cursor, bytes, length, runes);
+    xr_string_cursor_commit(&cursor);
+}
+XR_FUNC bool xr_xir_root_string_append_cursor(XrXirDomain *domain, XirString *string,
+    XrStringCursor *output) {
+    XR_DCHECK(xr_xir_domain_current(domain), "the native Root retains its current domain");
+    if (!output || output->bytes || !domain->root || string->object.domain != domain ||
+        !xir_object_unique(&string->object)) return false;
+    *output = (XrStringCursor){string->bytes, string->length, string->runes, string->capacity,
+        &string->length, &string->runes};
+    return true;
 }
 XR_FUNC bool xr_xir_root_string_append_in_place(XrXirDomain *domain, XirString *string,
     const XirString *suffix) {

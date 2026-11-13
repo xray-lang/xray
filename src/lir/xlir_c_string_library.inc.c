@@ -6,11 +6,21 @@
  *
  * xlir_c_string_library.inc.c - String operations on actual native bindings
  */
+static bool c_string_cursor_append(LirC *c, const XrLirInstructionView *v) {
+    return xr_lir_string_role(c->request->module, v) == XR_LIR_STRING_OP_APPEND_OWNED &&
+        c_string_literal(c, v->operands[1]);
+}
 static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     uint32_t role = xr_lir_string_role(c->request->module, v);
+    bool cursor = c->string_cursor && c_string_cursor_append(c, v);
+    /* A literal receiver takes a fresh owner while evaluating the call. */
+    if (cursor && c_string_literal(c, v->operands[0]))
+        c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
     c_text(c, "    ");
     if (v->result) c_format(c, "v%" PRIu32 " = ", v->result);
-    c_format(c, "%s(", xr_lir_string_native_symbol((XrLirStringOperation)role));
+    c_format(c, "%s(", cursor ? "xrt_string_append_cursor" :
+        xr_lir_string_native_symbol((XrLirStringOperation)role));
+    if (cursor) c_text(c, "&xrl_append, ");
     if (role == XR_LIR_STRING_OP_APPEND_STATE)
         c_format(c, "xrt_string_ref_state(xrl_access%" PRIu32 ", UINT32_C(%" PRIu32 "))",
             v->operands[0], source);

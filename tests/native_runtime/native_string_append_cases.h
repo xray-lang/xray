@@ -98,7 +98,78 @@ static void native_string_append_root(void *opaque) {
     xrt_string_drop(&value);
     probe->completed = true;
 }
+static void native_string_cursor_cases(void *opaque) {
+    (void)opaque;
+    XrtStringAppendCursor cursor = {0};
+    XrtString *value = xrt_string_new("a", 1, 1);
+    const XrtString *suffix = xrt_string_literal("x", 1, 1);
+    value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+    CHECK(cursor.string == value && value->length == 2);
+    value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+    CHECK(value->length == 2 && cursor.cursor.length == 3);
+    xrt_string_append_cursor_flush(&cursor);
+    CHECK(value->length == 3 && cursor.string == value);
+    xrt_string_append_cursor_close(&cursor);
+    XrtString *saved = xrt_string_retain(value, 1);
+    value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+    CHECK(value != saved && cursor.string == value);
+    xrt_string_append_cursor_close(&cursor);
+    string_equals(saved, "axx", 3);
+    string_equals(value, "axxx", 4);
+    xrt_string_drop(&saved);
+    XrXirValue source = {XR_XIR_STRING, 0, (int64_t)(intptr_t)value}, external = {0};
+    OK(xr_xir_value_copy(&source, &external));
+    value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+    CHECK(value != (XrtString *)(intptr_t)external.payload);
+    xrt_string_append_cursor_close(&cursor);
+    string_equals((XrtString *)(intptr_t)external.payload, "axxx", 4);
+    string_equals(value, "axxxx", 5);
+    xr_xir_value_drop(&external);
+    XrtString *dynamic = xrt_string_new("y", 1, 1);
+    value = xrt_string_append_cursor(&cursor, value, dynamic, 1);
+    CHECK(!cursor.string);
+    string_equals(value, "axxxxy", 6);
+    xrt_string_drop(&dynamic);
+    xrt_string_drop(&value);
+    value = xrt_string_retain(suffix, 1);
+    value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+    CHECK(value != suffix && cursor.string == value);
+    xrt_string_append_cursor_close(&cursor);
+    string_equals(value, "xx", 2);
+    string_equals((XrtString *)suffix, "x", 1);
+    XrXirDomain *foreign = NULL;
+    OK(xr_xir_root_domain_new(UINT64_MAX, &foreign));
+    XrStringCursor rejected = {0};
+    CHECK(!xr_xir_root_string_append_cursor(foreign, value, &rejected) && !rejected.bytes);
+    xr_xir_root_domain_release(foreign);
+    xrt_string_drop(&value);
+}
+static void native_string_cursor_growth(void *opaque) {
+    bool *completed = opaque;
+    XrtStringAppendCursor cursor = {0};
+    XrtString *value = xrt_string_new("a", 1, 1);
+    const XrtString *suffix = xrt_string_literal("\xc3\xa9\0", 3, 1);
+    char expected[1 + 256 * 3];
+    expected[0] = 'a';
+    for (size_t i = 0; i < 256; ++i) {
+        value = xrt_string_append_cursor(&cursor, value, suffix, 1);
+        CHECK(cursor.string == value);
+        xrt_string_append_cursor_flush(&cursor);
+        memcpy(expected + 1 + i * 3, "\xc3\xa9\0", 3);
+    }
+    xrt_string_append_cursor_close(&cursor);
+    string_equals(value, expected, sizeof(expected));
+    CHECK(xrt_string_length(value, 1) == 513);
+    xrt_string_drop(&value);
+    *completed = true;
+}
 static void native_string_append_cases(XrtLocationOwner *locations) {
+    XrtExecutionFailure cursor_failure = {0};
+    bool cursor_completed = false;
+    CHECK(xrt_run_embedded(locations, &cursor_failure, native_string_cursor_cases,
+        NULL) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_run_embedded(locations, &cursor_failure, native_string_cursor_growth,
+        &cursor_completed) == XRT_EXECUTION_COMPLETED && cursor_completed);
     for (unsigned scenario = 0; scenario != 3; ++scenario) {
         XrtExecutionFailure failure = {0};
         CHECK(xrt_run_embedded(locations, &failure, native_string_append_in_capacity,
@@ -139,5 +210,25 @@ static void native_string_append_failure_sweep(XrtLocationOwner *locations) {
         native_array_fail_at = SIZE_MAX;
         printf("String append aliases=%u allocation failure points: %zu\n", aliases, points);
     }
+    XrtExecutionFailure failure = {0};
+    bool completed = false;
+    native_array_calls = 0;
+    CHECK(xrt_run_embedded(locations, &failure, native_string_cursor_growth,
+        &completed) == XRT_EXECUTION_COMPLETED && completed);
+    size_t points = native_array_calls;
+    CHECK(points && !native_array_live && !native_array_bytes);
+    for (size_t point = 0; point < points; ++point) {
+        completed = false;
+        native_array_calls = 0; native_array_fail_at = point;
+        native_array_injected = false;
+        XrtValueRoot root = {0};
+        CHECK(xrt_run_embedded_owned(locations, &failure, native_string_cursor_growth,
+            &completed, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(native_array_injected && !completed && failure.kind == XRT_FAILURE_VALUE &&
+            failure.detail.value.status == XR_XIR_VALUE_OOM && xrt_value_root_empty(&root));
+        CHECK(!native_array_live && !native_array_bytes);
+    }
+    native_array_fail_at = SIZE_MAX;
+    printf("String cursor allocation failure points: %zu\n", points);
 }
 #endif

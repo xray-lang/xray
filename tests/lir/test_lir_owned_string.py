@@ -225,20 +225,29 @@ def main():
                 observation.mkdir()
                 observer = folder / 'literal-cache-observer.c'
                 observer.write_text('#include "xray_native_runtime.h"\n'
-                    'unsigned observed_literals;\n'
+                    'struct XrtStringAppendCursor;\n'
+                    'extern XrtString *xrt_string_append_cursor_refill(struct XrtStringAppendCursor *,\n'
+                    ' XrtString *,const XrtString *,uint32_t);\n'
+                    'unsigned observed_literals,observed_refills;\n'
                     'static XrtString *observe_literal(const char *bytes,size_t length,uint32_t source){\n'
                     ' ++observed_literals;return xrt_string_literal(bytes,length,source);}\n'
                     '#define xrt_string_literal(bytes,length,source) observe_literal((bytes),(length),(source))\n'
-                    f'#include "{generated.name}"\n', encoding='ascii')
+                    '#define xrt_string_append_cursor_refill observe_refill\n'
+                    f'#include "{generated.name}"\n'
+                    '#undef xrt_string_append_cursor_refill\n'
+                    'XrtString *observe_refill(XrtStringAppendCursor *cursor,XrtString *current,\n'
+                    ' const XrtString *suffix,uint32_t source){\n ++observed_refills;\n'
+                    ' return xrt_string_append_cursor_refill(cursor,current,suffix,source);}\n', encoding='ascii')
                 observed_main = folder / 'literal-cache-main.c'
                 observed_main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
-                    'extern unsigned observed_literals;\nint main(void){\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=5u)return 1;\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=10u)return 2;\nreturn 0;}\n', encoding='ascii')
+                    'extern unsigned observed_literals,observed_refills;\nint main(void){\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=5u || observed_refills!=2u)return 1;\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=10u || observed_refills!=4u)return 2;\nreturn 0;}\n', encoding='ascii')
                 for optimization in ('Od', 'O2'):
                     compile_run(observation, observer, observed_main, optimization, expected * 2)
                 records.append({'case': name, 'result': 'FIRST_USE_PER_ACTIVATION',
-                                'entryRuns': 2, 'literalCalls': 10, 'zeroIterationBodyCalls': 0})
+                                'entryRuns': 2, 'literalCalls': 10, 'cursorRefills': 4,
+                                'zeroIterationBodyCalls': 0})
             if name in frame_drops:
                 frame_observer(folder,generated,expected,frame_drops[name])
                 sink=folder/'standalone-read-only-output';sink.write_bytes(b'')

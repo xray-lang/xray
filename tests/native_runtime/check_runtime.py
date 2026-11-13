@@ -35,6 +35,7 @@ def header_clients(build, logs, libraries):
     shutil.copyfile(source / 'include/xray_native_view.h', prefix / 'include/xray_native_view.h')
     shutil.copyfile(source / 'include/xray_native_pod.h', prefix / 'include/xray_native_pod.h')
     shutil.copyfile(source / 'include/xray_native_string.h', prefix / 'include/xray_native_string.h')
+    shutil.copyfile(source / 'include/xray_string_cursor.h', prefix / 'include/xray_string_cursor.h')
     shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
     for library in libraries:
         shutil.copyfile(library, prefix / 'lib' / library.name)

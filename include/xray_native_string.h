@@ -9,6 +9,7 @@
 #ifndef XRAY_NATIVE_STRING_H
 #define XRAY_NATIVE_STRING_H
 #include "xray_native_state.h"
+#include "xray_string_cursor.h"
 
 /* A borrow keeps the caller's local cell or actual module slot. Its lifetime
  * ends with the synchronous call and it never owns the referenced String. */
@@ -16,6 +17,15 @@ typedef struct XrtStringRef {
     XrtString **cell;
     XrtModuleAccess state;
 } XrtStringRef;
+/* Compiler-local borrow. Generated code closes it before every observation or
+ * runtime interaction, and commits before selected-edge owner transfers. */
+typedef struct XrtStringAppendCursor {
+    XrtString *string;
+    const XrtString *suffix;
+    XrStringCursor cursor;
+    const char *suffix_bytes;
+    size_t suffix_length, suffix_runes;
+} XrtStringAppendCursor;
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,7 +38,27 @@ XRAY_API void xrt_string_ref_append(XrtStringRef, const XrtString *, uint32_t so
  * guest aliases retain their old value; failed preparation keeps the binding. */
 XRAY_API void xrt_string_cell_append(XrtString **, const XrtString *, uint32_t source);
 XRAY_API XrtString *xrt_string_append_owned(XrtString *, const XrtString *, uint32_t source);
+XRAY_API XrtString *xrt_string_append_cursor_refill(XrtStringAppendCursor *, XrtString *,
+    const XrtString *, uint32_t source);
 #ifdef __cplusplus
 }
 #endif
+static inline void xrt_string_append_cursor_flush(XrtStringAppendCursor *cursor) {
+    if (cursor->string) xr_string_cursor_commit(&cursor->cursor);
+}
+static inline void xrt_string_append_cursor_close(XrtStringAppendCursor *cursor) {
+    xrt_string_append_cursor_flush(cursor);
+    cursor->string = NULL;
+}
+static inline XrtString *xrt_string_append_cursor(XrtStringAppendCursor *cursor,
+    XrtString *current, const XrtString *suffix, uint32_t source) {
+    if (cursor->string && cursor->string == current && cursor->suffix == suffix &&
+        cursor->suffix_length < SIZE_MAX - cursor->cursor.length &&
+        cursor->cursor.length + cursor->suffix_length + 1 <= cursor->cursor.capacity) {
+        xr_string_cursor_append(&cursor->cursor, cursor->suffix_bytes,
+            cursor->suffix_length, cursor->suffix_runes);
+        return current;
+    }
+    return xrt_string_append_cursor_refill(cursor, current, suffix, source);
+}
 #endif // XRAY_NATIVE_STRING_H
