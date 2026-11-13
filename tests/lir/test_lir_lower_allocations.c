@@ -331,7 +331,22 @@ static void range_lower_failures(void) {
     printf("Range check Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void tuple_lower_failures(void) {
+    SourceFixture fixture = source_fixture("fn pair(a:i64,b:i64)->(i64,i64){return(a,b)}\n"
+        "var(a,b)=pair(40,2)\nprint(a+b)\nconst(c,d)=pair(17,25)\nprint(c+d)\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Tuple group Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 int main(void) {
+    tuple_lower_failures();
     range_lower_failures();
     callable_lower_failures();
     nullable_lower_failures();

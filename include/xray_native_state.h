@@ -89,8 +89,9 @@ XRAY_API XrtModuleStatus xrt_module_publish(XrtModuleRef *);
 XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *, uint32_t slot, const void *value);
 /* Validate the complete contiguous I64 group before publishing any slot.
  * Mutable members must already be constructed by this initializer. The call
- * prepares all scalar payloads in budgeted scratch before committing any
- * publication. Failure preserves the group's prior construction state. */
+ * preserves their current payloads, including writes before publication.
+ * Immutable members receive Tuple fields through budgeted scratch before
+ * the whole publication commits. Failure preserves prior construction. */
 XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *, uint32_t first,
     uint32_t count, const int64_t *values);
 XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *, uint32_t slot, XrtModuleRef **);

@@ -128,6 +128,11 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
                 if (status != XR_LIR_OK) REQUIRE(cell == XR_LIR_I64);
             }
         }
+        if (status == XR_LIR_OK) {
+            XrLirType tuple = XR_LIR_I64;
+            status = xr_lir_tuple_i64_type(*module, n, &tuple);
+            if (status != XR_LIR_OK) REQUIRE(tuple == XR_LIR_I64);
+        }
     }
     return status;
 }

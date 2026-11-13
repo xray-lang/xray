@@ -455,23 +455,27 @@ XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state,
         count > state->layout->view.slot_count - first) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint32_t module = state->layout->view.slots[first].module;
     if (state->modules[module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    bool initialize = false;
     for (uint32_t n = 0; n < count; ++n) {
         uint32_t slot = first + n;
         const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
         uint8_t required = (spec->flags & XRT_MODULE_SLOT_MUTABLE) ? SLOT_CONSTRUCTED : 0;
         if (spec->module != module || module_slot_type(state, slot)->kind != XRT_MODULE_I64 ||
             state->flags[slot] != required) return XR_XIR_VALUE_BAD_ARGUMENT;
+        initialize |= !(spec->flags & XRT_MODULE_SLOT_MUTABLE);
     }
-    size_t bytes;
-    if (sizeof(*values) > SIZE_MAX / count) return XR_XIR_VALUE_OVERFLOW;
-    bytes = (size_t)count * sizeof(*values);
-    if (bytes > state->byte_limit - state->bytes) return XR_XIR_VALUE_MEMORY_LIMIT;
-    int64_t *prepared = xr_malloc(bytes);
-    if (!prepared) return XR_XIR_VALUE_OOM;
-    memcpy(prepared, values, bytes);
-    for (uint32_t n = 0; n < count; ++n)
-        memcpy(module_payload(state, first + n), &prepared[n], sizeof(prepared[n]));
-    xr_free(prepared);
+    if (initialize) {
+        if (sizeof(*values) > SIZE_MAX / count) return XR_XIR_VALUE_OVERFLOW;
+        size_t bytes = (size_t)count * sizeof(*values);
+        if (bytes > state->byte_limit - state->bytes) return XR_XIR_VALUE_MEMORY_LIMIT;
+        int64_t *prepared = xr_malloc(bytes);
+        if (!prepared) return XR_XIR_VALUE_OOM;
+        memcpy(prepared, values, bytes);
+        for (uint32_t n = 0; n < count; ++n)
+            if (!(state->layout->view.slots[first + n].flags & XRT_MODULE_SLOT_MUTABLE))
+                memcpy(module_payload(state, first + n), &prepared[n], sizeof(prepared[n]));
+        xr_free(prepared);
+    }
     for (uint32_t n = 0; n < count; ++n) {
         state->flags[first + n] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
         state->publication[state->publication_count++] = first + n;

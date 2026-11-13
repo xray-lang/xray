@@ -5,27 +5,7 @@
  *
  * lir_tuple_cases.h - Exact I64 tuples survive owner retirement and raw admission
  */
-static XrLirModule *tuple_fixture(void) {
-    CArrayFixture c = {0};
-    OK(xr_lir_module_create(NULL, &c.module));
-    XrLirType tuple = 0;
-    OK(xr_lir_tuple_i64_type(c.module, 2, &tuple));
-    XrLirFunction root = {0};
-    XrLirFunctionSpec spec = {.name="tuple_root", .name_length=10, .result=XR_LIR_I64};
-    OK(xr_lir_declare_function(c.module, &spec, &root));
-    OK(xr_lir_define_function(c.module, root));
-    XrLirBlock block = {0};
-    OK(xr_lir_add_block(c.module, root, NULL, 0, &block));
-    OK(xr_lir_set_entry(c.module, root, block));
-    XrLirValue values[] = {ca_constant(&c, block, -17), ca_constant(&c, block, 42)};
-    XrLirValue value = ca_value(&c, block, XR_LIR_TUPLE_NEW, tuple, values, 2), field = {0};
-    XrLirInstruction get = {.op=XR_LIR_TUPLE_FIELD, .type=XR_LIR_I64,
-        .operands=&value, .operand_count=1, .bits=1};
-    OK(xr_lir_emit_value(c.module, block, &get, &field));
-    ca_return(&c, block, field);
-    OK(xr_lir_module_finish(c.module, NULL));
-    return c.module;
-}
+#include "lir_tuple_fixture.h"
 
 static void tuple_receiving_owners(void) {
     XrLirModule *source = tuple_fixture(), *copies[3] = {0};
@@ -108,6 +88,10 @@ static void tuple_group_admission(void) {
             .operands=args, .operand_count=2, .bits=n};
         OK(xr_lir_emit_value(c.module, block, &create, &refs[n]));
     }
+    XrLirValue write_args[] = {refs[0], ca_constant(&c, block, 99)};
+    XrLirInstruction write = {.op=XR_LIR_STATE_WRITE, .type=XR_LIR_UNIT,
+        .operands=write_args, .operand_count=2};
+    OK(xr_lir_emit_effect(c.module, block, &write));
     XrLirValue args[] = {state, value};
     XrLirInstruction publish = {.op=XR_LIR_STATE_GROUP_INITIALIZE, .type=XR_LIR_UNIT,
         .operands=args, .operand_count=2};
@@ -138,7 +122,7 @@ static void tuple_group_admission(void) {
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
     XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
     uint64_t bits = 0;
-    CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
+    CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 99);
     xr_rbc_outcome_free(&outcome);
     xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);

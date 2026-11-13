@@ -40,7 +40,7 @@ static void native_group_state(void) {
     CHECK(xrt_module_initialize_i64_group(state, 1, UINT32_MAX, values) == XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xrt_module_initialize_i64_group(state, 1, 0, values) == XR_XIR_VALUE_BAD_ARGUMENT);
     OK(xrt_module_initialize_i64_group(state, 1, 3, (const int64_t *)state->payload));
-    int64_t expected[] = {7, 7, 8, 0};
+    int64_t expected[] = {7, 8, 8, 9};
     CHECK(!memcmp(state->payload, expected, sizeof(expected)) && state->publication_count == 3);
     CHECK(xrt_module_initialize_i64_group(state, 1, 3, values) == XR_XIR_VALUE_BAD_ARGUMENT);
     OK(xrt_module_publish(initial[0]));
@@ -53,6 +53,8 @@ static void native_group_state(void) {
         if (n != 2) OK(xrt_module_construct(state, n, &old[n], &initial[n]));
     }
     OK(xrt_module_initialize_i64_group(state, 1, 3, values));
+    int64_t retried[] = {7, 8, 12, 9};
+    CHECK(!memcmp(state->payload, retried, sizeof(retried)));
     OK(xrt_module_publish(initial[0]));
     OK(xrt_module_ready(state, 0));
     xrt_module_state_drop(&state);

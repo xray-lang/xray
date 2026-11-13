@@ -1581,6 +1581,9 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &length, result));
     }
     if (op->op == XR_XIR_TUPLE_FIELD) {
+        if (op->type != XR_XIR_I64)
+            return lower_unsupported(c, "Tuple field has no admitted I64 physical result");
+        if (!lower_receive_type(c, xr_xir_operand_type(f->source, op->args[0]))) return false;
         if (!lower_value(f, op->args[0], &operands[0])) return false;
         XrLirInstruction field = {.op=XR_LIR_TUPLE_FIELD, .type=XR_LIR_I64,
             .operands=operands, .operand_count=1, .bits=(uint64_t)op->immediate, .source=lower_source(c)};
