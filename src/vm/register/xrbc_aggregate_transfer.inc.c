@@ -73,6 +73,17 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     if (access.operation == XR_RBC_FUNCTION_RETURN)
         return rbc_string_step(s, (XrRbcOperands){.op=access.count ? XR_RBC_RET : XR_RBC_RET0, .a=access.source});
     if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
+        if (access.destination) {
+            size_t home = s->function->aggregate_value_count + access.destination - 1;
+            if (s->aggregates[home]) return false;
+            for (uint32_t p = 0; p < access.count; ++p) {
+                XrRbcArrayLocation location = s->function->aggregate_operands[access.first + p];
+                uint8_t state = rbc_array_state(s, location);
+                if (rbc_array_location_kind(s->function, location) == XR_RBC_STATE ?
+                    state != RBC_STATE_BORROWED : state != RBC_BITS) return false;
+            }
+            s->aggregates[home] = 1;
+        }
         uint32_t r = access.result.index;
         if (s->state[r] != RBC_EMPTY && s->state[r] != RBC_FUNCTION) return false;
         s->state[r] = RBC_FUNCTION;

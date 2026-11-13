@@ -128,28 +128,52 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_callable_fixture.h"
 
 static void callable_compiler_failures(void) {
-    XrLirModule *module = NULL;
-    XrLirFunction root = {0};
-    callable_fixture(&module, &root);
-    XrRbcProgram *program = NULL;
-    attempts = 0; fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    size_t total = attempts;
-    xr_rbc_program_destroy(program); program = NULL;
-    CHECK(!live_allocations);
-    for (size_t point = 1; point <= total; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
-        CHECK(!program && !live_allocations && attempts >= point);
+    for (unsigned capture = 0; capture < 2; ++capture) {
+        XrLirModule *module = NULL;
+        XrLirFunction root = {0};
+        callable_fixture_capture(&module, &root, capture != 0);
+        XrRbcProgram *program = NULL;
+        attempts = 0; fail_at = SIZE_MAX;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+        size_t total = attempts;
+        xr_rbc_program_destroy(program); program = NULL;
+        CHECK(!live_allocations);
+        for (size_t point = 1; point <= total; ++point) {
+            attempts = 0; fail_at = point;
+            CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+            CHECK(!program && !live_allocations && attempts >= point);
+        }
+        fail_at = SIZE_MAX;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+        xr_lir_module_destroy(module);
+        uint64_t result = 0;
+        if (capture) {
+            XrRbcFunction *functions = (XrRbcFunction *)xr_rbc_program_view(program)->functions;
+            uint32_t callee = functions[0].environments[0].callee;
+            XrRbcFunction saved = functions[callee];
+            XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX] = {0};
+            functions[callee].register_count = XR_RBC_REGISTER_COUNT_MAX;
+            functions[callee].register_kinds = kinds;
+            functions[callee].register_kind_count = XR_RBC_REGISTER_COUNT_MAX;
+            size_t retained = live_allocations;
+            attempts = 0;
+            CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
+            size_t runtime = attempts;
+            CHECK(live_allocations == retained);
+            for (size_t point = 1; point <= runtime; ++point) {
+                attempts = 0; fail_at = point;
+                CHECK(execute(program, NULL, 0, &result) == XR_RBC_OUT_OF_MEMORY);
+                CHECK(live_allocations == retained);
+            }
+            fail_at = SIZE_MAX;
+            functions[callee] = saved;
+            printf("Frame callable relocating runtime failure points: %zu\n", runtime);
+        }
+        CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
+        xr_rbc_program_destroy(program);
+        CHECK(!live_allocations);
+        printf("Callable bytecode compiler failure points: %zu\n", total);
     }
-    fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    xr_lir_module_destroy(module);
-    uint64_t result = 0;
-    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
-    xr_rbc_program_destroy(program);
-    CHECK(!live_allocations);
-    printf("Callable bytecode compiler failure points: %zu\n", total);
 }
 
 static void view_compiler_failures(void) {

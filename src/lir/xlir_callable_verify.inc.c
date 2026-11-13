@@ -30,7 +30,7 @@ XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
         XrLirCallableType signature, target_signature;
-        if (v->bits || !v->callee || v->callee > m->function_count ||
+        if (v->bits > XR_LIR_CLOSURE_OWNED || !v->callee || v->callee > m->function_count ||
             xr_lir_callable_type_view(m, v->type, &signature) != XR_LIR_OK) return false;
         const XrLirFunctionData *target = &m->functions[v->callee - 1];
         XrLirClosureTarget closure = target->closure;

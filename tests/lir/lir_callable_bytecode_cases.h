@@ -81,3 +81,64 @@ static void callable_narrow_argument(const XrRbcProgram *program) {
     xr_rbc_execution_free(&execution);
     xr_free(code);
 }
+
+static void callable_frame_receiving(const XrRbcProgram *program) {
+    const XrRbcModule *original = xr_rbc_program_view(program);
+    const XrRbcFunction *root = &original->functions[0];
+    CHECK(root->environment_count == 1 && root->environment_size == 8);
+    XrRbcEnvironment environment = root->environments[0];
+    uint32_t callee = environment.callee, producer = environment.producer;
+    XrRbcFunction functions[3];
+    XrRbcAggregateAccess *accesses = xr_malloc(root->aggregate_access_count * sizeof(*accesses));
+    XrRbcArrayLocation *operands = xr_malloc(root->aggregate_operand_count * sizeof(*operands));
+    uint32_t *code = xr_malloc((root->code_count + 1) * sizeof(*code));
+    CHECK(accesses && operands && code && callee < 3);
+    for (unsigned scenario = 0; scenario < 11; ++scenario) {
+        XrRbcModule module = *original;
+        memcpy(functions, original->functions, sizeof(functions));
+        memcpy(accesses, root->aggregate_accesses, root->aggregate_access_count * sizeof(*accesses));
+        memcpy(operands, root->aggregate_operands, root->aggregate_operand_count * sizeof(*operands));
+        memcpy(code, root->code, root->code_count * sizeof(*code));
+        environment = root->environments[0];
+        XrRbcCallableValue capture = functions[callee].captures[0];
+        functions[callee].captures = &capture;
+        functions[0].environments = &environment;
+        functions[0].aggregate_accesses = accesses;
+        functions[0].aggregate_operands = operands;
+        module.functions = functions;
+        if (scenario == 0) functions[callee].captures = NULL;
+        if (scenario == 1) functions[callee].capture_count = functions[callee].parameter_count + 1;
+        if (scenario == 2) capture.kind = XR_RBC_CALLABLE_REFERENCE;
+        if (scenario == 3) functions[0].environment_size = 16;
+        if (scenario == 4) environment.offset = 1;
+        if (scenario == 5) environment.producer = (uint32_t)root->aggregate_access_count;
+        if (scenario == 6) accesses[producer].destination = 0;
+        if (scenario == 7) accesses[producer].count = 0;
+        if (scenario == 8) operands[accesses[producer].first] = accesses[producer].result;
+        if (scenario >= 9) {
+            uint32_t reference = 0;
+            size_t reference_pc = 0;
+            for (size_t pc = 0; pc < root->code_count; ++pc)
+                if ((code[pc] & 255) == XR_RBC_AGGREGATE_ACCESS && (code[pc] >> 16) == producer) {
+                    reference = code[pc];
+                    reference_pc = pc;
+                }
+            CHECK(reference);
+            if (scenario == 9) {
+                code[root->code_count] = code[root->code_count - 1];
+                code[root->code_count - 1] = reference;
+                functions[0].code_count += 1;
+            } else CHECK(xr_rbc_jump(&code[root->code_count - 1], root->code_count - 1,
+                reference_pc, root->code_count));
+            functions[0].code = code;
+            functions[0].source_ids = NULL;
+            functions[0].source_id_count = 0;
+        }
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID);
+        CHECK(!execution);
+    }
+    xr_free(code);
+    xr_free(operands);
+    xr_free(accesses);
+}

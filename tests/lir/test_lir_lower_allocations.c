@@ -274,17 +274,24 @@ static void nullable_lower_failures(void) {
 }
 
 static void callable_lower_failures(void) {
-    SourceFixture fixture = source_fixture("fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
-        "print(apply(fn(x:i64)->i64{return x+2},40))\n");
-    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
-    size_t total = attempts;
-    CHECK(total > 10);
-    for (size_t point = 0; point < total; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    const char *programs[] = {
+        "fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\nprint(apply(fn(x:i64)->i64{return x+2},40))\n",
+        "fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
+        "fn answer(seed:i64)->i64{const cb=fn(x:i64)->i64{return seed+x}\nreturn apply(cb,2)}\n"
+        "var state=40\nfn leaf(x:i64)->i64{return state+x}\n"
+        "fn current()->i64{const cb=leaf\nstate=50\nreturn apply(cb,2)}\nprint(answer(40))\nprint(current())\n"};
+    for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
+        SourceFixture fixture = source_fixture(programs[program]);
+        attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+        size_t total = attempts;
+        CHECK(total > 10);
+        for (size_t point = 0; point < total; ++point) {
+            attempts = 0; fail_at = point;
+            CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+        }
+        fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+        printf("Callable Lower: %zu allocation failures preserve empty output\n", total);
     }
-    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
-    printf("Callable Lower: %zu allocation failures preserve empty output\n", total);
 }
 
 static void range_lower_failures(void) {

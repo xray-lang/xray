@@ -20,6 +20,10 @@ enum {
     XR_LIR_CALLABLE_C_ABI = 2u
 };
 
+typedef enum XrLirClosureStorage {
+    XR_LIR_CLOSURE_FRAME, XR_LIR_CLOSURE_OWNED
+} XrLirClosureStorage;
+
 typedef struct XrLirCallableParameter {
     XrLirType type, array_element;
     XrParamMode mode;

@@ -73,6 +73,9 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
                 "invocation result has no exact bytecode carrier", (XrLirSource){0});
         for (uint32_t p = 0; p < signature.parameter_count; ++p) {
             XrLirCallableParameter parameter = signature.parameters[p];
+            if (parameter.escaping)
+                return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
+                    "escaping invocation parameters require owned environment transport", (XrLirSource){0});
             parameters[p].mode = (uint32_t)parameter.mode;
             parameters[p].escaping = parameter.escaping;
             if (!rbc_lir_callable_value(input, program, parameter.type, parameter.array_element, &parameters[p].value))

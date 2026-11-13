@@ -6,7 +6,7 @@
  *
  * lir_callable_fixture.h - Real higher-order calls through typed function values
  */
-static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
+static void callable_fixture_capture(XrLirModule **output, XrLirFunction *root, bool capture) {
     CArrayFixture c = {0};
     OK(xr_lir_module_create(NULL, &c.module));
     XrLirCallableParameter parameter = {.type=XR_LIR_I64};
@@ -14,18 +14,22 @@ static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
     XrLirType callable = 0;
     OK(xr_lir_callable_type(c.module, &shape, &callable));
     XrLirFunction plus = {0}, twice = {0};
-    XrLirType scalar = XR_LIR_I64;
+    XrLirType scalars[] = {XR_LIR_I64, XR_LIR_I64};
     XrLirFunctionSpec spec = {.name="plus_one", .name_length=8,
-        .parameters=&scalar, .parameter_count=1, .result=XR_LIR_I64};
+        .parameters=scalars, .parameter_count=capture ? 2u : 1u, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module, &spec, &plus));
-    OK(xr_lir_set_closure_target(c.module, plus, (XrLirClosureTarget){.callable=callable}));
+    OK(xr_lir_set_closure_target(c.module, plus,
+        (XrLirClosureTarget){.callable=callable, .capture_count=capture ? 1u : 0u}));
     OK(xr_lir_define_function(c.module, plus));
     XrLirBlock block = {0};
     OK(xr_lir_add_block(c.module, plus, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, plus, block));
     XrLirValue input = {0};
-    OK(xr_lir_function_parameter(c.module, plus, 0, &input));
-    ca_return(&c, block, ca_binary(&c, block, XR_LIR_ADD, input, ca_constant(&c, block, 1)));
+    OK(xr_lir_function_parameter(c.module, plus, capture ? 1u : 0u, &input));
+    XrLirValue increment = {0};
+    if (capture) OK(xr_lir_function_parameter(c.module, plus, 0, &increment));
+    else increment = ca_constant(&c, block, 1);
+    ca_return(&c, block, ca_binary(&c, block, XR_LIR_ADD, input, increment));
     XrLirType parameters[] = {callable, XR_LIR_I64};
     spec = (XrLirFunctionSpec){.name="twice", .name_length=5,
         .parameters=parameters, .parameter_count=2, .result=XR_LIR_I64};
@@ -46,6 +50,12 @@ static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, *root, block));
     XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=callable, .callee=plus};
+    XrLirValue captured = {0};
+    if (capture) {
+        captured = ca_constant(&c, block, 1);
+        reference.operands = &captured;
+        reference.operand_count = 1;
+    }
     OK(xr_lir_emit_value(c.module, block, &reference, &callback));
     XrLirValue actuals[] = {callback, ca_constant(&c, block, 40)};
     XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64, .callee=twice,
@@ -56,3 +66,8 @@ static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
     OK(xr_lir_module_finish(c.module, NULL));
     *output = c.module;
 }
+
+static void callable_fixture(XrLirModule **output, XrLirFunction *root) {
+    callable_fixture_capture(output, root, false);
+}
+

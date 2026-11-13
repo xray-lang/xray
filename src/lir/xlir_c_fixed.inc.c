@@ -49,8 +49,11 @@ static void c_prepare_types(LirC *c) {
                 return;
             }
             c_scalar(c, signature.result);
-            for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p)
+            for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p) {
+                if (signature.parameters[p].escaping)
+                    c_error(c, XR_LIR_C_UNSUPPORTED, "escaping callable parameters require owned environment transport");
                 c_scalar(c, signature.parameters[p].type);
+            }
             continue;
         }
         if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||

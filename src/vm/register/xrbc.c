@@ -425,7 +425,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
-    if (function->result_kind == XR_RBC_SLICE_I64 ||
+    if (function->result_kind == XR_RBC_SLICE_I64 || function->capture_count || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
         (!inject_state && function->parameter_count &&

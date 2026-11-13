@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("--compiler", action="append", default=[])
     parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
-    cases = ("callable_values", "callable_contracts", "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
+    cases = ("callable_values", "callable_contracts", "callable_frames", "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",

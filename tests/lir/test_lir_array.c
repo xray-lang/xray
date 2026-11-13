@@ -420,6 +420,7 @@ static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
     if (!strcmp(name, "function-reference")) callable_fixture(&m, &root);
+    else if (!strcmp(name, "function-frame")) callable_fixture_capture(&m, &root, true);
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;

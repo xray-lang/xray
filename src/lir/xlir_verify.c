@@ -302,7 +302,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR &&
         v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
-        v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE && !lir_view_operation(v->op) && v->bits)
+        v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
+        v->op != XR_LIR_FUNCTION_REF && !lir_view_operation(v->op) && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))

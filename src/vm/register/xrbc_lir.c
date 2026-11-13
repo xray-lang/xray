@@ -90,6 +90,10 @@ typedef struct {
     uint64_t *constants;
     XrRbcRegisterKind *register_kinds, *cell_kinds;
     uint32_t *register_callables;
+    XrRbcCallableValue *captures;
+    XrRbcEnvironment *environments;
+    size_t environment_count, environment_capacity;
+    uint32_t environment_size;
     XrRbcStateAccess *state_accesses;
     size_t state_access_count, state_access_capacity;
     XrRbcViewAccess *view_accesses;
@@ -413,6 +417,14 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         rbc_lir_error(d,XR_RBC_COMPILE_LIMIT,"SSA index space is exhausted",(XrLirSource){0});
         return false;
     }
+    XrLirClosureTarget closure = {0};
+    if (xr_lir_closure_target_view(input, f, &closure) == XR_LIR_OK)
+        for (uint32_t p = 0; p < closure.capture_count; ++p)
+            if (!rbc_lir_scalar(v->parameter_types[p])) {
+                rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+                    "captured payload has no frame bytecode carrier", (XrLirSource){0});
+                return false;
+            }
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY &&
          v->result != XR_LIR_SLICE_I64 &&
@@ -497,9 +509,14 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     switch (i->op) {
     case XR_LIR_FUNCTION_REF: {
         XrLirClosureTarget target;
-        return !i->operand_count && xr_lir_closure_target_view(input,
-            (XrLirFunction){input, i->callee}, &target) == XR_LIR_OK &&
-            !target.capture_count && !target.state_capture && xr_lir_callable_accepts(input, i->type, target.callable);
+        XrLirFunctionView callee;
+        XrLirFunction code = {input, i->callee};
+        if (i->bits != XR_LIR_CLOSURE_FRAME || xr_lir_closure_target_view(input, code, &target) != XR_LIR_OK ||
+            xr_lir_function_view(input, code, &callee) != XR_LIR_OK ||
+            !xr_lir_callable_accepts(input, i->type, target.callable)) return false;
+        for (uint32_t p = 0; p < target.capture_count; ++p)
+            if (!rbc_lir_scalar(callee.parameter_types[p])) return false;
+        return true;
     }
     case XR_LIR_CALL_INDIRECT: return true;
     case XR_LIR_CALL_INTRINSIC: {
@@ -566,6 +583,7 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
         XrLirFunction f = {input, ids[index]};
         XrLirFunctionView v;
         RbcLirOutputValues output={0};
+        bool entry_once = false;
         if (xr_lir_function_view(input, f, &v) != XR_LIR_OK ||
             !rbc_lir_admit(input, f, &v, d, &output)) goto rejected;
         for (uint32_t b = 0; b < v.block_count; ++b) {
@@ -578,6 +596,22 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 xr_lir_instruction_view(input, block, n, &i);
                 d->block = block.id;
                 d->instruction = n + 1;
+                if (i.op == XR_LIR_FUNCTION_REF && i.operand_count) {
+                    if (block.id != v.entry) goto frame_rejected;
+                    if (!entry_once) {
+                        for (uint32_t p = 0; p < v.block_count; ++p) {
+                            XrLirBlock predecessor;
+                            XrLirBlockView pv;
+                            XrLirInstructionView end;
+                            xr_lir_block_at(input, f, p, &predecessor);
+                            xr_lir_block_view(input, predecessor, &pv);
+                            xr_lir_instruction_view(input, predecessor, pv.instruction_count - 1, &end);
+                            for (uint32_t e = 0; e < end.edge_count; ++e)
+                                if (end.edges[e].target == v.entry) goto frame_rejected;
+                        }
+                        entry_once = true;
+                    }
+                }
                 if (!rbc_lir_operation(input, f, &i, &output)) {
                     rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                         "operation has no admitted bytecode implementation", i.source);
@@ -612,6 +646,9 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
         }
         rbc_lir_output_free(&output);
         continue;
+frame_rejected:
+        rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "frame environments require a single activation construction", (XrLirSource){0});
 rejected:
         rbc_lir_output_free(&output);
         return false;
@@ -1314,6 +1351,16 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA home tables");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->spill_home[v]=UINT32_MAX;
     c->scalar_parameter_count = c->view.parameter_count;
+    XrLirClosureTarget target = {0};
+    xr_lir_closure_target_view(c->input, c->function, &target);
+    if (target.capture_count) {
+        if (sizeof(*c->captures) > SIZE_MAX / target.capture_count)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "capture descriptors exceed address space");
+        c->captures = xr_malloc((size_t)target.capture_count * sizeof(*c->captures));
+        if (!c->captures) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own capture descriptors");
+        for (uint32_t p = 0; p < target.capture_count; ++p)
+            c->captures[p] = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
+    }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
@@ -1385,10 +1432,12 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .aggregate_arguments=c->aggregate_arguments, .aggregate_argument_count=c->aggregate_argument_count,
         .register_callables=c->register_callables,
         .register_callable_count=c->register_callables ? c->register_count : 0,
+        .captures=c->captures, .capture_count=target.capture_count, .state_capture=target.state_capture,
+        .environments=c->environments, .environment_count=(uint32_t)c->environment_count,
+        .environment_size=c->environment_size,
         .aggregate_result_type=rbc_lir_aggregate_type(c->input, c->view.result) ?
             rbc_lir_aggregate_ordinal(c, c->view.result) + 1 : 0};
-    XrLirClosureTarget target = {0};
-    if (xr_lir_closure_target_view(c->input, c->function, &target) == XR_LIR_OK && target.callable)
+    if (target.callable)
         out->callable = rbc_lir_callable_ordinal(c, target.callable) + 1;
     return true;
 }
@@ -1401,6 +1450,8 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].source_ids);
         xr_free((void *) program->module.functions[f].register_kinds);
         xr_free((void *) program->module.functions[f].register_callables);
+        xr_free((void *) program->module.functions[f].captures);
+        xr_free((void *) program->module.functions[f].environments);
         xr_free((void *) program->module.functions[f].cell_kinds);
         xr_free((void *) program->module.functions[f].state_accesses);
         xr_free((void *) program->module.functions[f].view_accesses);
@@ -1521,6 +1572,8 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.source_ids);
             xr_free(c.register_kinds);
             xr_free(c.register_callables);
+            xr_free(c.captures);
+            xr_free(c.environments);
             xr_free(c.cell_kinds);
             xr_free(c.state_accesses);
             xr_free(c.view_accesses);

@@ -15,6 +15,7 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_print.h"
 #include "lir/xlir_state.h"
+#include "lir/xlir_callable.h"
 
 typedef struct Text {
     char bytes[65536];
@@ -251,6 +252,8 @@ static void unsupported(void) {
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
     rejected("print(1)\n", true, "overflow-checks");
+    rejected("fn use(callback:escaping fn()->i64)->i64{return callback()}\n"
+        "print(use(fn()->i64{return 42}))\n", false, "owned escaping callable parameter transport");
 }
 static void fixed_division_source(const char *text, bool slot_frontier) {
     SourceFixture fixture = source_fixture(text);
@@ -640,8 +643,35 @@ static void module_cells_source(const char *directory) {
     xr_lir_lowered_free(&out);
     rejected("var n=7\nfn bump(v:ref i64)->i64{v=v+1\nreturn v}\nprint(bump(ref n))\n",
         false,"function parameter type");
-    rejected("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n",
-        false,"FUNCTION_REF");
+    out = lower_text("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n");
+    unsigned environments = 0;
+    for (uint32_t index = 0; index < xr_lir_function_count(out.module); ++index) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(out.module, index, &function));
+        OK(xr_lir_function_view(out.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView body;
+            OK(xr_lir_block_at(out.module, function, b, &block));
+            OK(xr_lir_block_view(out.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView instruction;
+                OK(xr_lir_instruction_view(out.module, block, i, &instruction));
+                if (instruction.op != XR_LIR_FUNCTION_REF) continue;
+                XrLirClosureTarget target = {0};
+                XrLirType state = XR_LIR_TYPE_INVALID;
+                OK(xr_lir_closure_target_view(out.module, (XrLirFunction){out.module, instruction.callee}, &target));
+                CHECK(!target.capture_count && target.state_capture && instruction.operand_count == 1);
+                OK(xr_lir_value_type(out.module,
+                    (XrLirValue){out.module, function.id, instruction.operands[0]}, &state));
+                CHECK(state == XR_LIR_STATE);
+                ++environments;
+            }
+        }
+    }
+    CHECK(environments == 1);
+    xr_lir_lowered_free(&out);
     fixture = source_fixture("var s=\"owned\"\nprint(7)\n");
     request = (XrLirLowerRequest){fixture.closed,fixture.source.snapshot,false};
     OK(xr_lir_lower_program_checked(&request,&out,NULL));

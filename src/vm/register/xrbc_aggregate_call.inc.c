@@ -14,12 +14,46 @@ static bool xr_rbc_callable_scalar_valid(XrRbcCallableValue value, uint64_t bits
 static bool xr_rbc_callable_arguments_valid(const XrRbcModule *module, const XrRbcFunction *callee,
     const XrRbcRegister *arguments) {
     if (!callee->callable) return true;
+    for (uint32_t p = 0; p < callee->capture_count; ++p)
+        if (!xr_rbc_callable_scalar_valid(callee->captures[p], arguments[p].bits)) return false;
     XrRbcCallableType type = module->callable_types[callee->callable - 1];
     for (uint32_t p = 0; p < type.parameter_count; ++p) {
         XrRbcCallableValue parameter = type.parameters[p].value;
-        if (!xr_rbc_callable_scalar_valid(parameter, arguments[p].bits)) return false;
+        if (!xr_rbc_callable_scalar_valid(parameter, arguments[callee->capture_count + p].bits)) return false;
     }
     return true;
+}
+
+static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *stack,
+    uint64_t token, uint32_t *callee, size_t *environment) {
+    if (!(token & 1u)) {
+        uint64_t code = token >> 1;
+        if (!code || code > module->function_count) return false;
+        *callee = (uint32_t)(code - 1);
+        *environment = SIZE_MAX;
+        return !module->functions[*callee].capture_count && !module->functions[*callee].state_capture;
+    }
+    uint64_t slot = token >> 1;
+    if (!slot || (uint64_t)(size_t)(slot - 1) != slot - 1) return false;
+    --slot;
+    for (size_t n = stack->depth; n-- > 0;) {
+        const XrRbcFrame *frame = &stack->frames[n];
+        const XrRbcFunction *function = &module->functions[frame->function];
+        if (!frame->aggregate_base || !function->environment_count) continue;
+        size_t offset, total;
+        if (!xr_rbc_activation_size(function, &offset, &total)) return false;
+        size_t first = frame->aggregate_base - 1 + offset / sizeof(*stack->spills);
+        for (uint32_t e = 0; e < function->environment_count; ++e) {
+            XrRbcEnvironment home = function->environments[e];
+            size_t index = first + home.offset / sizeof(*stack->spills);
+            if (slot == index) {
+                *callee = home.callee;
+                *environment = index;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *module, XrRbcStack *stack,
@@ -40,24 +74,54 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         return XR_RBC_OK;
     }
     if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
-        stack->slots[frame->base + access.result.index].bits = (uint64_t)access.callee + 1;
+        uint64_t token = ((uint64_t)access.callee + 1) << 1;
+        if (access.destination) {
+            if (!xr_rbc_aggregate_reserve(stack, frame, function)) return XR_RBC_OUT_OF_MEMORY;
+            size_t offset, total;
+            if (!xr_rbc_activation_size(function, &offset, &total)) return XR_RBC_INVALID;
+            size_t first = frame->aggregate_base - 1 + offset / sizeof(*stack->spills) +
+                function->environments[access.destination - 1].offset / sizeof(*stack->spills);
+            const XrRbcFunction *callee = &module->functions[access.callee];
+            for (uint32_t p = 0; p < callee->capture_count; ++p)
+                if (!xr_rbc_callable_scalar_valid(callee->captures[p], xr_rbc_aggregate_scalar(stack, frame,
+                    function->aggregate_operands[access.first + p])->bits)) return XR_RBC_INVALID;
+            for (uint32_t p = 0; p < access.count; ++p)
+                stack->spills[first + p] = *xr_rbc_aggregate_scalar(stack, frame,
+                    function->aggregate_operands[access.first + p]);
+            token = ((uint64_t)(first + 1) << 1) | 1u;
+        }
+        stack->slots[frame->base + access.result.index].bits = token;
         frame->pc = pc;
         return XR_RBC_OK;
     }
     if (access.operation == XR_RBC_AGGREGATE_CALL || access.operation == XR_RBC_FUNCTION_CALL) {
         /* The caller area must precede the callee's spill_base even when the
          * first value in that area will only be produced by this return. */
-        if (function->aggregate_size && !xr_rbc_aggregate_reserve(stack, frame, function)) return XR_RBC_OUT_OF_MEMORY;
+        if ((function->aggregate_size || function->environment_size) &&
+            !xr_rbc_aggregate_reserve(stack, frame, function)) return XR_RBC_OUT_OF_MEMORY;
+        size_t environment = SIZE_MAX;
         if (access.operation == XR_RBC_FUNCTION_CALL) {
             uint64_t target = stack->slots[frame->base + access.source].bits;
-            XR_DCHECK(target && target <= module->function_count, "admitted function values name real code entries");
-            access.callee = (uint32_t)(target - 1);
+            if (!xr_rbc_callable_target(module, stack, target, &access.callee, &environment)) return XR_RBC_INVALID;
         }
         const XrRbcFunction *callee = &module->functions[access.callee];
-        size_t base = frame->base + access.window + 1;
-        if (!xr_rbc_callable_arguments_valid(module, callee, stack->slots + base)) return XR_RBC_INVALID;
+        bool indirect = access.operation == XR_RBC_FUNCTION_CALL;
+        if (indirect && frame->base > SIZE_MAX - function->register_count) return XR_RBC_OUT_OF_MEMORY;
+        size_t base = frame->base + (indirect ? function->register_count : access.window + 1);
         frame->pc = pc;
         if (!xr_rbc_call_reserve(stack, base, callee)) return XR_RBC_OUT_OF_MEMORY;
+        frame = &stack->frames[parent];
+        if (indirect) {
+            XrRbcCallableType type = module->callable_types[access.slot - 1];
+            for (uint32_t p = 0; p < type.parameter_count; ++p)
+                stack->slots[base + callee->capture_count + p] =
+                    stack->slots[frame->base + access.window + 1 + p];
+            for (uint32_t p = 0; p < callee->capture_count; ++p)
+                stack->slots[base + p] = stack->spills[environment + p];
+            if (callee->state_capture)
+                stack->slots[base + callee->parameter_count - 1] = stack->spills[environment + callee->capture_count];
+        }
+        if (!xr_rbc_callable_arguments_valid(module, callee, stack->slots + base)) return XR_RBC_INVALID;
         frame = &stack->frames[stack->depth++];
         *frame = (XrRbcFrame){access.callee, 0, base,
             callee->aggregate_result_type ? access.destination : access.window,
@@ -67,7 +131,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));
         stack->cell_count += callee->cell_count;
         stack->spill_count += callee->spill_count;
-        if (callee->aggregate_size && !xr_rbc_aggregate_reserve(stack, frame, callee)) return XR_RBC_OUT_OF_MEMORY;
+        if ((callee->aggregate_size || callee->environment_size) &&
+            !xr_rbc_aggregate_reserve(stack, frame, callee)) return XR_RBC_OUT_OF_MEMORY;
         for (uint32_t n = 0; n < access.count; ++n) {
             XrRbcAggregateValue actual = function->aggregate_values[function->aggregate_arguments[access.first + n]];
             XrRbcAggregateValue formal = callee->aggregate_values[callee->aggregate_parameters[n]];

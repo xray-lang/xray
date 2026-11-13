@@ -23,13 +23,56 @@ static void c_callable_type(LirC *c, XrLirType type) {
     c_format(c, "); void *environment; void *owner; } %s;\n", name);
 }
 
+static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruction) {
+    XrLirClosureTarget target = {0};
+    XrLirFunctionView function = {0};
+    XrLirFunction callee = {c->request->module, instruction->callee};
+    if (instruction->bits != XR_LIR_CLOSURE_FRAME ||
+        xr_lir_closure_target_view(c->request->module, callee, &target) != XR_LIR_OK ||
+        xr_lir_function_view(c->request->module, callee, &function) != XR_LIR_OK) return false;
+    if (instruction->operand_count) {
+        if (c->block != c->view.entry) return false;
+        if (!(c->seen[c->function.id - 1] & 4u)) {
+            for (uint32_t b = 0; b < c->view.block_count; ++b) {
+                XrLirBlock block;
+                XrLirBlockView view;
+                XrLirInstructionView end;
+                xr_lir_block_at(c->request->module, c->function, b, &block);
+                xr_lir_block_view(c->request->module, block, &view);
+                xr_lir_instruction_view(c->request->module, block, view.instruction_count - 1, &end);
+                for (uint32_t e = 0; e < end.edge_count; ++e)
+                    if (end.edges[e].target == c->view.entry) return false;
+            }
+            c->seen[c->function.id - 1] |= 4u;
+        }
+    }
+    for (uint32_t p = 0; p < target.capture_count; ++p) {
+        XrLirType type = function.parameter_types[p];
+        if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
+            type != XR_LIR_U64 && type != XR_LIR_F64) return false;
+    }
+    return true;
+}
+
+static void c_callable_environment(LirC *c, uint32_t function, const XrLirFunctionView *view,
+    XrLirClosureTarget target) {
+    c_format(c, "typedef struct XrlEnv_%" PRIu32 " {", function);
+    for (uint32_t p = 0; p < target.capture_count; ++p)
+        c_format(c, " %s c%" PRIu32 ";", c_type(c, view->parameter_types[p]), p);
+    if (target.state_capture) c_text(c, " XrtModuleState *state;");
+    c_format(c, " } XrlEnv_%" PRIu32 ";\n", function);
+}
+
 static void c_callable_thunks(LirC *c) {
     for (uint32_t n = 0; n < c->closure_count && c_request_poll(c); ++n) {
         XrLirFunction function = {c->request->module, c->closure[n]};
         if (!(c->seen[function.id - 1] & 2u)) continue;
         XrLirClosureTarget target = {0};
-        if (xr_lir_closure_target_view(c->request->module, function, &target) != XR_LIR_OK ||
-            !target.callable || target.capture_count || target.state_capture) continue;
+        if (xr_lir_closure_target_view(c->request->module, function, &target) != XR_LIR_OK || !target.callable) continue;
+        XrLirFunctionView view = {0};
+        xr_lir_function_view(c->request->module, function, &view);
+        bool environment = target.capture_count || target.state_capture;
+        if (environment) c_callable_environment(c, function.id, &view, target);
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(c->request->module, target.callable, &signature) != XR_LIR_OK) {
             c_error(c, XR_LIR_C_INVALID_LIR, "closure code has no exact invocation signature");
@@ -39,12 +82,17 @@ static void c_callable_thunks(LirC *c) {
             c_type(c, signature.result), function.id);
         for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p)
             c_format(c, ", %s a%" PRIu32, c_type(c, signature.parameters[p].type), p);
-        c_text(c, ") {\n    (void)environment;\n    ");
+        c_text(c, ") {\n    ");
+        if (environment) c_format(c, "XrlEnv_%" PRIu32 " *bound = environment;\n    ", function.id);
+        else c_text(c, "(void)environment;\n    ");
         if (signature.result != XR_LIR_UNIT) c_text(c, "return ");
         c_function_name(c, function.id);
         c_text(c, "(");
+        for (uint32_t p = 0; p < target.capture_count; ++p)
+            c_format(c, p ? ", bound->c%" PRIu32 : "bound->c%" PRIu32, p);
         for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p)
-            c_format(c, p ? ", a%" PRIu32 : "a%" PRIu32, p);
+            c_format(c, p || target.capture_count ? ", a%" PRIu32 : "a%" PRIu32, p);
+        if (target.state_capture) c_text(c, target.capture_count || signature.parameter_count ? ", bound->state" : "bound->state");
         c_text(c, ");\n}\n");
     }
 }
@@ -59,8 +107,17 @@ static void c_callable_argument(LirC *c, uint32_t value, XrLirType expected) {
 
 static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
-        c_format(c, "    v%" PRIu32 " = (%s){xrl_thunk_%" PRIu32 ", NULL, NULL};\n",
-            v->result, c_type(c, v->type), v->callee);
+        if (v->operand_count) {
+            c_format(c, "    xrl_env%" PRIu32 " = (XrlEnv_%" PRIu32 "){", v->result, v->callee);
+            for (uint32_t p = 0; p < v->operand_count; ++p) {
+                if (p) c_text(c, ", ");
+                c_value(c, v->operands[p]);
+            }
+            c_text(c, "};\n");
+            c_format(c, "    v%" PRIu32 " = (%s){xrl_thunk_%" PRIu32 ", &xrl_env%" PRIu32 ", NULL};\n",
+                v->result, c_type(c, v->type), v->callee, v->result);
+        } else c_format(c, "    v%" PRIu32 " = (%s){xrl_thunk_%" PRIu32 ", NULL, NULL};\n",
+                v->result, c_type(c, v->type), v->callee);
         return;
     }
     c_text(c, "    ");

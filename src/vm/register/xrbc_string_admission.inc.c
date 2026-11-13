@@ -320,8 +320,8 @@ static void rbc_string_state_copy(RbcStringAdmission *to, const RbcStringAdmissi
     to->aggregates = aggregates;
     if (from->function->spill_count)
         memcpy(to->spills,from->spills,(size_t)from->function->spill_count * sizeof(*from->spills));
-    if (from->function->aggregate_value_count)
-        memcpy(to->aggregates, from->aggregates, from->function->aggregate_value_count);
+    size_t homes = from->function->aggregate_value_count + from->function->environment_count;
+    if (homes) memcpy(to->aggregates, from->aggregates, homes);
 }
 static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *from,
     bool *seen, bool *changed) {
@@ -333,6 +333,11 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
     if (to->published != from->published) return false;
     for (size_t n = 0; n < from->function->aggregate_value_count; ++n) {
         uint8_t initialized = to->aggregates[n] & from->aggregates[n];
+        if (initialized != to->aggregates[n]) { to->aggregates[n] = initialized; *changed = true; }
+    }
+    for (size_t n = from->function->aggregate_value_count;
+        n < from->function->aggregate_value_count + from->function->environment_count; ++n) {
+        uint8_t initialized = to->aggregates[n] | from->aggregates[n];
         if (initialized != to->aggregates[n]) { to->aggregates[n] = initialized; *changed = true; }
     }
     for (uint32_t r = 0; r < from->function->register_count; ++r) {
@@ -509,13 +514,15 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     }
     g->incoming[previous].end = f->code_count;
     g->work.spills = g->spills;
-    if (f->aggregate_value_count) {
-        if (rows > SIZE_MAX / f->aggregate_value_count) return XR_RBC_OUT_OF_MEMORY;
-        g->aggregates = xr_calloc(rows, f->aggregate_value_count);
+    size_t homes = f->aggregate_value_count + f->environment_count;
+    if (homes < f->aggregate_value_count) return XR_RBC_OUT_OF_MEMORY;
+    if (homes) {
+        if (rows > SIZE_MAX / homes) return XR_RBC_OUT_OF_MEMORY;
+        g->aggregates = xr_calloc(rows, homes);
         if (!g->aggregates) return XR_RBC_OUT_OF_MEMORY;
         g->work.aggregates = g->aggregates;
         for (size_t b = 0; b < g->count; ++b)
-            g->incoming[b].state.aggregates = g->aggregates + (b + 1) * f->aggregate_value_count;
+            g->incoming[b].state.aggregates = g->aggregates + (b + 1) * homes;
         for (size_t n = 0; n < f->aggregate_parameter_count; ++n)
             g->work.aggregates[f->aggregate_parameters[n]] = 1;
     }
@@ -618,11 +625,13 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
         }
     }
-    if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count) return XR_RBC_OK;
+    if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count && !f->environment_count)
+        return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
         .head = UINT32_MAX, .tail = UINT32_MAX,
-        .parameters_only = range || numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0};
+        .parameters_only = range || numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0 ||
+            f->environment_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
     if (status == XR_RBC_OK) {
         /* This initial merge remains a virtual predecessor even for a jump to

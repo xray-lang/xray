@@ -13,9 +13,11 @@
  */
 static bool xr_rbc_aggregate_reserve(XrRbcStack *stack, XrRbcFrame *frame, const XrRbcFunction *f) {
     if (frame->aggregate_base) return true;
-    size_t slots = f->aggregate_size / sizeof(*stack->spills) +
-        (f->aggregate_size % sizeof(*stack->spills) != 0);
+    size_t environment, bytes;
+    if (!xr_rbc_activation_size(f, &environment, &bytes)) return false;
+    size_t slots = bytes / sizeof(*stack->spills) + (bytes % sizeof(*stack->spills) != 0);
     if (!slots || slots > SIZE_MAX - stack->spill_count || stack->spill_count == SIZE_MAX) return false;
+    if ((uint64_t)(stack->spill_count + slots) > (UINT64_MAX >> 1) - 1u) return false;
     void *storage = stack->spills;
     if (!xr_rbc_grow(&storage, &stack->spill_capacity, stack->spill_count + slots, sizeof(*stack->spills)))
         return false;

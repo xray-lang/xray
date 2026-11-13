@@ -1,0 +1,16 @@
+fn apply(callback: fn(i64) -> i64, value: i64) -> i64 { return callback(value) }
+fn exercise(seed: i64) -> i64 {
+    const callback = fn(value: i64) -> i64 { return seed + value }
+    return apply(callback, 1) + apply(callback, 1)
+}
+var state: i64 = 40
+fn leaf(value: i64) -> i64 { return state + value }
+fn stateValue() -> i64 {
+    const callback = leaf
+    state = state + 10
+    return apply(callback, 2)
+}
+print(exercise(20))
+print(exercise(10))
+print(stateValue())
+print(stateValue())

@@ -183,6 +183,10 @@ typedef struct XrRbcAggregateAccess {
     uint32_t first, count, slot, callee, window;
 } XrRbcAggregateAccess;
 
+typedef struct XrRbcEnvironment {
+    uint32_t callee, offset, producer;
+} XrRbcEnvironment;
+
 typedef struct {
     const uint32_t *code;
     size_t code_count;
@@ -239,6 +243,14 @@ typedef struct {
     const uint32_t *register_callables;
     size_t register_callable_count;
     uint32_t callable;
+    /* Captures precede invocation parameters. A captured State remains the
+     * trailing physical parameter. Environment homes are immutable after their
+     * sole construction and retire with the owning activation's spill bank. */
+    const struct XrRbcCallableValue *captures;
+    uint32_t capture_count;
+    bool state_capture;
+    const XrRbcEnvironment *environments;
+    uint32_t environment_count, environment_size;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;

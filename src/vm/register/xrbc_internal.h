@@ -22,6 +22,20 @@ static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *acce
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
 
+static inline bool xr_rbc_activation_size(const XrRbcFunction *function, size_t *environment,
+    size_t *total) {
+    size_t bytes = function->aggregate_size;
+    if (function->environment_size) {
+        if (bytes > SIZE_MAX - 7u) return false;
+        bytes = (bytes + 7u) & ~(size_t)7u;
+        *environment = bytes;
+        if (function->environment_size > SIZE_MAX - bytes) return false;
+        bytes += function->environment_size;
+    } else *environment = bytes;
+    *total = bytes;
+    return true;
+}
+
 static inline bool xr_rbc_view_kind(XrRbcRegisterKind kind) {
     return kind >= XR_RBC_VIEW_FRAME && kind <= XR_RBC_SLICE_I64;
 }

@@ -48,11 +48,21 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
         for (uint32_t p = 0; p < type.parameter_count; ++p) {
             XrRbcCallableParameter parameter = type.parameters[p];
             if (parameter.mode > 2u || !rbc_callable_value_valid(m, parameter.value, t) ||
-                (parameter.escaping && parameter.value.kind != XR_RBC_CALLABLE_FUNCTION)) return false;
+                parameter.escaping) return false;
         }
     }
     for (size_t n = 0; n < m->function_count; ++n) {
         const XrRbcFunction *f = &m->functions[n];
+        if (f->capture_count > f->parameter_count || f->parameter_count > f->register_count ||
+            (f->capture_count ? !f->captures : f->captures != NULL) ||
+            (f->environment_count ? !f->environments : f->environments != NULL) ||
+            (!m->callable_type_count && (f->environment_count || f->environment_size)) ||
+            f->environment_count > UINT16_MAX + 1u) return false;
+        for (uint32_t p = 0; p < f->capture_count; ++p) {
+            XrRbcCallableValue value = f->captures[p];
+            if (value.kind != XR_RBC_CALLABLE_SCALAR || value.type == XR_POD_UNIT ||
+                !rbc_callable_value_valid(m, value, 0) || rbc_register_kind(f, p) != XR_RBC_BITS) return false;
+        }
         if (f->register_callables ? f->register_callable_count != f->register_count :
             f->register_callable_count != 0) return false;
         for (uint32_t r = 0; r < f->register_count; ++r) {
@@ -60,17 +70,41 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             if (rbc_register_kind(f, r) == XR_RBC_FUNCTION ? !type || type > m->callable_type_count : type != 0)
                 return false;
         }
-        if (!f->callable) continue;
+        if (!f->callable) {
+            if (f->capture_count || f->state_capture) return false;
+            continue;
+        }
         if (f->callable > m->callable_type_count) return false;
         XrRbcCallableType type = m->callable_types[f->callable - 1];
-        if (type.parameter_count != f->parameter_count || f->aggregate_parameter_count ||
+        if (f->state_capture && (!m->state_layout || f->parameter_count == f->capture_count ||
+            rbc_register_kind(f, f->parameter_count - 1) != XR_RBC_STATE)) return false;
+        if (type.parameter_count != f->parameter_count - f->capture_count - f->state_capture || f->aggregate_parameter_count ||
             type.result.kind == XR_RBC_CALLABLE_AGGREGATE || type.result.kind == XR_RBC_CALLABLE_FUNCTION ||
             rbc_callable_value_kind(type.result) != f->result_kind) return false;
         for (uint32_t p = 0; p < type.parameter_count; ++p) {
             XrRbcCallableValue value = type.parameters[p].value;
-            if (value.kind == XR_RBC_CALLABLE_AGGREGATE || rbc_callable_value_kind(value) != rbc_register_kind(f, p) ||
-                (value.kind == XR_RBC_CALLABLE_FUNCTION && f->register_callables[p] != value.type + 1)) return false;
+            uint32_t formal = f->capture_count + p;
+            if (value.kind == XR_RBC_CALLABLE_AGGREGATE || rbc_callable_value_kind(value) != rbc_register_kind(f, formal) ||
+                (value.kind == XR_RBC_CALLABLE_FUNCTION && f->register_callables[formal] != value.type + 1)) return false;
         }
+    }
+    for (size_t n = 0; m->callable_type_count && n < m->function_count; ++n) {
+        const XrRbcFunction *f = &m->functions[n];
+        uint32_t bytes = 0;
+        for (uint32_t e = 0; e < f->environment_count; ++e) {
+            XrRbcEnvironment environment = f->environments[e];
+            if (environment.callee >= m->function_count || environment.offset != bytes ||
+                !f->aggregate_accesses || environment.producer >= f->aggregate_access_count) return false;
+            const XrRbcFunction *callee = &m->functions[environment.callee];
+            uint32_t count = callee->capture_count + callee->state_capture;
+            if (!count || count > (UINT32_MAX - bytes) / 8u) return false;
+            XrRbcAggregateAccess access = f->aggregate_accesses[environment.producer];
+            if (access.operation != XR_RBC_FUNCTION_REFERENCE || access.destination != e + 1 ||
+                access.callee != environment.callee || access.count != count) return false;
+            bytes += count * 8u;
+        }
+        size_t offset, total;
+        if (bytes != f->environment_size || !xr_rbc_activation_size(f, &offset, &total)) return false;
     }
     return true;
 }
@@ -86,13 +120,27 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
         return access.count == 1 && access.source < f->register_count &&
             rbc_register_kind(f, access.source) == rbc_callable_value_kind(result);
     }
-    if (!access.slot || access.slot > m->callable_type_count || access.first || access.count ||
-        access.destination || access.result.spill) return false;
-    if (access.operation == XR_RBC_FUNCTION_REFERENCE)
-        return !access.source && !access.window && access.callee < m->function_count &&
+    if (!access.slot || access.slot > m->callable_type_count || access.result.spill) return false;
+    if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
+        if (access.source || access.window || access.callee >= m->function_count) return false;
+        const XrRbcFunction *callee = &m->functions[access.callee];
+        uint32_t count = callee->capture_count + callee->state_capture;
+        if (count) {
+            if (!access.destination || access.destination > f->environment_count || access.count != count ||
+                access.first > f->aggregate_operand_count || count > f->aggregate_operand_count - access.first ||
+                f->environments[access.destination - 1].callee != access.callee) return false;
+            for (uint32_t p = 0; p < count; ++p) {
+                XrRbcArrayLocation location = f->aggregate_operands[access.first + p];
+                if (!rbc_array_location_valid(f, location) || rbc_array_location_kind(f, location) !=
+                    (p < callee->capture_count ? XR_RBC_BITS : XR_RBC_STATE)) return false;
+            }
+        } else if (access.first || access.count || access.destination) return false;
+        return
             rbc_callable_accepts(m, access.slot, m->functions[access.callee].callable) &&
             access.result.index < f->register_count && rbc_register_kind(f, access.result.index) == XR_RBC_FUNCTION &&
             f->register_callables[access.result.index] == access.slot;
+    }
+    if (access.first || access.count || access.destination) return false;
     XrRbcCallableType type = m->callable_types[access.slot - 1];
     if (access.callee || access.result.index || access.source >= f->register_count ||
         rbc_register_kind(f, access.source) != XR_RBC_FUNCTION ||

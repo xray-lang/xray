@@ -388,8 +388,10 @@ static bool lower_storage_call(const Lower *c, const XrXirFunction *f,
         (op->args[1] && !f->operands)) return false;
     uint32_t callee = (uint32_t)op->immediate;
     const XrXirFunction *to = &c->source->functions[callee];
-    if (c->initializer_owner[callee] != UINT32_MAX || op->type != to->result ||
-        op->args[1] != to->parameter_count || (to->parameter_count && !to->parameters)) return false;
+    bool reference = op->op == XR_XIR_FUNCTION_REF;
+    uint32_t count = reference ? c->source->declarations->functions[callee].capture_count : to->parameter_count;
+    if (c->initializer_owner[callee] != UINT32_MAX || (!reference && op->type != to->result) ||
+        op->args[1] != count || count > to->parameter_count || (to->parameter_count && !to->parameters)) return false;
     for (uint32_t a = 0; a < op->args[1]; ++a) {
         uint32_t value = f->operands[op->args[0] + a];
         if ((uint64_t)value >= (uint64_t)f->parameter_count + f->instruction_count ||
@@ -399,7 +401,7 @@ static bool lower_storage_call(const Lower *c, const XrXirFunction *f,
     return true;
 }
 
-/* One trailing capability follows the reverse direct-call graph. Local SSA
+/* One trailing capability follows the reverse call and code-reference graph. Local SSA
  * Cells do not require module storage, and storage-free helpers keep their ABI. */
 static bool lower_storage_closures(Lower *c) {
     uint32_t count = c->source->function_count;
@@ -419,7 +421,7 @@ static bool lower_storage_closures(Lower *c) {
                 op->op == XR_XIR_SLOT_PLACE)
                 c->state_required[f] = 1;
             uint32_t target;
-            if (op->op == XR_XIR_CALL && lower_storage_call(c, body, op, &target)) {
+            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_FUNCTION_REF) && lower_storage_call(c, body, op, &target)) {
                 if (edges == SIZE_MAX) {
                     lower_error(c, XR_LIR_OUT_OF_MEMORY, "module call edge count overflow");
                     good = false;
@@ -438,7 +440,8 @@ static bool lower_storage_closures(Lower *c) {
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
             const XrXirInstruction *op = &body->instructions[i];
             uint32_t target;
-            if (op->op != XR_XIR_CALL || !lower_storage_call(c, body, op, &target)) continue;
+            if ((op->op != XR_XIR_CALL && op->op != XR_XIR_FUNCTION_REF) ||
+                !lower_storage_call(c, body, op, &target)) continue;
             XR_DCHECK(at < edges, "the immutable call graph retains its counted edges");
             calls[at] = (LowerStorageCall){f, heads[target]};
             heads[target] = at++;
@@ -880,15 +883,24 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (op->op == XR_XIR_FUNCTION_REF) {
         if (op->immediate < 0 || (uint64_t)op->immediate >= c->source->function_count)
             return lower_unsupported(c, "unresolved function reference");
-        if (op->args[1] || lower_hidden_state(c, (uint32_t)op->immediate))
-            return lower_unsupported(c, "FUNCTION_REF captured environment transport");
         XirClosureStorage placement = XIR_CLOSURE_UNRESOLVED;
         if (xr_xir_compile_closure_placement(c->request->closed, c->function,
             f->parameter_count + (uint32_t)(op - f->instructions), &placement) != XR_XIR_OK ||
             placement == XIR_CLOSURE_UNRESOLVED)
             return lower_unsupported(c, "unresolved function environment placement");
-        XrLirType type = lower_type(c, op->type);
         uint32_t callee = (uint32_t)op->immediate;
+        if (op->args[1] && placement != XIR_CLOSURE_FRAME)
+            return lower_unsupported(c, "owned function environment transport");
+        if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0])
+            return lower_unsupported(c, "function capture operand range");
+        const XrXirFunction *target = &c->source->functions[callee];
+        for (uint32_t p = 0; p < op->args[1]; ++p) {
+            XrLirType type = lower_type(c, target->parameters[p]);
+            if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
+                type != XR_LIR_U64 && type != XR_LIR_F64)
+                return lower_unsupported(c, "FUNCTION_REF captured physical binding transport");
+        }
+        XrLirType type = lower_type(c, op->type);
         if (!c->closure_types) {
             c->closure_types = lower_alloc(c, c->source->function_count, sizeof(*c->closure_types));
             if (!c->closure_types) return false;
@@ -943,6 +955,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[function];
     XR_DCHECK(c->active[function], "only executable functions enter admission");
+    if (f->escaping_parameter_count)
+        return lower_unsupported(c, "owned escaping callable parameter transport");
     if (!lower_receive_type(c, f->result)) return false;
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_ARRAY_CELL ||
         lower_type(c, f->result) == XR_LIR_VIEW_CELL)
@@ -1076,7 +1090,8 @@ static bool lower_declare(Lower *c, uint32_t index) {
     }
     if (good && c->closure_types && c->closure_types[index])
         good = lower_build(c, xr_lir_set_closure_target(c->module, c->functions[index],
-            (XrLirClosureTarget){.callable=c->closure_types[index]}));
+            (XrLirClosureTarget){.callable=c->closure_types[index],
+                .capture_count=c->source->declarations->functions[index].capture_count, .state_capture=hidden != 0}));
     xr_free(name);
     xr_free(parameters);
     return good;
@@ -1541,9 +1556,20 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         !lower_managed_type(lower_type(c, op->type)))
         return lower_value(f, op->args[0], &f->values[result]);
     if (op->op == XR_XIR_FUNCTION_REF) {
+        uint32_t callee = (uint32_t)op->immediate, hidden = lower_hidden_state(c, callee);
+        if (op->args[1] > UINT32_MAX - hidden) return lower_unsupported(c, "function capture count");
+        uint32_t count = op->args[1] + hidden;
+        XrLirValue *captures = lower_alloc(c, count, sizeof(*captures));
+        if (count && !captures) return false;
+        bool good = true;
+        for (uint32_t p = 0; p < op->args[1] && good; ++p)
+            good = lower_value(f, f->source->operands[op->args[0] + p], &captures[p]);
+        if (hidden) captures[op->args[1]] = f->state;
         XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF, .type=lower_type(c, op->type),
-            .callee=c->functions[(uint32_t)op->immediate], .source=lower_source(c)};
-        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
+            .callee=c->functions[callee], .operands=captures, .operand_count=count, .source=lower_source(c)};
+        if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
+        xr_free(captures);
+        return good;
     }
     if (op->op == XR_XIR_STRING_LEN) {
         XrLirValue input = {0};

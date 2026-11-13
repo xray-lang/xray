@@ -50,7 +50,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, string_cursor;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, string_cursor, stack_environments;
     XrLirStateLayout state_layout;
 } LirC;
 
@@ -377,9 +377,10 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             }
             break;
         case XR_LIR_FUNCTION_REF:
-            if (v->operand_count)
+            if (!c_callable_frame_target(c, v))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "captured environments require native lifetime transport");
             else {
+                c->stack_environments |= v->operand_count != 0;
                 c_visit(c, v->callee);
                 c->seen[v->callee - 1] |= 2u;
             }
@@ -443,6 +444,14 @@ static void c_admit(LirC *c) {
                 c_admit_instruction(c, &v);
             }
         }
+    }
+    for (uint32_t n = 0; c->stack_environments && n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
+        XrLirFunctionView function = {0};
+        XrLirCallableType result;
+        xr_lir_function_view(c->request->module,
+            (XrLirFunction){c->request->module, c->closure[n]}, &function);
+        if (xr_lir_callable_type_view(c->request->module, function.result, &result) == XR_LIR_OK)
+            c_error(c, XR_LIR_C_UNSUPPORTED, "frame environments cannot leave their owning activation");
     }
 }
 static void c_path(LirC *c, const XrLirSource *source) {
@@ -549,6 +558,18 @@ static void c_string_owner(LirC *c, uint32_t id) {
 static void c_declarations(LirC *c) {
     if (c->string_cursor)
         c_text(c, "    XrtStringAppendCursor xrl_append = {0};\n    (void)&xrl_append;\n");
+    for (uint32_t b = 0; c->stack_environments && b < c->view.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->request->module, c->function, b, &block);
+        xr_lir_block_view(c->request->module, block, &view);
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView instruction;
+            xr_lir_instruction_view(c->request->module, block, n, &instruction);
+            if (instruction.op == XR_LIR_FUNCTION_REF && instruction.operand_count)
+                c_format(c, "    XrlEnv_%" PRIu32 " xrl_env%" PRIu32 ";\n", instruction.callee, instruction.result);
+        }
+    }
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
             return;
