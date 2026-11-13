@@ -31,6 +31,7 @@ def header_clients(build, logs, libraries):
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
     shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
+    shutil.copyfile(source / 'include/xray_native_callable.h', prefix / 'include/xray_native_callable.h')
     shutil.copyfile(source / 'include/xray_native_array.h', prefix / 'include/xray_native_array.h')
     shutil.copyfile(source / 'include/xray_native_view.h', prefix / 'include/xray_native_view.h')
     shutil.copyfile(source / 'include/xray_native_pod.h', prefix / 'include/xray_native_pod.h')
