@@ -161,7 +161,7 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         layout->bytes = callable_bytes;
         uint64_t arena_bytes = 0;
         status = xrt_callable_types_new_accounted(types, spec->callable_type_count,
-            spec->byte_limit - bytes, &layout->callable_types, &arena_bytes);
+            spec->byte_limit - callable_bytes, &layout->callable_types, &arena_bytes);
         if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
             status = XR_XIR_VALUE_OVERFLOW;
         if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
