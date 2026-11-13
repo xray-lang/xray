@@ -397,6 +397,10 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_aggregate_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
+/* Keep computed-goto handlers on a stable cache-line boundary as cold code grows. */
+#if defined(__clang__) || defined(__GNUC__)
+XR_ALIGN(64)
+#endif
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
     const XrRbcFunction *function;
