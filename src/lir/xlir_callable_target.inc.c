@@ -22,7 +22,7 @@ XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *module
         if (next == row_count) return false;
         XrLirFunctionCallableParameter row = rows[next++];
         if (row.parameter != p || row.contract.type != parameters[p] || row.contract.array_element ||
-            !xr_param_mode_is_valid(row.contract.mode)) return false;
+            !xr_param_mode_is_valid(row.contract.mode) || row.contract.mode == XR_PARAM_REF) return false;
     }
     return next == row_count;
 }

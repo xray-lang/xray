@@ -99,7 +99,7 @@ static void callable_type_owners(void) {
 }
 
 static void callable_type_rejections(void) {
-    for (unsigned attempt = 0; attempt < 8; ++attempt) {
+    for (unsigned attempt = 0; attempt < 9; ++attempt) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
         XrLirCallableParameter parameter = {.type=XR_LIR_I64, .mode=XR_PARAM_READ};
@@ -112,7 +112,8 @@ static void callable_type_rejections(void) {
         case 4: parameter.type = XR_LIR_TYPE_COUNT; break;
         case 5: parameter.array_element = XR_LIR_I64; break;
         case 6: shape.result = XR_LIR_ARRAY; break;
-        default: shape.throws = true; break;
+        case 7: shape.throws = true; break;
+        default: parameter.mode = XR_PARAM_REF; break;
         }
         XrLirType output = 0;
         XrLirStatus expected = attempt == 7 ? XR_LIR_UNSUPPORTED : XR_LIR_INVALID_ARGUMENT;
@@ -145,7 +146,7 @@ static void callable_parameter_contracts(void) {
     OK(xr_lir_module_finish(module, NULL));
     XrLirFunctionData *data = &module->functions[0];
     XrLirFunctionCallableParameter *owned = data->callable_parameters;
-    for (unsigned mutation = 0; mutation < 7; ++mutation) {
+    for (unsigned mutation = 0; mutation < 8; ++mutation) {
         XrLirFunctionCallableParameter saved = owned[0];
         if (mutation == 0) owned[0].parameter = 0;
         if (mutation == 1) owned[0].contract.type = XR_LIR_I64;
@@ -154,6 +155,7 @@ static void callable_parameter_contracts(void) {
         if (mutation == 4) data->callable_parameter_count = 1;
         if (mutation == 5) data->callable_parameters = NULL;
         if (mutation == 6) data->callable_parameter_count = 0;
+        if (mutation == 7) owned[0].contract.mode = XR_PARAM_REF;
         CHECK(xr_lir_verify(module, NULL) != XR_LIR_OK);
         owned[0] = saved;
         data->callable_parameters = owned;
@@ -177,4 +179,37 @@ static void callable_parameter_contracts(void) {
         xr_lir_module_destroy(copies[i]);
     }
     puts("callable formal contracts own exact rows across transforms and producer retirement");
+}
+
+static void callable_reference_shapes(void) {
+    XrLirModule *module = NULL;
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType owned_cell = 0;
+    OK(xr_lir_cell_type(module, (XrLirCellType){XR_LIR_I64, 0}, &owned_cell));
+    XrLirType cells[] = {XR_LIR_I64_CELL, XR_LIR_STRING_CELL, XR_LIR_ARRAY_CELL,
+        XR_LIR_ARRAY_REF, XR_LIR_STRING_REF, XR_LIR_VIEW_CELL, owned_cell};
+    for (unsigned c = 0; c < sizeof(cells) / sizeof(cells[0]); ++c) {
+        XrLirCallableParameter parameter = {.type=cells[c], .mode=XR_PARAM_REF,
+            .array_element=cells[c] == XR_LIR_ARRAY_CELL || cells[c] == XR_LIR_ARRAY_REF ? XR_LIR_I64 : 0};
+        XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=XR_LIR_UNIT};
+        XrLirType type = 0;
+        OK(xr_lir_callable_type(module, &signature, &type));
+        XrLirCallableType view;
+        OK(xr_lir_callable_type_view(module, type, &view));
+        CHECK(view.parameters[0].type == cells[c] && view.parameters[0].mode == XR_PARAM_REF);
+        XrParamMode values[] = {XR_PARAM_READ, XR_PARAM_MOVE};
+        for (unsigned m = 0; m < sizeof(values) / sizeof(values[0]); ++m) {
+            XrLirModule *invalid = NULL;
+            OK(xr_lir_module_create(NULL, &invalid));
+            if (cells[c] == owned_cell)
+                OK(xr_lir_cell_type(invalid, (XrLirCellType){XR_LIR_I64, 0}, &parameter.type));
+            parameter.mode = values[m];
+            XrLirType rejected = 0;
+            CHECK(xr_lir_callable_type(invalid, &signature, &rejected) == XR_LIR_INVALID_ARGUMENT && !rejected);
+            xr_lir_module_destroy(invalid);
+        }
+    }
+    OK(xr_lir_module_finish(module, NULL));
+    OK(xr_lir_verify(module, NULL));
+    xr_lir_module_destroy(module);
 }

@@ -937,6 +937,7 @@ int main(void) {
     callable_type_owners();
     callable_type_rejections();
     callable_parameter_contracts();
+    callable_reference_shapes();
     string_catalog_owners();
     string_reference_lifetime();
     nullable_type_owners();

@@ -139,7 +139,7 @@ static void callable_import_failures(bool cells) {
     XrLirType type = XR_LIR_I64;
     for (uint32_t i = 0; i < 16; ++i) {
         if (cells) REQUIRE(xr_lir_cell_type(source, (XrLirCellType){type, 0}, &type) == XR_LIR_OK);
-        XrLirCallableParameter parameter = {.type=type};
+        XrLirCallableParameter parameter = {.type=type, .mode=cells ? XR_PARAM_REF : XR_PARAM_READ};
         XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=type};
         REQUIRE(xr_lir_callable_type(source, &signature, &type) == XR_LIR_OK);
     }
