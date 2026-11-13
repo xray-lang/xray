@@ -159,6 +159,7 @@ def main():
              ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n'),
              ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
              ('literal-edges', args.source_root / 'tests/lir/programs/owned-string-literal-edges.xr', b'small\nbig\nsmallbig\n'),
+             ('literal-cache', args.source_root / 'tests/lir/programs/owned-string-literal-cache.xr', b'0\n6\n4\n'),
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
              ('loop-branches', args.source_root / 'tests/lir/programs/owned-string-loop-branches.xr', b'left0\nright1\nright2\n'),
              ('sequential', args.source_root / 'tests/lir/programs/owned-string-sequential.xr', b'L-1\nlow-1\nR3\nhigh3\n')]
@@ -218,6 +219,23 @@ def main():
                                 'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
             for optimization in (('Od', 'O1', 'O2', 'Ox') if mode == 'raw' else ('O2',)):
                 compile_run(folder,generated,main,optimization,expected * 2)
+            if name == 'literal-cache' and mode == 'raw':
+                observer = folder / 'literal-cache-observer.c'
+                observer.write_text('#include "xray_native_runtime.h"\n'
+                    'unsigned observed_literals;\n'
+                    'static XrtString *observe_literal(const char *bytes,size_t length,uint32_t source){\n'
+                    ' ++observed_literals;return xrt_string_literal(bytes,length,source);}\n'
+                    '#define xrt_string_literal(bytes,length,source) observe_literal((bytes),(length),(source))\n'
+                    f'#include "{generated.name}"\n', encoding='ascii')
+                observed_main = folder / 'literal-cache-main.c'
+                observed_main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+                    'extern unsigned observed_literals;\nint main(void){\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=5u)return 1;\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=10u)return 2;\nreturn 0;}\n', encoding='ascii')
+                for optimization in ('Od', 'O2'):
+                    compile_run(folder, observer, observed_main, optimization, expected * 2)
+                records.append({'case': name, 'result': 'FIRST_USE_PER_ACTIVATION',
+                                'entryRuns': 2, 'literalCalls': 10, 'zeroIterationBodyCalls': 0})
             if name in frame_drops:
                 frame_observer(folder,generated,expected,frame_drops[name])
                 sink=folder/'standalone-read-only-output';sink.write_bytes(b'')

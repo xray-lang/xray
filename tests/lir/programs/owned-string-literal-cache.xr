@@ -1,0 +1,13 @@
+fn build(count: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        text += "é\0"
+        i += 1
+    }
+    return text
+}
+
+print(len(build(0)))
+print(len(build(3)))
+print(len(build(2)))

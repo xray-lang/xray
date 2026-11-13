@@ -545,7 +545,9 @@ static void c_declarations(LirC *c) {
         for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
             parameter |= c->view.parameters[p] == id;
         if (!parameter) {
-            c_format(c, "    %s v%" PRIu32 ";\n", c_literal_value(c, id) ? "const void *" : c_type(c, c_value_type(c, id)), id);
+            c_format(c, "    %s v%" PRIu32 "%s;\n",
+                c_literal_value(c, id) ? "const void *" : c_type(c, c_value_type(c, id)), id,
+                c_string_literal(c, id) ? " = NULL" : "");
             c_format(c, "    (void)&v%" PRIu32 ";\n", id);
         }
         if (c_value_type(c, id) == XR_LIR_STATE_REF) {
@@ -764,8 +766,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             const uint8_t *bytes = NULL;
             size_t length = 0;
             xr_lir_literal_view(c->request->module, literal, &bytes, &length);
-            c_format(c, "    v%" PRIu32 " = xrt_string_literal((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
-                v->result, v->bits, length, string_source);
+            /* The unique SSA home keeps this Root-pinned borrow for the call.
+             * Materializing at first execution preserves empty-loop behavior. */
+            c_format(c, "    if (!v%" PRIu32 ")\n        v%" PRIu32
+                " = xrt_string_literal((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
+                v->result, v->result, v->bits, length, string_source);
             break;
         }
         case XR_LIR_STRING_F64:
