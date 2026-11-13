@@ -916,6 +916,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
 }
 #include "xxir_source_local_errors.inc.c"
 static bool source_hir_current_scope(SourceContext *, XrHirBodyScope *);
+static bool source_lexical_refresh(SourceContext *,bool *);
 #include "xxir_source_lexical_events.inc.c"
 #include "xxir_source_region_emit.inc.c"
 static bool begin_block(SourceContext *ctx) {

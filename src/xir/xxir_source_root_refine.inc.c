@@ -312,7 +312,8 @@ static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects,
         if (status != XR_XIR_OK) {source_fail(ctx,NULL,status,"callable conversion equations did not close"); goto failure;}
         if (again) *changed = true;
     }
-    if (!source_effect_sync(ctx,effects,changed) || !source_root_query_sync(ctx)) goto failure;
+    if (!source_effect_sync(ctx,effects,changed) || !source_root_query_sync(ctx) ||
+        !source_lexical_refresh(ctx,changed)) goto failure;
     ctx->root_refinement = NULL;
     ctx->function = function; ctx->module = module;
     return XR_XIR_OK;

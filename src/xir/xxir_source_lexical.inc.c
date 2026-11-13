@@ -51,6 +51,27 @@ static bool source_lexical_materialized(const XrHirLexicalBinding *binding) {
         (binding->value!=UINT32_MAX || binding->declaration.logical==XR_XIR_UNIT);
 }
 
+static bool source_lexical_binding_types(SourceContext *ctx,const XrXirFunction *function,
+    XirLexicalBinding *binding,bool *changed) {
+    XrXirType physical=XR_XIR_UNIT;
+    if (binding->value!=UINT32_MAX) {
+        if (binding->value<function->parameter_count) physical=function->parameters[binding->value];
+        else {
+            uint32_t i=binding->value-function->parameter_count;
+            if (i>=function->instruction_count)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical binding lost its actual value");
+            physical=function->instructions[i].type;
+        }
+    }
+    XrXirType logical=binding->rebindable && !binding->direct_borrowed ?
+        xr_xir_cell_element(&ctx->types,physical) : physical;
+    if (binding->physical!=physical || binding->logical!=logical) {
+        binding->physical=physical;binding->logical=logical;
+        if (changed) *changed=true;
+    }
+    return true;
+}
+
 static bool source_lexical_bindings(SourceContext *ctx, XirLexicalFunction *functions,
     SourceLexicalMaps *maps) {
     for (uint32_t b=0;b<maps->binding_count;++b) {
@@ -78,25 +99,15 @@ static bool source_lexical_bindings(SourceContext *ctx, XirLexicalFunction *func
         uint32_t f=declaration.origin.function;
         XirLexicalFunction *row=&functions[f];
         const XrXirFunction *function=&ctx->functions[f];
-        XrXirType physical=XR_XIR_UNIT;
-        if (binding.value!=UINT32_MAX) {
-            if (binding.value<function->parameter_count) physical=function->parameters[binding.value];
-            else {
-                uint32_t i=binding.value-function->parameter_count;
-                if (i>=function->instruction_count) return false;
-                physical=function->instructions[i].type;
-            }
-        }
         if (declaration.scope.index>=maps->scope_count || maps->scopes[declaration.scope.index]==UINT32_MAX)
             return false;
-        XrXirType logical=declaration.rebindable && !declaration.direct_borrowed ?
-            xr_xir_cell_element(&ctx->types,physical) : physical;
         uint32_t at=row->binding_count++;
         XrHirBindingKey key=declaration.key;
         ((XirLexicalBinding *)row->bindings)[at]=(XirLexicalBinding){
             {key.module,key.declaration,key.node,key.parent_declaration,f,key.storage},
-            maps->scopes[declaration.scope.index],at,binding.value,logical,physical,
+            maps->scopes[declaration.scope.index],at,binding.value,XR_XIR_UNIT,XR_XIR_UNIT,
             declaration.mode,binding.role,declaration.rebindable,declaration.direct_borrowed};
+        if (!source_lexical_binding_types(ctx,function,&((XirLexicalBinding *)row->bindings)[at],NULL)) return false;
         maps->bindings[b]=at;
     }
     return true;
@@ -168,5 +179,24 @@ static bool source_lexical_prepare(SourceContext *ctx) {
         ctx->bodies[f].lexical=functions[f];
     }
     ctx->effect_evidence->lexical=(XirLexicalProgram){functions,ctx->function_count};
+    return true;
+}
+
+/* Canonical Cell identity refinement and lifetime relocation can replace the
+ * type of the same actual value. They keep the declaration and extent key. */
+static bool source_lexical_refresh(SourceContext *ctx,bool *changed) {
+    if (!ctx->effect_evidence || !ctx->effect_evidence->lexical.function_count) return true;
+    XirLexicalProgram program=ctx->effect_evidence->lexical;
+    if (program.function_count!=ctx->function_count || !program.functions)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical type owner changed shape");
+    for (uint32_t f=0;f<program.function_count;++f) {
+        const XrXirFunction *function=&ctx->functions[f];
+        const XirLexicalFunction *row=&program.functions[f];
+        for (uint32_t b=0;b<row->binding_count;++b) {
+            if (!source_request_poll(ctx,NULL)) return false;
+            if (!source_lexical_binding_types(ctx,function,
+                &((XirLexicalBinding *)row->bindings)[b],changed)) return false;
+        }
+    }
     return true;
 }

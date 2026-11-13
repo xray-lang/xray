@@ -10,6 +10,15 @@ static void closure_placement_source_expectations(const XrXirArtifact *artifact)
     for (unsigned n = 0; n < 7; ++n) {
         uint32_t function = root_find(module, names[n]), constructors = 0;
         const XrXirFunction *body = &module->functions[function];
+        XirLexicalFunction lexical={0};
+        CHECK(xr_xir_compile_lexical_function(artifact,function,&lexical)==XR_XIR_OK);
+        for (uint32_t b=0;b<lexical.binding_count;++b) {
+            const XirLexicalBinding *binding=&lexical.bindings[b];
+            if (binding->value==UINT32_MAX) continue;
+            XrXirType actual=binding->value<body->parameter_count ? body->parameters[binding->value] :
+                body->instructions[binding->value-body->parameter_count].type;
+            CHECK(binding->physical==actual);
+        }
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
             if (body->instructions[i].op != XR_XIR_FUNCTION_REF || !body->instructions[i].args[1]) continue;
             XirClosureStorage storage = XIR_CLOSURE_UNRESOLVED;
