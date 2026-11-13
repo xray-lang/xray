@@ -102,12 +102,14 @@ static bool rbc_call_parameter_matches(const RbcStringAdmission *s, uint32_t act
         return state == RBC_STRING_BORROWED && source && source <= s->function->register_count &&
             rbc_register_kind(s->function, source - 1) == formal;
     }
-    if (formal == XR_RBC_STRING_CELL || rbc_array_cell_kind(formal)) {
+    if (formal == XR_RBC_STRING_CELL || formal == XR_RBC_I64_BINDING || rbc_array_cell_kind(formal)) {
         if (!rbc_cell_state(state) || !s->origin[actual]) return false;
         uint32_t origin = s->origin[actual];
+        if (formal == XR_RBC_I64_BINDING && origin == UINT32_MAX) return state == RBC_CELL_BORROWED;
         if (origin >= 65537) return origin - 65537 < s->function->parameter_count &&
             rbc_register_kind(s->function, origin - 65537) == formal;
-        XrRbcRegisterKind payload = formal == XR_RBC_STRING_CELL ? XR_RBC_STRING : rbc_array_cell_payload(formal);
+        XrRbcRegisterKind payload = formal == XR_RBC_STRING_CELL ? XR_RBC_STRING :
+            formal == XR_RBC_I64_BINDING ? XR_RBC_BITS : rbc_array_cell_payload(formal);
         return origin <= s->function->cell_count && s->function->cell_kinds &&
             s->function->cell_kinds[origin - 1] == payload;
     }

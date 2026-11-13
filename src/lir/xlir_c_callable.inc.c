@@ -49,7 +49,7 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
     for (uint32_t p = 0; p < target.capture_count; ++p) {
         XrLirType type = function.parameter_types[p];
         if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
-            type != XR_LIR_U64 && type != XR_LIR_F64) return false;
+            type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL) return false;
     }
     return true;
 }

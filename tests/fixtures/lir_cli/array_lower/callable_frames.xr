@@ -1,4 +1,5 @@
 fn apply(callback: fn(i64) -> i64, value: i64) -> i64 { return callback(value) }
+fn sample(callback: fn() -> i64) -> i64 { return callback() }
 fn exercise(seed: i64) -> i64 {
     const callback = fn(value: i64) -> i64 { return seed + value }
     return apply(callback, 1) + apply(callback, 1)
@@ -10,7 +11,25 @@ fn stateValue() -> i64 {
     state = state + 10
     return apply(callback, 2)
 }
+fn counter(seed: i64) -> i64 {
+    var value = seed
+    const read = fn() -> i64 { return value }
+    const bump = fn(delta: i64) -> i64 { value = value + delta
+        return value }
+    const first = apply(bump, 2)
+    value = value + 3
+    return sample(read) + first
+}
+fn answer() -> i64 {
+    var n = 40
+    const f = fn() -> i64 { n = n + 1
+        return n }
+    return f()
+}
 print(exercise(20))
 print(exercise(10))
 print(stateValue())
 print(stateValue())
+print(counter(40))
+print(counter(10))
+print(answer())

@@ -15,7 +15,8 @@ static bool xr_rbc_callable_arguments_valid(const XrRbcModule *module, const XrR
     const XrRbcRegister *arguments) {
     if (!callee->callable) return true;
     for (uint32_t p = 0; p < callee->capture_count; ++p)
-        if (!xr_rbc_callable_scalar_valid(callee->captures[p], arguments[p].bits)) return false;
+        if (callee->captures[p].kind != XR_RBC_CALLABLE_BINDING &&
+            !xr_rbc_callable_scalar_valid(callee->captures[p], arguments[p].bits)) return false;
     XrRbcCallableType type = module->callable_types[callee->callable - 1];
     for (uint32_t p = 0; p < type.parameter_count; ++p) {
         XrRbcCallableValue parameter = type.parameters[p].value;
@@ -82,9 +83,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             size_t first = frame->aggregate_base - 1 + offset / sizeof(*stack->spills) +
                 function->environments[access.destination - 1].offset / sizeof(*stack->spills);
             const XrRbcFunction *callee = &module->functions[access.callee];
-            for (uint32_t p = 0; p < callee->capture_count; ++p)
-                if (!xr_rbc_callable_scalar_valid(callee->captures[p], xr_rbc_aggregate_scalar(stack, frame,
-                    function->aggregate_operands[access.first + p])->bits)) return XR_RBC_INVALID;
+            for (uint32_t p = 0; p < callee->capture_count; ++p) {
+                uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, function->aggregate_operands[access.first + p])->bits;
+                if (callee->captures[p].kind == XR_RBC_CALLABLE_BINDING ?
+                    !xr_rbc_cell(stack, module, bits, XR_RBC_BITS) :
+                    !xr_rbc_callable_scalar_valid(callee->captures[p], bits)) return XR_RBC_INVALID;
+            }
             for (uint32_t p = 0; p < access.count; ++p)
                 stack->spills[first + p] = *xr_rbc_aggregate_scalar(stack, frame,
                     function->aggregate_operands[access.first + p]);

@@ -29,7 +29,10 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
 static XrRbcProgram *compile(XrLirModule *m, XrLirFunction root) {
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
-    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, &diagnostic);
+    if (status != XR_RBC_COMPILE_OK) fprintf(stderr, "compile f%u b%u i%u status%u %s\n",
+        diagnostic.function, diagnostic.block, diagnostic.instruction, (unsigned)status, diagnostic.message);
+    CHECK(status == XR_RBC_COMPILE_OK);
     CHECK(program && diagnostic.status == XR_RBC_COMPILE_OK);
     return program;
 }

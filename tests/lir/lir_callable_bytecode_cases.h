@@ -88,12 +88,13 @@ static void callable_frame_receiving(const XrRbcProgram *program) {
     CHECK(root->environment_count == 1 && root->environment_size == 8);
     XrRbcEnvironment environment = root->environments[0];
     uint32_t callee = environment.callee, producer = environment.producer;
+    bool binding = original->functions[callee].captures[0].kind == XR_RBC_CALLABLE_BINDING;
     XrRbcFunction functions[3];
     XrRbcAggregateAccess *accesses = xr_malloc(root->aggregate_access_count * sizeof(*accesses));
     XrRbcArrayLocation *operands = xr_malloc(root->aggregate_operand_count * sizeof(*operands));
     uint32_t *code = xr_malloc((root->code_count + 1) * sizeof(*code));
     CHECK(accesses && operands && code && callee < 3);
-    for (unsigned scenario = 0; scenario < 11; ++scenario) {
+    for (unsigned scenario = 0; scenario < (binding ? 14u : 11u); ++scenario) {
         XrRbcModule module = *original;
         memcpy(functions, original->functions, sizeof(functions));
         memcpy(accesses, root->aggregate_accesses, root->aggregate_access_count * sizeof(*accesses));
@@ -128,12 +129,25 @@ static void callable_frame_receiving(const XrRbcProgram *program) {
                 code[root->code_count] = code[root->code_count - 1];
                 code[root->code_count - 1] = reference;
                 functions[0].code_count += 1;
-            } else CHECK(xr_rbc_jump(&code[root->code_count - 1], root->code_count - 1,
+            } else if (scenario == 10) CHECK(xr_rbc_jump(&code[root->code_count - 1], root->code_count - 1,
                 reference_pc, root->code_count));
             functions[0].code = code;
             functions[0].source_ids = NULL;
             functions[0].source_id_count = 0;
         }
+        if (scenario == 11 || scenario == 12) {
+            bool replaced = false;
+            for (size_t pc = 0; pc < root->code_count; ++pc)
+                if ((code[pc] & 255) == XR_RBC_CELL_NEW) {
+                    uint32_t destination = (code[pc] >> 8) & 255;
+                    CHECK(xr_rbc_encode(&code[pc], scenario == 11 ?
+                        (XrRbcOperands){.op=XR_RBC_MOV, .a=destination, .b=destination} :
+                        (XrRbcOperands){.op=XR_RBC_LOADI, .a=destination, .immediate=1}));
+                    replaced = true;
+                }
+            CHECK(replaced);
+        }
+        if (scenario == 13) capture = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, XR_POD_I64};
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID);
         CHECK(!execution);

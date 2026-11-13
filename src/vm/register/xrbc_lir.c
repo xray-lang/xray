@@ -108,7 +108,7 @@ typedef struct {
     size_t patch_count, patch_capacity;
     XrRbcCompileDiagnostic *diagnostic;
     XrRbcCompileStatus status;
-    bool string_scratch, control_scratch, state_scratch, state_ref_scratch;
+    bool string_scratch, control_scratch, state_scratch, state_ref_scratch, binding_scratch;
     bool array_scratch[XR_RBC_ARRAY_FAMILY_COUNT];
     bool view_scratch[3], has_views;
 } RbcLirCompiler;
@@ -420,7 +420,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     XrLirClosureTarget closure = {0};
     if (xr_lir_closure_target_view(input, f, &closure) == XR_LIR_OK)
         for (uint32_t p = 0; p < closure.capture_count; ++p)
-            if (!rbc_lir_scalar(v->parameter_types[p])) {
+            if (!rbc_lir_scalar(v->parameter_types[p]) && v->parameter_types[p] != XR_LIR_I64_CELL) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                     "captured payload has no frame bytecode carrier", (XrLirSource){0});
                 return false;
@@ -515,7 +515,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             xr_lir_function_view(input, code, &callee) != XR_LIR_OK ||
             !xr_lir_callable_accepts(input, i->type, target.callable)) return false;
         for (uint32_t p = 0; p < target.capture_count; ++p)
-            if (!rbc_lir_scalar(callee.parameter_types[p])) return false;
+            if (!rbc_lir_scalar(callee.parameter_types[p]) && callee.parameter_types[p] != XR_LIR_I64_CELL) return false;
         return true;
     }
     case XR_LIR_CALL_INDIRECT: return true;
@@ -659,6 +659,7 @@ rejected:
 /* Parallel copies run with no staged instruction operands. Reuse the first
  * temporary of the matching bank, never a slot from the other typed pool. */
 static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value, XrLirType type) {
+    if (type == XR_LIR_I64_CELL) return XR_RBC_I64_BINDING;
     if (rbc_lir_callable_type(c->input, type)) return XR_RBC_FUNCTION;
     if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
         XrLirArrayShape shape = {0};
@@ -677,11 +678,13 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
 }
 
 static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind) {
+    if (kind == XR_RBC_I64_BINDING)
+        return c->slot_count + (c->typed_spills ? c->scratch_count - 1 : 11u);
     uint32_t family = xr_rbc_array_family(kind);
     uint32_t offset = kind == XR_RBC_STRING ? 1u : kind == XR_RBC_STATE ? 2u :
         kind == XR_RBC_STATE_REF ? 3u : family < XR_RBC_ARRAY_FAMILY_COUNT ? 4u + family : 0u;
     if (xr_rbc_view_kind(kind)) {
-        uint32_t base = c->typed_spills ? c->scratch_count - 3u : 8u;
+        uint32_t base = c->typed_spills ? c->scratch_count - 3u - c->binding_scratch : 8u;
         return c->slot_count + base + (uint32_t)(kind - XR_RBC_VIEW_FRAME);
     }
     if (c->typed_spills) {
@@ -800,6 +803,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                         if (c->array_scratch[a]) count = 5u + a;
                     for (uint32_t v = 0; v < 3; ++v)
                         if (c->view_scratch[v]) count = 9u + v;
+                    if (c->binding_scratch) count = 12;
                     if (c->scratch_count < count) c->scratch_count = count;
                 }
             }
@@ -849,7 +853,7 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
                 c->register_kinds[c->slot_count+c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,a)+r]=xr_rbc_array_kind_at(a);
         for(uint32_t r=0;r<c->temporary_refs;++r)
             c->register_kinds[c->slot_count+c->temporary_strings+arrays+r]=XR_RBC_STATE_REF;
-        if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1-(c->has_views?3u:0u)]=XR_RBC_STATE;
+        if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1-(c->has_views?3u:0u)-c->binding_scratch]=XR_RBC_STATE;
     } else {
         if(c->string_scratch)c->register_kinds[c->slot_count+1]=XR_RBC_STRING;
         if(c->state_scratch)c->register_kinds[c->slot_count+2]=XR_RBC_STATE;
@@ -858,10 +862,12 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
             if(c->array_scratch[a])c->register_kinds[c->slot_count+4+a]=xr_rbc_array_kind_at(a);
     }
     for (uint32_t v = 0; v < 3; ++v) {
-        uint32_t offset = c->typed_spills ? c->scratch_count - 3u : 8u;
+        uint32_t offset = c->typed_spills ? c->scratch_count - 3u - c->binding_scratch : 8u;
         if (c->view_scratch[v]) c->register_kinds[c->slot_count + offset + v] =
             (XrRbcRegisterKind)(XR_RBC_VIEW_FRAME + v);
     }
+    if (c->binding_scratch)
+        c->register_kinds[c->slot_count + (c->typed_spills ? c->scratch_count - 1 : 11u)] = XR_RBC_I64_BINDING;
     if(c->reference_spill_count) {
         c->reference_spill_kinds=xr_malloc((size_t)c->reference_spill_count*sizeof(*c->reference_spill_kinds));
         if(!c->reference_spill_kinds)return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate managed spill shapes");
@@ -1359,7 +1365,9 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         c->captures = xr_malloc((size_t)target.capture_count * sizeof(*c->captures));
         if (!c->captures) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own capture descriptors");
         for (uint32_t p = 0; p < target.capture_count; ++p)
-            c->captures[p] = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
+            c->captures[p] = c->view.parameter_types[p] == XR_LIR_I64_CELL ?
+                (XrRbcCallableValue){XR_RBC_CALLABLE_BINDING, XR_POD_I64} :
+                (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;

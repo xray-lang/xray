@@ -128,10 +128,10 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_callable_fixture.h"
 
 static void callable_compiler_failures(void) {
-    for (unsigned capture = 0; capture < 2; ++capture) {
+    for (unsigned capture = 0; capture < 3; ++capture) {
         XrLirModule *module = NULL;
         XrLirFunction root = {0};
-        callable_fixture_capture(&module, &root, capture != 0);
+        callable_fixture_capture(&module, &root, capture);
         XrRbcProgram *program = NULL;
         attempts = 0; fail_at = SIZE_MAX;
         CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
@@ -152,9 +152,15 @@ static void callable_compiler_failures(void) {
             uint32_t callee = functions[0].environments[0].callee;
             XrRbcFunction saved = functions[callee];
             XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX] = {0};
+            for (uint32_t r = 0; r < saved.register_count; ++r) kinds[r] = saved.register_kinds[r];
+            XrRbcRegisterKind cell_kinds[200] = {0};
             functions[callee].register_count = XR_RBC_REGISTER_COUNT_MAX;
             functions[callee].register_kinds = kinds;
             functions[callee].register_kind_count = XR_RBC_REGISTER_COUNT_MAX;
+            functions[callee].cell_count = 200;
+            functions[callee].cell_kinds = cell_kinds;
+            functions[callee].cell_kind_count = 200;
+            functions[callee].spill_count = 200;
             size_t retained = live_allocations;
             attempts = 0;
             CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);

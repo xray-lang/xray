@@ -60,6 +60,10 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             f->environment_count > UINT16_MAX + 1u) return false;
         for (uint32_t p = 0; p < f->capture_count; ++p) {
             XrRbcCallableValue value = f->captures[p];
+            if (value.kind == XR_RBC_CALLABLE_BINDING) {
+                if (value.type != XR_POD_I64 || rbc_register_kind(f, p) != XR_RBC_I64_BINDING) return false;
+                continue;
+            }
             if (value.kind != XR_RBC_CALLABLE_SCALAR || value.type == XR_POD_UNIT ||
                 !rbc_callable_value_valid(m, value, 0) || rbc_register_kind(f, p) != XR_RBC_BITS) return false;
         }
@@ -131,8 +135,9 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
                 f->environments[access.destination - 1].callee != access.callee) return false;
             for (uint32_t p = 0; p < count; ++p) {
                 XrRbcArrayLocation location = f->aggregate_operands[access.first + p];
-                if (!rbc_array_location_valid(f, location) || rbc_array_location_kind(f, location) !=
-                    (p < callee->capture_count ? XR_RBC_BITS : XR_RBC_STATE)) return false;
+                XrRbcRegisterKind kind = p < callee->capture_count ?
+                    (callee->captures[p].kind == XR_RBC_CALLABLE_BINDING ? XR_RBC_I64_BINDING : XR_RBC_BITS) : XR_RBC_STATE;
+                if (!rbc_array_location_valid(f, location) || rbc_array_location_kind(f, location) != kind) return false;
             }
         } else if (access.first || access.count || access.destination) return false;
         return

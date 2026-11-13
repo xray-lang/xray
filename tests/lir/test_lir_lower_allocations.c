@@ -279,7 +279,11 @@ static void callable_lower_failures(void) {
         "fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
         "fn answer(seed:i64)->i64{const cb=fn(x:i64)->i64{return seed+x}\nreturn apply(cb,2)}\n"
         "var state=40\nfn leaf(x:i64)->i64{return state+x}\n"
-        "fn current()->i64{const cb=leaf\nstate=50\nreturn apply(cb,2)}\nprint(answer(40))\nprint(current())\n"};
+        "fn current()->i64{const cb=leaf\nstate=50\nreturn apply(cb,2)}\nprint(answer(40))\nprint(current())\n",
+        "fn sample(cb:fn()->i64)->i64{return cb()}\n"
+        "fn answer(seed:i64)->i64{var value=seed\nconst first=fn()->i64{value=value+1\nreturn value}\n"
+        "const second=fn()->i64{return value}\nconst result=sample(first)\nvalue=value+2\n"
+        "return result+sample(second)}\nprint(answer(40))\n"};
     for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
         SourceFixture fixture = source_fixture(programs[program]);
         attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));

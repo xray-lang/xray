@@ -79,8 +79,9 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
             for (uint32_t p = 0; p < access.count; ++p) {
                 XrRbcArrayLocation location = s->function->aggregate_operands[access.first + p];
                 uint8_t state = rbc_array_state(s, location);
-                if (rbc_array_location_kind(s->function, location) == XR_RBC_STATE ?
-                    state != RBC_STATE_BORROWED : state != RBC_BITS) return false;
+                XrRbcRegisterKind kind = rbc_array_location_kind(s->function, location);
+                if (kind == XR_RBC_STATE ? state != RBC_STATE_BORROWED :
+                    kind == XR_RBC_I64_BINDING ? state != RBC_CELL_BORROWED : state != RBC_BITS) return false;
             }
             s->aggregates[home] = 1;
         }

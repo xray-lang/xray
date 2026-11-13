@@ -245,9 +245,6 @@ static void unsupported(void) {
     rejected(
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
         false, "STRUCT_NEW");
-    rejected("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
-             "f()}\nprint(answer())\n",
-             false, "FUNCTION_REF");
     rejected("class Box{value:i64\ninit(value){this.value=value}}\nfn answer()->i64{const "
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
@@ -930,6 +927,28 @@ static void offset_sources(void) {
     CHECK(offsets==1);xr_lir_lowered_free(&output);
 }
 static void callable_source(void) {
+    XrLirLowered binding = lower_text("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
+        "f()}\nprint(answer())\n");
+    unsigned binding_count = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(binding.module); ++n) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(binding.module, n, &function));
+        OK(xr_lir_function_view(binding.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView body;
+            OK(xr_lir_block_at(binding.module, function, b, &block));
+            OK(xr_lir_block_view(binding.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView instruction;
+                OK(xr_lir_instruction_view(binding.module, block, i, &instruction));
+                binding_count += instruction.op == XR_LIR_CELL_NEW && instruction.type == XR_LIR_I64_CELL;
+            }
+        }
+    }
+    CHECK(binding_count == 1);
+    xr_lir_lowered_free(&binding);
     XrLirLowered output = lower_text("fn apply(cb:fn(i64)->i64,x:i64)->i64{return cb(x)}\n"
         "print(apply(fn(x:i64)->i64{return x+2},40))\n");
     unsigned references = 0, invocations = 0;

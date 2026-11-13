@@ -65,6 +65,13 @@ static void callable_vm_execution(void) {
     CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
     callable_frame_receiving(captured_program);
     xr_rbc_program_destroy(captured_program);
+    captured_program = NULL;
+    xr_lir_module_destroy(captured);
+    callable_fixture_capture(&captured, &captured_root, 2);
+    callable_transforms(captured, captured_root);
+    CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
+    callable_frame_receiving(captured_program);
+    xr_rbc_program_destroy(captured_program);
     xr_lir_module_destroy(captured);
     XrLirModule *module = NULL;
     XrLirFunction root = {0};
