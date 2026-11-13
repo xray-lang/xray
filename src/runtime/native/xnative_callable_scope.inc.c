@@ -54,7 +54,7 @@ static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
             if (arena && group->types != arena) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
             return group;
         }
-    if (!image || !image->entry_count || !image->entries || image->entry_count > 65536)
+    if (!image || !image->entry_count || !image->entries)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableGroup *group = xr_calloc(1, sizeof(*group));
     if (!group) xrt_value_failure(XR_XIR_VALUE_OOM, source);
@@ -70,7 +70,7 @@ static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
     size_t captures = 0;
     for (uint32_t e = 0; e < image->entry_count; ++e) {
         XrtCallableEntrySpec entry = image->entries[e];
-        if (entry.capture_count > 65536 || (entry.capture_count && !entry.captures))
+        if (entry.capture_count && !entry.captures)
             xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
         if (entry.capture_count > SIZE_MAX - captures) xrt_value_failure(XR_XIR_VALUE_OVERFLOW, source);
         captures += entry.capture_count;

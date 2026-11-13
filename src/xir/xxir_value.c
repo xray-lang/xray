@@ -545,9 +545,12 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET)
         return hash_storage_valid((XirHash *)object);
     if (object->kind == XIR_OBJECT_FUNCTION) {
-        const XrXirFunctionBinding *binding = &((XirFunction *) object)->binding;
-        return binding->owner && binding->release && binding->capture_count <= 65536 &&
-            ((binding->capture_count != 0) == (binding->captures != NULL));
+        const XirFunction *function = (const XirFunction *)object;
+        const XrXirFunctionBinding *binding = &function->binding;
+        size_t count = binding->capture_count;
+        return binding->owner && binding->release &&
+            count <= (SIZE_MAX - sizeof(*function)) / sizeof(XrXirValue) &&
+            binding->captures == (count ? (const XrXirValue *)(function + 1) : NULL);
     }
     if (object->kind == XIR_OBJECT_CELL) {
         const XirCell *cell = (const XirCell *)object;
@@ -1600,8 +1603,12 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
     XrXirValue *output) {
     if (!admission_owner(admission, arena, domain) || !unit_value(output) ||
         !xr_xir_type_is_callable(xr_xir_compile_type_arena_types(arena), type) ||
-        !binding || !binding->owner || !binding->release || binding->capture_count > 65536 ||
+        !binding || !binding->owner || !binding->release ||
         (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    size_t capture_bytes = binding->capture_count;
+    if (capture_bytes > (SIZE_MAX - sizeof(XirFunction)) / sizeof(XrXirValue))
+        return XR_XIR_VALUE_OVERFLOW;
+    capture_bytes *= sizeof(XrXirValue);
     if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
     if (!admission_is_compile(admission)) --admission->work;
     if (!admission->function) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -1628,13 +1635,13 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
         if (status != XR_XIR_VALUE_OK) return status;
     }
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    size_t bytes = sizeof(XirFunction) + (size_t) binding->capture_count * sizeof(XrXirValue);
+    size_t bytes = sizeof(XirFunction) + capture_bytes;
     XirFunction *function = (XirFunction *) constructed_allocate(domain, arena, type, bytes, &status);
     if (!function) return status;
     function->binding = *binding;
     XrXirValue *captures = (XrXirValue *) (function + 1);
     function->binding.captures = binding->capture_count ? captures : NULL;
-    memset(captures, 0, (size_t) binding->capture_count * sizeof(*captures));
+    memset(captures, 0, capture_bytes);
     for (uint32_t i = 0; i < binding->capture_count; ++i) {
         status = xr_xir_value_copy(&binding->captures[i], &captures[i]);
         if (status != XR_XIR_VALUE_OK) {

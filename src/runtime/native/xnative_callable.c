@@ -73,7 +73,6 @@ XR_FUNC XrXirValueStatus xrt_callable_code_new(XrXirTypeArena *arena,
         XrtCallableEntry entry = entries[e];
         const XrXirTypeNode *signature = xr_xir_callable_signature(types, entry.type);
         if (!signature || ((signature->flags & XR_XIR_CALLABLE_C_ABI) && entry.capture_count) ||
-            entry.capture_count > 65536 ||
             (entry.capture_count && !entry.captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (entry.capture_count > SIZE_MAX - captures) return XR_XIR_VALUE_OVERFLOW;
         captures += entry.capture_count;

@@ -169,3 +169,63 @@ static void native_callable_scopes(void) {
     xr_free(context);
     xrt_locations_release(owner);
 }
+
+typedef struct NativeCallableLargeScopeContext {
+    NativeCallableScopeContext execution;
+    XrtCallableImage image;
+    const uint64_t *captures;
+} NativeCallableLargeScopeContext;
+
+static void native_callable_large_scope_root(void *opaque) {
+    NativeCallableLargeScopeContext *context = opaque;
+    XrtCallableScope scope;
+    xrt_callable_scope_enter(&scope, &context->image, 1);
+    uint32_t entry = context->image.entry_count - 1;
+    uint32_t count = context->image.entries[entry].capture_count;
+    XrtCallable *function = xrt_callable_scope_new(&scope, entry, context->captures, count, 1);
+    if (count) {
+        context->execution.result = xrt_callable_capture(&context->image, function, entry, count - 1, 1);
+    } else {
+        context->execution.result = xrt_callable_entry(&context->image, function, 1);
+    }
+    CHECK(!xrt_callable_scope_leave(&scope, NULL, 1));
+}
+
+static void native_callable_large_scopes(void) {
+    static const XrtCallableTypeSpec types[] = {{.kind=XRT_CALLABLE_SIGNATURE,
+        .result={XRT_CALLABLE_SCALAR, XR_POD_I64}}};
+    const uint32_t count = 65537;
+    XrtLocationOwner *owner = locations("large-callable-scope.xr");
+    for (unsigned captured = 0; captured < 2; ++captured) {
+        uint32_t entries_count = captured ? 1 : count;
+        XrtCallableEntrySpec *entries = xr_calloc(entries_count, sizeof(*entries));
+        XrtCallableValueSpec *specs = captured ? xr_calloc(count, sizeof(*specs)) : NULL;
+        uint64_t *values = captured ? xr_calloc(count, sizeof(*values)) : NULL;
+        NativeCallableLargeScopeContext *context = xr_calloc(1, sizeof(*context));
+        CHECK(entries && context && (!captured || (specs && values)));
+        for (uint32_t i = 0; captured && i < count; ++i) {
+            specs[i] = (XrtCallableValueSpec){XRT_CALLABLE_SCALAR, XR_POD_I64};
+            values[i] = (uint64_t)i + 1;
+        }
+        if (captured) entries[0] = (XrtCallableEntrySpec){0, specs, count};
+        context->image = (XrtCallableImage){types, 1, entries, entries_count};
+        context->captures = values;
+        XrtExecutionStatus status = xrt_run_embedded_owned(owner, &context->execution.failure,
+            native_callable_large_scope_root, context, &context->execution.root);
+        uint64_t expected = captured ? count : count - 1;
+        bool valid = status == XRT_EXECUTION_COMPLETED && context->execution.result == expected;
+        if (!valid) {
+            fprintf(stderr, "callable image entries=%u captures=%u status=%u failure=%u result=%llu\n",
+                (unsigned)entries_count, captured ? (unsigned)count : 0u, (unsigned)status,
+                (unsigned)context->execution.failure.kind, (unsigned long long)context->execution.result);
+        }
+        CHECK(xrt_value_root_empty(&context->execution.root));
+        xr_free(context);
+        xr_free(values);
+        xr_free(specs);
+        xr_free(entries);
+        CHECK(valid);
+    }
+    xrt_locations_release(owner);
+    puts("callable images preserve uint32 entry and capture ordinals above 65536");
+}
