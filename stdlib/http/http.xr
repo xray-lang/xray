@@ -520,7 +520,7 @@ fn _routeSegments(path: string) -> Array<string> {
     var clean = _routePathOnly(path)
     if (clean == "/" || len(clean) == 0) { return [] }
     if (clean.runes().nth(0) == '/') { clean = clean.slice(1) }
-    return copy (try! clean.split("/"))
+    return try! clean.split("/")
 }
 
 fn _routeWildcardName(seg: string) -> string? {
