@@ -1,0 +1,10 @@
+struct Box {
+    items: Array<i64>
+    ref grow() -> i64 {
+        this.items.push(1)
+        B.items.push(2)
+        return len(this.items)
+    }
+}
+var B = Box{items: [0]}
+print(B.grow())

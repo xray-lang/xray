@@ -1,0 +1,8 @@
+var G = [1, 2, 3]
+fn touch() { G.push(9) }
+fn work(a: ref Array<i64>) -> i64 {
+    const before = len(a)
+    touch()
+    return before * 100 + len(a)
+}
+print(work(ref G))

@@ -22,6 +22,26 @@ typedef struct Text {
     size_t length;
 } Text;
 
+static void source_fixture_rejected(const char *text, const char *message) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrXirCompileContext context = {0};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    context.limits = xr_xir_compile_default_limits();
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-lowering", NULL};
+    XrXirSourceRequest request = {.session = session, .authority = &authority, .context = &context,
+        .linkage_kind = XR_XIR_PROGRAM};
+    XrXirSourceText input = {NULL, text, strlen(text)};
+    XrXirSourceResult result = {0};
+    XrXirSourceDiagnostic diagnostic = {0};
+    CHECK(xr_xir_compile_source_check_text(&request, &input, &result, &diagnostic, NULL) == XR_XIR_BAD_TYPE);
+    CHECK(!result.checked && !result.snapshot && strstr(diagnostic.message, message));
+    xr_xir_compile_source_result_free(&result);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(context.resources);
+}
+
 static bool write_text(void *context, const char *bytes, size_t length) {
     Text *text = context;
     CHECK(length < sizeof(text->bytes) - text->length);

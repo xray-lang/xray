@@ -58,7 +58,9 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
 
             XrXirOp op = module->functions[f].instructions[i].op;
             if (xr_xir_op_is_spawn(op) || op == XR_XIR_TASK_AWAIT || op==XR_XIR_TASK_AWAIT_RESULT || op == XR_XIR_FUNCTION_REF || op == XR_XIR_CLASS_METHOD_REF ||
-                op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH || op==XR_XIR_ITERATOR_CLOSE)) present = true;
+                op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH || op==XR_XIR_ITERATOR_CLOSE) ||
+                (module->declarations->slot_count && (op==XR_XIR_CALL || op==XR_XIR_INVOKE ||
+                    op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_CALL_REQUIREMENT))) present = true;
         }
         if (!owner) continue;
         present = true;
@@ -79,6 +81,7 @@ static XrXirStatus declaration_effects_verify(XirEffectInput input,
     XrXirStatus status = prepared ? XR_XIR_OK : xir_effects_infer_lifetimes_input(remaining,input,&effects,diagnostic);
     const XrXirEffects *facts = prepared ? prepared : effects;
     if (status == XR_XIR_OK) status = xir_effects_parameters_match_input(remaining, input, facts);
+    if (status == XR_XIR_OK) status = xir_effects_module_borrows_verify_input(remaining, input, facts, diagnostic);
     if (status == XR_XIR_OK && access)
         status=xir_compile_view_cell_access_verified_input(remaining,input,facts,diagnostic);
     if (status == XR_XIR_OK) status = declaration_callable_root_verify(input, facts, remaining, diagnostic);

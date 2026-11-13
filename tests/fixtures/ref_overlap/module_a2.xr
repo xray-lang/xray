@@ -1,0 +1,9 @@
+var G = "a"
+fn inner(x: ref string, y: ref string) -> i64 {
+    x += "b"
+    y += "c"
+    return len(x) * 100 + len(y)
+}
+fn g(a: ref string) -> i64 { return inner(ref a, ref G) }
+print(g(ref G))
+print(G)

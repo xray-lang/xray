@@ -1,0 +1,10 @@
+var G = [1, 2, 3]
+fn work(a: ref Array<i64>) -> i64 {
+    G.push(7)
+    return len(a)
+}
+fn run() -> i64 {
+    const f = work
+    return f(ref G)
+}
+print(run())

@@ -1,0 +1,7 @@
+var G = [1, 2, 3]
+fn apply(a: ref Array<i64>, f: fn() -> i64) -> i64 {
+    a.push(4)
+    return f() * 100 + len(a)
+}
+fn pure() -> i64 { return 7 }
+print(apply(ref G, pure))

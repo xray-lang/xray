@@ -1,0 +1,9 @@
+var G = [1, 2, 3]
+fn inner(x: ref Array<i64>, y: ref Array<i64>) -> i64 {
+    x.push(10)
+    y.push(20)
+    return len(x) * 100 + len(y)
+}
+fn g(a: ref Array<i64>) -> i64 { return inner(ref a, ref G) }
+print(g(ref G))
+print(len(G))

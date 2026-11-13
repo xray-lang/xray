@@ -265,12 +265,26 @@ static XrXirStatus effect_relocation_edges(EffectRelocation *relocation) {
     EffectCheckedRoots *roots = (EffectCheckedRoots *)relocation->source;
     for (uint32_t n = 0; n < roots->nodes; ++n) {
         if (!effect_relocation_step(relocation)) return relocation->status;
+        for (uint32_t s = roots->node[n].module_seeds; s != UINT32_MAX; s = roots->module_seed[s].next)
+            roots->module_seed[s].instruction = effect_relocation_instruction(relocation,
+                roots->node[n].function, roots->module_seed[s].instruction);
         for (uint32_t a = roots->node[n].aliases; a != UINT32_MAX; a = roots->alias[a].next)
             roots->alias[a].instruction = effect_relocation_instruction(relocation,
                 roots->node[n].function, roots->alias[a].instruction);
     }
     for (uint32_t a = 0; a < roots->aliases; ++a)
         roots->alias[a].source = effect_relocation_node(relocation, roots->alias[a].source);
+    if (roots->module_index_capacity)
+        memset(roots->module_index, 0, (size_t)roots->module_index_capacity * sizeof(*roots->module_index));
+    for (uint32_t m = 0; m < roots->module_members; ++m) {
+        EffectModuleMember *member = &roots->module_member[m];
+        member->node = effect_relocation_node(relocation, member->node);
+        member->instruction = effect_relocation_instruction(relocation, member->function, member->instruction);
+        uint32_t mask = roots->module_index_capacity - 1;
+        uint32_t at = effect_module_hash(member->node, member->identity, member->kind, member->property) & mask;
+        while (roots->module_index[at]) at = (at + 1) & mask;
+        roots->module_index[at] = m + 1;
+    }
     for (uint32_t d = 0; d < roots->dependencies; ++d) {
         roots->dependency[d].source = effect_relocation_node(relocation, roots->dependency[d].source);
         roots->dependency[d].target = effect_relocation_node(relocation, roots->dependency[d].target);

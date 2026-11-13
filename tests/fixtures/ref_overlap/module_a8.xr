@@ -1,0 +1,10 @@
+var G = [1, 2, 3]
+fn apply(a: ref Array<i64>, f: fn() -> i64) -> i64 {
+    a.push(4)
+    return f() * 100 + len(a)
+}
+fn touch() -> i64 {
+    G.push(9)
+    return len(G)
+}
+print(apply(ref G, touch))

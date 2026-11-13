@@ -297,6 +297,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
 #include "xxir_closure_placement.inc.c"
 #include "xxir_effect_relocate.inc.c"
 #include "xxir_effect_access_query.inc.c"
+#include "xxir_effect_module_query.inc.c"
 
 /* The constructor has retired its graph before the only public ownership
  * move. Its staging can be observed only by private construction consumers. */

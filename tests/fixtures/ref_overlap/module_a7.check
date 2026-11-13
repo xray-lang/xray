@@ -1,0 +1,1 @@
+10:1: error: E0382: ref of module binding `B` conflicts with access by `grow` via `grow`

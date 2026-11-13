@@ -32,6 +32,14 @@ XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *c
     const XrXirModule *module,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_effects_local_errors_verify_input(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+typedef struct XirModuleBorrowConflict {
+    uint32_t slot, callee, access_function, access_instruction;
+    bool unknown;
+} XirModuleBorrowConflict;
+XR_FUNC XrXirStatus xir_effects_module_borrow_site(const XrXirCompileContext *, const XrXirEffects *,
+    const XrXirModule *, uint32_t, uint32_t, XirModuleBorrowConflict *);
+XR_FUNC XrXirStatus xir_effects_module_borrows_verify_input(const XrXirCompileContext *,
+    XirEffectInput, const XrXirEffects *, XrXirDiagnostic *);
 
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);

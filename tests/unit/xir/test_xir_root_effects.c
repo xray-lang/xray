@@ -469,7 +469,9 @@ static void control_summary_detached(void) {
     effect_mark_check(baseline);
     puts("numeric control projections close without bodies and own detached values PASS");
 }
+#include "xir_module_borrow_cases.h"
 static void module_interface_lifetime(void) {
+    module_borrow_owner_cases();
     uint32_t imported = 1;
     XrXirSourceModule modules[2] = {
         {.name = "entry", .name_length = 5, .dependencies = &imported, .dependency_count = 1, .initializer = 2},
@@ -1608,8 +1610,12 @@ static void control_summary_kernel(void) {
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--control-summary") ||
         !strcmp(argv[1], "--source-storage") || !strcmp(argv[1], "--lexical") ||
-        !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion"))));
+        !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion") ||
+        !strcmp(argv[1], "--module-borrows"))));
     effect_case_begin();
+    if (argc==2 && !strcmp(argv[1],"--module-borrows")) {
+        module_borrow_owner_cases(); effect_case_end(); return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--conversion")) {
         conversion_owner_cases(); effect_case_end(); return 0;
     }

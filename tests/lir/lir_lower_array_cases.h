@@ -77,6 +77,11 @@ static void array_sources(void) {
         "update(ref values)\nprint(values[1] as i64)\n",
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        if (i + 1 == sizeof(cases) / sizeof(cases[0])) {
+            source_fixture_rejected(cases[i],
+                "E0382: ref of module binding `values` conflicts with access by `update` via `inspect`");
+            continue;
+        }
         XrLirLowered output = lower_text(cases[i]);
         CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_DISPLAY + 2));
         XrLirModule *copy = NULL;

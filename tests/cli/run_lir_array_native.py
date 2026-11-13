@@ -71,6 +71,8 @@ def main() -> None:
     for name in cases:
         if args.case and name not in args.case:
             continue
+        if name in ("ref_global_alias", "string_append_ref"):
+            continue
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
@@ -130,6 +132,8 @@ def main() -> None:
         if vm_out != out or vm_err != err:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
     rejected_sources = {
+        "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
+        "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
         "reject_display_nullable_fixed": b"value has no admitted builtin display",
         "reject_fixed_empty": b"this fixed byte length",
         "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",

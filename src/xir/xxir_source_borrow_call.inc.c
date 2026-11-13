@@ -43,9 +43,8 @@ static bool source_borrow_origin(SourceContext *ctx, AstNode *node, uint32_t val
     /* Projected identities require their selector overlap proof, not just a
      * common owner. Keep disjoint fields and finite keys out of this rule. */
     if (op && op->op == XR_XIR_CELL_PROJECT) return true;
-    if (op && op->op == XR_XIR_SLOT_LOAD) {
-        *origin = (SourceBorrowOrigin){2,(uint32_t)op->immediate}; return true;
-    }
+    /* Module binding loans use the shared transitive access summary. */
+    if (op && op->op == XR_XIR_SLOT_LOAD) return true;
     *origin = (SourceBorrowOrigin){1,value}; return true;
 }
 

@@ -1,0 +1,7 @@
+var G = [1, 2, 3]
+fn work(a: ref Array<i64>) -> i64 {
+    a.push(4)
+    return len(a)
+}
+print(work(ref G))
+print(len(G))

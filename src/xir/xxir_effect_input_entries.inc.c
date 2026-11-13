@@ -82,3 +82,11 @@ XR_FUNC XrXirStatus xir_effects_local_errors_verify_input(const XrXirCompileCont
     if(status==XR_XIR_OK)status=effect_input_facts_match(context,input,effects->input_facts);
     return status;
 }
+
+XR_FUNC XrXirStatus xir_effects_module_borrows_verify_input(const XrXirCompileContext *context,
+    XirEffectInput input, const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+    XrXirStatus status = effect_input_facts_match(context, input, effects ? effects->input_facts : NULL);
+    if (status == XR_XIR_OK) status = effect_module_borrows_verify(context, input.module, effects, diagnostic);
+    if (status == XR_XIR_OK) status = effect_input_facts_match(context, input, effects->input_facts);
+    return status;
+}

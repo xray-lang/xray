@@ -1,0 +1,12 @@
+fn inner(x: ref Array<i64>, y: ref Array<i64>) -> i64 {
+    x.push(10)
+    y.push(20)
+    return len(x) * 100 + len(y)
+}
+fn outer(a: ref Array<i64>, b: ref Array<i64>) -> i64 { return inner(ref a, ref b) }
+fn main() {
+    var p = [1]
+    var q = [1, 2]
+    print(outer(ref p, ref q))
+}
+main()

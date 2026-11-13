@@ -357,6 +357,49 @@ static XrXirStatus source_suspend_has_parameter(void *context, const XirSuspendC
 static void source_effect_explain(void *context, const XrXirModule *module,
     const XrXirEffects *effects, const XrXirDiagnostic *location) {
     SourceContext *ctx = context;
+    if (ctx->diagnostic.status == XR_XIR_OK &&
+        (location->reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_ACCESS ||
+            location->reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_UNKNOWN) &&
+        location->function < module->function_count) {
+        XirModuleBorrowConflict conflict = {0};
+        XrXirStatus status = xir_effects_module_borrow_site(&ctx->compile, effects, module,
+            location->function, location->instruction, &conflict);
+        if (status != XR_XIR_OK || conflict.slot >= ctx->slot_count) {
+            source_fail(ctx, NULL, status != XR_XIR_OK ? status : XR_XIR_BAD_STRUCTURE,
+                "invalid module binding access cause");
+            return;
+        }
+        const XrXirSlotFact *slot = &ctx->slot_facts[conflict.slot];
+        char message[512];
+        const XrXirFunction *callee = conflict.callee < module->function_count ?
+            &module->functions[conflict.callee] : NULL;
+        const XrXirFunction *access = conflict.access_function < module->function_count ?
+            &module->functions[conflict.access_function] : callee;
+        const char *name = callee ? callee->name : "indirect callable";
+        uint32_t length = callee ? callee->name_length : (uint32_t)strlen(name);
+        if (conflict.unknown)
+            status = source_format(ctx, message, sizeof(message),
+                "E0382: ref of module binding `%.*s` conflicts with unknown module access by `%.*s`",
+                (int)slot->name_length, slot->name, (int)length, name) == XR_DIAG_OK ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+        else
+            status = source_format(ctx, message, sizeof(message),
+                "E0382: ref of module binding `%.*s` conflicts with access by `%.*s` via `%.*s`",
+                (int)slot->name_length, slot->name, (int)length, name,
+                access ? (int)access->name_length : (int)length, access ? access->name : name) == XR_DIAG_OK ?
+                    XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+        uint32_t f = location->function;
+        ctx->module = ctx->bodies[f].module;
+        source_fail(ctx, ctx->bodies[f].node, status, status == XR_XIR_BAD_TYPE ? message : "module access diagnostic exhausted");
+        if (location->instruction < ctx->functions[f].instruction_count && ctx->bodies[f].debug_points) {
+            XrXirSourceRange range = ctx->bodies[f].debug_points[location->instruction].range;
+            if (range.line > 0) {
+                ctx->diagnostic.module = range.module;
+                ctx->diagnostic.line = range.line;
+                ctx->diagnostic.column = range.column;
+            }
+        }
+        return;
+    }
     bool cleanup = location->reason == XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
     if (ctx->diagnostic.status != XR_XIR_OK ||
         (location->reason != XR_XIR_DIAGNOSTIC_NO_SUSPEND && !cleanup) ||
@@ -409,7 +452,11 @@ static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, X
         location.reason == XR_XIR_DIAGNOSTIC_TASK_SENDABLE ?
         "Task arguments and captures must satisfy Sendable" :
         location.reason == XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE ?
-        "Cell captures cannot cross a Task boundary" : message;
+        "Cell captures cannot cross a Task boundary" :
+        location.reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_ACCESS ?
+        "E0382: ref of module binding conflicts with callee module access" :
+        location.reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_UNKNOWN ?
+        "E0382: ref of module binding conflicts with an unknown callee" : message;
     source_fail(ctx, site, status, cause);
     bool task_transfer=location.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE ||
         location.reason==XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE;

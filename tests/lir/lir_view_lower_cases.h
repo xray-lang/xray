@@ -19,6 +19,12 @@ static void view_cold_checked_sources(const char *programs) {
         "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append"};
     for (uint32_t n = 0; n < sizeof(names) / sizeof(*names); ++n) {
         char *text = read_file(directory, names[n], "xr");
+        if (!strcmp(names[n],"string_append_ref")) {
+            source_fixture_rejected(text,
+                "E0382: ref of module binding `published` conflicts with access by `actual` via `actual`");
+            xr_free(text);
+            continue;
+        }
         SourceFixture fixture = source_fixture(text);
         xr_free(text);
         XrXirCheckedPacket packet = {0};
