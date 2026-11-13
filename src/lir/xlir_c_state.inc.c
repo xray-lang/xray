@@ -37,7 +37,7 @@ static void c_state_layout(LirC *c) {
         "XRT_MODULE_U8", "XRT_MODULE_U16", "XRT_MODULE_U32", "XRT_MODULE_U64",
         "XRT_MODULE_F32", "XRT_MODULE_F64", "XRT_MODULE_STRING",
         "XRT_MODULE_ARRAY_I64", "XRT_MODULE_ARRAY_STRING",
-        "XRT_MODULE_ARRAY_U8", "XRT_MODULE_ARRAY_U64"
+        "XRT_MODULE_ARRAY_U8", "XRT_MODULE_ARRAY_U64", "XRT_MODULE_MAP_STRING_I64"
     };
     _Static_assert(sizeof(names) / sizeof(*names) == LIR_STATE_CONSTRUCTED_BASE,
         "Every builtin module type has a symbolic C name");
@@ -160,13 +160,14 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
             return;
         }
         c_format(c, "    v%" PRIu32 " = ", v->result);
-        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
-            c_text(c, shape.payload == XR_LIR_ARRAY ? "xrt_array_retain(" : "xrt_string_retain(");
+        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_MAP_STRING_I64)
+            c_text(c, shape.payload == XR_LIR_ARRAY ? "xrt_array_retain(" :
+                shape.payload == XR_LIR_MAP_STRING_I64 ? "xrt_map_retain(" : "xrt_string_retain(");
         c_format(c, "*(%s const *)xrl_access%" PRIu32 ".payload", c_type(c, shape.payload), reference);
-        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)
+        if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_MAP_STRING_I64)
             c_format(c, ", UINT32_C(%" PRIu32 "))", source);
         c_text(c, ";\n");
-    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_UNIT ||
+    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY || shape.payload == XR_LIR_MAP_STRING_I64 || shape.payload == XR_LIR_UNIT ||
         shape.payload >= XR_LIR_TYPE_COUNT) {
         c_text(c, "    xrt_module_require(xrt_module_replace(");
         c_value(c, reference);
@@ -248,12 +249,13 @@ static void c_state_root(LirC *c, XrLirType result) {
     if (lir_state_has_callables(c->request->module, &c->state_layout))
         c_text(c, "    xrt_callable_state_prepare(state, &xrl_callable_image, 0);\n");
     if (result == XR_LIR_UNIT) c_text(c, "    (void)context;\n    ");
-    else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY) c_format(c, "    %s owned = ", type);
+    else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY || result == XR_LIR_MAP_STRING_I64) c_format(c, "    %s owned = ", type);
     else c_format(c, "    *(%s *)context = ", type);
     c_function_name(c, c->request->entry.id);
     c_text(c, "(state);\n");
     if (result == XR_LIR_STRING) c_text(c, "    *(XrtString **)context = xrt_string_root_take(owned);\n");
     if (result == XR_LIR_ARRAY) c_text(c, "    *(XrtArray **)context = xrt_array_root_take(owned);\n");
+    if (result == XR_LIR_MAP_STRING_I64) c_text(c, "    *(XrtMap **)context = xrt_map_root_take(owned);\n");
     c_format(c, "}\n\n%s xray_lir_entry(void) {\n", type);
     if (result != XR_LIR_UNIT) c_format(c, "    %s result = {0};\n", type);
     c_format(c, "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, %s, &xrl_state_spec);\n",

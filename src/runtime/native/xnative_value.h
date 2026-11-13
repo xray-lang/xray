@@ -18,6 +18,7 @@
 typedef struct XrtStringOwner XrtStringOwner;
 typedef struct XrtStringLiteral XrtStringLiteral;
 typedef struct XrtArrayOwner XrtArrayOwner;
+typedef struct XrtMapOwner XrtMapOwner;
 typedef struct XrtViewRegistry XrtViewRegistry;
 typedef struct XrtCallableRegistry XrtCallableRegistry;
 typedef struct XrtCallableScope XrtCallableScope;
@@ -33,6 +34,10 @@ typedef struct XrtValueRoot {
     XrtArrayOwner *arrays;
     uint32_t array_capacity, array_count;
     uint64_t array_held;
+    XrXirTypeArena *map_types;
+    XrtMapOwner *maps;
+    uint32_t map_capacity, map_count;
+    uint64_t map_held;
     XrXirValue pending;
     XrtViewRegistry *views;
     XrtCallableRegistry *callables;
@@ -57,7 +62,8 @@ static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
     return !root->domain && !root->table && !root->literals && !root->held &&
         !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
         !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
-        !root->array_held && !root->views && !root->callables && !root->callable_scope &&
+        !root->array_held && !root->map_types && !root->maps && !root->map_capacity &&
+        !root->map_count && !root->map_held && !root->views && !root->callables && !root->callable_scope &&
         !root->pending.type && !root->pending.reserved && !root->pending.payload;
 }
 #endif // XNATIVE_VALUE_H

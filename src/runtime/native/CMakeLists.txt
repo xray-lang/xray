@@ -6,7 +6,7 @@ if(WIN32)
 endif()
 add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c
     xnative_execution.c xnative_string.c xnative_array.c xnative_view.c xnative_pod.c xnative_float.c xnative_module_state.c
-    xnative_callable.c
+    xnative_callable.c xnative_map.c
     "${native_output_platform}" "${native_clock_platform}")
 target_link_libraries(xray_native_runtime PUBLIC xray_xir_scalar)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"

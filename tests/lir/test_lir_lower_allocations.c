@@ -347,6 +347,22 @@ static void composition_lower_failures(void) {
     printf("Owned Fn capture Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void map_lower_failures(void) {
+    SourceFixture fixture = source_fixture("var state=#{\"x\":40}\n"
+        "fn change(items:ref Map<string,i64>){items.set(\"x\",42)}\n"
+        "fn value(items:Map<string,i64>)->Map<string,i64>{return items}\n"
+        "change(ref state)\nprint(value(state).get(\"x\"))\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Map State/borrow/value Lower: %zu allocation failures preserve empty output\n", total);
+}
+
 static void tuple_lower_failures(void) {
     SourceFixture fixture = source_fixture("fn pair(a:i64,b:i64)->(i64,i64){return(a,b)}\n"
         "var(a,b)=pair(40,2)\nprint(a+b)\nconst(c,d)=pair(17,25)\nprint(c+d)\n");
@@ -362,6 +378,7 @@ static void tuple_lower_failures(void) {
 }
 
 int main(void) {
+    map_lower_failures();
     composition_lower_failures();
     tuple_lower_failures();
     range_lower_failures();

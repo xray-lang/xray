@@ -1046,8 +1046,10 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 
 #include "lir_display_alloc_cases.h"
 #include "lir_string_alloc_cases.h"
+#include "lir_map_alloc_cases.h"
 
 int main(void) {
+    map_compiler_failures();
     composition_compiler_failures();
     tuple_compiler_failures();
     typed_edge_spill_cycles();

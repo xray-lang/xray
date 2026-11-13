@@ -13,6 +13,7 @@
 #include "xnative_module_state.h"
 #include "xnative_string.h"
 #include "xnative_array.h"
+#include "xnative_map.h"
 #include "xnative_module_cell.h"
 #include "xnative_callable.h"
 #include "xir/xxir_type_arena_internal.h"
@@ -45,6 +46,7 @@ struct XrtModuleLayout {
     uint32_t scratch_size;
     XrXirTypeArena *array_types;
     XrXirTypeArena *callable_types;
+    XrXirTypeArena *map_types;
 };
 enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
 enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
@@ -181,6 +183,20 @@ static void module_callable_drop(const XrtModuleType *type, void *storage) {
     }
 }
 
+static XrXirValueStatus module_map_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtMap *map = NULL; XrtMap *copy = NULL;
+    memcpy(&map, source, sizeof(map));
+    XrXirValueStatus status = xrt_map_owned_copy(map, type->arena, &copy);
+    if (status == XR_XIR_VALUE_OK) memcpy(empty, &copy, sizeof(copy));
+    return status;
+}
+static void module_map_drop(const XrtModuleType *type, void *storage) {
+    (void)type;
+    XrtMap *map = NULL;
+    memcpy(&map, storage, sizeof(map)); memset(storage, 0, sizeof(map));
+    xrt_map_owned_drop(&map);
+}
 static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
     const XrtModuleTypeSpec *spec = &layout->types[ordinal];
     XrtModuleType *type = &types[ordinal];
@@ -207,6 +223,9 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
     case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
         type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
         type->copy = module_array_copy; type->drop = module_array_drop; return true;
+    case XRT_MODULE_MAP_STRING_I64:
+        type->size = sizeof(XrtMap *); type->alignment = _Alignof(XrtMap *);
+        type->copy = module_map_copy; type->drop = module_map_drop; return true;
     case XRT_MODULE_NULLABLE: {
         if (spec->argument >= ordinal) return false;
         const XrtModuleType *element = &types[spec->argument];

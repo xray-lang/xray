@@ -191,7 +191,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         c->state_scratch |= rbc_lir_value_type(c,v)==XR_LIR_STATE;
         c->binding_scratch |= rbc_lir_value_type(c,v)==XR_LIR_I64_CELL;
     }
-    uint64_t reserved=(uint64_t)c->temporary_strings+rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+window+
+    uint64_t reserved=(uint64_t)c->temporary_strings+rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_maps+c->temporary_refs+c->temporary_bits+window+
         (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u)+c->binding_scratch;
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
@@ -219,7 +219,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                     if (!rbc_lir_spill_edge_type(c, i.edges[e].arguments[a]) &&
                         !rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
-            if ((i.op == XR_LIR_ARRAY_BORROW ||
+            if ((i.op == XR_LIR_MAP_BORROW || i.op == XR_LIR_ARRAY_BORROW ||
                 xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_BORROW_STATE ||
                 xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_APPEND_STATE) &&
                 !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
@@ -234,7 +234,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     for(uint32_t v=1;v<=c->view.value_count;++v) {
         XrLirType type=rbc_lir_value_type(c,v);
         if(c->slots[v]!=UINT32_MAX ||
-            (type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF && type!=XR_LIR_STRING_REF &&
+            (type!=XR_LIR_MAP_STRING_I64_CELL && type!=XR_LIR_MAP_STRING_I64_REF && type!=XR_LIR_STRING_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF && type!=XR_LIR_STRING_REF &&
              type!=XR_LIR_I64_CELL && type!=XR_LIR_STATE && type!=XR_LIR_VIEW_FRAME &&
              type!=XR_LIR_VIEW_CELL && type!=XR_LIR_SLICE_I64 && !rbc_lir_callable_type(c->input, type) &&
              !rbc_lir_captured_cell(c->input, type)))continue;
@@ -245,7 +245,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
             if(c->slots[v]!=UINT32_MAX || c->output.literals[v] || c->output.lengths[v])continue;
             XrLirType type=rbc_lir_value_type(c,v);
             if (type >= XR_LIR_TYPE_COUNT || type == XR_LIR_FUNCTION_SCOPE) continue;
-            if((type==XR_LIR_STRING || type==XR_LIR_ARRAY)!=(pool==0))continue;
+            if((type==XR_LIR_MAP_STRING_I64 || type==XR_LIR_STRING || type==XR_LIR_ARRAY)!=(pool==0))continue;
             if(c->slot_count<budget)c->slots[v]=c->slot_count++;
             else {
                 if(c->spill_count==XR_RBC_SPILL_COUNT_MAX)
@@ -257,7 +257,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         if (!rbc_lir_edge_spill_homes(c, pool == 0)) return false;
     }
     c->typed_spills=true;
-    c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_refs+c->temporary_bits+
+    c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_maps+c->temporary_refs+c->temporary_bits+
         (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u)+c->binding_scratch;
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
@@ -342,6 +342,7 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (xr_rbc_view_kind(kinds[first])) c->view_scratch[kinds[first] - XR_RBC_VIEW_FRAME] = true;
         uint32_t family = xr_rbc_array_family(kinds[first]);
         if (family < XR_RBC_ARRAY_FAMILY_COUNT) c->array_scratch[family] = true;
+        if (kinds[first] == XR_RBC_MAP_STRING_I64) c->map_scratch = true;
         if (emit && !rbc_lir_array_move(c, kinds[first], temporary, source)) return false;
         *scratch = true;
         for (uint32_t p = 0; p < count; ++p)

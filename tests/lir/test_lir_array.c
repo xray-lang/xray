@@ -34,6 +34,7 @@
 #include "lir_callable_composition_cases.h"
 #include "lir_captured_cell_cases.h"
 #include "lir_tuple_cases.h"
+#include "lir_map_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -507,6 +508,8 @@ static void array_vm_fixture(const char *name,int64_t expected) {
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
+    map_receiving_owners();
+    map_state_receiver();
     tuple_receiving_owners();
     tuple_group_admission();
     callable_owned_factory_cases();

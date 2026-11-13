@@ -1,0 +1,21 @@
+const initial = #{"same": 1, "other": 7, "same": 42}
+print(len(initial))
+print(initial.get("same"))
+print(initial.get("missing"))
+print(initial.containsKey("same"))
+print(initial.containsKey("missing"))
+fn copy(items:Map<string,i64>)->Map<string,i64> { return items }
+fn loop(limit:i64)->Map<string,i64> {
+    var items:Map<string,i64> = #{}
+    for(i in 0..limit) {
+        if(i==2) { continue }
+        items.set(string(i),i*10)
+        if(i==4) { break }
+    }
+    return copy(items)
+}
+const selected = loop(9)
+print(len(selected))
+print(selected.get("4"))
+print(selected.get("2"))
+print(initial.get("same"))

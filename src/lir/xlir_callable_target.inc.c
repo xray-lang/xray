@@ -41,6 +41,10 @@ XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
         return false;
     if (target.state_capture && function->parameter_types[function->parameter_count - 1] != XR_LIR_STATE)
         return false;
+    for (uint32_t p = 0; p < target.capture_count; ++p)
+        if (function->parameter_types[p] == XR_LIR_MAP_STRING_I64 ||
+            function->parameter_types[p] == XR_LIR_MAP_STRING_I64_CELL ||
+            function->parameter_types[p] == XR_LIR_MAP_STRING_I64_REF) return false;
     uint32_t contract = 0;
     for (uint32_t p = 0; p < signature.parameter_count; ++p) {
         uint32_t parameter = target.capture_count + p;

@@ -29,13 +29,15 @@ static uint32_t lower_operand_at(const XrXirFunction *f, const XrXirInstruction 
 static bool lower_array_place_consumer(XrXirOp op, uint32_t a) {
     return a == 0 && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN ||
         op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH ||
-        op == XR_XIR_PLACE_READ || op == XR_XIR_PLACE_WRITE);
+        op == XR_XIR_PLACE_READ || op == XR_XIR_PLACE_WRITE || op == XR_XIR_MAP_GET ||
+        op == XR_XIR_MAP_SET || op == XR_XIR_HASH_LEN || op == XR_XIR_HASH_CONTAINS ||
+        op == XR_XIR_HASH_DELETE || op == XR_XIR_HASH_CLEAR);
 }
 
 static bool lower_array_flow_inventory(LowerFunction *f) {
     Lower *c = f->owner;
     const XrXirFunction *source = f->source;
-    bool needed = c->arrays || c->string_appends;
+    bool needed = c->arrays || c->string_appends || c->maps;
     for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
         needed = source->parameters[p] == XR_XIR_STRING;
     for (uint32_t i = 0; !needed && source->block_count > 1 && i < source->instruction_count; ++i) {
@@ -60,6 +62,7 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             f->value_blocks[value] = b;
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
                 (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL ||
+                 lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL ||
                  (source->block_count > 1 && xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING)) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;
         }
@@ -142,13 +145,16 @@ static void lower_array_flow_liveness(LowerFunction *f, uint32_t b, uint32_t i) 
             f->use[(size_t)block * f->cell_count + cell] = 1;
     }
     if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_LEN || op->op == XR_XIR_ARRAY_SET ||
-        op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
+        op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE ||
+        op->op == XR_XIR_MAP_GET || op->op == XR_XIR_MAP_SET || op->op == XR_XIR_HASH_LEN ||
+        op->op == XR_XIR_HASH_CONTAINS || op->op == XR_XIR_HASH_DELETE || op->op == XR_XIR_HASH_CLEAR) {
         uint32_t receiver = lower_operand_at(source, op, 0);
         uint32_t cell = f->array_places[receiver];
         if (cell == UINT32_MAX) return;
         size_t at = (size_t)b * f->cell_count + cell;
         if (op->op != XR_XIR_PLACE_WRITE && !f->define[at]) f->use[at] = 1;
-        if (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_WRITE)
+        if (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_WRITE ||
+            op->op == XR_XIR_MAP_SET || op->op == XR_XIR_HASH_DELETE || op->op == XR_XIR_HASH_CLEAR)
             f->define[at] = 1;
     }
 }

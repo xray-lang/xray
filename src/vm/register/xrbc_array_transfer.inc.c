@@ -22,8 +22,10 @@ static bool rbc_array_source(const RbcStringAdmission *s, XrRbcArrayLocation loc
     return rbc_string_state(rbc_array_state(s, location));
 }
 #include "xrbc_array_ref_transfer.inc.c"
+#include "xrbc_map_transfer.inc.c"
 static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcArrayAccess access = s->function->array_accesses[index];
+    if (access.kind == XR_RBC_MAP_STRING_I64) return rbc_map_transfer(s, access);
     const XrRbcArrayLocation *operands = access.count ? s->function->array_operands + access.first : NULL;
     uint8_t source = access.count ? rbc_array_state(s, operands[0]) : RBC_EMPTY;
     if (access.operation == XR_RBC_ARRAY_BORROW || access.operation == XR_RBC_ARRAY_REF_READ ||
@@ -89,6 +91,8 @@ static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
 
 static bool rbc_call_parameter_matches(const RbcStringAdmission *s, uint32_t actual, XrRbcRegisterKind formal) {
     uint8_t state = s->state[actual];
+    if (formal == XR_RBC_MAP_STRING_I64_REF)
+        return rbc_array_ref_state(state) && rbc_array_ref_payload(s, state, s->origin[actual]) == XR_RBC_MAP_STRING_I64;
     if (formal == XR_RBC_STRING_REF)
         return rbc_array_ref_state(state) && rbc_array_ref_payload(s, state, s->origin[actual]) == XR_RBC_STRING;
     if (formal == XR_RBC_VIEW_CELL) return state == RBC_VIEW_CELL;
