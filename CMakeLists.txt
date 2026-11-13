@@ -3057,6 +3057,7 @@ if(BUILD_TESTS)
         NAME diagnostic_position_census
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY=$<TARGET_FILE:xray>
+                XRAY_TEST_JOBS=2
                 XRAY_TEST_CASE_TIMEOUT=${COMPILE_ERROR_CASE_TIMEOUT}
                 ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/check_diagnostic_positions.py
