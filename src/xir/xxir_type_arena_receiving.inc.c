@@ -247,6 +247,18 @@ XR_FUNC const XrXirTypeArena *xir_native_type_arena_string_i64_map_source(const 
     return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64 ?
         source : NULL;
 }
+XR_FUNC XrXirValueStatus xir_native_type_arena_string_i64_map_bytes(const XrXirTypeArena *source,
+    uint64_t *output) {
+    if (!source || !output || source->types.count != 1) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *node = xr_xir_type_node(&source->types, XR_XIR_CONSTRUCTED_TYPE_BASE);
+    if (!node || node->kind != XR_XIR_TYPE_MAP || node->element != XR_XIR_STRING || node->result != XR_XIR_I64)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrCompileResourceStats stats = {0};
+    if (xr_compile_resources_stats(source->context.resources, &stats) != XR_COMPILE_RESOURCE_OK)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output = stats.held_bytes;
+    return XR_XIR_VALUE_OK;
+}
 XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
     const XrXirValue *array, XrXirTypeArena **output) {
     if (!output || *output || !type_arena_i64_views_catalog(catalog)) return XR_XIR_VALUE_BAD_ARGUMENT;

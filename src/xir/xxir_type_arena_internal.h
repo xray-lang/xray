@@ -31,6 +31,8 @@ XR_FUNC XrXirValueStatus xir_native_type_arena_receive_string_i64_map(XrXirTypeA
     XrXirType type, const XrXirTypeArena *source);
 /* Borrowed through the receiving catalog's existing owning source edge. */
 XR_FUNC const XrXirTypeArena *xir_native_type_arena_string_i64_map_source(const XrXirTypeArena *, XrXirType);
+/* Actual retained source metadata footprint. Failure preserves output. */
+XR_FUNC XrXirValueStatus xir_native_type_arena_string_i64_map_bytes(const XrXirTypeArena *, uint64_t *);
 /* Derived directories charge the base catalog's existing finite ledger. A
  * failed receive releases the unpublished directory and preserves output. */
 XR_FUNC XrXirValueStatus xir_native_type_arena_derive_i64_views(const XrXirTypeArena *catalog,
