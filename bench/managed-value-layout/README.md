@@ -193,6 +193,14 @@ and still has no heap-allocation ratio gate. Every sample must execute and match
 its independent golden, including the diagnostic controls. This is prototype
 evidence, not product or formal multi-layout qualification.
 
+Process wall time uses a blocking native-wait observer. The existing process
+owner retains the deadline and complete tree cleanup; an unavailable observer
+invalidates the sample. Finite POSIX `Popen.wait` polling can quantize short
+commands, so earlier observations using that method remain separate diagnostics.
+The recorded interval includes process startup and observer scheduling latency;
+it is not a kernel-provided exit timestamp. CI checks observer failure and real
+timeout cleanup before preparing any layout measurements.
+
 Production integration, general carriers, shared graph publication, class identity, for-ref,
 external imports, Root/unwind integration, SAN, cross-platform compilation,
 module-summary serialization and mainline CI admission remain **OPEN**. No

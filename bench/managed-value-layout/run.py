@@ -102,6 +102,7 @@ def prepare(args) -> None:
         if source_identity() != initial:
             raise ValueError("Source changed during preparation")
         result.update(state="PREPARED_NOT_MEASURED", rounds=ROUNDS, timeoutSeconds=30,
+                      timingMethod=evidence.TIMING_METHOD,
                       rawCases=RAW_CASES, ratioCases=list(RATIO_CASES),
                       products=products, expected={name: (value + newline).encode().hex()
                                                    for name, value in CASES.items()},
@@ -123,6 +124,7 @@ def measure(args) -> int:
             or prepared["source"] != source_identity()
             or prepared["platform"] != sys.platform or prepared["rounds"] != ROUNDS
             or prepared["timeoutSeconds"] != 30 or set(prepared["products"]) != {"managed", "raw"}
+            or prepared.get("timingMethod") != evidence.TIMING_METHOD
             or prepared["expected"] != expected or prepared.get("rawCases") != RAW_CASES
             or prepared.get("ratioCases") != list(RATIO_CASES)):
         raise ValueError("The prepared prototype identity or fixed workload schema differs")
@@ -132,6 +134,7 @@ def measure(args) -> int:
         raise ValueError("A measured executable is absent from the frozen inputs")
     args.work.mkdir(parents=True)
     result = {"state": "RUNNING", "prepared": evidence.fingerprint(args.prepared), "samples": [],
+              "timingMethod": evidence.TIMING_METHOD,
               "medians": {}, "ratios": {}, "prototypeOnly": True, "productQualification": "NOT_RUN",
               "boundary": "Native local RC layout only. No VM, shared RC, Root/unwind, Source or full "
                           "sanitizer qualification. Record may fold and has no heap-allocation ratio gate. "

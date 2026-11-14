@@ -25,12 +25,14 @@ import shutil
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
 import xray_process
 
 PRODUCT_TIMEOUT = 30
+TIMING_METHOD = "blocking-native-wait-observer-v1"
 ROUNDS = 5
 NATIVE_LIMITS = {"push": 1.3, "inplace": 1.1}
 
@@ -60,21 +62,50 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
 
     class ObservedPopen(subprocess.Popen):
         def __init__(self, *args, **kwargs):
+            self.exit_observed = threading.Event()
+            self.exit_waiter = None
+            self.exit_error = None
             self.observation = {"started": time.perf_counter(), "parentPID": os.getpid()}
             super().__init__(*args, **kwargs)
             self.observation["pid"] = self.pid
             captured.append(self.observation)
 
-        def wait(self, *args, **kwargs):
-            code = super().wait(*args, **kwargs)
-            if "finished" not in self.observation:
+        def observe_exit(self):
+            try:
+                # A finite POSIX Popen.wait polls with backoff. Observe the
+                # blocking native wait instead; the existing owner still
+                # enforces the deadline and kills/drains the process tree.
+                code = super().wait()
                 self.observation.update(finished=time.perf_counter(), exit=code)
-            return code
+            except BaseException as error:
+                self.exit_error = error
+            finally:
+                self.exit_observed.set()
+
+        def wait(self, timeout=None):
+            if self.exit_waiter is None:
+                try:
+                    waiter = threading.Thread(target=self.observe_exit, daemon=True,
+                                              name="benchmark-exit-observer")
+                    waiter.start()
+                except Exception as error:
+                    # Preserve the original owner's cleanup even if timing
+                    # instrumentation is unavailable. Such a sample is invalid.
+                    self.observation["waitObservationError"] = repr(error)
+                    return super().wait(timeout=timeout)
+                self.exit_waiter = waiter
+            if not self.exit_observed.wait(timeout):
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            self.exit_waiter.join()
+            if self.exit_error is not None:
+                raise self.exit_error
+            return self.observation["exit"]
 
     argv = list(map(str, argv))
     paths = {key: directory / (name + "." + key) for key in ("stdout", "stderr")}
     row = {"argv": argv, "runnerPID": os.getpid(), "runnerParentPID": os.getppid(),
-           "timeoutSeconds": timeout, "state": "RUNNING", "processes": captured}
+           "timeoutSeconds": timeout, "state": "RUNNING", "processes": captured,
+           "timingMethod": TIMING_METHOD}
     previous = xray_process.subprocess
     xray_process.subprocess = SimpleNamespace(**(vars(subprocess) | {"Popen": ObservedPopen}))
     failure = None
@@ -98,7 +129,9 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
         row["exitAfterCleanup"] = captured[0]["exit"]
     if failure:
         row["error"] = repr(failure)
-    row["ok"] = failure is None and code == 0 and (expected is None or
+    row["timingValid"] = (len(captured) == 1 and "finished" in captured[0]
+                          and "waitObservationError" not in captured[0])
+    row["ok"] = row["timingValid"] and failure is None and code == 0 and (expected is None or
         (paths["stdout"].read_bytes() == expected and not paths["stderr"].read_bytes()))
     return row
 
@@ -123,6 +156,7 @@ def verify_prepared(data: dict) -> None:
     required = ("identity", "driver", "root", "stdlib", "references", "thresholds", "open", "fingerprints", "frozenTrees")
     if (data.get("schema") != 1 or data.get("state") != "PREPARED_NOT_MEASURED" or
             data.get("rounds") != ROUNDS or data.get("timeoutSeconds") != PRODUCT_TIMEOUT or
+            data.get("timingMethod") != TIMING_METHOD or
             data.get("scope") not in ("native", "array") or any(key not in data for key in required)):
         raise ValueError("Incomplete or unsupported prepared benchmark schema")
     if not data.get("engines"):
@@ -331,7 +365,8 @@ def prepare(args) -> None:
             for directory in ("stdlib", "include", "inputs", "libraries")]
         if clean_head(root) != head:
             raise ValueError("Source commit changed during preparation")
-        result.update(state="PREPARED_NOT_MEASURED", rounds=ROUNDS, timeoutSeconds=PRODUCT_TIMEOUT)
+        result.update(state="PREPARED_NOT_MEASURED", rounds=ROUNDS, timeoutSeconds=PRODUCT_TIMEOUT,
+                      timingMethod=TIMING_METHOD)
         save(work / "preparation.json", result)
         save(work / "prepared.json", result)
     except BaseException as error:
@@ -414,6 +449,7 @@ def assert_result(args) -> int:
                         raise ValueError("Changed measured raw stream")
                 valid &= row["argv"] == command["argv"] and row["exit"] == 0 and not row["timedOut"]
                 valid &= row["state"] == "TERMINAL_DRAINED" and "error" not in row
+                valid &= row.get("timingValid") is True and row.get("timingMethod") == TIMING_METHOD
                 valid &= Path(row["streams"]["stdout"]["path"]).read_bytes().hex() == command["expectedHex"]
                 valid &= not Path(row["streams"]["stderr"]["path"]).read_bytes()
                 valid &= math.isfinite(row.get("processWallSeconds", 0)) and row.get("processWallSeconds", 0) > 0
@@ -456,6 +492,20 @@ def self_test(args) -> None:
         save(args.work / "self-test.json", {"state": "RUNNING", "rows": rows, "benchmarkMeasurement": False})
         if row["ok"] != expected or row["state"] != "TERMINAL_DRAINED" or (name == "timeout" and not row["timedOut"]):
             raise RuntimeError("Hard-failure self-test failed: " + name)
+        if any(t.name == "benchmark-exit-observer" for t in threading.enumerate()):
+            raise RuntimeError("An exit observer survived owned cleanup")
+    original_start = threading.Thread.start
+    def unavailable_observer(thread):
+        raise RuntimeError("injected exit observer unavailability")
+    threading.Thread.start = unavailable_observer
+    try:
+        row = execute([sys.executable, "-E", "-c", cases["good"][0]], args.work,
+                      "observer-unavailable", environment(Path.cwd()), b"ok\n")
+    finally:
+        threading.Thread.start = original_start
+    rows.append(dict(row, name="observer-unavailable"))
+    if row["ok"] or row["timingValid"] or row["exit"] != 0 or row["state"] != "TERMINAL_DRAINED":
+        raise RuntimeError("Unavailable exit observation was accepted or changed cleanup")
     rejected = []
     for state in ("NOT_RUN", "UNKNOWN", "RUNNING", "FAIL"):
         receipt = args.work / ("bad-receipt-" + state + ".json")
