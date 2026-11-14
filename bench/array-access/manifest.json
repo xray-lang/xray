@@ -4,7 +4,8 @@
     "docsCommit": "13a89fe150207e90d04b434e4e5150a1781f8b9b",
     "push": "Original perf-gap-2026-11-14 XR/Lua/Python bytes; portable int64 C correction retained from the audited Windows reference.",
     "inplace": "Equivalent XR and raw C for the exclusive-access decision model: 4096 elements, 20000 updates each; modulo 2^64 recurrence and checksum.",
-    "platformCorrection": "Windows long cannot represent the push sum. C uses int64_t values/sum and checked size_t growth. Original inplace signed-overflow UB is replaced by uint64_t arithmetic and memcpy for signed output."
+    "platformCorrection": "Windows long cannot represent the push sum. C uses int64_t values/sum and checked size_t growth. Original inplace signed-overflow UB is replaced by uint64_t arithmetic and memcpy for signed output.",
+    "byteIdentity": "Governed inputs are Git LF bytes on every checkout. Windows CRLF-only source hashes from the first local preparation are historical, not cross-platform identities."
   },
   "cases": {
     "push": {
@@ -32,12 +33,12 @@
     }
   },
   "sha256": {
-    "push.xr": "50677edc1b14f1c5e806f25c16abbe26fa9bc541d75bb248a93fb90e3b728454",
-    "push.lua": "3e6bc8d40a28e9aa8bd90e8d99782691480ca18c1feb609dd2b90f64fee1f619",
-    "push.py": "b93cd1accc084f51b03e499aee645287afe5de557591c48b292048367c7c3228",
-    "push.c": "009c96b881be8e88ffc18879c25d1cddede9ef2cf2730fe5ce9fd2623b30a94b",
-    "inplace.xr": "395733698b9345077f9166a6633f3fb6be6fecf5ba6eb689cebd19a3d671a75a",
-    "inplace.c": "aeabb82e6345462f421c03b7d47d4b86a290e10671b42bb9d87fff8e4fbc3e63"
+    "push.xr": "3afa29187139041ea3280b95aa21ac1c407b967c9094035056aba36ca12dee2c",
+    "push.lua": "4e6ba1f1c532e72e937b8b5dc361c372c999f59d357f9f7195e614109a21b785",
+    "push.py": "7f2cf7c0ff394d892e5ab58154b60b0e93760bdc72a18b119cdc53db0ece14a9",
+    "push.c": "1e0a6432b5c5318d453ea1b354aad1fa6f445c3352b36a756cc4dfa91010889d",
+    "inplace.xr": "3e684063f704e6fb59bbec625b7b3d37956b0acc2b6a1ac65cfda55457b0fa32",
+    "inplace.c": "1b0900bb2ff9313c5fbb68b8b6f8785a5a55c17e65c2095b3471ed4f81484d27"
   },
   "open": {
     "record": "No qualified non-folded equivalent C reference is admitted by this harness.",

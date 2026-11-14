@@ -24,6 +24,10 @@ tests/benchmarks/target-machine/source_run/main.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
 
+# Performance plans bind the checked-in input bytes on every host.
+bench/array-access/* text eol=lf
+bench/managed-value-layout/* text eol=lf
+
 # Native declaration identities hash canonical UTF-8 text. Keep their governed
 # source inputs and generated projections LF-only across checkout settings.
 stdlib/defs/*.def text eol=lf

@@ -123,11 +123,43 @@ jobs:
         run: >-
           python scripts/ci_build_log.py --log current-evidence/pipe-probe.log --
           ctest --test-dir build --output-on-failure --no-tests=error -R '^os_pipe_owned$'
+      - name: Resolve the effective Array C compiler
+        shell: python
+        run: |
+          import os, pathlib, re
+          cache = pathlib.Path('build/CMakeCache.txt').read_text(encoding='utf-8')
+          compiler = re.search(r'^CMAKE_C_COMPILER:FILEPATH=(.+)$', cache, re.M)
+          if not compiler:
+              raise RuntimeError('Missing explicit compiler identity in the fresh build')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('ARRAY_CC=' + compiler[1].strip() + '\n')
+      - name: Prepare Windows Array performance gates
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          chcp 65001 >nul
+          python scripts/array_access_benchmark.py prepare --root . --build build --cc "%ARRAY_CC%" --work array-performance-prepare --case push --case inplace
+      - name: Prepare Unix Array performance gates
+        if: runner.os != 'Windows'
+        run: >-
+          python scripts/array_access_benchmark.py prepare --root . --build build
+          --cc "$ARRAY_CC" --work array-performance-prepare --case push --case inplace
+      - name: Measure native Array performance
+        run: >-
+          python scripts/array_access_benchmark.py measure
+          --prepared array-performance-prepare/prepared.json --work array-performance-measured
+      - name: Enforce native Array ratio limits
+        run: >-
+          python scripts/array_access_benchmark.py assert --scope native
+          --prepared array-performance-prepare/prepared.json
+          --result array-performance-measured/result.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: current-${{ matrix.os }}-${{ github.sha }}
           path: |
+            array-performance-prepare/
+            array-performance-measured/
             current-evidence/
             build/Testing/Temporary/LastTest.log
             build/smoke/
@@ -138,6 +170,63 @@ jobs:
             build/lir-cli-array-native/**/result.json
             build/lir-cli-array-native/**/*.stdout
             build/lir-cli-array-native/**/*.stderr
+
+  managed-layout:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-2022, name: Layout experiment (MSVC), cc: cl}
+          - {os: windows-2022, name: Layout experiment (clang-cl), cc: clang-cl}
+          - {os: macos-latest, name: Layout experiment (macOS Clang), cc: clang}
+          - {os: ubuntu-24.04, name: Layout experiment (Linux Clang), cc: clang}
+          - {os: ubuntu-24.04, name: Layout experiment (Linux GCC), cc: gcc}
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Resolve the explicit prototype compiler
+        shell: python
+        run: |
+          import os, shutil
+          compiler = shutil.which('${{ matrix.cc }}')
+          if not compiler:
+              raise RuntimeError('The declared prototype compiler is unavailable')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('LAYOUT_CC=' + compiler + '\n')
+      - name: Prepare the Windows layout experiment
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          chcp 65001 >nul
+          python bench/managed-value-layout/run.py prepare --cc "%LAYOUT_CC%" --work layout-prepare
+      - name: Prepare the Unix layout experiment
+        if: runner.os != 'Windows'
+        run: python bench/managed-value-layout/run.py prepare --cc "$LAYOUT_CC" --work layout-prepare
+      - name: Measure and gate the standalone layout
+        run: >-
+          python bench/managed-value-layout/run.py measure --gate
+          --prepared layout-prepare/prepared.json --work layout-measured
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: layout-${{ matrix.os }}-${{ matrix.cc }}-${{ github.sha }}
+          path: |
+            layout-prepare/
+            layout-measured/
 
   scalar-performance:
     if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
