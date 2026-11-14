@@ -83,6 +83,9 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
                 self.exit_observed.set()
 
         def wait(self, timeout=None):
+            deadline = None if timeout is None else time.perf_counter() + timeout
+            def remaining():
+                return None if deadline is None else max(0.0, deadline - time.perf_counter())
             if self.exit_waiter is None:
                 try:
                     waiter = threading.Thread(target=self.observe_exit, daemon=True,
@@ -92,13 +95,15 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
                     # Preserve the original owner's cleanup even if timing
                     # instrumentation is unavailable. Such a sample is invalid.
                     self.observation["waitObservationError"] = repr(error)
-                    return super().wait(timeout=timeout)
+                    return super().wait(timeout=remaining())
                 self.exit_waiter = waiter
-            if not self.exit_observed.wait(timeout):
+            if not self.exit_observed.wait(remaining()):
                 raise subprocess.TimeoutExpired(self.args, timeout)
             self.exit_waiter.join()
             if self.exit_error is not None:
                 raise self.exit_error
+            if deadline is not None and self.observation["finished"] > deadline:
+                raise subprocess.TimeoutExpired(self.args, timeout)
             return self.observation["exit"]
 
     argv = list(map(str, argv))
@@ -506,6 +511,18 @@ def self_test(args) -> None:
     rows.append(dict(row, name="observer-unavailable"))
     if row["ok"] or row["timingValid"] or row["exit"] != 0 or row["state"] != "TERMINAL_DRAINED":
         raise RuntimeError("Unavailable exit observation was accepted or changed cleanup")
+    def delayed_observer(thread):
+        time.sleep(0.2)
+        original_start(thread)
+    threading.Thread.start = delayed_observer
+    try:
+        row = execute([sys.executable, "-E", "-c", cases["good"][0]], args.work,
+                      "observer-delayed", environment(Path.cwd()), b"ok\n", timeout=0.05)
+    finally:
+        threading.Thread.start = original_start
+    rows.append(dict(row, name="observer-delayed"))
+    if row["ok"] or not row["timedOut"] or row["state"] != "TERMINAL_DRAINED":
+        raise RuntimeError("Observer startup extended the original deadline")
     rejected = []
     for state in ("NOT_RUN", "UNKNOWN", "RUNNING", "FAIL"):
         receipt = args.work / ("bad-receipt-" + state + ".json")
