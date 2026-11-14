@@ -285,10 +285,39 @@ static void hash_string_cases(XrXirValueAdmission *admission) {
 }
 #include "p09_hash_faults.h"
 #include "p09_hash_graph.h"
+static void hash_string_i64_layout_case(XrXirDomain *domain) {
+    XrXirTypeNode node = {.kind=XR_XIR_TYPE_MAP, .element=XR_XIR_STRING, .result=XR_XIR_I64};
+    XrXirTypes types = {&node, 1, NULL, NULL};
+    XrXirTypeArena *arena = NULL;
+    CHECK(value_compile_arena(&types, 65536, value_compile_limits(), &arena) == XR_XIR_VALUE_OK);
+    XrXirLayout key = {0}, value = {0};
+    CHECK(xr_xir_compile_type_arena_layout(arena, XR_XIR_STRING, &key));
+    CHECK(xr_xir_compile_type_arena_layout(arena, XR_XIR_I64, &value));
+    HashLayout layout = {0};
+    CHECK(hash_layout(arena, (XrXirType)256, &layout) == XR_XIR_VALUE_OK);
+    CHECK(layout.key_offset == ((16u + key.alignment - 1) & ~(key.alignment - 1)));
+    CHECK(layout.value_offset == ((layout.key_offset + key.size + value.alignment - 1) & ~(value.alignment - 1)));
+    CHECK(layout.stride == ((layout.value_offset + value.size + 7u) & ~7u) && !layout.release_capacity);
+    XrXirValueAdmission admission = {arena, domain, NULL, NULL, 1000000, 1048576};
+    XrXirValue map = {0};
+    CHECK(xr_xir_map_new((XrXirType)256, NULL, NULL, 0, &admission, &map) == XR_XIR_VALUE_OK);
+    XirHash *object = (XirHash *)object_pointer(&map);
+    uint32_t *fields[] = {&object->key_offset, &object->value_offset, &object->stride, &object->release_capacity};
+    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i) {
+        uint32_t saved = *fields[i];
+        *fields[i] ^= 8u;
+        CHECK(!xr_xir_value_valid(&map));
+        *fields[i] = saved;
+        CHECK(xr_xir_value_valid(&map));
+    }
+    xr_xir_value_drop(&map);
+    xr_xir_compile_type_arena_drop(arena);
+}
 int main(int argc, char **argv) {
     XrXirTypeArena *arena = hash_test_arena(); XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000000, 1048576};
+    hash_string_i64_layout_case(domain);
     hash_dense_cases(&admission); hash_ieee_cases(&admission); hash_string_cases(&admission); hash_order_cases(&admission);
     hash_order_path_case(&admission);
     hash_order_collision_case(&admission);
