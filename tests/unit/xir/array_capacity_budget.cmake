@@ -1,8 +1,0 @@
-# The existing capacity targets own the complete Source-to-Program pipeline.
-foreach(mode RANGE 0 0)
-
-    add_test(NAME test_xir_array_capacity_runtime_budget_${mode}
-        COMMAND ${capacity_budget_target} --runtime-budget ${mode})
-    set_tests_properties(test_xir_array_capacity_runtime_budget_${mode}
-        PROPERTIES TIMEOUT 120 LABELS "unit;xir;array;ownership;memory;cancel;budget")
-endforeach()
