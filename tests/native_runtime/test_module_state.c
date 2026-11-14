@@ -254,7 +254,63 @@ static void invalid_layouts(void) {
 #include "native_callable_state_cases.h"
 #include "native_group_state_cases.h"
 
+static void map_layout_root_budget(void *opaque) {
+    XrtValueRoot *root = opaque;
+    XrtModuleTypeSpec type = {XRT_MODULE_STRING, 0};
+    XrtModuleSpec module = {0};
+    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, sizeof(void *), _Alignof(void *)};
+    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+        .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
+        .byte_limit=UINT64_MAX};
+    XrtModuleLayout *reference = NULL, *cold = NULL, *warm = NULL;
+    OK(xrt_module_layout_new(&spec, &reference));
+    uint64_t base = reference->bytes;
+    xrt_module_layout_drop(&reference);
+    CHECK(!root->map_types);
+    type.kind = XRT_MODULE_MAP_STRING_I64;
+    OK(xrt_module_layout_new(&spec, &cold));
+    uint64_t source_bytes = 0;
+    OK(xir_native_type_arena_string_i64_map_bytes(root->map_types, &source_bytes));
+    CHECK(source_bytes && cold->map_types == root->map_types);
+    if (cold->bytes != base + source_bytes)
+        fprintf(stderr, "Map layout bytes=%llu base=%llu source=%llu\n",
+            (unsigned long long)cold->bytes, (unsigned long long)base, (unsigned long long)source_bytes);
+    CHECK(cold->bytes == base + source_bytes);
+    OK(xrt_module_layout_new(&spec, &warm));
+    CHECK(warm->bytes == cold->bytes && warm->map_types == cold->map_types);
+    uint64_t required = cold->bytes;
+    xrt_module_layout_drop(&cold);
+    xrt_module_layout_drop(&warm);
+    spec.byte_limit = required - 1;
+    CHECK(xrt_module_layout_new(&spec, &warm) == XR_XIR_VALUE_MEMORY_LIMIT && !warm);
+    spec.byte_limit = UINT64_MAX;
+    calls = 0;
+    OK(xrt_module_layout_new(&spec, &warm));
+    size_t sites = calls;
+    xrt_module_layout_drop(&warm);
+    size_t retained = live;
+    for (size_t point = 0; point < sites; ++point) {
+        calls = 0; fail_at = point; injected = false;
+        CHECK(xrt_module_layout_new(&spec, &warm) == XR_XIR_VALUE_OOM && !warm);
+        CHECK(injected && live == retained);
+    }
+    fail_at = SIZE_MAX;
+    printf("cold and warm pure Map layouts retain their actual source across %zu failures\n", sites);
+}
+
+static void map_layout_budget(void) {
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+    XrtValueRoot root = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned(locations, &failure, map_layout_root_budget, &root, &root) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&root));
+    xrt_locations_release(locations);
+    CHECK(!live);
+}
+
 int main(void) {
+    map_layout_budget();
     native_group_state();
     callable_state_values();
     nullable_state_values(); nullable_state_invalid_shapes(); nullable_state_deep_copy(); nullable_state_allocation_failures();
