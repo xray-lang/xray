@@ -24,7 +24,7 @@ typedef struct EffectModuleTarget {
 
 static bool effect_module_target_matches(EffectModuleTarget target, EffectModuleMember member) {
     if (member.kind != target.kind) return false;
-    if (target.kind != EFFECT_MODULE_FIELD) return member.identity == target.identity;
+    if (target.kind != EFFECT_MODULE_FIELD) return member.identity == target.identity || target.identity == UINT32_MAX;
     return member.identity == target.identity || member.identity == EFFECT_MODULE_FIELD_ANY ||
         target.identity == EFFECT_MODULE_FIELD_ANY;
 }
@@ -148,13 +148,21 @@ XR_FUNC XrXirStatus xir_effects_module_borrow_site(const XrXirCompileContext *co
         if (operand >= row.values) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *type = xr_xir_type_node(module->types, xr_xir_operand_type(body, operand));
         uint8_t view = !type ? 0 : type->kind == XR_XIR_TYPE_SLICE ? 1 : type->kind == XR_XIR_TYPE_MUT_SLICE ? 2 : 0;
-        uint32_t slot = UINT32_MAX;
-        if (view && xir_module_slot_root(module, body, operand, &slot)) {
-            EffectModuleTarget target = {EFFECT_MODULE_SLOT, view == 1 ? EFFECT_MODULE_WRITE : EFFECT_MODULE_ACCESS, slot};
-            if (effect_module_borrow_conflict(roots, module->types, op, function, instruction, a, target, &conflict)) {
-                conflict.view = view;
-                goto done;
+        if (view) {
+            for (uint32_t m = roots->node[row.first + operand].module_sets[EFFECT_MODULE_ORIGIN]; m != UINT32_MAX;
+                m = roots->module_member[m].next) {
+                EffectModuleMember origin = roots->module_member[m];
+                if (origin.kind != EFFECT_MODULE_SLOT && origin.kind != EFFECT_MODULE_UNKNOWN) continue;
+                bool unknown = origin.kind == EFFECT_MODULE_UNKNOWN;
+                EffectModuleTarget target = {EFFECT_MODULE_SLOT, view == 1 ? EFFECT_MODULE_WRITE : EFFECT_MODULE_ACCESS,
+                    unknown ? UINT32_MAX : origin.identity};
+                if (effect_module_borrow_conflict(roots, module->types, op, function, instruction, a, target, &conflict)) {
+                    conflict.view = view;
+                    conflict.unknown_owner = unknown;
+                    goto done;
+                }
             }
+            continue;
         }
         if (!effect_module_loan_operand(module->types, body, operand)) continue;
         for (uint32_t m = roots->node[row.first + operand].module_sets[EFFECT_MODULE_ORIGIN]; m != UINT32_MAX;) {
@@ -190,7 +198,7 @@ static XrXirStatus effect_module_borrows_verify(const XrXirCompileContext *conte
                     XR_XIR_DIAGNOSTIC_FIELD_BORROW};
                 return XR_XIR_BAD_TYPE;
             }
-            if (conflict.slot == UINT32_MAX) continue;
+            if (conflict.slot == UINT32_MAX && !conflict.unknown_owner) continue;
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, i,
                 conflict.unknown ? XR_XIR_DIAGNOSTIC_MODULE_BORROW_UNKNOWN : XR_XIR_DIAGNOSTIC_MODULE_BORROW_ACCESS};
             return XR_XIR_BAD_TYPE;
