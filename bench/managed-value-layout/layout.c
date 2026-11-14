@@ -66,6 +66,10 @@ static void mvl_header_free(XrMvlHeader *header) {
     mvl_deallocate(header->domain, header, header->allocation_bytes);
 }
 
+XR_FUNCDEF void xr_mvl_string_dispose_last(XrMvlString *string) {
+    mvl_header_free(&string->header);
+}
+
 static void mvl_array_destroy(XrMvlHeader *header) {
     XrMvlArray *array = (XrMvlArray *) header;
     mvl_deallocate(header->domain, array->data, array->capacity * sizeof(*array->data));
