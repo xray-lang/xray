@@ -17,6 +17,7 @@ The earlier canonical-access experiment remains separately archived at
 | `record` | Construct `{x:i,y:i+1}` 3,000,000 times and sum fields | `9000000000000` |
 | `map` | Seed `{"seed":0}`, insert and look up 200,000 `"k${i}"` keys | `19999900000` |
 | `map-take` | The complete same Map input, transferring each owned insertion key | `19999900000` |
+| `map-typed-drop` | The complete same take input with typed caller String drop sites | `19999900000` |
 
 These reproduce the operation counts and values of the original report. The
 Map constructs and drops a new allocated string on **every** insert and lookup;
@@ -33,6 +34,11 @@ commit. Any aliases keep their real references, including negative shared-counte
 references. Failure leaves the binding, key owner and net domain charge intact.
 Both modes allocate all 400,001 Strings including seed and lookup temporaries.
 No SSO, interning, key cache, or new Source/LIR ownership inference is involved.
+
+`map-typed-drop` changes only the three caller temporary-String drop sites in
+`map-take`. Destruction of the Map and its stored keys remains generic; this is
+not static dispatch for the entire Map destructor. Key construction, ownership
+transfer and lookup allocation are unchanged.
 
 The take API requires a valid caller-owned slot; its pointer type and RC do not
 prove that precondition. A null slot is rejected, but arbitrary external pointers
@@ -125,6 +131,8 @@ pointer and final destructor. A Domain and its descriptors must not move or be
 reinitialized while an object remains live. They are used at final drop, not
 looked up on every get/set. There is no XIR value, type arena, owner hash table,
 tagged value, VM frame, or per-element admission traversal.
+These static descriptors do not implement dynamic allocator or Instance lifetime
+leases; a static billing Domain must outlive every object that refers to it.
 
 * Array<i64>: header, `i64 *data`, `size_t length`, `size_t capacity`.
 * String: header, byte length, cached byte hash, trailing UTF-8 bytes and NUL.
@@ -181,9 +189,9 @@ not implement language loans, hoist proof, or cross-function summaries. A future
 checked plan must describe owner access/retain/escape, writes, returned origins
 and invalidation in a composable module interface, with link-time closure.
 
-VM operations can hold these same typed object pointers in the VM's existing
-register-owner slots; generated C can use them in stable native activation-owner
-slots. They share payload and drop semantics, not an execution frame. Cleanup
+Future VM integration would hold these typed object pointers in register-owner
+slots; generated C would use stable native activation-owner slots. That proposed
+integration would share payload and drop semantics, not an execution frame. Cleanup
 slots must remain discoverable across allocation and longjmp. A slow transaction
 must register prepared owners before a possible trap, commit the actual binding
 without failure, or abort on unwind. No automatic-stack address or relocatable
@@ -221,10 +229,12 @@ window. Full workloads and ratios require a fixed-input, alternating-order plan
 and must retain all samples; this directory does not create a new gate or change
 existing performance thresholds.
 
-The portable `run.py` driver measures all six original and variant workloads,
+The portable `run.py` driver measures all eight original and variant workloads,
 five alternating rounds each, with the corresponding unchanged raw workload.
+`record-escape` remains a separate ownership control, outside those eight modes.
 The automatic five-provider workflow retains the original `push` and `map`
-ratio limits of 1.3 and applies the same limit to `push-direct` and `map-take`.
+ratio limits of 1.3 and applies the same limit to `push-direct`, `push-noalias`,
+`map-take` and `map-typed-drop`.
 `push-prepared` remains the aggregate-ABI diagnostic control; `record` can fold
 and still has no heap-allocation ratio gate. Every sample must execute and match
 its independent golden, including the diagnostic controls. This is prototype
