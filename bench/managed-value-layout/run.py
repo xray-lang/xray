@@ -15,7 +15,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import array_access_benchmark as evidence
 import xray_process
 
-CASES = {"push": "12499997500000", "record": "9000000000000", "map": "19999900000"}
+CASES = {"push": "12499997500000", "record": "9000000000000", "map": "19999900000",
+         "push-prepared": "12499997500000", "push-direct": "12499997500000",
+         "map-take": "19999900000"}
+RAW_CASES = {"push-prepared": "push", "push-direct": "push", "map-take": "map"}
+RATIO_CASES = ("push", "map", "push-direct", "map-take")
 ROUNDS = 5
 
 
@@ -50,7 +54,7 @@ def flags(compiler: Path, version: bytes) -> list[str]:
 def prepare(args) -> None:
     initial = source_identity()
     args.work.mkdir(parents=True)
-    result = {"prototypeSchema": 1, "state": "PREPARING", "source": initial, "root": str(ROOT), "platform": sys.platform,
+    result = {"prototypeSchema": 2, "state": "PREPARING", "source": initial, "root": str(ROOT), "platform": sys.platform,
               "commands": [], "prototypeOnly": True, "productQualification": "NOT_RUN"}
     env = evidence.environment(ROOT)
 
@@ -98,6 +102,7 @@ def prepare(args) -> None:
         if source_identity() != initial:
             raise ValueError("Source changed during preparation")
         result.update(state="PREPARED_NOT_MEASURED", rounds=ROUNDS, timeoutSeconds=30,
+                      rawCases=RAW_CASES, ratioCases=list(RATIO_CASES),
                       products=products, expected={name: (value + newline).encode().hex()
                                                    for name, value in CASES.items()},
                       fingerprints=[evidence.fingerprint(path) for path in sorted(set(dependencies))])
@@ -114,11 +119,12 @@ def measure(args) -> int:
     prepared = json.loads(args.prepared.read_text(encoding="utf-8"))
     newline = "\r\n" if os.name == "nt" else "\n"
     expected = {name: (value + newline).encode().hex() for name, value in CASES.items()}
-    if (prepared.get("prototypeSchema") != 1 or prepared["state"] != "PREPARED_NOT_MEASURED"
+    if (prepared.get("prototypeSchema") != 2 or prepared["state"] != "PREPARED_NOT_MEASURED"
             or prepared["source"] != source_identity()
             or prepared["platform"] != sys.platform or prepared["rounds"] != ROUNDS
             or prepared["timeoutSeconds"] != 30 or set(prepared["products"]) != {"managed", "raw"}
-            or prepared["expected"] != expected):
+            or prepared["expected"] != expected or prepared.get("rawCases") != RAW_CASES
+            or prepared.get("ratioCases") != list(RATIO_CASES)):
         raise ValueError("The prepared prototype identity or fixed workload schema differs")
     evidence.verify_fingerprints(prepared["fingerprints"])
     args.work.mkdir(parents=True)
@@ -132,7 +138,8 @@ def measure(args) -> int:
             for round_index in range(ROUNDS):
                 order = ("managed", "raw") if round_index % 2 == 0 else ("raw", "managed")
                 for engine in order:
-                    row = evidence.execute([prepared["products"][engine], case], args.work,
+                    mode = RAW_CASES.get(case, case) if engine == "raw" else case
+                    row = evidence.execute([prepared["products"][engine], mode], args.work,
                                            f"{case}-{round_index}-{engine}", evidence.environment(ROOT),
                                            bytes.fromhex(prepared["expected"][case]))
                     row.update(case=case, engine=engine, round=round_index)
@@ -158,7 +165,7 @@ def measure(args) -> int:
         result["state"] = "PASS_EXECUTION_ONLY" if complete else "FAIL"
         result["layoutGates"] = {case: {"ratio": result["ratios"].get(case), "limit": 1.3,
                                        "pass": complete and result["ratios"].get(case, float("inf")) <= 1.3}
-                                 for case in ("push", "map")}
+                                 for case in RATIO_CASES}
         if args.gate and not all(gate["pass"] for gate in result["layoutGates"].values()):
             result["state"] = "FAIL_LAYOUT_RATIO"
         return 0 if result["state"] == "PASS_EXECUTION_ONLY" else 1
