@@ -11,6 +11,7 @@ The earlier canonical-access experiment remains separately archived at
 | Command | Work | Exact stdout |
 |---|---|---|
 | `push` | Push 5,000,000 i64 values, then sum them | `12499997500000` |
+| `push-prepared` | The complete same push input inside a trusted prepared window | `12499997500000` |
 | `record` | Construct `{x:i,y:i+1}` 3,000,000 times and sum fields | `9000000000000` |
 | `map` | Seed `{"seed":0}`, insert and look up 200,000 `"k${i}"` keys | `19999900000` |
 | `map-take` | The complete same Map input, transferring each owned insertion key | `19999900000` |
@@ -38,6 +39,30 @@ would need its separately verified ownership plan. State checks include actual
 aliases, equal distinct/same-pointer keys, both counter bands, every discovered
 allocation failure in growth and COW preparation, and partial child-retain failure
 at both signed RC limits. Negative-band fixtures expose no graph to a thread.
+
+`push-prepared` peels the first real write after its RHS. Only then does the
+shared Array kernel check physical uniqueness, grow or COW, and return a writable
+data/length/capacity descriptor. The remaining loop uses that descriptor and
+commits the canonical length after every element store. Cold growth accepts and
+returns descriptor values. It never receives or caches the caller's binding
+address. Ordinary and prepared Array writes use the same COW/growth kernel and
+the same 32-byte object; the descriptor owns no reference or second payload.
+
+This is a trusted caller-owned, alias-free window, not permission inferred from
+RC==1. Retain, alias observation, rebinding and observing calls close the window
+before executing. Close by discarding the descriptor, evaluate RHS effects, read
+the current binding, and prepare again at the actual write. The internal cold
+allocator/COW operation belongs to the window and returns refreshed pointers.
+Its successful COW result leaves the old caller reference unconsumed: immediately
+publish the returned owner, then drop that old reference. An explicit abort
+drops the fresh replacement instead. Do not insert a fallible call between
+preparation and publication; stable Root cleanup across unwind remains absent.
+
+State checks cover empty ranges without pre-COW, real RC without a pin, explicit
+abort/refund, all COW allocation failures, failed growth, refreshed pointers,
+RHS rebinding, bounds before allocation, and invalidated descriptors before
+retain/alias/call/rebind. These are native C protocol tests, not a language loan,
+module effect proof, Root/longjmp test, or support for class/for-ref.
 
 `record` is an inline two-i64 value. Ordinary scalar replacement and loop
 folding are allowed in both implementations. A folded loop or startup-limited

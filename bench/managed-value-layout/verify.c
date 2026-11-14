@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Failure is checked against real bindings, references and allocation charge.
  */
-#include "layout.h"
+#include "access.h"
 
 #define MVL_REQUIRE(condition) do { \
     if (!(condition)) { \
@@ -194,11 +194,12 @@ cleanup:
 }
 
 #include "take_cases.inc.c"
+#include "access_cases.inc.c"
 
 XR_FUNCDEF bool xr_mvl_verify(void) {
     size_t capacity;
     if (xr_mvl_capacity(0, SIZE_MAX, sizeof(int64_t), &capacity))
         return false;
     return mvl_verify_array() && mvl_verify_map() && mvl_verify_map_growth() &&
-        mvl_verify_record() && mvl_verify_header_counter() && mvl_verify_take();
+        mvl_verify_record() && mvl_verify_header_counter() && mvl_verify_take() && mvl_verify_access();
 }
