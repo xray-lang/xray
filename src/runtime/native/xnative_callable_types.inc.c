@@ -25,10 +25,14 @@ XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec value, uint32_t count, Xr
         if (value.type >= 4) return false;
         type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + value.type);
         break;
+    case XRT_CALLABLE_MAP_STRING_I64:
+        if (value.type) return false;
+        type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 4u);
+        break;
     case XRT_CALLABLE_CONSTRUCTED:
-        if (value.type >= count || value.type >= XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - 4u)
+        if (value.type >= count || value.type >= XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - XRT_CALLABLE_PREFIX_COUNT)
             return false;
-        type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + value.type);
+        type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + value.type);
         break;
     default: return false;
     }
@@ -61,9 +65,10 @@ static XrXirValueStatus callable_resource_status(XrCompileResourceStatus status)
 XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *specs, uint32_t count,
     uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes) {
     if (!empty || *empty || !bytes || (count && !specs)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - 4u)
+    if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - XRT_CALLABLE_PREFIX_COUNT)
         return XR_XIR_VALUE_LIMIT;
     size_t parameter_count = 0;
+    bool map = false;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec spec = specs[t];
         if ((uint32_t)spec.kind > XRT_CALLABLE_TUPLE_I64 || spec.parameter_count > 65536 ||
@@ -71,6 +76,9 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         if (spec.throws) return XR_XIR_VALUE_UNSUPPORTED;
         if (spec.parameter_count > SIZE_MAX - parameter_count) return XR_XIR_VALUE_OVERFLOW;
         parameter_count += spec.parameter_count;
+        map |= spec.element.kind == XRT_CALLABLE_MAP_STRING_I64 || spec.result.kind == XRT_CALLABLE_MAP_STRING_I64;
+        for (uint32_t p = 0; p < spec.parameter_count; ++p)
+            map |= spec.parameters[p].value.kind == XRT_CALLABLE_MAP_STRING_I64;
         if (spec.kind == XRT_CALLABLE_TUPLE_I64) {
             if (!spec.count || spec.count > 65536 || spec.count > SIZE_MAX - parameter_count)
                 return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -85,7 +93,7 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     XrXirTypeNode *nodes = NULL;
     XrXirCallableParameter *parameters = NULL;
     void *storage = NULL;
-    resource = xr_compile_resources_calloc(context.resources, (size_t)count + 4u, sizeof(*nodes), &storage);
+    resource = xr_compile_resources_calloc(context.resources, (size_t)count + XRT_CALLABLE_PREFIX_COUNT, sizeof(*nodes), &storage);
     nodes = storage;
     if (resource == XR_COMPILE_RESOURCE_OK && parameter_count) {
         storage = NULL;
@@ -96,10 +104,12 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     static const XrXirType elements[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
     if (status == XR_XIR_VALUE_OK)
         for (uint32_t a = 0; a < 4; ++a) nodes[a] = (XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY, .element=elements[a]};
+    if (status == XR_XIR_VALUE_OK)
+        nodes[4] = (XrXirTypeNode){.kind=XR_XIR_TYPE_MAP, .element=XR_XIR_STRING, .result=XR_XIR_I64};
     size_t next = 0;
     for (uint32_t t = 0; t < count && status == XR_XIR_VALUE_OK; ++t) {
         XrtCallableTypeSpec spec = specs[t];
-        XrXirTypeNode *node = &nodes[t + 4u];
+        XrXirTypeNode *node = &nodes[t + XRT_CALLABLE_PREFIX_COUNT];
         if (spec.kind == XRT_CALLABLE_SIGNATURE) {
             if (spec.count || spec.element.kind != XRT_CALLABLE_SCALAR || spec.element.type ||
                 (spec.flags & ~3u) || ((spec.flags & 2u) && !(spec.flags & 1u)) ||
@@ -151,9 +161,23 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         }
     }
     if (status == XR_XIR_VALUE_OK) {
-        XrXirTypes types = {.nodes=nodes, .count=count + 4u};
+        XrXirTypes types = {.nodes=nodes, .count=count + XRT_CALLABLE_PREFIX_COUNT};
         status = xr_xir_compile_type_arena_new(&context, &types, empty);
     }
+    XrXirTypeArena *owned_map = NULL;
+    const XrXirTypeArena *map_types = NULL;
+    uint64_t map_bytes = 0;
+    if (status == XR_XIR_VALUE_OK && map) {
+        if (xrt_value_root_active()) status = xrt_map_root_types_ensure(&map_types);
+        else {
+            status = xrt_map_types_new(limit, &owned_map, &map_bytes);
+            map_types = owned_map;
+        }
+        if (status == XR_XIR_VALUE_OK)
+            status = xir_native_type_arena_receive_string_i64_map(*empty,
+                XR_XIR_CONSTRUCTED_TYPE_BASE + 4u, map_types);
+    }
+    xr_xir_compile_type_arena_drop(owned_map);
     xr_compile_resources_free(parameters);
     xr_compile_resources_free(nodes);
     if (status == XR_XIR_VALUE_OK) {
@@ -161,10 +185,15 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         if (xr_compile_resources_stats(context.resources, &stats) != XR_COMPILE_RESOURCE_OK) {
             xr_xir_compile_type_arena_drop(*empty); *empty = NULL;
             status = XR_XIR_VALUE_BAD_ARGUMENT;
-        } else *bytes = stats.held_bytes;
+        } else if (map_bytes > limit || stats.held_bytes > limit - map_bytes) status = XR_XIR_VALUE_MEMORY_LIMIT;
+        else *bytes = stats.held_bytes + map_bytes;
     }
+    if (status != XR_XIR_VALUE_OK) { xr_xir_compile_type_arena_drop(*empty); *empty = NULL; }
     xr_compile_resources_release(context.resources);
     return status;
+}
+XR_FUNC const XrXirTypeArena *xrt_callable_map_catalog(const XrXirTypeArena *types) {
+    return xir_native_type_arena_string_i64_map_source(types, XR_XIR_CONSTRUCTED_TYPE_BASE + 4u);
 }
 XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *specs, uint32_t count,
     uint64_t limit, XrXirTypeArena **empty) {

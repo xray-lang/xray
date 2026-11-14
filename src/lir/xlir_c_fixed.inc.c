@@ -41,7 +41,7 @@ static void c_prepare_types(LirC *c) {
         LirCConstructedType *owned = &c->constructed_types[n];
         owned->pod_index = UINT32_MAX;
         XrLirCellType cell;
-        if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64) {
+        if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)) {
             cells = true;
             xr_lir_type_view(module, type, &owned->shape);
             owned->layout = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};

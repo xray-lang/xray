@@ -53,8 +53,10 @@ static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruc
         if (instruction->bits == XR_LIR_CLOSURE_OWNED &&
             xr_lir_callable_type_view(c->request->module, type, &captured) == XR_LIR_OK) continue;
         XrLirCellType cell;
-        if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64)
+        if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK &&
+            (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64))
             continue;
+        if (instruction->bits == XR_LIR_CLOSURE_OWNED && type == XR_LIR_MAP_STRING_I64) continue;
         if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
             type != XR_LIR_U64 && type != XR_LIR_F64 &&
             (instruction->bits == XR_LIR_CLOSURE_OWNED || type != XR_LIR_I64_CELL)) return false;

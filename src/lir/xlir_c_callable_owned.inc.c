@@ -159,9 +159,27 @@ static void c_callable_import_declarations(LirC *c) {
             c_format(c, "static %s xrl_callable_import_%" PRIu32 "(XrtCallable *, uint32_t);\n", c_type(c, type), type);
     }
 }
+static bool c_callable_owned_thunk_needed(LirC *c, uint32_t target) {
+    if (c->seen[target] & 32u) return true;
+    XrLirClosureTarget callee = c->request->module->functions[target].closure;
+    for (uint32_t f = 0; f < c->request->module->function_count; ++f) {
+        if (!c->seen[f]) continue;
+        const XrLirFunctionData *function = &c->request->module->functions[f];
+        if (c->owned_entries[f])
+            for (uint32_t p = 0; p < function->closure.capture_count; ++p)
+                if (xr_lir_callable_accepts(c->request->module, function->parameter_types[p], callee.callable)) return true;
+        for (uint32_t b = 0; b < function->block_count; ++b)
+            for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
+                const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
+                if (v->op == XR_LIR_STATE_READ && xr_lir_callable_accepts(c->request->module, v->type, callee.callable))
+                    return true;
+            }
+    }
+    return false;
+}
 static void c_callable_owned_thunks(LirC *c) {
     for (uint32_t f = 0; c->owned_entry_count && f < xr_lir_function_count(c->request->module); ++f) {
-        if (!c->owned_entries[f]) continue;
+        if (!c->owned_entries[f] || !c_callable_owned_thunk_needed(c, f)) continue;
         XrLirClosureTarget target;
         XrLirFunctionView view;
         XrLirCallableType signature;

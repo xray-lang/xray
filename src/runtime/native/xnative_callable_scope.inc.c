@@ -64,6 +64,8 @@ static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
     XrtValueRoot *root = xrt_value_root_current(source);
     uint64_t limit = root->byte_limit ? root->byte_limit : UINT64_MAX;
     if (arena) {
+        const XrXirTypeArena *maps = xrt_callable_map_catalog(arena);
+        if (maps) callable_scope_require(xrt_map_root_bind_types(maps), source);
         if (!xr_xir_compile_type_arena_retain(arena)) xrt_value_failure(XR_XIR_VALUE_REFCOUNT_LIMIT, source);
         group->types = arena;
     } else callable_scope_require(xrt_callable_types_new(image->types, image->type_count, limit, &group->types), source);
@@ -188,6 +190,11 @@ XRAY_API XrtCallable *xrt_callable_scope_new(XrtCallableScope *scope, uint32_t e
             const XirObject *object = (const XirObject *)(intptr_t)body->arguments[p].payload;
             if (!object) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
             body->arguments[p].type = (uint32_t)object->type;
+        } else if (expected.captures[p] == XR_XIR_STRING ||
+                (uint32_t)expected.captures[p] >= XR_XIR_CONSTRUCTED_TYPE_BASE) {
+            if (!xr_xir_value_from_payload(body->group->types, expected.captures[p],
+                    (int64_t)captures[p], &body->arguments[p]))
+                xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
         }
     }
     XrtCallableScopeValue *received = &body->values[body->count];

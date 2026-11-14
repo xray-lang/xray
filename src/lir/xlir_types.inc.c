@@ -70,7 +70,8 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
     if (!xr_lir_internal_type_valid(m, payload, true) || payload >= XR_LIR_TYPE_COUNT + ordinal) return false;
     if (payload == XR_LIR_ARRAY) return xr_lir_internal_array_element(element);
     if (element) return false;
-    if (payload < XR_LIR_TYPE_COUNT) return lir_pod_scalar(payload) < XR_POD_SCALAR_COUNT || payload == XR_LIR_STRING;
+    if (payload < XR_LIR_TYPE_COUNT) return lir_pod_scalar(payload) < XR_POD_SCALAR_COUNT ||
+        payload == XR_LIR_STRING || payload == XR_LIR_MAP_STRING_I64;
     return true;
 }
 

@@ -209,7 +209,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) {
         XrLirCellType cell;
         XrLirType type = v->op == XR_LIR_CELL_NEW ? v->type : c_value_type(c, v->operands[0]);
-        if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64) return true;
+        if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)) return true;
     }
     if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
@@ -415,6 +415,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                     c_callable_owned_target(c, v->callee);
                 if (v->bits == XR_LIR_CLOSURE_OWNED) {
                     c_callable_owned_target(c, v->callee);
+                    c->seen[v->callee - 1] |= 32u;
                     c->runtime = true;
                     if (c_located(&v->source)) {
                         if (c->location_count == UINT32_MAX)
@@ -936,8 +937,13 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_CELL_NEW:
             if (v->type >= XR_LIR_TYPE_COUNT) {
-                c_format(c, "    v%" PRIu32 " = xrt_callable_cell_scope_new(xrl_scope, %" PRIu32 ", ",
-                    v->result, v->type - XR_LIR_TYPE_COUNT);
+                XrLirCellType cell;
+                if (xr_lir_cell_type_view(c->request->module, v->type, &cell) != XR_LIR_OK) {
+                    c_error(c, XR_LIR_C_INVALID_LIR, "captured Cell has no payload"); break;
+                }
+                c_format(c, "    v%" PRIu32 " = xrt_callable_cell_scope_%s(xrl_scope, %" PRIu32 ", ",
+                    v->result, cell.payload == XR_LIR_MAP_STRING_I64 ? "map_new" : "new",
+                    v->type - XR_LIR_TYPE_COUNT);
                 c_value(c, v->operands[0]); c_format(c, ", %" PRIu32 ");\n", string_source);
                 break;
             }

@@ -68,12 +68,20 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     if (access.operation == XR_RBC_STATE_GROUP_INITIALIZE)
         return s->state[access.source] == RBC_STATE_BORROWED && s->aggregates[access.destination];
     if (access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) {
+        bool map = rbc_captured_map_type(s->module, (XrXirType)access.slot);
         if (access.operation == XR_RBC_CAPTURED_CELL_NEW) {
-            if (s->state[access.source] != RBC_BITS) return false;
+            if (map ? !rbc_array_source(s, s->function->aggregate_operands[access.first]) :
+                    s->state[access.source] != RBC_BITS) return false;
         } else if (s->state[access.source] != RBC_CAPTURED_CELL || s->origin[access.source] != access.slot) return false;
-        if (access.operation == XR_RBC_CAPTURED_CELL_WRITE) return s->state[access.window] == RBC_BITS;
+        if (access.operation == XR_RBC_CAPTURED_CELL_WRITE) return map ?
+            rbc_array_source(s, s->function->aggregate_operands[access.first]) : s->state[access.window] == RBC_BITS;
         uint32_t result = access.result.index;
         if (access.operation == XR_RBC_CAPTURED_CELL_READ) {
+            if (map) {
+                if (!rbc_array_destination(s, access.result)) return false;
+                rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
+                return true;
+            }
             if (!rbc_bits_destination(s, result)) return false;
             s->state[result] = RBC_BITS;
             return true;
@@ -139,6 +147,8 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
                 } else if (capture.kind == XR_RBC_CALLABLE_FUNCTION) {
                     if (location.spill || s->state[location.index] != RBC_FUNCTION_OWNED ||
                         !rbc_callable_accepts(s->module, capture.type + 1, s->origin[location.index])) return false;
+                } else if (capture.kind == XR_RBC_CALLABLE_REFERENCE) {
+                    if (!rbc_array_source(s, location)) return false;
                 } else if (rbc_array_state(s, location) != RBC_BITS) return false;
             }
         } else if (access.destination) {
@@ -150,7 +160,7 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
                 XrRbcRegisterKind kind = rbc_array_location_kind(s->function, location);
                 const XrRbcFunction *callee = &s->module->functions[access.callee];
                 if (p < callee->capture_count && callee->captures[p].kind == XR_RBC_CALLABLE_FUNCTION) return false;
-                if (kind == XR_RBC_CAPTURED_I64_CELL || kind == XR_RBC_CAPTURED_I64_BORROW) {
+                if (kind == XR_RBC_CAPTURED_CELL || kind == XR_RBC_CAPTURED_CELL_BORROW) {
                     if (location.spill || state != RBC_CAPTURED_CELL ||
                         s->origin[location.index] != s->module->functions[access.callee].captures[p].type) return false;
                     const uint32_t *scopes = rbc_scope_state(s);

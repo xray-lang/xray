@@ -17,7 +17,8 @@ static bool lir_scope_contains(const uint32_t *parents, uint32_t count,
 static bool lir_scope_callable(const XrLirModule *m, XrLirType type) {
     XrLirCallableType signature;
     XrLirCellType cell;
-    if (xr_lir_cell_type_view(m, type, &cell) == XR_LIR_OK) return cell.payload == XR_LIR_I64;
+    if (xr_lir_cell_type_view(m, type, &cell) == XR_LIR_OK)
+        return cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64;
     return type >= XR_LIR_TYPE_COUNT && xr_lir_callable_type_view(m, type, &signature) == XR_LIR_OK;
 }
 /* Frame storage belongs to the activation, while a captured canonical Cell

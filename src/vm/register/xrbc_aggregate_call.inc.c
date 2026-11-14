@@ -141,6 +141,11 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
                         entry.captures[p], &stack->closure_arguments[p])) return XR_RBC_INVALID;
                 continue;
             }
+            if (capture.kind == XR_RBC_CALLABLE_REFERENCE) {
+                if (!xr_xir_value_from_payload(module->closure_types, entry.captures[p], (int64_t)bits,
+                        &stack->closure_arguments[p])) return XR_RBC_INVALID;
+                continue;
+            }
             if (!xr_rbc_callable_scalar_valid(module->functions[access.callee].captures[p], bits))
                 return XR_RBC_INVALID;
             XrXirValue value = {.type=(uint32_t)entry.captures[p]};

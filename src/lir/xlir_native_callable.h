@@ -18,6 +18,8 @@ static inline bool lir_native_callable_value(XrLirType type, XrLirType element,
     XrPodScalar scalar = lir_pod_scalar(type);
     if (scalar < XR_POD_SCALAR_COUNT) *output = (XrtCallableValueSpec){XRT_CALLABLE_SCALAR, scalar};
     else if (type == XR_LIR_STRING) *output = (XrtCallableValueSpec){XRT_CALLABLE_STRING, 0};
+    else if (type == XR_LIR_MAP_STRING_I64)
+        *output = (XrtCallableValueSpec){XRT_CALLABLE_MAP_STRING_I64, 0};
     else if (type == XR_LIR_ARRAY) {
         static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
         uint32_t family = 0;

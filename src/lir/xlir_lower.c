@@ -37,7 +37,7 @@ typedef struct Lower {
     uint32_t *constructed_stack;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
-    XrLirType owned_i64_cell;
+    XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
     uint32_t *queue, queued;
@@ -776,6 +776,7 @@ static bool lower_binding_storage(const LowerFunction *function, const XrXirInst
     return value < function->value_count && function->frame_bindings[value];
 }
 static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruction *op) {
+    if (lower_binding_storage(lower, op)) return false;
     const Lower *c = lower->owner;
     const XrXirFunction *f = lower->source;
     uint32_t id = op->op == XR_XIR_CELL_NEW ? f->parameter_count + (uint32_t)(op - f->instructions) : op->args[0];
@@ -975,9 +976,11 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             XrLirCallableType captured;
             if (placement == XIR_CLOSURE_OWNED && xr_lir_callable_type_view(c->module, type, &captured) == XR_LIR_OK)
                 continue;
-            if (type == XR_LIR_I64_CELL) c->scalar_bindings = true;
+            if (type == XR_LIR_I64_CELL || type == XR_LIR_MAP_STRING_I64_CELL) c->scalar_bindings = true;
             if (type != XR_LIR_I1 && type != XR_LIR_I64 && type != XR_LIR_U8 &&
-                type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL)
+                type != XR_LIR_U64 && type != XR_LIR_F64 && type != XR_LIR_I64_CELL &&
+                type != XR_LIR_MAP_STRING_I64_CELL &&
+                !(placement == XIR_CLOSURE_OWNED && type == XR_LIR_MAP_STRING_I64))
                 return lower_unsupported(c, "FUNCTION_REF captured physical binding transport");
         }
         XrLirType type = lower_type(c, op->type);
@@ -1153,7 +1156,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         parameters[p] = lower_type(c, f->parameters[p]);
         if (c->owned_bindings && c->owned_bindings[index] && c->owned_bindings[index][p])
-            parameters[p] = c->owned_i64_cell;
+            parameters[p] = lower_owned_cell_type(c, f->parameters[p]);
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
         if (parameters[p] == XR_LIR_MAP_STRING_I64_CELL) parameters[p] = XR_LIR_MAP_STRING_I64_REF;
         if (parameters[p] == XR_LIR_STRING_CELL) { parameters[p] = XR_LIR_STRING_REF; c->string_appends = true; }
@@ -1302,13 +1305,16 @@ static bool lower_frame_bindings(LowerFunction *f) {
     if (f->value_count && !f->frame_bindings) return false;
     const XrXirFunction *source = f->source;
     for (uint32_t p = 0; p < source->parameter_count; ++p)
-        f->frame_bindings[p] = lower_type(c, source->parameters[p]) == XR_LIR_I64_CELL;
+        f->frame_bindings[p] = lower_type(c, source->parameters[p]) == XR_LIR_I64_CELL ||
+            (c->owned_bindings && c->owned_bindings[c->function] && c->owned_bindings[c->function][p]);
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         const XrXirInstruction *op = &source->instructions[i];
         if (op->op != XR_XIR_FUNCTION_REF) continue;
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             uint32_t value = source->operands[op->args[0] + p];
-            if (lower_type(c, xr_xir_operand_type(source, value)) != XR_LIR_I64_CELL) continue;
+            if (lower_type(c, xr_xir_operand_type(source, value)) != XR_LIR_I64_CELL &&
+                !(c->owned_bindings && c->owned_bindings[c->function] &&
+                    value < f->value_count && c->owned_bindings[c->function][value])) continue;
             bool found = false;
             for (uint32_t depth = 0; depth < f->value_count; ++depth) {
                 if (value >= f->value_count) break;
@@ -2105,8 +2111,8 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
                 (!create && !read && !lower_value(f, op->args[1], &arguments[1]))) return false;
             XrLirInstruction binding = {.op=create ? XR_LIR_CELL_NEW : read ? XR_LIR_CELL_READ : XR_LIR_CELL_WRITE,
                 .type=create ? (c->owned_bindings && c->owned_bindings[c->function] &&
-                    c->owned_bindings[c->function][result] ? c->owned_i64_cell : XR_LIR_I64_CELL) :
-                    read ? XR_LIR_I64 : XR_LIR_UNIT, .operands=arguments,
+                    c->owned_bindings[c->function][result] ? lower_owned_cell_type(c, op->type) : XR_LIR_I64_CELL) :
+                    read ? lower_type(c, op->type) : XR_LIR_UNIT, .operands=arguments,
                 .operand_count=create || read ? 1u : 2u, .source=lower_source(c)};
             if (!lower_build(c, read || create ? xr_lir_emit_value(c->module, f->blocks[b], &binding, &f->values[result]) :
                 xr_lir_emit_effect(c->module, f->blocks[b], &binding))) return false;

@@ -214,7 +214,7 @@ static bool rbc_lir_callable_type(const XrLirModule *module, XrLirType type) {
 }
 static bool rbc_lir_captured_cell(const XrLirModule *module, XrLirType type) {
     XrLirCellType cell;
-    return xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64;
+    return xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64);
 }
 static bool rbc_lir_captured_cell_point(const XrLirModule *module, XrLirFunction function,
     const XrLirInstructionView *instruction) {
@@ -531,6 +531,13 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
+    if (i->op == XR_LIR_MAP_BORROW && i->operand_count == 1) {
+        XrLirType type;
+        XrLirCellType cell;
+        if (xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]}, &type) == XR_LIR_OK &&
+            xr_lir_cell_type_view(input, type, &cell) == XR_LIR_OK && cell.payload == XR_LIR_MAP_STRING_I64)
+            return true;
+    }
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
     if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
@@ -720,8 +727,8 @@ rejected:
 static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value, XrLirType type) {
     if (rbc_lir_captured_cell(c->input, type)) {
         for (uint32_t p = 0; p < c->view.parameter_count; ++p)
-            if (c->view.parameters[p] == value) return XR_RBC_CAPTURED_I64_BORROW;
-        return XR_RBC_CAPTURED_I64_CELL;
+            if (c->view.parameters[p] == value) return XR_RBC_CAPTURED_CELL_BORROW;
+        return XR_RBC_CAPTURED_CELL;
     }
     if (type == XR_LIR_MAP_STRING_I64) return XR_RBC_MAP_STRING_I64;
     if (type == XR_LIR_MAP_STRING_I64_CELL) return XR_RBC_MAP_STRING_I64_CELL;
@@ -1070,12 +1077,31 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         XrLirType type = i->type;
         if (i->op != XR_LIR_CELL_NEW)
             xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[0]}, &type);
-        return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){
+        XrLirCellType cell;
+        xr_lir_cell_type_view(c->input, type, &cell);
+        bool map = cell.payload == XR_LIR_MAP_STRING_I64;
+        XrRbcAggregateAccess access = {
             .operation=i->op == XR_LIR_CELL_NEW ? XR_RBC_CAPTURED_CELL_NEW :
                 i->op == XR_LIR_CELL_READ ? XR_RBC_CAPTURED_CELL_READ : XR_RBC_CAPTURED_CELL_WRITE,
-            .slot=XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + type - XR_LIR_TYPE_COUNT,
+            .slot=XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + type - XR_LIR_TYPE_COUNT,
             .source=c->slots[i->operands[0]], .window=i->operand_count == 2 ? c->slots[i->operands[1]] : 0,
-            .result={result, false}});
+            .result={result, false}};
+        if (map && i->op == XR_LIR_CELL_READ) access.result = rbc_lir_array_location(c, i->result);
+        if (map && i->op != XR_LIR_CELL_READ) {
+            if (c->aggregate_operand_count == UINT32_MAX)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "captured Cell operands exceed bytecode indices");
+            void *storage = c->aggregate_operands;
+            if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
+                    c->aggregate_operand_count + 1, sizeof(*c->aggregate_operands))) return false;
+            c->aggregate_operands = storage;
+            access.first = (uint32_t)c->aggregate_operand_count;
+            access.count = 1;
+            c->aggregate_operands[c->aggregate_operand_count++] =
+                rbc_lir_array_location(c, i->operands[i->op == XR_LIR_CELL_NEW ? 0 : 1]);
+            if (i->op == XR_LIR_CELL_NEW) access.source = 0;
+            access.window = 0;
+        }
+        return rbc_lir_aggregate_append(c, access);
     }
     switch (i->op) {
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
@@ -1471,10 +1497,12 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 (XrRbcCallableValue){XR_RBC_CALLABLE_BINDING, XR_POD_I64} :
                 rbc_lir_captured_cell(c->input, c->view.parameter_types[p]) ?
                 (XrRbcCallableValue){XR_RBC_CALLABLE_CELL,
-                    XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + c->view.parameter_types[p] - XR_LIR_TYPE_COUNT} :
+                    XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + c->view.parameter_types[p] - XR_LIR_TYPE_COUNT} :
                 rbc_lir_callable_type(c->input, c->view.parameter_types[p]) ?
                 (XrRbcCallableValue){XR_RBC_CALLABLE_FUNCTION,
                     c->literals->program->physical_callables[c->view.parameter_types[p] - XR_LIR_TYPE_COUNT]} :
+                c->view.parameter_types[p] == XR_LIR_MAP_STRING_I64 ?
+                (XrRbcCallableValue){XR_RBC_CALLABLE_REFERENCE, XR_RBC_MAP_STRING_I64} :
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||

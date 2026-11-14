@@ -8,7 +8,7 @@
  */
 enum { RBC_BITS, RBC_STRING_BORROWED, RBC_STRING_OWNED, RBC_CELL_BORROWED,
        RBC_CELL_OWNED, RBC_EMPTY, RBC_STATE_BORROWED, RBC_STATE_REFERENCE,
-       RBC_ARRAY_REF_CELL, RBC_ARRAY_REF_STATE, RBC_ARRAY_REF_FORMAL,
+       RBC_ARRAY_REF_CELL, RBC_ARRAY_REF_STATE, RBC_ARRAY_REF_FORMAL, RBC_ARRAY_REF_CAPTURED,
        RBC_VIEW_FRAME, RBC_VIEW_CELL, RBC_VIEW_SLICE, RBC_VIEW_RETURNED, RBC_FUNCTION, RBC_FUNCTION_OWNED, RBC_CAPTURED_CELL };
 static bool rbc_function_state(uint8_t state) { return state == RBC_FUNCTION || state == RBC_FUNCTION_OWNED; }
 typedef struct RbcSpillState { uint32_t origin; uint8_t state; } RbcSpillState;
@@ -123,6 +123,8 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
                 (kind != XR_RBC_CALL_WINDOW && kind != reference) ||
                 state[v.a] == RBC_STRING_OWNED || state[v.a] == RBC_CELL_OWNED) return false;
             state[v.a] = state[v.b]; s->origin[v.a] = s->origin[v.b];
+            uint32_t *scopes = rbc_scope_state(s);
+            if (scopes) scopes[v.a + 1] = scopes[v.b + 1];
             return true;
         }
         if (state[v.b] == RBC_STATE_BORROWED || state[v.b] == RBC_STATE_REFERENCE) {
@@ -410,8 +412,10 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
         }
         if ((((kind == XR_RBC_FUNCTION || kind == XR_RBC_CALL_WINDOW) &&
                 rbc_function_state(to->state[r]) && rbc_function_state(from->state[r])) ||
-             ((kind == XR_RBC_CAPTURED_I64_CELL || kind == XR_RBC_CAPTURED_I64_BORROW) &&
-                to->state[r] == RBC_CAPTURED_CELL && from->state[r] == RBC_CAPTURED_CELL)) &&
+             ((kind == XR_RBC_CAPTURED_CELL || kind == XR_RBC_CAPTURED_CELL_BORROW) &&
+                to->state[r] == RBC_CAPTURED_CELL && from->state[r] == RBC_CAPTURED_CELL) ||
+             ((kind == XR_RBC_MAP_STRING_I64_REF || kind == XR_RBC_CALL_WINDOW) &&
+                to->state[r] == RBC_ARRAY_REF_CAPTURED && from->state[r] == RBC_ARRAY_REF_CAPTURED)) &&
             to->origin[r] == from->origin[r]) {
             if (to_scopes && to_scopes[r + 1] != from_scopes[r + 1]) {
                 XrRbcFunctionScopes shape = rbc_function_scopes(from->module, from->function);
@@ -424,8 +428,8 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
             if (to->state[r] != joined) { to->state[r] = joined; *changed = true; }
             continue;
         }
-        if (kind == XR_RBC_FUNCTION || kind == XR_RBC_I64_BINDING || kind == XR_RBC_CAPTURED_I64_CELL ||
-            kind == XR_RBC_CAPTURED_I64_BORROW || xr_rbc_view_kind(kind) || kind == XR_RBC_STATE ||
+        if (kind == XR_RBC_FUNCTION || kind == XR_RBC_I64_BINDING || kind == XR_RBC_CAPTURED_CELL ||
+            kind == XR_RBC_CAPTURED_CELL_BORROW || xr_rbc_view_kind(kind) || kind == XR_RBC_STATE ||
             kind == XR_RBC_STATE_REF || kind == XR_RBC_MAP_STRING_I64_REF || kind == XR_RBC_STRING_REF ||
             xr_rbc_array_ref_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT) {
             if (to->state[r] != from->state[r] ||
@@ -638,7 +642,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
             g->work.state[r] = RBC_CELL_BORROWED;
             if (!rbc_cell_parameter_origin(r, &g->work.origin[r])) return XR_RBC_INVALID;
         }
-        if (r < f->parameter_count && kind == XR_RBC_CAPTURED_I64_BORROW) {
+        if (r < f->parameter_count && kind == XR_RBC_CAPTURED_CELL_BORROW) {
             if (r >= f->capture_count || f->captures[r].kind != XR_RBC_CALLABLE_CELL) return XR_RBC_INVALID;
             g->work.state[r] = RBC_CAPTURED_CELL;
             g->work.origin[r] = f->captures[r].type;
@@ -720,7 +724,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
         managed |= f->register_kinds[r] == XR_RBC_MAP_STRING_I64 || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING || f->register_kinds[r] == XR_RBC_STRING_CELL ||
             f->register_kinds[r] == XR_RBC_STRING_REF || f->register_kinds[r] == XR_RBC_STATE || f->register_kinds[r] == XR_RBC_STATE_REF ||
             f->register_kinds[r] == XR_RBC_FUNCTION || f->register_kinds[r] == XR_RBC_I64_BINDING ||
-            f->register_kinds[r] == XR_RBC_CAPTURED_I64_CELL || f->register_kinds[r] == XR_RBC_CAPTURED_I64_BORROW ||
+            f->register_kinds[r] == XR_RBC_CAPTURED_CELL || f->register_kinds[r] == XR_RBC_CAPTURED_CELL_BORROW ||
             xr_rbc_view_kind(f->register_kinds[r]) ||
             rbc_array_kind(f->register_kinds[r]) || rbc_array_cell_kind(f->register_kinds[r]) ||
             xr_rbc_array_ref_family(f->register_kinds[r]) < XR_RBC_ARRAY_FAMILY_COUNT;

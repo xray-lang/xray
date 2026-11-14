@@ -14,7 +14,9 @@
 static bool xr_rbc_map_reference(XrRbcStack *stack, const XrRbcModule *module,
     uint64_t bits, uint32_t source, XrtMapRef *out) {
     if (!bits) return false;
-    if (bits & 1u) {
+    if ((bits & 3u) == 2u) {
+        *out = xrt_map_ref_captured((struct XirCell *)(uintptr_t)(bits & ~UINT64_C(3)), source);
+    } else if (bits & 1u) {
         XrRbcRegister *cell = xr_rbc_cell(stack, module, bits >> 1, XR_RBC_MAP_STRING_I64);
         if (!cell) return false;
         *out = xrt_map_ref_local(&cell->map, source);
@@ -67,6 +69,13 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_step(const XrRbcModule *module, XrRbcS
         return XR_RBC_OK;
     }
     if (a.operation == XR_RBC_ARRAY_BORROW) {
+        if (a.cell) {
+            XrXirValue cell;
+            if (!xr_rbc_captured_cell_value(module, stack, rbc_array_location_kind(f, args[0]),
+                    first->bits, (XrXirType)a.cell, &cell)) return XR_RBC_INVALID;
+            result->bits = (uint64_t)cell.payload | UINT64_C(2);
+            return XR_RBC_OK;
+        }
         bool valid = rbc_array_location_kind(f, args[0]) == XR_RBC_STATE_REF ?
             xr_rbc_array_ref_encode_state(first->state_ref, &result->bits) :
             xr_rbc_array_ref_encode_cell(first->bits, &result->bits);

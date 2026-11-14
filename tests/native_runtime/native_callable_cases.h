@@ -126,7 +126,7 @@ static void native_callable_projection(void) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *signature = xr_xir_callable_signature(types, (XrXirType)263);
     CHECK(signature && signature->parameters[0].mode == XR_PARAM_MOVE && signature->parameters[0].escaping &&
-        signature->parameters[0].type == 261 && signature->result == 261);
+        signature->parameters[0].type == 262 && signature->result == 262);
     CHECK((signature->flags & XR_XIR_CALLABLE_ROOT_MASK) == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     XrXirLayout layout = {0};
     CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)265, &layout) && layout.size == 18);

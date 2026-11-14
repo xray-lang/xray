@@ -13,10 +13,11 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, scalar};
         return true;
     }
-    if (type == XR_LIR_STRING || type == XR_LIR_ARRAY) {
+    if (type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64) {
         uint32_t family = rbc_lir_array_family(element);
         if (type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT) return false;
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_REFERENCE,
+            type == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 :
             type == XR_LIR_STRING ? XR_RBC_STRING : xr_rbc_array_kind_at(family)};
         return true;
     }

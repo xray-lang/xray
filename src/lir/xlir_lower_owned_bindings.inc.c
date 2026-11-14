@@ -16,6 +16,7 @@ static bool lower_owned_binding_mark(Lower *c, uint32_t function, uint32_t value
 }
 static bool lower_owned_bindings(Lower *c) {
     if (!c->scalar_bindings) return true;
+    bool maps = false;
     for (uint32_t f = 0; f < c->source->function_count; ++f) {
         if (!c->active[f]) continue;
         const XrXirFunction *body = &c->source->functions[f];
@@ -28,7 +29,9 @@ static bool lower_owned_bindings(Lower *c) {
             if (placement != XIR_CLOSURE_OWNED) continue;
             const XrXirFunction *target = &c->source->functions[op->immediate];
             for (uint32_t p = 0; p < op->args[1]; ++p) {
-                if (lower_type(c, target->parameters[p]) != XR_LIR_I64_CELL) continue;
+                XrLirType type = lower_type(c, target->parameters[p]);
+                if (type != XR_LIR_I64_CELL && type != XR_LIR_MAP_STRING_I64_CELL) continue;
+                maps |= type == XR_LIR_MAP_STRING_I64_CELL;
                 uint32_t value = body->operands[op->args[0] + p];
                 for (uint32_t depth = 0;; ++depth) {
                     if (depth >= body->instruction_count || value < body->parameter_count ||
@@ -59,5 +62,11 @@ static bool lower_owned_bindings(Lower *c) {
                     !lower_owned_binding_mark(c, (uint32_t)op->immediate, p)) return false;
         }
     }
-    return lower_build(c, xr_lir_cell_type(c->module, (XrLirCellType){XR_LIR_I64, 0}, &c->owned_i64_cell));
+    if (!lower_build(c, xr_lir_cell_type(c->module, (XrLirCellType){XR_LIR_I64, 0}, &c->owned_i64_cell))) return false;
+    return !maps || lower_build(c, xr_lir_cell_type(c->module,
+        (XrLirCellType){XR_LIR_MAP_STRING_I64, 0}, &c->owned_map_cell));
+}
+static XrLirType lower_owned_cell_type(const Lower *c, XrXirType type) {
+    XrXirType payload = xr_xir_cell_element(c->source->types, type);
+    return lower_map_type(c, payload) ? c->owned_map_cell : c->owned_i64_cell;
 }

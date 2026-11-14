@@ -29,6 +29,13 @@ static bool rbc_map_transfer(RbcStringAdmission *s, XrRbcArrayAccess a) {
         uint32_t origin = args[0].spill ? s->spills[args[0].index].origin : s->origin[args[0].index];
         if (a.operation == XR_RBC_ARRAY_BORROW) {
             if (s->state[a.result.index] != RBC_EMPTY && !rbc_array_ref_state(s->state[a.result.index])) return false;
+            if (a.cell) {
+                if (source != RBC_CAPTURED_CELL || origin != a.cell) return false;
+                uint32_t *scopes = rbc_scope_state(s);
+                if (scopes) scopes[a.result.index + 1] = scopes[args[0].index + 1];
+                rbc_array_define(s, a.result, RBC_ARRAY_REF_CAPTURED, origin);
+                return true;
+            }
             source = rbc_cell_state(source) ? RBC_ARRAY_REF_CELL :
                 source == RBC_STATE_REFERENCE ? RBC_ARRAY_REF_STATE : RBC_EMPTY;
             if (rbc_array_ref_payload(s, source, origin) != XR_RBC_MAP_STRING_I64) return false;

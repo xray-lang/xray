@@ -54,7 +54,7 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
     for (uint32_t f = 0; f < functions; ++f) program->closure_mapping[f] = UINT32_MAX;
     for (uint32_t t = 0; t < count; ++t)
         if (program->physical_callables[t] != UINT32_MAX)
-            signatures[program->physical_callables[t]] = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + t);
+            signatures[program->physical_callables[t]] = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + t);
     for (uint32_t f = 0; f < functions; ++f) {
         XrLirFunction function = {input, ids[f]};
         XrLirClosureTarget closure = {0};
@@ -64,7 +64,7 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         if (!closure.callable || closure.state_capture) continue;
         bool scalars = true;
         for (uint32_t c = 0; c < closure.capture_count; ++c)
-            scalars &= rbc_lir_scalar(view.parameter_types[c]) || rbc_lir_captured_cell(input, view.parameter_types[c]) ||
+            scalars &= rbc_lir_scalar(view.parameter_types[c]) || view.parameter_types[c] == XR_LIR_MAP_STRING_I64 || rbc_lir_captured_cell(input, view.parameter_types[c]) ||
                 rbc_lir_callable_type(input, view.parameter_types[c]);
         if (!scalars) continue;
         uint32_t ordinal = (uint32_t)program->module.closure_entry_count++;

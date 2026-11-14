@@ -9,8 +9,7 @@ static bool rbc_callable_canonical_type(const XrRbcModule *module, XrRbcCallable
     XrXirType *output) {
     if (value.kind == XR_RBC_CALLABLE_CELL) {
         *output = (XrXirType)value.type;
-        return module->closure_types && xr_xir_cell_element(xr_xir_compile_type_arena_types(module->closure_types),
-            *output) == XR_XIR_I64;
+        return rbc_captured_cell_type(module, *output);
     }
     if (value.kind == XR_RBC_CALLABLE_SCALAR)
         return xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_SCALAR, value.type}, 0, output);
@@ -21,6 +20,8 @@ static bool rbc_callable_canonical_type(const XrRbcModule *module, XrRbcCallable
     }
     if (value.kind != XR_RBC_CALLABLE_REFERENCE) return false;
     if (value.type == XR_RBC_STRING) { *output = XR_XIR_STRING; return true; }
+    if (value.type == XR_RBC_MAP_STRING_I64)
+        return xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_MAP_STRING_I64, 0}, 0, output);
     uint32_t family = xr_rbc_array_family((XrRbcRegisterKind)value.type);
     return family < XR_RBC_ARRAY_FAMILY_COUNT &&
         xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_ARRAY, family}, 0, output);
@@ -38,6 +39,8 @@ static bool rbc_callable_directory_valid(const XrRbcModule *module) {
     static const XrXirType elements[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
     for (uint32_t a = 0; a < sizeof(elements) / sizeof(elements[0]); ++a)
         if (xr_xir_array_element(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + a)) != elements[a]) return false;
+    const XrXirTypeNode *map = xr_xir_type_node(types, XR_XIR_CONSTRUCTED_TYPE_BASE + 4u);
+    if (!map || map->kind != XR_XIR_TYPE_MAP || map->element != XR_XIR_STRING || map->result != XR_XIR_I64) return false;
     for (size_t t = 0; t < module->callable_type_count; ++t) {
         XrRbcCallableType expected = module->callable_types[t];
         const XrXirTypeNode *actual = xr_xir_callable_signature(types, module->closure_signatures[t]);
@@ -67,7 +70,8 @@ static bool rbc_callable_directory_valid(const XrRbcModule *module) {
         for (uint32_t p = 0; p < entry.capture_count; ++p) {
             XrXirType type;
             if ((function->captures[p].kind != XR_RBC_CALLABLE_SCALAR && function->captures[p].kind != XR_RBC_CALLABLE_CELL &&
-                 function->captures[p].kind != XR_RBC_CALLABLE_FUNCTION) ||
+                 function->captures[p].kind != XR_RBC_CALLABLE_FUNCTION &&
+                 function->captures[p].kind != XR_RBC_CALLABLE_REFERENCE) ||
                 !rbc_callable_canonical_type(module, function->captures[p], &type) || type != entry.captures[p]) return false;
         }
     }

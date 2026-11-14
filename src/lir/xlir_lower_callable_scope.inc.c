@@ -125,7 +125,8 @@ static bool lower_lexical_inventory(LowerFunction *f) {
         const XirLexicalBinding *binding = &lexical->source.bindings[b];
         if (binding->role == XIR_LEXICAL_LOCAL &&
             xr_xir_type_is_cell(f->owner->source->types, binding->physical) &&
-            lower_callable_type(f, binding->logical))
+            lower_callable_type(f, binding->logical) &&
+            (!f->promoted_arrays || !f->promoted_arrays[binding->value]))
             return lower_unsupported(f->owner, "owned mutable function binding extent");
     }
     for (uint32_t n = 0; n < lexical->source.event_count; ++n)
@@ -183,15 +184,22 @@ static bool lower_lexical_bind(LowerFunction *f, uint32_t b, const XirLexicalEve
     const XirLexicalBinding *binding = &lexical->source.bindings[event->binding];
     bool cell = f->owner->owned_bindings && f->owner->owned_bindings[f->owner->function] &&
         binding->value < f->value_count && f->owner->owned_bindings[f->owner->function][binding->value];
-    if (binding->role != XIR_LEXICAL_LOCAL || (!cell && !lower_callable_type(f, binding->physical))) return true;
+    bool local = f->promoted_arrays && f->promoted_arrays[binding->value] && lower_callable_type(f, binding->logical);
+    if (binding->role != XIR_LEXICAL_LOCAL || (!cell && !local && !lower_callable_type(f, binding->physical))) return true;
     uint32_t scope = binding->scope + 1;
     if (!lower_lexical_contains(lexical, scope, lexical->current) || !lexical->caps[scope].id)
         return lower_unsupported(f->owner, "function binding has no live lexical owner");
     XrLirValue operands[2] = {lexical->caps[scope], {0}}, retained = {0};
-    if (!lower_value(f, event->value, &operands[1])) return false;
-    XrLirInstruction bind = {.op=XR_LIR_FUNCTION_BIND, .type=cell ? f->owner->owned_i64_cell : lower_type(f->owner, binding->physical),
+    uint32_t state = UINT32_MAX;
+    if (local) {
+        if (!lower_cell_index(f, event->value, &state)) return false;
+        operands[1] = f->current[state];
+    } else if (!lower_value(f, event->value, &operands[1])) return false;
+    XrLirInstruction bind = {.op=XR_LIR_FUNCTION_BIND, .type=cell ? lower_owned_cell_type(f->owner, binding->physical) :
+        lower_type(f->owner, local ? binding->logical : binding->physical),
         .operands=operands, .operand_count=2, .bits=binding->order, .source=lower_source(f->owner)};
     if (!lower_build(f->owner, xr_lir_emit_value(f->owner->module, f->blocks[b], &bind, &retained))) return false;
+    if (local) { f->current[state] = retained; return true; }
     uint32_t previous = lexical->value_scopes[event->value];
     /* A borrowed formal or a wider binding remains the canonical SSA carrier.
      * Only extending a temporary's lifetime replaces that shorter carrier. */

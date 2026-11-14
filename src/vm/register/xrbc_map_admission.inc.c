@@ -49,7 +49,7 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
     } else if (a.result.index || a.result.spill) return false;
     if (a.operation == XR_RBC_ARRAY_CELL_NEW) {
         if (!f->cell_kinds || a.cell >= f->cell_count || f->cell_kinds[a.cell] != XR_RBC_MAP_STRING_I64) return false;
-    } else if (a.cell) return false;
+    } else if (a.operation != XR_RBC_ARRAY_BORROW && a.cell) return false;
     for (uint32_t p = 0; p < a.count; ++p) {
         XrRbcArrayLocation location = f->array_operands[a.first + p];
         XrRbcRegisterKind kind = rbc_array_location_kind(f, location), expected = receiver;
@@ -58,7 +58,9 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
             a.operation == XR_RBC_MAP_STATE_WRITE ?
             XR_RBC_MAP_STRING_I64 : p == 1 ? XR_RBC_STRING : XR_RBC_BITS;
         else if (a.operation == XR_RBC_ARRAY_BORROW) {
-            if (location.spill || (kind != XR_RBC_MAP_STRING_I64_CELL && kind != XR_RBC_STATE_REF)) return false;
+            if (location.spill) return false;
+            if (a.cell ? (kind != XR_RBC_CAPTURED_CELL && kind != XR_RBC_CAPTURED_CELL_BORROW) :
+                    (kind != XR_RBC_MAP_STRING_I64_CELL && kind != XR_RBC_STATE_REF)) return false;
             continue;
         }
         if (!p && receiver == XR_RBC_STATE_REF && location.spill && location.index >= f->reference_spill_count)
@@ -73,6 +75,8 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
 static bool rbc_map_module_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     for (size_t n = 0; n < f->array_access_count; ++n) {
         XrRbcArrayAccess a = f->array_accesses[n];
+        if (a.kind == XR_RBC_MAP_STRING_I64 && a.operation == XR_RBC_ARRAY_BORROW && a.cell &&
+            !rbc_captured_map_type(module, (XrXirType)a.cell)) return false;
         if (a.kind != XR_RBC_MAP_STRING_I64 || a.operation != XR_RBC_ARRAY_GET) continue;
         uint32_t type = f->aggregate_values[a.result.index].type;
         if (type >= module->aggregate_type_count || module->aggregate_types[type].kind != XR_POD_NULLABLE ||

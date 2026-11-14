@@ -10,7 +10,8 @@
 #include "xray_native_pod.h"
 
 typedef enum XrtCallableValueKind {
-    XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED
+    XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED,
+    XRT_CALLABLE_MAP_STRING_I64
 } XrtCallableValueKind;
 typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
 typedef enum XrtCallableShapeKind {
@@ -55,6 +56,7 @@ typedef struct XrtCallableScope {
 } XrtCallableScope;
 typedef struct XirFunction XrtCallable;
 typedef struct XirCell XrtCapturedCell;
+struct XrtMap;
 struct XrtModuleState;
 
 #ifdef __cplusplus
@@ -83,6 +85,8 @@ XRAY_API void xrt_callable_state_prepare(struct XrtModuleState *, const XrtCalla
 /* A captured Cell keeps one canonical identity across borrowed frame captures
  * and owned closures. These pointers borrow the actual scope or closure owner. */
 XRAY_API XrtCapturedCell *xrt_callable_cell_scope_new(XrtCallableScope *, uint32_t type, int64_t initial, uint32_t source);
+XRAY_API XrtCapturedCell *xrt_callable_cell_scope_map_new(XrtCallableScope *, uint32_t type,
+    const struct XrtMap *initial, uint32_t source);
 XRAY_API XrtCapturedCell *xrt_callable_cell_scope_bind(XrtCallableScope *, uint32_t binding, XrtCapturedCell *, uint32_t source);
 XRAY_API int64_t xrt_callable_cell_i64_read(const XrtCallableImage *, const XrtCapturedCell *, uint32_t source);
 XRAY_API void xrt_callable_cell_i64_write(const XrtCallableImage *, const XrtCapturedCell *, int64_t value, uint32_t source);
