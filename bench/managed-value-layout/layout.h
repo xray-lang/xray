@@ -20,7 +20,8 @@ typedef enum {
     XR_MVL_OK,
     XR_MVL_OOM,
     XR_MVL_BOUNDS,
-    XR_MVL_RC_OVERFLOW
+    XR_MVL_RC_OVERFLOW,
+    XR_MVL_INVALID_OWNER
 } XrMvlStatus;
 
 typedef struct {
@@ -113,6 +114,7 @@ XR_FUNC XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, in
 XR_FUNC XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length);
 XR_FUNC XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain);
 XR_FUNC XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value);
+XR_FUNC XrMvlStatus xr_mvl_map_set_take_slow(XrMvlMap **binding, XrMvlString **key_owner, int64_t value);
 XR_FUNC XrMvlPairObject *xr_mvl_pair_new(XrMvlDomain *domain, XrMvlPair value);
 XR_FUNC bool xr_mvl_pair_escape(XrMvlPairObject *value);
 XR_FUNC XrMvlPairObject *xr_mvl_pair_escaped(void);
@@ -158,20 +160,45 @@ static inline bool xr_mvl_map_get(const XrMvlMap *map, const XrMvlString *key, i
     return true;
 }
 
+static inline void xr_mvl_map_commit_slot(XrMvlMap *map, XrMvlMapSlot *slot,
+                                          XrMvlString *key, int64_t value) {
+    if (!slot->key) {
+        slot->hash = key->hash;
+        slot->key = key;
+        ++map->length;
+    }
+    slot->value = value;
+}
+
 static inline XrMvlStatus xr_mvl_map_set(XrMvlMap **binding, XrMvlString *key, int64_t value) {
     XrMvlMap *map = *binding;
     XrMvlMapSlot *slot = &map->slots[xr_mvl_map_probe(map, key)];
     if (!xr_signed_rc_unique(&map->header.refs) ||
         (!slot->key && !xr_mvl_map_room(map->length, map->capacity)))
         return xr_mvl_map_set_slow(binding, key, value);
-    if (!slot->key) {
-        if (!xr_mvl_retain(&key->header))
-            return XR_MVL_RC_OVERFLOW;
-        slot->hash = key->hash;
-        slot->key = key;
-        ++map->length;
-    }
-    slot->value = value;
+    if (!slot->key && !xr_mvl_retain(&key->header))
+        return XR_MVL_RC_OVERFLOW;
+    xr_mvl_map_commit_slot(map, slot, key, value);
+    return XR_MVL_OK;
+}
+
+/* The slot must hold one real owned reference. Other aliases may remain live.
+ * Success consumes that reference; failure preserves both caller slots. */
+static inline XrMvlStatus xr_mvl_map_set_take(XrMvlMap **binding,
+                                             XrMvlString **key_owner, int64_t value) {
+    if (!binding || !*binding || !key_owner || !*key_owner)
+        return XR_MVL_INVALID_OWNER;
+    XrMvlMap *map = *binding;
+    XrMvlString *key = *key_owner;
+    XrMvlMapSlot *slot = &map->slots[xr_mvl_map_probe(map, key)];
+    if (!xr_signed_rc_unique(&map->header.refs) ||
+        (!slot->key && !xr_mvl_map_room(map->length, map->capacity)))
+        return xr_mvl_map_set_take_slow(binding, key_owner, value);
+    bool duplicate = slot->key != NULL;
+    xr_mvl_map_commit_slot(map, slot, key, value);
+    *key_owner = NULL;
+    if (duplicate)
+        xr_mvl_drop(&key->header);
     return XR_MVL_OK;
 }
 

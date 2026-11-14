@@ -10,7 +10,8 @@
  * KEY CONCEPT:
  *   Whole-program outputs are checked; no timing or product runtime is embedded.
  */
-#include "layout.h"
+#include "access.h"
+#include "direct.inc.c"
 
 static void mvl_layout(void) {
 #define MVL_TYPE(type) printf(#type " size=%zu align=%zu", sizeof(type), (size_t) _Alignof(type))
@@ -64,6 +65,18 @@ static void mvl_layout(void) {
     MVL_FIELD(XrMvlDomain, allocations);
     MVL_FIELD(XrMvlDomain, fail_after);
     puts("");
+    MVL_TYPE(XrMvlArrayAccess);
+    MVL_FIELD(XrMvlArrayAccess, owner);
+    MVL_FIELD(XrMvlArrayAccess, data);
+    MVL_FIELD(XrMvlArrayAccess, length);
+    MVL_FIELD(XrMvlArrayAccess, capacity);
+    MVL_FIELD(XrMvlArrayAccess, writable);
+    puts("");
+    MVL_TYPE(XrMvlArrayWrite);
+    MVL_FIELD(XrMvlArrayWrite, status);
+    MVL_FIELD(XrMvlArrayWrite, access);
+    MVL_FIELD(XrMvlArrayWrite, previous);
+    puts("");
 #undef MVL_TYPE
 #undef MVL_FIELD
 }
@@ -86,6 +99,58 @@ static bool mvl_push(XrMvlDomain *domain, int64_t *result) {
     xr_mvl_drop(&array->header);
     *result = total;
     return ok;
+}
+
+static bool mvl_push_prepared(XrMvlDomain *domain, int64_t *result) {
+    XrMvlArray *array = xr_mvl_array_new(domain);
+    if (!array)
+        return false;
+    bool ok = true;
+    XrMvlArrayAccess access = xr_mvl_array_access_start(NULL);
+    int64_t count = XR_MVL_PUSH_COUNT;
+    if (count > 0) {
+        int64_t value = 0;
+        XrMvlArrayWrite write = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, value, true);
+        ok = write.status == XR_MVL_OK;
+        if (ok) {
+            array = write.access.owner;
+            access = write.access;
+            if (write.previous) xr_mvl_drop(&write.previous->header);
+        }
+    }
+    for (int64_t i = 1; ok && i < count; ++i) {
+        XrMvlArrayWrite write = xr_mvl_array_access_push(access, i);
+        if (write.status != XR_MVL_OK) {
+            ok = false;
+            break;
+        }
+        array = write.access.owner;
+        access = write.access;
+        if (write.previous) xr_mvl_drop(&write.previous->header);
+    }
+    access = xr_mvl_array_access_start(NULL);
+    int64_t total = 0;
+    if (ok)
+        for (size_t i = 0; i < array->length; ++i)
+            total += array->data[i];
+    xr_mvl_drop(&array->header);
+    *result = total;
+    return ok;
+}
+
+static bool mvl_push_direct(XrMvlDomain *domain, int64_t *result) {
+    XrMvlArray *array = xr_mvl_array_new(domain);
+    if (!array)
+        return false;
+    XrMvlArrayWrite write = mvl_array_push_direct_range(array, XR_MVL_PUSH_COUNT);
+    array = write.access.owner;
+    int64_t total = 0;
+    if (write.status == XR_MVL_OK)
+        for (size_t i = 0; i < array->length; ++i)
+            total += array->data[i];
+    xr_mvl_drop(&array->header);
+    *result = total;
+    return write.status == XR_MVL_OK;
 }
 
 static int64_t mvl_record(void) {
@@ -164,9 +229,51 @@ static bool mvl_map(XrMvlDomain *domain, int64_t *result) {
     return ok;
 }
 
+/* Keep the borrowed workload intact as a control. Only insertion ownership
+ * differs; lookup still constructs and drops every temporary String. */
+static bool mvl_map_take(XrMvlDomain *domain, int64_t *result) {
+    XrMvlMap *map = xr_mvl_map_new(domain);
+    if (!map)
+        return false;
+    XrMvlString *key = xr_mvl_string_new(domain, "seed", 4);
+    bool ok = key && xr_mvl_map_set_take(&map, &key, 0) == XR_MVL_OK;
+    if (key)
+        xr_mvl_drop(&key->header);
+    for (int64_t i = 0; ok && i < XR_MVL_MAP_COUNT; ++i) {
+        char bytes[32];
+        size_t length = xr_mvl_key_bytes((uint64_t) i, bytes);
+        key = xr_mvl_string_new(domain, bytes, length);
+        if (!key) {
+            ok = false;
+            break;
+        }
+        ok = xr_mvl_map_set_take(&map, &key, i) == XR_MVL_OK;
+        if (key)
+            xr_mvl_drop(&key->header);
+    }
+    int64_t total = 0;
+    for (int64_t i = 0; ok && i < XR_MVL_MAP_COUNT; ++i) {
+        char bytes[32];
+        size_t length = xr_mvl_key_bytes((uint64_t) i, bytes);
+        key = xr_mvl_string_new(domain, bytes, length);
+        if (!key) {
+            ok = false;
+            break;
+        }
+        int64_t value;
+        ok = xr_mvl_map_get(map, key, &value);
+        if (ok)
+            total += value;
+        xr_mvl_drop(&key->header);
+    }
+    xr_mvl_drop(&map->header);
+    *result = total;
+    return ok;
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "usage: managed <push|record|map|record-escape|verify|layout>\n");
+        fprintf(stderr, "usage: managed <push|push-prepared|push-direct|record|map|map-take|record-escape|verify|layout>\n");
         return 2;
     }
     if (strcmp(argv[1], "layout") == 0) {
@@ -186,6 +293,12 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "push") == 0) {
         expected = INT64_C(12499997500000);
         ok = mvl_push(&domain, &total);
+    } else if (strcmp(argv[1], "push-prepared") == 0) {
+        expected = INT64_C(12499997500000);
+        ok = mvl_push_prepared(&domain, &total);
+    } else if (strcmp(argv[1], "push-direct") == 0) {
+        expected = INT64_C(12499997500000);
+        ok = mvl_push_direct(&domain, &total);
     } else if (strcmp(argv[1], "record") == 0) {
         expected = INT64_C(9000000000000);
         total = mvl_record();
@@ -193,6 +306,9 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[1], "map") == 0) {
         expected = INT64_C(19999900000);
         ok = mvl_map(&domain, &total);
+    } else if (strcmp(argv[1], "map-take") == 0) {
+        expected = INT64_C(19999900000);
+        ok = mvl_map_take(&domain, &total);
     } else if (strcmp(argv[1], "record-escape") == 0) {
         expected = INT64_C(9000000000000);
         ok = mvl_record_escape(&domain, &total);
