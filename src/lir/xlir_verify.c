@@ -13,6 +13,7 @@
  */
 #include "xlir_internal.h"
 #include "xlir_verify.h"
+#include "xlir_ownership.h"
 #include "xlir_cell.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -856,12 +857,13 @@ static XrLirStatus lir_frame_cells(const XrLirModule *m, const XrLirFunctionData
 }
 #include "xlir_array_cell_flow.inc.c"
 #include "xlir_string_verify.inc.c"
+#include "xlir_ownership.inc.c"
 
 /* Each block owns its managed parameters and instruction results. String and
  * Array backedges use the same selected-edge transfer rule. Physical Cell
  * handles retain their activation's lifetime. */
 static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionData *f, uint32_t function,
-    const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
+    const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d, XrLirOwnershipPlan *plan) {
     bool managed = false, cells = false, array_cells = false, string_references = false;
     for (uint32_t i = 0; i < f->value_count; ++i) {
         managed |= lir_managed_value(f->values[i].type) || lir_managed_cell(f->values[i].type);
@@ -883,6 +885,10 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
         XrLirStatus status = lir_array_cells(f, function, g, d);
         if (status != XR_LIR_OK) return status;
     }
+    for (uint32_t p = 0; plan && p < f->parameter_count; ++p)
+        if (lir_managed_value(f->parameter_types[p]) && !lir_plan_value(plan, f,
+            XR_LIR_OWNERSHIP_PARAMETER_BORROW, function, 0, 0, f->parameters[p], p))
+            return XR_LIR_OUT_OF_MEMORY;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f, b);
         for (uint32_t e = 0; e < term->edge_count; ++e)
@@ -898,27 +904,56 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];
         for (uint32_t p = 0; p < block->parameter_count; ++p)
-            if (lir_managed_value(f->values[block->parameters[p] - 1].type))
+            if (lir_managed_value(f->values[block->parameters[p] - 1].type)) {
                 owned[block->parameters[p] - 1] = 1;
+                if (!lir_plan_value(plan, f, XR_LIR_OWNERSHIP_BLOCK_OWNER,
+                    function, b + 1, 0, block->parameters[p], p)) return XR_LIR_OUT_OF_MEMORY;
+            }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
+            bool append = xr_lir_string_role(m, v) == XR_LIR_STRING_OP_APPEND_OWNED;
+            bool transfer = v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
+                v->op == XR_LIR_MAP_DROP || append ||
+                (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(f->result));
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 const XrLirValueData *value = &f->values[id - 1];
                 if (lir_managed_value(value->type) &&
                     (!value->parameter || value->block) && !owned[id - 1])
                     return xr_lir_internal_error(d, "Managed use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
+                if (lir_managed_value(value->type) && !(a == 0 && transfer) &&
+                    !lir_plan_value(plan, f, XR_LIR_OWNERSHIP_OPERAND_BORROW,
+                        function, b + 1, i + 1, id, a)) return XR_LIR_OUT_OF_MEMORY;
             }
-            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_MAP_DROP ||
-                xr_lir_string_role(m, v) == XR_LIR_STRING_OP_APPEND_OWNED ||
-                (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(f->result))) {
+            if (transfer) {
                 uint32_t id = v->operands[0];
                 if (!owned[id - 1])
                     return xr_lir_internal_error(d, "Managed transfer requires an owned reference", function, b + 1, i + 1, &v->source);
                 owned[id - 1] = 0;
+                XrLirOwnershipFactKind kind = v->op == XR_LIR_RET ? XR_LIR_OWNERSHIP_RETURN_TRANSFER :
+                    append ?
+                    XR_LIR_OWNERSHIP_APPEND_TRANSFER : XR_LIR_OWNERSHIP_RELEASE;
+                if (!lir_plan_value(plan, f, kind, function, b + 1, i + 1, id, 0))
+                    return XR_LIR_OUT_OF_MEMORY;
             }
-            if (v->result && lir_managed_value(v->type))
+            if (v->result && lir_managed_value(v->type)) {
                 owned[v->result - 1] = 1;
+                if (!lir_plan_value(plan, f, XR_LIR_OWNERSHIP_RESULT_OWNER,
+                    function, b + 1, i + 1, v->result, 0)) return XR_LIR_OUT_OF_MEMORY;
+            }
+            if (plan && v->op == XR_LIR_CALL_INTRINSIC) {
+                const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
+                if (shape) {
+                    bool constructor = shape->operation == XR_LIR_ARRAY_OP_NEW ||
+                        shape->operation == XR_LIR_ARRAY_OP_REPEAT;
+                    uint32_t receiver = constructor ? 0 : v->operands[0];
+                    if (!lir_plan_add(plan, (XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_ARRAY_OPERATION,
+                        .function=function, .block=b + 1, .instruction=i + 1, .value=receiver,
+                        .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
+                        .array_element=constructor ? shape->result_element : shape->parameter_elements[0],
+                        .array_operation=shape->operation})) return XR_LIR_OUT_OF_MEMORY;
+                }
+            }
         }
         const XrLirInstructionView *term = lir_terminator(f, b);
         for (uint32_t e = 0; e < term->edge_count; ++e) {
@@ -931,6 +966,12 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
                 for (uint32_t p = 0; p < a; ++p)
                     if (edge->arguments[p] == id)
                         return xr_lir_internal_error(d, "Managed edge duplicates one owned reference", function, b + 1, 0, &term->source);
+                if (!lir_plan_add(plan, (XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
+                    .function=function, .block=b + 1, .instruction=block->instruction_count,
+                    .value=id, .argument=a, .edge=e + 1, .target_block=edge->target,
+                    .target_value=f->blocks[edge->target - 1].parameters[a],
+                    .type=f->values[id - 1].type, .array_element=f->values[id - 1].array_element}))
+                    return XR_LIR_OUT_OF_MEMORY;
             }
             for (uint32_t id = 1; id <= f->value_count; ++id) {
                 if (!owned[id - 1]) continue;
@@ -951,7 +992,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 
 #include "xlir_callable_scope_verify.inc.c"
 
-XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
+static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirOwnershipPlan *plan) {
     if (d)
         memset(d, 0, sizeof(*d));
     if (!m || m->failure != XR_LIR_OK || m->function_count > m->function_capacity ||
@@ -1031,6 +1072,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||
             !f->parameter_count || f->parameter_types[f->parameter_count - 1] != XR_LIR_STATE))
             return xr_lir_internal_error(d, "injected entry lacks its trailing state", index + 1, 0, 0, NULL);
+        lir_plan_function(plan, f, index + 1);
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
         uint8_t *seen = f->value_count ? xr_malloc(f->value_count) : NULL;
@@ -1053,7 +1095,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
-            status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
+            status = lir_managed_owners(m, f, index + 1, &graph, seen, d, plan);
         if (status == XR_LIR_OK && scopes)
             status = lir_callable_scopes(m, f, index + 1, &graph, d);
         xr_free(seen);
@@ -1072,4 +1114,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         }
     }
     return XR_LIR_OK;
+}
+
+XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
+    return lir_verify(m, d, NULL);
 }
