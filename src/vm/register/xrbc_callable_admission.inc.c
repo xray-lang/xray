@@ -223,7 +223,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
         }
         if (access.destination) return false;
         if (access.operation == XR_RBC_CAPTURED_CELL_READ)
-            return !access.window && rbc_array_location_valid(f, access.result) &&
+            return !access.window && (map || !access.result.spill) && rbc_array_location_valid(f, access.result) &&
                 rbc_array_location_kind(f, access.result) == (map ? XR_RBC_MAP_STRING_I64 : XR_RBC_BITS);
         return !access.result.index && !access.result.spill && (map ||
             (access.window < f->register_count && rbc_register_kind(f, access.window) == XR_RBC_BITS));

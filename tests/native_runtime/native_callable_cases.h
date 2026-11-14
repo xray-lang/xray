@@ -124,14 +124,15 @@ static void native_callable_projection(void) {
     memset(specs, 0, sizeof(specs));
     memset(&parameter, 0, sizeof(parameter));
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
-    const XrXirTypeNode *signature = xr_xir_callable_signature(types, (XrXirType)263);
+    const XrXirType base = XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT;
+    const XrXirTypeNode *signature = xr_xir_callable_signature(types, (XrXirType)(base + 3));
     CHECK(signature && signature->parameters[0].mode == XR_PARAM_MOVE && signature->parameters[0].escaping &&
-        signature->parameters[0].type == 262 && signature->result == 262);
+        signature->parameters[0].type == base + 1 && signature->result == base + 1);
     CHECK((signature->flags & XR_XIR_CALLABLE_ROOT_MASK) == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     XrXirLayout layout = {0};
-    CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)265, &layout) && layout.size == 18);
-    XrXirType capture_types[] = {(XrXirType)260, XR_XIR_I64, (XrXirType)262};
-    XrtCallableEntry entries[] = {{(XrXirType)261, capture_types, 2}, {(XrXirType)261, capture_types + 2, 1}};
+    CHECK(xr_xir_compile_type_arena_layout(arena, (XrXirType)(base + 5), &layout) && layout.size == 18);
+    XrXirType capture_types[] = {base, XR_XIR_I64, (XrXirType)(base + 2)};
+    XrtCallableEntry entries[] = {{(XrXirType)(base + 1), capture_types, 2}, {(XrXirType)(base + 1), capture_types + 2, 1}};
     uint32_t retired = 0;
     NativeCallableLease *owner = xr_malloc(sizeof(*owner));
     CHECK(owner);
@@ -143,7 +144,7 @@ static void native_callable_projection(void) {
     CHECK(xr_xir_domain_new(UINT64_MAX, &domain) == XR_XIR_VALUE_OK);
     XrXirDomainStats baseline = xr_xir_domain_stats(domain);
     XrXirValue initial = {XR_XIR_I64, 0, 40}, integer = {0}, first = {0}, slot = {0}, cycle = {0};
-    CHECK(xrt_callable_cell_new(code, domain, (XrXirType)260, &initial, &integer) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_new(code, domain, base, &initial, &integer) == XR_XIR_VALUE_OK);
     XrXirValue captures[] = {integer, {XR_XIR_I64, 0, 2}};
     CHECK(xrt_callable_new(code, domain, 0, captures, 2, &first) == XR_XIR_VALUE_OK);
     XrXirFunctionBinding *stored = (XrXirFunctionBinding *)xr_xir_function_binding(&first);
@@ -153,10 +154,10 @@ static void native_callable_projection(void) {
     CHECK(!xr_xir_value_valid(&first));
     stored->captures = inline_captures;
     CHECK(xr_xir_value_valid(&first));
-    CHECK(xrt_callable_cell_new(code, domain, (XrXirType)262, &first, &slot) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_new(code, domain, (XrXirType)(base + 2), &first, &slot) == XR_XIR_VALUE_OK);
     CHECK(xrt_callable_new(code, domain, 1, &slot, 1, &cycle) == XR_XIR_VALUE_OK);
-    CHECK(xrt_callable_cell_write(code, domain, (XrXirType)262, &slot, &cycle) == XR_XIR_VALUE_OK);
-    CHECK(xrt_callable_cell_write(code, domain, (XrXirType)260, &slot, &initial) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xrt_callable_cell_write(code, domain, (XrXirType)(base + 2), &slot, &cycle) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_cell_write(code, domain, base, &slot, &initial) == XR_XIR_VALUE_BAD_ARGUMENT);
     xr_xir_compile_type_arena_drop(arena);
     xrt_callable_code_drop(&code);
     native_callable_release(owner);

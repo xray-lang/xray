@@ -68,7 +68,6 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - XRT_CALLABLE_PREFIX_COUNT)
         return XR_XIR_VALUE_LIMIT;
     size_t parameter_count = 0;
-    bool map = false;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec spec = specs[t];
         if ((uint32_t)spec.kind > XRT_CALLABLE_TUPLE_I64 || spec.parameter_count > 65536 ||
@@ -76,9 +75,6 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         if (spec.throws) return XR_XIR_VALUE_UNSUPPORTED;
         if (spec.parameter_count > SIZE_MAX - parameter_count) return XR_XIR_VALUE_OVERFLOW;
         parameter_count += spec.parameter_count;
-        map |= spec.element.kind == XRT_CALLABLE_MAP_STRING_I64 || spec.result.kind == XRT_CALLABLE_MAP_STRING_I64;
-        for (uint32_t p = 0; p < spec.parameter_count; ++p)
-            map |= spec.parameters[p].value.kind == XRT_CALLABLE_MAP_STRING_I64;
         if (spec.kind == XRT_CALLABLE_TUPLE_I64) {
             if (!spec.count || spec.count > 65536 || spec.count > SIZE_MAX - parameter_count)
                 return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -167,12 +163,14 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     XrXirTypeArena *owned_map = NULL;
     const XrXirTypeArena *map_types = NULL;
     uint64_t map_bytes = 0;
-    if (status == XR_XIR_VALUE_OK && map) {
+    if (status == XR_XIR_VALUE_OK) {
         if (xrt_value_root_active()) status = xrt_map_root_types_ensure(&map_types);
         else {
             status = xrt_map_types_new(limit, &owned_map, &map_bytes);
             map_types = owned_map;
         }
+        if (status == XR_XIR_VALUE_OK)
+            status = xir_native_type_arena_string_i64_map_bytes(map_types, &map_bytes);
         if (status == XR_XIR_VALUE_OK)
             status = xir_native_type_arena_receive_string_i64_map(*empty,
                 XR_XIR_CONSTRUCTED_TYPE_BASE + 4u, map_types);

@@ -22,7 +22,7 @@ def main() -> None:
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding", "tuple_values", "tuple_flow",
-             "map_values", "map_bindings",
+             "map_values", "map_bindings", "callable_map_capture", "callable_map_value", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
@@ -118,13 +118,15 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_bool", "reject_nested", "reject_nullable_managed", "reject_owned_binding",
-                 "reject_tuple_mixed", "reject_tuple_unit"):
+    for name in ("reject_bool", "reject_nested", "reject_nullable_managed", "reject_function_reassign",
+                 "reject_function_alias", "reject_function_ref", "reject_tuple_mixed", "reject_tuple_unit"):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
         diagnostic = (b"Tuple fields require the admitted I64 physical layout" if name.startswith("reject_tuple_") else
-                      b"owned mutable function binding extent" if name == "reject_owned_binding" else
+                      b"owned mutable function binding extent" if name == "reject_function_reassign" else
+                      b"FUNCTION_REF captured physical binding transport" if name == "reject_function_alias" else
+                      b"COPY is not supported" if name == "reject_function_ref" else
                       b"Nullable payload has no inline POD layout" if name == "reject_nullable_managed" else
                       b"module slot payload type is not supported")
         if out or diagnostic not in err:

@@ -745,6 +745,7 @@ int main(void) {
     native_callable_owners();
     native_callable_nested_owners();
     native_callable_scopes();
+    native_callable_catalog_budget();
     native_callable_large_scopes();
     native_f64_text_recovery();
     native_frame_cell_recovery();

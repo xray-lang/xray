@@ -52,6 +52,7 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
     } else if (a.operation != XR_RBC_ARRAY_BORROW && a.cell) return false;
     for (uint32_t p = 0; p < a.count; ++p) {
         XrRbcArrayLocation location = f->array_operands[a.first + p];
+        if (!rbc_array_location_valid(f, location)) return false;
         XrRbcRegisterKind kind = rbc_array_location_kind(f, location), expected = receiver;
         if (a.operation == XR_RBC_ARRAY_NEW) expected = p % 2 ? XR_RBC_BITS : XR_RBC_STRING;
         else if (p) expected = a.operation == XR_RBC_ARRAY_CELL_WRITE || a.operation == XR_RBC_ARRAY_REF_WRITE ||

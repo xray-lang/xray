@@ -463,6 +463,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (xr_lir_closure_target_view(input, f, &closure) == XR_LIR_OK)
         for (uint32_t p = 0; p < closure.capture_count; ++p)
             if (!rbc_lir_scalar(v->parameter_types[p]) && v->parameter_types[p] != XR_LIR_I64_CELL &&
+                v->parameter_types[p] != XR_LIR_MAP_STRING_I64 &&
                 !rbc_lir_captured_cell(input, v->parameter_types[p]) && !rbc_lir_callable_type(input, v->parameter_types[p])) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                     "captured payload has no frame bytecode carrier", (XrLirSource){0});
@@ -571,7 +572,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             !xr_lir_callable_accepts(input, i->type, target.callable)) return false;
         for (uint32_t p = 0; p < target.capture_count; ++p)
             if (!rbc_lir_scalar(callee.parameter_types[p]) &&
-                !(i->bits == XR_LIR_CLOSURE_OWNED && rbc_lir_callable_type(input, callee.parameter_types[p])) &&
+                !(i->bits == XR_LIR_CLOSURE_OWNED && (rbc_lir_callable_type(input, callee.parameter_types[p]) ||
+                    callee.parameter_types[p] == XR_LIR_MAP_STRING_I64)) &&
                 !rbc_lir_captured_cell(input, callee.parameter_types[p]) &&
                 (i->bits == XR_LIR_CLOSURE_OWNED || callee.parameter_types[p] != XR_LIR_I64_CELL)) return false;
         if (i->bits == XR_LIR_CLOSURE_OWNED && target.state_capture) return false;

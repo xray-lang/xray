@@ -13,7 +13,7 @@
 #include "xir/xxir_types.h"
 
 static inline bool rbc_captured_map_type(const XrRbcModule *module, XrXirType type) {
-    if (!module->closure_types) return false;
+    if (!module->closure_types || !xrt_callable_map_catalog(module->closure_types)) return false;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(module->closure_types);
     const XrXirTypeNode *node = xr_xir_type_node(types, xr_xir_cell_element(types, type));
     return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64;
