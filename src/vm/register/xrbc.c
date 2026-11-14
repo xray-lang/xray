@@ -448,15 +448,13 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
 #include "xrbc_dispatch.inc.c"
 }
 
-XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
+XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output) {
     if (!output || *output || !locations || !module || !module->functions ||
         entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    XrRbcStatus validation = xr_rbc_module_admit(module, locations);
-    if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION || function->result_kind == XR_RBC_BOXED ||
         function->capture_count || function->state_capture ||
@@ -543,6 +541,17 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->stack.spill_count = function->spill_count;
     *output = execution;
     return XR_RBC_OK;
+}
+
+XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
+    const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
+    XrRbcExecution **output) {
+    if (!output || *output || !locations || !module || !module->functions ||
+        entry >= module->function_count || (argument_count && !arguments))
+        return XR_RBC_INVALID;
+    XrRbcStatus status = xr_rbc_module_admit(module, locations);
+    if (status != XR_RBC_OK) return status;
+    return xr_rbc_module_prepare_admitted(module, entry, arguments, argument_count, locations, output);
 }
 
 static void xr_rbc_root(void *context) {
