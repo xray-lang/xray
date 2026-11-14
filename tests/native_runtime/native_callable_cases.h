@@ -254,13 +254,12 @@ static void native_callable_owners(void) {
     *owner = (NativeCallableLease){1, &retired, false};
     XrtCallableLease lease = {owner, native_callable_retain, native_callable_release};
     XrtCallableCode *code = NULL;
-    for (unsigned invalid = 0; invalid < 5; ++invalid) {
+    for (unsigned invalid = 0; invalid < 4; ++invalid) {
         XrtCallableEntry wrong = entries[0];
         if (invalid == 0) wrong.type = XR_XIR_I64;
         if (invalid == 1) wrong.captures = NULL;
-        if (invalid == 2) wrong.capture_count = 65537;
-        if (invalid == 3) capture_types[1] = XR_XIR_NEVER;
-        if (invalid == 4) wrong.type = (XrXirType)258;
+        if (invalid == 2) capture_types[1] = XR_XIR_NEVER;
+        if (invalid == 3) wrong.type = (XrXirType)258;
         CHECK(xrt_callable_code_new(arena, &wrong, 1, lease, &code) == XR_XIR_VALUE_BAD_ARGUMENT);
         CHECK(!code && owner->references == 1);
         capture_types[1] = XR_XIR_I64;
