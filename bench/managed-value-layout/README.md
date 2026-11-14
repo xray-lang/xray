@@ -13,6 +13,7 @@ The earlier canonical-access experiment remains separately archived at
 | `push` | Push 5,000,000 i64 values, then sum them | `12499997500000` |
 | `push-prepared` | The complete same push input inside a trusted prepared window | `12499997500000` |
 | `push-direct` | The complete same push input with scalar locals in the hot loop | `12499997500000` |
+| `push-noalias` | The complete same push input with capacity-bounded restrict blocks | `12499997500000` |
 | `record` | Construct `{x:i,y:i+1}` 3,000,000 times and sum fields | `9000000000000` |
 | `map` | Seed `{"seed":0}`, insert and look up 200,000 `"k${i}"` keys | `19999900000` |
 | `map-take` | The complete same Map input, transferring each owned insertion key | `19999900000` |
@@ -75,6 +76,32 @@ that same helper with a committed prefix, local/shared aliases, zero count and
 every measured allocation failure. The fixed CLI workload still appends all
 5,000,000 values. No volatile, forced inlining, compiler flag or allocator change
 is used, and this introduces no product access authority or new runtime carrier.
+
+`push-noalias` adds standard C11 `restrict` inside a fresh nested block for each
+capacity-bounded hot segment. Its safety argument is limited to the existing
+canonical i64 layout and the same trusted owned, nonobserving window:
+
+* `array_new` allocates the owner separately; `resize` and `array_copy` allocate
+  its data separately. Successful live allocations do not overlap. First-write
+  preparation supplies nonnull data with sufficient capacity before a hot block.
+* Within that block, element storage is accessed only through `block_data` and
+  canonical length only through `block_owner`. Conditions and indices use scalar
+  locals. No original-owner, descriptor, alias, callback or RC access occurs there.
+* Each successful store is followed by the canonical length assignment in source.
+  There is no valid observer inside this exclusive window. Compiler coalescing
+  under the as-if rule does not add a permission to observe intermediate states.
+* The block ends before cold growth/COW, allocation or retiring an old owner.
+  Restricted pointers are never assigned out, returned or retained. The next
+  block binds freshly refreshed, unrestricted scalar copies; old data is not used
+  after realloc. The cold kernel and owner protocol are unchanged.
+
+RC establishes COW counts, not this access authority or spatial proof. Forged
+carriers with data inside the owner, imported/view/identity storage, concurrent
+observers, or a caller that retains/aliases during the segment are outside the
+trusted input contract. Product use needs an independently checked plan proving
+these conditions; a direct reference fact alone is insufficient. The same actual
+range-state test checks both direct implementations, including zero count,
+committed prefixes, positive/negative aliases and all allocation failures.
 
 `record` is an inline two-i64 value. Ordinary scalar replacement and loop
 folding are allowed in both implementations. A folded loop or startup-limited

@@ -11,7 +11,10 @@
  *   Exercise the actual loop, not a mirror of its writes; failed preparation
  *   preserves already committed elements and refunds all temporary allocations.
  */
-static bool mvl_verify_direct_attempt(size_t budget, bool shared, bool negative, size_t *sites) {
+typedef XrMvlArrayWrite (*MvlRangeWrite)(XrMvlArray *, int64_t);
+
+static bool mvl_verify_direct_attempt(MvlRangeWrite range, size_t budget,
+    bool shared, bool negative, size_t *sites) {
     static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     XrMvlArray *array = xr_mvl_array_new(&domain), *snapshot = NULL;
@@ -24,12 +27,12 @@ static bool mvl_verify_direct_attempt(size_t budget, bool shared, bool negative,
             atomic_store_explicit(&array->header.refs, -2, memory_order_release);
     }
     size_t allocations = domain.allocations, bytes = domain.live_bytes;
-    XrMvlArrayWrite write = mvl_array_push_direct_range(array, 0);
+    XrMvlArrayWrite write = range(array, 0);
     array = write.access.owner;
     MVL_REQUIRE(write.status == XR_MVL_OK && !write.previous && !write.access.writable);
     MVL_REQUIRE(array->length == 1 && domain.allocations == allocations && domain.live_bytes == bytes);
     domain.fail_after = budget;
-    write = mvl_array_push_direct_range(array, 9);
+    write = range(array, 9);
     array = write.access.owner;
     MVL_REQUIRE(!write.previous && !write.access.writable);
     if (budget == SIZE_MAX) {
@@ -59,15 +62,20 @@ cleanup:
     return ok && !domain.live_blocks && !domain.live_bytes;
 }
 
-static bool mvl_verify_direct(void) {
+static bool mvl_verify_range(MvlRangeWrite range) {
     for (unsigned scenario = 0; scenario < 3; ++scenario) {
         size_t sites = 0;
         bool shared = scenario != 0, negative = scenario == 2;
-        if (!mvl_verify_direct_attempt(SIZE_MAX, shared, negative, &sites))
+        if (!mvl_verify_direct_attempt(range, SIZE_MAX, shared, negative, &sites))
             return false;
         for (size_t budget = 0; budget < sites; ++budget)
-            if (!mvl_verify_direct_attempt(budget, shared, negative, &sites))
+            if (!mvl_verify_direct_attempt(range, budget, shared, negative, &sites))
                 return false;
     }
     return true;
+}
+
+static bool mvl_verify_direct(void) {
+    return mvl_verify_range(mvl_array_push_direct_range) &&
+        mvl_verify_range(mvl_array_push_noalias_range);
 }
