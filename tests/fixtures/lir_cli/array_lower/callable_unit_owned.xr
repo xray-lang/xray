@@ -1,0 +1,8 @@
+fn unit() {}
+fn make()->fn()->i64 {
+    const marker = unit()
+    var callback = fn()->i64 { return 42 }
+    return callback
+}
+const answer = make()
+print(answer())

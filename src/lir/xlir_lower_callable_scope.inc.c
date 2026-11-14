@@ -126,7 +126,7 @@ static bool lower_lexical_inventory(LowerFunction *f) {
         if (binding->role == XIR_LEXICAL_LOCAL &&
             xr_xir_type_is_cell(f->owner->source->types, binding->physical) &&
             lower_callable_type(f, binding->logical) &&
-            (!f->promoted_arrays || !f->promoted_arrays[binding->value]))
+            (!f->promoted_arrays || binding->value >= f->value_count || !f->promoted_arrays[binding->value]))
             return lower_unsupported(f->owner, "owned mutable function binding extent");
     }
     for (uint32_t n = 0; n < lexical->source.event_count; ++n)
@@ -184,7 +184,8 @@ static bool lower_lexical_bind(LowerFunction *f, uint32_t b, const XirLexicalEve
     const XirLexicalBinding *binding = &lexical->source.bindings[event->binding];
     bool cell = f->owner->owned_bindings && f->owner->owned_bindings[f->owner->function] &&
         binding->value < f->value_count && f->owner->owned_bindings[f->owner->function][binding->value];
-    bool local = f->promoted_arrays && f->promoted_arrays[binding->value] && lower_callable_type(f, binding->logical);
+    bool local = f->promoted_arrays && binding->value < f->value_count &&
+        f->promoted_arrays[binding->value] && lower_callable_type(f, binding->logical);
     if (binding->role != XIR_LEXICAL_LOCAL || (!cell && !local && !lower_callable_type(f, binding->physical))) return true;
     uint32_t scope = binding->scope + 1;
     if (!lower_lexical_contains(lexical, scope, lexical->current) || !lexical->caps[scope].id)

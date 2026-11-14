@@ -307,7 +307,9 @@ static void callable_lower_failures(void) {
         "return fn()->i64{table.set(\"value\",seed+1)\nreturn table.get(\"value\") ?? 0}}\n"
         "const callback=make(40)\nprint(callback())\n",
         "fn make(seed:i64)->fn(i64)->i64{var callback=fn(n:i64)->i64{if(n==0){return seed}\n"
-        "return callback(n-1)+1}\nreturn callback}\nconst answer=make(40)\nprint(answer(2))\n"};
+        "return callback(n-1)+1}\nreturn callback}\nconst answer=make(40)\nprint(answer(2))\n",
+        "fn unit(){}\nfn make()->fn()->i64{const marker=unit()\n"
+        "var callback=fn()->i64{return 42}\nreturn callback}\nconst answer=make()\nprint(answer())\n"};
     for (size_t program = 0; program < sizeof(programs) / sizeof(programs[0]); ++program) {
         SourceFixture fixture = source_fixture(programs[program]);
         attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
