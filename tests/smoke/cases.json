@@ -253,8 +253,8 @@
       "stdout": "tests/smoke/expected/shared_data.txt",
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slot payload type is not supported by LIR lowering yet"
+        "feature": "Task339 M3",
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:30:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -987,8 +987,8 @@
       "stdout": "tests/smoke/expected/shared_data.txt",
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:11:7: module slot payload type is not supported by LIR lowering yet"
+        "feature": "Task339 M3",
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:30:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
