@@ -35,7 +35,7 @@ def flags(compiler: Path, version: bytes) -> list[str]:
             raise ValueError("Windows requires an explicit MSVC or clang-cl executable")
         common = ["/nologo", "/std:c11", "/utf-8", "/W4", "/WX", "/O2", "/DNDEBUG",
                   "/D_CRT_SECURE_NO_WARNINGS", "/MT", "/I" + str(ROOT / "src")]
-        return common + (["/fp:precise", "/wd4200"] if name == "cl.exe" else
+        return common + (["/fp:precise", "/wd4200", "/experimental:c11atomics"] if name == "cl.exe" else
                          ["/clang:-ffp-contract=off", "/clang:-falign-functions=16"])
     if sys.platform not in ("linux", "darwin"):
         raise ValueError("Unsupported prototype host: " + sys.platform)
@@ -50,7 +50,7 @@ def flags(compiler: Path, version: bytes) -> list[str]:
 def prepare(args) -> None:
     initial = source_identity()
     args.work.mkdir(parents=True)
-    result = {"state": "PREPARING", "source": initial, "root": str(ROOT), "platform": sys.platform,
+    result = {"prototypeSchema": 1, "state": "PREPARING", "source": initial, "root": str(ROOT), "platform": sys.platform,
               "commands": [], "prototypeOnly": True, "productQualification": "NOT_RUN"}
     env = evidence.environment(ROOT)
 
@@ -111,10 +111,13 @@ def prepare(args) -> None:
 
 def measure(args) -> int:
     prepared = json.loads(args.prepared.read_text(encoding="utf-8"))
-    if (prepared["state"] != "PREPARED_NOT_MEASURED" or prepared["source"] != source_identity()
+    newline = "\r\n" if os.name == "nt" else "\n"
+    expected = {name: (value + newline).encode().hex() for name, value in CASES.items()}
+    if (prepared.get("prototypeSchema") != 1 or prepared["state"] != "PREPARED_NOT_MEASURED"
+            or prepared["source"] != source_identity()
             or prepared["platform"] != sys.platform or prepared["rounds"] != ROUNDS
             or prepared["timeoutSeconds"] != 30 or set(prepared["products"]) != {"managed", "raw"}
-            or set(prepared["expected"]) != set(CASES)):
+            or prepared["expected"] != expected):
         raise ValueError("The prepared prototype identity or fixed workload schema differs")
     evidence.verify_fingerprints(prepared["fingerprints"])
     args.work.mkdir(parents=True)
