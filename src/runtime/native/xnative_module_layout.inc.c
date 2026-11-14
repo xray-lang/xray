@@ -195,6 +195,8 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
             if (xrt_value_root_active()) {
                 const XrXirTypeArena *maps = NULL;
                 status = xrt_map_root_types_ensure(&maps);
+                if (status == XR_XIR_VALUE_OK)
+                    status = xir_native_type_arena_string_i64_map_bytes(maps, &arena_bytes);
                 if (status == XR_XIR_VALUE_OK && !xr_xir_compile_type_arena_retain((XrXirTypeArena *)maps))
                     status = XR_XIR_VALUE_REFCOUNT_LIMIT;
                 if (status == XR_XIR_VALUE_OK) layout->map_types = (XrXirTypeArena *)maps;
