@@ -14,9 +14,12 @@
 static bool lower_map_read(LowerFunction *f, uint32_t block, XrLirValue receiver, XrLirValue *output) {
     XrLirType type = lower_value_type(f, receiver);
     if (type == XR_LIR_MAP_STRING_I64) { *output = receiver; return true; }
-    if (type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF && type != XR_LIR_STATE_REF)
+    XrLirCellType cell;
+    bool captured = xr_lir_cell_type_view(f->owner->module, type, &cell) == XR_LIR_OK &&
+        cell.payload == XR_LIR_MAP_STRING_I64;
+    if (!captured && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF && type != XR_LIR_STATE_REF)
         return lower_unsupported(f->owner, "Map receiver without a typed binding");
-    XrLirInstruction read = {.op=type == XR_LIR_MAP_STRING_I64_CELL ? XR_LIR_CELL_READ :
+    XrLirInstruction read = {.op=type == XR_LIR_MAP_STRING_I64_CELL || captured ? XR_LIR_CELL_READ :
         type == XR_LIR_MAP_STRING_I64_REF ? XR_LIR_MAP_REF_READ : XR_LIR_STATE_READ,
         .type=XR_LIR_MAP_STRING_I64, .operands=&receiver, .operand_count=1, .source=lower_source(f->owner)};
     return lower_build(f->owner, xr_lir_emit_value(f->owner->module, f->blocks[block], &read, output));
@@ -78,8 +81,11 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
         else good = lower_value(f, grouped ? f->source->operands[op->args[0] + n] : op->args[n], &args[n]);
     if (good && !construct) {
         XrLirType receiver = lower_value_type(f, args[0]);
+        XrLirCellType captured;
+        bool captured_cell = xr_lir_cell_type_view(c->module, receiver, &captured) == XR_LIR_OK &&
+            captured.payload == XR_LIR_MAP_STRING_I64;
         if (!mutation) good = lower_map_read(f, block, args[0], &args[0]);
-        else if (receiver == XR_LIR_STATE_REF) good = lower_map_borrow(f, block, &args[0]);
+        else if (receiver == XR_LIR_STATE_REF || captured_cell) good = lower_map_borrow(f, block, &args[0]);
         else if (cell != UINT32_MAX) {
             XrLirValue current = {0};
             good = lower_map_read(f, block, args[0], &current);

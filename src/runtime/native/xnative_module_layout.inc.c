@@ -166,6 +166,13 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
             status = XR_XIR_VALUE_OVERFLOW;
         if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
+        const XrXirTypeArena *maps = xrt_callable_map_catalog(layout->callable_types);
+        if (maps) {
+            if (!xr_xir_compile_type_arena_retain((XrXirTypeArena *)maps)) {
+                xrt_module_layout_drop(&layout); return XR_XIR_VALUE_REFCOUNT_LIMIT;
+            }
+            layout->map_types = (XrXirTypeArena *)maps;
+        }
     }
     for (uint32_t t = 0; t < spec->type_count; ++t) {
         if (!module_type(&layout->view, t, layout->types)) {
@@ -185,7 +192,13 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         }
         if (layout->types[slot->type].copy == module_map_copy && !layout->map_types) {
             uint64_t arena_bytes = 0;
-            status = xrt_map_types_new(spec->byte_limit - layout->bytes, &layout->map_types, &arena_bytes);
+            if (xrt_value_root_active()) {
+                const XrXirTypeArena *maps = NULL;
+                status = xrt_map_root_types_ensure(&maps);
+                if (status == XR_XIR_VALUE_OK && !xr_xir_compile_type_arena_retain((XrXirTypeArena *)maps))
+                    status = XR_XIR_VALUE_REFCOUNT_LIMIT;
+                if (status == XR_XIR_VALUE_OK) layout->map_types = (XrXirTypeArena *)maps;
+            } else status = xrt_map_types_new(spec->byte_limit - layout->bytes, &layout->map_types, &arena_bytes);
             if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
                 status = XR_XIR_VALUE_OVERFLOW;
             if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }

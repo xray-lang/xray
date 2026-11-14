@@ -10,19 +10,19 @@
 static void callable_owned_array_directory(const XrRbcProgram *program) {
     const XrRbcModule *original = xr_rbc_program_view(program);
     const XrXirTypes *old = xr_xir_compile_type_arena_types(original->closure_types);
-    CHECK(old->count == 5 && original->callable_type_count == 1);
+    CHECK(old->count == 6 && original->callable_type_count == 1);
     for (unsigned wrong = 0; wrong < 2; ++wrong) {
-        XrXirTypeNode nodes[6];
-        memcpy(nodes, old->nodes, 5 * sizeof(*nodes));
+        XrXirTypeNode nodes[7];
+        memcpy(nodes, old->nodes, 6 * sizeof(*nodes));
         if (wrong) {
             nodes[0].element = XR_XIR_U64;
             nodes[3].element = XR_XIR_I64;
         }
         XrXirCallableParameter parameter = {.type=(XrXirType)256, .mode=XR_PARAM_READ};
-        nodes[5] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER,
+        nodes[6] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE, .element=XR_XIR_NEVER,
             .parameters=&parameter, .parameter_count=1, .result=XR_XIR_I64,
             .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
-        XrXirTypes types = {.nodes=nodes, .count=6};
+        XrXirTypes types = {.nodes=nodes, .count=7};
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
         XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
         CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
@@ -32,7 +32,7 @@ static void callable_owned_array_directory(const XrRbcProgram *program) {
         XrRbcCallableParameter expected = {{XR_RBC_CALLABLE_REFERENCE, XR_RBC_ARRAY_I64}, XR_PARAM_READ, false};
         XrRbcCallableType signatures[] = {original->callable_types[0],
             {.parameters=&expected, .parameter_count=1, .result={XR_RBC_CALLABLE_SCALAR, XR_POD_I64}}};
-        XrXirType identities[] = {original->closure_signatures[0], (XrXirType)261};
+        XrXirType identities[] = {original->closure_signatures[0], (XrXirType)262};
         XrRbcModule module = *original;
         module.closure_types = arena;
         module.closure_signatures = identities;

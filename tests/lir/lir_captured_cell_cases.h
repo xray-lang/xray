@@ -190,11 +190,11 @@ static void captured_cell_scope_join(void) {
     const XrRbcModule *original = xr_rbc_program_view(program);
     CHECK(original->function_count == 3);
     const XrXirTypes *old = xr_xir_compile_type_arena_types(original->closure_types);
-    CHECK(old->count == 5);
-    XrXirTypeNode nodes[6];
-    memcpy(nodes, old->nodes, 5 * sizeof(*nodes));
-    nodes[5] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CELL, .element=XR_XIR_I64};
-    XrXirTypes types = {.nodes=nodes, .count=6};
+    CHECK(old->count == 6);
+    XrXirTypeNode nodes[7];
+    memcpy(nodes, old->nodes, 6 * sizeof(*nodes));
+    nodes[6] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CELL, .element=XR_XIR_I64};
+    XrXirTypes types = {.nodes=nodes, .count=7};
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
     XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
@@ -203,15 +203,15 @@ static void captured_cell_scope_join(void) {
     xr_compile_resources_release(context.resources);
     uint32_t parents[] = {0, 1}, callables[5] = {0};
     XrRbcFunctionScopes scopes[3] = {{parents, 2}, {0}, {0}};
-    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_CAPTURED_I64_CELL,
-        XR_RBC_CAPTURED_I64_CELL, XR_RBC_BITS, XR_RBC_BITS};
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_CAPTURED_CELL,
+        XR_RBC_CAPTURED_CELL, XR_RBC_BITS, XR_RBC_BITS};
     XrRbcAggregateAccess accesses[] = {
         {.operation=XR_RBC_FUNCTION_SCOPE_ENTER, .destination=1},
-        {.operation=XR_RBC_CAPTURED_CELL_NEW, .result={1, false}, .source=3, .slot=261},
+        {.operation=XR_RBC_CAPTURED_CELL_NEW, .result={1, false}, .source=3, .slot=262},
         {.operation=XR_RBC_FUNCTION_SCOPE_ENTER, .destination=2, .source=1},
-        {.operation=XR_RBC_CAPTURED_CELL_NEW, .result={2, false}, .source=3, .slot=261},
+        {.operation=XR_RBC_CAPTURED_CELL_NEW, .result={2, false}, .source=3, .slot=262},
         {.operation=XR_RBC_FUNCTION_SCOPE_LEAVE, .destination=2},
-        {.operation=XR_RBC_CAPTURED_CELL_READ, .source=2, .result={4, false}, .slot=261},
+        {.operation=XR_RBC_CAPTURED_CELL_READ, .source=2, .result={4, false}, .slot=262},
         {.operation=XR_RBC_FUNCTION_SCOPE_LEAVE, .destination=1},
         {.operation=XR_RBC_FUNCTION_SCOPE_RETURN, .source=4, .count=1}
     };

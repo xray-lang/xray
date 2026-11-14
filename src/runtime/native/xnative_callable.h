@@ -12,6 +12,8 @@
 #include "xray_native_callable.h"
 
 typedef struct XrtCallableCode XrtCallableCode;
+enum { XRT_CALLABLE_PREFIX_COUNT = 5 };
+XR_FUNC const XrXirTypeArena *xrt_callable_map_catalog(const XrXirTypeArena *);
 XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *, const XrtCallableTypeSpec *, uint32_t count);
 
 XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirType *);

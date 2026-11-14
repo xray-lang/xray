@@ -17,12 +17,18 @@ static uint32_t c_map_role(LirC *c, const XrLirInstructionView *v) {
         xr_lir_intrinsic_view(c->request->module, v->intrinsic, &entry) == XR_LIR_OK &&
         xr_lir_map_intrinsic_valid(c->request->module, &entry) ? entry.operation : 0;
 }
+static bool c_map_captured_cell(const LirC *c, XrLirType type) {
+    XrLirCellType cell;
+    return xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK &&
+        cell.payload == XR_LIR_MAP_STRING_I64;
+}
 static bool c_map_point(LirC *c, const XrLirInstructionView *v) {
     return c_map_role(c, v) || v->op == XR_LIR_MAP_RETAIN || v->op == XR_LIR_MAP_BORROW ||
         v->op == XR_LIR_MAP_REF_READ || v->op == XR_LIR_MAP_REF_WRITE ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_MAP_STRING_I64_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_MAP_STRING_I64) ||
-        (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_MAP_STRING_I64_CELL);
+        (v->op == XR_LIR_CELL_WRITE && (c_value_type(c, v->operands[0]) == XR_LIR_MAP_STRING_I64_CELL ||
+            c_map_captured_cell(c, c_value_type(c, v->operands[0]))));
 }
 static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     uint32_t role = c_map_role(c, v);
@@ -64,8 +70,17 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
         c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
     } else if (v->op == XR_LIR_MAP_BORROW) {
         c_format(c, "    v%" PRIu32 " = xrt_map_ref_%s(", v->result,
-            c_value_type(c, v->operands[0]) == XR_LIR_STATE_REF ? "state" : "local");
+            c_value_type(c, v->operands[0]) == XR_LIR_STATE_REF ? "state" :
+            c_map_captured_cell(c, c_value_type(c, v->operands[0])) ? "captured" : "local");
         c_value(c, v->operands[0]); c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+    } else if ((v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) &&
+            c_map_captured_cell(c, c_value_type(c, v->operands[0]))) {
+        c_text(c, "    ");
+        if (v->op == XR_LIR_CELL_READ) c_format(c, "v%" PRIu32 " = ", v->result);
+        c_format(c, "xrt_map_ref_%s(xrt_map_ref_captured(", v->op == XR_LIR_CELL_READ ? "read" : "write");
+        c_value(c, v->operands[0]); c_format(c, ", UINT32_C(%" PRIu32 "))", source);
+        if (v->op == XR_LIR_CELL_WRITE) { c_text(c, ", "); c_value(c, v->operands[1]); }
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
     } else if (v->op == XR_LIR_MAP_REF_READ) {
         c_format(c, "    v%" PRIu32 " = xrt_map_ref_read(", v->result);
         c_value(c, v->operands[0]); c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);

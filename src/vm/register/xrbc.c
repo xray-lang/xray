@@ -422,6 +422,8 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_array_execute.inc.c"
 #include "xrbc_view_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
+static bool xr_rbc_captured_cell_value(const XrRbcModule *, const XrRbcStack *,
+    XrRbcRegisterKind, uint64_t, XrXirType, XrXirValue *);
 #include "xrbc_map_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
@@ -542,6 +544,11 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
 
 static void xr_rbc_root(void *context) {
     XrRbcExecution *execution = context;
+    const XrXirTypeArena *map_types = xrt_callable_map_catalog(execution->module->closure_types);
+    if (map_types) {
+        XrXirValueStatus status = xrt_map_root_bind_types(map_types);
+        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, 0);
+    }
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
         execution->pending->locations, &execution->pending->value, execution->entries);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_STRING)

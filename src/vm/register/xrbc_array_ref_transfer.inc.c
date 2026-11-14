@@ -7,9 +7,12 @@
  * xrbc_array_ref_transfer.inc.c - Borrowed Array references retain true provenance
  */
 static bool rbc_array_ref_state(uint8_t state) {
-    return state == RBC_ARRAY_REF_CELL || state == RBC_ARRAY_REF_STATE || state == RBC_ARRAY_REF_FORMAL;
+    return state == RBC_ARRAY_REF_CELL || state == RBC_ARRAY_REF_STATE || state == RBC_ARRAY_REF_FORMAL ||
+        state == RBC_ARRAY_REF_CAPTURED;
 }
 static XrRbcRegisterKind rbc_array_ref_payload(const RbcStringAdmission *s, uint8_t state, uint32_t origin) {
+    if (state == RBC_ARRAY_REF_CAPTURED)
+        return rbc_captured_map_type(s->module, (XrXirType)origin) ? XR_RBC_MAP_STRING_I64 : XR_RBC_BITS;
     if (state == RBC_ARRAY_REF_STATE) {
         uint32_t kind = xr_rbc_state_kind(s->module, origin);
         if ((origin & 1u) && kind == XRT_MODULE_MAP_STRING_I64) return XR_RBC_MAP_STRING_I64;

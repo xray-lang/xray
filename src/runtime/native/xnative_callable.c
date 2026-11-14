@@ -12,6 +12,9 @@
  *   edges. Queued child objects can finish retirement afterward.
  */
 #include "xnative_callable.h"
+#include "xnative_map.h"
+#include "xnative_value.h"
+#include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_value_internal.h"
 #include "base/xmalloc.h"

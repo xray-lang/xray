@@ -40,10 +40,11 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
     bool needed = c->arrays || c->string_appends || c->maps;
     for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
         needed = source->parameters[p] == XR_XIR_STRING;
-    for (uint32_t i = 0; !needed && source->block_count > 1 && i < source->instruction_count; ++i) {
+    for (uint32_t i = 0; !needed && i < source->instruction_count; ++i) {
         XrXirType type = source->instructions[i].type;
-        needed = type == XR_XIR_STRING || (xr_xir_type_is_cell(c->source->types, type) &&
-            xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING);
+        XrXirType element = xr_xir_cell_element(c->source->types, type);
+        needed = (source->block_count > 1 && (type == XR_XIR_STRING || element == XR_XIR_STRING)) ||
+            xr_xir_type_is_callable(c->source->types, element);
     }
     if (!needed) return true;
     f->promoted_arrays = lower_alloc(c, f->value_count, 1);
@@ -63,6 +64,7 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
                 (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL ||
                  lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL ||
+                 xr_xir_type_is_callable(c->source->types, xr_xir_cell_element(c->source->types, op->type)) ||
                  (source->block_count > 1 && xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING)) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;
         }
@@ -77,9 +79,11 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             for (uint32_t a = op->op == XR_XIR_PHI ? 1u : 0u; a < count;
                  a += op->op == XR_XIR_PHI ? 2u : 1u) {
                 uint32_t value = lower_operand_at(source, op, a);
+                bool callable = xr_xir_type_is_callable(c->source->types,
+                    xr_xir_cell_element(c->source->types, xr_xir_operand_type(source, value)));
                 if (f->promoted_arrays[value] && !(a == 0 &&
-                    (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
-                     op->op == XR_XIR_CELL_STRING_APPEND || op->op == XR_XIR_CELL_PLACE)))
+                    (op->op == XR_XIR_CELL_READ || (!callable && (op->op == XR_XIR_CELL_WRITE ||
+                     op->op == XR_XIR_CELL_STRING_APPEND || op->op == XR_XIR_CELL_PLACE)))))
                     f->promoted_arrays[value] = 0;
                 if (value < source->parameter_count) continue;
                 const XrXirInstruction *definition = &source->instructions[value - source->parameter_count];

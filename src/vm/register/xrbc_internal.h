@@ -10,6 +10,18 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
+#include "xir/xxir_types.h"
+
+static inline bool rbc_captured_map_type(const XrRbcModule *module, XrXirType type) {
+    if (!module->closure_types) return false;
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(module->closure_types);
+    const XrXirTypeNode *node = xr_xir_type_node(types, xr_xir_cell_element(types, type));
+    return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64;
+}
+static inline bool rbc_captured_cell_type(const XrRbcModule *module, XrXirType type) {
+    return module->closure_types && (xr_xir_cell_element(xr_xir_compile_type_arena_types(module->closure_types),
+        type) == XR_XIR_I64 || rbc_captured_map_type(module, type));
+}
 
 static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *accesses,
     size_t count, uint32_t word) {

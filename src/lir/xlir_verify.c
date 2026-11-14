@@ -151,7 +151,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             XrLirCellType cell;
             return a == XR_LIR_FUNCTION_SCOPE && v->type == b && v->bits < UINT32_MAX &&
                 (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
-                 (xr_lir_cell_type_view(m, b, &cell) == XR_LIR_OK && cell.payload == XR_LIR_I64));
+                 (xr_lir_cell_type_view(m, b, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)));
         }
         case XR_LIR_TUPLE_NEW:
         case XR_LIR_FIXED_ARRAY_NEW: {
@@ -192,7 +192,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_CELL_NEW: {
             XrLirCellType cell;
             if (xr_lir_cell_type_view(m, v->type, &cell) == XR_LIR_OK)
-                return cell.payload == XR_LIR_I64 && a == XR_LIR_I64;
+                return (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64) && a == cell.payload;
             return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
                 (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING) ||
                 (v->type == XR_LIR_MAP_STRING_I64_CELL && a == XR_LIR_MAP_STRING_I64) ||
@@ -201,7 +201,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_CELL_READ: {
             XrLirCellType cell;
             if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
-                return cell.payload == XR_LIR_I64 && v->type == XR_LIR_I64;
+                return (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64) && v->type == cell.payload;
             return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
                 (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL) ||
                 (v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64_CELL) ||
@@ -210,7 +210,8 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_CELL_WRITE: {
             XrLirCellType cell;
             if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
-                return cell.payload == XR_LIR_I64 && b == XR_LIR_I64 && v->type == XR_LIR_UNIT;
+                return (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64) &&
+                    b == cell.payload && v->type == XR_LIR_UNIT;
             return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
                 (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING) ||
                 (a == XR_LIR_MAP_STRING_I64_CELL && b == XR_LIR_MAP_STRING_I64) ||
@@ -219,10 +220,13 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_MAP_RETAIN: return v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64;
         case XR_LIR_MAP_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64;
         case XR_LIR_MAP_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64_CELL;
-        case XR_LIR_MAP_BORROW:
+        case XR_LIR_MAP_BORROW: {
+            XrLirCellType cell;
             return v->type == XR_LIR_MAP_STRING_I64_REF && (a == XR_LIR_MAP_STRING_I64_CELL ||
+                (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK && cell.payload == XR_LIR_MAP_STRING_I64) ||
                 (a == XR_LIR_STATE_REF && f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_MAP_STRING_I64 &&
                  f->values[v->operands[0] - 1].state_reference.mutable));
+        }
         case XR_LIR_MAP_REF_READ: return v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64_REF;
         case XR_LIR_MAP_REF_WRITE:
             return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64_REF && b == XR_LIR_MAP_STRING_I64;

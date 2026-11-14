@@ -25,7 +25,7 @@ static uint32_t rbc_scope_current(const RbcStringAdmission *state) {
 static bool rbc_scope_captured_cells(const XrRbcFunction *function) {
     for (uint32_t r = 0; r < function->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(function, r);
-        if (kind == XR_RBC_CAPTURED_I64_CELL || kind == XR_RBC_CAPTURED_I64_BORROW) return true;
+        if (kind == XR_RBC_CAPTURED_CELL || kind == XR_RBC_CAPTURED_CELL_BORROW) return true;
     }
     return false;
 }
@@ -73,7 +73,8 @@ static bool rbc_callable_scope_transfer(RbcStringAdmission *state, XrRbcAggregat
         if (access.destination != current) return false;
         receiving = shape.parents[current - 1];
         for (uint32_t r = 0; r < state->function->register_count; ++r)
-            if ((rbc_function_state(state->state[r]) || state->state[r] == RBC_CAPTURED_CELL) &&
+            if ((rbc_function_state(state->state[r]) || state->state[r] == RBC_CAPTURED_CELL ||
+                    state->state[r] == RBC_ARRAY_REF_CAPTURED) &&
                 scopes[r + 1] == current) state->state[r] = RBC_EMPTY;
         scopes[0] = receiving;
     } else if (!rbc_scope_contains(shape, access.destination, current)) return false;

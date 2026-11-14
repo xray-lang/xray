@@ -16,6 +16,7 @@
 #include "xnative_map.h"
 #include "xnative_module_cell.h"
 #include "xnative_callable.h"
+#include "xnative_value.h"
 #include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_value_internal.h"
@@ -245,7 +246,7 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
             layout->callable_types[spec->argument].kind != XRT_CALLABLE_SIGNATURE) return false;
         type->size = sizeof(void *); type->alignment = _Alignof(void *);
         type->copy = module_callable_copy; type->drop = module_callable_drop;
-        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 4u + spec->argument);
+        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + spec->argument);
         return true;
     case XRT_MODULE_FIXED_U8:
         if (!spec->argument || spec->argument > 65535) return false;

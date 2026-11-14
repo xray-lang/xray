@@ -1,13 +1,13 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 static bool xr_rbc_captured_cell_value(const XrRbcModule *module, const XrRbcStack *stack,
     XrRbcRegisterKind kind, uint64_t bits, XrXirType type, XrXirValue *output) {
-    if (kind == XR_RBC_CAPTURED_I64_CELL) {
+    if (kind == XR_RBC_CAPTURED_CELL) {
         size_t index;
         if (!xr_rbc_closure_slot(stack, bits, &index)) return false;
         *output = stack->closures[index];
         return xr_xir_value_argument(output, module->closure_types, type);
     }
-    return kind == XR_RBC_CAPTURED_I64_BORROW &&
+    return kind == XR_RBC_CAPTURED_CELL_BORROW &&
         xr_xir_value_from_payload(module->closure_types, type, (int64_t)bits, output);
 }
 static XrRbcStatus xr_rbc_captured_cell_step(const XrRbcModule *module, XrRbcStack *stack,
@@ -17,7 +17,13 @@ static XrRbcStatus xr_rbc_captured_cell_step(const XrRbcModule *module, XrRbcSta
     if (access.operation != XR_RBC_CAPTURED_CELL_NEW &&
         !xr_rbc_captured_cell_value(module, stack, rbc_register_kind(function, access.source),
             stack->slots[frame->base + access.source].bits, (XrXirType)access.slot, &value)) return XR_RBC_INVALID;
+    bool map = rbc_captured_map_type(module, (XrXirType)access.slot);
     if (access.operation == XR_RBC_CAPTURED_CELL_READ) {
+        if (map) {
+            XrtMapRef reference = xrt_map_ref_captured((struct XirCell *)(intptr_t)value.payload, source);
+            xr_rbc_array_location(stack, frame, access.result)->map = xrt_map_ref_read(reference, source);
+            return XR_RBC_OK;
+        }
         XrXirValue result = {0};
         XrXirValueStatus status = xr_xir_cell_read(&value, &result);
         if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
@@ -25,6 +31,12 @@ static XrRbcStatus xr_rbc_captured_cell_step(const XrRbcModule *module, XrRbcSta
         return XR_RBC_OK;
     }
     if (access.operation == XR_RBC_CAPTURED_CELL_WRITE) {
+        if (map) {
+            XrtMapRef reference = xrt_map_ref_captured((struct XirCell *)(intptr_t)value.payload, source);
+            XrRbcArrayLocation input = function->aggregate_operands[access.first];
+            xrt_map_ref_write(reference, xr_rbc_array_location(stack, frame, input)->map, source);
+            return XR_RBC_OK;
+        }
         XrXirValue replacement = {XR_XIR_I64, 0, 0};
         memcpy(&replacement.payload, &stack->slots[frame->base + access.window].bits, sizeof(replacement.payload));
         XrXirValueStatus status = xrt_callable_cell_write(stack->closure_code, stack->closure_domain,
@@ -56,7 +68,13 @@ static XrRbcStatus xr_rbc_captured_cell_step(const XrRbcModule *module, XrRbcSta
             if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
         }
         XrXirValue initial = {XR_XIR_I64, 0, 0};
-        memcpy(&initial.payload, &stack->slots[frame->base + access.source].bits, sizeof(initial.payload));
+        if (map) {
+            XrRbcArrayLocation input = function->aggregate_operands[access.first];
+            XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(module->closure_types),
+                (XrXirType)access.slot);
+            if (!xr_xir_value_from_payload(module->closure_types, element,
+                    (int64_t)(intptr_t)xr_rbc_array_location(stack, frame, input)->map, &initial)) return XR_RBC_INVALID;
+        } else memcpy(&initial.payload, &stack->slots[frame->base + access.source].bits, sizeof(initial.payload));
         status = xrt_callable_cell_new(stack->closure_code, stack->closure_domain,
             (XrXirType)access.slot, &initial, &stack->closure_pending);
     } else status = xr_xir_value_copy(&value, &stack->closure_pending);

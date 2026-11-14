@@ -19,6 +19,7 @@ static uint32_t rbc_lir_map_role(const XrLirModule *module, const XrLirInstructi
 }
 
 static bool rbc_lir_map_point(RbcLirCompiler *c, const XrLirInstructionView *i) {
+    if (rbc_lir_captured_cell_point(c->input, c->function, i)) return false;
     if (rbc_lir_map_role(c->input, i)) return true;
     if (i->op == XR_LIR_STATE_READ) return i->type == XR_LIR_MAP_STRING_I64;
     if (i->op == XR_LIR_STATE_WRITE) {
@@ -78,6 +79,8 @@ static bool rbc_lir_map_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
         row.cell = c->cell_count;
         c->cell_kinds[c->cell_count++] = XR_RBC_MAP_STRING_I64;
     }
+    if (operation == XR_RBC_ARRAY_BORROW && rbc_lir_captured_cell(c->input, receiver))
+        row.cell = XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + receiver - XR_LIR_TYPE_COUNT;
     XrRbcArrayLocation small[3], *operands = small;
     if (row.count > 3) {
         if (sizeof(*operands) > SIZE_MAX / row.count)

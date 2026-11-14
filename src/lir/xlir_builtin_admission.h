@@ -36,7 +36,8 @@ static inline bool lir_definition_type(const XrLirModule *module, XrLirType type
     if (lir_builtin_or_fixed_type(module, type)) return true;
     XrLirCallableType signature;
     XrLirCellType cell;
-    if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK) return cell.payload == XR_LIR_I64;
+    if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK)
+        return cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64;
     return xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK;
 }
 
