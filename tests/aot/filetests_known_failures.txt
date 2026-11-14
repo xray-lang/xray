@@ -11,10 +11,8 @@
 #   - Adding a line requires a written reason under one of the groups below.
 #   - Never add a line to make an unrelated change go green.
 #
-# Established 2026-07-30, when the suite was moved out of the CI exclusion list
-# (it had been excluded from all three workflows and treated as a known-failing
-# "AOT boundary" suite by scripts/run_release_09_gate.py).  Triage of the 40
-# entries below is recorded per group.
+# Established 2026-07-30, when the suite was moved out of the CI exclusion list.
+# Triage of the 40 entries below is recorded per group.
 
 # Group A is empty: all four entries were real compiler defects and were fixed
 # on 2026-07-30 rather than re-baselined.  See the report for the four root

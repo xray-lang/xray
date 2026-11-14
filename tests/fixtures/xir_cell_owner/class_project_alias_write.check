@@ -1,0 +1,1 @@
+9:26: error: ref of class field `Holder.value` may be reached through another path by `illegal` via `write` while it is lent; the run-time identity check this needs is not supported yet

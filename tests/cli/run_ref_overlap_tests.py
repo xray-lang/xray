@@ -5,9 +5,10 @@ The cases cover the ref places of one call that must not overlap, a module
 binding or class field lent by ref to code that may reach it by another path,
 and a Slice of a module binding lent to code that may write that binding.
 
-Every `<name>.xr` under tests/fixtures/ref_overlap is paired with `<name>.check`
-holding exactly one line, written from the overlap rules rather than captured
-from a run:
+Every `<name>.xr` under tests/fixtures/ref_overlap, plus the original class
+projection alias cases under tests/fixtures/xir_cell_owner, is paired with
+`<name>.check` holding exactly one line, written from the overlap rules rather
+than captured from a run:
 
   ok                          `xray check` accepts the program: exit 0 and no
                               output at all
@@ -36,7 +37,12 @@ DIAGNOSTIC = re.compile(r"^(?P<file>.+?):(?P<rest>[0-9]+:[0-9]+: .*)$")
 
 
 def collect() -> list[tuple[Path, str]]:
-    sources = sorted(FIXTURES.glob("*.xr"))
+    class_owner = FIXTURES.parent / "xir_cell_owner"
+    sources = sorted([
+        *FIXTURES.glob("*.xr"),
+        class_owner / "class_project_alias_read.xr",
+        class_owner / "class_project_alias_write.xr",
+    ])
     expectations = sorted(FIXTURES.glob("*.check"))
     paired = {source.with_suffix(".check") for source in sources}
     stray = [path.name for path in expectations if path not in paired]
