@@ -196,12 +196,7 @@ XR_FUNCDEF XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain) {
 
 static void mvl_map_insert_prepared(XrMvlMap *map, XrMvlString *key, int64_t value) {
     XrMvlMapSlot *slot = &map->slots[xr_mvl_map_probe(map, key)];
-    if (!slot->key) {
-        slot->hash = key->hash;
-        slot->key = key;
-        ++map->length;
-    }
-    slot->value = value;
+    xr_mvl_map_commit_slot(map, slot, key, value);
 }
 
 static XrMvlMap *mvl_map_copy(const XrMvlMap *source, size_t capacity, XrMvlStatus *status) {
@@ -241,37 +236,59 @@ static bool mvl_map_grow(XrMvlMap *map, size_t capacity) {
     return true;
 }
 
-XR_FUNCDEF XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value) {
+static XrMvlStatus mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key,
+                                   int64_t value, XrMvlString **key_owner) {
     XrMvlMap *map = *binding;
     bool found = map->slots[xr_mvl_map_probe(map, key)].key != NULL;
-    if (!found && !xr_mvl_retain(&key->header))
+    bool copied_key = !found && !key_owner;
+    if (copied_key && !xr_mvl_retain(&key->header))
         return XR_MVL_RC_OVERFLOW;
     size_t capacity = map->capacity;
     if (!found && !xr_mvl_map_room(map->length, capacity) &&
         !xr_mvl_capacity(capacity, capacity + 1, sizeof(XrMvlMapSlot), &capacity)) {
-        xr_mvl_drop(&key->header);
+        if (copied_key)
+            xr_mvl_drop(&key->header);
         return XR_MVL_OOM;
     }
     XrMvlStatus status = XR_MVL_OOM;
+    XrMvlMap *retired = NULL;
     if (!xr_signed_rc_unique(&map->header.refs)) {
         XrMvlMap *copy = mvl_map_copy(map, capacity, &status);
         if (!copy) {
-            if (!found)
+            if (copied_key)
                 xr_mvl_drop(&key->header);
             return status;
         }
         mvl_map_insert_prepared(copy, key, value);
         *binding = copy;
-        xr_mvl_drop(&map->header);
+        retired = map;
     } else {
         if (capacity != map->capacity && !mvl_map_grow(map, capacity)) {
-            if (!found)
+            if (copied_key)
                 xr_mvl_drop(&key->header);
             return XR_MVL_OOM;
         }
         mvl_map_insert_prepared(map, key, value);
     }
+    if (key_owner) {
+        *key_owner = NULL;
+        if (found)
+            xr_mvl_drop(&key->header);
+    }
+    if (retired)
+        xr_mvl_drop(&retired->header);
     return XR_MVL_OK;
+}
+
+XR_FUNCDEF XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value) {
+    return mvl_map_set_slow(binding, key, value, NULL);
+}
+
+XR_FUNCDEF XrMvlStatus xr_mvl_map_set_take_slow(XrMvlMap **binding,
+                                             XrMvlString **key_owner, int64_t value) {
+    if (!binding || !*binding || !key_owner || !*key_owner)
+        return XR_MVL_INVALID_OWNER;
+    return mvl_map_set_slow(binding, *key_owner, value, key_owner);
 }
 
 XR_FUNCDEF XrMvlPairObject *xr_mvl_pair_new(XrMvlDomain *domain, XrMvlPair value) {
