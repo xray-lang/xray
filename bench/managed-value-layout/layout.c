@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Allocation and COW are cold; a prepared replacement commits without failure.
  */
-#include "layout.h"
+#include "access.h"
 
 static void *mvl_allocate(XrMvlDomain *domain, size_t bytes) {
     assert(domain && bytes);
@@ -115,44 +115,61 @@ static XrMvlArray *mvl_array_copy(const XrMvlArray *source, size_t capacity) {
     return copy;
 }
 
-XR_FUNCDEF XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value) {
-    XrMvlArray *array = *binding;
-    size_t capacity;
-    if (array->length == SIZE_MAX ||
-        !xr_mvl_capacity(array->capacity, array->length + 1, sizeof(int64_t), &capacity))
-        return XR_MVL_OOM;
-    if (!xr_signed_rc_unique(&array->header.refs)) {
-        XrMvlArray *copy = mvl_array_copy(array, capacity);
-        if (!copy)
-            return XR_MVL_OOM;
-        copy->data[copy->length++] = value;
-        *binding = copy;
-        xr_mvl_drop(&array->header);
-        return XR_MVL_OK;
+XR_FUNCDEF XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,
+    size_t index, int64_t value, bool append) {
+    XrMvlArray *array = access.owner;
+    XrMvlArrayWrite result = {XR_MVL_INVALID_OWNER, xr_mvl_array_access_start(array), NULL};
+    if (!array)
+        return result;
+    if (!append && index >= array->length) {
+        result.status = XR_MVL_BOUNDS;
+        return result;
     }
-    if (capacity != array->capacity) {
+    size_t capacity = array->capacity;
+    result.status = XR_MVL_OOM;
+    if (append && (array->length == SIZE_MAX ||
+        !xr_mvl_capacity(capacity, array->length + 1, sizeof(int64_t), &capacity)))
+        return result;
+    XrMvlArray *target = array;
+    if (!access.writable && !xr_signed_rc_unique(&array->header.refs)) {
+        target = mvl_array_copy(array, capacity);
+        if (!target)
+            return result;
+        result.previous = array;
+    } else if (capacity != array->capacity) {
         int64_t *data = mvl_resize(array->header.domain, array->data,
                                   array->capacity * sizeof(*data), capacity * sizeof(*data));
         if (!data)
-            return XR_MVL_OOM;
+            return result;
         array->data = data;
         array->capacity = capacity;
     }
-    array->data[array->length++] = value;
-    return XR_MVL_OK;
+    if (append)
+        index = target->length;
+    target->data[index] = value;
+    if (append)
+        ++target->length;
+    result.access = (XrMvlArrayAccess) {target, target->data, target->length, target->capacity, true};
+    result.status = XR_MVL_OK;
+    return result;
+}
+
+XR_FUNCDEF XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value) {
+    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), 0, value, true);
+    if (result.status == XR_MVL_OK) {
+        *binding = result.access.owner;
+        if (result.previous) xr_mvl_drop(&result.previous->header);
+    }
+    return result.status;
 }
 
 XR_FUNCDEF XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value) {
-    XrMvlArray *array = *binding;
-    if (index >= array->length)
-        return XR_MVL_BOUNDS;
-    XrMvlArray *copy = mvl_array_copy(array, array->capacity);
-    if (!copy)
-        return XR_MVL_OOM;
-    copy->data[index] = value;
-    *binding = copy;
-    xr_mvl_drop(&array->header);
-    return XR_MVL_OK;
+    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), index, value, false);
+    if (result.status == XR_MVL_OK) {
+        *binding = result.access.owner;
+        if (result.previous) xr_mvl_drop(&result.previous->header);
+    }
+    return result.status;
 }
 
 XR_FUNCDEF XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length) {
@@ -196,12 +213,7 @@ XR_FUNCDEF XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain) {
 
 static void mvl_map_insert_prepared(XrMvlMap *map, XrMvlString *key, int64_t value) {
     XrMvlMapSlot *slot = &map->slots[xr_mvl_map_probe(map, key)];
-    if (!slot->key) {
-        slot->hash = key->hash;
-        slot->key = key;
-        ++map->length;
-    }
-    slot->value = value;
+    xr_mvl_map_commit_slot(map, slot, key, value);
 }
 
 static XrMvlMap *mvl_map_copy(const XrMvlMap *source, size_t capacity, XrMvlStatus *status) {
@@ -241,37 +253,59 @@ static bool mvl_map_grow(XrMvlMap *map, size_t capacity) {
     return true;
 }
 
-XR_FUNCDEF XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value) {
+static XrMvlStatus mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key,
+                                   int64_t value, XrMvlString **key_owner) {
     XrMvlMap *map = *binding;
     bool found = map->slots[xr_mvl_map_probe(map, key)].key != NULL;
-    if (!found && !xr_mvl_retain(&key->header))
+    bool copied_key = !found && !key_owner;
+    if (copied_key && !xr_mvl_retain(&key->header))
         return XR_MVL_RC_OVERFLOW;
     size_t capacity = map->capacity;
     if (!found && !xr_mvl_map_room(map->length, capacity) &&
         !xr_mvl_capacity(capacity, capacity + 1, sizeof(XrMvlMapSlot), &capacity)) {
-        xr_mvl_drop(&key->header);
+        if (copied_key)
+            xr_mvl_drop(&key->header);
         return XR_MVL_OOM;
     }
     XrMvlStatus status = XR_MVL_OOM;
+    XrMvlMap *retired = NULL;
     if (!xr_signed_rc_unique(&map->header.refs)) {
         XrMvlMap *copy = mvl_map_copy(map, capacity, &status);
         if (!copy) {
-            if (!found)
+            if (copied_key)
                 xr_mvl_drop(&key->header);
             return status;
         }
         mvl_map_insert_prepared(copy, key, value);
         *binding = copy;
-        xr_mvl_drop(&map->header);
+        retired = map;
     } else {
         if (capacity != map->capacity && !mvl_map_grow(map, capacity)) {
-            if (!found)
+            if (copied_key)
                 xr_mvl_drop(&key->header);
             return XR_MVL_OOM;
         }
         mvl_map_insert_prepared(map, key, value);
     }
+    if (key_owner) {
+        *key_owner = NULL;
+        if (found)
+            xr_mvl_drop(&key->header);
+    }
+    if (retired)
+        xr_mvl_drop(&retired->header);
     return XR_MVL_OK;
+}
+
+XR_FUNCDEF XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value) {
+    return mvl_map_set_slow(binding, key, value, NULL);
+}
+
+XR_FUNCDEF XrMvlStatus xr_mvl_map_set_take_slow(XrMvlMap **binding,
+                                             XrMvlString **key_owner, int64_t value) {
+    if (!binding || !*binding || !key_owner || !*key_owner)
+        return XR_MVL_INVALID_OWNER;
+    return mvl_map_set_slow(binding, *key_owner, value, key_owner);
 }
 
 XR_FUNCDEF XrMvlPairObject *xr_mvl_pair_new(XrMvlDomain *domain, XrMvlPair value) {
