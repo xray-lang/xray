@@ -103,6 +103,27 @@ static void captured_cell_frame_raw(const XrRbcProgram *program) {
             xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
     }
     xr_free(accesses);
+    const XrRbcFunction *target = &original->functions[1];
+    accesses = xr_malloc(target->aggregate_access_count * sizeof(*accesses));
+    CHECK(accesses);
+    memcpy(accesses, target->aggregate_accesses, target->aggregate_access_count * sizeof(*accesses));
+    XrRbcFunction functions[2];
+    memcpy(functions, original->functions, sizeof(functions));
+    functions[1].aggregate_accesses = accesses;
+    bool changed = false;
+    for (size_t n = 0; n < target->aggregate_access_count; ++n) {
+        if (accesses[n].operation != XR_RBC_CAPTURED_CELL_READ) continue;
+        accesses[n].result.spill = true;
+        functions[1].spill_count = accesses[n].result.index + 1;
+        changed = true;
+    }
+    CHECK(changed);
+    XrRbcModule module = *original;
+    module.functions = functions;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0,
+        xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
+    xr_free(accesses);
 }
 
 static void captured_cell_frame_extent(void) {

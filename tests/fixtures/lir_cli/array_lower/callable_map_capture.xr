@@ -1,0 +1,18 @@
+fn make(seed:i64)->fn(i64)->i64 {
+    var cache = #{"value":seed}
+    const before = cache
+    const frame = fn() { cache.set("value",seed+1) }
+    frame()
+    print(before.get("value"))
+    var recursive = fn(n:i64)->i64 {
+        if(n==0) { return cache.get("value") ?? 0 }
+        return recursive(n-1)+1
+    }
+    return recursive
+}
+const first = make(40)
+const second = make(50)
+print(first(2))
+print(second(2))
+print(first(3))
+print(first(64))

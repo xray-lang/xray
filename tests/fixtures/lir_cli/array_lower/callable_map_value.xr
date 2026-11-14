@@ -1,0 +1,6 @@
+fn make()->fn()->i64 {
+    const table = #{"x":1}
+    return fn()->i64 { return len(table) }
+}
+const answer = make()
+print(answer())

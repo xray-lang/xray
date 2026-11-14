@@ -21,7 +21,8 @@ static bool rbc_callable_canonical_type(const XrRbcModule *module, XrRbcCallable
     if (value.kind != XR_RBC_CALLABLE_REFERENCE) return false;
     if (value.type == XR_RBC_STRING) { *output = XR_XIR_STRING; return true; }
     if (value.type == XR_RBC_MAP_STRING_I64)
-        return xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_MAP_STRING_I64, 0}, 0, output);
+        return xrt_callable_map_catalog(module->closure_types) &&
+            xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_MAP_STRING_I64, 0}, 0, output);
     uint32_t family = xr_rbc_array_family((XrRbcRegisterKind)value.type);
     return family < XR_RBC_ARRAY_FAMILY_COUNT &&
         xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_ARRAY, family}, 0, output);

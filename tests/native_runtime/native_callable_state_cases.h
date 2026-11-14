@@ -38,7 +38,8 @@ static void callable_state_values(void) {
     printf("callable State layout accounts its retained arena and preserves owners across %zu failures\n", allocation_sites);
     XrXirTypeArena *arena = xrt_module_callable_catalog(layout);
     CHECK(arena);
-    XrtCallableEntry entries[] = {{(XrXirType)260, NULL, 0}, {(XrXirType)262, NULL, 0}};
+    const XrXirType base = XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT;
+    XrtCallableEntry entries[] = {{base, NULL, 0}, {(XrXirType)(base + 2), NULL, 0}};
     uint32_t references = 1;
     XrtCallableCode *code = NULL;
     OK(xrt_callable_code_new(arena, entries, 2,

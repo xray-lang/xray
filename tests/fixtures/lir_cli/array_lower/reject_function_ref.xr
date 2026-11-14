@@ -1,0 +1,6 @@
+fn use(callback:ref fn(i64)->i64) { print(callback(2)) }
+fn exercise() {
+    var callback = fn(value:i64)->i64 { return value+40 }
+    use(ref callback)
+}
+exercise()

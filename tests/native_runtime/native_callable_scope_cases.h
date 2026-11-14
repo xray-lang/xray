@@ -6,6 +6,51 @@ typedef struct NativeCallableScopeContext {
     bool panic;
 } NativeCallableScopeContext;
 
+static void native_callable_catalog_budget_root(void *opaque) {
+    NativeCallableScopeContext *context = opaque;
+    XrtCallableTypeSpec spec = {.kind=XRT_CALLABLE_SIGNATURE,
+        .result={XRT_CALLABLE_SCALAR, XR_POD_I64}};
+    XrXirTypeArena *first = NULL, *second = NULL;
+    uint64_t cold = 0, warm = 0;
+    CHECK(!context->root.map_types);
+    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &cold) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_map_catalog(first) == context->root.map_types);
+    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &second, &warm) == XR_XIR_VALUE_OK);
+    CHECK(cold == warm && cold > 1 && xrt_callable_map_catalog(second) == context->root.map_types);
+    xr_xir_compile_type_arena_drop(first);
+    xr_xir_compile_type_arena_drop(second);
+    first = NULL;
+    uint64_t preserved = 17;
+    CHECK(xrt_callable_types_new_accounted(&spec, 1, cold - 1, &first, &preserved) == XR_XIR_VALUE_MEMORY_LIMIT);
+    CHECK(!first && preserved == 17);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    size_t begin = native_string_calls;
+    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OK);
+    size_t sites = native_string_calls - begin;
+    xr_xir_compile_type_arena_drop(first);
+    first = NULL;
+    size_t retained = native_string_live;
+    size_t retained_bytes = native_string_bytes;
+    for (size_t point = 0; point < sites; ++point) {
+        native_string_fail_at = native_string_calls + point;
+        native_string_injected = false;
+        CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OOM);
+        CHECK(!first && native_string_injected && native_string_live == retained && native_string_bytes == retained_bytes);
+    }
+    native_string_fail_at = SIZE_MAX;
+    printf("warm callable catalog preserves its Map source across %zu receiving failures\n", sites);
+#endif
+}
+static void native_callable_catalog_budget(void) {
+    NativeCallableScopeContext context = {0};
+    XrtLocationOwner *owner = locations("callable-catalog-budget.xr");
+    CHECK(xrt_run_embedded_owned(owner, &context.failure, native_callable_catalog_budget_root,
+        &context, &context.root) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&context.root));
+    xrt_locations_release(owner);
+    puts("cold and warm callable catalogs account for their actual retained Map source");
+}
+
 static void native_callable_empty_scope(void *opaque) {
     static const XrtCallableImage image = {0};
     NativeCallableScopeContext *context = opaque;

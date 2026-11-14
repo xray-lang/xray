@@ -1,0 +1,7 @@
+fn make(seed:i64)->fn()->i64 {
+    var callback = fn()->i64 { return seed }
+    const other = fn()->i64 { return callback() }
+    return other
+}
+const answer = make(42)
+print(answer())
