@@ -1976,7 +1976,11 @@ XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *p, const uint64_t
     for (size_t i = 0; i < count; ++i)
         if (p->parameters[i] == XR_LIR_I1 && arguments[i] > 1) return XR_RBC_INVALID;
         else if (p->parameters[i] == XR_LIR_U8 && arguments[i] > UINT8_MAX) return XR_RBC_INVALID;
-    return xr_rbc_module_prepare(&p->module, 0, arguments, count, p->locations, output);
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
+    XrRbcStatus status = xr_rbc_module_admit(&p->module, p->locations);
+    if (status != XR_RBC_OK) return status;
+#endif
+    return xr_rbc_module_prepare_admitted(&p->module, 0, arguments, count, p->locations, output);
 }
 
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program) {
