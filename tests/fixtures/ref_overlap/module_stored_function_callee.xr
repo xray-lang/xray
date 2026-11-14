@@ -1,0 +1,13 @@
+// The callee runs a function stored in a module variable while the binding is lent.
+var G = [1, 2, 3]
+fn touch() -> i64 {
+    G.push(9)
+    return len(G)
+}
+var F = touch
+fn apply(a: ref Array<i64>) -> i64 {
+    a.push(4)
+    return F() * 100 + len(a)
+}
+print(apply(ref G))
+print(len(G))

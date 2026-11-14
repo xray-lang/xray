@@ -1,0 +1,1 @@
+9:1: error: E0382: ref of module binding `value` conflicts with unknown module access by `indirect callable`
