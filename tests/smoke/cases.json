@@ -146,7 +146,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:34:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -189,13 +189,9 @@
       "id": "demos/04-functional/functional.xr",
       "path": "demos/04-functional/functional.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/functional.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:56:9: MAP_NEW is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functional.txt"
     },
     {
       "id": "demos/05-concurrency/atomic.xr",
@@ -363,7 +359,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-2:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -399,7 +395,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-2:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -802,13 +798,9 @@
       "id": "native:demos/04-functional/functional.xr",
       "path": "demos/04-functional/functional.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/functional.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/04-functional/functional.xr:56:9: MAP_NEW is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functional.txt"
     },
     {
       "id": "native:README.md#xray-2",
@@ -819,7 +811,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "README.md#xray-2:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -831,7 +823,7 @@
       "stdout": "tests/smoke/expected/readme_record.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "README_CN.md#xray-2:8:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "README_CN.md#xray-2:9:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -892,7 +884,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:7:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:34:5: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
