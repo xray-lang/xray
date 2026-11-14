@@ -106,7 +106,8 @@ static bool mvl_push_prepared(XrMvlDomain *domain, int64_t *result) {
         return false;
     bool ok = true;
     XrMvlArrayAccess access = xr_mvl_array_access_start(NULL);
-    if (XR_MVL_PUSH_COUNT > 0) {
+    int64_t count = XR_MVL_PUSH_COUNT;
+    if (count > 0) {
         int64_t value = 0;
         XrMvlArrayWrite write = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, value, true);
         ok = write.status == XR_MVL_OK;
@@ -116,7 +117,7 @@ static bool mvl_push_prepared(XrMvlDomain *domain, int64_t *result) {
             if (write.previous) xr_mvl_drop(&write.previous->header);
         }
     }
-    for (int64_t i = 1; ok && i < XR_MVL_PUSH_COUNT; ++i) {
+    for (int64_t i = 1; ok && i < count; ++i) {
         XrMvlArrayWrite write = xr_mvl_array_access_push(access, i);
         if (write.status != XR_MVL_OK) {
             ok = false;
