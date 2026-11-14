@@ -53,27 +53,29 @@ static void *mvl_resize(XrMvlDomain *domain, void *memory, size_t old_bytes, siz
     return replacement;
 }
 
-static void mvl_header_init(XrMvlHeader *header, XrMvlDomain *domain,
-                            const XrMvlTypeOps *ops, size_t bytes) {
+static void mvl_header_init(XrMvlHeader *header, const XrMvlTypeOps *ops) {
     xr_signed_rc_initialize(&header->refs);
     header->flags = 0;
-    header->allocation_bytes = bytes;
-    header->domain = domain;
     header->ops = ops;
 }
 
-static void mvl_header_free(XrMvlHeader *header) {
-    mvl_deallocate(header->domain, header, header->allocation_bytes);
+static void mvl_header_free(XrMvlHeader *header, size_t bytes) {
+    mvl_deallocate(header->ops->domain, header, bytes);
+}
+
+static void mvl_string_destroy(XrMvlHeader *header) {
+    XrMvlString *string = (XrMvlString *)header;
+    mvl_header_free(header, sizeof(*string) + string->length + 1);
 }
 
 XR_FUNCDEF void xr_mvl_string_dispose_last(XrMvlString *string) {
-    mvl_header_free(&string->header);
+    mvl_string_destroy(&string->header);
 }
 
 static void mvl_array_destroy(XrMvlHeader *header) {
     XrMvlArray *array = (XrMvlArray *) header;
-    mvl_deallocate(header->domain, array->data, array->capacity * sizeof(*array->data));
-    mvl_header_free(header);
+    mvl_deallocate(header->ops->domain, array->data, array->capacity * sizeof(*array->data));
+    mvl_header_free(header, sizeof(*array));
 }
 
 static void mvl_map_destroy(XrMvlHeader *header) {
@@ -81,20 +83,27 @@ static void mvl_map_destroy(XrMvlHeader *header) {
     for (size_t i = 0; i < map->capacity; ++i)
         if (map->slots[i].key)
             xr_mvl_drop(&map->slots[i].key->header);
-    mvl_deallocate(header->domain, map->slots, map->capacity * sizeof(*map->slots));
-    mvl_header_free(header);
+    mvl_deallocate(header->ops->domain, map->slots, map->capacity * sizeof(*map->slots));
+    mvl_header_free(header, sizeof(*map));
 }
 
-static const XrMvlTypeOps mvl_array_ops = {mvl_array_destroy, "Array<i64>"};
-static const XrMvlTypeOps mvl_string_ops = {mvl_header_free, "String"};
-static const XrMvlTypeOps mvl_map_ops = {mvl_map_destroy, "Map<String,i64>"};
-static const XrMvlTypeOps mvl_pair_ops = {mvl_header_free, "{x:i64,y:i64}"};
+static void mvl_pair_destroy(XrMvlHeader *header) {
+    mvl_header_free(header, sizeof(XrMvlPairObject));
+}
+
+XR_FUNCDEF void xr_mvl_domain_init(XrMvlDomain *domain) {
+    *domain = (XrMvlDomain){.fail_after=SIZE_MAX,
+        .array_ops={mvl_array_destroy, "Array<i64>", domain},
+        .string_ops={mvl_string_destroy, "String", domain},
+        .map_ops={mvl_map_destroy, "Map<String,i64>", domain},
+        .pair_ops={mvl_pair_destroy, "{x:i64,y:i64}", domain}};
+}
 
 XR_FUNCDEF XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain) {
     XrMvlArray *array = mvl_allocate(domain, sizeof(*array));
     if (!array)
         return NULL;
-    mvl_header_init(&array->header, domain, &mvl_array_ops, sizeof(*array));
+    mvl_header_init(&array->header, &domain->array_ops);
     array->data = NULL;
     array->length = array->capacity = 0;
     return array;
@@ -102,11 +111,11 @@ XR_FUNCDEF XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain) {
 
 static XrMvlArray *mvl_array_copy(const XrMvlArray *source, size_t capacity) {
     assert(capacity >= source->length && capacity <= SIZE_MAX / sizeof(int64_t));
-    XrMvlArray *copy = xr_mvl_array_new(source->header.domain);
+    XrMvlArray *copy = xr_mvl_array_new(source->header.ops->domain);
     if (!copy)
         return NULL;
     if (capacity) {
-        copy->data = mvl_allocate(copy->header.domain, capacity * sizeof(*copy->data));
+        copy->data = mvl_allocate(copy->header.ops->domain, capacity * sizeof(*copy->data));
         if (!copy->data) {
             xr_mvl_drop(&copy->header);
             return NULL;
@@ -141,7 +150,7 @@ XR_FUNCDEF XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,
             return result;
         result.previous = array;
     } else if (capacity != array->capacity) {
-        int64_t *data = mvl_resize(array->header.domain, array->data,
+        int64_t *data = mvl_resize(array->header.ops->domain, array->data,
                                   array->capacity * sizeof(*data), capacity * sizeof(*data));
         if (!data)
             return result;
@@ -183,7 +192,7 @@ XR_FUNCDEF XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes
     XrMvlString *string = mvl_allocate(domain, extent);
     if (!string)
         return NULL;
-    mvl_header_init(&string->header, domain, &mvl_string_ops, extent);
+    mvl_header_init(&string->header, &domain->string_ops);
     string->length = length;
     string->hash = xr_hash_bytes64(bytes, length);
     if (length)
@@ -199,7 +208,7 @@ static XrMvlMap *mvl_map_create(XrMvlDomain *domain, size_t capacity) {
     XrMvlMap *map = mvl_allocate(domain, sizeof(*map));
     if (!map)
         return NULL;
-    mvl_header_init(&map->header, domain, &mvl_map_ops, sizeof(*map));
+    mvl_header_init(&map->header, &domain->map_ops);
     map->slots = mvl_allocate(domain, capacity * sizeof(*map->slots));
     map->length = map->capacity = 0;
     if (!map->slots) {
@@ -221,7 +230,7 @@ static void mvl_map_insert_prepared(XrMvlMap *map, XrMvlString *key, int64_t val
 }
 
 static XrMvlMap *mvl_map_copy(const XrMvlMap *source, size_t capacity, XrMvlStatus *status) {
-    XrMvlMap *copy = mvl_map_create(source->header.domain, capacity);
+    XrMvlMap *copy = mvl_map_create(source->header.ops->domain, capacity);
     if (!copy)
         return NULL;
     for (size_t i = 0; i < source->capacity; ++i) {
@@ -239,7 +248,7 @@ static XrMvlMap *mvl_map_copy(const XrMvlMap *source, size_t capacity, XrMvlStat
 }
 
 static bool mvl_map_grow(XrMvlMap *map, size_t capacity) {
-    XrMvlMapSlot *slots = mvl_allocate(map->header.domain, capacity * sizeof(*slots));
+    XrMvlMapSlot *slots = mvl_allocate(map->header.ops->domain, capacity * sizeof(*slots));
     if (!slots)
         return false;
     memset(slots, 0, capacity * sizeof(*slots));
@@ -251,7 +260,7 @@ static bool mvl_map_grow(XrMvlMap *map, size_t capacity) {
             index = (index + 1) & (capacity - 1);
         slots[index] = map->slots[i];
     }
-    mvl_deallocate(map->header.domain, map->slots, map->capacity * sizeof(*map->slots));
+    mvl_deallocate(map->header.ops->domain, map->slots, map->capacity * sizeof(*map->slots));
     map->slots = slots;
     map->capacity = capacity;
     return true;
@@ -316,7 +325,7 @@ XR_FUNCDEF XrMvlPairObject *xr_mvl_pair_new(XrMvlDomain *domain, XrMvlPair value
     XrMvlPairObject *object = mvl_allocate(domain, sizeof(*object));
     if (!object)
         return NULL;
-    mvl_header_init(&object->header, domain, &mvl_pair_ops, sizeof(*object));
+    mvl_header_init(&object->header, &domain->pair_ops);
     object->value = value;
     return object;
 }

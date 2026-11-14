@@ -24,31 +24,33 @@ typedef enum {
     XR_MVL_INVALID_OWNER
 } XrMvlStatus;
 
-typedef struct {
-    size_t live_blocks;
-    size_t live_bytes;
-    size_t allocations;
-    size_t fail_after;
-} XrMvlDomain;
-
+typedef struct XrMvlDomain XrMvlDomain;
 typedef struct XrMvlHeader XrMvlHeader;
 typedef struct {
     void (*destroy)(XrMvlHeader *);
     const char *name;
+    XrMvlDomain *domain;
 } XrMvlTypeOps;
+
+/* Billing is independent of cycle registration. These descriptors have stable
+ * addresses and may not be copied or reinitialized while any object is live. */
+struct XrMvlDomain {
+    size_t live_blocks;
+    size_t live_bytes;
+    size_t allocations;
+    size_t fail_after;
+    XrMvlTypeOps array_ops, string_ops, map_ops, pair_ops;
+};
 
 struct XrMvlHeader {
     _Atomic(int32_t) refs;
     uint32_t flags;
-    size_t allocation_bytes;
-    XrMvlDomain *domain;
     const XrMvlTypeOps *ops;
 };
 
-_Static_assert(sizeof(XrMvlHeader) == 32, "the prototype uses a 32-byte managed header");
+_Static_assert(sizeof(XrMvlHeader) == 16, "the prototype uses a 16-byte managed header");
 _Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) == 4 &&
-    offsetof(XrMvlHeader, allocation_bytes) == 8 && offsetof(XrMvlHeader, domain) == 16 &&
-    offsetof(XrMvlHeader, ops) == 24, "the prototype header has explicit field offsets");
+    offsetof(XrMvlHeader, ops) == 8, "the prototype header has explicit field offsets");
 
 typedef struct {
     XrMvlHeader header;
@@ -87,9 +89,7 @@ typedef struct {
     XrMvlPair value;
 } XrMvlPairObject;
 
-static inline void xr_mvl_domain_init(XrMvlDomain *domain) {
-    *domain = (XrMvlDomain) {0, 0, 0, SIZE_MAX};
-}
+XR_FUNC void xr_mvl_domain_init(XrMvlDomain *domain);
 
 static inline bool xr_mvl_retain(XrMvlHeader *header) {
     assert(header);

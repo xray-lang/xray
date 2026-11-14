@@ -48,7 +48,7 @@ data/length/capacity descriptor. The remaining loop uses that descriptor and
 commits the canonical length after every element store. Cold growth accepts and
 returns descriptor values. It never receives or caches the caller's binding
 address. Ordinary and prepared Array writes use the same COW/growth kernel and
-the same 32-byte object; the descriptor owns no reference or second payload.
+the same 16-byte-header object; the descriptor owns no reference or second payload.
 
 This is a trusted caller-owned, alias-free window, not permission inferred from
 RC==1. Retain, alias observation, rebinding and observing calls close the window
@@ -118,9 +118,11 @@ It is a state check, not a timing sample. No timing result exists yet.
 
 ## Layout and reusable algorithms
 
-Heap objects begin with one fixed 32-byte header: signed atomic RC, flags, allocation extent,
-allocator domain, and a stable `TypeOps` pointer. `TypeOps` are static for this
-executable and therefore outlive every object. They are used at final drop, not
+Heap objects begin with one fixed 16-byte header: signed atomic RC at offset 0,
+flags at offset 4, and a stable `TypeOps` pointer at offset 8. Each static billing
+Domain embeds one descriptor per family; that descriptor carries the Domain
+pointer and final destructor. A Domain and its descriptors must not move or be
+reinitialized while an object remains live. They are used at final drop, not
 looked up on every get/set. There is no XIR value, type arena, owner hash table,
 tagged value, VM frame, or per-element admission traversal.
 
@@ -138,12 +140,20 @@ Allocation goes through `src/base/xmalloc.h`; FNV comes directly from
 helpers in `algorithms.h`. The raw-C control shares these algorithms, not a
 managed-value runtime. Domain accounting is constant-time on allocation/free;
 ordinary element access does not consult it.
+Object refunds use the fixed family size, or `sizeof(String) + length + 1`.
+Separate Array data and Map slots use their actual capacity and element size;
+construction/growth checks these additions and multiplications before allocating.
+Every key retains its own descriptor, so a Map and its String keys may refund
+different billing Domains. No hidden allocation prefix or per-object side table
+stores an extent or Domain. Billing does not register an object in a cycle domain.
 
 Counter-only primitives come from `src/base/xsigned_rc.h`, shared with the
 unchanged 72-byte production XIR object header. Positive counts use local relaxed
 loads/stores; negative counts use atomic CAS. Unique `-1` becomes local `+1` with
 acquire ordering. Counter code has no XIR dependency. The former 40-byte local
-header and its complete measurements remain a separate fixed baseline.
+header and the later 32-byte header with their complete measurements remain
+separate fixed baselines. The shared primitive's local relaxed atomic accesses
+are unchanged; this does not claim a completed plain-nonatomic implementation.
 
 The intentional representation differences are managed heap headers/domain
 accounting, real RC on copied/retained objects, and COW when an object is shared.

@@ -32,7 +32,7 @@ static bool mvl_verify_take_alias(bool negative) {
     if (negative)
         atomic_store_explicit(&duplicate->header.refs, -1, memory_order_release);
     size_t bytes = domain.live_bytes, blocks = domain.live_blocks;
-    size_t duplicate_bytes = duplicate->header.allocation_bytes;
+    size_t duplicate_bytes = sizeof(*duplicate) + duplicate->length + 1;
     MVL_REQUIRE(xr_mvl_map_set_take(&map, &duplicate, 2) == XR_MVL_OK && !duplicate);
     MVL_REQUIRE(domain.live_bytes == bytes - duplicate_bytes && domain.live_blocks == blocks - 1);
     MVL_REQUIRE(map->slots[slot].key == alias && map->slots[slot].value == 2);
