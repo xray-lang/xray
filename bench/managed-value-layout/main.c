@@ -271,9 +271,51 @@ static bool mvl_map_take(XrMvlDomain *domain, int64_t *result) {
     return ok;
 }
 
+/* Match map-take exactly except for caller-owned String retirement. Stored
+ * Map keys and the Map itself keep their generic destruction control. */
+static bool mvl_map_typed_drop(XrMvlDomain *domain, int64_t *result) {
+    XrMvlMap *map = xr_mvl_map_new(domain);
+    if (!map)
+        return false;
+    XrMvlString *key = xr_mvl_string_new(domain, "seed", 4);
+    bool ok = key && xr_mvl_map_set_take(&map, &key, 0) == XR_MVL_OK;
+    if (key)
+        xr_mvl_string_drop(key);
+    for (int64_t i = 0; ok && i < XR_MVL_MAP_COUNT; ++i) {
+        char bytes[32];
+        size_t length = xr_mvl_key_bytes((uint64_t) i, bytes);
+        key = xr_mvl_string_new(domain, bytes, length);
+        if (!key) {
+            ok = false;
+            break;
+        }
+        ok = xr_mvl_map_set_take(&map, &key, i) == XR_MVL_OK;
+        if (key)
+            xr_mvl_string_drop(key);
+    }
+    int64_t total = 0;
+    for (int64_t i = 0; ok && i < XR_MVL_MAP_COUNT; ++i) {
+        char bytes[32];
+        size_t length = xr_mvl_key_bytes((uint64_t) i, bytes);
+        key = xr_mvl_string_new(domain, bytes, length);
+        if (!key) {
+            ok = false;
+            break;
+        }
+        int64_t value;
+        ok = xr_mvl_map_get(map, key, &value);
+        if (ok)
+            total += value;
+        xr_mvl_string_drop(key);
+    }
+    xr_mvl_drop(&map->header);
+    *result = total;
+    return ok;
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "usage: managed <push|push-prepared|push-direct|record|map|map-take|record-escape|verify|layout>\n");
+        fprintf(stderr, "usage: managed <push|push-prepared|push-direct|record|map|map-take|map-typed-drop|record-escape|verify|layout>\n");
         return 2;
     }
     if (strcmp(argv[1], "layout") == 0) {
@@ -309,6 +351,9 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[1], "map-take") == 0) {
         expected = INT64_C(19999900000);
         ok = mvl_map_take(&domain, &total);
+    } else if (strcmp(argv[1], "map-typed-drop") == 0) {
+        expected = INT64_C(19999900000);
+        ok = mvl_map_typed_drop(&domain, &total);
     } else if (strcmp(argv[1], "record-escape") == 0) {
         expected = INT64_C(9000000000000);
         ok = mvl_record_escape(&domain, &total);

@@ -17,9 +17,9 @@ import xray_process
 
 CASES = {"push": "12499997500000", "record": "9000000000000", "map": "19999900000",
          "push-prepared": "12499997500000", "push-direct": "12499997500000",
-         "map-take": "19999900000"}
-RAW_CASES = {"push-prepared": "push", "push-direct": "push", "map-take": "map"}
-RATIO_CASES = ("push", "map", "push-direct", "map-take")
+         "map-take": "19999900000", "map-typed-drop": "19999900000"}
+RAW_CASES = {"push-prepared": "push", "push-direct": "push", "map-take": "map", "map-typed-drop": "map"}
+RATIO_CASES = ("push", "map", "push-direct", "map-take", "map-typed-drop")
 ROUNDS = 5
 
 
