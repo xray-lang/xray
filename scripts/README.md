@@ -53,7 +53,7 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 
 ### `check_temp_workarounds.py`
 
-接入 PR 门禁（参考 `.github/workflows/ci.yml` 的 `reverse-invariants` job）。本表只做完整性收录，不再展开规则。
+可在本地或 CTest 中运行。本表只做完整性收录，不再展开规则。
 
 ### `check_stdlib_surface_uniqueness.py`
 

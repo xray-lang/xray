@@ -104,7 +104,7 @@ order: 019
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用（触发规则见 §2.13 N-12）|
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
-| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用冲突，包括 owner 失效、同次调用的 `ref` 路径重叠及引用迭代期间经其他路径访问容器；后两项的实现资格见 §17 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用冲突，包括 owner 失效、同次调用的 `ref` 路径重叠、被调方访问借出的模块绑定及引用迭代期间经其他路径访问容器；路径重叠与引用迭代的实现资格见 §17 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、逃逸闭包捕获、跨执行边界） |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
@@ -308,7 +308,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
 | `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
 | `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
-| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | borrow conflict, including owner invalidation, overlapping `ref` paths in one call and container access through another path during reference iteration, with qualification of the latter two in §17 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | borrow conflict, including owner invalidation, overlapping `ref` paths in one call, a callee reaching a lent module binding and container access through another path during reference iteration, with qualification of path overlap and reference iteration in §17 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, escaping closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |

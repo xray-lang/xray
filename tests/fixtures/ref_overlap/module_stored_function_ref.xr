@@ -1,0 +1,10 @@
+// A function value read from a module variable may be any stored function.
+var value = 1
+fn writer(v: ref i64) -> i64 {
+    value = value + 10
+    v = v + 1
+    return v
+}
+var f = writer
+print(f(ref value))
+print(value)

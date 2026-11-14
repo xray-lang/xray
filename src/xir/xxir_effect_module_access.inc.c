@@ -117,6 +117,17 @@ static bool effect_module_requirement_unknown(const XrXirTypes *types, EffectChe
     return effect_check_type_mask(types, table->declarations[pending.selector].methods[pending.member].signature) != 0;
 }
 
+/* A function value read from module storage may be whatever was last stored
+ * there. Its type's ROOT promise is the only bound on what it touches; a type
+ * that promises nothing root-free leaves the executed code unknown. */
+static bool effect_module_stored_callable(EffectCheckBuild *build, const EffectCheckNode *node) {
+    const XrXirTypes *types = effect_check_types_read(build);
+    if (!xr_xir_type_is_callable(types, node->type) || !effect_check_type_mask(types, node->type)) return false;
+    for (uint32_t m = node->module_sets[EFFECT_MODULE_ORIGIN]; m != UINT32_MAX; m = build->roots->module_member[m].next)
+        if (build->roots->module_member[m].kind == EFFECT_MODULE_SLOT) return true;
+    return false;
+}
+
 static bool effect_module_execute(EffectCheckBuild *build, uint32_t output, uint32_t source,
     uint32_t instruction) {
     EffectCheckNode node = build->roots->node[source];
@@ -202,6 +213,9 @@ static bool effect_module_evaluate(EffectCheckBuild *build, uint32_t id) {
     }
     for (uint32_t c = node.calls; !erased && c != UINT32_MAX; c = roots->call[c].next)
         changed |= effect_module_apply(build, id, roots->call[c]);
+    if (!erased && effect_module_stored_callable(build, &roots->node[id]))
+        changed |= effect_module_add(build, id, EFFECT_MODULE_ACCESS, EFFECT_MODULE_UNKNOWN,
+            0, function.declaration, UINT32_MAX);
     if (id == function.root) {
         for (uint32_t p = 0; p < function.pending_count; ++p) {
             EffectCheckPending pending = roots->pending[function.pending_first + p];

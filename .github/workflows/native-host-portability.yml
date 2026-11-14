@@ -259,6 +259,32 @@ jobs:
             build/CMakeCache.txt
             build/compile_commands.json
 
+  # The pushed or proposed commits must explain themselves; see the script.
+  commit-messages:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: Commit messages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the new commits
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            range="origin/$BASE_REF..HEAD"
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+              && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..HEAD"
+          else
+            range="origin/main..HEAD"
+          fi
+          python3 scripts/check_commit_messages.py "$range"
+
   msvc-generated-c:
     if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
     name: MSVC generated C11

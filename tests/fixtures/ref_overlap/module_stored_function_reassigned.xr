@@ -1,0 +1,15 @@
+// Reassigning the stored function does not make its code known.
+var value = 1
+fn pure(v: ref i64) -> i64 {
+    v = v + 1
+    return v
+}
+fn writer(v: ref i64) -> i64 {
+    value = value + 10
+    v = v + 1
+    return v
+}
+var f = pure
+f = writer
+print(f(ref value))
+print(value)
