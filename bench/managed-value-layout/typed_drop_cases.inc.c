@@ -46,7 +46,7 @@ static bool mvl_verify_typed_drop_map_alias(bool negative, bool map_first) {
         atomic_store_explicit(&key->header.refs, -2, memory_order_release);
     XrMvlString *stored = key;
     size_t bytes = domain.live_bytes, blocks = domain.live_blocks, allocations = domain.allocations;
-    size_t key_bytes = key->header.allocation_bytes;
+    size_t key_bytes = sizeof(*key) + key->length + 1;
     domain.fail_after = 0;
     if (map_first) {
         xr_mvl_drop(&map->header); map = NULL;
@@ -80,7 +80,7 @@ static bool mvl_verify_typed_drop_oom(void) {
     domain.fail_after = 1;
     string = xr_mvl_string_new(&domain, "oom", 3);
     MVL_REQUIRE(string && !domain.fail_after && domain.allocations == 1 &&
-        domain.live_blocks == 1 && domain.live_bytes == string->header.allocation_bytes);
+        domain.live_blocks == 1 && domain.live_bytes == sizeof(*string) + string->length + 1);
     xr_mvl_string_drop(string); string = NULL;
     MVL_REQUIRE(!domain.live_blocks && !domain.live_bytes && domain.allocations == 1);
 cleanup:

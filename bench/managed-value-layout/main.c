@@ -21,8 +21,6 @@ static void mvl_layout(void) {
     MVL_FIELD(XrMvlHeader, refs);
     printf(" refs_bits=%zu", sizeof(((XrMvlHeader *) 0)->refs) * CHAR_BIT);
     MVL_FIELD(XrMvlHeader, flags);
-    MVL_FIELD(XrMvlHeader, allocation_bytes);
-    MVL_FIELD(XrMvlHeader, domain);
     MVL_FIELD(XrMvlHeader, ops);
     puts("");
     MVL_TYPE(XrMvlArray);
@@ -59,12 +57,17 @@ static void mvl_layout(void) {
     MVL_TYPE(XrMvlTypeOps);
     MVL_FIELD(XrMvlTypeOps, destroy);
     MVL_FIELD(XrMvlTypeOps, name);
+    MVL_FIELD(XrMvlTypeOps, domain);
     puts("");
     MVL_TYPE(XrMvlDomain);
     MVL_FIELD(XrMvlDomain, live_blocks);
     MVL_FIELD(XrMvlDomain, live_bytes);
     MVL_FIELD(XrMvlDomain, allocations);
     MVL_FIELD(XrMvlDomain, fail_after);
+    MVL_FIELD(XrMvlDomain, array_ops);
+    MVL_FIELD(XrMvlDomain, string_ops);
+    MVL_FIELD(XrMvlDomain, map_ops);
+    MVL_FIELD(XrMvlDomain, pair_ops);
     puts("");
     MVL_TYPE(XrMvlArrayAccess);
     MVL_FIELD(XrMvlArrayAccess, owner);

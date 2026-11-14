@@ -199,6 +199,7 @@ cleanup:
 #include "access_cases.inc.c"
 #include "direct_cases.inc.c"
 #include "typed_drop_cases.inc.c"
+#include "domain_cases.inc.c"
 
 XR_FUNCDEF bool xr_mvl_verify(void) {
     size_t capacity;
@@ -206,5 +207,7 @@ XR_FUNCDEF bool xr_mvl_verify(void) {
         return false;
     return mvl_verify_array() && mvl_verify_map() && mvl_verify_map_growth() &&
         mvl_verify_record() && mvl_verify_header_counter() && mvl_verify_take() &&
-        mvl_verify_access() && mvl_verify_direct() && mvl_verify_typed_drop();
+        mvl_verify_access() && mvl_verify_direct() && mvl_verify_typed_drop() &&
+        mvl_verify_domains(false, false) && mvl_verify_domains(false, true) &&
+        mvl_verify_domains(true, false) && mvl_verify_domains(true, true) && mvl_verify_string_extent();
 }
