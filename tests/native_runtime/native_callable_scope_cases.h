@@ -6,6 +6,56 @@ typedef struct NativeCallableScopeContext {
     bool panic;
 } NativeCallableScopeContext;
 
+static void native_record_projection(void) {
+    char name[] = "name";
+    XrtCallableParameterSpec fields[] = {
+        {.value={XRT_CALLABLE_CONSTRUCTED,0}, .name=name, .name_length=4},
+        {.value={XRT_CALLABLE_SCALAR,XR_POD_I64}, .name="score", .name_length=5}};
+    XrtCallableParameterSpec nested = {.value={XRT_CALLABLE_CONSTRUCTED,1}, .name="child", .name_length=5};
+    XrtCallableTypeSpec specs[] = {
+        {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_STRING,0}},
+        {.kind=XRT_CALLABLE_RECORD, .parameters=fields, .parameter_count=2},
+        {.kind=XRT_CALLABLE_RECORD, .parameters=&nested, .parameter_count=1}};
+    XrXirTypeArena *arena = NULL;
+    uint64_t bytes = 17;
+    CHECK(xrt_callable_types_new_accounted(specs, 3, 1, &arena, &bytes) == XR_XIR_VALUE_MEMORY_LIMIT &&
+        !arena && bytes == 17);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    size_t begin = native_string_calls;
+    CHECK(xrt_callable_types_new(specs, 3, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    size_t sites = native_string_calls - begin;
+    xr_xir_compile_type_arena_drop(arena); arena = NULL;
+    CHECK(!native_string_live && !native_string_bytes);
+    for (size_t point = 0; point < sites; ++point) {
+        native_string_fail_at = native_string_calls + point;
+        native_string_injected = false;
+        bytes = 17;
+        CHECK(xrt_callable_types_new_accounted(specs, 3, UINT64_MAX, &arena, &bytes) == XR_XIR_VALUE_OOM);
+        CHECK(!arena && bytes == 17 && native_string_injected && !native_string_live && !native_string_bytes);
+    }
+    native_string_fail_at = SIZE_MAX;
+    printf("Record canonical catalog receiving failures: %zu allocation sites\n", sites);
+#endif
+    CHECK(xrt_callable_types_new(specs, 3, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    memset(name, 'x', sizeof(name)); memset(fields, 0xa5, sizeof(fields));
+    memset(&nested, 0xa5, sizeof(nested)); memset(specs, 0xa5, sizeof(specs));
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    XrXirType base = XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT;
+    XrXirTypeDescription description = {0};
+    XrXirFieldDescription field = {0};
+    CHECK(xr_xir_compile_type_description(&context, types, (XrXirType)(base + 1), &description) == XR_XIR_OK);
+    CHECK(xr_xir_compile_description_field(&context, &description, 0, &field) == XR_XIR_OK &&
+        field.resolved && field.type == base && field.name.length == 4 && !memcmp(field.name.bytes,"name",4));
+    CHECK(xr_xir_compile_type_description(&context, types, (XrXirType)(base + 2), &description) == XR_XIR_OK);
+    CHECK(xr_xir_compile_description_field(&context, &description, 0, &field) == XR_XIR_OK &&
+        field.resolved && field.type == base + 1 && field.name.length == 5 && !memcmp(field.name.bytes,"child",5));
+    xr_compile_resources_release(context.resources);
+    xr_xir_compile_type_arena_drop(arena);
+}
+
 static void native_callable_catalog_budget_root(void *opaque) {
     NativeCallableScopeContext *context = opaque;
     XrtCallableTypeSpec spec = {.kind=XRT_CALLABLE_SIGNATURE,
@@ -174,7 +224,7 @@ static void native_callable_scopes(void) {
     context->panic = true;
     CHECK(xrt_run_embedded_owned(owner, &context->failure, native_callable_scope_root, context,
         &context->root) == XRT_EXECUTION_FAILURE);
-    CHECK(context->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC &&
+    CHECK(context->failure.kind == XRT_FAILURE_TYPED_PANIC &&
         context->failure.detail.panic.code == 420 && xrt_value_root_empty(&context->root));
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     CHECK(!native_string_live && !native_string_bytes);
@@ -206,7 +256,7 @@ static void native_callable_scopes(void) {
     context->panic = true;
     CHECK(xrt_run_embedded_owned(owner, &context->failure, native_captured_cell_scope_root, context,
         &context->root) == XRT_EXECUTION_FAILURE);
-    CHECK(context->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC &&
+    CHECK(context->failure.kind == XRT_FAILURE_TYPED_PANIC &&
         context->failure.detail.panic.code == 421 && xrt_value_root_empty(&context->root));
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     CHECK(!native_string_live && !native_string_bytes);

@@ -72,7 +72,7 @@ def adapter(generated, result, panic, location):
                 'xrt_module_state_drop(&call.state);if(outcome!=XRT_EXECUTION_FAILURE)return 3;\n')
         else:
             text += 'int64_t value=0;if(xrt_run_embedded(owner,&failure,xrl_invoke,&value)!=XRT_EXECUTION_FAILURE)return 3;\n'
-        text += 'if(failure.kind!=XRT_FAILURE_ARITHMETIC_PANIC||failure.detail.panic.code!=' + str(panic) + ')return 4;\n'
+        text += 'if(failure.kind!=XRT_FAILURE_TYPED_PANIC||failure.detail.panic.code!=' + str(panic) + ')return 4;\n'
         text += 'const XrtSourceLocation *point=xrt_locations_get(owner,failure.detail.panic.source_id);\n'
         if path is None:
             text += 'if(point||failure.detail.panic.source_id!=0)return 5;\n'

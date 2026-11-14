@@ -96,7 +96,7 @@ static void rbc_result(XrRbcProgram *program,uint64_t input,uint64_t expected,bo
     xr_rbc_execution_free(&execution); CHECK(!execution);
     uint64_t bits=UINT64_C(0x123456789abcdef0);
     if (range) {
-        CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_ARITHMETIC_PANIC);
+        CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_TYPED_PANIC);
         XrtArithmeticPanic facts={0}; const XrtLocationOwner *locations=NULL;
         CHECK(xr_rbc_outcome_arithmetic_panic(outcome,&facts,&locations));
         CHECK(facts.code==422 && facts.source_id==1 && locations);
@@ -119,7 +119,7 @@ static void native_result(XrtLocationOwner *locations,uint64_t input,uint64_t ex
     unsigned char original[sizeof(failure)]; memcpy(original,&failure,sizeof(failure));
     XrtExecutionStatus status=xrt_run_embedded(locations,&failure,native_integer,&context);
     if (range) {
-        CHECK(status==XRT_EXECUTION_FAILURE && failure.kind==XRT_FAILURE_ARITHMETIC_PANIC);
+        CHECK(status==XRT_EXECUTION_FAILURE && failure.kind==XRT_FAILURE_TYPED_PANIC);
         CHECK(failure.detail.panic.code==422 && failure.detail.panic.source_id==1);
         CHECK(!context.after && context.output==INT64_C(123456789));
     } else CHECK(status==XRT_EXECUTION_COMPLETED && context.after &&
@@ -287,7 +287,7 @@ static void retired_failure(void) {
     CHECK(xr_rbc_program_prepare(program,&input,1,&execution)==XR_RBC_OK && execution);
     XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
-    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_ARITHMETIC_PANIC);
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_TYPED_PANIC);
     XrtArithmeticPanic facts={0}; const XrtLocationOwner *locations=NULL;
     CHECK(xr_rbc_outcome_arithmetic_panic(outcome,&facts,&locations) && facts.code==422 && facts.source_id==1);
     const XrtSourceLocation *location=xrt_locations_get(locations,1);

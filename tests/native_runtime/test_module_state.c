@@ -154,7 +154,7 @@ static void independent_lifetimes(void) {
         XrtExecutionFailure failure = {0};
         XrtExecutionStatus status = xrt_run_embedded(locations, &failure, initialize_root, &context);
         CHECK(status == (panic ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
-        if (panic) CHECK(failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && failure.detail.panic.code == 420);
+        if (panic) CHECK(failure.kind == XRT_FAILURE_TYPED_PANIC && failure.detail.panic.code == 420);
         XrtModuleRef *reference = NULL;
         OK(xrt_module_reference(state, 1, &reference));
         const void *payload = NULL;
@@ -217,7 +217,7 @@ static void pending_string_failure(void) {
     CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
     XrtExecutionFailure failure = {0};
     CHECK(xrt_run_embedded(locations, &failure, replace_string_root, state) == XRT_EXECUTION_FAILURE);
-    CHECK(failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && failure.detail.panic.code == 421);
+    CHECK(failure.kind == XRT_FAILURE_TYPED_PANIC && failure.detail.panic.code == 421);
     CHECK(state->construction_count == 1 && !state->publication_count);
     xrt_module_state_drop(&state);
     xrt_locations_release(locations);

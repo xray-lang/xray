@@ -237,14 +237,15 @@ def main():
                 (work/'result.json').write_text(json.dumps(result,indent=2)+'\n');return
             executable=native(label,[generated,main_c])
             run('native-'+label,[executable],stdout=oracle*2,stderr=b'EXIT_CALLBACK')
-    for name in ('f64-i64-range','f64-i64-unused-range'):
+    # Module initialization must preserve the trap of an unused conversion.
+    for name in ('f64-i64-range','f64-i64-unused-range','f64-i64-module-slot-unsupported'):
         source=programs/(name+'.xr');inputs[str(source)]=source.read_bytes()
         for mode in MODES:
             for order in ('program-first','outcome-first'):
                 label=name+'-'+mode+'-'+order;generated=work/(label+'.c');receipt=work/(label+'.json')
                 run('source-'+label,[args.driver,source,mode,generated,receipt,'0','1','arithmetic-'+order],
                     stdout=b'before\n',stderr=HOST_ALIVE)
-                facts=json.loads(receipt.read_text());assert facts['status']=='XR_RBC_ARITHMETIC_PANIC'
+                facts=json.loads(receipt.read_text());assert facts['status']=='XR_RBC_TYPED_PANIC'
                 assert facts['arithmetic_facts']['code']==422 and facts['owner_path_matches_original']
                 # Source assigns this conversion the enclosing return's point.
                 column=inputs[str(source)].splitlines()[0].index(b'return')+1
@@ -264,13 +265,6 @@ def main():
         rejected=run('same-width-'+mode,[args.driver,source,mode,output,receipt,'0','1','normal'],
                      exit=1,stdout=b'',stderr=None)
         assert b'xr_lir_emit_c' in rejected.stderr and not output.exists() and not receipt.exists()
-    source=programs/'f64-i64-module-slot-unsupported.xr';inputs[str(source)]=source.read_bytes()
-    marker=b'module slot without a direct same-block i64 literal is not supported by LIR lowering yet'
-    for mode in MODES:
-        output=work/('module-slot-'+mode+'.c');receipt=work/('module-slot-'+mode+'.json')
-        rejected=run('module-slot-'+mode,[args.driver,source,mode,output,receipt,'0','1','normal'],
-            exit=1,stdout=b'',stderr=None)
-        assert b'lower: '+marker in rejected.stderr and not output.exists() and not receipt.exists()
     for cpp in (False,True):
         label='public-cpp' if cpp else 'public-c';path=work/(label+('.cpp' if cpp else '.c'))
         path.write_text(adapter(cpp),encoding='ascii');executable=native(label,[path],cpp)

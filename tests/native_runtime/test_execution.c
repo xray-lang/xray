@@ -240,7 +240,7 @@ static void native_string_recovery(void) {
             CHECK(context->failure.detail.output.io.failed && context->failure.detail.output.io.code);
             CHECK(context->failure.detail.output.source_id == 1);
         } else if (mode >= 2) {
-            CHECK(context->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC);
+            CHECK(context->failure.kind == XRT_FAILURE_TYPED_PANIC);
             CHECK(context->failure.detail.panic.code == 418 + mode);
             CHECK(context->failure.detail.panic.source_id == 1);
         }
@@ -487,7 +487,7 @@ static void native_frame_cell_recovery(void) {
         if(!mode)CHECK(c->writes==3 && c->normal_drops==1 && c->after==1 && c->before_drain && !c->cell);
         else CHECK(c->writes==1 && !c->normal_drops && !c->after && !c->before_drain);
         if(mode==1)CHECK(c->failure.kind==XRT_FAILURE_OUTPUT && c->failure.detail.output.source_id==1);
-        if(mode==2 || mode==3)CHECK(c->failure.kind==XRT_FAILURE_ARITHMETIC_PANIC &&
+        if(mode==2 || mode==3)CHECK(c->failure.kind==XRT_FAILURE_TYPED_PANIC &&
             c->failure.detail.panic.code==418+mode && c->failure.detail.panic.source_id==1);
         if(mode==4)CHECK(c->failure.kind==XRT_FAILURE_HOST_CLOCK && c->failure.detail.clock.source_id==1);
         c->cell=NULL; // Failure retired the root; the old slot is no longer an owner.
@@ -588,7 +588,7 @@ static void native_owned_strings(void) {
         CHECK(!context->strings.domain && !context->strings.held);
         CHECK(context->after==(mode==0 || mode==5 ? 1u : 0u));
         if (mode==1) CHECK(context->failure.kind==XRT_FAILURE_OUTPUT);
-        if (mode==2 || mode==3) CHECK(context->failure.kind==XRT_FAILURE_ARITHMETIC_PANIC &&
+        if (mode==2 || mode==3) CHECK(context->failure.kind==XRT_FAILURE_TYPED_PANIC &&
             context->failure.detail.panic.code==418+mode);
         if (mode==4) CHECK(context->failure.kind==XRT_FAILURE_HOST_CLOCK);
         if (mode==5) {
@@ -740,6 +740,7 @@ static void native_string_misuse_aborts(void) {
 #include "native_callable_scope_cases.h"
 
 int main(void) {
+    native_record_projection();
     native_callable_binding_snapshot();
     native_callable_projection();
     native_callable_owners();
@@ -811,7 +812,7 @@ int main(void) {
             outer->panic_code = code;
             outer->source_id = id;
             CHECK(xrt_run_embedded(outer->owner, &outer->failure, panic_root, outer) == XRT_EXECUTION_FAILURE);
-            CHECK(outer->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC);
+            CHECK(outer->failure.kind == XRT_FAILURE_TYPED_PANIC);
             CHECK(outer->failure.detail.panic.code == code && outer->failure.detail.panic.source_id == id);
             memcpy(prior, &outer->failure, sizeof(prior));
             CHECK(xrt_run_embedded(outer->owner, &outer->failure, normal_root, outer) == XRT_EXECUTION_COMPLETED);
@@ -822,7 +823,7 @@ int main(void) {
     inner->source_id = 1;
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, nested_root, outer) == XRT_EXECUTION_FAILURE);
     CHECK(outer->inner_status == XRT_EXECUTION_FAILURE);
-    CHECK(inner->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && inner->failure.detail.panic.code == 420);
+    CHECK(inner->failure.kind == XRT_FAILURE_TYPED_PANIC && inner->failure.detail.panic.code == 420);
     CHECK(inner->failure.detail.panic.source_id == 1 && outer->failure.detail.panic.code == 421);
     // A recovered panic restores the enclosing output binding and its variant.
     outer->panic_code = 0;
@@ -830,7 +831,7 @@ int main(void) {
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, nested_root, outer) == XRT_EXECUTION_FAILURE);
     restore_output(saved);
     CHECK(outer->failure.kind == XRT_FAILURE_OUTPUT && outer->failure.detail.output.source_id == 1);
-    CHECK(inner->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && outer->inner_status == XRT_EXECUTION_FAILURE);
+    CHECK(inner->failure.kind == XRT_FAILURE_TYPED_PANIC && outer->inner_status == XRT_EXECUTION_FAILURE);
     xrt_locations_release(inner->owner);
     xrt_locations_release(outer->owner);
     xr_free(inner);
