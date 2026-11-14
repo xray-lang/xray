@@ -17,6 +17,7 @@
 #include "lir_ownership_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 
