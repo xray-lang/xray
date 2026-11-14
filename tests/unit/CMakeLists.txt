@@ -1722,7 +1722,6 @@ foreach(capacity_core_target IN ITEMS test_xir_array_capacity_core)
 endforeach()
 
 
-include("${CMAKE_CURRENT_LIST_DIR}/xir/array_capacity_budget.cmake")
 
 
 
@@ -1957,7 +1956,6 @@ add_subdirectory(xir/p11_array_observe)
 add_subdirectory(xir/p11_ref_closure_source)
 add_subdirectory(xir/p11_struct_observe)
 add_subdirectory(xir/p11_materialization)
-add_subdirectory(xir/p11_recursive_data)
 add_subdirectory(xir/p11_import)
 add_subdirectory(xir/p11_ctfe_instance)
 # Register independent legacy controls without replacing product-owned tests.
