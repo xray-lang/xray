@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
         puts("verified");
         return 0;
     }
-    XrMvlDomain domain;
+    static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     int64_t total = 0, expected;
     bool ok;

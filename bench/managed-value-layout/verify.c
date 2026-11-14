@@ -21,7 +21,7 @@
 } while (0)
 
 static bool mvl_verify_array(void) {
-    XrMvlDomain domain;
+    static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     XrMvlArray *array = xr_mvl_array_new(&domain), *snapshot = NULL;
     bool ok = true;
@@ -67,7 +67,7 @@ cleanup:
 }
 
 static bool mvl_verify_map(void) {
-    XrMvlDomain domain;
+    static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     XrMvlMap *map = xr_mvl_map_new(&domain), *snapshot = NULL;
     XrMvlString *seed = xr_mvl_string_new(&domain, "seed", 4);
@@ -109,7 +109,7 @@ cleanup:
 }
 
 static bool mvl_verify_record(void) {
-    XrMvlDomain domain;
+    static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     XrMvlPairObject *first = xr_mvl_pair_new(&domain, (XrMvlPair) {1, 2});
     XrMvlPairObject *second = xr_mvl_pair_new(&domain, (XrMvlPair) {3, 4});
@@ -134,7 +134,7 @@ cleanup:
 }
 
 static bool mvl_verify_map_growth(void) {
-    XrMvlDomain domain;
+    static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
     XrMvlMap *map = xr_mvl_map_new(&domain);
     XrMvlString *key = NULL;
