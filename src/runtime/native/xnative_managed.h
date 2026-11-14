@@ -33,6 +33,9 @@ typedef enum XrtManagedStatus {
     XRT_MANAGED_LIMIT, XRT_MANAGED_CLOSED, XRT_MANAGED_REFCOUNT
 } XrtManagedStatus;
 
+/* Every callback in this interface must return normally, without longjmp,
+ * exceptions or another nonlocal exit. Retain may report failure only by false;
+ * drop/deallocate/payload destruction cannot report failure. */
 typedef struct XrtManagedLease {
     void *context;
     bool (*retain)(void *);
@@ -41,7 +44,8 @@ typedef struct XrtManagedLease {
 
 /* NULL selects the static xr_malloc/xr_free provider without a synthetic lease.
  * A supplied provider owns its context/code through lease and supports concurrent
- * free. Callbacks run without an index lock and must not fail or longjmp on free. */
+ * free. Callbacks run without an index lock. Allocate reports failure only by
+ * returning NULL; it must not leave its reservation through a nonlocal exit. */
 typedef struct XrtManagedAllocator {
     void *context;
     void *(*allocate)(void *, size_t);
