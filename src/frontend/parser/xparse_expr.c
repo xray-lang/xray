@@ -28,7 +28,7 @@
 
 static const char *XR_ARROW_RETURN_TYPE_DIAGNOSTIC =
     "arrow lambda has no return-type position; use `fn(x: T) -> R { ... }`, "
-    "annotate the binding (`var f: (T) -> R = x -> ...`), or rely on the call-site signature";
+    "annotate the binding (`var f: fn(T) -> R = x -> ...`), or rely on the call-site signature";
 
 // Strip underscore separators from numeric literal into dst buffer.
 // Returns number of characters written (not counting NUL).
