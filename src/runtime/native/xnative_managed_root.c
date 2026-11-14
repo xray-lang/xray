@@ -22,8 +22,9 @@ struct XrtManagedFrame {
     XrtManagedRoot *root;
     XrtManagedFrame *previous;
     size_t slot_count;
-    XrtManagedSlot slots[];
 };
+_Static_assert(sizeof(XrtManagedFrame) % alignof(XrtManagedSlot) == 0 &&
+    alignof(XrtManagedFrame) >= alignof(XrtManagedSlot), "frame tail has slot alignment");
 struct XrtManagedRoot {
     XrtManagedHeader header;
     XrtManagedFrame *top;
@@ -31,17 +32,21 @@ struct XrtManagedRoot {
     bool busy;
 };
 
+/* The allocation owns a fixed, checked tail, not an independently movable bank. */
+static XrtManagedSlot *frame_slots(XrtManagedFrame *frame) {
+    return (XrtManagedSlot *)(frame + 1);
+}
 static void frame_abort(XrtManagedFrame *frame) {
     for (size_t i = 0; i < frame->slot_count; ++i)
-        xrt_managed_abort(&frame->slots[i].pending);
+        xrt_managed_abort(&frame_slots(frame)[i].pending);
 }
 static void frame_dispose(XrtManagedHeader *value, void *context) {
     (void)context;
     XrtManagedFrame *frame = (XrtManagedFrame *)value;
     frame_abort(frame);
     for (size_t i = 0; i < frame->slot_count; ++i) {
-        XrtManagedHeader *owned = frame->slots[i].committed;
-        frame->slots[i].committed = NULL;
+        XrtManagedHeader *owned = frame_slots(frame)[i].committed;
+        frame_slots(frame)[i].committed = NULL;
         xrt_managed_drop(owned);
     }
 }
@@ -74,7 +79,7 @@ static bool root_begin(XrtManagedRoot *root) {
 static XrtManagedSlot *slot_begin(XrtManagedFrame *frame, size_t index) {
     if (!frame || !frame->root || index >= frame->slot_count || !root_begin(frame->root))
         return NULL;
-    return &frame->slots[index];
+    return &frame_slots(frame)[index];
 }
 static bool slot_empty(const XrtManagedSlot *slot) {
     return !slot->committed && !slot->pending.value && !slot->pending.allocation_bytes;
@@ -139,7 +144,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_frame_enter(XrtManagedRoot *root, size_t
         XrtManagedFrame *frame = (XrtManagedFrame *)pending.value;
         frame->root = root;
         frame->previous = root->top;
-        for (size_t i = 0; i < count; ++i) frame->slots[i] = (XrtManagedSlot){0};
+        for (size_t i = 0; i < count; ++i) frame_slots(frame)[i] = (XrtManagedSlot){0};
         XrtManagedHeader *committed = NULL;
         status = xrt_managed_commit(&pending, &committed);
         if (status == XRT_MANAGED_OK) root->top = *output = (XrtManagedFrame *)committed;
@@ -172,7 +177,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *frame, size
     XrtManagedHeader **output) {
     if (!output || *output) return XRT_MANAGED_ARGUMENT;
     if (!frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
-    *output = frame->slots[index].committed;
+    *output = frame_slots(frame)[index].committed;
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
@@ -181,7 +186,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, 
         from >= source->slot_count || to >= destination->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *target = slot_begin(destination, to);
     if (!target) return XRT_MANAGED_ARGUMENT;
-    XrtManagedSlot *input = &source->slots[from];
+    XrtManagedSlot *input = &frame_slots(source)[from];
     XrtManagedStatus status = !slot_empty(target) || !input->committed || input->pending.value ||
         input->pending.allocation_bytes ? XRT_MANAGED_ARGUMENT : XRT_MANAGED_OK;
     if (status == XRT_MANAGED_OK) { target->committed = input->committed; input->committed = NULL; }

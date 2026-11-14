@@ -212,6 +212,35 @@ static void replacement_and_extent(void) {
     OK(xrt_managed_root_destroy(&root));
     fixture_finish(&fixture);
 }
+static void partial_children(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    OK(xrt_managed_frame_enter(root, 1, &frame));
+    XrtManagedHeader *owned = make_value(&fixture, 31);
+    OK(xrt_managed_slot_adopt(frame, 0, &owned));
+    owned = make_value(&fixture, 34);
+    BAD(xrt_managed_slot_adopt(frame, 0, &owned));
+    CHECK(owned && ((Payload *)owned)->id == 34);
+    xrt_managed_drop(owned);
+    XrtBillingStats old_storage = xrt_billing_owner_stats(fixture.billing);
+    Payload *pending = prepare_value(&fixture, frame, 0, 32);
+    pending->child = make_value(&fixture, 33);
+    XrtManagedHeader *output = NULL;
+    BAD(xrt_managed_slot_prepare(frame, 0, fixture.ops, sizeof(Payload), &output));
+    CHECK(!output);
+    pending->capacity = SIZE_MAX;
+    BAD(xrt_managed_slot_commit(frame, 0));
+    OK(xrt_managed_slot_abort(frame, 0));
+    same_storage(old_storage, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_root_destroy(&root));
+    CHECK(fixture.audit.count == 4);
+    CHECK(event_position(&fixture.audit, 33) < event_position(&fixture.audit, 32));
+    CHECK(event_position(&fixture.audit, 32) < event_position(&fixture.audit, 31));
+    fixture_finish(&fixture);
+}
 
 typedef struct JumpContext { Fixture *fixture; XrtManagedRoot *root; } JumpContext;
 static void abandoned_frames(JumpContext *context, jmp_buf target) {
@@ -325,6 +354,7 @@ static void scalar_and_closed(void) {
 int main(void) {
     aliases_and_return();
     replacement_and_extent();
+    partial_children();
     nonlocal_cleanup();
     metadata_failures();
     scalar_and_closed();
