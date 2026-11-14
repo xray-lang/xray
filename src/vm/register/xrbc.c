@@ -302,7 +302,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_RET:
         return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
-            (function->result_kind == XR_RBC_BITS || rbc_direct_managed_kind(function->result_kind));
+            (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
+                rbc_direct_managed_kind(function->result_kind));
     case XR_RBC_RET0:
         return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:

@@ -9,6 +9,32 @@
 #include "register_fixed_call_fixture.h"
 
 static void test_raw_view_cold_returns(void) {
+    XrRbcRegisterKind slice_kinds[] = {XR_RBC_SLICE_I64, XR_RBC_VIEW_FRAME, XR_RBC_SLICE_I64};
+    XrRbcViewAccess slice_views[] = {
+        {.operation=XR_RBC_VIEW_FRAME_ENTER, .result={1, false}},
+        {.operation=XR_RBC_VIEW_RETURN, .result={2, false}, .count=2, .operands={{1, false}, {0, false}}},
+        {.operation=XR_RBC_VIEW_FRAME_LEAVE, .count=1, .operands={{1, false}}}};
+    uint32_t entry_code = XR_RBC_RET0;
+    uint32_t slice_code[] = {fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 0),
+        fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 1),
+        fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 2),
+        fixed_call_word(XR_RBC_RET, 2, 0, 0, 0)};
+    XrRbcFunction slice_functions[] = {
+        {.code=&entry_code, .code_count=1, .register_count=1},
+        {.code=slice_code, .code_count=4, .register_count=3, .parameter_count=1,
+            .register_kinds=slice_kinds, .register_kind_count=3, .result_kind=XR_RBC_SLICE_I64,
+            .view_accesses=slice_views, .view_access_count=3}};
+    XrRbcModule slice_module = {.functions=slice_functions, .function_count=2};
+    uint64_t result = 0;
+    CHECK(execute(&slice_module, 0, NULL, 0, &result) == XR_RBC_OK);
+    slice_code[1] = fixed_call_word(XR_RBC_MOV, 2, 0, 0, 0);
+    reject_prepare(&slice_module, 0, NULL, 0);
+    slice_code[1] = fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 1);
+    CHECK(xr_rbc_jump(&slice_code[2], 2, 3, 4));
+    reject_prepare(&slice_module, 0, NULL, 0);
+    slice_code[2] = fixed_call_word(XR_RBC_VIEW_ACCESS, 0, 0, 0, 2);
+    slice_functions[1].result_kind = XR_RBC_MAP_STRING_I64;
+    reject_prepare(&slice_module, 0, NULL, 0);
     for (unsigned callable = 0; callable < 2; ++callable) {
         XrRbcRegisterKind kinds[] = {XR_RBC_VIEW_FRAME, XR_RBC_BITS};
         XrRbcViewAccess views[] = {{.operation=XR_RBC_VIEW_FRAME_ENTER, .result={0, false}},
