@@ -1,0 +1,16 @@
+// The callee writes a different field of a possibly identical object: disjoint.
+final class Holder {
+    left: i64
+    right: i64
+    init() { this.left = 1; this.right = 2 }
+}
+fn bump(x: ref i64, other: Holder) -> i64 {
+    other.right = other.right + 10
+    x += 1
+    return x
+}
+fn main() {
+    const h = Holder()
+    print(bump(ref h.left, h))
+}
+main()

@@ -35,7 +35,7 @@ def main() -> None:
              "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
              "view_local", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
              "view_module_const", "view_conditional_cleanup", "view_phi", "view_copy_argument",
-             "view_copy_unused_parameter", "panic_nullable_view", "string_append_values", "string_append_ref",
+             "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
@@ -147,6 +147,8 @@ def main() -> None:
         "reject_view_live_write": b"during view lifetime normalization",
         "reject_view_copy_live_write": b"during view lifetime normalization",
         "reject_view_module_alias": b"during view lifetime normalization",
+        "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
+        "reject_view_capture_module_write": b"during view lifetime normalization",
         "reject_view_local_return": b"constructed XIR failed checking",
     }
     for name, diagnostic in rejected_sources.items():

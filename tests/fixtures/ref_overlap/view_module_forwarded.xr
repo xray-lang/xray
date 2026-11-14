@@ -1,0 +1,8 @@
+// A Slice of a module binding forwarded to a function that writes that binding.
+var G = [1, 2, 3]
+fn r(s: Slice<i64>) -> i64 {
+    G.push(9)
+    return s[0]
+}
+fn mid(s: Slice<i64>) -> i64 { return r(s) }
+print(mid(G[0:2]))

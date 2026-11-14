@@ -192,14 +192,14 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
         if(begin){status=xir_native_callable_verify(module,f);if(status!=XR_XIR_OK)break;}
         if (!view_boundary_supported(module->types,flags,body->result)&&!begin) {
             status=XR_XIR_BAD_TYPE;
-            if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_VIEW_BOUNDARY};
             break;
         }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
             if (!view_boundary_supported(module->types,flags,body->parameters[p])&&
                 !(callback&&p+1u==body->parameter_count)) {
                 status=XR_XIR_BAD_TYPE;
-                if(diagnostic)*diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+                if(diagnostic)*diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_VIEW_BOUNDARY};
             }
         }
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
@@ -217,8 +217,10 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
                 bool local=temporary&&((temporary->kind==XR_XIR_TYPE_SLICE&&temporary->element==XR_XIR_I64)||
                     (temporary->kind==XR_XIR_TYPE_MUT_SLICE&&
                      (temporary->element==XR_XIR_U8||temporary->element==XR_XIR_I64)));
-                if (!local)
+                if (!local) {
                     status=XR_XIR_BAD_TYPE;
+                    if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,i,XR_XIR_DIAGNOSTIC_VIEW_BOUNDARY};
+                }
             }
         }
     }

@@ -1,0 +1,1 @@
+9:5: error: E0382: Slice of module binding `G` conflicts with write by `r` via `r`

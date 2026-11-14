@@ -1,0 +1,11 @@
+// The second Slice argument views the module binding the callee pushes.
+var G = [1, 2, 3]
+fn r(s: Slice<i64>, t: Slice<i64>) -> i64 {
+    G.push(9)
+    return s[0] + t[0]
+}
+fn main() {
+    var local = [5, 6]
+    print(r(local[0:1], G[0:1]))
+}
+main()

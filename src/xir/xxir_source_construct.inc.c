@@ -353,10 +353,83 @@ static XrXirStatus source_suspend_has_parameter(void *context, const XirSuspendC
     return XR_XIR_OK;
 }
 
+/* Names a packed class field identity (declaring class << 12 | ordinal). */
+static bool source_field_name(const XrXirModule *module, uint32_t field, XrXirLiteral *owner,
+    XrXirLiteral *name) {
+    const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
+    uint32_t declaration = field >> 12, ordinal = field & 0xfffu;
+    if (!table || declaration >= table->count) return false;
+    if (table->declarations) {
+        const XrXirNominalDeclaration *d = &table->declarations[declaration];
+        if (ordinal >= d->field_count || !d->fields) return false;
+        *owner = d->name;
+        *name = d->fields[ordinal].name;
+        return true;
+    }
+    const XrXirNominalIdentity *d = table->identities ? &table->identities[declaration] : NULL;
+    if (!d || ordinal >= d->field_count || !d->fields) return false;
+    *owner = d->name;
+    *name = d->fields[ordinal].name;
+    return true;
+}
+
+static void source_field_borrow_explain(SourceContext *ctx, const XrXirModule *module,
+    const XrXirEffects *effects, const XrXirDiagnostic *location) {
+    XirModuleBorrowConflict conflict = {0};
+    XrXirStatus status = xir_effects_module_borrow_site(&ctx->compile, effects, module,
+        location->function, location->instruction, &conflict);
+    if (status != XR_XIR_OK || conflict.field == UINT32_MAX) {
+        source_fail(ctx, NULL, status != XR_XIR_OK ? status : XR_XIR_BAD_STRUCTURE,
+            "invalid class field access cause");
+        return;
+    }
+    XrXirLiteral owner = {0}, field = {0};
+    char subject[160];
+    if (source_field_name(module, conflict.field, &owner, &field))
+        status = source_format(ctx, subject, sizeof(subject), "class field `%.*s.%.*s`",
+            (int)owner.length, (const char *)owner.bytes, (int)field.length, (const char *)field.bytes) == XR_DIAG_OK ?
+            XR_XIR_OK : XR_XIR_BUDGET;
+    else
+        status = source_format(ctx, subject, sizeof(subject), "a class field") == XR_DIAG_OK ? XR_XIR_OK : XR_XIR_BUDGET;
+    const XrXirFunction *callee = conflict.callee < module->function_count ? &module->functions[conflict.callee] : NULL;
+    const XrXirFunction *access = conflict.access_function < module->function_count ?
+        &module->functions[conflict.access_function] : callee;
+    const char *name = callee ? callee->name : "indirect callable";
+    uint32_t length = callee ? callee->name_length : (uint32_t)strlen(name);
+    char message[512];
+    if (status == XR_XIR_OK && conflict.unknown)
+        status = source_format(ctx, message, sizeof(message),
+            "ref of %s is lent to `%.*s`, which may run unknown code that reaches it; "
+            "the run-time identity check this needs is not supported yet",
+            subject, (int)length, name) == XR_DIAG_OK ? XR_XIR_UNSUPPORTED : XR_XIR_BUDGET;
+    else if (status == XR_XIR_OK)
+        status = source_format(ctx, message, sizeof(message),
+            "ref of %s may be reached through another path by `%.*s` via `%.*s` while it is lent; "
+            "the run-time identity check this needs is not supported yet",
+            subject, (int)length, name, access ? (int)access->name_length : (int)length,
+            access ? access->name : name) == XR_DIAG_OK ? XR_XIR_UNSUPPORTED : XR_XIR_BUDGET;
+    uint32_t f = location->function;
+    ctx->module = ctx->bodies[f].module;
+    source_fail(ctx, ctx->bodies[f].node, status, status == XR_XIR_UNSUPPORTED ? message : "class field access diagnostic exhausted");
+    if (location->instruction < ctx->functions[f].instruction_count && ctx->bodies[f].debug_points) {
+        XrXirSourceRange range = ctx->bodies[f].debug_points[location->instruction].range;
+        if (range.line > 0) {
+            ctx->diagnostic.module = range.module;
+            ctx->diagnostic.line = range.line;
+            ctx->diagnostic.column = range.column;
+        }
+    }
+}
+
 /* Diagnostic text is copied before the immutable numeric owner is released. */
 static void source_effect_explain(void *context, const XrXirModule *module,
     const XrXirEffects *effects, const XrXirDiagnostic *location) {
     SourceContext *ctx = context;
+    if (ctx->diagnostic.status == XR_XIR_OK && location->reason == XR_XIR_DIAGNOSTIC_FIELD_BORROW &&
+        location->function < module->function_count) {
+        source_field_borrow_explain(ctx, module, effects, location);
+        return;
+    }
     if (ctx->diagnostic.status == XR_XIR_OK &&
         (location->reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_ACCESS ||
             location->reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_UNKNOWN) &&
@@ -377,14 +450,17 @@ static void source_effect_explain(void *context, const XrXirModule *module,
             &module->functions[conflict.access_function] : callee;
         const char *name = callee ? callee->name : "indirect callable";
         uint32_t length = callee ? callee->name_length : (uint32_t)strlen(name);
+        const char *loan = conflict.view == 1 ? "Slice" : conflict.view == 2 ? "MutSlice" : "ref";
+        const char *kind = conflict.view == 1 ? "write" : "access";
         if (conflict.unknown)
             status = source_format(ctx, message, sizeof(message),
-                "E0382: ref of module binding `%.*s` conflicts with unknown module access by `%.*s`",
-                (int)slot->name_length, slot->name, (int)length, name) == XR_DIAG_OK ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+                "E0382: %s of module binding `%.*s` conflicts with unknown module %s by `%.*s`",
+                loan, (int)slot->name_length, slot->name, kind, (int)length, name) == XR_DIAG_OK ?
+                XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         else
             status = source_format(ctx, message, sizeof(message),
-                "E0382: ref of module binding `%.*s` conflicts with access by `%.*s` via `%.*s`",
-                (int)slot->name_length, slot->name, (int)length, name,
+                "E0382: %s of module binding `%.*s` conflicts with %s by `%.*s` via `%.*s`",
+                loan, (int)slot->name_length, slot->name, kind, (int)length, name,
                 access ? (int)access->name_length : (int)length, access ? access->name : name) == XR_DIAG_OK ?
                     XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         uint32_t f = location->function;
@@ -456,7 +532,13 @@ static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, X
         location.reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_ACCESS ?
         "E0382: ref of module binding conflicts with callee module access" :
         location.reason == XR_XIR_DIAGNOSTIC_MODULE_BORROW_UNKNOWN ?
-        "E0382: ref of module binding conflicts with an unknown callee" : message;
+        "E0382: ref of module binding conflicts with an unknown callee" :
+        location.reason == XR_XIR_DIAGNOSTIC_VIEW_BOUNDARY ?
+        "this view type is not supported here yet: parameters, results and local views accept only "
+        "Slice<i64>, Slice<u8>, Ptr<u8> and MutPtr<u8>, and local views also MutSlice<i64> and MutSlice<u8>" :
+        location.reason == XR_XIR_DIAGNOSTIC_FIELD_BORROW ?
+        "ref of a class field may be reached through another path while it is lent; "
+        "the run-time identity check this needs is not supported yet" : message;
     source_fail(ctx, site, status, cause);
     bool task_transfer=location.reason==XR_XIR_DIAGNOSTIC_TASK_SENDABLE ||
         location.reason==XR_XIR_DIAGNOSTIC_TASK_CELL_CAPTURE;

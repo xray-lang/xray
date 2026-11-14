@@ -1,0 +1,17 @@
+// A lent class field reached by a closure the callee runs.
+final class Holder {
+    left: i64
+    init() { this.left = 1 }
+}
+fn apply(x: ref i64, f: fn() -> i64) -> i64 {
+    x += 1
+    return f() + x
+}
+fn main() {
+    const h = Holder()
+    print(apply(ref h.left, fn() -> i64 {
+        h.left = 5
+        return 0
+    }))
+}
+main()

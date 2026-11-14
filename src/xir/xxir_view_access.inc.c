@@ -206,6 +206,20 @@ static XrXirStatus view_access_same_owned_leaf(ViewAccess *a,const ViewAccessOri
         *same = ls && rs;
     return status;
 }
+/* A view parameter is granted at call entry. The caller refuses to lend a view
+ * of a module binding to code that may write that binding, so storage reached
+ * through a module binding is apart from every entry view of this body.
+ * Captures are excluded: a closure's captured view is checked by no call. */
+static XrXirStatus view_access_entry_module(ViewAccess *a,const XrXirViewLoanOrigin *loan,uint32_t value,bool *apart) {
+    *apart=false;bool input=false;uint32_t slot=0;
+    const XrXirModule *module=a->resolver->check.module;
+    const XrXirDeclarations *declarations=module->declarations;
+    if (!declarations || !declarations->functions || a->function>=module->function_count ||
+        loan->value<declarations->functions[a->function].capture_count) return XR_XIR_OK;
+    XrXirStatus status=view_access_entry_origin(a,loan,&input);
+    if (status==XR_XIR_OK && input) *apart=xir_module_slot_root(module,a->body,value,&slot);
+    return status;
+}
 static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner,bool writable,bool view,bool *blocked) {
     if (blocked) *blocked=false;
     if (view && value==owner && view_leaves_at(a->resolver->check.module->types,a->resolver->check.flags,
@@ -250,6 +264,9 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
     bool all_safe=true,all_blocked=true,any=false;
     for (ViewAccessOrigin *r=right;r;r=r->next) {
         if (!view) {
+            bool apart=false;status=view_access_entry_module(a,&r->event,value,&apart);
+            if (status!=XR_XIR_OK) return status;
+            if (apart) {all_blocked=false;any=true;continue;}
             ViewAccessDecision decision=VIEW_ACCESS_UNKNOWN;
             if (writable && r->event.kind==XR_XIR_VIEW_LOAN_CALL) {
                 uint32_t receiver=0,cell=0;bool known=false,present=false;

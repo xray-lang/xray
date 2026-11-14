@@ -1,0 +1,16 @@
+// A lent class field written through another parameter that may be the same object.
+final class Holder {
+    left: i64
+    init() { this.left = 1 }
+}
+fn bump(x: ref i64, other: Holder) -> i64 {
+    other.left = other.left + 10
+    x += 1
+    return x
+}
+fn main() {
+    const h = Holder()
+    print(bump(ref h.left, h))
+    print(h.left)
+}
+main()

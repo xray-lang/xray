@@ -1,0 +1,6 @@
+// A Slice of a module binding lent to a function that only reads that binding.
+var G = [1, 2, 3]
+fn r(s: Slice<i64>) -> i64 {
+    return s[0] + len(G)
+}
+print(r(G[0:2]))

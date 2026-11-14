@@ -1,0 +1,1 @@
+13:5: error: ref of class field `Holder.left` may be reached through another path by `bump` via `bump` while it is lent; the run-time identity check this needs is not supported yet

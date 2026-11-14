@@ -1,0 +1,10 @@
+var values = [11, 22, 33]
+fn grow() -> i64 {
+    values.push(44)
+    return 0
+}
+fn first(part: Slice<i64>) -> i64 {
+    grow()
+    return part[0]
+}
+print(first(values[0:2]))

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Exclusive ref places of one call, checked by `xray check` against independent expectations.
+"""Exclusive loans of a call, checked by `xray check` against independent expectations.
+
+The cases cover the ref places of one call that must not overlap, a module
+binding or class field lent by ref to code that may reach it by another path,
+and a Slice of a module binding lent to code that may write that binding.
 
 Every `<name>.xr` under tests/fixtures/ref_overlap is paired with `<name>.check`
 holding exactly one line, written from the overlap rules rather than captured

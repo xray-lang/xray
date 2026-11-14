@@ -32,8 +32,12 @@ XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *c
     const XrXirModule *module,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_effects_local_errors_verify_input(const XrXirCompileContext *context,
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+/* slot names a lent module binding, field a lent class field (both UINT32_MAX
+ * when the call conflicts with neither). view is 1 when the binding is lent as
+ * a Slice, 2 as a MutSlice, 0 by ref. */
 typedef struct XirModuleBorrowConflict {
-    uint32_t slot, callee, access_function, access_instruction;
+    uint32_t slot, field, callee, access_function, access_instruction;
+    uint8_t view;
     bool unknown;
 } XirModuleBorrowConflict;
 XR_FUNC XrXirStatus xir_effects_module_borrow_site(const XrXirCompileContext *, const XrXirEffects *,

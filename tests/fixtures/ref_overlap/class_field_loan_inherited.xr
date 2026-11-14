@@ -1,0 +1,19 @@
+// A Derived field lent while the callee writes the same field through a Base view.
+class Base {
+    value: i64
+    init() { this.value = 1 }
+}
+class Derived extends Base {
+    extra: i64
+    init() { super(); this.extra = 2 }
+}
+fn bump(x: ref i64, b: Base) -> i64 {
+    b.value = b.value + 10
+    x += 1
+    return x
+}
+fn main() {
+    const d = Derived()
+    print(bump(ref d.value, d))
+}
+main()

@@ -1,0 +1,10 @@
+var values = [11, 22, 33]
+fn main() {
+    const part: Slice<i64> = values[0:2]
+    const grow = fn() -> i64 {
+        values.push(44)
+        return part[0]
+    }
+    print(grow())
+}
+main()

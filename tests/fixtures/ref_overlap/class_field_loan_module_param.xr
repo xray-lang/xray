@@ -1,0 +1,17 @@
+// A module object passed by value, then its field lent while the callee writes the module binding's field.
+final class Holder {
+    left: i64
+    init() { this.left = 1 }
+}
+var H = Holder()
+fn bump(x: ref i64) -> i64 {
+    H.left = H.left + 10
+    x += 1
+    return x
+}
+fn run(h: Holder) -> i64 { return bump(ref h.left) }
+fn main() {
+    print(run(H))
+    print(H.left)
+}
+main()

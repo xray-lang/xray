@@ -1,0 +1,1 @@
+2:4: error: this view type is not supported here yet: parameters, results and local views accept only Slice<i64>, Slice<u8>, Ptr<u8> and MutPtr<u8>, and local views also MutSlice<i64> and MutSlice<u8>

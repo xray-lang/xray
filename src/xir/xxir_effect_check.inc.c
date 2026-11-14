@@ -42,7 +42,8 @@ typedef struct EffectCheckNode {
     bool task_creation, restricted, conversion, type_bound, refined_type_bound;
     uint8_t refined_conversion;
     bool queued, deferred, worker_blocked, cell_parameter, spawn, tuple, capture_contents, access_denied, value_upper, contents_value;
-    uint32_t module_seeds, module_sets[2];
+    /* ACCESS, ORIGIN and WRITE module terms; see xxir_effect_module_access.inc.c. */
+    uint32_t module_seeds, module_sets[3];
 } EffectCheckNode;
 
 typedef enum EffectCheckPendingKind {
@@ -74,8 +75,12 @@ typedef struct EffectCheckAlias {
     uint8_t module_transfer;
 } EffectCheckAlias;
 
+/* FIELD names a class field by its declaring class and ordinal; see
+ * effect_module_field_identity. It joins ACCESS sets only for fields some call
+ * lends by ref, so unrelated field traffic never grows the sets. */
 typedef enum EffectModuleTermKind {
-    EFFECT_MODULE_SLOT, EFFECT_MODULE_CALLBACK, EFFECT_MODULE_CAPTURE, EFFECT_MODULE_UNKNOWN
+    EFFECT_MODULE_SLOT, EFFECT_MODULE_CALLBACK, EFFECT_MODULE_CAPTURE, EFFECT_MODULE_UNKNOWN,
+    EFFECT_MODULE_FIELD
 } EffectModuleTermKind;
 
 typedef struct EffectModuleSeed {
@@ -191,6 +196,8 @@ typedef struct EffectCheckedRoots {
     EffectModuleMember *module_member;
     uint32_t *module_index;
     uint32_t module_seeds, module_seed_capacity, module_members, module_member_capacity, module_index_capacity;
+    uint32_t *lent_fields;
+    uint32_t lent_field_count, lent_field_capacity;
     bool module_access;
     bool liveness_checked, refinement_dirty;
 } EffectCheckedRoots;
@@ -247,6 +254,7 @@ static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     xr_compile_resources_free(roots->module_seed);
     xr_compile_resources_free(roots->module_member);
     xr_compile_resources_free(roots->module_index);
+    xr_compile_resources_free(roots->lent_fields);
     if (roots->terms) effect_terms_free(roots->terms);
     xr_compile_resources_free(roots->terms);
     xr_compile_resources_free(roots);
@@ -430,7 +438,7 @@ static EffectCheckNode effect_check_empty_node(uint32_t function) {
         .suspend_parameter = {UINT32_MAX, UINT32_MAX}, .suspend_instruction = {UINT32_MAX, UINT32_MAX},
         .suspend_seed_instruction = {UINT32_MAX, UINT32_MAX},
         .suspend_distance = {UINT32_MAX, UINT32_MAX}, .suspend_order = {UINT32_MAX, UINT32_MAX},
-        .module_seeds = UINT32_MAX, .module_sets = {UINT32_MAX, UINT32_MAX}};
+        .module_seeds = UINT32_MAX, .module_sets = {UINT32_MAX, UINT32_MAX, UINT32_MAX}};
 }
 
 #include "xxir_effect_module_access.inc.c"
@@ -442,6 +450,8 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
     roots->resources = build->memory->resources;
     roots->borrowed_types = build->module->types;
     roots->module_access = build->module->declarations && build->module->declarations->slot_count != 0;
+    if (!effect_module_lent_fields(build)) return build->status;
+    roots->module_access |= roots->lent_field_count != 0;
     roots->stringable_interface = roots->stringable_integer = roots->stringable_string = UINT32_MAX;
     roots->functions = build->module->function_count;
     roots->templates = roots->function_capacity = roots->functions;
@@ -1497,7 +1507,7 @@ static uint32_t effect_check_instance(EffectCheckBuild *build,
             if (n < source.parameters) node.escaping = true;
         }
         node.dependencies = node.consumers = node.aliases = node.calls = node.last_call = node.bindings = node.elements = UINT32_MAX;
-        node.module_seeds = node.module_sets[0] = node.module_sets[1] = UINT32_MAX;
+        node.module_seeds = node.module_sets[0] = node.module_sets[1] = node.module_sets[2] = UINT32_MAX;
         for (uint32_t bit = 0; bit < 2; ++bit)
             if (node.reason[bit] != UINT32_MAX) node.reason[bit] = row.first + n;
         for (uint32_t bit = 0; bit < 2; ++bit)

@@ -1,0 +1,8 @@
+// A Slice of a module binding lent to a function that passes the binding by ref.
+var G = [1, 2, 3]
+fn w(a: ref Array<i64>) { a.push(1) }
+fn r(s: Slice<i64>) -> i64 {
+    w(ref G)
+    return s[0]
+}
+print(r(G[0:2]))

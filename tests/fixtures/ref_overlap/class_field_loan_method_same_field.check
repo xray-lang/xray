@@ -1,0 +1,1 @@
+9:20: error: ref of class field `Buf.items` may be reached through another path by `fill` via `fill` while it is lent; the run-time identity check this needs is not supported yet

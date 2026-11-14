@@ -237,7 +237,8 @@ static void module_borrow_sparse_growth(void) {
     CHECK(roots->module_index_capacity>=512 && roots->module_members==count*2);
     for (uint32_t s=0;s<count;++s) {
         XirModuleBorrowConflict conflict={0};
-        CHECK(effect_module_conflict_set(roots,roots->function[0].root,EFFECT_MODULE_ACCESS,0,s,&conflict));
+        CHECK(effect_module_conflict_set(roots,roots->function[0].root,EFFECT_MODULE_ACCESS,0,
+            (EffectModuleTarget){EFFECT_MODULE_SLOT,EFFECT_MODULE_ACCESS,s},&conflict));
         CHECK(conflict.slot==s && conflict.access_instruction==s);
     }
     effect_checked_roots_free(roots);
@@ -267,7 +268,8 @@ static void module_borrow_owner_cases(void) {
     EffectCheckBuild build={.memory=&effect_context,.module=&fixture.module,.roots=roots};
     CHECK(effect_check_close(&build)==XR_XIR_OK && roots->module_members==members);
     memset(&fixture,0xCE,sizeof(fixture));
-    CHECK(effect_module_conflict_set(roots,roots->function[1].root,EFFECT_MODULE_ACCESS,1,0,&conflict));
+    CHECK(effect_module_conflict_set(roots,roots->function[1].root,EFFECT_MODULE_ACCESS,1,
+        (EffectModuleTarget){EFFECT_MODULE_SLOT,EFFECT_MODULE_ACCESS,0},&conflict));
     effect_checked_roots_free(roots);
     effect_mark_check(baseline);
 

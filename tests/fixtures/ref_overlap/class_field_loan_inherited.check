@@ -1,0 +1,1 @@
+17:5: error: ref of class field `Base.value` may be reached through another path by `bump` via `bump` while it is lent; the run-time identity check this needs is not supported yet

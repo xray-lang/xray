@@ -21,4 +21,10 @@ typedef struct XirEffectInput {
     XrCompileRequestControl *control;
 } XirEffectInput;
 
+/* Follows a place, Cell or view back through projections to the mutable module
+ * binding whose storage it denotes. A class field step ends the walk: an object
+ * is reached by identity, never by the binding's name. */
+XR_FUNC bool xir_module_slot_root(const XrXirModule *module, const XrXirFunction *body, uint32_t value,
+    uint32_t *slot);
+
 #endif // XXIR_EFFECT_INPUT_INTERNAL_H

@@ -1,0 +1,17 @@
+// A method lends this.items to a method that only touches this.count.
+final class Buf {
+    items: Array<i64>
+    count: i64
+    init() { this.items = []; this.count = 0 }
+    fill(xs: ref Array<i64>) -> i64 {
+        xs.push(1)
+        this.count = this.count + 1
+        return len(xs)
+    }
+    run() -> i64 { return this.fill(ref this.items) }
+}
+fn main() {
+    const b = Buf()
+    print(b.run())
+}
+main()

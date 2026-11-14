@@ -1,0 +1,15 @@
+// A method lends this.items to another method that reads this.items.
+final class Buf {
+    items: Array<i64>
+    init() { this.items = [] }
+    fill(xs: ref Array<i64>) -> i64 {
+        xs.push(1)
+        return len(this.items)
+    }
+    run() -> i64 { return this.fill(ref this.items) }
+}
+fn main() {
+    const b = Buf()
+    print(b.run())
+}
+main()

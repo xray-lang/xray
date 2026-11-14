@@ -1,0 +1,11 @@
+// MutSlice parameters are not supported yet; the refusal says so.
+fn w(s: MutSlice<i64>) -> i64 {
+    s[0] = 7
+    return 1
+}
+fn main() {
+    var local = [1, 2, 3]
+    print(w(local[0:2]))
+    print(local[0])
+}
+main()
