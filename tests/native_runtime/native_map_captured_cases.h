@@ -29,6 +29,9 @@ static void native_map_captured_root(void *opaque) {
     bool *completed = opaque;
     XrtValueRoot *root = xrt_value_root_current(1);
     XrXirTypeArena *arena = native_map_cell_types();
+    uint64_t unchanged = 71;
+    CHECK(xir_native_type_arena_string_i64_map_bytes(arena, &unchanged) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(unchanged == 71);
     XrXirValueAdmission admission = {arena, xrt_value_root_domain(root, 1),
         NULL, NULL, UINT64_MAX, UINT64_MAX};
     XrtMap *initial = native_map_create();
@@ -87,6 +90,10 @@ static void native_map_captured_initialize(void *opaque) {
     XrXirTypeArena *source = NULL, *different = NULL;
     uint64_t bytes = 0;
     OK(xrt_map_types_new(UINT64_MAX, &source, &bytes));
+    uint64_t observed = 0;
+    OK(xir_native_type_arena_string_i64_map_bytes(source, &observed));
+    CHECK(observed == bytes && observed);
+    CHECK(xir_native_type_arena_string_i64_map_bytes(source, NULL) == XR_XIR_VALUE_BAD_ARGUMENT);
     OK(xrt_map_root_bind_types(source));
     OK(xrt_map_root_bind_types(source));
     const XrXirTypeArena *borrowed = NULL;
