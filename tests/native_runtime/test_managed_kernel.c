@@ -91,6 +91,10 @@ static XrtRuntimeTypeSpec payload_spec(Provider *provider, const size_t *fields,
 static void balanced(Audit *audit) {
     CHECK(!atomic_load(&audit->bytes) && !atomic_load(&audit->blocks) && atomic_load(&audit->finalized) == 1);
 }
+static void *retire_worker(void *value) {
+    xrt_managed_drop(value);
+    return NULL;
+}
 
 static void dynamic_retirement(void) {
     Audit audit = {0};
@@ -123,7 +127,9 @@ static void dynamic_retirement(void) {
     provider_drop(provider);
     CHECK(!atomic_load(&audit.finalized) && atomic_load(&audit.callbacks) == 0);
     CHECK(xrt_billing_owner_stats(left).closed && xrt_billing_owner_stats(right).closed);
-    xrt_managed_drop(root);
+    xr_thread_t retire;
+    CHECK(xr_thread_create(&retire, retire_worker, root));
+    CHECK(xr_thread_join(retire, NULL) == 0);
     CHECK(atomic_load(&audit.callbacks) == 2);
     balanced(&audit);
 }

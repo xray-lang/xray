@@ -296,6 +296,10 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes
     }
     memset(memory, 0, bytes);
     XrtManagedHeader *value = memory;
+    for (size_t i = 0; i < spec->child_count; ++i) {
+        XrtManagedHeader *empty = NULL;
+        memcpy((unsigned char *)memory + spec->child_offsets[i], &empty, sizeof(empty));
+    }
     xr_signed_rc_initialize(&value->references);
     value->ops = ops;
     if (spec->stride) {
