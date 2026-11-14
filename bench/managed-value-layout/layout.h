@@ -108,6 +108,26 @@ static inline void xr_mvl_drop(XrMvlHeader *header) {
         header->ops->destroy(header);
 }
 
+/* Terminal helper for the trusted String release below. Its caller has already
+ * received LAST from the shared counter primitive; this does not drop another
+ * reference. Both the generic String ops and this entry use one leaf kernel. */
+XR_FUNC void xr_mvl_string_dispose_last(XrMvlString *);
+
+/* The pointer carries one real String owner, not a unique-count assertion.
+ * Other local or negative-band aliases may remain; only LAST destroys storage.
+ * This benchmark-local typed entry does not admit external untyped carriers. */
+static inline void xr_mvl_string_drop(XrMvlString *string) {
+    if (!string)
+        return;
+    XrSignedRcRelease released = xr_signed_rc_release(&string->header.refs);
+    if (released == XR_SIGNED_RC_INVALID) {
+        fputs("managed object reference count underflow\n", stderr);
+        abort();
+    }
+    if (released == XR_SIGNED_RC_LAST)
+        xr_mvl_string_dispose_last(string);
+}
+
 XR_FUNC XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain);
 XR_FUNC XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value);
 XR_FUNC XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value);
