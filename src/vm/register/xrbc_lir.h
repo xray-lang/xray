@@ -63,7 +63,11 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);
 // explicitly or keep their original immutable borrowed lifetime.
 XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *program, const uint64_t *arguments,
     size_t argument_count, XrRbcExecution **output);
-// The view and everything reachable through it borrow the program.
+// The view and everything reachable through it borrow the immutable program.
+// Publication completes bytecode admission once; preparation consumes that
+// owned result. Writing through a cast or changing nested descriptors violates
+// this API, including while no execution is active. Opaque metadata owners
+// expose lifetime operations, not mutation of the admitted representation.
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program);
 // Borrowed immutable metadata, including a real owner for empty tables. Retain
 // before using it beyond Program destruction; release only references you own.

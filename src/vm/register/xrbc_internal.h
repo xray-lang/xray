@@ -122,8 +122,14 @@ static inline uint32_t xr_rbc_array_ref_family(XrRbcRegisterKind kind) {
     return XR_RBC_ARRAY_FAMILY_COUNT;
 }
 
-/* Both compiler publication and preparation use this complete receiver.
+/* Compiler publication and public raw preparation use this complete receiver.
  * It does not allocate an execution or retain the borrowed module/locations. */
 XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *, const XrtLocationOwner *);
+
+/* Private receiving path for an immutable module that has already passed
+ * complete admission. Runtime entry arguments and allocation failures remain
+ * checked. Public raw callers use xr_rbc_module_prepare instead. */
+XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *, uint32_t entry,
+    const uint64_t *arguments, size_t argument_count, XrtLocationOwner *, XrRbcExecution **);
 
 #endif // XRBC_INTERNAL_H

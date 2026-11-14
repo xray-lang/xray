@@ -29,6 +29,7 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
 static size_t attempts, fail_at = SIZE_MAX, live_allocations;
 static bool in_compile_admission;
 static unsigned admission_attempts,admission_failure;
+static unsigned compile_admission_calls, admission_source_map_passes;
 static size_t fail_home_size;
 static enum {LITERAL_NO_FAULT,LITERAL_MAP_FAULT,LITERAL_PAYLOAD_FAULT,LITERAL_TABLE_FAULT,LITERAL_TABLE_INITIAL_FAULT} literal_fault;
 static size_t literal_payload_count, literal_payload_failure, literal_table_requests;
@@ -109,9 +110,18 @@ static void *allocate_location(size_t size) {
 #include "runtime/native/xnative_locations.c"
 #undef xr_malloc
 #define xr_malloc(size) allocate(size)
+/* Each successful full admission queries the location inventory once. Observe
+ * that real receiver without adding a production admission counter or flag. */
+static size_t observed_location_count(const XrtLocationOwner *owner) {
+    ++admission_source_map_passes;
+    return xrt_locations_count(owner);
+}
+#define xrt_locations_count observed_location_count
 #include "vm/register/xrbc.c"
+#undef xrt_locations_count
 // Scope fault injection to the actual common admission called before publish.
 static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocationOwner *locations) {
+    ++compile_admission_calls;
     in_compile_admission=true;admission_attempts=0;
     XrRbcStatus status=xr_rbc_module_admit(module,locations);
     in_compile_admission=false;return status;
@@ -130,6 +140,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_callable_composition_fixture.h"
 #include "../lir/lir_tuple_fixture.h"
 #include "../lir/lir_record_fixture.h"
+#include "lir_bytecode_owned_prepare_cases.h"
 
 static void callable_factory_failures(bool scopes) {
     XrLirModule *module = NULL;
@@ -1084,6 +1095,7 @@ static void record_compiler_failures(void) {
     attempts = 0;
 }
 int main(void) {
+    owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
     composition_compiler_failures();
