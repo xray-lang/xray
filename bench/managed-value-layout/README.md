@@ -184,8 +184,17 @@ window. Full workloads and ratios require a fixed-input, alternating-order plan
 and must retain all samples; this directory does not create a new gate or change
 existing performance thresholds.
 
+The portable `run.py` driver measures all six original and variant workloads,
+five alternating rounds each, with the corresponding unchanged raw workload.
+The automatic five-provider workflow retains the original `push` and `map`
+ratio limits of 1.3 and applies the same limit to `push-direct` and `map-take`.
+`push-prepared` remains the aggregate-ABI diagnostic control; `record` can fold
+and still has no heap-allocation ratio gate. Every sample must execute and match
+its independent golden, including the diagnostic controls. This is prototype
+evidence, not product or formal multi-layout qualification.
+
 Production integration, general carriers, shared graph publication, class identity, for-ref,
 external imports, Root/unwind integration, SAN, cross-platform compilation,
-module-summary serialization and CI performance blocking remain **OPEN**. No
+module-summary serialization and mainline CI admission remain **OPEN**. No
 micro-VM was implemented; sharing the layout with product execution is a design
 proposal pending actual integration and validation.
