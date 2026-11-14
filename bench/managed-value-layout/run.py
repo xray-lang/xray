@@ -127,6 +127,9 @@ def measure(args) -> int:
             or prepared.get("ratioCases") != list(RATIO_CASES)):
         raise ValueError("The prepared prototype identity or fixed workload schema differs")
     evidence.verify_fingerprints(prepared["fingerprints"])
+    frozen = {str(Path(row["path"]).resolve()) for row in prepared["fingerprints"]}
+    if any(str(Path(path).resolve()) not in frozen for path in prepared["products"].values()):
+        raise ValueError("A measured executable is absent from the frozen inputs")
     args.work.mkdir(parents=True)
     result = {"state": "RUNNING", "prepared": evidence.fingerprint(args.prepared), "samples": [],
               "medians": {}, "ratios": {}, "prototypeOnly": True, "productQualification": "NOT_RUN",
@@ -166,7 +169,7 @@ def measure(args) -> int:
         result["layoutGates"] = {case: {"ratio": result["ratios"].get(case), "limit": 1.3,
                                        "pass": complete and result["ratios"].get(case, float("inf")) <= 1.3}
                                  for case in RATIO_CASES}
-        if args.gate and not all(gate["pass"] for gate in result["layoutGates"].values()):
+        if args.gate and complete and not all(gate["pass"] for gate in result["layoutGates"].values()):
             result["state"] = "FAIL_LAYOUT_RATIO"
         return 0 if result["state"] == "PASS_EXECUTION_ONLY" else 1
     except BaseException as error:
