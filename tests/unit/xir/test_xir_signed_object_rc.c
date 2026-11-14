@@ -19,6 +19,29 @@ enum { THREAD_COUNT = 8, REFERENCE_ROUNDS = 100000, OWNER_HANDOFFS = 2000 };
 static XirObject shared;
 static _Atomic(bool) started;
 
+static void counter_boundaries(void) {
+    _Atomic(int32_t) references;
+    xr_signed_rc_initialize(&references);
+    CHECK(xr_signed_rc_retain(&references) && xr_signed_rc_read(&references) == 2);
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_ALIVE);
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_LAST);
+    CHECK(xr_signed_rc_read(&references) == 0 && !xr_signed_rc_retain(&references));
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_INVALID);
+    const int32_t limits[] = {INT32_MAX, -INT32_MAX, INT32_MIN};
+    for (size_t i = 0; i < sizeof(limits) / sizeof(*limits); ++i) {
+        atomic_store_explicit(&references, limits[i], memory_order_relaxed);
+        CHECK(!xr_signed_rc_retain(&references));
+        CHECK(xr_signed_rc_read(&references) == limits[i]);
+    }
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_INVALID);
+    CHECK(xr_signed_rc_read(&references) == INT32_MIN);
+    atomic_store_explicit(&references, -2, memory_order_release);
+    CHECK(!xr_signed_rc_unique(&references));
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_ALIVE);
+    CHECK(xr_signed_rc_unique(&references) && xr_signed_rc_read(&references) == 1);
+    CHECK(xr_signed_rc_release(&references) == XR_SIGNED_RC_LAST);
+}
+
 static void *count_worker(void *unused) {
     (void)unused;
     while (!atomic_load_explicit(&started, memory_order_acquire)) xr_thread_yield();
@@ -42,6 +65,7 @@ static void *handoff_reader(void *opaque) {
 }
 
 int main(void) {
+    counter_boundaries();
     xr_thread_t threads[THREAD_COUNT];
     xir_object_initialize(&shared);
     atomic_store_explicit(&shared.references, -1, memory_order_release);

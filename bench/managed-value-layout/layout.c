@@ -55,7 +55,11 @@ static void *mvl_resize(XrMvlDomain *domain, void *memory, size_t old_bytes, siz
 
 static void mvl_header_init(XrMvlHeader *header, XrMvlDomain *domain,
                             const XrMvlTypeOps *ops, size_t bytes) {
-    *header = (XrMvlHeader) {1, bytes, domain, ops, 1};
+    xr_signed_rc_initialize(&header->refs);
+    header->flags = 0;
+    header->allocation_bytes = bytes;
+    header->domain = domain;
+    header->ops = ops;
 }
 
 static void mvl_header_free(XrMvlHeader *header) {
@@ -117,7 +121,7 @@ XR_FUNCDEF XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t valu
     if (array->length == SIZE_MAX ||
         !xr_mvl_capacity(array->capacity, array->length + 1, sizeof(int64_t), &capacity))
         return XR_MVL_OOM;
-    if (array->header.refs != 1) {
+    if (!xr_signed_rc_unique(&array->header.refs)) {
         XrMvlArray *copy = mvl_array_copy(array, capacity);
         if (!copy)
             return XR_MVL_OOM;
@@ -249,7 +253,7 @@ XR_FUNCDEF XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key,
         return XR_MVL_OOM;
     }
     XrMvlStatus status = XR_MVL_OOM;
-    if (map->header.refs != 1) {
+    if (!xr_signed_rc_unique(&map->header.refs)) {
         XrMvlMap *copy = mvl_map_copy(map, capacity, &status);
         if (!copy) {
             if (!found)

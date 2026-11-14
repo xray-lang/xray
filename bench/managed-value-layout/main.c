@@ -17,10 +17,11 @@ static void mvl_layout(void) {
 #define MVL_FIELD(type, field) printf(" " #field "=%zu", offsetof(type, field))
     MVL_TYPE(XrMvlHeader);
     MVL_FIELD(XrMvlHeader, refs);
+    printf(" refs_bits=%zu", sizeof(((XrMvlHeader *) 0)->refs) * CHAR_BIT);
+    MVL_FIELD(XrMvlHeader, flags);
     MVL_FIELD(XrMvlHeader, allocation_bytes);
     MVL_FIELD(XrMvlHeader, domain);
     MVL_FIELD(XrMvlHeader, ops);
-    MVL_FIELD(XrMvlHeader, state);
     puts("");
     MVL_TYPE(XrMvlArray);
     MVL_FIELD(XrMvlArray, header);

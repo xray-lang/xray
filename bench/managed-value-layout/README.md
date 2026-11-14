@@ -36,7 +36,7 @@ It is a state check, not a timing sample. No timing result exists yet.
 
 ## Layout and reusable algorithms
 
-Heap objects begin with one fixed header: local RC/state, allocation extent,
+Heap objects begin with one fixed 32-byte header: signed atomic RC, flags, allocation extent,
 allocator domain, and a stable `TypeOps` pointer. `TypeOps` are static for this
 executable and therefore outlive every object. They are used at final drop, not
 looked up on every get/set. There is no XIR value, type arena, owner hash table,
@@ -57,6 +57,12 @@ helpers in `algorithms.h`. The raw-C control shares these algorithms, not a
 managed-value runtime. Domain accounting is constant-time on allocation/free;
 ordinary element access does not consult it.
 
+Counter-only primitives come from `src/base/xsigned_rc.h`, shared with the
+unchanged 72-byte production XIR object header. Positive counts use local relaxed
+loads/stores; negative counts use atomic CAS. Unique `-1` becomes local `+1` with
+acquire ordering. Counter code has no XIR dependency. The former 40-byte local
+header and its complete measurements remain a separate fixed baseline.
+
 The intentional representation differences are managed heap headers/domain
 accounting, real RC on copied/retained objects, and COW when an object is shared.
 The raw control manually transfers unique key storage and has no RC or COW.
@@ -66,9 +72,10 @@ a claim that the compiler has proved hoisting or escape analysis.
 
 ## COW, borrow, cleanup and future execution integration
 
-Each logical heap copy owns a real RC reference. This experiment supports local,
-single-threaded references only. Shared atomic RC and conversion to local RC are
-not implemented and must follow the existing language rules before promotion.
+Each logical heap copy owns a real RC reference. The fixed workloads use local
+objects. Counter operations support the production local/shared bands and unique
+handoff, but complete graph publication and cross-execution APIs are not
+implemented. A negative counter alone is not shared-binding mutation authority.
 Array SET/PUSH and Map SET receive already evaluated RHS/key/value arguments,
 then resolve the current binding. Slow paths prepare all fallible allocation
 and key references before publishing. Failure preserves the old pointer,
@@ -104,7 +111,7 @@ Compile the two standalone executables without LTO, using the same provider,
 optimization flags and allocator backend for both:
 
 ```
-cl /std:c11 /O2 /DNDEBUG /DXR_OS_WINDOWS /I <source>/src main.c layout.c verify.c escape.c /Fe:managed.exe
+cl /std:c11 /experimental:c11atomics /O2 /DNDEBUG /DXR_OS_WINDOWS /I <source>/src main.c layout.c verify.c escape.c /Fe:managed.exe
 cl /std:c11 /O2 /DNDEBUG /DXR_OS_WINDOWS /I <source>/src raw.c raw_keys.c /Fe:raw.exe
 ```
 
@@ -122,7 +129,7 @@ window. Full workloads and ratios require a fixed-input, alternating-order plan
 and must retain all samples; this directory does not create a new gate or change
 existing performance thresholds.
 
-Production integration, general carriers, shared RC, class identity, for-ref,
+Production integration, general carriers, shared graph publication, class identity, for-ref,
 external imports, Root/unwind integration, SAN, cross-platform compilation,
 module-summary serialization and CI performance blocking remain **OPEN**. No
 micro-VM was implemented; sharing the layout with product execution is a design

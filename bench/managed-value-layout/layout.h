@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * layout.h - Typed local managed objects with direct payload access
+ * layout.h - Typed managed objects with shared signed counter primitives
  *
  * KEY CONCEPT:
  *   Trusted typed pointers carry no compiler arena or execution-frame dependency.
@@ -14,6 +14,7 @@
 #define XR_MVL_LAYOUT_H
 
 #include "algorithms.h"
+#include "base/xsigned_rc.h"
 
 typedef enum {
     XR_MVL_OK,
@@ -36,12 +37,17 @@ typedef struct {
 } XrMvlTypeOps;
 
 struct XrMvlHeader {
-    size_t refs;
+    _Atomic(int32_t) refs;
+    uint32_t flags;
     size_t allocation_bytes;
     XrMvlDomain *domain;
     const XrMvlTypeOps *ops;
-    uint32_t state;
 };
+
+_Static_assert(sizeof(XrMvlHeader) == 32, "the prototype uses a 32-byte managed header");
+_Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) == 4 &&
+    offsetof(XrMvlHeader, allocation_bytes) == 8 && offsetof(XrMvlHeader, domain) == 16 &&
+    offsetof(XrMvlHeader, ops) == 24, "the prototype header has explicit field offsets");
 
 typedef struct {
     XrMvlHeader header;
@@ -85,18 +91,19 @@ static inline void xr_mvl_domain_init(XrMvlDomain *domain) {
 }
 
 static inline bool xr_mvl_retain(XrMvlHeader *header) {
-    assert(header && header->refs && header->state == 1);
-    if (header->refs == SIZE_MAX)
-        return false;
-    ++header->refs;
-    return true;
+    assert(header);
+    return xr_signed_rc_retain(&header->refs);
 }
 
 static inline void xr_mvl_drop(XrMvlHeader *header) {
     if (!header)
         return;
-    assert(header->refs && header->state == 1);
-    if (--header->refs == 0)
+    XrSignedRcRelease released = xr_signed_rc_release(&header->refs);
+    if (released == XR_SIGNED_RC_INVALID) {
+        fputs("managed object reference count underflow\n", stderr);
+        abort();
+    }
+    if (released == XR_SIGNED_RC_LAST)
         header->ops->destroy(header);
 }
 
@@ -114,7 +121,7 @@ XR_FUNC bool xr_mvl_verify(void);
 
 static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
     XrMvlArray *array = *binding;
-    if (array->header.refs == 1 && array->length < array->capacity) {
+    if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
         array->data[array->length++] = value;
         return XR_MVL_OK;
     }
@@ -125,7 +132,7 @@ static inline XrMvlStatus xr_mvl_array_set(XrMvlArray **binding, size_t index, i
     XrMvlArray *array = *binding;
     if (index >= array->length)
         return XR_MVL_BOUNDS;
-    if (array->header.refs != 1)
+    if (!xr_signed_rc_unique(&array->header.refs))
         return xr_mvl_array_set_slow(binding, index, value);
     array->data[index] = value;
     return XR_MVL_OK;
@@ -154,7 +161,7 @@ static inline bool xr_mvl_map_get(const XrMvlMap *map, const XrMvlString *key, i
 static inline XrMvlStatus xr_mvl_map_set(XrMvlMap **binding, XrMvlString *key, int64_t value) {
     XrMvlMap *map = *binding;
     XrMvlMapSlot *slot = &map->slots[xr_mvl_map_probe(map, key)];
-    if (map->header.refs != 1 ||
+    if (!xr_signed_rc_unique(&map->header.refs) ||
         (!slot->key && !xr_mvl_map_room(map->length, map->capacity)))
         return xr_mvl_map_set_slow(binding, key, value);
     if (!slot->key) {
