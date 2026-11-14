@@ -12,6 +12,30 @@ class RecoveryRequired(RuntimeError):
     pass
 
 
+GROUP_EXIT_SECONDS = 5.0
+
+
+def _kill_group(group: int) -> None:
+    """Kill every remaining member of a command's POSIX process group.
+
+    Darwin answers EPERM rather than ESRCH while the group holds only exiting
+    processes that have not been reaped yet. Those are retried until the group
+    disappears; a group that still refuses after the deadline is reported
+    instead of being treated as gone.
+    """
+    deadline = time.monotonic() + GROUP_EXIT_SECONDS
+    while True:
+        try:
+            os.killpg(group, signal.SIGKILL)
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise RecoveryRequired("Command process group refused termination") from None
+            time.sleep(0.01)
+
+
 def run_child(command: list[str], *, timeout: float | None = None, **kwargs) -> int:
     """Wait for the leader; cleanup completes before a timeout is propagated."""
     if os.name != "nt":
@@ -19,10 +43,7 @@ def run_child(command: list[str], *, timeout: float | None = None, **kwargs) -> 
         try:
             return child.wait(timeout=timeout)
         finally:
-            try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            _kill_group(child.pid)
             child.wait()
     return _run_windows(command, timeout=timeout, **kwargs)
 
