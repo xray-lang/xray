@@ -290,7 +290,50 @@ static void concurrent_final_free(void) {
     balanced(&audit);
 }
 
-int main(void) {
+static void deep_chain_retirement(void) {
+    typedef struct Node { XrtManagedHeader header; XrtManagedHeader *child; } Node;
+    const size_t count = 100000;
+    size_t field = offsetof(Node, child);
+    XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(Node), .alignment=alignof(Node),
+        .capacity_offset=SIZE_MAX, .child_offsets=&field, .child_count=1};
+    XrtBillingOwner *owner = NULL;
+    XrtRuntimeTypePlan *plan = NULL;
+    XrtManagedOps *ops = NULL;
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &owner));
+    OK(xrt_runtime_type_plan_new(owner, &spec, &plan));
+    OK(xrt_managed_ops_bind(owner, plan, &ops));
+    XrtBillingStats baseline = xrt_billing_owner_stats(owner);
+    XrtManagedHeader *head = NULL;
+    for (size_t i = 0; i < count; ++i) {
+        XrtManagedPending pending = {0};
+        OK(xrt_managed_prepare(ops, sizeof(Node), &pending));
+        CHECK(!((Node *)pending.value)->child);
+        ((Node *)pending.value)->child = head;
+        head = NULL;
+        OK(xrt_managed_commit(&pending, &head));
+    }
+    size_t actual = 0;
+    for (Node *node = (Node *)head; node; node = (Node *)node->child) {
+        CHECK(++actual <= count && xr_signed_rc_read(&node->header.references) == 1);
+    }
+    CHECK(actual == count && xrt_billing_owner_stats(owner).blocks == baseline.blocks + count &&
+        xrt_billing_owner_stats(owner).bytes == baseline.bytes + count * sizeof(Node));
+    xrt_managed_ops_drop(ops);
+    xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_close(owner);
+    xrt_billing_owner_drop(owner);
+    puts("built and verified 100000 single-owner nodes");
+    CHECK(fflush(stdout) == 0);
+    xrt_managed_drop(head);
+    puts("deep managed chain passed");
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "deep-chain")) {
+        deep_chain_retirement();
+        return 0;
+    }
+    CHECK(argc == 1);
     default_provider_retirement();
     dynamic_retirement();
     failure_atomicity();
