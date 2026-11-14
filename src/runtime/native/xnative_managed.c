@@ -12,6 +12,7 @@
 #include "xnative_managed.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
+#include "base/xmax_align.h"
 #include <stdalign.h>
 #include <string.h>
 
@@ -141,7 +142,7 @@ static void billing_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
 
 static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     if (!spec || spec->fixed_size < sizeof(XrtManagedHeader) || spec->alignment < alignof(XrtManagedHeader) ||
-        spec->alignment > alignof(max_align_t) || (spec->alignment & (spec->alignment - 1)) ||
+        spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
         !lease_valid(spec->code) || (spec->child_count && !spec->child_offsets) ||
         spec->child_count > (SIZE_MAX - sizeof(XrtRuntimeTypePlan)) / sizeof(size_t)) return false;
     if (spec->stride ? spec->capacity_offset < sizeof(XrtManagedHeader) ||

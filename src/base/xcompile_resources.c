@@ -14,6 +14,7 @@
 #include "xcompile_resources.h"
 #include "xchecks.h"
 #include "xmalloc.h"
+#include "xmax_align.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -48,18 +49,6 @@ static bool compile_release_locked(XrCompileResources *resources) {
     return true;
 }
 
-/* Microsoft's C headers omit max_align_t; these scalar types cover its
- * fundamental alignments without depending on an OS allocation API. */
-#if defined(XR_COMPILER_MSVC)
-typedef union CompileMaxAlignment {
-    long double floating;
-    uint64_t integer;
-    void *pointer;
-} CompileMaxAlignment;
-#else
-typedef max_align_t CompileMaxAlignment;
-#endif
-
 union CompileAllocation {
     struct {
         XrCompileResources *resources;
@@ -67,11 +56,11 @@ union CompileAllocation {
         CompileAllocation *left, *right;
         unsigned height;
     } info;
-    CompileMaxAlignment alignment;
+    XrMaxAlignment alignment;
 };
 
 _Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Allocation sizes must fit memory accounting");
-_Static_assert(sizeof(CompileAllocation) % _Alignof(CompileMaxAlignment) == 0,
+_Static_assert(sizeof(CompileAllocation) % _Alignof(XrMaxAlignment) == 0,
     "Allocation payload must preserve fundamental alignment");
 
 static uint64_t compile_saturated_add(uint64_t value, uint64_t added) {
