@@ -364,6 +364,11 @@ static void source_effect_explain(void *context, const XrXirModule *module,
         XirModuleBorrowConflict conflict = {0};
         XrXirStatus status = xir_effects_module_borrow_site(&ctx->compile, effects, module,
             location->function, location->instruction, &conflict);
+        if (status == XR_XIR_OK && conflict.unknown_owner) {
+            source_fail(ctx, ctx->bodies[location->function].node, XR_XIR_BAD_TYPE,
+                "E0382: unresolved view owner cannot be proven disjoint from callee module access");
+            return;
+        }
         if (status != XR_XIR_OK || conflict.slot >= ctx->slot_count) {
             source_fail(ctx, NULL, status != XR_XIR_OK ? status : XR_XIR_BAD_STRUCTURE,
                 "invalid module binding access cause");
@@ -377,14 +382,15 @@ static void source_effect_explain(void *context, const XrXirModule *module,
             &module->functions[conflict.access_function] : callee;
         const char *name = callee ? callee->name : "indirect callable";
         uint32_t length = callee ? callee->name_length : (uint32_t)strlen(name);
+        const char *borrow = conflict.view ? "view" : "ref";
         if (conflict.unknown)
             status = source_format(ctx, message, sizeof(message),
-                "E0382: ref of module binding `%.*s` conflicts with unknown module access by `%.*s`",
-                (int)slot->name_length, slot->name, (int)length, name) == XR_DIAG_OK ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
+                "E0382: %s of module binding `%.*s` conflicts with unknown module access by `%.*s`",
+                borrow, (int)slot->name_length, slot->name, (int)length, name) == XR_DIAG_OK ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         else
             status = source_format(ctx, message, sizeof(message),
-                "E0382: ref of module binding `%.*s` conflicts with access by `%.*s` via `%.*s`",
-                (int)slot->name_length, slot->name, (int)length, name,
+                "E0382: %s of module binding `%.*s` conflicts with access by `%.*s` via `%.*s`",
+                borrow, (int)slot->name_length, slot->name, (int)length, name,
                 access ? (int)access->name_length : (int)length, access ? access->name : name) == XR_DIAG_OK ?
                     XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         uint32_t f = location->function;

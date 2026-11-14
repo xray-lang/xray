@@ -54,8 +54,8 @@ typedef struct XirViewRootRequest {
 /* The module generation and compile context outlive this borrowed owner.
  * The module has complete ordinary type, structure and SSA admission.
  * Parameter roots stay symbolic in their function; actual shared captures
- * are still independently replayed. Module Cell loads follow every actual
- * initializer producer, including grouped initialization. No saved
+ * are still independently replayed. Module Cell loads name their qualified
+ * current binding instead of replaying an initializer value. No saved
  * observation, source bit or caller-supplied root grants access permission. */
 XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext *context,XirEffectInput input,XirViewRootResolver **output,XrXirDiagnostic *diagnostic);
 XR_FUNC void xir_compile_view_root_resolver_free(XirViewRootResolver *resolver);

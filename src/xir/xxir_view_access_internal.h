@@ -33,6 +33,14 @@ typedef struct XirViewAccessCells {
  * borrowed access. The access consumer still checks the actual live loans. */
 XR_FUNC XrXirStatus xir_effects_value_restricted(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, uint32_t function, uint32_t value, bool *output);
+/* The binding identity belongs to the same qualified origin equations that
+ * callers use; this query grants neither lifetime nor disjointness. */
+XR_FUNC XrXirStatus xir_effects_module_origin(const XrXirCompileContext *,
+    const struct XrXirEffects *, uint32_t, uint32_t, uint32_t, bool *);
+/* A conditional callee entry reads its actual module-write summary. The common
+ * receiver still checks every caller's borrowed owner against that summary. */
+XR_FUNC XrXirStatus xir_effects_view_module_entry(const XrXirCompileContext *,
+    const struct XrXirEffects *, const XrXirModule *, uint32_t, uint32_t, uint32_t, bool *);
 /* Requires ordinary type/structure/SSA, return-origin and affine admission of
  * the immutable generation. Recomputes actual may-owned state, scope ancestry,
  * compatible PHI choices and storage paths. Borrowed inputs denote compatible

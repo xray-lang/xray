@@ -1,0 +1,10 @@
+var H = [5]
+fn r(s: Slice<i64>) -> i64 {
+    H.push(9)
+    return s[0] + len(H)
+}
+fn identity(s: Slice<i64>) -> Slice<i64> { return s }
+fn relay(callback: fn(Slice<i64>) -> Slice<i64>, s: Slice<i64>) -> i64 {
+    return r(callback(s))
+}
+print(relay(identity, H[0:1]))

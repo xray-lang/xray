@@ -344,7 +344,12 @@ static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
     bool unresolved=!roots.left;
     for (ViewRootSaved *p=roots.left;p && status==XR_XIR_OK;p=p->next) {
         const XrXirViewRootEvent *event=&p->event;
-        unresolved|=event->opaque_suffix || event->dynamic_identity || event->kind==XR_XIR_VIEW_ROOT_UNRESOLVED || event->kind==XR_XIR_VIEW_ROOT_MODULE;
+        bool module=false;
+        if (event->kind==XR_XIR_VIEW_ROOT_MODULE && a->cells && a->cells->effects)
+            status=xir_effects_module_origin(a->resolver->check.context,a->cells->effects,
+                a->function,value,event->root_value,&module);
+        unresolved|=event->opaque_suffix || event->dynamic_identity || event->kind==XR_XIR_VIEW_ROOT_UNRESOLVED ||
+            (event->kind==XR_XIR_VIEW_ROOT_MODULE && !module);
         for (uint32_t i=0;i<event->step_count;++i) {
 
             unresolved|=xr_xir_type_is_class(a->resolver->check.module->types,event->steps[i].container);

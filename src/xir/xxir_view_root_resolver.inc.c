@@ -8,37 +8,12 @@
  */
 struct XirViewRootResolver { ViewRootCheck check; uint8_t *flags; bool busy; };
 
-/* Slot names do not prove distinct cells. Replay concrete initializers;
- * ordinary admission rejects slot rebinding before this query is used. */
+/* A module load names the current binding, as does its qualified effect
+ * origin. Its initializer is an earlier value, not the binding's identity. */
 static XrXirStatus view_root_symbolic_slot(ViewRootQuery *q,uint32_t slot,ViewOriginPair context) {
-    ViewRootCheck *c=q->check;const XrXirDeclarations *d=c->module->declarations;uint32_t found=0;
+    ViewRootCheck *c=q->check;const XrXirDeclarations *d=c->module->declarations;
     if (!d || slot>=d->slot_count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t f=0;f<c->module->function_count;++f) {
-        const XrXirFunction *body=c->module->functions+f;
-        for (uint32_t i=0;i<body->instruction_count;++i) {
-
-            const XrXirInstruction *op=body->instructions+i;uint32_t value=UINT32_MAX;
-            if (op->op==XR_XIR_SLOT_INIT && (uint32_t)op->immediate==slot)
-                value=op->args[0];
-            else if (op->op==XR_XIR_SLOT_GROUP_INIT) {
-                uint32_t first=(uint32_t)((uint64_t)op->immediate>>32),count=(uint32_t)op->immediate;
-                if (slot<first || slot-first>=count) continue;
-                uint32_t operand=0;
-                for (uint32_t p=first;p<slot;++p) {
-
-                    operand+=d->slots[p].type!=XR_XIR_UNIT;
-                }
-                if (operand>=op->args[1]) return XR_XIR_BAD_STRUCTURE;
-                value=body->operands[op->args[0]+operand];
-            }
-            if (value==UINT32_MAX) continue;
-            XrXirStatus status=view_root_push(q,f,value,context.first,context.second);
-            if (status != XR_XIR_OK)
-                return status;
-            ++found;
-        }
-    }
-    return found?XR_XIR_OK:view_root_emit(q,(ViewOriginPair){UINT32_MAX,slot},context,XR_XIR_VIEW_ROOT_MODULE);
+    return view_root_emit(q,(ViewOriginPair){UINT32_MAX,slot},context,XR_XIR_VIEW_ROOT_MODULE);
 }
 XR_FUNC void xir_compile_view_root_resolver_free(XirViewRootResolver *resolver) {
     if (!resolver) return;

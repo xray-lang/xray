@@ -35,6 +35,9 @@ def main() -> None:
              "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
              "view_local", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
              "view_module_const", "view_conditional_cleanup", "view_phi", "view_copy_argument",
+             "view_module_unrelated_push", "view_module_unrelated_set", "view_module_same_read",
+             "view_module_unrelated_forward", "view_module_unrelated_return",
+             "view_module_unrelated_recursive", "view_module_unrelated_multiple",
              "view_copy_unused_parameter", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append")
     unknown = sorted(set(args.case) - set(cases))
@@ -148,6 +151,13 @@ def main() -> None:
         "reject_view_copy_live_write": b"during view lifetime normalization",
         "reject_view_module_alias": b"during view lifetime normalization",
         "reject_view_local_return": b"constructed XIR failed checking",
+        "reject_view_module_same_push": b"E0382: view of module binding `H` conflicts with access by `r` via `r`",
+        "reject_view_module_same_forward": b"E0382: view of module binding `H` conflicts with access by `forward` via `r`",
+        "reject_view_module_same_return": b"E0382: view of module binding `H` conflicts with access by `r` via `r`",
+        "reject_view_module_same_recursive": b"E0382: view of module binding `H` conflicts with access by `r` via `r`",
+        "reject_view_module_same_multiple": b"E0382: view of module binding `H` conflicts with access by `r` via `r`",
+        "reject_view_module_unknown_return": b"during view lifetime normalization",
+        "reject_view_module_rebind": b"E0382: view of module binding `H` conflicts with access by `r` via `r`",
     }
     for name, diagnostic in rejected_sources.items():
         source = fixtures / (name + ".xr")

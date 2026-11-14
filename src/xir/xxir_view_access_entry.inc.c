@@ -76,8 +76,20 @@ static XrXirStatus view_access_entry_cell(ViewAccess *a,const XrXirViewRootEvent
         role==XR_XIR_CELL_PROOF_SCOPED_CAPTURE;return XR_XIR_OK;
 }
 static XrXirStatus view_access_entry_regions(ViewAccess *a,const XrXirViewRootEvent *left,
-    const XrXirViewRootEvent *right,bool *safe) {
+    const XrXirViewRootEvent *right,uint32_t left_value,uint32_t right_value,bool *safe) {
     *safe=false;bool l=false,r=false,lc=false,rc=false;XrXirType lt=XR_XIR_UNIT,rt=XR_XIR_UNIT;
+    const XrXirViewRootEvent *input = left, *module = right;
+    uint32_t accessed = right_value;
+    if (right->kind == XR_XIR_VIEW_ROOT_BORROWED_PARAMETER) { input = right; module = left; accessed = left_value; }
+    if (a->cells && a->cells->effects && input->kind == XR_XIR_VIEW_ROOT_BORROWED_PARAMETER &&
+        input->root_function == a->function && !input->step_count && !input->selection_count &&
+        !input->opaque_suffix && !input->dynamic_identity &&
+        (module->kind == XR_XIR_VIEW_ROOT_MODULE || module->kind == XR_XIR_VIEW_ROOT_CELL) &&
+        !module->step_count && !module->selection_count && !module->opaque_suffix && !module->dynamic_identity) {
+        XrXirStatus grant = xir_effects_view_module_entry(a->resolver->check.context, a->cells->effects,
+            a->resolver->check.module, a->function, input->root_value, accessed, safe);
+        if (grant != XR_XIR_OK || *safe) return grant;
+    }
     XrXirStatus status=view_access_entry_cell(a,left,&lc);
     if (status==XR_XIR_OK) status=view_access_entry_cell(a,right,&rc);
     if (status==XR_XIR_OK) status=view_access_entry_root_type(a,left,&lt,&l);

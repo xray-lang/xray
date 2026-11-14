@@ -1,0 +1,11 @@
+var H = [5]
+fn r(s: Slice<i64>) -> i64 {
+    H.push(9)
+    return s[0] + len(H)
+}
+fn forward(s: Slice<i64>) -> i64 { return r(s) }
+fn main() {
+    var local = [1, 2, 3]
+    print(forward(local[0:2]))
+}
+main()

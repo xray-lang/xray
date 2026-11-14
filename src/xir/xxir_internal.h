@@ -34,7 +34,7 @@ XR_FUNC XrXirStatus xir_effects_local_errors_verify_input(const XrXirCompileCont
     XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 typedef struct XirModuleBorrowConflict {
     uint32_t slot, callee, access_function, access_instruction;
-    bool unknown;
+    bool unknown, view, unknown_owner;
 } XirModuleBorrowConflict;
 XR_FUNC XrXirStatus xir_effects_module_borrow_site(const XrXirCompileContext *, const XrXirEffects *,
     const XrXirModule *, uint32_t, uint32_t, XirModuleBorrowConflict *);

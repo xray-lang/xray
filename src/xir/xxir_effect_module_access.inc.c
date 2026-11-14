@@ -13,8 +13,14 @@
 enum {
     EFFECT_MODULE_ACCESS, EFFECT_MODULE_ORIGIN,
     EFFECT_MODULE_TRANSFER_ACCESS = 1, EFFECT_MODULE_TRANSFER_ORIGIN = 2,
-    EFFECT_MODULE_TRANSFER_CAPTURE = 4, EFFECT_MODULE_TRANSFER_EXECUTE = 8
+    EFFECT_MODULE_TRANSFER_CAPTURE = 4, EFFECT_MODULE_TRANSFER_EXECUTE = 8,
+    EFFECT_MODULE_TRANSFER_WRITE = 16
 };
+
+static bool effect_module_view_type(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && (node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE);
+}
 
 static uint32_t effect_module_hash(uint32_t node, uint32_t identity, uint8_t kind, uint8_t property) {
     uint64_t pair = ((uint64_t)node << 32) | identity;
@@ -106,6 +112,18 @@ static bool effect_module_merge(EffectCheckBuild *build, uint32_t target, uint8_
     return changed;
 }
 
+static bool effect_module_write(EffectCheckBuild *build, uint32_t target, uint32_t source,
+    uint32_t function, uint32_t instruction) {
+    bool changed = false;
+    for (uint32_t m = build->roots->node[source].module_sets[EFFECT_MODULE_ORIGIN]; m != UINT32_MAX;) {
+        EffectModuleMember member = build->roots->module_member[m];
+        changed |= effect_module_add(build, target, EFFECT_MODULE_ACCESS,
+            (uint8_t)(member.kind | EFFECT_MODULE_WRITE), member.identity, function, instruction);
+        m = member.next;
+    }
+    return changed;
+}
+
 static bool effect_module_unknown(const EffectCheckNode *node) {
     return (node->bound | node->root_seed) != 0;
 }
@@ -139,26 +157,32 @@ static bool effect_module_execute(EffectCheckBuild *build, uint32_t output, uint
 }
 
 static bool effect_module_apply(EffectCheckBuild *build, uint32_t output, EffectCheckCall call) {
-    if (call.fixed_effects) return false;
     EffectCheckedRoots *roots = build->roots;
     EffectCheckFunction callee = roots->function[roots->node[call.target].function];
+    bool origin = call.target == callee.result && effect_module_view_type(effect_check_types_read(build),
+        roots->node[call.target].type);
+    if (call.fixed_effects && !origin) return false;
+    uint8_t property = origin ? EFFECT_MODULE_ORIGIN : EFFECT_MODULE_ACCESS;
     bool changed = false;
-    for (uint32_t m = roots->node[call.target].module_sets[EFFECT_MODULE_ACCESS]; m != UINT32_MAX;) {
+    for (uint32_t m = roots->node[call.target].module_sets[property]; m != UINT32_MAX;) {
         EffectModuleMember member = roots->module_member[m];
         m = member.next;
-        if (member.kind == EFFECT_MODULE_CALLBACK || member.kind == EFFECT_MODULE_CAPTURE) {
+        uint8_t kind = (uint8_t)(member.kind & ~EFFECT_MODULE_WRITE);
+        if (kind == EFFECT_MODULE_CALLBACK || kind == EFFECT_MODULE_CAPTURE || kind == EFFECT_MODULE_PARAMETER) {
             uint32_t parameter = member.identity;
             if (parameter < call.count) {
                 uint32_t actual = roots->argument[call.first + parameter];
-                changed |= effect_module_merge(build, output, EFFECT_MODULE_ACCESS, actual,
-                    member.kind == EFFECT_MODULE_CAPTURE ? EFFECT_MODULE_ORIGIN : EFFECT_MODULE_ACCESS);
+                if (member.kind & EFFECT_MODULE_WRITE)
+                    changed |= effect_module_write(build, output, actual, member.function, member.instruction);
+                else changed |= effect_module_merge(build, output, property, actual,
+                    kind == EFFECT_MODULE_CALLBACK ? EFFECT_MODULE_ACCESS : EFFECT_MODULE_ORIGIN);
             } else if (call.protocol == 1 && parameter < callee.parameters &&
                 effect_module_unknown(&roots->node[callee.first + parameter])) {
                 changed |= effect_module_add(build, output, EFFECT_MODULE_ACCESS,
                     EFFECT_MODULE_UNKNOWN, 0, callee.declaration, call.instruction);
             }
         } else {
-            changed |= effect_module_add(build, output, EFFECT_MODULE_ACCESS, member.kind,
+            changed |= effect_module_add(build, output, property, member.kind,
                 member.identity, member.function, member.instruction);
         }
     }
@@ -186,8 +210,10 @@ static bool effect_module_evaluate(EffectCheckBuild *build, uint32_t id) {
         if (node.callable_input)
             changed |= effect_module_add(build, id, EFFECT_MODULE_ACCESS, EFFECT_MODULE_CALLBACK,
                 parameter, function.declaration, UINT32_MAX);
-        if (parameter < function.capture_count && node.cell)
-            changed |= effect_module_add(build, id, EFFECT_MODULE_ORIGIN, EFFECT_MODULE_CAPTURE,
+        bool view = effect_module_view_type(effect_check_types_read(build), node.type);
+        if (node.cell || view)
+            changed |= effect_module_add(build, id, EFFECT_MODULE_ORIGIN,
+                parameter < function.capture_count ? EFFECT_MODULE_CAPTURE : EFFECT_MODULE_PARAMETER,
                 parameter, function.declaration, UINT32_MAX);
         if (parameter < function.capture_count && node.cell) {
             for (uint32_t b = node.bindings; b != UINT32_MAX; b = roots->binding[b].next)
@@ -200,6 +226,10 @@ static bool effect_module_evaluate(EffectCheckBuild *build, uint32_t id) {
         changed |= effect_module_add(build, id, EFFECT_MODULE_ACCESS, EFFECT_MODULE_UNKNOWN,
             0, function.declaration, UINT32_MAX);
     }
+    if (effect_module_view_type(effect_check_types_read(build), node.type) &&
+        id >= function.first + function.parameters && node.aliases == UINT32_MAX && node.calls == UINT32_MAX)
+        changed |= effect_module_add(build, id, EFFECT_MODULE_ORIGIN, EFFECT_MODULE_UNKNOWN,
+            0, function.declaration, UINT32_MAX);
     for (uint32_t a = node.aliases; a != UINT32_MAX; a = roots->alias[a].next) {
         EffectCheckAlias alias = roots->alias[a];
         if (!erased && (alias.module_transfer & EFFECT_MODULE_TRANSFER_ACCESS))
@@ -210,6 +240,8 @@ static bool effect_module_evaluate(EffectCheckBuild *build, uint32_t id) {
             changed |= effect_module_merge(build, id, EFFECT_MODULE_ACCESS, alias.source, EFFECT_MODULE_ORIGIN);
         if (alias.module_transfer & EFFECT_MODULE_TRANSFER_EXECUTE)
             changed |= effect_module_execute(build, id, alias.source, alias.instruction);
+        if (alias.module_transfer & EFFECT_MODULE_TRANSFER_WRITE)
+            changed |= effect_module_write(build, id, alias.source, function.declaration, alias.instruction);
     }
     for (uint32_t c = node.calls; !erased && c != UINT32_MAX; c = roots->call[c].next)
         changed |= effect_module_apply(build, id, roots->call[c]);
@@ -230,6 +262,16 @@ static bool effect_module_evaluate(EffectCheckBuild *build, uint32_t id) {
     return changed;
 }
 
+static bool effect_module_link(EffectCheckBuild *build, uint32_t target, uint32_t source,
+    uint8_t transfer, uint32_t instruction) {
+    if (source == UINT32_MAX || !effect_check_alias(build, target, source)) return false;
+    EffectCheckAlias *alias = &build->roots->alias[build->roots->node[target].aliases];
+    alias->module_transfer = transfer;
+    alias->instruction = instruction;
+    alias->root = alias->suspension = alias->callable_origin = false;
+    return true;
+}
+
 static bool effect_module_instruction(EffectCheckBuild *build, uint32_t f, uint32_t i) {
     EffectCheckedRoots *roots = build->roots;
     if (!roots->module_access) return true;
@@ -247,15 +289,59 @@ static bool effect_module_instruction(EffectCheckBuild *build, uint32_t f, uint3
         if (!effect_module_seed(build, function.root, EFFECT_MODULE_ACCESS, EFFECT_MODULE_SLOT, slot, i)) return false;
         if (op->op != XR_XIR_SLOT_STORE &&
             !effect_module_seed(build, value, EFFECT_MODULE_ORIGIN, EFFECT_MODULE_SLOT, slot, i)) return false;
+        if (op->op == XR_XIR_SLOT_STORE && !effect_module_seed(build, function.root, EFFECT_MODULE_ACCESS,
+            EFFECT_MODULE_SLOT | EFFECT_MODULE_WRITE, slot, i)) return false;
     }
     if (op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_INDEX_PLACE || op->op == XR_XIR_OBJECT_PLACE ||
-        op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_TAKE || op->op == XR_XIR_PLACE_READ) {
+        op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_TAKE || op->op == XR_XIR_PLACE_READ ||
+        op->op == XR_XIR_CELL_PROJECT || op->op == XR_XIR_VIEW_NEW || op->op == XR_XIR_VIEW_REBORROW) {
+        uint32_t operand = op->args[0];
+        if (op->op == XR_XIR_VIEW_NEW || op->op == XR_XIR_VIEW_REBORROW) {
+            const XrXirFunction *body = &build->module->functions[f];
+            if (!op->args[1] || operand >= body->operand_count) { build->status = XR_XIR_BAD_STRUCTURE; return false; }
+            operand = body->operands[operand];
+        }
+        uint32_t source = effect_check_value(build, f, operand);
+        if (!effect_module_link(build, value, source, EFFECT_MODULE_TRANSFER_ORIGIN, i)) return false;
+    }
+    if (op->op == XR_XIR_RETURN &&
+        effect_module_view_type(effect_check_types_read(build), build->module->functions[f].result)) {
         uint32_t source = effect_check_value(build, f, op->args[0]);
-        if (source == UINT32_MAX || !effect_check_alias(build, value, source)) return false;
-        roots->alias[roots->node[value].aliases].module_transfer = EFFECT_MODULE_TRANSFER_ORIGIN;
-        roots->alias[roots->node[value].aliases].root = false;
-        roots->alias[roots->node[value].aliases].suspension = false;
-        roots->alias[roots->node[value].aliases].callable_origin = false;
+        if (!effect_module_link(build, function.result, source, EFFECT_MODULE_TRANSFER_ORIGIN, i)) return false;
+    }
+    bool write = xr_xir_operand_role(op->op, 0) == XR_XIR_OPERAND_WRITE ||
+        op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_WRITE_TAKE || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND || op->op == XR_XIR_CLASS_SET || op->op == XR_XIR_VIEW_SET;
+    if (write) {
+        uint32_t operand = op->args[0];
+        if (xr_xir_op_uses_operand_table(op->op)) {
+            const XrXirFunction *body = &build->module->functions[f];
+            if (!op->args[1] || operand >= body->operand_count) { build->status = XR_XIR_BAD_STRUCTURE; return false; }
+            operand = body->operands[operand];
+        }
+        uint32_t source = effect_check_value(build, f, operand);
+        if (!effect_module_link(build, function.root, source, EFFECT_MODULE_TRANSFER_WRITE, i)) return false;
+    }
+    bool call = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_CALL_INDIRECT ||
+        op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT;
+    if (call) {
+        const XrXirFunction *body = &build->module->functions[f];
+        if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0]) {
+            build->status = XR_XIR_BAD_STRUCTURE;
+            return false;
+        }
+        uint32_t captures = 0;
+        if ((op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE) && op->immediate >= 0 &&
+            (uint64_t)op->immediate < build->module->function_count)
+            captures = roots->function[op->immediate].capture_count;
+        for (uint32_t p = captures; p < op->args[1]; ++p) {
+            uint32_t operand = body->operands[op->args[0] + p];
+            XrXirType type = xr_xir_operand_type(body, operand);
+            if (!xr_xir_type_is_cell(effect_check_types_read(build), type) &&
+                xr_xir_place_kind(body, operand) == XR_XIR_PLACE_NONE) continue;
+            uint32_t source = effect_check_value(build, f, operand);
+            if (!effect_module_link(build, function.root, source, EFFECT_MODULE_TRANSFER_WRITE, i)) return false;
+        }
     }
     return true;
 }

@@ -233,7 +233,8 @@ static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t righ
         status=view_root_path_pair(&a->resolver->check,&p->event,&q->event,&disjoint);
         if (status==XR_XIR_OK && !disjoint) status=view_access_fresh_input(a,&p->event,&q->event,left_query,&fresh);
         if (status==XR_XIR_OK && !disjoint && !fresh) status=view_access_fresh_input(a,&q->event,&p->event,right_query,&fresh);
-        if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_entry_regions(a,&p->event,&q->event,&entry);
+        if (status==XR_XIR_OK && !disjoint && !fresh && !entry)
+            status=view_access_entry_regions(a,&p->event,&q->event,left,right,&entry);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_epoch_separation(a,&p->event,&q->event,left_query,right_query,&epochs);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry && !epochs) status=view_access_overlap(a,&p->event,&q->event,left_query,right_query,&overlap);
         if (status != XR_XIR_OK)
