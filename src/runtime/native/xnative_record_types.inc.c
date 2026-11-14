@@ -43,14 +43,16 @@ static XrXirValueStatus record_project(const XrtCallableTypeSpec *specs, uint32_
     allocated = xr_compile_resources_calloc(resources, records, sizeof(*output->labels), &storage);
     output->labels = storage;
     if (allocated != XR_COMPILE_RESOURCE_OK) return callable_resource_status(allocated);
-    storage = NULL;
-    allocated = xr_compile_resources_calloc(resources, fields, sizeof(*output->fields), &storage);
-    output->fields = storage;
-    if (allocated != XR_COMPILE_RESOURCE_OK) return callable_resource_status(allocated);
-    storage = NULL;
-    allocated = xr_compile_resources_calloc(resources, fields, sizeof(*output->types), &storage);
-    output->types = storage;
-    if (allocated != XR_COMPILE_RESOURCE_OK) return callable_resource_status(allocated);
+    if (fields) {
+        storage = NULL;
+        allocated = xr_compile_resources_calloc(resources, fields, sizeof(*output->fields), &storage);
+        output->fields = storage;
+        if (allocated != XR_COMPILE_RESOURCE_OK) return callable_resource_status(allocated);
+        storage = NULL;
+        allocated = xr_compile_resources_calloc(resources, fields, sizeof(*output->types), &storage);
+        output->types = storage;
+        if (allocated != XR_COMPILE_RESOURCE_OK) return callable_resource_status(allocated);
+    }
     size_t next = 0;
     output->table.identities = output->identities;
     for (uint32_t t = 0; t < count; ++t) {

@@ -193,7 +193,9 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         }
     }
     for (uint32_t t = 0; t < spec->type_count; ++t) {
-        if (!module_type(&layout->view, t, layout->types)) {
+        if (!module_type(&layout->view, t, layout->types) ||
+            (layout->types[t].kind == XRT_MODULE_BOXED &&
+             !xrt_boxed_type(layout->callable_types, layout->types[t].callable))) {
             xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
         }
     }

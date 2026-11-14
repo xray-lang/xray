@@ -65,7 +65,8 @@ XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLir
  * Other Tuple payload families require their own admitted exact layout. */
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *, uint32_t count, XrLirType *output);
 /* Structural fields are in canonical key order. The receiving module owns
- * every field name and exact dependency; no frontend metadata is borrowed. */
+ * every field name and exact dependency; no frontend metadata is borrowed.
+ * String, I64, Bool, F64 and earlier boxed fields have complete transports. */
 XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordField *,
     uint32_t count, XrLirType *output);
 XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *, XrLirType,

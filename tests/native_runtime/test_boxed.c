@@ -12,6 +12,8 @@
 #include "runtime/native/xnative_module_state.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_array.h"
+#include "xir/xxir_struct.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,6 +152,11 @@ static void consume(void *opaque) {
 }
 static void create_values(void *opaque) {
     (void)opaque;
+    XrtCallableTypeSpec empty_type = {.kind=XRT_CALLABLE_RECORD};
+    XrtBoxedImage empty_image = {&empty_type,1};
+    XrtBoxed *empty = xrt_boxed_new(&empty_image, 0, NULL, 0, 0);
+    XrtBoxed *empty_copy = xrt_boxed_retain(empty, 0);
+    xrt_boxed_drop(empty, 0); xrt_boxed_drop(empty_copy, 0);
     XrtBoxed *a = nested_new(false), *b = nested_new(true);
     XrtBoxed *copy = xrt_boxed_retain(b, 0);
     xrt_boxed_drop(a, 0); xrt_boxed_drop(b, 0); xrt_boxed_drop(copy, 0);
@@ -162,6 +169,15 @@ static void invalid_handle(void *opaque) {
     if (context->scenario < 3) (void)xrt_boxed_retain(box, 0);
     else if (context->scenario == 3) (void)xrt_boxed_present(box, 0);
     else (void)xrt_boxed_field(box, 0, 0);
+    CHECK(false);
+}
+static void invalid_schema(void *opaque) {
+    (void)opaque;
+    XrtCallableParameterSpec field = {.value={XRT_CALLABLE_ARRAY,0}, .name="items", .name_length=5};
+    XrtCallableTypeSpec type = {.kind=XRT_CALLABLE_RECORD, .parameters=&field, .parameter_count=1};
+    XrtBoxedImage wrong = {&type,1};
+    uint64_t bits = 0;
+    (void)xrt_boxed_new(&wrong, 0, &bits, 1, 0);
     CHECK(false);
 }
 static void closed_shapes(void) {
@@ -180,6 +196,49 @@ static void closed_shapes(void) {
     CHECK(!xrt_boxed_type(arena, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1)));
     xr_xir_compile_type_arena_drop(arena);
     xr_compile_resources_release(context.resources);
+    XrtCallableTypeSpec nullable = {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_SCALAR,XR_POD_I64}};
+    XrtModuleTypeSpec slot_type = {XRT_MODULE_BOXED,0};
+    XrtModuleSpec module = {0};
+    XrtModuleSlotSpec slot = {.size=8, .alignment=8};
+    XrtModuleLayoutSpec layout_spec = {.types=&slot_type, .type_count=1, .byte_limit=UINT64_MAX,
+        .modules=&module, .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8,
+        .callable_types=&nullable, .callable_type_count=1};
+    XrtModuleLayout *layout = NULL;
+    CHECK(xrt_module_layout_new(&layout_spec, &layout) == XR_XIR_VALUE_BAD_ARGUMENT && !layout);
+}
+static void unsupported_projection(void *opaque) {
+    XrXirValue *producer = opaque;
+    XrtBoxed *copy = xrt_boxed_retain((XrtBoxed *)(intptr_t)producer->payload, 0);
+    xr_xir_value_drop(producer);
+    (void)xrt_boxed_field(copy, 0, 0);
+    CHECK(false);
+}
+static void pending_projection_failure(XrtLocationOwner *locations) {
+    XrtCallableParameterSpec inner_field = {.value={XRT_CALLABLE_ARRAY,0}, .name="items", .name_length=5};
+    XrtCallableParameterSpec outer_field = {.value={XRT_CALLABLE_CONSTRUCTED,0}, .name="child", .name_length=5};
+    XrtCallableTypeSpec schema[] = {
+        {.kind=XRT_CALLABLE_RECORD, .parameters=&inner_field, .parameter_count=1},
+        {.kind=XRT_CALLABLE_RECORD, .parameters=&outer_field, .parameter_count=1}};
+    XrXirTypeArena *arena = NULL;
+    OK(xrt_callable_types_new(schema, 2, UINT64_MAX, &arena));
+    XrXirDomain *domain = NULL;
+    OK(xr_xir_domain_new(UINT64_MAX, &domain));
+    uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
+    XrXirValueAdmission admission = {arena,domain,NULL,NULL,UINT64_MAX,UINT64_MAX};
+    XrXirValue scalar = {XR_XIR_I64,0,7}, array = {0}, inner = {0}, outer = {0};
+    OK(xr_xir_array_new((XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, &scalar, 1, &admission, &array));
+    XrXirType inner_type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT);
+    OK(xr_xir_struct_new(inner_type, &array, 1, &admission, &inner));
+    OK(xr_xir_struct_new((XrXirType)(inner_type + 1), &inner, 1, &admission, &outer));
+    xr_xir_value_drop(&array); xr_xir_value_drop(&inner);
+    xr_xir_compile_type_arena_drop(arena);
+    XrtValueRoot root = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned(locations, &failure, unsupported_projection, &outer, &root) == XRT_EXECUTION_FAILURE);
+    CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
+        !outer.type && xrt_value_root_empty(&root));
+    CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
+    xr_xir_domain_drop(domain);
 }
 #if defined(XR_NATIVE_BOXED_ALLOCATIONS)
 static void allocation_sweep(XrtLocationOwner *locations) {
@@ -208,11 +267,19 @@ int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
     closed_shapes();
+    pending_projection_failure(locations);
     for (uint32_t scenario = 0; scenario < 5; ++scenario) {
         BoxedContext context = {.scenario=scenario};
         XrtValueRoot root = {0};
         XrtExecutionFailure failure = {0};
         CHECK(xrt_run_embedded_owned(locations, &failure, invalid_handle, &context, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
+            xrt_value_root_empty(&root));
+    }
+    {
+        XrtValueRoot root = {0};
+        XrtExecutionFailure failure = {0};
+        CHECK(xrt_run_embedded_owned(locations, &failure, invalid_schema, NULL, &root) == XRT_EXECUTION_FAILURE);
         CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT &&
             xrt_value_root_empty(&root));
     }

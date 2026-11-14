@@ -18,7 +18,8 @@ typedef struct XrtBoxedImage {
 extern "C" {
 #endif
 /* The image is immutable for the execution. Each result owns one canonical
- * reference independently of its input handles and guest activation storage. */
+ * reference independently of its input handles and guest activation storage.
+ * Fields admit String, I64, Bool, F64, Record and managed Nullable carriers. */
 XRAY_API XrtBoxed *xrt_boxed_new(const XrtBoxedImage *, uint32_t type,
     const uint64_t *fields, uint32_t count, uint32_t source);
 XRAY_API XrtBoxed *xrt_boxed_retain(XrtBoxed *, uint32_t source);

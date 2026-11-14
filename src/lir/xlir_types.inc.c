@@ -131,6 +131,24 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
     return true;
 }
 
+static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField *fields,
+    uint32_t count, uint32_t earlier) {
+    if ((count != 0) != (fields != NULL)) return false;
+    for (uint32_t f = 0; f < count; ++f) {
+        XrLirRecordField field = fields[f];
+        if (!field.name || !field.name_length || field.type >= XR_LIR_TYPE_COUNT + earlier ||
+            !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 || field.type == XR_LIR_I1 ||
+              field.type == XR_LIR_F64 || xr_lir_boxed_type(m, field.type))) return false;
+        if (f) {
+            XrLirRecordField prior = fields[f - 1];
+            uint32_t bytes = prior.name_length < field.name_length ? prior.name_length : field.name_length;
+            int order = memcmp(prior.name, field.name, bytes);
+            if (order > 0 || (!order && prior.name_length >= field.name_length)) return false;
+        }
+    }
+    return true;
+}
+
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
     if (m->type_count > m->type_capacity || m->type_count > UINT32_MAX - XR_LIR_TYPE_COUNT ||
         (m->type_capacity && !m->types) || (m->type_index_capacity && !m->type_index) ||
@@ -152,6 +170,8 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
                 (type.shape.element != type.callable.result || type.shape.count != type.callable.parameter_count ||
                     !lir_callable_signature_valid(m, &type.callable, n))) ||
             (type.shape.kind != XR_LIR_TYPE_CALLABLE && type.callable.parameters) ||
+            (type.shape.kind == XR_LIR_TYPE_RECORD ?
+                !lir_record_fields_valid(m, type.fields, type.shape.count, n) : type.fields != NULL) ||
             (type.shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, type.shape.element, type.cell_element, n) :
                 type.cell_element != XR_LIR_TYPE_INVALID) ||
             m->type_index[lir_type_slot(m, type.shape, &type.callable, type.cell_element, type.fields)] != n + 1) return false;
@@ -169,18 +189,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
         (shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, shape.element, cell_element, m->type_count) : cell_element != 0))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (shape.kind == XR_LIR_TYPE_RECORD) {
-        if ((shape.count && !fields) || (!shape.count && fields)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-        for (uint32_t f = 0; f < shape.count; ++f) {
-            XrLirRecordField field = fields[f];
-            if (!field.name || !field.name_length || !xr_lir_internal_type_valid(m, field.type, false) ||
-                field.type >= XR_LIR_TYPE_COUNT + m->type_count) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-            if (f) {
-                XrLirRecordField prior = fields[f - 1];
-                uint32_t count = prior.name_length < field.name_length ? prior.name_length : field.name_length;
-                int order = memcmp(prior.name, field.name, count);
-                if (order > 0 || (!order && prior.name_length >= field.name_length)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-            }
-        }
+        if (!lir_record_fields_valid(m, fields, shape.count, m->type_count)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     } else if (fields) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (!m->type_index_capacity || m->type_count >= m->type_index_capacity / 2)
         if (!lir_type_index_grow(m)) return m->failure;

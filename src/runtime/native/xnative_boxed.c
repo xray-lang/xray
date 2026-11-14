@@ -39,15 +39,32 @@ static XrXirValue boxed_value(const XrtBoxed *box) {
 static void boxed_require(XrXirValueStatus status, uint32_t source) {
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
 }
-XR_FUNC bool xrt_boxed_type(const XrXirTypeArena *arena, XrXirType type) {
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
-    const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    while (node && node->kind == XR_XIR_TYPE_NULLABLE) {
-        if (node->element == XR_XIR_STRING) return true;
-        node = xr_xir_type_node(types, node->element);
-    }
+static bool boxed_record_type(const XrXirTypes *types, const XrXirTypeNode *node) {
     return node && node->kind == XR_XIR_TYPE_NOMINAL && types->nominals && types->nominals->identities &&
         (types->nominals->identities[node->nominal.declaration].flags & XR_XIR_NOMINAL_RECORD) != 0;
+}
+static const XrXirTypeNode *boxed_leaf(const XrXirTypes *types, XrXirType type, bool *string) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    while (node && node->kind == XR_XIR_TYPE_NULLABLE) {
+        if (node->element == XR_XIR_STRING) { *string = true; return NULL; }
+        node = xr_xir_type_node(types, node->element);
+    }
+    return node;
+}
+XR_FUNC bool xrt_boxed_type(const XrXirTypeArena *arena, XrXirType type) {
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    bool string = false;
+    const XrXirTypeNode *node = boxed_leaf(types, type, &string);
+    if (string) return true;
+    if (!boxed_record_type(types, node)) return false;
+    for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
+        XrXirType field = node->nominal.fields[f];
+        if (field == XR_XIR_STRING || field == XR_XIR_I64 || field == XR_XIR_BOOL || field == XR_XIR_F64) continue;
+        string = false;
+        const XrXirTypeNode *child = boxed_leaf(types, field, &string);
+        if (!string && !boxed_record_type(types, child)) return false;
+    }
+    return true;
 }
 static XrXirValue boxed_argument(const XrtBoxed *box, uint32_t source) {
     if (!box) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
@@ -187,7 +204,10 @@ XRAY_API uint64_t xrt_boxed_field(const XrtBoxed *box, uint32_t field, uint32_t 
     uint64_t bits;
     memcpy(&bits, &root->pending.payload, sizeof(bits));
     if (root->pending.type == XR_XIR_STRING) return (uint64_t)(uintptr_t)xrt_string_publish_pending(source);
-    if (root->pending.type >= XR_XIR_CONSTRUCTED_TYPE_BASE) return (uint64_t)(uintptr_t)boxed_publish(root, source);
+    if (root->pending.type >= XR_XIR_CONSTRUCTED_TYPE_BASE) {
+        if (!xrt_boxed_type(arena, (XrXirType)root->pending.type)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+        return (uint64_t)(uintptr_t)boxed_publish(root, source);
+    }
     root->pending = (XrXirValue){0};
     return bits;
 }

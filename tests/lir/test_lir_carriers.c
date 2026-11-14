@@ -10,6 +10,7 @@
 #include "lir/xlir_c.h"
 #include "lir/xlir_sccp.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_internal.h"
 #include "vm/register/xrbc_lir.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -458,6 +459,42 @@ static void boxed_entry_frontier(void) {
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_INVALID && !execution);
     xr_rbc_program_destroy(program); xr_compile_resources_release(resources);
 }
+static void record_field_frontier(void) {
+    const XrLirType rejected[] = {XR_LIR_ARRAY, XR_LIR_MAP_STRING_I64, XR_LIR_PTR,
+        XR_LIR_STATE, XR_LIR_STRING_CELL, XR_LIR_UNIT, XR_LIR_I8};
+    for (size_t n = 0; n < sizeof(rejected) / sizeof(*rejected) + 3; ++n) {
+        XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+        XrLirType field = XR_LIR_TYPE_INVALID, output = XR_LIR_I64;
+        if (n < sizeof(rejected) / sizeof(*rejected)) field = rejected[n];
+        else if (n == sizeof(rejected) / sizeof(*rejected)) {
+            XrLirCallableType signature = {.result=XR_LIR_I64}; OK(xr_lir_callable_type(m, &signature, &field));
+        } else if (n == sizeof(rejected) / sizeof(*rejected) + 1)
+            OK(xr_lir_cell_type(m, (XrLirCellType){XR_LIR_I64,0}, &field));
+        else OK(xr_lir_nullable_type(m, XR_LIR_I64, &field));
+        XrLirRecordField member = {"value",5,field};
+        CHECK(xr_lir_record_type(m, &member, 1, &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
+        xr_lir_module_destroy(m);
+    }
+    for (unsigned n = 0; n < 4; ++n) {
+        XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+        XrLirRecordField member = {"value",5,XR_LIR_I64};
+        XrLirType type; OK(xr_lir_record_type(m, &member, 1, &type));
+        XrLirFunction root = function(m, "empty", NULL, 0, XR_LIR_UNIT);
+        XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
+        XrLirInstruction finish = {.op=XR_LIR_RET, .type=XR_LIR_UNIT};
+        OK(xr_lir_set_terminator(m, b, &finish)); OK(xr_lir_module_finish(m, NULL));
+        XrLirTypeData *data = &m->types[type - XR_LIR_TYPE_COUNT];
+        XrLirRecordField *fields = (XrLirRecordField *)data->fields;
+        XrLirRecordField saved = fields[0];
+        if (n == 0) data->fields = NULL;
+        if (n == 1) fields[0].name = NULL;
+        if (n == 2) fields[0].type = type;
+        if (n == 3) fields[0].type = XR_LIR_ARRAY;
+        CHECK(xr_lir_verify(m, NULL) == XR_LIR_VERIFY_ERROR);
+        data->fields = fields; fields[0] = saved;
+        xr_lir_module_destroy(m);
+    }
+}
 static void test_frontier(void) {
     const XrLirType native_rejected[] = {XR_LIR_F32};
     for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
@@ -499,7 +536,7 @@ static void test_frontier(void) {
 int main(int argc, char **argv) {
     const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_PTR};
     if (argc == 1) {
-        test_frontier(); record_metadata(); boxed_entry_frontier();
+        test_frontier(); record_metadata(); boxed_entry_frontier(); record_field_frontier();
         f64_owned_programs(); reject_float_operations(); native_negation();
         for (size_t i = 0; i < 4; ++i) {
             for (unsigned output = 0; output <= (types[i] == XR_LIR_PTR ? 1u : 0u); ++output) {
