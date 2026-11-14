@@ -80,7 +80,7 @@ typedef struct EffectCheckAlias {
  * lends by ref, so unrelated field traffic never grows the sets. */
 typedef enum EffectModuleTermKind {
     EFFECT_MODULE_SLOT, EFFECT_MODULE_CALLBACK, EFFECT_MODULE_CAPTURE, EFFECT_MODULE_UNKNOWN,
-    EFFECT_MODULE_FIELD
+    EFFECT_MODULE_FIELD, EFFECT_MODULE_PARAMETER
 } EffectModuleTermKind;
 
 typedef struct EffectModuleSeed {
@@ -593,7 +593,8 @@ static bool effect_check_pending(EffectCheckBuild *build, uint32_t function,
         .selector = op->targets[0], .member = op->targets[1], .kind = kind,
         .argument_first = roots->arguments, .argument_count = op->args[1], .receiver = UINT32_MAX,
         .result = UINT32_MAX};
-    if (kind != EFFECT_CHECK_CLASS_DISPATCH && effect_check_callable_result(build->module->types, op->type))
+    if (kind != EFFECT_CHECK_CLASS_DISPATCH && (effect_check_callable_result(build->module->types, op->type) ||
+        effect_module_view_type(build->module->types, op->type)))
         pending.result = roots->function[function].first + body->parameter_count + instruction;
     uint32_t receiver = UINT32_MAX;
     if (kind == EFFECT_CHECK_CLASS_DISPATCH || kind == EFFECT_CHECK_TUPLE_FIELD) {
@@ -974,7 +975,8 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
             build->roots->node[value].cleanup_handler = handler;
             build->roots->node[value].cleanup_panic_frontier = handler ? function->blocks[handler].frontier : 0;
         }
-        if (callable && !effect_check_call(build, value, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_VALUE)) return false;
+        if ((callable || effect_module_view_type(build->module->types, op->type)) &&
+            !effect_check_call(build, value, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_VALUE)) return false;
         return !effect_check_array_result(build->module->types, op->type) ||
             effect_check_call(build, row.contents + function->parameter_count + i, (uint32_t)op->immediate, op, i, EFFECT_CHECK_OUTPUT_CONTENTS);
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: {
@@ -992,7 +994,8 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
         if (target == UINT32_MAX) return false;
         XrXirInstruction call = {.op = op->op, .type_arguments = {op->type_arguments[0], op->type_arguments[1]}};
         if (!effect_check_call(build, row.root, target, &call, i, EFFECT_CHECK_OUTPUT_ROOT)) return false;
-        if (callable && !effect_check_call(build, value, target, &call, i, EFFECT_CHECK_OUTPUT_VALUE)) return false;
+        if ((callable || effect_module_view_type(build->module->types, op->type)) &&
+            !effect_check_call(build, value, target, &call, i, EFFECT_CHECK_OUTPUT_VALUE)) return false;
         return !effect_check_array_result(build->module->types, op->type) ||
             effect_check_call(build, row.contents + function->parameter_count + i, target, &call, i, EFFECT_CHECK_OUTPUT_CONTENTS);
     }

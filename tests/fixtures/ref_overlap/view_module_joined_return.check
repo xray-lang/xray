@@ -1,0 +1,1 @@
+12:5: error: E0382: Slice of module binding `H` conflicts with write by `r` via `r`

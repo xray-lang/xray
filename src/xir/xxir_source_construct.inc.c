@@ -437,6 +437,22 @@ static void source_effect_explain(void *context, const XrXirModule *module,
         XirModuleBorrowConflict conflict = {0};
         XrXirStatus status = xir_effects_module_borrow_site(&ctx->compile, effects, module,
             location->function, location->instruction, &conflict);
+        if (status == XR_XIR_OK && conflict.unknown_owner) {
+            uint32_t f = location->function;
+            ctx->module = ctx->bodies[f].module;
+            source_fail(ctx, ctx->bodies[f].node, XR_XIR_BAD_TYPE,
+                conflict.view == 1 ? "E0382: unresolved view owner cannot be proven disjoint from callee module write" :
+                    "E0382: unresolved view owner cannot be proven disjoint from callee module access");
+            if (location->instruction < ctx->functions[f].instruction_count && ctx->bodies[f].debug_points) {
+                XrXirSourceRange range = ctx->bodies[f].debug_points[location->instruction].range;
+                if (range.line > 0) {
+                    ctx->diagnostic.module = range.module;
+                    ctx->diagnostic.line = range.line;
+                    ctx->diagnostic.column = range.column;
+                }
+            }
+            return;
+        }
         if (status != XR_XIR_OK || conflict.slot >= ctx->slot_count) {
             source_fail(ctx, NULL, status != XR_XIR_OK ? status : XR_XIR_BAD_STRUCTURE,
                 "invalid module binding access cause");
