@@ -96,6 +96,53 @@ static void *retire_worker(void *value) {
     return NULL;
 }
 
+static XrtBillingOwner *default_owner_borrow;
+static XrtBillingStats default_baseline;
+static unsigned default_callbacks;
+static void default_payload_callback(XrtManagedHeader *value, void *context) {
+    Payload *payload = (Payload *)value;
+    CHECK(!context && !payload->child && payload->capacity > payload->length);
+    ++default_callbacks;
+    if (payload->length == 1) {
+        XrtBillingStats stats = xrt_billing_owner_stats(default_owner_borrow);
+        CHECK(default_callbacks == 2 && stats.closed);
+        CHECK(stats.bytes == default_baseline.bytes + sizeof(Payload) + 129 &&
+            stats.blocks == default_baseline.blocks + 1);
+        default_owner_borrow = NULL;
+    }
+}
+static void default_provider_retirement(void) {
+    XrtBillingOwner *owner = NULL;
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &owner));
+    size_t field = offsetof(Payload, child);
+    XrtRuntimeTypeSpec spec = payload_spec(NULL, &field, 1);
+    spec.drop_payload = default_payload_callback;
+    CHECK(!spec.code.context && !spec.code.retain && !spec.code.drop);
+    XrtRuntimeTypePlan *plan = NULL;
+    XrtManagedOps *ops = NULL;
+    OK(xrt_runtime_type_plan_new(owner, &spec, &plan));
+    OK(xrt_managed_ops_bind(owner, plan, &ops));
+    default_baseline = xrt_billing_owner_stats(owner);
+    XrtManagedPending parent = {0}, child = {0};
+    OK(xrt_managed_prepare(ops, sizeof(Payload) + 129, &parent));
+    OK(xrt_managed_prepare(ops, sizeof(Payload) + 9, &child));
+    CHECK(((Payload *)parent.value)->capacity == 129 && ((Payload *)child.value)->capacity == 9);
+    ((Payload *)parent.value)->length = 1;
+    ((Payload *)child.value)->length = 2;
+    XrtManagedHeader *leaf = NULL, *root = NULL;
+    OK(xrt_managed_commit(&child, &leaf));
+    ((Payload *)parent.value)->child = leaf;
+    OK(xrt_managed_commit(&parent, &root));
+    xrt_managed_ops_drop(ops);
+    xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_close(owner);
+    default_owner_borrow = owner;
+    xrt_billing_owner_drop(owner);
+    CHECK(!default_callbacks && xrt_billing_owner_stats(default_owner_borrow).closed);
+    xrt_managed_drop(root);
+    CHECK(default_callbacks == 2 && !default_owner_borrow);
+}
+
 static void dynamic_retirement(void) {
     Audit audit = {0};
     Provider *provider = provider_new(&audit);
@@ -244,6 +291,7 @@ static void concurrent_final_free(void) {
 }
 
 int main(void) {
+    default_provider_retirement();
     dynamic_retirement();
     failure_atomicity();
     reentrant_binding();
