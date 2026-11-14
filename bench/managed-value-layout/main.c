@@ -12,6 +12,7 @@
  */
 #include "access.h"
 #include "direct.inc.c"
+#include "noalias.inc.c"
 
 static void mvl_layout(void) {
 #define MVL_TYPE(type) printf(#type " size=%zu align=%zu", sizeof(type), (size_t) _Alignof(type))
@@ -153,6 +154,21 @@ static bool mvl_push_direct(XrMvlDomain *domain, int64_t *result) {
     return write.status == XR_MVL_OK;
 }
 
+static bool mvl_push_noalias(XrMvlDomain *domain, int64_t *result) {
+    XrMvlArray *array = xr_mvl_array_new(domain);
+    if (!array)
+        return false;
+    XrMvlArrayWrite write = mvl_array_push_noalias_range(array, XR_MVL_PUSH_COUNT);
+    array = write.access.owner;
+    int64_t total = 0;
+    if (write.status == XR_MVL_OK)
+        for (size_t i = 0; i < array->length; ++i)
+            total += array->data[i];
+    xr_mvl_drop(&array->header);
+    *result = total;
+    return write.status == XR_MVL_OK;
+}
+
 static int64_t mvl_record(void) {
     int64_t total = 0;
     for (int64_t i = 0; i < XR_MVL_RECORD_COUNT; ++i) {
@@ -273,7 +289,7 @@ static bool mvl_map_take(XrMvlDomain *domain, int64_t *result) {
 
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "usage: managed <push|push-prepared|push-direct|record|map|map-take|record-escape|verify|layout>\n");
+        fprintf(stderr, "usage: managed <push|push-prepared|push-direct|push-noalias|record|map|map-take|record-escape|verify|layout>\n");
         return 2;
     }
     if (strcmp(argv[1], "layout") == 0) {
@@ -299,6 +315,9 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[1], "push-direct") == 0) {
         expected = INT64_C(12499997500000);
         ok = mvl_push_direct(&domain, &total);
+    } else if (strcmp(argv[1], "push-noalias") == 0) {
+        expected = INT64_C(12499997500000);
+        ok = mvl_push_noalias(&domain, &total);
     } else if (strcmp(argv[1], "record") == 0) {
         expected = INT64_C(9000000000000);
         total = mvl_record();

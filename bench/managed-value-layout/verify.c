@@ -12,6 +12,7 @@
  */
 #include "access.h"
 #include "direct.inc.c"
+#include "noalias.inc.c"
 
 #define MVL_REQUIRE(condition) do { \
     if (!(condition)) { \
