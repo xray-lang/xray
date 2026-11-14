@@ -9,12 +9,12 @@ var task = go fail_with_enum()
 var result = task.awaitResult()
 
 match (result) {
-    TaskResult.Failed { error: err } -> {
+    TaskResult.Failed { error: err } => {
         print(typeName(err))
         match (err) {
-            TaskResultErr.Msg { message } -> print(message)
-            _ -> print("unexpected payload")
+            TaskResultErr.Msg { message } => print(message),
+            _ => print("unexpected payload"),
         }
-    }
-    _ -> print("unexpected status")
+    },
+    _ => print("unexpected status"),
 }

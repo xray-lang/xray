@@ -15,8 +15,8 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value { value: v } -> { sum = sum + v }
-            _ -> {}
+            Recv.Value { value: v } => { sum = sum + v },
+            _ => {},
         }
     }
     return sum

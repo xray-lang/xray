@@ -185,10 +185,10 @@ fn _resolveWriteOptions(options: YamlWriteOptions?) -> YamlWriteOptions {
 
 fn _isFatalKind(kind: YamlErrorKind) -> bool {
     return match (kind) {
-        YamlErrorKind.UnsupportedTag     -> true,
-        YamlErrorKind.UnsupportedFeature -> true,
-        YamlErrorKind.MaxDepthExceeded   -> true,
-        _                                -> false
+        YamlErrorKind.UnsupportedTag     => true,
+        YamlErrorKind.UnsupportedFeature => true,
+        YamlErrorKind.MaxDepthExceeded   => true,
+        _                                => false,
     }
 }
 
@@ -211,36 +211,36 @@ fn _emptyStrings() -> Array<string> {
 
 export fn isNull(value: YamlValue) -> bool {
     return match (value) {
-        YamlValue.Null -> true,
-        _              -> false
+        YamlValue.Null => true,
+        _              => false,
     }
 }
 
 export fn asBool(value: YamlValue) -> bool? {
     return match (value) {
-        YamlValue.Boolean { value: b } -> b,
-        _                    -> null
+        YamlValue.Boolean { value: b } => b,
+        _                    => null,
     }
 }
 
 export fn asInt(value: YamlValue) -> i64? {
     return match (value) {
-        YamlValue.Integer { value: n } -> n,
-        _                    -> null
+        YamlValue.Integer { value: n } => n,
+        _                    => null,
     }
 }
 
 export fn asFloat(value: YamlValue) -> f64? {
     return match (value) {
-        YamlValue.Float { value: f } -> f,
-        _                  -> null
+        YamlValue.Float { value: f } => f,
+        _                  => null,
     }
 }
 
 export fn asString(value: YamlValue) -> string? {
     return match (value) {
-        YamlValue.String { value: s } -> s,
-        _                   -> null
+        YamlValue.String { value: s } => s,
+        _                   => null,
     }
 }
 
@@ -249,16 +249,16 @@ export fn asString(value: YamlValue) -> string? {
 // contaminates the enum payload-field type globally.
 export fn asSequence(value: YamlValue) -> Array<YamlValue>? {
     match (value) {
-        YamlValue.Sequence { items } -> { return items }
-        _                         -> { return null }
+        YamlValue.Sequence { items } => { return items },
+        _                         => { return null },
     }
     return null
 }
 
 export fn asMapping(value: YamlValue) -> YamlMapping? {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return m }
-        _                    -> { return null }
+        YamlValue.Mapping { mapping: m } => { return m },
+        _                    => { return null },
     }
     return null
 }
@@ -266,8 +266,8 @@ export fn asMapping(value: YamlValue) -> YamlMapping? {
 // Value bound to `key` inside a Mapping (null for non-mappings / missing key).
 export fn get(value: YamlValue, key: string) -> YamlValue? {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return m.get(key) }
-        _                    -> { return null }
+        YamlValue.Mapping { mapping: m } => { return m.get(key) },
+        _                    => { return null },
     }
     return null
 }
@@ -275,11 +275,11 @@ export fn get(value: YamlValue, key: string) -> YamlValue? {
 // Element at `index` inside a Sequence (null when out of range / not a sequence).
 export fn at(value: YamlValue, index: i64) -> YamlValue? {
     match (value) {
-        YamlValue.Sequence { items } -> {
+        YamlValue.Sequence { items } => {
             if (index < 0 || index >= len(items)) { return null }
             return items[index]
-        }
-        _ -> { return null }
+        },
+        _ => { return null },
     }
     return null
 }
@@ -287,9 +287,9 @@ export fn at(value: YamlValue, index: i64) -> YamlValue? {
 // Element count of a Sequence or Mapping (0 otherwise).
 export fn length(value: YamlValue) -> i64 {
     match (value) {
-        YamlValue.Sequence { items } -> { return len(items) }
-        YamlValue.Mapping { mapping: m }      -> { return m.size() }
-        _                         -> { return 0 }
+        YamlValue.Sequence { items } => { return len(items) },
+        YamlValue.Mapping { mapping: m }      => { return m.size() },
+        _                         => { return 0 },
     }
     return 0
 }
@@ -297,8 +297,8 @@ export fn length(value: YamlValue) -> i64 {
 // Ordered keys of a Mapping (empty otherwise).
 export fn keys(value: YamlValue) -> Array<string> {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return copy m.keys }
-        _                    -> { return _emptyStrings() }
+        YamlValue.Mapping { mapping: m } => { return copy m.keys },
+        _                    => { return _emptyStrings() },
     }
     return _emptyStrings()
 }
@@ -1170,16 +1170,16 @@ fn _binaryText(bytes: Array<u8>) -> string {
 
 fn _scalarText(value: YamlValue) -> string {
     return match (value) {
-        YamlValue.Null          -> "null",
-        YamlValue.Boolean { value: b }    -> _boolText(b),
-        YamlValue.Integer { value: n }    -> string(n),
-        YamlValue.Float { value: f }      -> string(f),
-        YamlValue.String { value: s }     -> _quoteString(s),
-        YamlValue.Binary { bytes } -> _binaryText(bytes),
-        YamlValue.Sequence { items: xs }  -> "[]",
-        YamlValue.Mapping { mapping: m }    -> "{}",
-        YamlValue.Tagged { tagged: tg }    -> _taggedText(tg),
-        YamlValue.Alias { anchor: a }      -> _aliasText(a)
+        YamlValue.Null          => "null",
+        YamlValue.Boolean { value: b }    => _boolText(b),
+        YamlValue.Integer { value: n }    => string(n),
+        YamlValue.Float { value: f }      => string(f),
+        YamlValue.String { value: s }     => _quoteString(s),
+        YamlValue.Binary { bytes } => _binaryText(bytes),
+        YamlValue.Sequence { items: xs }  => "[]",
+        YamlValue.Mapping { mapping: m }    => "{}",
+        YamlValue.Tagged { tagged: tg }    => _taggedText(tg),
+        YamlValue.Alias { anchor: a }      => _aliasText(a),
     }
 }
 
@@ -1189,9 +1189,9 @@ fn _taggedText(tagged: YamlTagged) -> string {
 
 fn _isBlockValue(value: YamlValue) -> bool {
     match (value) {
-        YamlValue.Sequence { items } -> { return len(items) > 0 }
-        YamlValue.Mapping { mapping: m }      -> { return m.size() > 0 }
-        _                         -> { return false }
+        YamlValue.Sequence { items } => { return len(items) > 0 },
+        YamlValue.Mapping { mapping: m }      => { return m.size() > 0 },
+        _                         => { return false },
     }
     return false
 }

@@ -12,8 +12,8 @@ enum MonDebugErr { Msg { message: string } }
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 
@@ -56,9 +56,9 @@ fn test_coro_cancel_status() {
     t.cancel()
     var result = t.awaitResult()
     var cancelled = match (result) {
-        TaskResult.Cancelled -> true
-        TaskResult.Success { value } -> value == "was cancelled"
-        _ -> false
+        TaskResult.Cancelled => true,
+        TaskResult.Success { value } => value == "was cancelled",
+        _ => false,
     }
     print("取消状态:", cancelled)
     assertEqual(cancelled, true)

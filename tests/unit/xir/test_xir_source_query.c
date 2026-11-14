@@ -873,7 +873,7 @@ static void source_enum_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "enum Choice<T> { Empty, Some { value:T }, Other { value:string } }\n"
         "const v=Choice<i64>.Some { value:42 }\nprint(v.ordinal)\n"
-        "const got=match(v){Choice.Some{value:item}->item,Choice.Other{value:ignored}->0,Choice.Empty->-1}\n");
+        "const got=match(v){Choice.Some{value:item}=>item,Choice.Other{value:ignored}=>0,Choice.Empty=>-1,}\n");
     XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL)==XR_XIR_OK && result.checked && result.snapshot);
     xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
@@ -911,9 +911,9 @@ static void source_enum_facts(XrXirSourceRequest *request) {
 static void nested_pattern_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "enum Inner<T>{A,B{value:T}}\nenum Outer<T>{Wrap{inner:Inner<T>,flag:bool}}\n"
-        "fn pick(v:Outer<string>)->string{return match(v){Outer.Wrap{inner:Inner.A}->\"empty\","
-        "Outer.Wrap{inner:Inner.B{value:item},flag:true}->item,"
-        "Outer.Wrap{inner:Inner.B{value:other},flag:false}->other}}\n");
+        "fn pick(v:Outer<string>)->string{return match(v){Outer.Wrap{inner:Inner.A}=>\"empty\","
+        "Outer.Wrap{inner:Inner.B{value:item},flag:true}=>item,"
+        "Outer.Wrap{inner:Inner.B{value:other},flag:false}=>other,}}\n");
     XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL)==XR_XIR_OK && result.checked && result.snapshot);
     xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
@@ -936,7 +936,7 @@ static void nested_pattern_facts(XrXirSourceRequest *request) {
 static void range_pattern_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "enum E{A{x:i8}}\nfn pick(v:E)->i64{return match(v){\n"
-        "E.A{x:-128..0}->1,\nE.A{x:0..=127}->2}}\n");
+        "E.A{x:-128..0}=>1,\nE.A{x:0..=127}=>2,}}\n");
     XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL)==XR_XIR_OK && result.checked && result.snapshot);
     xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
@@ -955,7 +955,7 @@ static void range_pattern_facts(XrXirSourceRequest *request) {
 static void alternative_pattern_facts(XrXirSourceRequest *request) {
     write_source(request->entry_path,
         "enum E{A{x:string},B{x:string}}\nfn pick(v:E)->string{return match(v){\n"
-        "E.A{x:item},\nE.B{x:item} if(item==\"yes\")->item,\n_->\"no\"}}\n");
+        "E.A{x:item},\nE.B{x:item} if(item==\"yes\")=>item,\n_=>\"no\",}}\n");
     XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL)==XR_XIR_OK && result.checked && result.snapshot);
     xr_xir_compile_artifact_free(result.checked); result.checked=NULL;
@@ -978,7 +978,7 @@ static void alternative_pattern_facts(XrXirSourceRequest *request) {
     xr_xir_compile_source_result_free(&result);
 }
 static void unreachable_pattern_facts(XrXirSourceRequest *request) {
-    write_source(request->entry_path,"fn f(v:f32)->i64{return match(v){\n_,\n16777216->1}}\n");
+    write_source(request->entry_path,"fn f(v:f32)->i64{return match(v){\n_,\n16777216=>1,}}\n");
     XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL)==XR_XIR_OK && result.checked && result.snapshot);
     xr_xir_compile_artifact_free(result.checked); result.checked=NULL;

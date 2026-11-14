@@ -6,9 +6,9 @@ fn pick() -> Box<i64> { return Box<i64>.Empty }
 
 fn main() {
     match (pick()) {
-        Box.Full { value: v } -> print("full")
-        Box.Nope -> print("nope")
-        _ -> print("other")
+        Box.Full { value: v } => print("full"),
+        Box.Nope => print("nope"),
+        _ => print("other"),
     }
 }
 

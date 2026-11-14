@@ -11,10 +11,10 @@ scope {
     }
     for (var producer = 0; producer < 4; producer++) {
         match (results.recv()) {
-            Recv.Value { value: (first, second, third) } -> {
+            Recv.Value { value: (first, second, third) } => {
                 total = total + first + second + third
-            }
-            _ -> {}
+            },
+            _ => {},
         }
     }
 }

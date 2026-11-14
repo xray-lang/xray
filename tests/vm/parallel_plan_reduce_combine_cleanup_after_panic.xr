@@ -1,13 +1,13 @@
 import { Options, Plan } from parallel
 
-var plan = Plan<i64>(Options(4), lane -> lane)
+var plan = Plan<i64>(Options(4), lane => lane)
 
 try {
     var result = plan.reduce(
         0..20000,
         0,
-        (state, i) -> state + i,
-        (a, b) -> {
+        (state, i) => state + i,
+        (a, b) => {
             if (b >= 0) {
                 var zero = b - b
                 return a + (10 / zero)
@@ -22,7 +22,7 @@ try {
 }
 
 const afterReduce = Atomic<i64>(0)
-plan.forEach(0..4, (state, i) -> {
+plan.forEach(0..4, (state, i) => {
     afterReduce.add(1, Ordering.Relaxed)
 })
 print(afterReduce.load(Ordering.Relaxed) == 4)

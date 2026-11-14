@@ -1292,12 +1292,12 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2014,12 +2014,12 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2286,7 +2286,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         XrThrowsClause throws_clause = {0};
         if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
         do {
-            xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
+            if (!xr_parser_match_arrow(parser, false))
+                xr_parser_error_at_current(parser, "expected '->' after 'operator len()'");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         XrTypeRef *return_type = xr_parse_type_annotation(parser);
@@ -2405,12 +2406,12 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;

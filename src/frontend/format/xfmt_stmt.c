@@ -247,7 +247,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
             for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                 xfmt_write_char(ctx, ' ');
         }
-        xfmt_write_str(ctx, " -> ");
+        xfmt_write_str(ctx, " => ");
 
         if (sc->body->type == AST_BLOCK) {
             xfmt_emit_block(ctx, sc->body);

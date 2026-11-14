@@ -23,18 +23,18 @@ enum Tree {
 
 fn describe(s: Shape) -> string {
     return match (s) {
-        Shape.Circle { radius: r } -> "circle:" + string(r)
-        Shape.Square { side } -> "square:" + string(side)
-        Shape.Point -> "point"
-        Shape.Unknown -> "unknown"
+        Shape.Circle { radius: r } => "circle:" + string(r),
+        Shape.Square { side } => "square:" + string(side),
+        Shape.Point => "point",
+        Shape.Unknown => "unknown",
     }
 }
 
 fn radius_or(s: Shape) -> i64 {
     return match (s) {
-        Shape.Circle { radius: r } -> r
-        Shape.Point -> -1
-        _ -> -2
+        Shape.Circle { radius: r } => r,
+        Shape.Point => -1,
+        _ => -2,
     }
 }
 
@@ -63,8 +63,8 @@ fn test_adt_enum() {
     // Bare non-payload variant bound to a local, then matched.
     var p = Shape.Point
     var is_point = match (p) {
-        Shape.Point -> true
-        _ -> false
+        Shape.Point => true,
+        _ => false,
     }
     assertEqual(is_point, true)
 
@@ -72,8 +72,8 @@ fn test_adt_enum() {
     // family — Circle(0) is ordinal 0, Point is ordinal 2.
     var c0 = Shape.Circle { radius: 0 }
     var matched_circle = match (c0) {
-        Shape.Circle { radius: _ } -> true
-        _ -> false
+        Shape.Circle { radius: _ } => true,
+        _ => false,
     }
     assertEqual(matched_circle, true)
 
@@ -87,16 +87,16 @@ fn test_adt_enum() {
     // A second ADT enum with a leading non-payload arm.
     var t = Tree.Empty
     var td = match (t) {
-        Tree.Empty -> 0
-        Tree.Leaf { value: v } -> v
-        Tree.Branch { value: v } -> v * 10
+        Tree.Empty => 0,
+        Tree.Leaf { value: v } => v,
+        Tree.Branch { value: v } => v * 10,
     }
     assertEqual(td, 0)
     var leaf = Tree.Leaf { value: 7 }
     var ld = match (leaf) {
-        Tree.Empty -> 0
-        Tree.Leaf { value: v } -> v
-        Tree.Branch { value: v } -> v * 10
+        Tree.Empty => 0,
+        Tree.Leaf { value: v } => v,
+        Tree.Branch { value: v } => v * 10,
     }
     assertEqual(ld, 7)
 }

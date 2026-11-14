@@ -46,7 +46,7 @@ fn lexicalPanic(seed: i64) -> i64 {
     catch panic { return seed }
 }
 
-fn lexicalPlanned(value: i64) -> i64 { return match (value) { 0 -> 1, _ -> value } }
+fn lexicalPlanned(value: i64) -> i64 { return match (value) { 0 => 1, _ => value, } }
 
 fn lexicalEmpty() {}
 fn lexicalUnit() { const local = lexicalEmpty() }

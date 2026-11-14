@@ -44,10 +44,10 @@ var received = 0
 
 while (received < TOTAL) {
     select {
-        msg from ch0 -> { received++ }
-        msg from ch1 -> { received++ }
-        msg from ch2 -> { received++ }
-        msg from ch3 -> { received++ }
+        msg from ch0 => { received++ }
+        msg from ch1 => { received++ }
+        msg from ch2 => { received++ }
+        msg from ch3 => { received++ }
     }
 }
 

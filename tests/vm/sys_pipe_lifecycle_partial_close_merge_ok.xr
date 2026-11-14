@@ -19,12 +19,12 @@ fn closeReadInTernary(flag: bool) {
 fn closeReadInMatch(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
-        0 -> {
+        0 => {
             print(pipe!.closeRead())
-        }
-        _ -> {
+        },
+        _ => {
             print(pipe!.closeRead())
-        }
+        },
     }
     print(pipe!.closeWrite())
 }

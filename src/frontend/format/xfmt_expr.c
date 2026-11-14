@@ -341,7 +341,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     }
 
     // Pass 2: real emission. Pad each arm's head to max_width before
-    // writing " -> body".
+    // writing " => body".
     for (int i = 0; xfmt_healthy(ctx) && (i < arm_count); i++) {
         MatchArmNode *ma = &arms[i]->as.match_arm;
 
@@ -352,13 +352,14 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
             for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                 xfmt_write_char(ctx, ' ');
         }
-        xfmt_write_str(ctx, " -> ");
+        xfmt_write_str(ctx, " => ");
 
         if (ma->body->type == AST_BLOCK) {
             xfmt_emit_block(ctx, ma->body);
         } else {
             xfmt_emit_expression(ctx, ma->body);
         }
+        xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
     }
 
@@ -908,7 +909,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_space(ctx);
                 xfmt_emit_block(ctx, fn->body);
             } else {
-                /* Arrow form: emit params then -> body. */
+                /* Arrow form: emit params then => body. */
                 bool bare = fn->param_count == 1 && !has_param_metadata;
                 if (bare) {
                     xfmt_write_str(ctx, fn->params[0]->name);
@@ -921,9 +922,12 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     }
                     xfmt_write_char(ctx, ')');
                 }
-                xfmt_write_str(ctx, " -> ");
+                xfmt_write_str(ctx, " => ");
                 if (is_expr_body) {
+                    bool literal = arrow_expr->type == AST_OBJECT_LITERAL || arrow_expr->type == AST_MAP_LITERAL;
+                    if (literal) xfmt_write_char(ctx, '(');
                     xfmt_emit_expression(ctx, arrow_expr);
+                    if (literal) xfmt_write_char(ctx, ')');
                 } else {
                     xfmt_emit_block(ctx, fn->body);
                 }

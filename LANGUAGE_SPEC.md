@@ -292,7 +292,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `isolated` | `scope(isolated)` option (§10.7) |
-| `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `after` | `select` timeout arm (`after 1000 => ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 | `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
@@ -567,7 +567,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`i64 \| string`) / bitwise or |
-| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
+| `->` | Type arrow: return types of functions, methods and fn lambdas; function types use `fn(T) -> R` and omit the arrow for unit (`fn(T)`) |
+| `=>` | Value arrow: arrow lambdas and `match` / `select` arms; recognized as one token by longest match |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |
@@ -1228,11 +1229,11 @@ Constraints:
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
 
@@ -1301,11 +1302,11 @@ Sendable is the conjunction of all fields; this family does not automatically ex
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // prints 1
+    print(pair.1)   // prints hello
     var (a, b) = pair    // destructuring
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // prints 1
+    print(b)        // prints hello
 }
 
 main()
@@ -1325,9 +1326,9 @@ Aliases are **purely syntactic** equivalences; they do not introduce new types,
 runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
-```xray
+```xray @fragment
 var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -1395,14 +1396,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 See §7.4 for details. In summary:
 
-```xray
+```xray @fragment
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
 var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
+var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -1695,12 +1696,12 @@ Arrays:
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // prints [1, 2, 3, 4]
+    print(len(nums))     // prints 4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // prints [2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // prints [2, 4]
 }
 
 main()
@@ -1712,15 +1713,15 @@ Maps and Sets:
 fn main() {
     var scores = #{"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // prints 95
+    print(len(scores))                 // prints 3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // prints 2
+    print(seen.contains(1))   // prints true
 }
 
 main()
@@ -1731,9 +1732,9 @@ Nullable types with `??`:
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // prints anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // prints NYC
 }
 
 main()
@@ -2317,12 +2318,12 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 Anonymous Functions and Lambdas
 
-Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x => expr` and `(x) => expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
 
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda   ::= Identifier '=>' ArrowBody
+                | '(' ArrowParams? ')' '=>' ArrowBody
 ArrowBody     ::= Expression | Block
 ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam    ::= Identifier (':' ParamMode? Type)?
@@ -2330,14 +2331,14 @@ ParamMode     ::= 'ref' | 'move'
 FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```
 
-```xray
+```xray @fragment
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
 var inc = fn(x: i64) -> i64 {
@@ -2351,34 +2352,35 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 
 | Concept | Syntax | Capability and selection rule |
 |---------|--------|-------------------------------|
-| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| Arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
-- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
-- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
-- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `->` introduces only a type. `=>` introduces an expression or block and associates to the right: `x => y => x + y` returns a lambda. Its body extends to the end of the containing expression. A `{` immediately after `=>` always opens a block; parenthesize a literal expression to return it. A type arrow in value position or value arrow in type position is rejected at that arrow with a replacement hint.
+- Arrow parameter annotations are independent, so `(x: i64, y) => ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) => ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R => ...` and `(x: T) => R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `=> expr` implicitly returns the expression value. `=> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) => x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) => { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Captures follow §7.4. `go` arguments and captures must satisfy Sendable, and closures cannot capture outer `var` bindings. Copyable values preserve logical copies and identity types retain identity. Loan and synchronization rules continue to apply, with current qualification in §17.
 
 ### 3.13 `match` Expression
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' '(' Expr ')')? '=>' (Expression | Block)
 ```
 
-```xray
+```xray @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // multi-value
-    10..20 -> "teen",                 // range
-    n if (n > 100) -> "big",          // guard
-    Color.Red -> "red",               // enum
-    is User -> "a user",              // type pattern
-    _ -> "default"                    // wildcard
+    1 => "one",
+    2, 3, 4 => "few",                 // multi-value
+    10..20 => "teen",                 // range
+    n if (n > 100) => "big",          // guard
+    Color.Red => "red",               // enum
+    is User => "a user",              // type pattern
+    _ => "default",                    // wildcard
 }
 ```
 
@@ -2629,25 +2631,25 @@ The body cannot access the container through another path or change its length. 
 ### 4.5 `match` Statement
 
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
 
 **Key syntax**:
 - The matched expression **must** be parenthesized: `match (x) {...}`.
-- Commas between arms are **optional** — both styles can be mixed in the same `match` (omitting commas is more common).
+- Commas between arms are required; a trailing comma is optional and the formatter supplies it. Arms use `=>`; an immediately following `{` always opens a block.
 - Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
 
-```xray
-match (x) { 1 -> print("one"), _ -> print("other") }
+```xray @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
 
@@ -2717,15 +2719,15 @@ CatchHeader   ::= Identifier (':' Type)?
                 | EnumPattern (',' EnumPattern)*
 ```
 
-```xray
+```xray @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -2813,13 +2815,13 @@ dump(some_obj)                 // debug output, with type info and structure
 
 Combining `if` / `match` / `for-in` control flow:
 
-```xray
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 
@@ -2969,13 +2971,13 @@ fn echo(x: i64) {                       // omitted return type = ()
 A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
 
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
 
-These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
+These examples show signatures with bodies omitted as comments; ordinary definitions require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
 Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors (§5.2.8), but propagation sites still require marking. `fn main()` is an ordinary named function and gets no such permission. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
 
@@ -3288,8 +3290,8 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+    print(addBase(5))            // prints 15
+    print(apply(addBase, 7))     // prints 17 (function passed as an argument)
 }
 
 main()
@@ -3304,8 +3306,8 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // prints 3
+    print(r)   // prints 2
 }
 
 main()
@@ -3491,9 +3493,9 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // prints 12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // prints 40
 }
 ```
 
@@ -3526,8 +3528,8 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // prints Rex
+    print(d.speak())   // prints woof
 }
 
 main()
@@ -3623,8 +3625,8 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct assignment copies
     q.x = 99
-    print(p.x)           // => 3 (unchanged)
-    print(q.x)           // => 99
+    print(p.x)           // prints 3 (unchanged)
+    print(q.x)           // prints 99
 }
 
 main()
@@ -3750,7 +3752,7 @@ An enum type is identified by its declaring module, declaration and ordered type
 
 #### 5.6.1 Simple enums (0-payload enum)
 
-```xray
+```xray @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -3765,9 +3767,9 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
@@ -3827,12 +3829,12 @@ var e3 = NetEvent.Connected                         // unit variant: no braces
 
 Destructuring (match):
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
 
@@ -3917,7 +3919,7 @@ An enum resolves members separately in its type-access and value-access domains.
 
 Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 
-```xray
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -3925,9 +3927,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -3936,8 +3938,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }
@@ -4052,14 +4054,14 @@ Patterns appear in `match` expressions/statements, in `var` / `const` destructur
 
 ### 6.1 Literal Patterns
 
-```xray
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
 
@@ -4068,12 +4070,12 @@ match (x) {
 
 ### 6.2 Range Patterns `a..b` / `a..=b`
 
-```xray
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
 
@@ -4084,11 +4086,11 @@ match (age) {
 
 #### 6.3.1 Simple variants (no payload)
 
-```xray
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
 
@@ -4100,31 +4102,31 @@ The scrutinee is evaluated once. Pattern bindings are immutable values scoped to
 
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // Same-name binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // List only fields that are observed
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
 
@@ -4135,7 +4137,7 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
-```xray
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -4144,8 +4146,8 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```
@@ -4154,12 +4156,12 @@ match (event) {
 
 ### 6.4 Type Patterns `is T`
 
-```xray
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // bind the narrowed value
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // bind the narrowed value
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
 
@@ -4167,11 +4169,11 @@ match (value) {
 
 ### 6.5 Guard Conditions `if`
 
-```xray
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
 
@@ -4180,11 +4182,11 @@ match (x) {
 
 ### 6.6 Multi-value Patterns
 
-```xray
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
 
@@ -4201,11 +4203,11 @@ match (x) {
 
 ### 6.8 Variable-binding Patterns
 
-```xray
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
 
@@ -4221,12 +4223,12 @@ var { name, age } = user
 
 See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
 
-```xray
+```xray @fragment
 match (p) {
-    { x, y } -> ...           // object field destructure (shorthand binding)
-    { name: n, age } -> ...   // field rename + shorthand mixed
-    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
-    [_, mid, _] -> ...        // element-position wildcards
+    { x, y } => print(x, y),             // object field destructure (shorthand binding)
+    { name: n, age } => print(n, age),    // field rename + shorthand mixed
+    [a, b, ..rest,] => print(a, b, rest), // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] => print(mid),           // element-position wildcards
 }
 ```
 
@@ -4415,8 +4417,8 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
@@ -4532,9 +4534,9 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
@@ -4707,8 +4709,8 @@ class PanicInfo {
     data: JSON.Value            // additional data; JSON null when absent
     replacedError: Error?      // read-only; owned error replaced by cleanup panic, or null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
 
@@ -4939,7 +4941,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed, then payload
+        print(fetchData(true))         // prints closed, then payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -4981,7 +4983,7 @@ These self-contained target-language examples state expected stdout in `output` 
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray @run
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -4995,8 +4997,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // prints empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -5041,8 +5043,8 @@ fn main() {
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // prints message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // prints code: 430
     }
 }
 
@@ -5588,21 +5590,21 @@ fn producer(ch: Channel<i64>) {
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
 
-```xray
+```xray @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
-    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
-    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
-    _ -> { print("no channel ready") }                   // default arm (non-blocking)
+    msg from ch1 => { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 => { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 => { print("sent 100 to ch1") }        // send arm
+    _ => { print("no channel ready") }                   // default arm (non-blocking)
 }
 ```
 
@@ -5973,8 +5975,8 @@ import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+    print(math.sqrt(144.0))   // prints 12.0
+    print(sha256("xray"))     // prints 1a46e6a6... (SHA-256 digest)
 }
 
 main()
@@ -8639,8 +8641,8 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
-ArrowLambda ::= Identifier '->' (Expression | Block)
-              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
@@ -8649,8 +8651,8 @@ FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType?
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 
-MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
 CallArg ::= ('ref' | 'out') Expression
@@ -8741,7 +8743,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 BreakStmt    ::= 'break' Identifier?
@@ -8764,10 +8766,10 @@ ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
-            |  Expression 'to' Expression '->' Block        // send
-            |  'after' Expression '->' Block                // timeout
-            |  '_' '->' Block                                // default
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
 
 YieldStmt ::= 'yield' Expression
 ```
@@ -8936,6 +8938,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | Statements | `++` `--` |
+| Value mapping | `=>` |
 | Types, ranges, and spread | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---

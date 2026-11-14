@@ -9,6 +9,6 @@ fn fails() -> i64 {
     return 1
 }
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     print(fails())
 }, parallel.Options(2))

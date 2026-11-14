@@ -46,7 +46,7 @@ fn test_nullable() {
 
 @test
 fn test_exceptions() {
-    assertThrows(() -> {
+    assertThrows(() => {
         throw TestErr.Expected { message: "expected error" }
     })
 }

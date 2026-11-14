@@ -46,7 +46,7 @@ const holder = Holder{text:"owned"}
 assertEqual(holder.text,"owned")
 enum Choice { Empty, Present { text:string? } }
 const choice = Choice.Present{text:"variant"}
-const selected:string? = match(choice) { Choice.Empty -> null, Choice.Present{text} -> text }
+const selected:string? = match(choice) { Choice.Empty => null, Choice.Present{text} => text, }
 assertEqual(selected,"variant")
 
 var getCount = 0

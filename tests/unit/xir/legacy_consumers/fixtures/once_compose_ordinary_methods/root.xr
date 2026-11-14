@@ -20,7 +20,7 @@ class Once {
 
 const counter = Atomic<i64>(0)
 var once = Once()
-once.call(() -> { counter.fetchAdd(1) })
-once.call(() -> { counter.fetchAdd(1) })
-once.call(() -> { counter.fetchAdd(1) })
+once.call(() => { counter.fetchAdd(1) })
+once.call(() => { counter.fetchAdd(1) })
+once.call(() => { counter.fetchAdd(1) })
 print(counter.load())   // 1 — body ran exactly once

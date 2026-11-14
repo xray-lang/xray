@@ -5,12 +5,12 @@ import { XmlNode, XmlName, XmlAttribute, XmlError, XmlErrorKind, XmlDiagnostic }
 
 fn nodeKind(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Document { children: kids }              -> "document",
-        XmlNode.Element { name, attributes: attrs, children: kids }  -> "element",
-        XmlNode.Text { content: s }                     -> "text",
-        XmlNode.Comment { content: s }                  -> "comment",
-        XmlNode.CData { content: s }                    -> "cdata",
-        XmlNode.ProcessingInstruction { target: t, data: d } -> "pi"
+        XmlNode.Document { children: kids }              => "document",
+        XmlNode.Element { name, attributes: attrs, children: kids }  => "element",
+        XmlNode.Text { content: s }                     => "text",
+        XmlNode.Comment { content: s }                  => "comment",
+        XmlNode.CData { content: s }                    => "cdata",
+        XmlNode.ProcessingInstruction { target: t, data: d } => "pi",
     }
 }
 

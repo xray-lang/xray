@@ -89,14 +89,14 @@ export fn calculate(kind:i64, left:i64, right:i64) throws(Error)->i64 {
         catch (PatternFailure.Wrapped {}) { return right }
         return -1
     }
-    if (kind == 27) { return match(left) {1,2->71} }
-    if (kind == 28) { return match(left==1) {true->72} }
-    if (kind == 29) { return match(left as f64) {1.0->73} }
+    if (kind == 27) { return match(left) {1,2=>71,} }
+    if (kind == 28) { return match(left==1) {true=>72,} }
+    if (kind == 29) { return match(left as f64) {1.0=>73,} }
     if (kind == 30) {
         const text=left==1 ? "owned"+"match" : "owned"+"miss"
-        return match(text) {"ownedmatch"->74}
+        return match(text) {"ownedmatch"=>74,}
     }
-    if (kind == 31) { return match(left) {x if(matchPause(x))->75} }
+    if (kind == 31) { return match(left) {x if(matchPause(x))=>75,} }
     if (kind == 26) { return "A中😀B".indexOf("B",left) }
     var held = "arith" + "metic"
     if (kind == 20) {
@@ -235,7 +235,7 @@ fn chooseCallback(flag:bool)->fn(bool)->string {
     var prefix = "bad"
     const frozen = alpha.frozen<string>(flag ? "y" : "n")
     const make = fn()->fn(bool)->string {
-        return (value:bool) -> prefix + frozen()
+        return (value:bool) => prefix + frozen()
     }
     const ready = make()
     prefix = closureScope() == 9 && sharedControl() == 28 ? "r" : "bad"
@@ -572,14 +572,14 @@ var enumMatchTrace=0
 fn enumScrutinee()->alpha.Event<i64> { enumMatchTrace=enumMatchTrace*10+1; return enumPayload }
 fn enumGuard(digit:i64)->bool { enumMatchTrace=enumMatchTrace*10+digit; return false }
 const enumMatched=match(enumScrutinee()) {
-    alpha.Event.Empty if(enumGuard(9)) -> "wrong-unit",
-    alpha.Event.Data { label } if(enumGuard(2)) -> label,
-    alpha.Event.Data { label } -> { Coro.yield(); label; },
-    alpha.Event.Empty -> "empty"
+    alpha.Event.Empty if(enumGuard(9)) => "wrong-unit",
+    alpha.Event.Data { label } if(enumGuard(2)) => label,
+    alpha.Event.Data { label } => { Coro.yield(); label; },
+    alpha.Event.Empty => "empty",
 }
 fn enumReader(v:alpha.Event<string>)->fn()->string {
     const value=99
-    return fn()->string { return match(v) { alpha.Event.Data { value } -> value, alpha.Event.Empty -> "empty" } }
+    return fn()->string { return match(v) { alpha.Event.Data { value } => value, alpha.Event.Empty => "empty", } }
 }
 const enumRead=enumReader(enumGeneric)
 print(enumMatched,alpha.eventValue<i64>(enumPayload,-1),alpha.eventValue<i64>(alpha.Event<i64>.Empty,-1),enumRead(),enumMatchTrace)
@@ -587,25 +587,25 @@ print(enumMatched,alpha.eventValue<i64>(enumPayload,-1),alpha.eventValue<i64>(al
 var enumMutable=alpha.event<string>("snapshot")
 fn enumRebind()->bool { enumMutable=alpha.Event<string>.Empty; Coro.yield(); return false }
 const enumPreserved=match(enumMutable) {
-    alpha.Event.Data { value } if(enumRebind()) -> "wrong-guard",
-    alpha.Event.Data { value } -> value,
-    alpha.Event.Empty -> "wrong-empty"
+    alpha.Event.Data { value } if(enumRebind()) => "wrong-guard",
+    alpha.Event.Data { value } => value,
+    alpha.Event.Empty => "wrong-empty",
 }
 fn enumEarly(v:alpha.Event<i64>)->i64 {
-    match(v) { alpha.Event.Data { value } -> { return value }, alpha.Event.Empty -> { return -1 } }
+    match(v) { alpha.Event.Data { value } => { return value }, alpha.Event.Empty => { return -1 }, }
 }
 fn enumMixed(v:alpha.Event<i64>)->i64 {
-    const result=match(v) { alpha.Event.Data { value } -> { if(value>0){return value}; 0 }, alpha.Event.Empty -> -1 }
+    const result=match(v) { alpha.Event.Data { value } => { if(value>0){return value}; 0 }, alpha.Event.Empty => -1, }
     return result
 }
 fn enumLoop(v:Mode)->i64 {
     var n=0
-    while(n<3) { n=n+1; match(v) { Mode.Cold -> { continue }, Mode.Warm -> { break } } }
+    while(n<3) { n=n+1; match(v) { Mode.Cold => { continue }, Mode.Warm => { break }, } }
     return n
 }
 const enumEscaped=match(enumGeneric) {
-    alpha.Event.Data { value } -> fn()->string {return value},
-    alpha.Event.Empty -> fn()->string {return "empty"}
+    alpha.Event.Data { value } => fn()->string {return value},
+    alpha.Event.Empty => fn()->string {return "empty"},
 }
 print(enumPreserved,enumEarly(enumPayload),enumEarly(alpha.Event<i64>.Empty),enumMixed(enumPayload),enumMixed(alpha.event<i64>(-5)),enumLoop(Mode.Cold),enumLoop(Mode.Warm),enumEscaped(),enumMutable.ordinal)
 
@@ -613,19 +613,19 @@ print(enumPreserved,enumEarly(enumPayload),enumEarly(alpha.Event<i64>.Empty),enu
 enum NestedBits { Pair { left:bool, right:bool } }
 fn nestedBits(v:NestedBits)->i64 {
     return match(v) {
-        NestedBits.Pair { left:true, right:true } -> 1,
-        NestedBits.Pair { left:true, right:false } -> 2,
-        NestedBits.Pair { left:false, right:true } -> 3,
-        NestedBits.Pair { left:false, right:false } -> 4
+        NestedBits.Pair { left:true, right:true } => 1,
+        NestedBits.Pair { left:true, right:false } => 2,
+        NestedBits.Pair { left:false, right:true } => 3,
+        NestedBits.Pair { left:false, right:false } => 4,
     }
 }
 enum NestedBox<T:Sendable> { None, Some { inner:alpha.Event<T>, enabled:bool } }
 fn nestedPick<T:Sendable>(v:NestedBox<T>,fallback:T)->T {
     return match(v) {
-        NestedBox.None -> fallback,
-        NestedBox.Some { inner:alpha.Event.Empty } -> fallback,
-        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } -> value,
-        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:false } -> fallback
+        NestedBox.None => fallback,
+        NestedBox.Some { inner:alpha.Event.Empty } => fallback,
+        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } => value,
+        NestedBox.Some { inner:alpha.Event.Data { value }, enabled:false } => fallback,
     }
 }
 var nestedRoot=NestedBox<string>.Some { inner:alpha.event<string>("snapshot"), enabled:true }
@@ -637,10 +637,10 @@ fn nestedGuard()->bool {
     return false
 }
 const nestedSnapshot=match(nestedRoot) {
-    NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } if(nestedGuard()) -> fn()->string {return "wrong"},
-    NestedBox.Some { inner:alpha.Event.Data { value } } -> fn()->string {return value},
-    NestedBox.Some { inner:alpha.Event.Empty } -> fn()->string {return "empty"},
-    NestedBox.None -> fn()->string {return "none"}
+    NestedBox.Some { inner:alpha.Event.Data { value }, enabled:true } if(nestedGuard()) => fn()->string {return "wrong"},
+    NestedBox.Some { inner:alpha.Event.Data { value } } => fn()->string {return value},
+    NestedBox.Some { inner:alpha.Event.Empty } => fn()->string {return "empty"},
+    NestedBox.None => fn()->string {return "none"},
 }
 print(nestedBits(NestedBits.Pair{left:true,right:true}),nestedBits(NestedBits.Pair{left:true,right:false}),nestedBits(NestedBits.Pair{left:false,right:true}),nestedBits(NestedBits.Pair{left:false,right:false}),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:true},"fallback"),nestedPick<string>(NestedBox<string>.Some{inner:alpha.event<string>("nested"),enabled:false},"fallback"),nestedSnapshot(),nestedGuardCalls)
 
@@ -648,14 +648,14 @@ print(nestedBits(NestedBits.Pair{left:true,right:true}),nestedBits(NestedBits.Pa
 enum ScalarPayload { Empty, Data { small:i8, wide:u64, decimal:f32, text:string } }
 fn scalarPattern(v:ScalarPayload)->i64 {
     return match(v) {
-        ScalarPayload.Data { small:-128 } -> 1,
-        ScalarPayload.Data { wide:18446744073709551615 } -> 2,
-        ScalarPayload.Data { decimal:-0.0 } -> 3,
-        ScalarPayload.Data { decimal:1 } -> 4,
-        ScalarPayload.Data { text:"literal" } -> 5,
-        ScalarPayload.Data { text:"" } -> 6,
-        ScalarPayload.Data {} -> 7,
-        ScalarPayload.Empty -> 8
+        ScalarPayload.Data { small:-128 } => 1,
+        ScalarPayload.Data { wide:18446744073709551615 } => 2,
+        ScalarPayload.Data { decimal:-0.0 } => 3,
+        ScalarPayload.Data { decimal:1 } => 4,
+        ScalarPayload.Data { text:"literal" } => 5,
+        ScalarPayload.Data { text:"" } => 6,
+        ScalarPayload.Data {} => 7,
+        ScalarPayload.Empty => 8,
     }
 }
 print(scalarPattern(ScalarPayload.Data{small:-128,wide:0,decimal:2.0,text:"x"}),
@@ -671,17 +671,17 @@ print(scalarPattern(ScalarPayload.Data{small:-128,wide:0,decimal:2.0,text:"x"}),
 enum SignedRange { Data { value:i64 } }
 fn signedRange(v:SignedRange)->i64 {
     return match(v) {
-        SignedRange.Data { value:0..0 } -> 99,
-        SignedRange.Data { value:1..=0 } -> 98,
-        SignedRange.Data { value:-9223372036854775808..0 } -> 1,
-        SignedRange.Data { value:0..=9223372036854775807 } -> 2
+        SignedRange.Data { value:0..0 } => 99,
+        SignedRange.Data { value:1..=0 } => 98,
+        SignedRange.Data { value:-9223372036854775808..0 } => 1,
+        SignedRange.Data { value:0..=9223372036854775807 } => 2,
     }
 }
 enum UnsignedRange { Data { value:u64 } }
 fn unsignedRange(v:UnsignedRange)->i64 {
     return match(v) {
-        UnsignedRange.Data { value:0..18446744073709551615 } -> 3,
-        UnsignedRange.Data { value:18446744073709551615 } -> 4
+        UnsignedRange.Data { value:0..18446744073709551615 } => 3,
+        UnsignedRange.Data { value:18446744073709551615 } => 4,
     }
 }
 print(signedRange(SignedRange.Data{value:-9223372036854775808}),signedRange(SignedRange.Data{value:-1}),
@@ -692,7 +692,7 @@ print(signedRange(SignedRange.Data{value:-9223372036854775808}),signedRange(Sign
 enum Alternatives<T> { Left { first:T, second:T }, Right { value:T } }
 fn alternativeClosure<T>(v:Alternatives<T>)->fn()->T {
     return match(v) {
-        Alternatives.Left{first:item}, Alternatives.Right{value:item} -> fn()->T {return item}
+        Alternatives.Left{first:item}, Alternatives.Right{value:item} => fn()->T {return item},
     }
 }
 var alternativeGuards=0
@@ -703,8 +703,8 @@ fn alternativeGuard(text:string)->bool {
 }
 fn alternativeOrder(v:Alternatives<string>)->string {
     return match(v) {
-        Alternatives.Left{first:item}, Alternatives.Left{second:item} if(alternativeGuard(item)) -> "wrong",
-        Alternatives.Left{first:item}, Alternatives.Right{value:item} -> item
+        Alternatives.Left{first:item}, Alternatives.Left{second:item} if(alternativeGuard(item)) => "wrong",
+        Alternatives.Left{first:item}, Alternatives.Right{value:item} => item,
     }
 }
 const alternativeLeft=alternativeClosure<string>(Alternatives<string>.Left{first:"left",second:"unused"})
@@ -712,8 +712,8 @@ const alternativeRight=alternativeClosure<string>(Alternatives<string>.Right{val
 print(alternativeLeft(),alternativeRight(),alternativeOrder(Alternatives<string>.Left{first:"first",second:"second"}),alternativeGuards)
 
 fn matchPause(value:i64)->bool { Coro.yield(); return value==1 }
-print(match(true){true->"bool",false->"wrong"},match(-128 as i8){-128..0->1,0..=127->2},
-    match(-0.0){0.0->"zero",_->"wrong"},match("text"){"prefix"->"wrong",x->x})
+print(match(true){true=>"bool",false=>"wrong",},match(-128 as i8){-128..0=>1,0..=127=>2,},
+    match(-0.0){0.0=>"zero",_=>"wrong",},match("text"){"prefix"=>"wrong",x=>x,})
 
 
 enum CatchFailure { Bad { text:string } }
@@ -765,7 +765,7 @@ enum TypedFailure<T> { Value { item:T } }
 fn typedErrorValue<T>(value:T) throws(TypedOther)->T {
     try {throw TypedFailure<T>.Value{item:value}}
     catch(wrong:TypedOther) {throw wrong}
-    catch(e:TypedFailure<T>) {return match(e){TypedFailure.Value{item:x}->x}}
+    catch(e:TypedFailure<T>) {return match(e){TypedFailure.Value{item:x}=>x,}}
 }
 fn typedSecond()->i64 {
     try {throw TypedOther.Bad}
@@ -842,7 +842,7 @@ fn patternUnmatched()->i64 {
         try { throw PatternOther.Bad { code:89 } }
         catch (PatternFailure.Plain) { return 0 }
         catch (PatternOther.Bad { code:1..=9 }) { return 0 }
-    } catch (outer:PatternOther) { return match(outer) { PatternOther.Bad { code } -> code } }
+    } catch (outer:PatternOther) { return match(outer) { PatternOther.Bad { code } => code, } }
 }
 fn patternRethrow() throws(PatternFailure)->i64 {
     try {

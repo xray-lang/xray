@@ -170,9 +170,9 @@ export enum Signal {
 
 fn _signalCode(signal: Signal) -> i64 {
     return match (signal) {
-        Signal.TERM -> 15
-        Signal.KILL -> 9
-        Signal.INT -> 2
+        Signal.TERM => 15,
+        Signal.KILL => 9,
+        Signal.INT => 2,
     }
 }
 

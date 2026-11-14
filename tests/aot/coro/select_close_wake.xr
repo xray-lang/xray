@@ -1,7 +1,7 @@
 fn wait_select_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel<i64>) -> i64 {
     ready.send(1)
     select {
-        value from ch -> {
+        value from ch => {
         }
     }
     done.send(1)
@@ -14,8 +14,8 @@ const done = Channel<i64>(1)
 
 go wait_select_close(ch, ready, done)
 print(match (ready.recv()) {
-    Recv.Value { value } -> value
-    _ -> -1
+    Recv.Value { value } => value,
+    _ => -1,
 })
 
 for (var i = 0; i < 16; i++) {
@@ -25,12 +25,12 @@ for (var i = 0; i < 16; i++) {
 ch.close()
 var result = done.recvTimeout(2000)
 print(match (result) {
-    Recv.Value { value } -> value
-    _ -> -1
+    Recv.Value { value } => value,
+    _ => -1,
 })
 print(match (result) {
-    Recv.Value { value: _ } -> true
-    _ -> false
+    Recv.Value { value: _ } => true,
+    _ => false,
 })
 ready.close()
 done.close()

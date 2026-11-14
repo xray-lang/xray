@@ -3,6 +3,6 @@
 const ch: Channel<Array<i64>> = Channel(1)
 var xs = [1, 2, 3]
 select {
-    xs to ch -> { print("sent") }
-    _ -> { print("full") }
+    xs to ch => { print("sent") }
+    _ => { print("full") }
 }

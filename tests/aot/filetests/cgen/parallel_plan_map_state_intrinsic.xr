@@ -1,11 +1,11 @@
 import { Plan, Options } from parallel
 
-var plan = Plan<i64>(Options(2), (lane) -> lane + 10)
+var plan = Plan<i64>(Options(2), (lane) => lane + 10)
 
-var mapped = plan.map(0..4, (state, i) -> state + i)
+var mapped = plan.map(0..4, (state, i) => state + i)
 
 var out: Array<i64> = []
-plan.mapInto(0..4, ref out, (state, i) -> state * 10 + i)
+plan.mapInto(0..4, ref out, (state, i) => state * 10 + i)
 
 print(mapped[0])
 print(out[3])

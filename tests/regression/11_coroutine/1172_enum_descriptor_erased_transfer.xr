@@ -12,13 +12,13 @@ type TransferVariant = EnumVariant<TransferHue> | EnumVariant<TransferState>
 
 fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value } -> {
+        Recv.Value { value } => {
             if (value is EnumVariant<TransferHue>) {
                 return value.ordinal
             }
             return -1
-        }
-        _                 -> -2
+        },
+        _                 => -2,
     }
 }
 

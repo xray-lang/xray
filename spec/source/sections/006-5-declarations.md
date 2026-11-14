@@ -132,13 +132,13 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
 
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
 
-上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
+上例只展示签名，函数体以注释省略；普通函数定义必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
 
 入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误（§5.2.8），但传播点仍须标记。`fn main()` 是普通具名函数，没有这项许可。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
 
@@ -460,8 +460,8 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+    print(addBase(5))            // 输出：15
+    print(apply(addBase, 7))     // 输出：17（函数作为参数传入）
 }
 
 main()
@@ -476,8 +476,8 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // 输出：3
+    print(r)   // 输出：2
 }
 
 main()
@@ -663,9 +663,9 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // 输出：12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // 输出：40
 }
 ```
 
@@ -698,8 +698,8 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // 输出：Rex
+    print(d.speak())   // 输出：woof
 }
 
 main()
@@ -795,8 +795,8 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct 赋值是拷贝
     q.x = 99
-    print(p.x)           // => 3（不受影响）
-    print(q.x)           // => 99
+    print(p.x)           // 输出：3（不受影响）
+    print(q.x)           // 输出：99
 }
 
 main()
@@ -922,7 +922,7 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' T
 
 #### 5.6.1 简单枚举（0-payload enum）
 
-```xray @id=decl-enum-simple
+```xray @id=decl-enum-simple @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -937,9 +937,9 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
@@ -999,12 +999,12 @@ var e3 = NetEvent.Connected                         // unit 变体不写 braces
 
 解构（match）：
 
-```xray @id=decl-enum-match
+```xray @id=decl-enum-match @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
 
@@ -1089,7 +1089,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 `enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
-```xray
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -1097,9 +1097,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -1108,8 +1108,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }
@@ -1344,13 +1344,13 @@ fn echo(x: i64) {                       // omitted return type = ()
 A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
 
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
 
-These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
+These examples show signatures with bodies omitted as comments; ordinary definitions require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
 Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors (§5.2.8), but propagation sites still require marking. `fn main()` is an ordinary named function and gets no such permission. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
 
@@ -1663,8 +1663,8 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+    print(addBase(5))            // prints 15
+    print(apply(addBase, 7))     // prints 17 (function passed as an argument)
 }
 
 main()
@@ -1679,8 +1679,8 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // prints 3
+    print(r)   // prints 2
 }
 
 main()
@@ -1866,9 +1866,9 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // prints 12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // prints 40
 }
 ```
 
@@ -1901,8 +1901,8 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // prints Rex
+    print(d.speak())   // prints woof
 }
 
 main()
@@ -1998,8 +1998,8 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct assignment copies
     q.x = 99
-    print(p.x)           // => 3 (unchanged)
-    print(q.x)           // => 99
+    print(p.x)           // prints 3 (unchanged)
+    print(q.x)           // prints 99
 }
 
 main()
@@ -2125,7 +2125,7 @@ An enum type is identified by its declaring module, declaration and ordered type
 
 #### 5.6.1 Simple enums (0-payload enum)
 
-```xray @id=decl-enum-simple
+```xray @id=decl-enum-simple @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -2140,9 +2140,9 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
@@ -2202,12 +2202,12 @@ var e3 = NetEvent.Connected                         // unit variant: no braces
 
 Destructuring (match):
 
-```xray @id=decl-enum-match
+```xray @id=decl-enum-match @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
 
@@ -2292,7 +2292,7 @@ An enum resolves members separately in its type-access and value-access domains.
 
 Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 
-```xray
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -2300,9 +2300,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -2311,8 +2311,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }

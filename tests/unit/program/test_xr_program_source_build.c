@@ -1071,7 +1071,7 @@ TEST(source_owner_explicit_bool_conditions_execute) {
         " for (var index = 0; index < 2; index++) { score += 4 }\n"
         " while (score < 13) { score += 1 }\n"
         " for (var index = 0; ; index++) { break }\n"
-        " var extra = match (score) { value if (value == 13) -> 29\n _ -> 0 }\n"
+        " var extra = match (score) { value if (value == 13) => 29,\n _ => 0, }\n"
         " return score + selected + extra\n}\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));

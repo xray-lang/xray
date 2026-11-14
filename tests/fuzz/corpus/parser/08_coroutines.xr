@@ -25,12 +25,12 @@ go fn() {
 }()
 while (true) {
     match (ch.tryRecv()) {
-        Recv.Value { value } -> {
+        Recv.Value { value } => {
             print(value)
-        }
-        _ -> {
+        },
+        _ => {
             break
-        }
+        },
     }
 }
 // Select statement
@@ -43,13 +43,13 @@ go fn() {
     ch2.send("from ch2")
 }()
 select {
-    msg from ch1 -> {
+    msg from ch1 => {
         print("Received from ch1: " + msg)
     }
-    msg from ch2 -> {
+    msg from ch2 => {
         print("Received from ch2: " + msg)
     }
-    _ -> {
+    _ => {
         print("No message available")
     }
 }

@@ -2,8 +2,8 @@ import parallel
 
 const seen: Atomic<i64> = Atomic<i64>(0)
 
-parallel.forEach(0..4, (i) -> {
-    parallel.forEach(0..4, (j) -> {
+parallel.forEach(0..4, (i) => {
+    parallel.forEach(0..4, (j) => {
         seen.add(1, Ordering.Relaxed)
     }, parallel.Options(2))
 }, parallel.Options(2))

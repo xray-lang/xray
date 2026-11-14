@@ -7,14 +7,14 @@ fn serve(
     var checksum = 0
     while (true) {
         match (requests.recv()) {
-            Recv.Value { value: (requestId, slot, value) } -> {
+            Recv.Value { value: (requestId, slot, value) } => {
                 checksum = checksum + value
                 replies.send(copy((requestId, slot, value)))
-            }
-            _ -> {
+            },
+            _ => {
                 replies.close()
                 return checksum
-            }
+            },
         }
     }
     return checksum
@@ -27,11 +27,11 @@ fn route(
     var routed = 0
     while (true) {
         match (replies.recv()) {
-            Recv.Value { value: (requestId, slot, value) } -> {
+            Recv.Value { value: (requestId, slot, value) } => {
                 outputs[slot].send(copy((requestId, slot, value)))
                 routed = routed + 1
-            }
-            _ -> { return routed }
+            },
+            _ => { return routed },
         }
     }
     return routed
@@ -51,11 +51,11 @@ fn produce(
     for (var requestId = 1; requestId <= REQUESTS; requestId++) {
         requests.send(copy((requestId, 0, requestId)))
         match (replies.recv()) {
-            Recv.Value { value: (receivedId, _slot, value) } if (receivedId == requestId) -> {
+            Recv.Value { value: (receivedId, _slot, value) } if (receivedId == requestId) => {
                 completed = completed + 1
                 checksum = checksum + value
-            }
-            _ -> {}
+            },
+            _ => {},
         }
     }
     var result = (completed, checksum)
@@ -78,11 +78,11 @@ scope {
     var _ready = ready.recv()
     start.send(1)
     match (done.recv()) {
-        Recv.Value { value: (count, value) } -> {
+        Recv.Value { value: (count, value) } => {
             completed = count
             checksum = value
-        }
-        _ -> {}
+        },
+        _ => {},
     }
 }
 requests.close()

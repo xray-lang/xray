@@ -25,8 +25,8 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value { value: v } -> { sum = sum + v }
-            _ -> {}
+            Recv.Value { value: v } => { sum = sum + v },
+            _ => {},
         }
     }
     return sum
@@ -51,12 +51,12 @@ fn test_explicit_task_handle_observes_failure() {
         var task = go fail_report(ch, 5)
         var result = task.awaitResult()
         match (result) {
-            TaskResult.Failed { error: _ } -> {}
-            _ -> { assert(false, "failed task should be observed through TaskResult") }
+            TaskResult.Failed { error: _ } => {},
+            _ => { assert(false, "failed task should be observed through TaskResult") },
         }
         print(match (result) {
-            TaskResult.Failed { error: _ } -> true
-            _ -> false
+            TaskResult.Failed { error: _ } => true,
+            _ => false,
         })
     }
     var p19PlainScopeFive = recv_sum(ch, 1)
@@ -71,12 +71,12 @@ fn test_cancelled_child_is_local_to_scope() {
         task.cancel()
         var result = task.awaitResult()
         match (result) {
-            TaskResult.Cancelled -> {}
-            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }
+            TaskResult.Cancelled => {},
+            _ => { assert(false, "cancelled task should report TaskResult.Cancelled") },
         }
         print(match (result) {
-            TaskResult.Cancelled -> true
-            _ -> false
+            TaskResult.Cancelled => true,
+            _ => false,
         })
     }
 }

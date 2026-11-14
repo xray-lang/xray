@@ -2,8 +2,8 @@
 
 fn recv_has_value(r: Recv<i64>) -> bool {
     return match (r) {
-        Recv.Value { value: _ } -> true
-        _ -> false
+        Recv.Value { value: _ } => true,
+        _ => false,
     }
 }
 
@@ -71,9 +71,9 @@ fn test_select() {
     ch1.trySend(100)
 
     select {
-        msg from ch1 -> { print(msg) }
-        msg from ch2 -> { print(msg) }
-        _ -> { print("default") }
+        msg from ch1 => { print(msg) }
+        msg from ch2 => { print(msg) }
+        _ => { print("default") }
     }
 }
 

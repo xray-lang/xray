@@ -142,7 +142,7 @@ static bool enum_name_starts_method(Parser *parser) {
         } while (0);
     }
     bool is_method =
-        depth == 0 && (xr_parser_check(parser, TK_ARROW) || xr_parser_check(parser, TK_COLON) ||
+        depth == 0 && ((xr_parser_check(parser, TK_ARROW) || xr_parser_check(parser, TK_FAT_ARROW)) || xr_parser_check(parser, TK_COLON) ||
                        xr_parser_check(parser, TK_LBRACE));
     if (!xr_parser_healthy(parser)) return false;
     do {

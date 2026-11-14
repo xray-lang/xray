@@ -13,7 +13,7 @@ TEST(analyzer_conditions_require_plain_bool) {
         "while (value) { break }",
         "for (var index = 0; value; index++) { break }",
         "var selected = value ? 1 : 0",
-        "var selected = match (1) { _ if (value) -> 1\n _ -> 0 }",
+        "var selected = match (1) { _ if (value) => 1,\n _ => 0, }",
     };
     static const char *const types[] = {
         "bool", "bool?", "i64?", "f64?", "string?", "Array<i64>?", "Holder?",

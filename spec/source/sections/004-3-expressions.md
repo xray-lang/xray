@@ -582,12 +582,12 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 匿名函数与 Lambda
 
-xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x -> expr` 与 `(x) -> expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
+xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x => expr` 与 `(x) => expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
 
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda   ::= Identifier '=>' ArrowBody
+                | '(' ArrowParams? ')' '=>' ArrowBody
 ArrowBody     ::= Expression | Block
 ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam    ::= Identifier (':' ParamMode? Type)?
@@ -595,14 +595,14 @@ ParamMode     ::= 'ref' | 'move'
 FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```
 
-```xray @id=expr-lambda-forms
+```xray @id=expr-lambda-forms @fragment
 // ── arrow lambda：每个参数都可独立标注或推断 ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
 var inc = fn(x: i64) -> i64 {
@@ -616,34 +616,35 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 
 | 概念 | 语法 | 能力与选择条件 |
 |------|------|----------------|
-| arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
+| arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
-- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
-- arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
-- `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `->` 只引入类型；`=>` 引入表达式或块，右结合。`x => y => x + y` 表示返回 lambda 的 lambda，函数体延伸到包含它的表达式结束。紧跟 `=>` 的 `{` 一律是块；要返回字面量表达式，须用括号包裹。值位置的 `->` 与类型位置的 `=>` 均拒绝，并在错误箭头处提示替换。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) => ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) => ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
+- arrow 没有返回类型位置。`(x: T): R => ...` 与 `(x: T) => R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
+- `=> expr` 隐式返回表达式值。`=> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) => x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) => { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获遵循 §7.4。`go` 实参与捕获必须满足 Sendable，闭包不得捕获外层 `var`。可复制值保留逻辑副本，身份类型保持身份。借用与同步规则继续适用，当前实现资格见 §17。
 
 ### 3.13 `match` 表达式
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' '(' Expr ')')? '=>' (Expression | Block)
 ```
 
-```xray @id=expr-match
+```xray @id=expr-match @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // 多值
-    10..20 -> "teen",                 // 范围
-    n if (n > 100) -> "big",          // 守卫
-    Color.Red -> "red",               // 枚举
-    is User -> "a user",              // 类型模式
-    _ -> "default"                    // 通配符
+    1 => "one",
+    2, 3, 4 => "few",                 // 多值
+    10..20 => "teen",                 // 范围
+    n if (n > 100) => "big",          // 守卫
+    Color.Red => "red",               // 枚举
+    is User => "a user",              // 类型模式
+    _ => "default",                    // 通配符
 }
 ```
 
@@ -1300,12 +1301,12 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 Anonymous Functions and Lambdas
 
-Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x => expr` and `(x) => expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
 
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda   ::= Identifier '=>' ArrowBody
+                | '(' ArrowParams? ')' '=>' ArrowBody
 ArrowBody     ::= Expression | Block
 ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam    ::= Identifier (':' ParamMode? Type)?
@@ -1313,14 +1314,14 @@ ParamMode     ::= 'ref' | 'move'
 FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```
 
-```xray @id=expr-lambda-forms
+```xray @id=expr-lambda-forms @fragment
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
 var inc = fn(x: i64) -> i64 {
@@ -1334,34 +1335,35 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 
 | Concept | Syntax | Capability and selection rule |
 |---------|--------|-------------------------------|
-| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| Arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
-- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
-- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
-- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `->` introduces only a type. `=>` introduces an expression or block and associates to the right: `x => y => x + y` returns a lambda. Its body extends to the end of the containing expression. A `{` immediately after `=>` always opens a block; parenthesize a literal expression to return it. A type arrow in value position or value arrow in type position is rejected at that arrow with a replacement hint.
+- Arrow parameter annotations are independent, so `(x: i64, y) => ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) => ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R => ...` and `(x: T) => R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `=> expr` implicitly returns the expression value. `=> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) => x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) => { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Captures follow §7.4. `go` arguments and captures must satisfy Sendable, and closures cannot capture outer `var` bindings. Copyable values preserve logical copies and identity types retain identity. Loan and synchronization rules continue to apply, with current qualification in §17.
 
 ### 3.13 `match` Expression
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' '(' Expr ')')? '=>' (Expression | Block)
 ```
 
-```xray @id=expr-match
+```xray @id=expr-match @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // multi-value
-    10..20 -> "teen",                 // range
-    n if (n > 100) -> "big",          // guard
-    Color.Red -> "red",               // enum
-    is User -> "a user",              // type pattern
-    _ -> "default"                    // wildcard
+    1 => "one",
+    2, 3, 4 => "few",                 // multi-value
+    10..20 => "teen",                 // range
+    n if (n > 100) => "big",          // guard
+    Color.Red => "red",               // enum
+    is User => "a user",              // type pattern
+    _ => "default",                    // wildcard
 }
 ```
 

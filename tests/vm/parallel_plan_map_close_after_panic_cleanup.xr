@@ -1,6 +1,6 @@
 import { Options, ParallelError, Plan } from parallel
 
-var mapPlan = Plan<i64>(Options(2), lane -> lane + 1)
+var mapPlan = Plan<i64>(Options(2), lane => lane + 1)
 const mapTouched = Atomic<i64>(0)
 
 fn closeMapPlan() {
@@ -8,7 +8,7 @@ fn closeMapPlan() {
 }
 
 try {
-    var mapped = mapPlan.map(0..20000, (state, i) -> {
+    var mapped = mapPlan.map(0..20000, (state, i) => {
         mapTouched.add(1, Ordering.Relaxed)
         if (i == 10000) {
             closeMapPlan()
@@ -27,19 +27,19 @@ try {
 print(mapTouched.load(Ordering.Relaxed) > 0)
 
 try {
-    mapPlan.forEach(0..1, (state, i) -> {
+    mapPlan.forEach(0..1, (state, i) => {
         print(state + i)
     })
     print("map-reopen-miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("map-closed")
-        ParallelError.ConcurrentDispatch -> print("map-active-leak")
-        _ -> print("map-other")
+        ParallelError.ClosedPlan => print("map-closed"),
+        ParallelError.ConcurrentDispatch => print("map-active-leak"),
+        _ => print("map-other"),
     }
 }
 
-var intoPlan = Plan<i64>(Options(2), lane -> lane + 3)
+var intoPlan = Plan<i64>(Options(2), lane => lane + 3)
 const intoTouched = Atomic<i64>(0)
 
 fn closeIntoPlan() {
@@ -48,7 +48,7 @@ fn closeIntoPlan() {
 
 var out: Array<i64> = []
 try {
-    intoPlan.mapInto(0..20000, ref out, (state, i) -> {
+    intoPlan.mapInto(0..20000, ref out, (state, i) => {
         intoTouched.add(1, Ordering.Relaxed)
         if (i == 10000) {
             closeIntoPlan()
@@ -66,19 +66,19 @@ try {
 print(intoTouched.load(Ordering.Relaxed) > 0)
 
 try {
-    intoPlan.reduce(0..1, 0, (state, i) -> state + i, (a, b) -> a + b)
+    intoPlan.reduce(0..1, 0, (state, i) => state + i, (a, b) => a + b)
     print("mapinto-reopen-miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("mapinto-closed")
-        ParallelError.ConcurrentDispatch -> print("mapinto-active-leak")
-        _ -> print("mapinto-other")
+        ParallelError.ClosedPlan => print("mapinto-closed"),
+        ParallelError.ConcurrentDispatch => print("mapinto-active-leak"),
+        _ => print("mapinto-other"),
     }
 }
 
-var fresh = Plan<i64>(Options(2), lane -> lane)
+var fresh = Plan<i64>(Options(2), lane => lane)
 const freshTouched = Atomic<i64>(0)
-fresh.forEach(0..4, (state, i) -> {
+fresh.forEach(0..4, (state, i) => {
     freshTouched.add(1, Ordering.Relaxed)
 })
 print(freshTouched.load(Ordering.Relaxed) == 4)

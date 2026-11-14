@@ -95,7 +95,7 @@ static void sdk_task_language_cases(const char *stdlib_path) {
         "print(error.ordinal)\n"
         "print(panic.ordinal)\n"
         "print(cancelled.ordinal)\n"
-        "print(match (success) { TaskResult.Success { value } -> value _ -> -1 })\n"
+        "print(match (success) { TaskResult.Success { value } => value, _ => -1, })\n"
         "print(unitResult().ordinal)\n"
         "print(nestedResult().ordinal)\n"
         "print(len(resultArray()))\n"
@@ -120,7 +120,7 @@ static void sdk_task_language_cases(const char *stdlib_path) {
         "    return TaskResult<null,Never>.Panic { info: info }\n"
         "}\n"
         "export fn rethrowA(result: TaskResult<i64,A>) throws(A) -> i64 {\n"
-        "    return match (result) { TaskResult.Error { error } -> { throw error } _ -> 0 }\n"
+        "    return match (result) { TaskResult.Error { error } => { throw error }, _ => 0, }\n"
         "}\n"
         "\n"
         "fn divideZero(value: i64) -> i64 { return 1 / value }\n"
@@ -145,7 +145,7 @@ static void sdk_task_language_cases(const char *stdlib_path) {
         "export fn replacedGraph() -> Error? {\n"
         "    var task = go cleanupPanic()\n"
         "    const result = task.awaitResult()\n"
-        "    return match (result) { TaskResult.Panic { info } -> info.replacedError _ -> null }\n"
+        "    return match (result) { TaskResult.Panic { info } => info.replacedError, _ => null, }\n"
         "}\n"
         ;
 #ifdef __cplusplus

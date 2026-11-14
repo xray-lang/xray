@@ -437,7 +437,7 @@ AstNode *xr_parse_defer_statement(Parser *parser) {
 
 /*
  * Parse select statement
- * select { msg from ch -> ..., value to ch -> ..., _ -> ... }
+ * select { msg from ch => ..., value to ch => ..., _ => ... }
  */
 AstNode *xr_parse_select_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -468,12 +468,12 @@ AstNode *xr_parse_select_statement(Parser *parser) {
         AstNode *case_node = NULL;
         int case_line = parser->current.line;
 
-        // Check if wildcard fallback case (_ -> ...)
+        // Check if wildcard fallback case (_ => ...)
         if (xr_parser_match(parser, TK_UNDERSCORE)) {
             // Wildcard fallback case
-            if (!xr_parser_match(parser, TK_ARROW)) {
+            if (!xr_parser_match_arrow(parser, true)) {
                 do {
-                    xr_parser_error(parser, "expected '->' after _");
+                    xr_parser_error(parser, "expected '=>' after _");
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
                 return NULL;
@@ -503,7 +503,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             } while (0);
         } else {
             // Parse expression, then check if from or to
-            // var from ch -> ... (recv) or val to ch -> ... (send)
+            // var from ch => ... (recv) or val to ch => ... (send)
             AstNode *first_expr = xr_parse_precedence(parser, PREC_CALL);
             if (!xr_parser_healthy(parser)) return NULL;
             if (!first_expr) {
@@ -515,7 +515,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             }
 
             if (xr_parser_check_name(parser, "from")) {
-                // recv case: var from ch -> ...
+                // recv case: var from ch => ...
                 do {
                     xr_parser_advance(parser);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -542,10 +542,10 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '->'
-                if (!xr_parser_match(parser, TK_ARROW)) {
+                // Expect '=>'
+                if (!xr_parser_match_arrow(parser, true)) {
                     do {
-                        xr_parser_error(parser, "expected '->' after channel");
+                        xr_parser_error(parser, "expected '=>' after channel");
                         if (!xr_parser_healthy(parser)) return NULL;
                     } while (0);
                     return NULL;
@@ -575,7 +575,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 } while (0);
 
             } else if (xr_parser_check_name(parser, "to")) {
-                // send case: val to ch -> ...
+                // send case: val to ch => ...
                 do {
                     xr_parser_advance(parser);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -594,10 +594,10 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '->'
-                if (!xr_parser_match(parser, TK_ARROW)) {
+                // Expect '=>'
+                if (!xr_parser_match_arrow(parser, true)) {
                     do {
-                        xr_parser_error(parser, "expected '->' after channel");
+                        xr_parser_error(parser, "expected '=>' after channel");
                         if (!xr_parser_healthy(parser)) return NULL;
                     } while (0);
                     return NULL;
@@ -626,18 +626,18 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
 
-            } else if (xr_parser_check(parser, TK_ARROW)) {
-                // Check if after case: after ms -> ...
+            } else if (xr_parser_check_value_arrow(parser)) {
+                // Check if after case: after ms => ...
                 if (first_expr->type == AST_VARIABLE &&
                     xr_parser_compare_string(parser, first_expr->as.variable.name, "after") == 0) {
                     do {
                         xr_parser_error(parser,
-                                    "after requires timeout expression, format: after 1000 -> ...");
+                                    "after requires timeout expression, format: after 1000 => ...");
                         if (!xr_parser_healthy(parser)) return NULL;
                     } while (0);
                     return NULL;
                 }
-                // Possibly after ms -> ... form, first_expr is number
+                // Possibly after ms => ... form, first_expr is number
                 do {
                     xr_parser_error(parser, "expected 'from' or 'to' in select case");
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -646,7 +646,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
 
             } else if (first_expr->type == AST_VARIABLE &&
                        xr_parser_compare_string(parser, first_expr->as.variable.name, "after") == 0) {
-                // after case: after ms -> ...
+                // after case: after ms => ...
                 // Parse timeout expression (milliseconds)
                 AstNode *timeout_expr = xr_parse_precedence(parser, PREC_CALL);
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -658,10 +658,10 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '->'
-                if (!xr_parser_match(parser, TK_ARROW)) {
+                // Expect '=>'
+                if (!xr_parser_match_arrow(parser, true)) {
                     do {
-                        xr_parser_error(parser, "expected '->' after timeout expression");
+                        xr_parser_error(parser, "expected '=>' after timeout expression");
                         if (!xr_parser_healthy(parser)) return NULL;
                     } while (0);
                     return NULL;

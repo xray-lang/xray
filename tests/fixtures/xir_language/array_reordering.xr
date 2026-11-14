@@ -78,7 +78,7 @@ fn main() {
     var choices = [Choice.Empty, Choice.Text{text: "enum"}]
     choices.unshift(Choice.Empty)
     const choices_result = choices.reverse()
-    print(match(choices_result[0]) { Choice.Empty -> "wrong", Choice.Text{text} -> text })
+    print(match(choices_result[0]) { Choice.Empty => "wrong", Choice.Text{text} => text, })
     var maybe: Array<i64?> = [null, 5]
     maybe.unshift(null)
     const maybe_result = maybe.reverse()

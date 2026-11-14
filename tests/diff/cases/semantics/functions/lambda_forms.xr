@@ -14,13 +14,13 @@ fn call0(f: fn() -> i64) -> i64 { return f() }
 fn takeRef(f: fn(ref i64) -> i64, x: ref i64) -> i64 { return f(ref x) }
 
 fn main() {
-    print(apply(x -> x * 2, 21))              // bare arrow, one parameter
-    print(apply((x) -> x * 2, 21))            // same concept, parenthesised
-    print(apply2((a, b) -> a + b, 3, 4))      // several parameters
-    print(apply2((a: i64, b) -> a * b, 3, 4)) // per-parameter annotation mix
-    print(call0(() -> 99))                    // zero parameters
+    print(apply(x => x * 2, 21))              // bare arrow, one parameter
+    print(apply((x) => x * 2, 21))            // same concept, parenthesised
+    print(apply2((a, b) => a + b, 3, 4))      // several parameters
+    print(apply2((a: i64, b) => a * b, 3, 4)) // per-parameter annotation mix
+    print(call0(() => 99))                    // zero parameters
 
-    print(apply(x -> { var y = x + 1
+    print(apply(x => { var y = x + 1
                        return y * 10 }, 4))   // block body, explicit return
 
     var inc = fn(x: i64) -> i64 { var y = x + 1
@@ -31,11 +31,11 @@ fn main() {
     print(id(7))                              // generic fn lambda
 
     var v = 10
-    print(takeRef((x: ref i64) -> x * 2, ref v))
+    print(takeRef((x: ref i64) => x * 2, ref v))
     print(v)                                  // 10 -- ref does not write back
 
     var w = 10
-    takeRef((x: ref i64) -> { x = x * 3
+    takeRef((x: ref i64) => { x = x * 3
                               return x }, ref w)
     print(w)                                  // 30 -- assignment does
 

@@ -78,7 +78,7 @@ fn childErrors() {
         try scope { go payloadError(); go worker(0) }
     } catch (error: PayloadError) {
         match (error) {
-            PayloadError.Failed { values: items } -> { assert(len(items) == 2 && items[0] + items[1] == 42) }
+            PayloadError.Failed { values: items } => { assert(len(items) == 2 && items[0] + items[1] == 42) },
         }
         caught = true
     }
@@ -124,8 +124,8 @@ export fn exitOrder() -> i64 {
     scope {
         go deferredWorker(ready, waiting)
         match (ready.recv()) {
-            Recv.Value { value: signal } -> { assert(signal == 1) }
-            _ -> { assert(false) }
+            Recv.Value { value: signal } => { assert(signal == 1) },
+            _ => { assert(false) },
         }
         defer { value = 42; waiting.close() }
         return value
@@ -168,7 +168,7 @@ fn bodyFirstFailure() -> i64 {
         }
     } catch (error: PayloadError) {
         match (error) {
-            PayloadError.Failed { values: items } -> { caught = items[0] + items[1] }
+            PayloadError.Failed { values: items } => { caught = items[0] + items[1] },
         }
     } catch (error: WorkError) { caught = 1 }
     return caught
@@ -195,31 +195,31 @@ fn selections() {
     words.send("selected")
     var chosen = 0
     select {
-        word from words -> { assert(word == "selected"); chosen = 1 }
-        number from numbers -> { assert(false) }
-        _ -> { assert(false) }
+        word from words => { assert(word == "selected"); chosen = 1 }
+        number from numbers => { assert(false) }
+        _ => { assert(false) }
     }
     assert(chosen == 1)
     select {
-        number from numbers -> { assert(false) }
-        _ -> { chosen = 2 }
+        number from numbers => { assert(false) }
+        _ => { chosen = 2 }
     }
     assert(chosen == 2)
     select {
-        after selectedDelay() -> { chosen = 3 }
-        number from selectedChannel(numbers) -> { assert(false) }
+        after selectedDelay() => { chosen = 3 }
+        number from selectedChannel(numbers) => { assert(false) }
     }
     assert(chosen == 3 && selectOrder.load() == 2)
     scope {
         go fn() { numbers.send(42) }()
-        select { number from numbers -> { assert(number == 42); chosen = 4 } }
+        select { number from numbers => { assert(number == 42); chosen = 4 } }
     }
     assert(chosen == 4)
     const maybe = Channel<i64?>(1)
     maybe.send(null)
     select {
-        value from maybe -> { assert(value == null); chosen = 5 }
-        _ -> { assert(false) }
+        value from maybe => { assert(value == null); chosen = 5 }
+        _ => { assert(false) }
     }
     assert(chosen == 5)
 }
@@ -258,7 +258,7 @@ fn aggregates() {
             else { const result = try Task.first([task]) }
         } catch (error: PayloadError) {
             match (error) {
-                PayloadError.Failed { values: items } -> { assert(items[0] + items[1] == 42) }
+                PayloadError.Failed { values: items } => { assert(items[0] + items[1] == 42) },
             }
             caught = true
         }

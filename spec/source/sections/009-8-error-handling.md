@@ -64,8 +64,8 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
@@ -181,9 +181,9 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
@@ -356,8 +356,8 @@ class PanicInfo {
     data: JSON.Value            // 附加数据；无数据时为 JSON null
     replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
 
@@ -576,7 +576,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed 然后 payload
+        print(fetchData(true))         // 输出：closed 然后 payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -618,7 +618,7 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray @run
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -632,8 +632,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // 输出：empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -678,8 +678,8 @@ fn main() {
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // 输出：message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // 输出：code: 430
     }
 }
 
@@ -752,8 +752,8 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
@@ -869,9 +869,9 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
@@ -1044,8 +1044,8 @@ class PanicInfo {
     data: JSON.Value            // additional data; JSON null when absent
     replacedError: Error?      // read-only; owned error replaced by cleanup panic, or null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
 
@@ -1276,7 +1276,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed, then payload
+        print(fetchData(true))         // prints closed, then payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -1318,7 +1318,7 @@ These self-contained target-language examples state expected stdout in `output` 
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray @run
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -1332,8 +1332,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // prints empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -1378,8 +1378,8 @@ fn main() {
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // prints message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // prints code: 430
     }
 }
 

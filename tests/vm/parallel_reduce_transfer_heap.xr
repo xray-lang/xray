@@ -6,8 +6,8 @@ import parallel
 var total = parallel.reduce(
     0..100,
     [0],
-    (i) -> [i + 1],
-    (a, b) -> [a[0] + b[0]],
+    (i) => [i + 1],
+    (a, b) => [a[0] + b[0]],
     parallel.Options(4)
 )
 

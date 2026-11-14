@@ -34,7 +34,7 @@ typedef struct XrFmtConfig {
     int brace_same_line;               // Opening brace on same line
 
     // ---- Column alignment ----
-    int align_branch_arrows;      // Column-align `->` of match/select branch arms
+    int align_branch_arrows;      // Column-align `=>` of match/select branch arms
     int align_enum_values;        // Column-align `=` of enum members
     int align_struct_fields;      // Column-align `:` of class/struct/iface fields
     int align_trailing_comments;  // Column-align `//` of consecutive trailing line comments

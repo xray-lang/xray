@@ -434,7 +434,7 @@ TEST(parser_for_stmt) {
 
 TEST(parser_select_wildcard_default_arm) {
     setup();
-    AstNode *stmt = parse_first("select {\n  _ -> { print(\"idle\") }\n}");
+    AstNode *stmt = parse_first("select {\n  _ => { print(\"idle\") }\n}");
     ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
     ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
     AstNode *case_node = stmt->as.select_stmt.cases[0];
@@ -448,7 +448,7 @@ TEST(parser_select_wildcard_default_arm) {
 
 TEST(parser_select_channel_arrow_remains_arm_delimiter) {
     setup();
-    AstNode *stmt = parse_first("select {\n  value from ch -> { print(value) }\n}");
+    AstNode *stmt = parse_first("select {\n  value from ch => { print(value) }\n}");
     ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
     ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
     AstNode *case_node = stmt->as.select_stmt.cases[0];
@@ -463,7 +463,7 @@ TEST(parser_select_channel_arrow_remains_arm_delimiter) {
 TEST(parser_select_default_keyword_rejected) {
     setup();
     AstNode *ast = parse_program(X_session,
-                            "select {\n  default -> { print(\"idle\") }\n}");
+                            "select {\n  default => { print(\"idle\") }\n}");
     ASSERT_NULL(ast);
     teardown();
 }
@@ -991,8 +991,8 @@ TEST(parser_enum_record_payload_surface) {
     ASSERT_EQ_INT(construct->as.enum_construct.field_values[0]->type, AST_LITERAL_INT);
 
     AstNode *binding = parse_first("var y = match (x) {\n"
-                                   "  Result.Ok { value } -> value,\n"
-                                   "  Result.Err { error: _ } -> 0\n"
+                                   "  Result.Ok { value } => value,\n"
+                                   "  Result.Err { error: _ } => 0,\n"
                                    "}");
     AstNode *match = binding->as.var_decl.initializer;
     ASSERT_EQ_INT(match->type, AST_MATCH_EXPR);
@@ -1140,7 +1140,7 @@ TEST(parser_rejects_positional_enum_payload_surface) {
     ASSERT_NULL(parse_program(X_session,
                          "enum Result { Ok(i64), Err(string) }"));
     ASSERT_NULL(parse_program(X_session,
-                         "var y = match (x) { Result.Ok(value) -> value }"));
+                         "var y = match (x) { Result.Ok(value) => value }"));
     ASSERT_NULL(parse_program(X_session,
                          "enum Color { Red fn label() -> string { return this.name } }"));
     teardown();
@@ -1477,7 +1477,7 @@ TEST(parser_arrow_fn_not_tuple) {
     setup();
     /* `(a, b) -> a + b` must still parse as a function expression,
      * not as a 2-tuple of variable references followed by `->`. */
-    AstNode *stmt = parse_first("var f = (a, b) -> a + b");
+    AstNode *stmt = parse_first("var f = (a, b) => a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     teardown();
@@ -1485,7 +1485,7 @@ TEST(parser_arrow_fn_not_tuple) {
 
 TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     setup();
-    AstNode *stmt = parse_first("var f = (a: i64, b, c: ref i64, d: move Buffer,) -> a + b");
+    AstNode *stmt = parse_first("var f = (a: i64, b, c: ref i64, d: move Buffer,) => a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 4);
@@ -1499,15 +1499,15 @@ TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     ASSERT_EQ_INT(init->as.function_expr.params[3]->passing_mode, XR_PARAM_MOVE);
 
     XrCompilerSession *session = X_session;
-    ASSERT_NULL(parse_program(session, "var f = (ref x) -> x"));
-    ASSERT_NULL(parse_program(session, "var f = (x: i64 = 1) -> x"));
-    ASSERT_NULL(parse_program(session, "var f = (...xs: i64) -> xs"));
+    ASSERT_NULL(parse_program(session, "var f = (ref x) => x"));
+    ASSERT_NULL(parse_program(session, "var f = (x: i64 = 1) => x"));
+    ASSERT_NULL(parse_program(session, "var f = (...xs: i64) => xs"));
     teardown();
 }
 
 TEST(parser_bare_lambda_in_expression_position) {
     setup();
-    AstNode *stmt = parse_first("var f: fn(i64) -> i64 = x -> x * 2");
+    AstNode *stmt = parse_first("var f: fn(i64) -> i64 = x => x * 2");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 1);

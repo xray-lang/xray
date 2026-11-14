@@ -36,7 +36,7 @@ fn test_fn_type_alias() {
         return f(x)
     }
     
-    var result = apply(5, (n) -> n * 2)
+    var result = apply(5, (n) => n * 2)
     assertEqual(result, 10)
 }
 
@@ -73,7 +73,7 @@ fn test_nested_alias() {
         return f(f(x))
     }
     
-    assertEqual(applyTwice(3, (n) -> n * 2), 12)
+    assertEqual(applyTwice(3, (n) => n * 2), 12)
 }
 
 // ===== Type alias in return type =====
@@ -100,7 +100,7 @@ fn test_void_fn_alias() {
         }
     }
     
-    forEach([1, 2, 3], (x) -> {
+    forEach([1, 2, 3], (x) => {
         sum = sum + x
     })
     assertEqual(sum, 6)

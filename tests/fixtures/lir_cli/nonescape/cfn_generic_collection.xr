@@ -6,5 +6,5 @@ fn copied() {
     const saved = identity(callback)
     const copies = pair(saved)
     const values: Array<CFn<fn(i64) -> i64>> = [callback]
-    const mapped = values.map((value) -> value)
+    const mapped = values.map((value) => value)
 }

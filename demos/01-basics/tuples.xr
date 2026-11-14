@@ -52,11 +52,11 @@ for ((k, v) in pairs) {
 // === Match with tuple patterns ===
 fn classify(p: (i64, i64)) -> string {
     return match (p) {
-        (0, 0)             -> "origin"
-        (0, _)             -> "y-axis"
-        (_, 0)             -> "x-axis"
-        (x, y) if (x == y) -> "diagonal"
-        _                  -> "general"
+        (0, 0)             => "origin",
+        (0, _)             => "y-axis",
+        (_, 0)             => "x-axis",
+        (x, y) if (x == y) => "diagonal",
+        _                  => "general",
     }
 }
 print(classify((0, 0)))
@@ -68,8 +68,8 @@ print(classify((2, 9)))
 // === Nested match patterns ===
 fn fst_first(t: ((i64, i64), i64)) -> i64 {
     return match (t) {
-        ((0, _), _) -> -1
-        ((a, _), _) -> a
+        ((0, _), _) => -1,
+        ((a, _), _) => a,
     }
 }
 print(fst_first(((42, 99), 7)))

@@ -7,8 +7,8 @@ import time
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 

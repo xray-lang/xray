@@ -79330,7 +79330,7 @@
     },
     {
       "case_id": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
-      "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd",
+      "source_lf_sha256": "a8b3218bf60679cc8674670ada2e5be13c05bd622d3c41a0296847c32e3ec1cf",
       "primary_family": "channel-select-scope-cancel",
       "secondary_families": [
         "ownership-read-ref-move-copy-drop",

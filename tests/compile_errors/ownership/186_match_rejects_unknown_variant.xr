@@ -6,9 +6,9 @@ fn pick() -> Color { return Color.Red }
 
 fn main() {
     match (pick()) {
-        Color.Red -> print("red")
-        Color.Purple -> print("purple")
-        _ -> print("other")
+        Color.Red => print("red"),
+        Color.Purple => print("purple"),
+        _ => print("other"),
     }
 }
 

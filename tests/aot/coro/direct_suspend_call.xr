@@ -1,7 +1,7 @@
 fn recv_once(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value } -> value
-        _ -> -1
+        Recv.Value { value } => value,
+        _ => -1,
     }
 }
 

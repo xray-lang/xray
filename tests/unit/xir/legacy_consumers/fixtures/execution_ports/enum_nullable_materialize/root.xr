@@ -32,7 +32,7 @@ fn make(b: bool) -> E? {
 
 fn describe(e: E?) -> i64 {
     if (e == null) { return -1 }
-    return match (e!) { E.A { value: v } -> v, E.B -> 0 }
+    return match (e!) { E.A { value: v } => v, E.B => 0, }
 }
 
 // local materialization (typed contexts)

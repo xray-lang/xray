@@ -47,9 +47,9 @@ enum Shape {
 
 fn shapeValue(s: Shape) -> i64 {
     return match (s) {
-        Shape.Empty -> 0,
-        Shape.Boxed { b } -> b.get(),
-        Shape.Point { p } -> p.x + p.y,
+        Shape.Empty => 0,
+        Shape.Boxed { b } => b.get(),
+        Shape.Point { p } => p.x + p.y,
     }
 }
 
@@ -76,9 +76,9 @@ enum Expr {
 
 fn eval(e: Expr) -> i64 {
     return match (e) {
-        Expr.Num { v } -> v,
-        Expr.Add { l, r } -> eval(l.get()) + eval(r.get()),
-        Expr.Mul { l, r } -> eval(l.get()) * eval(r.get()),
+        Expr.Num { v } => v,
+        Expr.Add { l, r } => eval(l.get()) + eval(r.get()),
+        Expr.Mul { l, r } => eval(l.get()) * eval(r.get()),
     }
 }
 

@@ -21,18 +21,18 @@ class Cell<T> {
 }
 
 // inferred-return lambdas passed to free functions
-print(apply((y) -> y * 3, 10))       // 30
-print(applyTwice((y) -> y + 1, 5))   // 7
-print(toStr((n) -> "n=" + n.toString(), 7))  // n=7
+print(apply((y) => y * 3, 10))       // 30
+print(applyTwice((y) => y + 1, 5))   // 7
+print(toStr((n) => "n=" + n.toString(), 7))  // n=7
 
 // generic free function taking a closure
-var r = mapInt([1, 2, 3], (v) -> v * v)
+var r = mapInt([1, 2, 3], (v) => v * v)
 print(r[0])   // 1
 print(r[1])   // 4
 print(r[2])   // 9
 
 // generic class method taking a closure (inferred method type param U)
 var c = Cell<i64>(10)
-print(c.map((v) -> v + 100))   // 110
-print(c.update((v) -> v * 2))  // 20
+print(c.map((v) => v + 100))   // 110
+print(c.update((v) => v * 2))  // 20
 print(c.value)                  // 20

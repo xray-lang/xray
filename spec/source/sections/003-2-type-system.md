@@ -619,11 +619,11 @@ v = "hello"             // OK
 - **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
 
@@ -692,11 +692,11 @@ Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // 输出：1
+    print(pair.1)   // 输出：hello
     var (a, b) = pair    // 解构
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // 输出：1
+    print(b)        // 输出：hello
 }
 
 main()
@@ -714,9 +714,9 @@ type Mapper2<T, U> = fn(T) -> U
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
-```xray
+```xray @fragment
 var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
@@ -770,14 +770,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 详见 §7.4。简述：
 
-```xray @id=types-inference
+```xray @id=types-inference @fragment
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
 var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
+var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1070,12 +1070,12 @@ print(len(a))               // 4
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // 输出：[1, 2, 3, 4]
+    print(len(nums))     // 输出：4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // 输出：[2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // 输出：[2, 4]
 }
 
 main()
@@ -1087,15 +1087,15 @@ Map 与 Set：
 fn main() {
     var scores = #{"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // 输出：95
+    print(len(scores))                 // 输出：3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // 输出：2
+    print(seen.contains(1))   // 输出：true
 }
 
 main()
@@ -1106,9 +1106,9 @@ main()
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // 输出：anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // 输出：NYC
 }
 
 main()
@@ -1745,11 +1745,11 @@ Constraints:
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
 
@@ -1818,11 +1818,11 @@ Sendable is the conjunction of all fields; this family does not automatically ex
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // prints 1
+    print(pair.1)   // prints hello
     var (a, b) = pair    // destructuring
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // prints 1
+    print(b)        // prints hello
 }
 
 main()
@@ -1842,9 +1842,9 @@ Aliases are **purely syntactic** equivalences; they do not introduce new types,
 runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
-```xray
+```xray @fragment
 var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -1912,14 +1912,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 See §7.4 for details. In summary:
 
-```xray @id=types-inference
+```xray @id=types-inference @fragment
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
 var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
+var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -2212,12 +2212,12 @@ Arrays:
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // prints [1, 2, 3, 4]
+    print(len(nums))     // prints 4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // prints [2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // prints [2, 4]
 }
 
 main()
@@ -2229,15 +2229,15 @@ Maps and Sets:
 fn main() {
     var scores = #{"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // prints 95
+    print(len(scores))                 // prints 3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // prints 2
+    print(seen.contains(1))   // prints true
 }
 
 main()
@@ -2248,9 +2248,9 @@ Nullable types with `??`:
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // prints anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // prints NYC
 }
 
 main()

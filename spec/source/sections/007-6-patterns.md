@@ -14,14 +14,14 @@ order: 007
 
 ### 6.1 字面量模式
 
-```xray
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
 
@@ -30,12 +30,12 @@ match (x) {
 
 ### 6.2 范围模式 `a..b` / `a..=b`
 
-```xray
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
 
@@ -46,11 +46,11 @@ match (age) {
 
 #### 6.3.1 简单变体（无 payload）
 
-```xray
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
 
@@ -62,31 +62,31 @@ match (color) {
 
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // 同名 binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // 只列需要观察的字段
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
 
@@ -97,7 +97,7 @@ match (msg) {
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
-```xray
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -106,8 +106,8 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
@@ -116,12 +116,12 @@ match (event) {
 
 ### 6.4 类型模式 `is T`
 
-```xray
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // 绑定窄化值
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // 绑定窄化值
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
 
@@ -129,11 +129,11 @@ match (value) {
 
 ### 6.5 守卫条件 `if`
 
-```xray
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
 
@@ -142,11 +142,11 @@ match (x) {
 
 ### 6.6 多值模式
 
-```xray
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
 
@@ -163,11 +163,11 @@ match (x) {
 
 ### 6.8 变量绑定模式
 
-```xray
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
 
@@ -183,12 +183,12 @@ var { name, age } = user
 
 详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
 
-```xray
+```xray @fragment
 match (p) {
-    { x, y } -> ...           // 对象字段解构（簡寫绑定）
-    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
-    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
-    [_, mid, _] -> ...        // 元素位通配
+    { x, y } => print(x, y),             // 对象字段解构（簡寫绑定）
+    { name: n, age } => print(n, age),    // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest,] => print(a, b, rest), // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] => print(mid),           // 元素位通配
 }
 ```
 
@@ -214,14 +214,14 @@ Patterns appear in `match` expressions/statements, in `var` / `const` destructur
 
 ### 6.1 Literal Patterns
 
-```xray
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
 
@@ -230,12 +230,12 @@ match (x) {
 
 ### 6.2 Range Patterns `a..b` / `a..=b`
 
-```xray
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
 
@@ -246,11 +246,11 @@ match (age) {
 
 #### 6.3.1 Simple variants (no payload)
 
-```xray
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
 
@@ -262,31 +262,31 @@ The scrutinee is evaluated once. Pattern bindings are immutable values scoped to
 
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // Same-name binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // List only fields that are observed
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
 
@@ -297,7 +297,7 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
-```xray
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -306,8 +306,8 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```
@@ -316,12 +316,12 @@ match (event) {
 
 ### 6.4 Type Patterns `is T`
 
-```xray
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // bind the narrowed value
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // bind the narrowed value
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
 
@@ -329,11 +329,11 @@ match (value) {
 
 ### 6.5 Guard Conditions `if`
 
-```xray
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
 
@@ -342,11 +342,11 @@ match (x) {
 
 ### 6.6 Multi-value Patterns
 
-```xray
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
 
@@ -363,11 +363,11 @@ match (x) {
 
 ### 6.8 Variable-binding Patterns
 
-```xray
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
 
@@ -383,12 +383,12 @@ var { name, age } = user
 
 See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
 
-```xray
+```xray @fragment
 match (p) {
-    { x, y } -> ...           // object field destructure (shorthand binding)
-    { name: n, age } -> ...   // field rename + shorthand mixed
-    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
-    [_, mid, _] -> ...        // element-position wildcards
+    { x, y } => print(x, y),             // object field destructure (shorthand binding)
+    { name: n, age } => print(n, age),    // field rename + shorthand mixed
+    [a, b, ..rest,] => print(a, b, rest), // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] => print(mid),           // element-position wildcards
 }
 ```
 

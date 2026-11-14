@@ -4,5 +4,5 @@ fn countIf(n: i64, predicate: fn(i64) -> bool) -> i64 {
     return count
 }
 fn zeros(data: Slice<u8>) -> i64 {
-    return countIf(len(data), (i) -> data[i] == 0)
+    return countIf(len(data), (i) => data[i] == 0)
 }

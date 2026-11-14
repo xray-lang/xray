@@ -1,0 +1,12 @@
+fn apply(value: i64, action: fn(i64) -> i64) -> i64 {
+    return action(value)
+}
+print(apply(4, x => x * 2))
+print(apply(4, (x: i64) => x + 3))
+print(apply(4, fn(x: i64) -> i64 { return x + 5 }))
+print(apply(4, (x: i64) => { var result = x * 3; return result }))
+print(match (-2) {
+    0 => 0,
+    n if (n < 0) => { 11 },
+    _ => 12,
+})

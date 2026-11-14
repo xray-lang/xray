@@ -1,8 +1,8 @@
 const ch = Channel<i64>(2)
 
 select {
-    1 to ch -> { print("sent") }
-    _ -> { print("full") }
+    1 to ch => { print("sent") }
+    _ => { print("full") }
 }
 
 ch.close()

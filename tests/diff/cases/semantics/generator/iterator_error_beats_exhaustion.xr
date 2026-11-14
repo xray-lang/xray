@@ -35,7 +35,7 @@ try {
     direct()
 } catch (e) {
     match (e) {
-        GenErr.Msg { s } -> print("direct-caught " + s)
+        GenErr.Msg { s } => print("direct-caught " + s),
     }
 } catch panic (p) {
     print("direct-panic " + string(p.code))
@@ -45,7 +45,7 @@ try {
     looped()
 } catch (e) {
     match (e) {
-        GenErr.Msg { s } -> print("looped-caught " + s)
+        GenErr.Msg { s } => print("looped-caught " + s),
     }
 } catch panic (p) {
     print("looped-panic " + string(p.code))

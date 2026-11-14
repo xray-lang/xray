@@ -11,7 +11,7 @@ fn typedError() -> i64 {
         throw WorkError.Failed{value: 42}
     }()
     try { return try await task }
-    catch (error: WorkError) { return match(error) { WorkError.Failed{value} -> value } }
+    catch (error: WorkError) { return match(error) { WorkError.Failed{value} => value, } }
 }
 export fn main() -> i64 {
     assert((await go producer.worker(42)) == 42)

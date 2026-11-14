@@ -1,15 +1,15 @@
 fn wait_select_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel<i64>) {
     ready.send(1)
     select {
-        msg from ch -> {}
+        msg from ch => {}
     }
     done.send(1)
 }
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
@@ -29,12 +29,12 @@ fn test_select_wakes_on_channel_close() {
     ch.close()
     var result = done.recvTimeout(2000)
     var ok = match (result) {
-        Recv.Value { value: _ } -> true
-        _ -> false
+        Recv.Value { value: _ } => true,
+        _ => false,
     }
     var value = match (result) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
     assertEqual(ok, true)
     assertEqual(value, 1)

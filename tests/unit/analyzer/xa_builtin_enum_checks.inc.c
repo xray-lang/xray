@@ -30,10 +30,10 @@ static bool builtin_enum_source_has_errors(const char *source) {
 TEST(analyzer_builtin_enum_channel_results_keep_declaration_identity) {
     ASSERT(!builtin_enum_source_has_errors(
         "fn sent(result: SendResult) -> bool {\n"
-        "  return match (result) { SendResult.Sent -> true, _ -> false }\n"
+        "  return match (result) { SendResult.Sent => true, _ => false, }\n"
         "}\n"
         "fn received(result: Recv<i64>) -> i64 {\n"
-        "  return match (result) { Recv.Value { value } -> value, _ -> -1 }\n"
+        "  return match (result) { Recv.Value { value } => value, _ => -1, }\n"
         "}\n"
         "const channel: Channel<i64> = Channel(2)\n"
         "var sent_ok = sent(channel.trySend(17))\n"

@@ -12,10 +12,10 @@ fn skipWaitTry(p: Process) {
 
 fn skipCloseMatch(pipe: Pipe) {
     match (0) {
-        0 -> {
+        0 => {
             return
-        }
-        _ -> {}
+        },
+        _ => {},
     }
     print(pipe.close())
 }

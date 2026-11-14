@@ -12,11 +12,11 @@ fn assertionMessage() -> string {
 
 assert(true, assertionMessage())
 assertEqual(7, 7, assertionMessage())
-assertThrows(() -> {
+assertThrows(() => {
     actionCount = actionCount + 1
     throw AssertionProbeError.Expected
 }, assertionMessage())
-assertPanics(() -> {
+assertPanics(() => {
     actionCount = actionCount + 1
     var zero = 0
     var ignored = 1 / zero
@@ -24,19 +24,19 @@ assertPanics(() -> {
 
 // Wrong-channel and normal-return outcomes must become assertion failures,
 // which the outer panic assertion observes without accepting the wrong input.
-assertPanics(() -> {
-    assertThrows(() -> {
+assertPanics(() => {
+    assertThrows(() => {
         var zero = 0
         var ignored = 1 / zero
     })
 })
-assertPanics(() -> {
-    assertPanics(() -> {
+assertPanics(() => {
+    assertPanics(() => {
         throw AssertionProbeError.Expected
     })
 })
-assertPanics(() -> { assertThrows(() -> {}) })
-assertPanics(() -> { assertPanics(() -> {}) })
+assertPanics(() => { assertThrows(() => {}) })
+assertPanics(() => { assertPanics(() => {}) })
 
 assertEqual(actionCount, 2)
 assertEqual(messageCount, 4)

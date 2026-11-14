@@ -3,6 +3,6 @@ import sync
 
 var t = sys.Thread.spawn(fn() -> i64 {
     var rw = sync.RwLock<i64>(7)
-    return rw.read((v) -> v)
+    return rw.read((v) => v)
 })
 print(t.join())

@@ -6,9 +6,9 @@ fn frozen<T>()->Packet<i64> {
 export fn referenceAnswer()->i64 {
     const stored=frozen<i8>()
     const {value:left,count:right}=stored
-    const selected=match(stored) { {value:x,count:y}->x+y }
+    const selected=match(stored) { {value:x,count:y}=>x+y, }
     const choice=Choice.Data{value:left+right}
-    const answer=match(choice) { Choice.Data{value:n}->n, Choice.Empty->0 }
+    const answer=match(choice) { Choice.Data{value:n}=>n, Choice.Empty=>0, }
     assert(selected==42 && answer==42)
     return answer
 }

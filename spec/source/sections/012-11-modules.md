@@ -176,8 +176,8 @@ import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+    print(math.sqrt(144.0))   // 输出：12.0
+    print(sha256("xray"))     // 输出：1a46e6a6...（SHA-256 摘要）
 }
 
 main()
@@ -359,8 +359,8 @@ import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+    print(math.sqrt(144.0))   // prints 12.0
+    print(sha256("xray"))     // prints 1a46e6a6... (SHA-256 digest)
 }
 
 main()

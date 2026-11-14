@@ -51,8 +51,8 @@ fn sleeper(ch: Channel<i64>) -> i64 {
     // the only way out is cancellation.
     var held = [1, 2, 3, 4, 5, 6, 7, 8]
     var got = match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
+        Recv.Value { value: v } => v,
+        _ => 0,
     }
     return len(held) + got
 }
@@ -69,8 +69,8 @@ fn drop_cancelled(rounds: i64) -> i64 {
         // frame (and the Array parked in it) must already be torn down by
         // the time the result is visible.
         var hit = match (t.awaitResult()) {
-            TaskResult.Cancelled -> 1
-            _ -> 0
+            TaskResult.Cancelled => 1,
+            _ => 0,
         }
         done = done + hit
         ch.close()

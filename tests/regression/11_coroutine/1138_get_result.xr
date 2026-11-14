@@ -3,8 +3,8 @@
 
 fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
@@ -18,16 +18,16 @@ fn test_main() {
     const ch = Channel<i64>(0)
     var task = go blocked(ch)
     print("before pending:", match (task.poll()) {
-        TaskResult.Pending -> true
-        _ -> false
+        TaskResult.Pending => true,
+        _ => false,
     })
 
     ch.send(21)
     var result = await task
     print("after:", result)
     print("again:", match (task.poll()) {
-        TaskResult.Success { value: v } -> v
-        _ -> -1
+        TaskResult.Success { value: v } => v,
+        _ => -1,
     })
     ch.close()
 
@@ -37,8 +37,8 @@ fn test_main() {
     task2.cancel()
     var cancelled = task2.awaitResult()
     print("cancelled:", match (cancelled) {
-        TaskResult.Cancelled -> true
-        _ -> false
+        TaskResult.Cancelled => true,
+        _ => false,
     })
     ch2.close()
 
@@ -46,8 +46,8 @@ fn test_main() {
     var task3 = go compute(21)
     var done = task3.awaitResult()
     print("completed:", match (done) {
-        TaskResult.Success { value: v } -> v
-        _ -> -1
+        TaskResult.Success { value: v } => v,
+        _ => -1,
     })
 }
 

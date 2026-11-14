@@ -23,10 +23,10 @@ class GenericQueue<T> {
         for (var i = 0; i < this.workers; i++) {
             var idx = (worker_id + i) % this.workers
             match (this.shards[idx].tryRecv()) {
-                Recv.Value { value: item } -> {
+                Recv.Value { value: item } => {
                     return item
-                }
-                _ -> {}
+                },
+                _ => {},
             }
         }
         return null

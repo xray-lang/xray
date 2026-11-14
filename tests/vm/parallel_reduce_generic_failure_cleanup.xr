@@ -6,7 +6,7 @@ try {
     var failed = parallel.reduce(
         0..20000,
         "",
-        (i) -> {
+        (i) => {
             touched.add(1, Ordering.Relaxed)
             if (i == 10000) {
                 var zero = i - 10000
@@ -14,7 +14,7 @@ try {
             }
             return "x"
         },
-        (a, b) -> a + b,
+        (a, b) => a + b,
         parallel.Options(4)
     )
     print(len(failed))
@@ -29,8 +29,8 @@ print(touched.load(Ordering.Relaxed) > 0)
 var after = parallel.reduce(
     0..1000,
     "",
-    (i) -> "a",
-    (a, b) -> a + b,
+    (i) => "a",
+    (a, b) => a + b,
     parallel.Options(4)
 )
 

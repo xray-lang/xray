@@ -14,9 +14,9 @@ try {
     order.push("unreachable")
 } catch (e) {
     match (e) {
-        AppErr.Msg { s } -> {
+        AppErr.Msg { s } => {
             order.push("caught:" + s)
-        }
+        },
     }
 }
 order.push("after")

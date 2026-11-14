@@ -8,17 +8,17 @@
 #include "xir_sdk_resource_test.h"
 #include "lsp_open_json_owner.h"
 static const char *const source[]={
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value}->value }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}, E.B {value}->value }\n",
-    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}->value }\n"
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value}=>value, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}, E.B {value}=>value, }\n",
+    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}=>value, }\n"
 };
 static const char *const expected[]={
-    "enum E { A { payload:i64 }, B { value:i64 } }\nvar x=E.A {payload:1}\nvar y=match(x){ E.A {payload: value}, E.B {value}->value }\n",
-    "enum E { A { value:i64 }, B { payload:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {payload: value}->value }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value: local\xf0\x9f\x98\x80}, E.B {value: local\xf0\x9f\x98\x80}->local\xf0\x9f\x98\x80 }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:local}, E.B {value: local}->local }\n",
-    "enum E { A { payload:i64 } }\nvar x=E.A {payload:1}\nvar y=match(x){ E.A {payload:value}->value }\n",
-    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:local}->local }\n"
+    "enum E { A { payload:i64 }, B { value:i64 } }\nvar x=E.A {payload:1}\nvar y=match(x){ E.A {payload: value}, E.B {value}=>value, }\n",
+    "enum E { A { value:i64 }, B { payload:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {payload: value}=>value, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value: local\xf0\x9f\x98\x80}, E.B {value: local\xf0\x9f\x98\x80}=>local\xf0\x9f\x98\x80, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:local}, E.B {value: local}=>local, }\n",
+    "enum E { A { payload:i64 } }\nvar x=E.A {payload:1}\nvar y=match(x){ E.A {payload:value}=>value, }\n",
+    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:local}=>local, }\n"
 };
 static size_t offset(const char *text,int64_t line,int64_t column) {
     CHECK(line>=0&&column>=0);size_t at=0;while(line){CHECK(text[at]);if(text[at++]=='\n')--line;}

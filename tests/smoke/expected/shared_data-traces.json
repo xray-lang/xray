@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "demos/05-concurrency/shared_data.xr",
-  "sourceCanonicalSha256": "3f795fe120e3886ef13b33001b3f73cc08e5e02e10ac61dc020d4e9ae35a1a3f",
+  "sourceCanonicalSha256": "d9a0856b305ed59fe72d65401d58d124c58cd451730f3fa5b1e9507f25613034",
   "traces": [
     "worker-1: host=localhost, port=8080\nworker-2: host=localhost, port=8080\nworker-3: host=localhost, port=8080\nreceived via channel: 42\nchild sees: [1, 2, 3, 999]\nparent still has: [1, 2, 3]\n\nAll concurrency rules demonstrated safely!\n",
     "worker-1: host=localhost, port=8080\nworker-3: host=localhost, port=8080\nworker-2: host=localhost, port=8080\nreceived via channel: 42\nchild sees: [1, 2, 3, 999]\nparent still has: [1, 2, 3]\n\nAll concurrency rules demonstrated safely!\n",

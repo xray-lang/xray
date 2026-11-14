@@ -3,8 +3,8 @@
 
 fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value { value: v } -> v
-        _ -> 0
+        Recv.Value { value: v } => v,
+        _ => 0,
     }
 }
 

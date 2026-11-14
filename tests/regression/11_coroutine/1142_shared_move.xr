@@ -11,8 +11,8 @@
 
 fn recvArray(ch: Channel<Array<i64>>) -> Array<i64> {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> []
+        Recv.Value { value: v } => v,
+        _ => [],
     }
 }
 
@@ -26,8 +26,8 @@ fn emptyStep() -> StepMessage {
 
 fn recvStep(ch: Channel<StepMessage>) -> StepMessage {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> emptyStep()
+        Recv.Value { value: v } => v,
+        _ => emptyStep(),
     }
 }
 

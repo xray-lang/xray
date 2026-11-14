@@ -2,9 +2,9 @@ import parallel
 
 const ch: Channel<i64> = Channel<i64>(4)
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     select {
-        msg from ch -> { print(msg) }
-        _ -> {}
+        msg from ch => { print(msg) }
+        _ => {}
     }
 }, parallel.Options(2))

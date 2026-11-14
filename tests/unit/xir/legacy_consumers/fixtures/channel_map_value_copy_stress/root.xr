@@ -19,15 +19,15 @@ fn producer(id: i64) -> i64 {
 
 fn recv_map_size() -> i64 {
     return match (maps.recv()) {
-        Recv.Value { value: m } -> len(m)
-        _ -> -1
+        Recv.Value { value: m } => len(m),
+        _ => -1,
     }
 }
 
 fn recv_done_count() -> i64 {
     return match (done.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 

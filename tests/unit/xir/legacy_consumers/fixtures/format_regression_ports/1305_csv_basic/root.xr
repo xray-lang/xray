@@ -56,8 +56,8 @@ fn test_parse_report_and_strict_error() {
         csv.parse("a,b\n1")
     } catch (e: CsvError) {
         rejected = match (e) {
-            CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
-            _ -> false
+            CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } => record == 1,
+            _ => false,
         }
     }
     assert(rejected)
@@ -136,8 +136,8 @@ fn test_limits() {
         csv.parse("a,b", options)
     } catch (e: CsvError) {
         rejected = match (e) {
-            CsvError.ColumnLimitExceeded { limit } -> limit == 1,
-            _                                   -> false
+            CsvError.ColumnLimitExceeded { limit } => limit == 1,
+            _                                   => false,
         }
     }
     assert(rejected)

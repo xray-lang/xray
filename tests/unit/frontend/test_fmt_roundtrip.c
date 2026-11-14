@@ -651,19 +651,37 @@ TEST(arrow_return_type_emitted) {
     teardown();
 }
 
+TEST(arrow_literal_body_stays_parenthesized) {
+    setup();
+    const char *source = "const object = (x: i64) => ({value: x})\n"
+                         "const map = (x: i64) => (#{\"value\": x})\n"
+                         "const block = (x: i64) => { var y = x; return y }\n";
+    char *first = parse_and_format(source, "arrow_literals.xr");
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(contains(first, "=> ({"));
+    ASSERT_TRUE(contains(first, "=> (#{"));
+    ASSERT_TRUE(contains(first, "=> {"));
+    char *second = parse_and_format(first, "arrow_literals_formatted.xr");
+    ASSERT_NOT_NULL(second);
+    ASSERT_STR_EQ(first, second);
+    xr_compile_resources_free(second);
+    xr_compile_resources_free(first);
+    teardown();
+}
+
 TEST(annotated_and_mode_lambda_remain_arrow) {
     setup();
-    const char *src = "var typed = (x: i64) -> x + 1\n"
-                      "var mutate = (x: ref i64) -> { x = x + 1 }\n"
-                      "var consume = (job: move Job) -> job\n"
-                      "var task = go launch((x: i64) -> x)\n"
+    const char *src = "var typed = (x: i64) => x + 1\n"
+                      "var mutate = (x: ref i64) => { x = x + 1 }\n"
+                      "var consume = (job: move Job) => job\n"
+                      "var task = go launch((x: i64) => x)\n"
                       "var explicit = fn(x: i64) -> i64 { return x + 1 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "(x: i64) -> x + 1"));
-    ASSERT_TRUE(contains(fmt1, "(x: ref i64) ->"));
-    ASSERT_TRUE(contains(fmt1, "(job: move Job) -> job"));
-    ASSERT_TRUE(contains(fmt1, "go launch((x: i64) -> x)"));
+    ASSERT_TRUE(contains(fmt1, "(x: i64) => x + 1"));
+    ASSERT_TRUE(contains(fmt1, "(x: ref i64) =>"));
+    ASSERT_TRUE(contains(fmt1, "(job: move Job) => job"));
+    ASSERT_TRUE(contains(fmt1, "go launch((x: i64) => x)"));
     ASSERT_TRUE(contains(fmt1, "fn(x: i64) -> i64"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
@@ -967,19 +985,19 @@ TEST(branch_arrows_default_aligned) {
     setup();
     const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
-                      "        0 -> \"zero\",\n"
-                      "        n if (n < 0) -> \"negative\",\n"
-                      "        n if (n > 100) -> \"big\",\n"
-                      "        _ -> \"small positive\"\n"
+                      "        0 => \"zero\",\n"
+                      "        n if (n < 0) => \"negative\",\n"
+                      "        n if (n > 100) => \"big\",\n"
+                      "        _ => \"small positive\",\n"
                       "    }\n"
                       "}\n";
     /* NULL config -> default; branch arrows are aligned by default. */
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "0              -> \"zero\""));
-    ASSERT_TRUE(contains(out, "n if (n < 0)   -> \"negative\""));
-    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
-    ASSERT_TRUE(contains(out, "_              -> \"small positive\""));
+    ASSERT_TRUE(contains(out, "0              => \"zero\""));
+    ASSERT_TRUE(contains(out, "n if (n < 0)   => \"negative\""));
+    ASSERT_TRUE(contains(out, "n if (n > 100) => \"big\""));
+    ASSERT_TRUE(contains(out, "_              => \"small positive\""));
     xr_compile_resources_free(out);
     teardown();
 }
@@ -988,22 +1006,22 @@ TEST(branch_arrows_can_disable_alignment) {
     setup();
     const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
-                      "        0 -> \"zero\",\n"
-                      "        n if (n < 0) -> \"negative\",\n"
-                      "        n if (n > 100) -> \"big\",\n"
-                      "        _ -> \"small positive\"\n"
+                      "        0 => \"zero\",\n"
+                      "        n if (n < 0) => \"negative\",\n"
+                      "        n if (n > 100) => \"big\",\n"
+                      "        _ => \"small positive\",\n"
                       "    }\n"
                       "}\n";
     XrFmtConfig cfg = xfmt_default_config;
     cfg.align_branch_arrows = 0;
     char *out = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "0 -> \"zero\""));
-    ASSERT_TRUE(contains(out, "n if (n < 0) -> \"negative\""));
-    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
-    ASSERT_TRUE(contains(out, "_ -> \"small positive\""));
-    ASSERT_FALSE(contains(out, "0  ->"));
-    ASSERT_FALSE(contains(out, "_  ->"));
+    ASSERT_TRUE(contains(out, "0 => \"zero\""));
+    ASSERT_TRUE(contains(out, "n if (n < 0) => \"negative\""));
+    ASSERT_TRUE(contains(out, "n if (n > 100) => \"big\""));
+    ASSERT_TRUE(contains(out, "_ => \"small positive\""));
+    ASSERT_FALSE(contains(out, "0  =>"));
+    ASSERT_FALSE(contains(out, "_  =>"));
     xr_compile_resources_free(out);
     teardown();
 }
@@ -1012,9 +1030,9 @@ TEST(branch_arrows_aligned_idempotent) {
     setup();
     const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
-                      "        0 -> \"zero\",\n"
-                      "        n if (n < 0) -> \"negative\",\n"
-                      "        _ -> \"other\"\n"
+                      "        0 => \"zero\",\n"
+                      "        n if (n < 0) => \"negative\",\n"
+                      "        _ => \"other\",\n"
                       "    }\n"
                       "}\n";
     XrFmtConfig cfg = xfmt_default_config;
@@ -1040,18 +1058,18 @@ TEST(select_branch_arrows_default_aligned) {
                       "    const ch1 = Channel<i64>(1)\n"
                       "    const ch2 = Channel<i64>(1)\n"
                       "    select {\n"
-                      "        v from ch1 -> { print(v) }\n"
-                      "        100 to ch2 -> { print(\"sent\") }\n"
-                      "        after 10 -> { print(\"timeout\") }\n"
-                      "        _ -> { print(\"default\") }\n"
+                      "        v from ch1 => { print(v) }\n"
+                      "        100 to ch2 => { print(\"sent\") }\n"
+                      "        after 10 => { print(\"timeout\") }\n"
+                      "        _ => { print(\"default\") }\n"
                       "    }\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "v from ch1 -> {"));
-    ASSERT_TRUE(contains(out, "100 to ch2 -> {"));
-    ASSERT_TRUE(contains(out, "after 10   -> {"));
-    ASSERT_TRUE(contains(out, "_          -> {"));
+    ASSERT_TRUE(contains(out, "v from ch1 => {"));
+    ASSERT_TRUE(contains(out, "100 to ch2 => {"));
+    ASSERT_TRUE(contains(out, "after 10   => {"));
+    ASSERT_TRUE(contains(out, "_          => {"));
     xr_compile_resources_free(out);
     teardown();
 }
@@ -1062,13 +1080,13 @@ TEST(match_single_arm_no_padding) {
      * with alignment turned on — there is nothing to align against. */
     const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
-                      "        _ -> \"only\"\n"
+                      "        _ => \"only\",\n"
                       "    }\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "_ -> \"only\""));
-    ASSERT_FALSE(contains(out, "_  ->"));
+    ASSERT_TRUE(contains(out, "_ => \"only\""));
+    ASSERT_FALSE(contains(out, "_  =>"));
     xr_compile_resources_free(out);
     teardown();
 }
@@ -1117,14 +1135,14 @@ TEST(enum_record_construction_and_selective_pattern_are_idempotent) {
                       "var made=Result.Ok{code:\"ready\",value:1}\n"
                       "fn inspect(input:Result)->i64{\n"
                       "return match(input){\n"
-                      "Result.Ok{value,code:_}->value\n"
+                      "Result.Ok{value,code:_}=>value,\n"
                       "}\n"
                       "}\n";
     char *out = parse_and_format(src, "enum_record_surface.xr");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "Ok { value: i64, code: string }"));
     ASSERT_TRUE(contains(out, "Result.Ok { code: \"ready\", value: 1 }"));
-    ASSERT_TRUE(contains(out, "Result.Ok { value, code: _ } -> value"));
+    ASSERT_TRUE(contains(out, "Result.Ok { value, code: _ } => value"));
     ASSERT_FALSE(contains(out, "value: value"));
 
     char *again = parse_and_format(out, "enum_record_surface_formatted.xr");
@@ -1377,6 +1395,7 @@ RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
+RUN_TEST(arrow_literal_body_stays_parenthesized);
 RUN_TEST(annotated_and_mode_lambda_remain_arrow);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
 RUN_TEST(method_deprecated_attribute_roundtrip);

@@ -1,17 +1,17 @@
 import { Options, ParallelError, Plan } from parallel
 
-var plan = Plan<i64>(Options(2), lane -> lane + 1)
+var plan = Plan<i64>(Options(2), lane => lane + 1)
 const touched = Atomic<i64>(0)
 
 fn closeAndReenter() {
     plan.close()
-    plan.forEach(0..1, (state, i) -> {
+    plan.forEach(0..1, (state, i) => {
         print(state + i)
     })
 }
 
 try {
-    plan.forEach(0..20000, (state, i) -> {
+    plan.forEach(0..20000, (state, i) => {
         touched.add(1, Ordering.Relaxed)
         if (i == 10000) {
             closeAndReenter()
@@ -20,30 +20,30 @@ try {
     print("miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("closed-typed")
-        ParallelError.ConcurrentDispatch -> print("active-leak")
-        _ -> print("other")
+        ParallelError.ClosedPlan => print("closed-typed"),
+        ParallelError.ConcurrentDispatch => print("active-leak"),
+        _ => print("other"),
     }
 }
 
 print(touched.load(Ordering.Relaxed) > 0)
 
 try {
-    plan.forEach(0..1, (state, i) -> {
+    plan.forEach(0..1, (state, i) => {
         print(state + i)
     })
     print("reopen-miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("closed")
-        ParallelError.ConcurrentDispatch -> print("active-leak")
-        _ -> print("other-after")
+        ParallelError.ClosedPlan => print("closed"),
+        ParallelError.ConcurrentDispatch => print("active-leak"),
+        _ => print("other-after"),
     }
 }
 
-var fresh = Plan<i64>(Options(2), lane -> lane)
+var fresh = Plan<i64>(Options(2), lane => lane)
 const freshTouched = Atomic<i64>(0)
-fresh.forEach(0..4, (state, i) -> {
+fresh.forEach(0..4, (state, i) => {
     freshTouched.add(1, Ordering.Relaxed)
 })
 print(freshTouched.load(Ordering.Relaxed) == 4)

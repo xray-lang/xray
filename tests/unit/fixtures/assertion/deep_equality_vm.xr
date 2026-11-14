@@ -21,14 +21,14 @@ var point_b: Point = { y: 2, x: 1 }
 assertEqual(point_a, point_b)
 
 assertEqual(Choice.Value { value: 3 }, Choice.Value { value: 3 })
-assertPanics(() -> { assertEqual(Choice.Value { value: 3 }, Choice.Value { value: 4 }) })
-assertPanics(() -> { assertEqual(Choice.Value { value: 3 }, Choice.Empty) })
+assertPanics(() => { assertEqual(Choice.Value { value: 3 }, Choice.Value { value: 4 }) })
+assertPanics(() => { assertEqual(Choice.Value { value: 3 }, Choice.Empty) })
 
 assertEqual(DerivedPoint(1, 2), DerivedPoint(1, 2))
-assertPanics(() -> { assertEqual(DerivedPoint(1, 2), DerivedPoint(1, 3)) })
+assertPanics(() => { assertEqual(DerivedPoint(1, 2), DerivedPoint(1, 3)) })
 
 assertEqual([1, 2, 3], [1, 2, 3])
-assertPanics(() -> { assertEqual([1, 2], [1, 3]) })
+assertPanics(() => { assertEqual([1, 2], [1, 3]) })
 
 var map_a: Map<string, Array<i64>> = #{ "a": [1, 2], "b": [3] }
 var map_b: Map<string, Array<i64>> = #{ "b": [3], "a": [1, 2] }
@@ -44,11 +44,11 @@ var none_a: i64? = null
 var none_b: i64? = null
 assertEqual(some_a, some_b)
 assertEqual(none_a, none_b)
-assertPanics(() -> { assertEqual(some_a, none_a) })
+assertPanics(() => { assertEqual(some_a, none_a) })
 
 assertEqual(0.0, -0.0)
 var nan = 0.0 / 0.0
-assertPanics(() -> { assertEqual(nan, nan) })
+assertPanics(() => { assertEqual(nan, nan) })
 var nan_map_a: Map<f64, i64> = #{}
 var nan_map_b: Map<f64, i64> = #{}
 nan_map_a[nan] = 7
@@ -64,6 +64,6 @@ cycle_right_b.set("next", JSON.value(cycle_right_a))
 assertEqual(cycle_left, cycle_right_a)
 cycle_left.set("value", JSON.value(1))
 cycle_right_a.set("value", JSON.value(2))
-assertPanics(() -> { assertEqual(cycle_left, cycle_right_a) })
+assertPanics(() => { assertEqual(cycle_left, cycle_right_a) })
 
 print("assertion-vm-equality-ok")

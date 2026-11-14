@@ -16,18 +16,18 @@ print(ch.recv())
 time.sleep(5)
 var sent = ch.sendTimeout(22, 50)
 print(match (sent) {
-    SendResult.Sent -> "sent"
-    SendResult.Timeout -> "send-timeout"
-    _ -> "send-closed"
+    SendResult.Sent => "sent",
+    SendResult.Timeout => "send-timeout",
+    _ => "send-closed",
 })
 
 // Leftover sleep timeout vs timed recv with data queued.
 time.sleep(5)
 var got = ch.recvTimeout(50)
 print(match (got) {
-    Recv.Timeout -> "recv-timeout"
-    Recv.Closed -> "recv-closed"
-    _ -> "recv-value"
+    Recv.Timeout => "recv-timeout",
+    Recv.Closed => "recv-closed",
+    _ => "recv-value",
 })
 
 // Genuine timeout right after a sleep: the empty channel has no sender, so
@@ -35,8 +35,8 @@ print(match (got) {
 time.sleep(5)
 var empty = ch.recvTimeout(10)
 print(match (empty) {
-    Recv.Timeout -> "empty-timeout"
-    Recv.Closed -> "empty-closed"
-    _ -> "empty-value"
+    Recv.Timeout => "empty-timeout",
+    Recv.Closed => "empty-closed",
+    _ => "empty-value",
 })
 ch.close()

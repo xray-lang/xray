@@ -25,10 +25,10 @@ fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
-            Recv.Value { value: v } -> {
+            Recv.Value { value: v } => {
                 sum = sum + v
-            }
-            _ -> {}
+            },
+            _ => {},
         }
     }
     return sum
@@ -43,11 +43,11 @@ scope {
 var a = ch.recv()
 var b = ch.recv()
 print(match (a) {
-    Recv.Value { value: av } -> match (b) {
-        Recv.Value { value: bv } -> av + bv
-        _ -> -1
-    }
-    _ -> -1
+    Recv.Value { value: av } => match (b) {
+        Recv.Value { value: bv } => av + bv,
+        _ => -1,
+    },
+    _ => -1,
 })
 ch.close()
 

@@ -22,22 +22,22 @@ fn closeProcessInTryOrCatch(throwNow: bool) {
 fn closeProcessInMatch(tag: i64) {
     var p = sys.Process.spawn("sh", ["-c", "exit 0"])
     match (tag) {
-        0 -> {
+        0 => {
             print(p!.wait())
-        }
-        _ -> {
+        },
+        _ => {
             print(p!.wait())
-        }
+        },
     }
 }
 
 fn closeProcessInSelect() {
     var p = sys.Process.spawn("sh", ["-c", "exit 0"])
     select {
-        msg from processLintCh -> {
+        msg from processLintCh => {
             print(p!.wait())
         }
-        _ -> {
+        _ => {
             print(p!.wait())
         }
     }
@@ -51,12 +51,12 @@ fn closeProcessInTernary(flag: bool) {
 fn closePipeInMatch(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
-        0 -> {
+        0 => {
             print(pipe!.close())
-        }
-        _ -> {
+        },
+        _ => {
             print(pipe!.close())
-        }
+        },
     }
 }
 

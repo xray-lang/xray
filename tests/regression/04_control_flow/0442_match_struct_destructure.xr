@@ -7,8 +7,8 @@
 fn test_match_object_shorthand() {
     var p = {x: 3, y: 4}
     var r = match (p) {
-        { x, y } -> x + y
-        _ -> 0
+        { x, y } => x + y,
+        _ => 0,
     }
     assertEqual(r, 7)
 }
@@ -18,8 +18,8 @@ fn test_match_object_shorthand() {
 fn test_match_object_rename() {
     var user = {name: "Bob", age: 5}
     var r = match (user) {
-        { name: n, age } -> n + ":" + string(age)
-        _ -> "none"
+        { name: n, age } => n + ":" + string(age),
+        _ => "none",
     }
     assertEqual(r, "Bob:5")
 }
@@ -29,9 +29,9 @@ fn test_match_object_rename() {
 fn test_match_object_refutable_field() {
     var cfg = {mode: 2, label: "go"}
     var r = match (cfg) {
-        { mode: 1 } -> "one"
-        { mode: 2, label } -> "two:" + label
-        _ -> "other"
+        { mode: 1 } => "one",
+        { mode: 2, label } => "two:" + label,
+        _ => "other",
     }
     assertEqual(r, "two:go")
 }
@@ -41,13 +41,13 @@ fn test_match_object_refutable_field() {
 fn test_match_array_rest() {
     var a = [10, 20, 30]
     match (a) {
-        [first, ..rest] -> {
+        [first, ..rest] => {
             assertEqual(first, 10)
             assertEqual(len(rest), 2)
             assertEqual(rest[0], 20)
             assertEqual(rest[1], 30)
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -56,9 +56,9 @@ fn test_match_array_rest() {
 fn test_match_array_length_select() {
     var pair = [1, 2]
     var r = match (pair) {
-        [x] -> x
-        [x, y] -> x * 10 + y
-        _ -> 0
+        [x] => x,
+        [x, y] => x * 10 + y,
+        _ => 0,
     }
     assertEqual(r, 12)
 }
@@ -68,11 +68,11 @@ fn test_match_array_length_select() {
 fn test_match_array_empty_rest() {
     var single = [99]
     match (single) {
-        [head, ..tail] -> {
+        [head, ..tail] => {
             assertEqual(head, 99)
             assertEqual(len(tail), 0)
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -81,8 +81,8 @@ fn test_match_array_empty_rest() {
 fn test_match_array_wildcards() {
     var triple = [7, 8, 9]
     var r = match (triple) {
-        [_, mid, _] -> mid
-        _ -> 0
+        [_, mid, _] => mid,
+        _ => 0,
     }
     assertEqual(r, 8)
 }
@@ -92,9 +92,9 @@ fn test_match_array_wildcards() {
 fn test_match_array_guard() {
     var a = [5, 6]
     var r = match (a) {
-        [x, y] if (x > 10) -> "big"
-        [x, y] -> "small:" + string(x + y)
-        _ -> "none"
+        [x, y] if (x > 10) => "big",
+        [x, y] => "small:" + string(x + y),
+        _ => "none",
     }
     assertEqual(r, "small:11")
 }

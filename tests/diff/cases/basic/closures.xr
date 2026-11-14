@@ -1,7 +1,7 @@
 // anchor: basic-closures-recursion
 fn makeCounter() -> fn() -> i64 {
     var n = 0
-    return () -> {
+    return () => {
         n = n + 1
         return n
     }
@@ -13,7 +13,7 @@ print(c())
 print(c())
 
 var base = 10
-print(((x: i64) -> x + base)(5))
+print(((x: i64) => x + base)(5))
 
 fn fib(n: i64) -> i64 {
     if (n < 2) {

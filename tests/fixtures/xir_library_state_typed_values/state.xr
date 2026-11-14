@@ -30,7 +30,7 @@ export fn current()->i64 {
     if(callback(40)!=41){return 99;};
     if(object.n!=n){return 99;};
     if(object.text!=record.text){return 99;};
-    const count = match(packet){Packet.Count{n,text}->{if(text!=record.text){return 99;};n},Packet.Empty->99}
+    const count = match(packet){Packet.Count{n,text}=>{if(text!=record.text){return 99;};n},Packet.Empty=>99,}
     if(count!=n){return 99;};
     return n
 }

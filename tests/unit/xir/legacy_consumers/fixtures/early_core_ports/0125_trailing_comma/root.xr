@@ -69,6 +69,6 @@ fn test_new_trailing_comma() {
 // 8. Arrow function with trailing comma in params
 @test
 fn test_arrow_trailing_comma() {
-    var f = (a: i64, b: i64,) -> a + b
+    var f = (a: i64, b: i64,) => a + b
     assert(f(3, 4) == 7)
 }

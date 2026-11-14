@@ -5,8 +5,8 @@ fn main_logic() {
     var total = parallel.reduce(
         0..4,
         0,
-        (i) -> i,
-        (a, b) -> {
+        (i) => i,
+        (a, b) => {
             seen = seen + b
             return a + b
         },

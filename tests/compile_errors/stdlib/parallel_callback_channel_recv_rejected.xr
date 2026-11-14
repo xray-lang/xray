@@ -3,7 +3,7 @@ import parallel
 const ch: Channel<i64> = Channel<i64>(4)
 ch.trySend(42)
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     var value = ch.recv()
     print(value)
 }, parallel.Options(2))

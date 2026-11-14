@@ -1,36 +1,36 @@
 const ch = Channel<i64>(2)
 
 select {
-    100 to ch -> { print("sent 100") }
-    _ -> { print("send failed") }
+    100 to ch => { print("sent 100") }
+    _ => { print("send failed") }
 }
 
 select {
-    200 to ch -> { print("sent 200") }
-    _ -> { print("send failed") }
+    200 to ch => { print("sent 200") }
+    _ => { print("send failed") }
 }
 
 select {
-    300 to ch -> { print("sent 300") }
-    _ -> { print("buffer full") }
+    300 to ch => { print("sent 300") }
+    _ => { print("buffer full") }
 }
 
 var r1 = ch.tryRecv()
 var r2 = ch.tryRecv()
 print(match (r1) {
-    Recv.Value { value: v } -> v
-    _ -> -1
+    Recv.Value { value: v } => v,
+    _ => -1,
 })
 print(match (r2) {
-    Recv.Value { value: v } -> v
-    _ -> -1
+    Recv.Value { value: v } => v,
+    _ => -1,
 })
 print(match (r1) {
-    Recv.Value { value: _ } -> true
-    _ -> false
+    Recv.Value { value: _ } => true,
+    _ => false,
 } && match (r2) {
-    Recv.Value { value: _ } -> true
-    _ -> false
+    Recv.Value { value: _ } => true,
+    _ => false,
 })
 ch.close()
 print("done")

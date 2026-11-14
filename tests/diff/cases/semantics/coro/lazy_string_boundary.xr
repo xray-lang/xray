@@ -9,8 +9,8 @@ fn glue(a: string, b: string) -> string {
 
 fn recv_string(ch: Channel<string>) -> string {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> ""
+        Recv.Value { value: v } => v,
+        _ => "",
     }
 }
 

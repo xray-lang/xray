@@ -22,11 +22,11 @@ fn makeCounter() -> IntThunk {
                          return count }
 }
 
-fn makeAdder(base: i64) -> IntFn { return (n) -> n + base }
+fn makeAdder(base: i64) -> IntFn { return (n) => n + base }
 
 fn main() {
     var greeting = "hi"
-    var sayIt = () -> greeting + "!"
+    var sayIt = () => greeting + "!"
     print(sayIt())                   // hi! -- read-only capture
 
     var c = makeCounter()
@@ -44,7 +44,7 @@ fn main() {
     print(add99(5))                  // 104
 
     var total = 0
-    var accumulate = (v: i64) -> { total = total + v }
+    var accumulate = (v: i64) => { total = total + v }
     accumulate(5)
     accumulate(7)
     print(total)                     // 12 -- the write is visible outside

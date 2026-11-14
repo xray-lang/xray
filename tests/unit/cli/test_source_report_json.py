@@ -366,7 +366,7 @@ def closure_parameter_cases(args, output, environment):
             'fn answer<T>(tag:T) throws(Fault)->i64{\r\n'
             'var offset=2\r\n'
             '/*é😀*/ const a=fn(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n'
-            '/*é😀*/ const b=(value:i64,value:i64)->value+offset\r\n'
+            '/*é😀*/ const b=(value:i64,value:i64)=>value+offset\r\n'
             '/*é😀*/ fn local(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n'
             'return try a(1,2)+b(1,2)+try local(1,2)\r\n'
             '}\r\n'
@@ -419,8 +419,8 @@ def closure_parameter_cases(args, output, environment):
     assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
     (output/'closure-native.stdout').write_bytes(child.stdout)
     positives = {
-        'module-expression': 'print(((value:i64)->value+1)(8))\n',
-        'nested-shadow': 'fn outer(value:i64)->i64{const a=(value:i64)->{const b=(value:i64)->value;return b(value)};const b=(value:i64)->value;return a(value)+b(value)-value}\nprint(outer(9))\n',
+        'module-expression': 'print(((value:i64)=>value+1)(8))\n',
+        'nested-shadow': 'fn outer(value:i64)->i64{const a=(value:i64)=>{const b=(value:i64)=>value;return b(value)};const b=(value:i64)=>value;return a(value)+b(value)-value}\nprint(outer(9))\n',
         'generic-context': 'fn apply<T>(seed:T)->T{const f:fn(T)->T=fn(value){return value};return f(seed)}\nprint(apply<i64>(9))\n',
         'contextual-ref': 'var value=4\nconst f:fn(ref i64)->i64=fn(value)->i64{value+=1;return value}\nprint(f(ref value)+value-1)\n'}
     positives.update({'const-shadow': 'fn outer()->i64{const value=2;const captured=3;const f=fn(value:i64)->i64{return value+captured};return f(value+4)}\nprint(outer())\n', 'cell-shadow': 'fn outer()->i64{var value=100;var captured=2;const f=fn(value:i64)->i64{captured+=1;return value+captured};const result=f(6);return result+value-100}\nprint(outer())\n', 'self-positive': 'fn outer()->i64{fn local(value:i64)->i64{if(value==0){return 0};return local(value-1)+1};return local(9)}\nprint(outer())\n', 'captured-this': 'class Box{value:i64;init(value:i64){this.value=value};read()->i64{const f=fn(value:i64)->i64{return this.value+value};return f(4)}}\nprint(Box(5).read())\n'})

@@ -1,1 +1,1 @@
-var f = value -> value
+var f = value => value

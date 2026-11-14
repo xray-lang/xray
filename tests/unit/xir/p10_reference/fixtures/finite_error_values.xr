@@ -15,7 +15,7 @@ fn raiseRight() throws(RouteError) -> i64 {
     throw choose(1)
 }
 fn score(error:RouteError)->i64 {
-    return match(error) { RouteError.Left->13, RouteError.Right->29 }
+    return match(error) { RouteError.Left=>13, RouteError.Right=>29, }
 }
 export fn referenceAnswer()->i64 {
     var total:i64=0

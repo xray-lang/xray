@@ -24,8 +24,8 @@ fn test_await_timeout() {
     var task1 = go fast_task()
     var result1 = task1.awaitTimeout(1000)
     print("  result:", match (result1) {
-        TaskResult.Success { value: v } -> v
-        _ -> -1
+        TaskResult.Success { value: v } => v,
+        _ => -1,
     })
 
     // 测试2：立即完成的任务
@@ -33,8 +33,8 @@ fn test_await_timeout() {
     var task2 = go fast_task()
     var result2 = task2.awaitTimeout(100)
     print("  result:", match (result2) {
-        TaskResult.Success { value: v } -> v
-        _ -> -1
+        TaskResult.Success { value: v } => v,
+        _ => -1,
     })
 
     // 测试3：已完成的任务使用超时等待
@@ -43,8 +43,8 @@ fn test_await_timeout() {
     await task3  // 先等待完成
     var result3 = task3.awaitTimeout(100)  // 再用超时等待已完成的任务
     print("  result:", match (result3) {
-        TaskResult.Success { value: v } -> v
-        _ -> -1
+        TaskResult.Success { value: v } => v,
+        _ => -1,
     })
 
     // 测试4：超时返回 TaskResult.Timeout
@@ -52,8 +52,8 @@ fn test_await_timeout() {
     var task4 = go slow_task()
     var result4 = task4.awaitTimeout(1)
     print("  timeout:", match (result4) {
-        TaskResult.Timeout -> true
-        _ -> false
+        TaskResult.Timeout => true,
+        _ => false,
     })
     await task4
 }

@@ -8,8 +8,8 @@ static void lsp_hover_field_cases(const char *root) {
         "}\n"
         "var made = Result.Ok { code: 7, value: 42 }\n"
         "var selected = match (made) {\n"
-        "    Result.Ok { value, code: _ } -> value\n"
-        "    Result.Err { value: message } -> 0\n"
+        "    Result.Ok { value, code: _ } => value,\n"
+        "    Result.Err { value: message } => 0,\n"
         "}\n";
     /* Literal positions distinguish the same-named fields and an explicit
      * local alias. No emitted declaration or range supplies the oracle. */

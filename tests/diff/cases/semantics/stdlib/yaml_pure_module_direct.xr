@@ -6,16 +6,16 @@ import { YamlValue } from yaml
 // local `var` bindings rather than YamlValue-returning helpers.
 fn kindOf(v: YamlValue) -> string {
     return match (v) {
-        YamlValue.Null          -> "null",
-        YamlValue.Boolean { value: b }    -> "bool",
-        YamlValue.Integer { value: n }    -> "int",
-        YamlValue.Float { value: f }      -> "float",
-        YamlValue.String { value: s }     -> "string",
-        YamlValue.Binary { bytes } -> "binary",
-        YamlValue.Sequence { items: xs }  -> "seq",
-        YamlValue.Mapping { mapping: m }    -> "map",
-        YamlValue.Tagged { tagged: t }     -> "tagged",
-        YamlValue.Alias { anchor: a }      -> "alias"
+        YamlValue.Null          => "null",
+        YamlValue.Boolean { value: b }    => "bool",
+        YamlValue.Integer { value: n }    => "int",
+        YamlValue.Float { value: f }      => "float",
+        YamlValue.String { value: s }     => "string",
+        YamlValue.Binary { bytes } => "binary",
+        YamlValue.Sequence { items: xs }  => "seq",
+        YamlValue.Mapping { mapping: m }    => "map",
+        YamlValue.Tagged { tagged: t }     => "tagged",
+        YamlValue.Alias { anchor: a }      => "alias",
     }
 }
 

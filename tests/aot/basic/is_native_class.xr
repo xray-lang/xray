@@ -12,8 +12,8 @@ fn isSb(x: StringBuilder | i64) -> bool { return x is StringBuilder }
 
 fn describeBig(x: BigInt | i64) -> string {
     match (x) {
-        is BigInt -> { return "big" }
-        is i64 -> { return "int" }
+        is BigInt => { return "big" },
+        is i64 => { return "int" },
     }
 }
 

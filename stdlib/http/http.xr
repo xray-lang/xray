@@ -2207,13 +2207,13 @@ fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Header
 // because every refusal http2 makes carries one of these five names.
 fn _http2ToHttpError(e: Http2Error) -> HttpError {
     match (e) {
-        Http2Error.ProtocolError { reason } -> { return HttpError.ProtocolError { reason: reason } }
-        Http2Error.FramingError { reason } -> { return HttpError.ProtocolError { reason: reason } }
-        Http2Error.CompressionError { reason } -> { return HttpError.ProtocolError { reason: reason } }
-        Http2Error.ConnectionFailed { target: connectionTarget } -> {
+        Http2Error.ProtocolError { reason } => { return HttpError.ProtocolError { reason: reason } },
+        Http2Error.FramingError { reason } => { return HttpError.ProtocolError { reason: reason } },
+        Http2Error.CompressionError { reason } => { return HttpError.ProtocolError { reason: reason } },
+        Http2Error.ConnectionFailed { target: connectionTarget } => {
             return HttpError.ConnectionFailed { target: connectionTarget }
-        }
-        Http2Error.TlsUnavailable -> { return HttpError.UnsupportedVersion { version: HttpVersion.Http2 } }
+        },
+        Http2Error.TlsUnavailable => { return HttpError.UnsupportedVersion { version: HttpVersion.Http2 } },
     }
 }
 

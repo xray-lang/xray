@@ -33,21 +33,21 @@ var _dropped = 0
 
 fn _levelValue(level: LogLevel) -> i64 {
     return match (level) {
-        LogLevel.Debug -> 0,
-        LogLevel.Info  -> 1,
-        LogLevel.Warn  -> 2,
-        LogLevel.Error -> 3,
-        LogLevel.Fatal -> 4
+        LogLevel.Debug => 0,
+        LogLevel.Info  => 1,
+        LogLevel.Warn  => 2,
+        LogLevel.Error => 3,
+        LogLevel.Fatal => 4,
     }
 }
 
 fn _levelName(level: LogLevel) -> string {
     return match (level) {
-        LogLevel.Debug -> "DEBUG",
-        LogLevel.Info  -> "INFO",
-        LogLevel.Warn  -> "WARN",
-        LogLevel.Error -> "ERROR",
-        LogLevel.Fatal -> "FATAL"
+        LogLevel.Debug => "DEBUG",
+        LogLevel.Info  => "INFO",
+        LogLevel.Warn  => "WARN",
+        LogLevel.Error => "ERROR",
+        LogLevel.Fatal => "FATAL",
     }
 }
 

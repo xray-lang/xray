@@ -14,7 +14,7 @@ fn apply(f: fn(i64) -> i64, n: i64) -> i64 {
 
 fn main() {
     var named = helper
-    var lambda = (a: i64) -> a * 2
+    var lambda = (a: i64) => a * 2
 
     print(named)
     print(string(named))

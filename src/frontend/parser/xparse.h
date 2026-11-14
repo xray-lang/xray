@@ -96,6 +96,12 @@ typedef struct XrParseCallSyntax {
 } XrParseCallSyntax;
 typedef XrCompileResourceStatus (*XrParseCallSyntaxFn)(void *, const XrParseCallSyntax *);
 
+/* Arrow observations borrow the source token only during the callback.
+ * Lookahead can repeat an observation; consumers deduplicate by source offset. */
+typedef void (*XrParseArrowSyntaxFn)(void *, const Token *, bool value_arrow);
+typedef void (*XrParseMatchArmSyntaxFn)(void *, const Token *body_end);
+typedef void (*XrParseArrowErrorFn)(void *, const Token *, bool value_arrow);
+
 /* ========== Parser State ==========
  *
  * Callers stack-allocate this struct. After parsing, callers may read:
@@ -123,6 +129,13 @@ struct Parser {
     void *error_callback_data;
     XrParseCallSyntaxFn call_syntax_callback;
     void *call_syntax_data;
+    XrParseArrowSyntaxFn arrow_syntax_callback;
+    void *arrow_syntax_data;
+    XrParseMatchArmSyntaxFn match_arm_syntax_callback;
+    void *match_arm_syntax_data;
+    /* Interpolation children borrow a synchronous reporter for original-file positions. */
+    XrParseArrowErrorFn arrow_error_callback;
+    void *arrow_error_data;
     int error_count;  // Number of errors collected
     int max_errors;   // Max errors before stopping (0 = unlimited)
 
@@ -167,13 +180,6 @@ struct Parser {
     // A match arm consumes the next block's tail value; nested blocks reset it.
     bool match_value_block_pending;
     bool block_tail_value_observed;
-
-    // Nesting count of match-arm expression bodies currently being parsed.
-    // `is` has no prefix rule (it is infix-only), so a line break before a
-    // leading `is` would not normally terminate the previous expression; when
-    // the previous arm body is still open, that leading `is` starts the next
-    // arm's type pattern and must end the body instead.
-    int match_arm_body_depth;
 
     // Record braces after a qualified path belong to the enclosing pattern
     // parser while this flag is set; expression parsing must leave them unread.
@@ -269,6 +275,12 @@ XR_FUNC XrParseStatus xr_compile_parser_status(const Parser *parser);
 XR_FUNC void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
                                           void *user_data, int max_errors);
 XR_FUNC void xr_parser_set_call_syntax_callback(Parser *, XrParseCallSyntaxFn, void *);
+XR_FUNC void xr_parser_set_arrow_syntax_callback(Parser *, XrParseArrowSyntaxFn, void *);
+XR_FUNC void xr_parser_set_match_arm_syntax_callback(Parser *, XrParseMatchArmSyntaxFn, void *);
+/* Tooling-only lexical signature/arm observations, including rejected syntax.
+ * Does not advance the parser or authorize an AST. Successful parses must be
+ * cross-checked against their ordinary observations before a rewrite. */
+XR_FUNC XrParseStatus xr_parser_scan_arrow_syntax(Parser *, XrParseArrowSyntaxFn, void *);
 
 // Consumes the parser scope. OK or RECOVERED publishes an AST borrowing the
 // caller's exact arena; resource failure never publishes a partial AST.

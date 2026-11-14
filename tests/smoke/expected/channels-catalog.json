@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "demos/05-concurrency/channels.xr",
-  "sourceCanonicalSha256": "17da75b01807fe5615098d617b3d68acdb7c290794e01e8f580ad3360999eefa",
+  "sourceCanonicalSha256": "021176553b4545dffd0bc438e8578478df31d3ae603897aba2aedfa8b937055e",
   "prefix": [
     "recv: 10",
     "recv: 20",

@@ -30,8 +30,8 @@ fn lanesSeen() -> i64 {
 }
 
 reset()
-var plan1 = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)
-plan1.forEach(0..8000, (state, i) -> {
+var plan1 = parallel.Plan<i64>(parallel.Options(1), (lane) => lane)
+plan1.forEach(0..8000, (state, i) => {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
         lane0.store(1, Ordering.Relaxed)
@@ -41,8 +41,8 @@ print(touched.load(Ordering.Relaxed) == 8000)
 print(lanesSeen() == 1)
 
 reset()
-var plan2 = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
-plan2.forEach(0..16000, (state, i) -> {
+var plan2 = parallel.Plan<i64>(parallel.Options(2), (lane) => lane)
+plan2.forEach(0..16000, (state, i) => {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
         lane0.store(1, Ordering.Relaxed)
@@ -54,8 +54,8 @@ print(touched.load(Ordering.Relaxed) == 16000)
 print(lanesSeen() == 2)
 
 reset()
-var plan4 = parallel.Plan<i64>(parallel.Options(4), (lane) -> lane)
-plan4.forEach(0..32000, (state, i) -> {
+var plan4 = parallel.Plan<i64>(parallel.Options(4), (lane) => lane)
+plan4.forEach(0..32000, (state, i) => {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
         lane0.store(1, Ordering.Relaxed)
@@ -71,8 +71,8 @@ print(touched.load(Ordering.Relaxed) == 32000)
 print(lanesSeen() == 4)
 
 reset()
-var plan8 = parallel.Plan<i64>(parallel.Options(8), (lane) -> lane)
-plan8.forEach(0..64000, (state, i) -> {
+var plan8 = parallel.Plan<i64>(parallel.Options(8), (lane) => lane)
+plan8.forEach(0..64000, (state, i) => {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
         lane0.store(1, Ordering.Relaxed)

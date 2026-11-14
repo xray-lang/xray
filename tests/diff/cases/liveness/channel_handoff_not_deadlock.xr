@@ -5,9 +5,9 @@
 fn echo(requests: Channel<i64>, replies: Channel<i64>) {
     while (true) {
         match (requests.recv()) {
-            Recv.Value { value } if (value < 0) -> { return }
-            Recv.Value { value } -> { replies.send(value) }
-            _ -> { return }
+            Recv.Value { value } if (value < 0) => { return },
+            Recv.Value { value } => { replies.send(value) },
+            _ => { return },
         }
     }
 }
@@ -20,8 +20,8 @@ for (var round = 0; round < 4; round++) {
     for (var value = 0; value < 96000; value++) {
         requests.send(value)
         match (replies.recv()) {
-            Recv.Value { value: reply } -> { checksum = checksum + reply }
-            _ -> {}
+            Recv.Value { value: reply } => { checksum = checksum + reply },
+            _ => {},
         }
     }
 }

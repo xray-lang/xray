@@ -14,7 +14,7 @@ try {
     enum_lib.failWithBlue()
 } catch (error) {
     match (error) {
-        enum_lib.ExportColor.Blue -> print("blue")
-        _                         -> print("other")
+        enum_lib.ExportColor.Blue => print("blue"),
+        _                         => print("other"),
     }
 }

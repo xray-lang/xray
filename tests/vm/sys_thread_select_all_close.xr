@@ -8,10 +8,10 @@ fn closeInSelect() {
         return 42
     })
     select {
-        msg from ch -> {
+        msg from ch => {
             print(t.join())
         }
-        _ -> {
+        _ => {
             t.detach()
         }
     }

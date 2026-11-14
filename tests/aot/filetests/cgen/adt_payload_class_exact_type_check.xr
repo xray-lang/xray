@@ -18,12 +18,12 @@ fn make() -> Payload<Box> {
 fn score() -> i64 {
     var payload = make()
     match (payload) {
-        Payload.Item { value: box } -> {
+        Payload.Item { value: box } => {
             return box.value
-        }
-        Payload.Empty -> {
+        },
+        Payload.Empty => {
             return 0
-        }
+        },
     }
 }
 

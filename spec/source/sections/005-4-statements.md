@@ -178,25 +178,25 @@ ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
 ### 4.5 `match` 语句
 
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
 
 **关键语法**：
 - 被匹配的表达式**必须**用括号包裹：`match (x) {...}`。
-- 分支之间的逗号**可选**——同一个 match 中可以混用（不写更常见）。
+- 分支之间必须写逗号；末尾逗号可写可不写，格式化器统一补齐。分支用 `=>`，其后的 `{` 一律是块。
 - 守卫条件 `if` 后的表达式必须用括号：`n if (n > 0)`。
 
-```xray @id=stmt-match
-match (x) { 1 -> print("one"), _ -> print("other") }
+```xray @id=stmt-match @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
 
@@ -266,14 +266,14 @@ CatchHeader   ::= Identifier (':' Type)?
                 | EnumPattern (',' EnumPattern)*
 ```
 
-```xray @id=stmt-try
+```xray @id=stmt-try @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -360,13 +360,13 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 综合 `if` / `match` / `for-in` 的控制流：
 
-```xray
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 
@@ -565,25 +565,25 @@ The body cannot access the container through another path or change its length. 
 ### 4.5 `match` Statement
 
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
 
 **Key syntax**:
 - The matched expression **must** be parenthesized: `match (x) {...}`.
-- Commas between arms are **optional** — both styles can be mixed in the same `match` (omitting commas is more common).
+- Commas between arms are required; a trailing comma is optional and the formatter supplies it. Arms use `=>`; an immediately following `{` always opens a block.
 - Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
 
-```xray @id=stmt-match
-match (x) { 1 -> print("one"), _ -> print("other") }
+```xray @id=stmt-match @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
 
@@ -653,15 +653,15 @@ CatchHeader   ::= Identifier (':' Type)?
                 | EnumPattern (',' EnumPattern)*
 ```
 
-```xray @id=stmt-try
+```xray @id=stmt-try @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -749,13 +749,13 @@ dump(some_obj)                 // debug output, with type info and structure
 
 Combining `if` / `match` / `for-in` control flow:
 
-```xray
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 

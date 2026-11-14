@@ -140,17 +140,17 @@ go fn() {
     ch.send(42)
 }()
 select {
-    value from ch -> {
+    value from ch => {
         print("received ${value}")
     }
-    after 1000    -> {
+    after 1000    => {
         print("timeout")
     }
 }
 ch.close()
 ```
 
-在 `select` 中，`value from ch` 表示接收，`value to ch` 表示发送，`after milliseconds` 表示超时，`_ ->` 表示立即执行的默认分支。`scope` 会在退出作用域前等待其中启动的协程结束。
+在 `select` 中，`value from ch` 表示接收，`value to ch` 表示发送，`after milliseconds` 表示超时，`_ =>` 表示立即执行的默认分支。`scope` 会在退出作用域前等待其中启动的协程结束。
 
 ### 内存管理
 

@@ -187,7 +187,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `isolated` | `scope(isolated)` 选项（§10.7） |
-| `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `after` | `select` 的超时分支 (`after 1000 => ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 | `escaping` | 参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存 |
@@ -462,7 +462,8 @@ var decimal = re"\d+\.\d+"
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`i64 \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
+| `->` | 类型箭头：函数、方法及 fn lambda 的返回类型；函数类型写 `fn(T) -> R`，返回 unit 时省略箭头（`fn(T)`） |
+| `=>` | 值箭头：箭头 lambda、`match` 与 `select` 分支；按最长匹配识别为一个 token |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -680,7 +681,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `isolated` | `scope(isolated)` option (§10.7) |
-| `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `after` | `select` timeout arm (`after 1000 => ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 | `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
@@ -955,7 +956,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`i64 \| string`) / bitwise or |
-| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
+| `->` | Type arrow: return types of functions, methods and fn lambdas; function types use `fn(T) -> R` and omit the arrow for unit (`fn(T)`) |
+| `=>` | Value arrow: arrow lambdas and `match` / `select` arms; recognized as one token by longest match |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |

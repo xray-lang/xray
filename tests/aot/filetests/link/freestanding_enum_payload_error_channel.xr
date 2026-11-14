@@ -21,9 +21,9 @@ fn xray_enum_payload_error(n: i64) -> i64 {
         out = pair.left + pair.right
     } catch (e: FsErr) {
         match (e) {
-            FsErr.Bad { code } -> {
+            FsErr.Bad { code } => {
                 out = 0 - code
-            }
+            },
         }
     }
     return out

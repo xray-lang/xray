@@ -54,7 +54,8 @@
       "heading": "Lambda forms",
       "fences": [
         "expr-lambda-forms"
-      ]
+      ],
+      "markdown": "Arrow lambdas and match/select arms use => for a value or block. Return types and fn(...) -> R function types use ->. Arrow lambdas are right-associative; a following brace is always a block, so parenthesize a returned literal. Wrong-position arrows are rejected with replacement hints."
     },
     {
       "heading": "Error signatures and external verification",

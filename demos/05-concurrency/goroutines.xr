@@ -40,10 +40,10 @@ print("first finished: ${first}")
 
 fn taskResultText(result: TaskResult<i64, Never>) -> string {
     return match (result) {
-        TaskResult.Success { value: v } -> "TaskResult.Success(${v})",
-        TaskResult.Error { error: _ } -> "TaskResult.Error",
-        TaskResult.Panic { info: _ } -> "TaskResult.Panic",
-        TaskResult.Cancelled -> "TaskResult.Cancelled",
+        TaskResult.Success { value: v } => "TaskResult.Success(${v})",
+        TaskResult.Error { error: _ } => "TaskResult.Error",
+        TaskResult.Panic { info: _ } => "TaskResult.Panic",
+        TaskResult.Cancelled => "TaskResult.Cancelled",
     }
 }
 

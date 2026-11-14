@@ -5,7 +5,7 @@ import sys
 var counter = 0
 const once = sys.OsOnce()
 
-once.call(() -> { counter = counter + 1 })
-once.call(() -> { counter = counter + 10 })
-once.call(() -> { counter = counter + 100 })
+once.call(() => { counter = counter + 1 })
+once.call(() => { counter = counter + 10 })
+once.call(() => { counter = counter + 100 })
 print(counter)

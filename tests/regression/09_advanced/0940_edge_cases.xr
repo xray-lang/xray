@@ -32,7 +32,7 @@ fn test_empty_array_operations() {
     assertEqual(len(arr), 0)
 
     // 对空数组的 map/filter
-    var mapped = arr.map((x) -> x * 2)
+    var mapped = arr.map((x) => x * 2)
     assertEqual(len(mapped), 0)
 }
 
@@ -51,7 +51,7 @@ fn test_single_element_array() {
     var arr = [42]
     assertEqual(len(arr), 1)
     assertEqual(arr[0], 42)
-    var doubled = arr.map((x) -> x * 2)
+    var doubled = arr.map((x) => x * 2)
     assertEqual(doubled[0], 84)
 }
 
@@ -145,7 +145,7 @@ fn test_deep_nesting() {
 @test
 fn test_closure_capture() {
     var x = 10
-    var f = () -> x
+    var f = () => x
     assertEqual(f(), 10)
 
     // 修改外部变量后闭包应该看到新值

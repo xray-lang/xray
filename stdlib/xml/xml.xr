@@ -59,8 +59,8 @@ export enum XmlNode {
 // Local name of an Element, or null for non-element nodes.
 export fn tag(node: XmlNode) -> string? {
     return match (node) {
-        XmlNode.Element { name, attributes: attrs, children: kids } -> name.local,
-        _                                  -> null
+        XmlNode.Element { name, attributes: attrs, children: kids } => name.local,
+        _                                  => null,
     }
 }
 
@@ -71,8 +71,8 @@ export fn tag(node: XmlNode) -> string? {
 // globally, which then breaks unrelated Element matches.
 export fn qualifiedName(node: XmlNode) -> XmlName? {
     match (node) {
-        XmlNode.Element { name, attributes: attrs, children: kids } -> { return name }
-        _ -> { return null }
+        XmlNode.Element { name, attributes: attrs, children: kids } => { return name },
+        _ => { return null },
     }
     return null
 }
@@ -80,8 +80,8 @@ export fn qualifiedName(node: XmlNode) -> XmlName? {
 // Ordered attributes of an Element (empty for other node kinds).
 export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
     return match (node) {
-        XmlNode.Element { name, attributes: attrs, children: kids } -> copy attrs,
-        _                                  -> _emptyAttrs()
+        XmlNode.Element { name, attributes: attrs, children: kids } => copy attrs,
+        _                                  => _emptyAttrs(),
     }
 }
 
@@ -111,19 +111,19 @@ export fn namespace(node: XmlNode, prefix: string) -> string? {
 // Direct children of a Document or Element (empty otherwise).
 export fn children(node: XmlNode) -> Array<XmlNode> {
     return match (node) {
-        XmlNode.Document { children: kids }             -> copy kids,
-        XmlNode.Element { name, attributes: attrs, children: kids } -> copy kids,
-        _                                  -> _emptyNodes()
+        XmlNode.Document { children: kids }             => copy kids,
+        XmlNode.Element { name, attributes: attrs, children: kids } => copy kids,
+        _                                  => _emptyNodes(),
     }
 }
 
 // Own textual payload of a Text/Comment/CData node.
 export fn nodeText(node: XmlNode) -> string? {
     return match (node) {
-        XmlNode.Text { content: s }    -> s,
-        XmlNode.Comment { content: s } -> s,
-        XmlNode.CData { content: s }   -> s,
-        _                  -> null
+        XmlNode.Text { content: s }    => s,
+        XmlNode.Comment { content: s } => s,
+        XmlNode.CData { content: s }   => s,
+        _                  => null,
     }
 }
 
@@ -131,11 +131,11 @@ export fn nodeText(node: XmlNode) -> string? {
 // Text/CData leaf).
 export fn textContent(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Element { name, attributes: attrs, children: kids } -> _directText(kids),
-        XmlNode.Document { children: kids }             -> _directText(kids),
-        XmlNode.Text { content: s }                    -> s,
-        XmlNode.CData { content: s }                   -> s,
-        _                                  -> ""
+        XmlNode.Element { name, attributes: attrs, children: kids } => _directText(kids),
+        XmlNode.Document { children: kids }             => _directText(kids),
+        XmlNode.Text { content: s }                    => s,
+        XmlNode.CData { content: s }                   => s,
+        _                                  => "",
     }
 }
 
@@ -449,15 +449,15 @@ fn _emptyNodes() -> Array<XmlNode> {
 
 fn _isTextNode(node: XmlNode) -> bool {
     return match (node) {
-        XmlNode.Text { content: s } -> true,
-        _               -> false
+        XmlNode.Text { content: s } => true,
+        _               => false,
     }
 }
 
 fn _textOf(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Text { content: s } -> s,
-        _               -> ""
+        XmlNode.Text { content: s } => s,
+        _               => "",
     }
 }
 
@@ -465,9 +465,9 @@ fn _directText(kids: Array<XmlNode>) -> string {
     var out = ""
     for (child in kids) {
         var piece = match (child) {
-            XmlNode.Text { content: s }  -> s,
-            XmlNode.CData { content: s } -> s,
-            _                -> ""
+            XmlNode.Text { content: s }  => s,
+            XmlNode.CData { content: s } => s,
+            _                => "",
         }
         out += piece
     }
@@ -949,13 +949,13 @@ fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions
 fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64) -> string {
     if (depth > XML_MAX_DEPTH) { return "" }
     return match (node) {
-        XmlNode.Document { children: kids }                          -> _serializeChildren(kids, config, level, depth),
-        XmlNode.Element { name, attributes: attrs, children: kids }              -> _serializeElement(name, attrs, kids, config, level, depth),
-        XmlNode.Text { content: value }                             -> _serializeText(value, config, level),
-        XmlNode.Comment { content: value }                          -> _serializeComment(value, config, level),
-        XmlNode.CData { content: value }                            -> _serializeCData(value, config, level),
-        XmlNode.ProcessingInstruction { target: instructionTarget, data: piData } ->
-            _serializePI(instructionTarget, piData, config, level)
+        XmlNode.Document { children: kids }                          => _serializeChildren(kids, config, level, depth),
+        XmlNode.Element { name, attributes: attrs, children: kids }              => _serializeElement(name, attrs, kids, config, level, depth),
+        XmlNode.Text { content: value }                             => _serializeText(value, config, level),
+        XmlNode.Comment { content: value }                          => _serializeComment(value, config, level),
+        XmlNode.CData { content: value }                            => _serializeCData(value, config, level),
+        XmlNode.ProcessingInstruction { target: instructionTarget, data: piData } =>
+            _serializePI(instructionTarget, piData, config, level),
     }
 }
 

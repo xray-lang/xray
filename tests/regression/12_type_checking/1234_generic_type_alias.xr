@@ -21,7 +21,7 @@ fn test_function_alias() {
     fn apply(f: Mapper<i64, string>, value: i64) -> string {
         return f(value)
     }
-    assertEqual(apply((n) -> "n=" + string(n), 9), "n=9")
+    assertEqual(apply((n) => "n=" + string(n), 9), "n=9")
 }
 
 @test

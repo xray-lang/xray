@@ -1118,9 +1118,7 @@ Token xr_scanner_scan(Scanner *scanner) {
                 return make_token(scanner, TK_DEC);  // --
             }
             if (match(scanner, '>')) {
-                return make_token(
-                    scanner,
-                    TK_ARROW);  // -> (unified arrow: fn return, fn type, closure, match/select arm)
+                return make_token(scanner, TK_ARROW);
             }
             return make_token(scanner, match(scanner, '=') ? TK_MINUS_ASSIGN : TK_MINUS);
         case '*':
@@ -1155,6 +1153,7 @@ Token xr_scanner_scan(Scanner *scanner) {
             }
             return make_token(scanner, TK_NOT);
         case '=':
+            if (match(scanner, '>')) return make_token(scanner, TK_FAT_ARROW);
             if (match(scanner, '=')) {
                 if (match(scanner, '=')) {
                     return error_token(scanner,
@@ -1163,9 +1162,6 @@ Token xr_scanner_scan(Scanner *scanner) {
                 return make_token(scanner, TK_EQ);
             }
             return make_token(scanner, TK_ASSIGN);
-            // Note: `=>` is no longer a token; the unified arrow is `->`. Parser
-            // emits a migration hint when it encounters `=` followed by `>` in
-            // legacy positions (handled by parser-level diagnostic, not here).
         case '<':
             if (match(scanner, '<')) {
                 return make_token(scanner, match(scanner, '=') ? TK_LSHIFT_ASSIGN : TK_LSHIFT);
@@ -1341,6 +1337,7 @@ static const char *token_names[] = {
     [TK_QUESTION_LBRACKET] = "?[",
     [TK_PIPE] = "|",
     [TK_ARROW] = "->",
+    [TK_FAT_ARROW] = "=>",
     [TK_DOT_DOT_DOT] = "...",
     [TK_RANGE] = "..",
     [TK_RANGE_INCLUSIVE] = "..=",

@@ -16,12 +16,12 @@ fn test_channel_timeout() {
     ch1.send(42)
     var result1 = ch1.recvTimeout(1000)
     var result1_value = match (result1) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
     var result1_ok = match (result1) {
-        Recv.Value { value: _ } -> true
-        _ -> false
+        Recv.Value { value: _ } => true,
+        _ => false,
     }
     print("  result:", result1_value, "ok:", result1_ok)  // expect: 42, true
 
@@ -30,9 +30,9 @@ fn test_channel_timeout() {
     const ch2: Channel<i64> = Channel(1)
     var result2 = ch2.recvTimeout(100)  // 100ms 超时
     match (result2) {
-        Recv.Timeout -> print("  timeout")  // expect: timeout
-        Recv.Value { value: v } -> print("  got:", v)
-        _ -> print("  no value")
+        Recv.Timeout => print("  timeout"),  // expect: timeout
+        Recv.Value { value: v } => print("  got:", v),
+        _ => print("  no value"),
     }
 
     // 测试 3：sendTimeout 立即成功（Channel 有空间）
@@ -40,13 +40,13 @@ fn test_channel_timeout() {
     const ch3: Channel<i64> = Channel(1)
     var ok3 = ch3.sendTimeout(100, 1000)
     print("  success:", match (ok3) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     })  // expect: true
     var v3 = ch3.recv()
     print("  value:", match (v3) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     })  // expect: 100
 
     // 测试 4：sendTimeout 超时（Channel 满）
@@ -55,8 +55,8 @@ fn test_channel_timeout() {
     ch4.send(1)  // 填满 channel
     var ok4 = ch4.sendTimeout(2, 100)  // 100ms 超时
     print("  success:", match (ok4) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     })  // expect: false（超时）
 
     // 测试 5：生产者-消费者带超时
@@ -67,10 +67,10 @@ fn test_channel_timeout() {
     var producer = go fn() {
         for (i in 1..4) {
             match (ch5.sendTimeout(i, 500)) {
-                SendResult.Sent -> {}
-                _ -> {
+                SendResult.Sent => {},
+                _ => {
                     print("  producer timeout at", i)
-                }
+                },
             }
         }
         ch5.close()
@@ -81,13 +81,13 @@ fn test_channel_timeout() {
         var count = 0
         while (true) {
             match (ch5.recvTimeout(200)) {
-                Recv.Value { value: val } -> {
+                Recv.Value { value: val } => {
                     print("  consumed:", val)
                     count++
-                }
-                _ -> {
+                },
+                _ => {
                     break
-                }
+                },
             }
         }
         return count

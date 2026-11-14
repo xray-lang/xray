@@ -42,14 +42,14 @@ fn drain_counts(ch: Channel<i64>, expected: i64) -> Array<i64> {
     var counts: Array<i64> = [0, 0]
     for (var i = 0; i < expected; i++) {
         match (ch.recv()) {
-            Recv.Value { value: v } -> {
+            Recv.Value { value: v } => {
                 if (v < 0) {
                     counts[0] = counts[0] + 1
                 } else {
                     counts[1] = counts[1] + 1
                 }
-            }
-            _ -> {}
+            },
+            _ => {},
         }
     }
     return counts

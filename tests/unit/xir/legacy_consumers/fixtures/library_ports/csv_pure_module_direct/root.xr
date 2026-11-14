@@ -32,8 +32,8 @@ try {
     csv.parse("a,b\n1")
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
-        _ -> false
+        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } => record == 1,
+        _ => false,
     })
 }
 
@@ -70,7 +70,7 @@ try {
     csv.parse("a,b", limited)
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.ColumnLimitExceeded { limit } -> limit == 1,
-        _                                   -> false
+        CsvError.ColumnLimitExceeded { limit } => limit == 1,
+        _                                   => false,
     })
 }

@@ -149,14 +149,14 @@ assertPanics(fn() { ch.send("owned payload") })
 print("alive")
 ''', "3\n3\nalive\n", 0, ""),
     "select_send": ('''const ch = Channel<string>(1)
-select { "payload" to ch -> { print("sent") } }
-match(ch.recv()) { Recv.Value { value } -> print(value), _ -> assert(false) }
+select { "payload" to ch => { print("sent") } }
+match(ch.recv()) { Recv.Value { value } => print(value), _ => assert(false), }
 ''', "sent\npayload\n", 0, ""),
     "select_closed": ('''fn main() {
     defer { print("select-cleanup") }
     const ch = Channel<string>()
     ch.close()
-    select { "payload" to ch -> { print("unreachable") } }
+    select { "payload" to ch => { print("unreachable") } }
 }
 main()
 ''', "select-cleanup\n", 1, "[Uncaught Panic] E0702: cannot send on a closed channel\n"),

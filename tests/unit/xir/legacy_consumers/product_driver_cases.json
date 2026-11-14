@@ -33329,7 +33329,7 @@
       "id": "complete_channel_timeout_after_sleep",
       "oracle_id": "complete_channel_timeout_after_sleep",
       "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
-      "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd",
+      "source_lf_sha256": "a8b3218bf60679cc8674670ada2e5be13c05bd622d3c41a0296847c32e3ec1cf",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "Recv.Value(11)\nsent\nrecv-value\nempty-timeout\n",
@@ -33347,7 +33347,7 @@
       "independent_execution_model": "Complete unchanged sleep/channel original:capacity1,all four sleep5calls,untimed11send/wholeRecvprint,timed22send50,queuedrecv50,emptyrecv10,all threematches/fourprints/finalclose. Independent finite FIFO andcompletion provenance drop only preceding sleep status before a channel operation while preserving a genuine newchannel timeout. Canonical recv returns Recv<i64>,so first direct print is Recv.Value(11),not an unwrapped scalar. No host clock orproduct output oracle;logical tickets do not prove physical timer count,scheduler latency,cleanup,cancel,lifetime,FI,safety,providers or mixed execution.",
       "preserved_original_identity": {
         "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
-        "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd"
+        "source_lf_sha256": "a8b3218bf60679cc8674670ada2e5be13c05bd622d3c41a0296847c32e3ec1cf"
       },
       "remaining_gates": [
         "Complete four sleeps/untimed andtimedchanneloperations/directRecvprint/threematches/finalclose retained. New genuineChannel timeout must remain distinct from preceding sleep status;actualscheduler/latency/cancel/cleanup/lifetime/FI/resources/safety/providers/mixed remainopen."

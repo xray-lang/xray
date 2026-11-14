@@ -1,9 +1,9 @@
 fn unpack(result: Recv<i64>) -> i64 {
     return match (result) {
-        Recv.Value { value: item } -> item,
-        Recv.Empty -> -1,
-        Recv.Timeout -> -2,
-        Recv.Closed -> -3,
+        Recv.Value { value: item } => item,
+        Recv.Empty => -1,
+        Recv.Timeout => -2,
+        Recv.Closed => -3,
     }
 }
 fn sendWorker(channel: Channel<i64>, value: i64) -> i64 {
@@ -46,10 +46,10 @@ export fn blockingUnitSend(channel: Channel<()>) -> i64 {
 }
 export fn blockingUnitRecv(channel: Channel<()>) -> i64 {
     return match(channel.recv()) {
-        Recv.Value { value: ignored } -> 41,
-        Recv.Empty -> -21,
-        Recv.Timeout -> -22,
-        Recv.Closed -> 44,
+        Recv.Value { value: ignored } => 41,
+        Recv.Empty => -21,
+        Recv.Timeout => -22,
+        Recv.Closed => 44,
     }
 }
 export fn blockingUnitDefault(channel: Channel<()>) -> i64 {
@@ -81,10 +81,10 @@ export fn main() -> i64 {
     units.close()
     units.recvOr(tick(counter))
     const seen = match(units.recv()) {
-        Recv.Value { value: ignored } -> -20,
-        Recv.Empty -> -21,
-        Recv.Timeout -> -22,
-        Recv.Closed -> 31,
+        Recv.Value { value: ignored } => -20,
+        Recv.Empty => -21,
+        Recv.Timeout => -22,
+        Recv.Closed => 31,
     }
     print(counter.load(), seen, unpack(genericRecv<i64>(closed)))
     const bare = Channel<i64>()
@@ -98,10 +98,10 @@ export fn main() -> i64 {
     const unitWrapped = Channel<()>()
     const unitWrappedSender = go sendUnitWorker(unitWrapped, counter)
     const unitValue = match(unitWrapped.recv()) {
-        Recv.Value { value: ignored } -> 41,
-        Recv.Empty -> -21,
-        Recv.Timeout -> -22,
-        Recv.Closed -> -23,
+        Recv.Value { value: ignored } => 41,
+        Recv.Empty => -21,
+        Recv.Timeout => -22,
+        Recv.Closed => -23,
     }
     print(unitValue, await unitWrappedSender, counter.load())
     const arrays = Channel<Array<i64>>(1)

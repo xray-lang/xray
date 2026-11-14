@@ -28,8 +28,8 @@ class Tree {
 
 fn describe(n: Node) -> i64 {
     return match (n) {
-        Node.Leaf { value: v } -> v,
-        Node.Branch { children: a } -> len(a)
+        Node.Leaf { value: v } => v,
+        Node.Branch { children: a } => len(a),
     }
 }
 
@@ -44,7 +44,7 @@ print(describe(t.at(1)))
 // nested: read a Branch's inner Array<Node> element back out
 var emptyNodes: Array<Node> = []
 var branch = t.at(1)
-var inner = match (branch) { Node.Branch { children: a } -> a, Node.Leaf { value: v } -> emptyNodes }
+var inner = match (branch) { Node.Branch { children: a } => a, Node.Leaf { value: v } => emptyNodes, }
 print(len(inner))
 print(describe(inner[0]))
 print(describe(inner[1]))

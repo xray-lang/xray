@@ -16,7 +16,7 @@ fn takesParen(f: (fn(i64) -> i64)) -> i64 { return f(1) }
 fn main() {
     var c = makeCounter()
     print(c())                        // 1
-    print(takesParen(x -> x + 41))    // 42
+    print(takesParen(x => x + 41))    // 42
 
     var nf: (fn() -> i64)? = null
     print(nf == null)                 // true

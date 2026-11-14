@@ -394,7 +394,7 @@ XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const c
  *
  * Produces human-readable type strings like "i64", "Array<string>",
  * "(i64) -> bool", etc.  Arena-allocated — no free needed.
- * Function types follow the unified arrow form (no leading `fn`).
+ * Function types use an `fn` prefix and a type-only return arrow.
  * ===================================================================== */
 
 /* Max buffer for xr_tref_to_string scratch — handles deeply nested

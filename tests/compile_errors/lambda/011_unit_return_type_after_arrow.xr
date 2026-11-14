@@ -1,1 +1,1 @@
-var f = (x: i64) -> () { return () }
+var f = (x: i64) => () { return () }

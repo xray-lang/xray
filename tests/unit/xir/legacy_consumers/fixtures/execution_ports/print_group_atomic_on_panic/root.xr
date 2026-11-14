@@ -30,22 +30,22 @@ class Explodes {
 
 fn main() {
     print("-- first operand --")
-    assertPanics(() -> {
+    assertPanics(() => {
         print(Explodes("x"), "tail")
     })
 
     print("-- middle operand --")
-    assertPanics(() -> {
+    assertPanics(() => {
         print("head", Explodes("x"), "tail")
     })
 
     print("-- last operand --")
-    assertPanics(() -> {
+    assertPanics(() => {
         print("head", "middle", Explodes("x"))
     })
 
     print("-- sole operand --")
-    assertPanics(() -> {
+    assertPanics(() => {
         print(Explodes("x"))
     })
 

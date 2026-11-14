@@ -3,22 +3,22 @@
 // SendResult/Recv builtin globals without requiring a coroutine isolate.
 fn is_sent(r: SendResult) -> bool {
     return match (r) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     }
 }
 
 fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
 fn has_value(r: Recv<i64>) -> bool {
     return match (r) {
-        Recv.Value { value: _ } -> true
-        _ -> false
+        Recv.Value { value: _ } => true,
+        _ => false,
     }
 }
 

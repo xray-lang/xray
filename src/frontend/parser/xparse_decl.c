@@ -1000,12 +1000,12 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
-    // The unified arrow `->` is the only legal separator.
+    // The type arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -1709,8 +1709,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
 
         // `{ ... }` is always a structural-object literal in Xray.
         // The only legal key-value separator is `:`. Map literals must use
-        // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
-        // for function / branch arrows and is rejected here with a hint.
+        // the `#{ k: v }` prefix form. The type arrow `->` is reserved
+        // for return types and is rejected here with a hint.
         if (xr_parser_match(parser, TK_COLON)) {
         } else if (xr_parser_check(parser, TK_ARROW)) {
             do {

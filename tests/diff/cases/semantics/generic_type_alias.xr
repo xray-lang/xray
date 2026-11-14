@@ -17,5 +17,5 @@ var box: Forward<f64> = { value: 3.5 }
 
 print(p.first + p.second)
 print(words[0] + words[1])
-print(apply((n) -> "n=" + string(n), 7))
+print(apply((n) => "n=" + string(n), 7))
 print(box.value)

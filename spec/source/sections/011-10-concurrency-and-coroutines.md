@@ -207,21 +207,21 @@ fn producer(ch: Channel<i64>) {
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
 
-```xray @id=coro-select
+```xray @id=coro-select @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
-    msg from ch2 -> { print("got from ch2:", msg) }      // 接收分支
-    100  to   ch1 -> { print("sent 100 to ch1") }        // 发送分支
-    _ -> { print("no channel ready") }                   // 默认分支（非阻塞）
+    msg from ch1 => { print("got from ch1:", msg) }      // 接收分支
+    msg from ch2 => { print("got from ch2:", msg) }      // 接收分支
+    100  to   ch1 => { print("sent 100 to ch1") }        // 发送分支
+    _ => { print("no channel ready") }                   // 默认分支（非阻塞）
 }
 ```
 
@@ -624,21 +624,21 @@ fn producer(ch: Channel<i64>) {
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
 
-```xray @id=coro-select
+```xray @id=coro-select @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
-    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
-    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
-    _ -> { print("no channel ready") }                   // default arm (non-blocking)
+    msg from ch1 => { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 => { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 => { print("sent 100 to ch1") }        // send arm
+    _ => { print("no channel ready") }                   // default arm (non-blocking)
 }
 ```
 

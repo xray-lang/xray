@@ -26,8 +26,8 @@ fn test_linked_scope_error() {
     } catch (e) {
         caught = true
         match (e) {
-            WorkerErr.Failed { code: c } -> { code = c }
-            _ -> {}
+            WorkerErr.Failed { code: c } => { code = c }
+            _ => {}
         }
     }
     assert(caught, "linked scope should have thrown child error")

@@ -18,6 +18,6 @@ static const char initialization_error_source[]=
     "struct Node{first:i64=try read()\nvalue:i64=try Node().value}\n"
     "const factory=fn()->Node{return try Node()}\n"
     "export fn answer()->i64{try{const n=factory();return n.value}"
-    "catch(e:ReadErr){return match(e){ReadErr.Bad{code}->code}}}\n"
+    "catch(e:ReadErr){return match(e){ReadErr.Bad{code}=>code,}}}\n"
     "print(answer())\n";
 #endif

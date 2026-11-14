@@ -10,12 +10,12 @@ fn make_pair() -> PairResult {
 fn score() -> i64 {
     var result = make_pair()
     match (result) {
-        PairResult.Pair { left, right } -> {
+        PairResult.Pair { left, right } => {
             return left + right
-        }
-        PairResult.Empty -> {
+        },
+        PairResult.Empty => {
             return 0
-        }
+        },
     }
 }
 

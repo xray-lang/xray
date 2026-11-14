@@ -7,7 +7,7 @@ export fn referenceAnswer()->i64 {
     var total:i64=0
     try { total=fail(3) }
     catch(error:RouteError) {
-        total=match(error) { RouteError.Left->42, RouteError.Right->0 }
+        total=match(error) { RouteError.Left=>42, RouteError.Right=>0, }
     }
     return total
 }

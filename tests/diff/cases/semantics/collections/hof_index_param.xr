@@ -13,10 +13,10 @@
 //
 // forEach uses a block body so this case does not also depend on D1.
 fn main() {
-    print([10, 20, 30].map(x -> x * 100))
-    print([10, 20, 30].map((x, i) -> x * 100 + i))
-    print([10, 20, 30].filter((x, i) -> i < 2))
-    [10, 20].forEach((x, i) -> { print("${i}:${x}") })
+    print([10, 20, 30].map(x => x * 100))
+    print([10, 20, 30].map((x, i) => x * 100 + i))
+    print([10, 20, 30].filter((x, i) => i < 2))
+    [10, 20].forEach((x, i) => { print("${i}:${x}") })
 }
 
 main()

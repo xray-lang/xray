@@ -1,7 +1,7 @@
 fn wait_recv(ch: Channel<i64>) -> i64 {
     var result = 0
     select {
-        value from ch -> {
+        value from ch => {
             result = value + 1
         }
     }

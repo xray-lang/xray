@@ -497,8 +497,8 @@ TEST(deep_expression_reports_error_instead_of_crashing) {
     teardown();
 }
 
-TEST(removed_match_arrow_recovers_without_null_assignment_lhs) {
-    // The parser corpus still contains the removed `=>` match-arm spelling.
+TEST(malformed_match_arrow_recovers_without_null_assignment_lhs) {
+    // Separated `= >` tokens are not the `=>` match-arm delimiter.
     // Error recovery reaches the `=` token after rejecting the arm pattern;
     // it must not call the assignment infix parser with a NULL left operand.
     setup();
@@ -507,7 +507,7 @@ TEST(removed_match_arrow_recovers_without_null_assignment_lhs) {
     XrArena *arena = NULL;
     AstNode *ast = parse_recoverable("fn f(x) {\n"
                                      "    return match (x) {\n"
-                                     "        _ => null\n"
+                                     "        _ = > null,\n"
                                      "    }\n"
                                      "}\n"
                                      "var after = 1\n",
@@ -713,7 +713,7 @@ RUN_TEST(broken_function_body_does_not_eat_following_decls);
 RUN_TEST(empty_and_whitespace_source_no_error);
 RUN_TEST(error_coordinates_in_source_bounds);
 RUN_TEST(deep_expression_reports_error_instead_of_crashing);
-RUN_TEST(removed_match_arrow_recovers_without_null_assignment_lhs);
+RUN_TEST(malformed_match_arrow_recovers_without_null_assignment_lhs);
 RUN_TEST(malformed_type_list_recovers_without_unbounded_growth);
 RUN_TEST(invalid_loop_label_recovers_without_revisiting_tokens);
 RUN_TEST(override_modifier_has_exact_declaration_scope);

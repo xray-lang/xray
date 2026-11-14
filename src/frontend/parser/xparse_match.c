@@ -544,7 +544,7 @@ static AstNode *parse_top_level_pattern(Parser *parser) {
     if (!xr_parser_check(parser, TK_COMMA))
         return first;
 
-    /* Alternation: `p1, p2, p3 -> ...` — gather until the arrow.
+    /* Alternation: `p1, p2, p3 => ...` — gather until the arrow.
      * The first atom may itself be a tuple/range/wildcard pattern. */
     AstNode **patterns =
         (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 16);
@@ -553,7 +553,7 @@ static AstNode *parse_top_level_pattern(Parser *parser) {
     int capacity = 16;
     patterns[count++] = first;
 
-    while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_ARROW) &&
+    while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check_value_arrow(parser) &&
            !xr_parser_check(parser, TK_IF)) {
         if (count >= capacity) {
             int old_capacity = capacity;
@@ -588,9 +588,9 @@ XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
 
 /*
  * Parse match arm
- * pattern -> expression
- * pattern if guard -> expression
- * pattern -> { block }
+ * pattern => expression
+ * pattern if guard => expression
+ * pattern => { block }
  */
 static AstNode *parse_match_arm(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -635,7 +635,8 @@ static AstNode *parse_match_arm(Parser *parser) {
 
     // Consume arrow
     do {
-        xr_parser_consume(parser, TK_ARROW, "expected '->' after pattern");
+        if (!xr_parser_match_arrow(parser, true))
+            xr_parser_error_at_current(parser, "expected '=>' after pattern");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
@@ -649,14 +650,11 @@ static AstNode *parse_match_arm(Parser *parser) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
     } else {
-        // Single expression; a line break followed by `is` ends the body and
-        // starts the next arm's type pattern (see line_break_ends_expr).
-        parser->match_arm_body_depth++;
+        // The separating comma terminates an expression body.
         do {
             body = xr_parse_expression(parser);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
-        parser->match_arm_body_depth--;
     }
 
     if (!body) {
@@ -667,15 +665,17 @@ static AstNode *parse_match_arm(Parser *parser) {
         return NULL;
     }
 
+    if (parser->match_arm_syntax_callback && !xr_parser_check(parser, TK_COMMA))
+        parser->match_arm_syntax_callback(parser->match_arm_syntax_data, &parser->previous);
     return xr_ast_match_arm(parser->compiler_session, pattern, guard, body, line);
 }
 
 /*
  * Parse match expression (prefix)
  * match (x) {
- *     1 -> "one",
- *     2 -> "two",
- *     _ -> "other"
+ *     1 => "one",
+ *     2 => "two",
+ *     _ => "other"
  * }
  */
 AstNode *xr_parse_match_expr(Parser *parser) {
@@ -685,7 +685,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
 
     // Scrutinee must be parenthesised, mirroring `if (...)`, `for (...)`,
     // `while (...)`. Required parens also disambiguate tuple scrutinees
-    // (`match (x, y) { (a, b) -> ... }`) from a sequence of bare names.
+    // (`match (x, y) { (a, b) => ... }`) from a sequence of bare names.
     do {
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'match'");
         if (!xr_parser_healthy(parser)) return NULL;
@@ -752,12 +752,16 @@ AstNode *xr_parse_match_expr(Parser *parser) {
 
         arms[arm_count++] = arm;
 
-        // Optional comma
+        // A trailing comma is optional; distinct arms require a separator.
         if (xr_parser_check(parser, TK_COMMA)) {
             do {
                 xr_parser_advance(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
+        } else if (!xr_parser_check(parser, TK_RBRACE)) {
+            xr_parser_error_coded_note(parser, &parser->current, 0,
+                "expected ',' between match arms", "insert `,` after the preceding match arm");
+            return NULL;
         }
     }
 

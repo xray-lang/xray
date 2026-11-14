@@ -1,6 +1,6 @@
 fn leaf() -> i64 { return 7 }
 fn retain(callback: escaping fn() -> i64) -> fn() -> i64 { return callback }
 const xs: Array<fn() -> i64> = [leaf]
-const ys = xs.map((item) -> item)
+const ys = xs.map((item) => item)
 const handlers: Map<string, fn() -> i64> = #{"leaf": leaf}
-handlers.forEach((key, value) -> { const saved = retain(value) })
+handlers.forEach((key, value) => { const saved = retain(value) })

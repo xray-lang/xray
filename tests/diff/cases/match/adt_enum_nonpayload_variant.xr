@@ -17,10 +17,10 @@ enum Shape {
 
 fn describe(s: Shape) -> string {
     return match (s) {
-        Shape.Circle { radius: r } -> "circle:" + string(r)
-        Shape.Square { side } -> "square:" + string(side)
-        Shape.Point -> "point"
-        Shape.Unknown -> "unknown"
+        Shape.Circle { radius: r } => "circle:" + string(r),
+        Shape.Square { side } => "square:" + string(side),
+        Shape.Point => "point",
+        Shape.Unknown => "unknown",
     }
 }
 
@@ -36,9 +36,9 @@ for (sh in shapes) {
 // wildcard — exercises the ordinal read on a bare variant value.
 fn radius_or(s: Shape) -> i64 {
     return match (s) {
-        Shape.Circle { radius: r } -> r
-        Shape.Point -> -1
-        _ -> -2
+        Shape.Circle { radius: r } => r,
+        Shape.Point => -1,
+        _ => -2,
     }
 }
 

@@ -22,12 +22,12 @@ var matchTarget = sys.Process.spawn("sh", ["-c", "exit 0"])
 var oldMatch = sys.Process.spawn("sh", ["-c", "exit 0"])
 processHandle = oldMatch!
 match (1) {
-    0 -> {
+    0 => {
         processHandle = matchTarget!
-    }
-    _ -> {
+    },
+    _ => {
         processHandle = matchTarget!
-    }
+    },
 }
 print(processHandle.wait())
 
@@ -35,10 +35,10 @@ var selectTarget = sys.Process.spawn("sh", ["-c", "exit 0"])
 var oldSelect = sys.Process.spawn("sh", ["-c", "exit 0"])
 processHandle = oldSelect!
 select {
-    msg from processAliasMergeCh -> {
+    msg from processAliasMergeCh => {
         processHandle = selectTarget!
     }
-    _ -> {
+    _ => {
         processHandle = selectTarget!
     }
 }
@@ -48,12 +48,12 @@ var pipeTarget = Pipe.open()
 var oldPipe = Pipe.open()
 var pipeHandle = oldPipe!
 match (1) {
-    0 -> {
+    0 => {
         pipeHandle = pipeTarget!
-    }
-    _ -> {
+    },
+    _ => {
         pipeHandle = pipeTarget!
-    }
+    },
 }
 print(pipeHandle.close())
 processAliasMergeCh.close()

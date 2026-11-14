@@ -48,6 +48,7 @@ static ParseRule rules[] = {
     [TK_COLON] = {NULL, NULL, PREC_NONE},
     [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
     [TK_ARROW] = {NULL, xr_parse_bare_lambda, PREC_ASSIGNMENT},
+    [TK_FAT_ARROW] = {NULL, xr_parse_bare_lambda, PREC_ASSIGNMENT},
 
     // Arithmetic operators
     [TK_PLUS] = {NULL, xr_parse_binary, PREC_TERM},
@@ -276,12 +277,6 @@ static bool line_break_ends_expr(const Parser *parser) {
         return false;
     if (!xr_token_can_end_expr(parser->previous.type))
         return false;
-    /* Inside a match arm's expression body, a line starting with `is` opens
-     * the next arm's type pattern. `is` is infix-only (no prefix rule), so
-     * the generic check below would otherwise glue it onto the previous arm
-     * body as an infix type test. */
-    if (parser->match_arm_body_depth > 0 && parser->current.type == TK_IS)
-        return !xr_parser_in_group(parser);
     if (xr_get_rule(parser->current.type)->prefix == NULL)
         return false;
     return !xr_parser_in_group(parser);
@@ -404,6 +399,64 @@ int xr_parser_match(Parser *parser, XrTokenType type) {
 }
 
 // Consume token of specified type, or report error
+void xr_parser_observe_arrow(Parser *parser, const Token *token, bool value_arrow) {
+    if (parser->arrow_syntax_callback)
+        parser->arrow_syntax_callback(parser->arrow_syntax_data, token, value_arrow);
+}
+
+void xr_parser_set_arrow_syntax_callback(Parser *parser, XrParseArrowSyntaxFn callback, void *data) {
+    if (!parser) return;
+    parser->arrow_syntax_callback = callback;
+    parser->arrow_syntax_data = data;
+}
+
+void xr_parser_set_match_arm_syntax_callback(Parser *parser, XrParseMatchArmSyntaxFn callback, void *data) {
+    if (!parser) return;
+    parser->match_arm_syntax_callback = callback;
+    parser->match_arm_syntax_data = data;
+}
+
+bool xr_parser_check_value_arrow(Parser *parser) {
+    return xr_parser_check(parser, TK_FAT_ARROW) || xr_parser_check(parser, TK_ARROW);
+}
+
+void xr_parser_arrow_error(Parser *parser, Token *token, bool value_arrow) {
+    if (!xr_parser_healthy(parser) || parser->panic_mode ||
+        (parser->max_errors > 0 && parser->error_count >= parser->max_errors)) return;
+    if (parser->arrow_error_callback) {
+        parser->had_error = 1;
+        parser->panic_mode = 1;
+        ++parser->error_count;
+        parser->arrow_error_callback(parser->arrow_error_data, token, value_arrow);
+        return;
+    }
+    const char *title = value_arrow ?
+        "use `=>` for lambdas, match arms and select arms; `->` only introduces a type" :
+        "use `->` before a return type or in a function type; `=>` maps a value";
+    const char *repair = value_arrow ? "replace `->` with `=>`" : "replace `=>` with `->`";
+    /* Callback consumers own one message, so retain the repair there instead
+     * of losing the separately rendered console note. */
+    char message[256];
+    if (parser->error_callback) {
+        if (!xr_parser_format(parser, message, sizeof(message), "%s\nnote: %s", title, repair)) return;
+        title = message;
+        repair = NULL;
+    }
+    xr_parser_error_coded_note(parser, token, 0, title, repair);
+}
+
+int xr_parser_match_arrow(Parser *parser, bool value_arrow) {
+    XrTokenType expected = value_arrow ? TK_FAT_ARROW : TK_ARROW;
+    XrTokenType wrong = value_arrow ? TK_ARROW : TK_FAT_ARROW;
+    if (!xr_parser_check(parser, expected)) {
+        if (xr_parser_check(parser, wrong)) xr_parser_arrow_error(parser, &parser->current, value_arrow);
+        return 0;
+    }
+    xr_parser_observe_arrow(parser, &parser->current, value_arrow);
+    xr_parser_advance(parser);
+    return xr_parser_healthy(parser);
+}
+
 void xr_parser_consume(Parser *parser, XrTokenType type, const char *message) {
     if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_consume: NULL parser");
@@ -1016,7 +1069,7 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
 
     // Recoverable parsing may reject the prefix expression while leaving an
-    // assignment-like token (for example the removed `=>` match arm syntax)
+    // assignment-like token (for example the malformed `= >` arm delimiter)
     // as the current token. Do not dispatch an infix rule with a NULL left
     // operand; the outer recoverable loop will synchronize at the error.
     if (!first_expr)

@@ -15,9 +15,9 @@ enum E {
 
 fn take(e: E) -> i64 {
     return match (e) {
-        E.Num { value: v } -> v,
-        E.Pair { left: a, right: b } -> a + b,
-        E.Null -> -1
+        E.Num { value: v } => v,
+        E.Pair { left: a, right: b } => a + b,
+        E.Null => -1,
     }
 }
 

@@ -1,14 +1,14 @@
 fn sent(r: SendResult) -> bool {
     return match (r) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     }
 }
 
 fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> []
+        Recv.Value { value: v } => v,
+        _ => [],
     }
 }
 

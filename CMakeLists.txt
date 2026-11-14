@@ -3029,6 +3029,12 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    add_test(NAME test_value_arrow_syntax
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_value_arrows.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(test_value_arrow_syntax PROPERTIES
+        LABELS "frontend;syntax;vm;native" TIMEOUT 120)
+
     # The matcher every compile-error case is judged by. A regression in it
     # would not turn one case red -- it would turn all of them silently green,
     # so its own rejections are asserted directly.

@@ -3,8 +3,8 @@
 
 fn blocked_task(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
@@ -20,8 +20,8 @@ fn test_cancel() {
     t1.cancel()
     var r1 = t1.awaitResult()
     print("t1 cancelled:", match (r1) {
-        TaskResult.Cancelled -> true
-        _ -> false
+        TaskResult.Cancelled => true,
+        _ => false,
     })
     print("t1 status:", t1.status)
     ch.close()
@@ -31,8 +31,8 @@ fn test_cancel() {
     var r2 = await t2
     t2.cancel()
     print("t2 success:", match (t2.poll()) {
-        TaskResult.Success { value: _ } -> true
-        _ -> false
+        TaskResult.Success { value: _ } => true,
+        _ => false,
     })
     print("t2 result:", r2)
 

@@ -726,10 +726,10 @@ fn test_error_carries_message_and_position() {
         assertEqual(regex.test(re, "a"), false)
     } catch (e: RegexError) {
         match (e) {
-            RegexError.InvalidPattern { message: msg, position: p } -> {
+            RegexError.InvalidPattern { message: msg, position: p } => {
                 got = msg
                 pos = p
-            }
+            },
         }
     }
     assert(len(got) > 0)

@@ -40,8 +40,8 @@ enum Code {
 
     code() -> i64 {
         return match (this) {
-            Code.Ok -> 200,
-            Code.Err -> 500
+            Code.Ok => 200,
+            Code.Err => 500,
         }
     }
 }

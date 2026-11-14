@@ -65,7 +65,7 @@ fn test_typeof_function() {
     fn add(a: i64, b: i64) -> i64 { return a + b }
     assertEqual(typeName(add), "function")
     
-    var lambda = (x: i64) -> x * 2
+    var lambda = (x: i64) => x * 2
     assertEqual(typeName(lambda), "function")
 }
 

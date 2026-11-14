@@ -16,6 +16,6 @@ try {
     print("after try")
 } catch (e) {
     match (e) {
-        GenErr.Msg { s } -> print("caught " + s)
+        GenErr.Msg { s } => print("caught " + s),
     }
 }

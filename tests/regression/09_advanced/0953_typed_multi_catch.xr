@@ -13,7 +13,7 @@ fn test_single_catch() {
     try {
         throw CatchErr.Msg { message: "single" }
     } catch (e) {
-        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } => { msg = s }, }
     }
     assertEqual(msg, "single")
 }
@@ -25,7 +25,7 @@ fn test_typed_catch_exception() {
     try {
         throw CatchErr.Msg { message: "typed" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } => { msg = s }, }
     }
     assertEqual(msg, "typed")
 }
@@ -40,7 +40,7 @@ fn test_typed_catch_defer() {
         try {
             throw CatchErr.Msg { message: "tcf" }
         } catch (e: CatchErr) {
-            match (e) { CatchErr.Msg { message: s } -> { msg = s } }
+            match (e) { CatchErr.Msg { message: s } => { msg = s }, }
         }
     }
     work()
@@ -55,7 +55,7 @@ fn test_multi_catch_typed_then_catchall() {
     try {
         throw CatchErr.Msg { message: "multi" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg { message: s } -> { result = "typed:" + s } }
+        match (e) { CatchErr.Msg { message: s } => { result = "typed:" + s }, }
     } catch (e) {
         result = "catchall"
     }
@@ -84,7 +84,7 @@ fn test_multi_catch_defer() {
         try {
             throw CatchErr.Msg { message: "mf" }
         } catch (e: CatchErr) {
-            match (e) { CatchErr.Msg { message: s } -> { result = s } }
+            match (e) { CatchErr.Msg { message: s } => { result = s }, }
         } catch (e) {
             result = "catchall"
         }
@@ -107,7 +107,7 @@ fn test_nested_multi_catch_rethrow() {
         }
     } catch (e: CatchErr) {
         log.push("outer-catch")
-        match (e) { CatchErr.Msg { message: s } -> { assertEqual(s, "rethrown") } }
+        match (e) { CatchErr.Msg { message: s } => { assertEqual(s, "rethrown") }, }
     }
     assertEqual(len(log), 2)
     assertEqual(log[0], "inner-catch")
@@ -122,12 +122,12 @@ fn test_sequential_multi_catch() {
     try {
         throw CatchErr.Msg { message: "first" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg { message: s } -> { a = s } }
+        match (e) { CatchErr.Msg { message: s } => { a = s }, }
     }
     try {
         throw CatchErr.Msg { message: "second" }
     } catch (e: CatchErr) {
-        match (e) { CatchErr.Msg { message: s } -> { b = s } }
+        match (e) { CatchErr.Msg { message: s } => { b = s }, }
     }
     assertEqual(a, "first")
     assertEqual(b, "second")
@@ -140,7 +140,7 @@ fn test_catchall_only() {
     try {
         throw CatchErr.Msg { message: "any" }
     } catch (e) {
-        match (e) { CatchErr.Msg { message: s } -> { msg = s } }
+        match (e) { CatchErr.Msg { message: s } => { msg = s }, }
     }
     assertEqual(msg, "any")
 }
@@ -154,7 +154,7 @@ fn test_multi_catch_fallthrough_to_catchall() {
     } catch (e: OtherErr) {
         result = "other"
     } catch (e) {
-        match (e) { CatchErr.Msg { message: s } -> { result = "catchall:" + s } }
+        match (e) { CatchErr.Msg { message: s } => { result = "catchall:" + s }, }
     }
     assertEqual(result, "catchall:fall")
 }

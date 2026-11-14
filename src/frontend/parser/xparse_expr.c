@@ -28,7 +28,7 @@
 
 static const char *XR_ARROW_RETURN_TYPE_DIAGNOSTIC =
     "arrow lambda has no return-type position; use `fn(x: T) -> R { ... }`, "
-    "annotate the binding (`var f: fn(T) -> R = x -> ...`), or rely on the call-site signature";
+    "annotate the binding (`var f: fn(T) -> R = x => ...`), or rely on the call-site signature";
 
 // Strip underscore separators from numeric literal into dst buffer.
 // Returns number of characters written (not counting NUL).
@@ -156,7 +156,8 @@ static XrArrowHeadLookahead xr_scan_arrow_head(Parser *parser) {
         } while (0);
         while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_EOF)) {
             XrTokenType type = parser->current.type;
-            if (type == TK_ARROW && nested == 0) {
+            if ((type == TK_FAT_ARROW || type == TK_ARROW) && nested == 0) {
+                xr_parser_observe_arrow(parser, &parser->current, true);
                 result.has_return_type_position = true;
                 break;
             }
@@ -173,17 +174,19 @@ static XrArrowHeadLookahead xr_scan_arrow_head(Parser *parser) {
         }
     } else {
         do {
-            result.is_arrow_head = xr_parser_check(parser, TK_ARROW);
+            result.is_arrow_head = xr_parser_check_value_arrow(parser);
+            if (result.is_arrow_head) xr_parser_observe_arrow(parser, &parser->current, true);
             if (!xr_parser_healthy(parser)) return (XrArrowHeadLookahead){0};
         } while (0);
         if (result.is_arrow_head) {
+            bool value_arrow = parser->current.type == TK_FAT_ARROW;
             do {
                 xr_parser_advance(parser);
                 if (!xr_parser_healthy(parser)) return (XrArrowHeadLookahead){0};
             } while (0);
             do {
                 result.has_return_type_after_arrow =
-                xr_arrow_removed_return_type_before_block(parser);
+                value_arrow && xr_arrow_removed_return_type_before_block(parser);
                 if (!xr_parser_healthy(parser)) return (XrArrowHeadLookahead){0};
             } while (0);
         }
@@ -769,11 +772,78 @@ static bool template_find_expr_end(Parser *parser, const char *src, int len, int
 }
 
 // Parse template string: "Hello, ${name}!" or r"raw ${name}"
+typedef struct XrTemplateArrowSource {
+    Parser *parent;
+    Token literal;
+    const char *normalized, *expression;
+    size_t expression_offset;
+} XrTemplateArrowSource;
+
+static const char *template_source_offset(XrTemplateArrowSource *map, size_t offset) {
+    const char *raw = map->literal.start + map->literal.prefix_length + map->literal.quote_count;
+    const char *end = map->literal.start + map->literal.length;
+    /* Quoted normalization only removes whitespace. Match the preserved
+     * non-whitespace stream so block margins and CRLF retain file offsets. */
+    for (size_t i = 0; i <= offset; ++i) {
+        char c = map->normalized[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+        while (raw < end && (*raw == ' ' || *raw == '\t' || *raw == '\r' || *raw == '\n')) ++raw;
+        if (raw == end || *raw != c) {
+            xr_parser_diagnostic_fail(map->parent, XR_PARSE_BAD_ARGUMENT);
+            return NULL;
+        }
+        if (i == offset) {
+            return raw;
+        }
+        ++raw;
+    }
+    return NULL;
+}
+
+static bool template_source_token(XrTemplateArrowSource *map, const Token *token, Token *output) {
+    size_t offset = map->expression_offset + (size_t)(token->start - map->expression);
+    const char *start = template_source_offset(map, offset);
+    const char *last = template_source_offset(map, offset + (size_t)token->length - 1);
+    if (!start || !last) return false;
+    *output = *token;
+    output->start = start;
+    output->length = (int)(last - start + 1);
+    output->line = map->literal.line;
+    output->column = map->literal.column;
+    for (const char *p = map->literal.start; p < start; ++p) {
+        if (*p == '\n') { ++output->line; output->column = 1; }
+        else ++output->column;
+    }
+    return true;
+}
+
+static void template_arrow_error(void *data, const Token *token, bool value_arrow) {
+    XrTemplateArrowSource *map = data;
+    Token original;
+    if (template_source_token(map, token, &original))
+        xr_parser_arrow_error(map->parent, &original, value_arrow);
+}
+
+static void template_arrow_source(void *data, const Token *token, bool value_arrow) {
+    XrTemplateArrowSource *map = data;
+    Token original;
+    if (template_source_token(map, token, &original))
+        xr_parser_observe_arrow(map->parent, &original, value_arrow);
+}
+
+static void template_arm_source(void *data, const Token *token) {
+    XrTemplateArrowSource *map = data;
+    Token original;
+    if (template_source_token(map, token, &original))
+        map->parent->match_arm_syntax_callback(map->parent->match_arm_syntax_data, &original);
+}
+
 AstNode *xr_parse_template_string(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_template_string: NULL parser");
     bool is_raw = parser->previous.escape_mode == XR_LITERAL_RAW;
     XrLiteralSourceForm source_form = parser->previous.source_form;
+    Token source_token = parser->previous;
     XrParsedQuoted payload = {0};
     const char *decode_error = NULL;
     if (xr_parser_decode_quoted(parser, &parser->previous, false, &payload, &decode_error) != XR_QUOTED_OK) {
@@ -889,6 +959,19 @@ AstNode *xr_parse_template_string(Parser *parser) {
             expr_parser.error_count = 0;
             expr_parser.bracket_bits = 0;
             expr_parser.bracket_depth = 0;
+            XrTemplateArrowSource arrow_source = {
+                parser, source_token, tmpl, expr_code, (size_t)expr_start + 2
+            };
+            expr_parser.arrow_error_callback = template_arrow_error;
+            expr_parser.arrow_error_data = &arrow_source;
+            if (parser->arrow_syntax_callback) {
+                expr_parser.arrow_syntax_callback = template_arrow_source;
+                expr_parser.arrow_syntax_data = &arrow_source;
+            }
+            if (parser->match_arm_syntax_callback) {
+                expr_parser.match_arm_syntax_callback = template_arm_source;
+                expr_parser.match_arm_syntax_data = &arrow_source;
+            }
             if (xr_compile_state_zero(parser->state, &expr_parser.current, sizeof(Token)) != XR_COMPILE_RESOURCE_OK ||
                 xr_compile_state_zero(parser->state, &expr_parser.previous, sizeof(Token)) != XR_COMPILE_RESOURCE_OK) return NULL;
 
@@ -942,7 +1025,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_grouping: NULL parser");
     int line = parser->previous.line;
 
-    // Case 1: `() -> expr` no-param arrow function, or `()` unit literal.
+    // Case 1: `() => expr` no-param arrow function, or `()` unit literal.
     // Arrow lambdas never have a return-type position.
     if (xr_parser_check(parser, TK_RPAREN)) {
         do {
@@ -956,7 +1039,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
             } while (0);
             return NULL;
         }
-        if (xr_parser_match(parser, TK_ARROW)) {
+        if (xr_parser_match_arrow(parser, true)) {
             if (xr_arrow_removed_return_type_before_block(parser)) {
                 do {
                     xr_parser_error(parser, XR_ARROW_RETURN_TYPE_DIAGNOSTIC);
@@ -971,7 +1054,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
         return xr_ast_tuple_literal(parser->compiler_session, NULL, 0, line);
     }
 
-    // Case 2: arrow-function head — `(...) -> body`.
+    // Case 2: arrow-function head — `(...) => body`.
     //
     // The lookahead also recognises the two removed annotation positions so
     // they cannot fall through to unrelated grouping/type-cast diagnostics.
@@ -1067,9 +1150,9 @@ AstNode *xr_parse_grouping(Parser *parser) {
             } while (0);
             return NULL;
         }
-        if (!xr_parser_match(parser, TK_ARROW)) {
+        if (!xr_parser_match_arrow(parser, true)) {
             do {
-                xr_parser_error(parser, "expected '->' after arrow lambda parameters");
+                xr_parser_error(parser, "expected '=>' after arrow lambda parameters");
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             return NULL;
@@ -1179,18 +1262,23 @@ AstNode *xr_parse_grouping(Parser *parser) {
     return xr_ast_tuple_literal(parser->compiler_session, elems, count, line);
 }
 
-// Parse a bare single-parameter lambda after Pratt consumed `->`.
-// Giving `->` assignment-level precedence lets arrow-delimited constructs
-// such as `select { value from channel -> ... }` stop at the delimiter by
+// Parse a bare single-parameter lambda after Pratt consumed `=>`.
+// Giving `=>` assignment-level precedence lets arrow-delimited constructs
+// such as `select { value from channel => ... }` stop at the delimiter by
 // parsing their head with PREC_CALL, while ordinary expressions accept the
-// same `parameter -> body` form in any position.
+// same `parameter => body` form in any position.
 AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter) {
+    if (parser->previous.type != TK_FAT_ARROW) {
+        xr_parser_arrow_error(parser, &parser->previous, true);
+        return NULL;
+    }
+    xr_parser_observe_arrow(parser, &parser->previous, true);
     if (!xr_parser_healthy(parser)) return NULL;
     if (!parameter || parameter->type != AST_VARIABLE) {
         do {
             xr_parser_error_at_previous(
             parser,
-            "unparenthesized arrow lambda parameter must be one identifier; use `(params) -> body`");
+            "unparenthesized arrow lambda parameter must be one identifier; use `(params) => body`");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         return NULL;
@@ -1215,7 +1303,7 @@ AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter) {
 }
 
 // Parse arrow function body
-// Supports: -> expr (auto return) or -> { ... } (block)
+// Supports: => expr (auto return) or => { ... } (block)
 AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,
                                       int line) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -1223,13 +1311,13 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
 
     parser->scope_depth++;
     if (xr_parser_match(parser, TK_LBRACE)) {
-        // Block body: -> { ... }
+        // Block body: => { ... }
         do {
             body = xr_parse_block(parser);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
     } else {
-        // Expression body: -> expr (auto-wrap in return)
+        // Expression body: => expr (auto-wrap in return)
         AstNode *expr = xr_parse_expression(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!expr) {
@@ -1301,9 +1389,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
     // Parse optional return type annotation: `fn(...) -> T { ... }`.
-    // The unified arrow `->` is the only legal separator.
+    // The type arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;

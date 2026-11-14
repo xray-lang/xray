@@ -8,7 +8,7 @@ const local = sys.ThreadLocal<i64, Never>(fn() -> i64 {
 fn main() -> i64 {
     var m = sync.Mutex<i64>(2)
     var x = try! local.get()
-    return m.lock((v) -> v + x)
+    return m.lock((v) => v + x)
 }
 
 var result = main()

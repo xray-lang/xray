@@ -293,7 +293,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `isolated` | `scope(isolated)` 选项（§10.7） |
-| `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `after` | `select` 的超时分支 (`after 1000 => ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 | `escaping` | 参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存 |
@@ -568,7 +568,8 @@ var decimal = re"\d+\.\d+"
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`i64 \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
+| `->` | 类型箭头：函数、方法及 fn lambda 的返回类型；函数类型写 `fn(T) -> R`，返回 unit 时省略箭头（`fn(T)`） |
+| `=>` | 值箭头：箭头 lambda、`match` 与 `select` 分支；按最长匹配识别为一个 token |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -1216,11 +1217,11 @@ v = "hello"             // OK
 - **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
 
@@ -1289,11 +1290,11 @@ Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // 输出：1
+    print(pair.1)   // 输出：hello
     var (a, b) = pair    // 解构
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // 输出：1
+    print(b)        // 输出：hello
 }
 
 main()
@@ -1311,9 +1312,9 @@ type Mapper2<T, U> = fn(T) -> U
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
-```xray
+```xray @fragment
 var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
@@ -1367,14 +1368,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 详见 §7.4。简述：
 
-```xray
+```xray @fragment
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
 var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
+var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1667,12 +1668,12 @@ print(len(a))               // 4
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // 输出：[1, 2, 3, 4]
+    print(len(nums))     // 输出：4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // 输出：[2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // 输出：[2, 4]
 }
 
 main()
@@ -1684,15 +1685,15 @@ Map 与 Set：
 fn main() {
     var scores = #{"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // 输出：95
+    print(len(scores))                 // 输出：3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // 输出：2
+    print(seen.contains(1))   // 输出：true
 }
 
 main()
@@ -1703,9 +1704,9 @@ main()
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // 输出：anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // 输出：NYC
 }
 
 main()
@@ -2289,12 +2290,12 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 匿名函数与 Lambda
 
-xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x -> expr` 与 `(x) -> expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
+xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x => expr` 与 `(x) => expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
 
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda   ::= Identifier '=>' ArrowBody
+                | '(' ArrowParams? ')' '=>' ArrowBody
 ArrowBody     ::= Expression | Block
 ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam    ::= Identifier (':' ParamMode? Type)?
@@ -2302,14 +2303,14 @@ ParamMode     ::= 'ref' | 'move'
 FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```
 
-```xray
+```xray @fragment
 // ── arrow lambda：每个参数都可独立标注或推断 ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
 var inc = fn(x: i64) -> i64 {
@@ -2323,34 +2324,35 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 
 | 概念 | 语法 | 能力与选择条件 |
 |------|------|----------------|
-| arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
+| arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
-- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
-- arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
-- `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `->` 只引入类型；`=>` 引入表达式或块，右结合。`x => y => x + y` 表示返回 lambda 的 lambda，函数体延伸到包含它的表达式结束。紧跟 `=>` 的 `{` 一律是块；要返回字面量表达式，须用括号包裹。值位置的 `->` 与类型位置的 `=>` 均拒绝，并在错误箭头处提示替换。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) => ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) => ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
+- arrow 没有返回类型位置。`(x: T): R => ...` 与 `(x: T) => R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
+- `=> expr` 隐式返回表达式值。`=> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) => x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) => { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获遵循 §7.4。`go` 实参与捕获必须满足 Sendable，闭包不得捕获外层 `var`。可复制值保留逻辑副本，身份类型保持身份。借用与同步规则继续适用，当前实现资格见 §17。
 
 ### 3.13 `match` 表达式
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' '(' Expr ')')? '=>' (Expression | Block)
 ```
 
-```xray
+```xray @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // 多值
-    10..20 -> "teen",                 // 范围
-    n if (n > 100) -> "big",          // 守卫
-    Color.Red -> "red",               // 枚举
-    is User -> "a user",              // 类型模式
-    _ -> "default"                    // 通配符
+    1 => "one",
+    2, 3, 4 => "few",                 // 多值
+    10..20 => "teen",                 // 范围
+    n if (n > 100) => "big",          // 守卫
+    Color.Red => "red",               // 枚举
+    is User => "a user",              // 类型模式
+    _ => "default",                    // 通配符
 }
 ```
 
@@ -2601,25 +2603,25 @@ ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
 ### 4.5 `match` 语句
 
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
 
 **关键语法**：
 - 被匹配的表达式**必须**用括号包裹：`match (x) {...}`。
-- 分支之间的逗号**可选**——同一个 match 中可以混用（不写更常见）。
+- 分支之间必须写逗号；末尾逗号可写可不写，格式化器统一补齐。分支用 `=>`，其后的 `{` 一律是块。
 - 守卫条件 `if` 后的表达式必须用括号：`n if (n > 0)`。
 
-```xray
-match (x) { 1 -> print("one"), _ -> print("other") }
+```xray @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
 
@@ -2689,14 +2691,14 @@ CatchHeader   ::= Identifier (':' Type)?
                 | EnumPattern (',' EnumPattern)*
 ```
 
-```xray
+```xray @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -2783,13 +2785,13 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 综合 `if` / `match` / `for-in` 的控制流：
 
-```xray
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 
@@ -2939,13 +2941,13 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
 
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
 
-上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
+上例只展示签名，函数体以注释省略；普通函数定义必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
 
 入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误（§5.2.8），但传播点仍须标记。`fn main()` 是普通具名函数，没有这项许可。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
 
@@ -3267,8 +3269,8 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+    print(addBase(5))            // 输出：15
+    print(apply(addBase, 7))     // 输出：17（函数作为参数传入）
 }
 
 main()
@@ -3283,8 +3285,8 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // 输出：3
+    print(r)   // 输出：2
 }
 
 main()
@@ -3470,9 +3472,9 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // 输出：12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // 输出：40
 }
 ```
 
@@ -3505,8 +3507,8 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // 输出：Rex
+    print(d.speak())   // 输出：woof
 }
 
 main()
@@ -3602,8 +3604,8 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct 赋值是拷贝
     q.x = 99
-    print(p.x)           // => 3（不受影响）
-    print(q.x)           // => 99
+    print(p.x)           // 输出：3（不受影响）
+    print(q.x)           // 输出：99
 }
 
 main()
@@ -3729,7 +3731,7 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' T
 
 #### 5.6.1 简单枚举（0-payload enum）
 
-```xray
+```xray @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -3744,9 +3746,9 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
@@ -3806,12 +3808,12 @@ var e3 = NetEvent.Connected                         // unit 变体不写 braces
 
 解构（match）：
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
 
@@ -3896,7 +3898,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 `enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
-```xray
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -3904,9 +3906,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -3915,8 +3917,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }
@@ -4031,14 +4033,14 @@ export * from "./other"
 
 ### 6.1 字面量模式
 
-```xray
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
 
@@ -4047,12 +4049,12 @@ match (x) {
 
 ### 6.2 范围模式 `a..b` / `a..=b`
 
-```xray
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
 
@@ -4063,11 +4065,11 @@ match (age) {
 
 #### 6.3.1 简单变体（无 payload）
 
-```xray
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
 
@@ -4079,31 +4081,31 @@ match (color) {
 
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
-```xray
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // 同名 binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // 只列需要观察的字段
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
 
@@ -4114,7 +4116,7 @@ match (msg) {
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
-```xray
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -4123,8 +4125,8 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
@@ -4133,12 +4135,12 @@ match (event) {
 
 ### 6.4 类型模式 `is T`
 
-```xray
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // 绑定窄化值
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // 绑定窄化值
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
 
@@ -4146,11 +4148,11 @@ match (value) {
 
 ### 6.5 守卫条件 `if`
 
-```xray
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
 
@@ -4159,11 +4161,11 @@ match (x) {
 
 ### 6.6 多值模式
 
-```xray
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
 
@@ -4180,11 +4182,11 @@ match (x) {
 
 ### 6.8 变量绑定模式
 
-```xray
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
 
@@ -4200,12 +4202,12 @@ var { name, age } = user
 
 详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
 
-```xray
+```xray @fragment
 match (p) {
-    { x, y } -> ...           // 对象字段解构（簡寫绑定）
-    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
-    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
-    [_, mid, _] -> ...        // 元素位通配
+    { x, y } => print(x, y),             // 对象字段解构（簡寫绑定）
+    { name: n, age } => print(n, age),    // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest,] => print(a, b, rest), // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] => print(mid),           // 元素位通配
 }
 ```
 
@@ -4392,8 +4394,8 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
@@ -4509,9 +4511,9 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
@@ -4684,8 +4686,8 @@ class PanicInfo {
     data: JSON.Value            // 附加数据；无数据时为 JSON null
     replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
 
@@ -4904,7 +4906,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed 然后 payload
+        print(fetchData(true))         // 输出：closed 然后 payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -4946,7 +4948,7 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray @run
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -4960,8 +4962,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // 输出：empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -5006,8 +5008,8 @@ fn main() {
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // 输出：message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // 输出：code: 430
     }
 }
 
@@ -5541,21 +5543,21 @@ fn producer(ch: Channel<i64>) {
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
 
-```xray
+```xray @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
-    msg from ch2 -> { print("got from ch2:", msg) }      // 接收分支
-    100  to   ch1 -> { print("sent 100 to ch1") }        // 发送分支
-    _ -> { print("no channel ready") }                   // 默认分支（非阻塞）
+    msg from ch1 => { print("got from ch1:", msg) }      // 接收分支
+    msg from ch2 => { print("got from ch2:", msg) }      // 接收分支
+    100  to   ch1 => { print("sent 100 to ch1") }        // 发送分支
+    _ => { print("no channel ready") }                   // 默认分支（非阻塞）
 }
 ```
 
@@ -5925,8 +5927,8 @@ import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+    print(math.sqrt(144.0))   // 输出：12.0
+    print(sha256("xray"))     // 输出：1a46e6a6...（SHA-256 摘要）
 }
 
 main()
@@ -8414,8 +8416,8 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
-ArrowLambda ::= Identifier '->' (Expression | Block)
-              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
@@ -8424,8 +8426,8 @@ FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType?
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 
-MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
 CallArg ::= ('ref' | 'out') Expression
@@ -8515,7 +8517,7 @@ ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression
              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 BreakStmt    ::= 'break' Identifier?
@@ -8538,10 +8540,10 @@ ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
-            |  Expression 'to' Expression '->' Block        // 发送
-            |  'after' Expression '->' Block                // 超时
-            |  '_' '->' Block                                // 默认
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // 接收
+            |  Expression 'to' Expression '=>' Block        // 发送
+            |  'after' Expression '=>' Block                // 超时
+            |  '_' '=>' Block                                // 默认
 
 YieldStmt ::= 'yield' Expression
 ```
@@ -8710,6 +8712,7 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
 | 逻辑 | `&&` `\|\|` `!` |
 | 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | 语句 | `++` `--` |
+| 值映射 | `=>` |
 | 类型、范围与展开 | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---

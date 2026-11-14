@@ -1,9 +1,9 @@
 import parallel
 
-var plan = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(2), (lane) => lane)
 
 try {
-    plan.forEach(0..20000, (state, i) -> {
+    plan.forEach(0..20000, (state, i) => {
         if (i == 10000) {
             var zero = i - 10000
             print(10 / zero)
@@ -16,7 +16,7 @@ try {
 }
 
 const touched = Atomic<i64>(0)
-plan.forEach(0..4, (state, i) -> {
+plan.forEach(0..4, (state, i) => {
     touched.add(1, Ordering.Relaxed)
 })
 

@@ -1,8 +1,8 @@
 fn sent(result: SendResult) -> i64 {
-    return match(result) { SendResult.Sent -> 1, SendResult.Full -> -1, SendResult.Timeout -> -2, SendResult.Closed -> -3, }
+    return match(result) { SendResult.Sent => 1, SendResult.Full => -1, SendResult.Timeout => -2, SendResult.Closed => -3, }
 }
 fn received(result: Recv<i64>) -> i64 {
-    return match(result) { Recv.Value { value: item } -> item, Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> -3, }
+    return match(result) { Recv.Value { value: item } => item, Recv.Empty => -1, Recv.Timeout => -2, Recv.Closed => -3, }
 }
 fn tick(counter: Atomic<i64>) { counter.add(1) }
 fn genericRecv<T: Sendable>(channel: Channel<T>, timeout: i64) -> Recv<T> { return channel.recvTimeout(timeout) }
@@ -24,11 +24,11 @@ export fn main() -> i64 {
     print(sent(unit.sendTimeout(tick(counter), 5)), counter.load())
     const unitBuffered = Channel<()>(1)
     const unitSent = sent(unitBuffered.sendTimeout(tick(counter), 0))
-    const unitValue = match(unitBuffered.recvTimeout(0)) { Recv.Value { value: ignored } -> 7, Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> -3, }
+    const unitValue = match(unitBuffered.recvTimeout(0)) { Recv.Value { value: ignored } => 7, Recv.Empty => -1, Recv.Timeout => -2, Recv.Closed => -3, }
     print(unitSent, unitValue, counter.load())
     const strings = Channel<string>(1)
     strings.sendTimeout("payload", 0)
-    const stringValue = match(genericRecv(strings, 5)) { Recv.Value { value: item } -> len(item), Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> -3, }
+    const stringValue = match(genericRecv(strings, 5)) { Recv.Value { value: item } => len(item), Recv.Empty => -1, Recv.Timeout => -2, Recv.Closed => -3, }
     print(stringValue)
     return 99
 }
@@ -44,7 +44,7 @@ export fn timedUnitSend(channel: Channel<()>, milliseconds: i64) -> i64 {
 }
 export fn timedUnitRecv(channel: Channel<()>, milliseconds: i64) -> i64 {
     return match(channel.recvTimeout(milliseconds)) {
-        Recv.Value { value: ignored } -> 41, Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> 44,
+        Recv.Value { value: ignored } => 41, Recv.Empty => -1, Recv.Timeout => -2, Recv.Closed => 44,
     }
 }
 export fn timedClose(channel: Channel<()>) -> i64 { channel.close(); return 7 }

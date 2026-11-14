@@ -12,8 +12,8 @@ import time
 
 fn grinder(ch: Channel<i64>) -> i64 {
     var seed = match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 1
+        Recv.Value { value: v } => v,
+        _ => 1,
     }
     var acc = seed
     while (true) {
@@ -30,8 +30,8 @@ var t = go grinder(ch)
 time.sleep(30)
 t.cancel()
 var res = match (t.awaitResult()) {
-    TaskResult.Cancelled -> "cancelled"
-    _ -> "other"
+    TaskResult.Cancelled => "cancelled",
+    _ => "other",
 }
 print(res)
 ch.close()

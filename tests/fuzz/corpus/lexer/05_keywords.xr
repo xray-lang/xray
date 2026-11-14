@@ -29,7 +29,7 @@ for (let i = 0; i < 10; i++) {
 for (x in arr) {
 }
 match (value) {
-    _ -> "default"
+    _ => "default",
 }
 return null
 throw "error"
@@ -50,6 +50,6 @@ await promise
 defer { cleanup() }
 const config = {}
 select {
-    _ -> {
+    _ => {
     }
 }

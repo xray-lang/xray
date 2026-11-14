@@ -5,18 +5,18 @@ print(ch.trySend(8))
 
 var r1 = ch.tryRecv()
 print(match (r1) {
-    Recv.Value { value: v } -> v
-    _ -> -1
+    Recv.Value { value: v } => v,
+    _ => -1,
 })
 print(match (r1) {
-    Recv.Value { value: _ } -> true
-    _ -> false
+    Recv.Value { value: _ } => true,
+    _ => false,
 })
 
 var r2 = ch.tryRecv()
 print(match (r2) {
-    Recv.Value { value: _ } -> true
-    _ -> false
+    Recv.Value { value: _ } => true,
+    _ => false,
 })
 
 ch.close()

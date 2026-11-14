@@ -231,8 +231,8 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
 
 fn _resolveDelimiter(data: string, options: CsvParseOptions) throws(CsvError) -> rune {
     var delimiter = match (options.delimiter) {
-        CsvDelimiter.Exact { delimiter: value } -> value,
-        CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
+        CsvDelimiter.Exact { delimiter: value } => value,
+        CsvDelimiter.Auto         => _detectDelimiter(data, options.quoteChar, options.escapeChar),
     }
     if (delimiter == options.quoteChar) {
         throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
@@ -243,8 +243,8 @@ fn _resolveDelimiter(data: string, options: CsvParseOptions) throws(CsvError) ->
 fn _explicitHeaders(header: CsvHeader) -> Array<string> {
     var empty: Array<string> = []
     return match (header) {
-        CsvHeader.Explicit { names: values } -> copy values,
-        _                          -> empty
+        CsvHeader.Explicit { names: values } => copy values,
+        _                          => empty,
     }
 }
 
@@ -361,8 +361,8 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
     }
 
     var headerConsumed = match (options.header) {
-        CsvHeader.FirstRow -> len(state.document.headers) == 0,
-        _                  -> false
+        CsvHeader.FirstRow => len(state.document.headers) == 0,
+        _                  => false,
     }
     if (headerConsumed) {
         state.document.headers = copy row

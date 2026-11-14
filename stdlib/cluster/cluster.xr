@@ -1528,24 +1528,24 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
     defer { notifications.close() }
     while (true) {
         match (notifications.recvTimeout(_REMOTE_MONITOR_POLL_MS)) {
-            Recv.Value { value: reason } -> {
+            Recv.Value { value: reason } => {
                 if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
                 var exited: ClusterCoroExit = { name: name, reason: reason }
                 var response = encodeCoroExit(exited)
                 if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
                 return
-            }
-            Recv.Closed -> {
+            },
+            Recv.Closed => {
                 if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
                 var exited: ClusterCoroExit = { name: name, reason: "noproc" }
                 var response = encodeCoroExit(exited)
                 if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
                 return
-            }
-            Recv.Timeout -> {
+            },
+            Recv.Timeout => {
                 if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
-            }
-            Recv.Empty -> {}
+            },
+            Recv.Empty => {},
         }
     }
 }
@@ -2948,10 +2948,10 @@ fn _bufferFromBytes(source: Array<u8>) -> Buffer {
 fn _offerTopic(destination: Channel<Buffer>, envelope: Array<u8>) -> i64 {
     var payload = _bufferFromBytes(envelope)
     return match (destination.trySend(move payload)) {
-        SendResult.Sent -> 0
-        SendResult.Closed -> 1
-        SendResult.Full -> 2
-        SendResult.Timeout -> 2
+        SendResult.Sent => 0,
+        SendResult.Closed => 1,
+        SendResult.Full => 2,
+        SendResult.Timeout => 2,
     }
 }
 

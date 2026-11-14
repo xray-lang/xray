@@ -9,7 +9,11 @@ Every fenced block is classified before it is judged:
   error-demo -- the block's comments announce a compile error (编译错误 /
                 error[Exxxx]): must FAIL `xray check`; a demo that silently
                 passes is stale.
-  fragment   -- everything else: skipped.
+  parse-only -- a block explicitly marked @fragment: must pass syntax parsing.
+  fragment   -- unmarked legacy fragments: reported as skipped.
+
+Explicit @check blocks must pass checking. These markers let edited sections
+join strict gates while the remaining unmarked specification is inventoried.
 
 A baseline file lists snippet keys that are known-bad today. The gate only
 fails on NEW deviations, so the spec can converge incrementally; fixing a
@@ -42,7 +46,7 @@ def extract_blocks(spec_text: str):
                 buf = []
         else:
             if line.strip() == "```":
-                blocks.append((start_line, "\n".join(buf)))
+                blocks.append((start_line, "\n".join(buf), fence.split()[1:]))
                 fence = None
             else:
                 buf.append(line)
@@ -86,11 +90,11 @@ def main() -> int:
 
     deviations = []  # (key, line, kind, detail)
     passes_in_baseline = []
-    counts = {"runnable": 0, "error-demo": 0, "fragment": 0}
+    counts = {"runnable": 0, "error-demo": 0, "parse-only": 0, "fragment": 0}
 
     with tempfile.TemporaryDirectory(prefix="spec_snippets.") as tmp:
-        for start_line, code in extract_blocks(spec_text):
-            kind = classify(code)
+        for start_line, code, markers in extract_blocks(spec_text):
+            kind = "parse-only" if "@fragment" in markers else "runnable" if "@check" in markers else classify(code)
             counts[kind] += 1
             if kind == "fragment":
                 continue
@@ -98,14 +102,14 @@ def main() -> int:
             src = Path(tmp) / f"snippet_{start_line}.xr"
             src.write_text(code + "\n", encoding="utf-8")
             proc = subprocess.run(
-                [args.xray, "check", str(src)],
+                [args.xray, "check", *(["-S"] if kind == "parse-only" else []), str(src)],
                 capture_output=True,
                 encoding="utf-8",
                 errors="strict",
                 timeout=30,
             )
             ok = proc.returncode == 0
-            expected_ok = kind == "runnable"
+            expected_ok = kind in ("runnable", "parse-only")
             if ok == expected_ok:
                 if key in baseline:
                     passes_in_baseline.append((key, start_line))
@@ -128,7 +132,8 @@ def main() -> int:
     new = [(k, l, kind, d) for (k, l, kind, d) in deviations if k not in baseline]
     print(
         f"spec snippets: {counts['runnable']} runnable, {counts['error-demo']} error demos, "
-        f"{counts['fragment']} fragments; {len(deviations)} deviations "
+        f"{counts['parse-only']} parse-only, {counts['fragment']} unmarked fragments skipped; "
+        f"{len(deviations)} deviations "
         f"({len(new)} new, {len(deviations) - len(new)} baselined)"
     )
     for key, line, kind, detail in new:

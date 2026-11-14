@@ -13,11 +13,11 @@ fn pick(n: i64) -> FastResult {
 fn xray_enum_payload_value(n: i64) -> i64 {
     var result = pick(n)
     match (result) {
-        FastResult.Ok { value } -> {
+        FastResult.Ok { value } => {
             return value + 1
-        }
-        FastResult.Err { code } -> {
+        },
+        FastResult.Err { code } => {
             return 0 - code
-        }
+        },
     }
 }

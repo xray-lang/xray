@@ -11,7 +11,7 @@
 fn userHof(f: fn(i64, i64) -> i64) -> i64 { return f(10, 5) }
 
 fn main() {
-    print(userHof((a) -> a * 100))
+    print(userHof((a) => a * 100))
 }
 
 main()

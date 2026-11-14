@@ -8,7 +8,7 @@ class FakeParallel {
 var parallel = FakeParallel()
 var sum = 0
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     sum = sum + i
 })
 

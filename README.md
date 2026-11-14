@@ -153,17 +153,17 @@ go fn() {
     ch.send(42)
 }()
 select {
-    value from ch -> {
+    value from ch => {
         print("received ${value}")
     }
-    after 1000    -> {
+    after 1000    => {
         print("timeout")
     }
 }
 ch.close()
 ```
 
-In a `select`, `value from ch` receives, `value to ch` sends, `after milliseconds` adds a timeout, and `_ ->` adds an immediate default branch. A `scope` waits for the coroutines started inside it before the scope exits.
+In a `select`, `value from ch` receives, `value to ch` sends, `after milliseconds` adds a timeout, and `_ =>` adds an immediate default branch. A `scope` waits for the coroutines started inside it before the scope exits.
 
 ### Memory management
 

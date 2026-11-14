@@ -1041,7 +1041,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
         AstBorrowOriginRef *borrow_origins = NULL;
         int borrow_origin_count = 0;
-        if (xr_parser_match(parser, TK_ARROW)) {
+        if (xr_parser_match_arrow(parser, false)) {
             do {
                 ret = xr_parse_type_annotation(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -1081,7 +1081,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
      * recover as a function type. */
     if (xr_parser_match(parser, TK_LPAREN)) {
         if (xr_parser_match(parser, TK_RPAREN)) {
+            if (xr_parser_check(parser, TK_FAT_ARROW)) {
+                xr_parser_arrow_error(parser, &parser->current, false);
+                return NULL;
+            }
             if (xr_parser_check(parser, TK_ARROW)) {
+                xr_parser_observe_arrow(parser, &parser->current, false);
                 do {
                     xr_parser_error(parser,
                                 "function types are written `fn(...) -> R` (add the `fn` prefix)");
@@ -1149,7 +1154,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_consume(parser, TK_RPAREN, "expected ')'");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
-        if (xr_parser_check(parser, TK_ARROW)) {
+        if (xr_parser_check(parser, TK_FAT_ARROW)) {
+                xr_parser_arrow_error(parser, &parser->current, false);
+                return NULL;
+            }
+            if (xr_parser_check(parser, TK_ARROW)) {
+                xr_parser_observe_arrow(parser, &parser->current, false);
             do {
                 xr_parser_error(parser,
                             "function types are written `fn(...) -> R` (add the `fn` prefix)");

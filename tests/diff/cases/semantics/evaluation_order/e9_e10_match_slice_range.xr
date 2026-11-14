@@ -8,16 +8,16 @@ fn tb(tag: string, v: bool) -> bool { print(tag); return v }
 fn main() {
     print("-- match scrutinee once --")
     match (t("scrutinee", 2)) {
-        1 -> print("one")
-        2 -> print("two")
-        _ -> print("other")
+        1 => print("one"),
+        2 => print("two"),
+        _ => print("other"),
     }
 
     print("-- guard runs only for a matching pattern --")
     match (t("scrutinee", 1)) {
-        1 if (tb("guard-1", false)) -> print("one-guarded")
-        1 if (tb("guard-2", true)) -> print("one-fallback")
-        _ -> print("other")
+        1 if (tb("guard-1", false)) => print("one-guarded"),
+        1 if (tb("guard-2", true)) => print("one-fallback"),
+        _ => print("other"),
     }
 
     print("-- range endpoints --")
