@@ -1,0 +1,16 @@
+fn main() {
+    var a: Array<i64> = []
+    var i = 0
+    while (i < 5000000) {
+        a.push(i)
+        i = i + 1
+    }
+    var total = 0
+    i = 0
+    while (i < len(a)) {
+        total = total + a[i]
+        i = i + 1
+    }
+    print(total)
+}
+main()

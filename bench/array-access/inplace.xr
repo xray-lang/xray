@@ -1,0 +1,16 @@
+fn main() {
+    var a: Array<i64> = []
+    var i = 0
+    while (i < 4096) { a.push(i); i = i + 1 }
+    var r = 0
+    while (r < 20000) {
+        i = 0
+        while (i < len(a)) { a[i] = a[i] * 3 + 1; i = i + 1 }
+        r = r + 1
+    }
+    var total = 0
+    i = 0
+    while (i < len(a)) { total = total + a[i]; i = i + 1 }
+    print(total)
+}
+main()
