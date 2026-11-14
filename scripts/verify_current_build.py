@@ -26,6 +26,8 @@ REQUIRED = (
     "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
     # Canonical Record/String? ownership, external schemas and failure cleanup.
     "test_native_boxed", "test_native_boxed_allocations",
+    # Physical metadata, allocator and foreign-thread owner retirement.
+    "native_managed_kernel",
     # Value delimiters must reject type arrows and preserve source ownership.
     "test_lexer", "test_parser_recoverable", "test_parser_arrow_syntax",
     "test_fmt_roundtrip", "test_value_arrow_syntax",
