@@ -207,6 +207,8 @@ jobs:
               raise RuntimeError('The declared prototype compiler is unavailable')
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('LAYOUT_CC=' + compiler + '\n')
+      - name: Verify benchmark execution controls
+        run: python scripts/array_access_benchmark.py self-test --work build/layout-controls
       - name: Prepare the Windows layout experiment
         if: runner.os == 'Windows'
         shell: cmd
@@ -225,6 +227,7 @@ jobs:
         with:
           name: layout-${{ matrix.os }}-${{ matrix.cc }}-${{ github.sha }}
           path: |
+            build/layout-controls/
             build/layout-prepare/
             build/layout-measured/
 
