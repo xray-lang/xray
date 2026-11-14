@@ -98,6 +98,13 @@ static void faults(void) {
     reset(); CHECK(pipeline(&limits, &observed) == XR_COMPILE_RESOURCE_MEMORY_LIMIT);
 }
 
+static void bounded_recovery_diagnostic(void *data, int line, int column,
+    int end_line, int end_column, const char *message) {
+    (void)line; (void)column; (void)end_line; (void)end_column; (void)message;
+    unsigned *count = data;
+    CHECK(++*count < 16);
+}
+
 static void recoverable_and_rollback(void) {
     reset();
     XrCompileResources *resources = NULL;
@@ -114,6 +121,15 @@ static void recoverable_and_rollback(void) {
     AstNode *partial = NULL;
     CHECK(xr_compile_parse_recoverable(&parser, &partial) == XR_PARSE_RECOVERED);
     CHECK(partial && !partial->as.program.owns_arena && partial->as.program.arena == &arena);
+    xr_compile_parser_close(&parser);
+    parser = (Parser) {0};
+    unsigned diagnostic_count = 0;
+    CHECK(xr_compile_parser_open(&parser, session, "scope {}\nlinked scope {}\n}\nconst next = 1",
+                                 NULL, &arena) == XR_PARSE_OK);
+    xr_parser_set_error_callback(&parser, bounded_recovery_diagnostic, &diagnostic_count, 0);
+    partial = NULL;
+    CHECK(xr_compile_parse_recoverable(&parser, &partial) == XR_PARSE_RECOVERED);
+    CHECK(partial && diagnostic_count > 0 && diagnostic_count < 16);
     xr_compile_parser_close(&parser);
     parser = (Parser) {0};
     CHECK(xr_compile_parser_open(&parser, session, "const value = 1", NULL, &arena) == XR_PARSE_OK);

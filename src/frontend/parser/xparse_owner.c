@@ -178,8 +178,9 @@ static AstNode *parse_body(Parser *parser, bool expression, bool trivia) {
             }
             xr_ast_program_add(parser->compiler_session, program, declaration);
         }
-        if (parser->current.start == start && !declaration && !parser->panic_mode &&
-            !xr_parser_check(parser, TK_EOF) && !xr_parser_check(parser, TK_RBRACE))
+        /* Recovery can stop at the previous closing brace without consuming
+         * the rejected declaration. Make progress even with unlimited errors. */
+        if (parser->current.start == start && !xr_parser_check(parser, TK_EOF))
             xr_parser_advance(parser);
     }
     return xr_parser_healthy(parser) ? program : NULL;
