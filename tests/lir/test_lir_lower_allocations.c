@@ -384,7 +384,24 @@ static void tuple_lower_failures(void) {
     printf("Tuple group Lower: %zu allocation failures preserve empty output\n", total);
 }
 
+static void record_lower_failures(void) {
+    SourceFixture fixture = source_fixture("fn snapshot<T>(value:T)->T{return value}\n"
+        "fn some<T>(value:T)->T?{return value}\n"
+        "var current={name:some(\"alice\"),score:41}\n"
+        "const saved=some(snapshot(current))\nvar empty:string?=null\ncurrent={name:empty,score:99}\n"
+        "print(saved!.name!)\nprint(saved!.score)\n");
+    attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX; OK(run(&fixture)); source_fixture_free(&fixture);
+    printf("Record/Nullable Lower: %zu allocation failures preserve empty output\n", total);
+}
 int main(void) {
+    record_lower_failures();
     map_lower_failures();
     composition_lower_failures();
     tuple_lower_failures();

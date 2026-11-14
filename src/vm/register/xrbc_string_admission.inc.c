@@ -724,11 +724,13 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     bool managed = rbc_managed_kind(f->result_kind) || f->array_access_count != 0 || f->view_access_count != 0;
     bool range = rbc_function_scopes(module, f).count != 0;
-    for (size_t n = 0; n < f->aggregate_access_count; ++n)
+    for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
+        managed |= rbc_boxed_operation(f->aggregate_accesses[n].operation);
+    }
     bool numeric_conversion = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
-        managed |= f->register_kinds[r] == XR_RBC_MAP_STRING_I64 || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING || f->register_kinds[r] == XR_RBC_STRING_CELL ||
+        managed |= rbc_managed_kind(f->register_kinds[r]) || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING_CELL ||
             f->register_kinds[r] == XR_RBC_STRING_REF || f->register_kinds[r] == XR_RBC_STATE || f->register_kinds[r] == XR_RBC_STATE_REF ||
             f->register_kinds[r] == XR_RBC_FUNCTION || f->register_kinds[r] == XR_RBC_I64_BINDING ||
             f->register_kinds[r] == XR_RBC_CAPTURED_CELL || f->register_kinds[r] == XR_RBC_CAPTURED_CELL_BORROW ||

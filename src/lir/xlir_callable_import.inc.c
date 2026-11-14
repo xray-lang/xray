@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_callable_import.inc.c - Iterative receiving of callable dependencies
+ * xlir_callable_import.inc.c - Iterative receiving of constructed dependencies
  *
  * KEY CONCEPT:
  *   Dependencies precede their user. A reverse marking pass and a forward
@@ -18,7 +18,7 @@ static XrLirType lir_imported_dependency(const XrLirType *mapping, XrLirType typ
     return type < XR_LIR_TYPE_COUNT ? type : mapping[type - XR_LIR_TYPE_COUNT];
 }
 
-static XrLirStatus lir_import_callable(XrLirModule *target, const XrLirModule *source,
+static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModule *source,
     XrLirType type, XrLirType *output) {
     if (target == source) { *output = type; return XR_LIR_OK; }
     uint32_t count = type - XR_LIR_TYPE_COUNT + 1;

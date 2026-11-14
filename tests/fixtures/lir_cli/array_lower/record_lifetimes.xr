@@ -1,0 +1,10 @@
+fn snapshot<T>(value:T)->T { return value }
+var i=0
+var total=0
+while(i<2000) {
+    const row={name:"row ${i}",score:i}
+    const saved=snapshot(row)
+    total=total+saved.score
+    i=i+1
+}
+print(total)

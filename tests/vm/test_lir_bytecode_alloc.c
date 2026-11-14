@@ -129,6 +129,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_callable_factory_fixture.h"
 #include "../lir/lir_callable_composition_fixture.h"
 #include "../lir/lir_tuple_fixture.h"
+#include "../lir/lir_record_fixture.h"
 
 static void callable_factory_failures(bool scopes) {
     XrLirModule *module = NULL;
@@ -1048,7 +1049,42 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #include "lir_string_alloc_cases.h"
 #include "lir_map_alloc_cases.h"
 
+static void record_compiler_failures(void) {
+    XrLirFunction root = {0};
+    XrLirModule *module = record_fixture(&root);
+    XrRbcProgram *program = NULL;
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    size_t total = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(total && !live_allocations);
+    for (size_t n = 1; n <= total; ++n) {
+        attempts = 0; fail_at = n;
+        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    size_t retained = live_allocations;
+    uint64_t bits = 0;
+    attempts = 0;
+    CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OK && bits == 100);
+    size_t runtime = attempts;
+    CHECK(live_allocations == retained);
+    for (size_t n = 1; n <= runtime; ++n) {
+        attempts = 0; fail_at = n;
+        CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OUT_OF_MEMORY);
+        CHECK(live_allocations == retained);
+    }
+    fail_at = SIZE_MAX;
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("Record/Nullable compiler/runtime allocation failures %zu/%zu drained\n", total, runtime);
+    attempts = 0;
+}
 int main(void) {
+    record_compiler_failures();
     map_compiler_failures();
     composition_compiler_failures();
     tuple_compiler_failures();

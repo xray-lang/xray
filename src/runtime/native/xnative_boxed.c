@@ -39,6 +39,24 @@ static XrXirValue boxed_value(const XrtBoxed *box) {
 static void boxed_require(XrXirValueStatus status, uint32_t source) {
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
 }
+XR_FUNC bool xrt_boxed_type(const XrXirTypeArena *arena, XrXirType type) {
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    while (node && node->kind == XR_XIR_TYPE_NULLABLE) {
+        if (node->element == XR_XIR_STRING) return true;
+        node = xr_xir_type_node(types, node->element);
+    }
+    return node && node->kind == XR_XIR_TYPE_NOMINAL && types->nominals && types->nominals->identities &&
+        (types->nominals->identities[node->nominal.declaration].flags & XR_XIR_NOMINAL_RECORD) != 0;
+}
+static XrXirValue boxed_argument(const XrtBoxed *box, uint32_t source) {
+    if (!box) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    XrXirValue value = boxed_value(box);
+    if (value.type < XR_XIR_CONSTRUCTED_TYPE_BASE || !xr_xir_value_valid(&value) ||
+        !xrt_boxed_type(xr_xir_value_arena(&value), (XrXirType)value.type))
+        xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    return value;
+}
 static XrtBoxedOwner **boxed_owner(XrtValueRoot *root, const XrtBoxed *box) {
     XrtBoxedOwner **cursor = &root->boxed;
     while (*cursor && (const void *)(intptr_t)(*cursor)->value.payload != box) cursor = &(*cursor)->next;
@@ -96,7 +114,7 @@ XR_FUNC XrtBoxed *xrt_boxed_create(const XrXirTypeArena *arena, XrXirType type,
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     bool nullable = node && node->kind == XR_XIR_TYPE_NULLABLE;
-    if (!node || (count && !fields) || (nullable ? count > 1 : !xr_xir_type_is_struct(types, type) ||
+    if (!node || !xrt_boxed_type(arena, type) || (count && !fields) || (nullable ? count > 1 : !xr_xir_type_is_struct(types, type) ||
         node->nominal.field_count != count)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XR_CHECK(!root->pending.type, "one rooted pending value covers failure-atomic publication");
     XrXirValue *values = count ? boxed_allocate(root, (size_t)count * sizeof(*values), source) : NULL;
@@ -125,7 +143,7 @@ XRAY_API XrtBoxed *xrt_boxed_new(const XrtBoxedImage *image, uint32_t type,
 }
 XRAY_API XrtBoxed *xrt_boxed_retain(XrtBoxed *box, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    XrXirValue value = boxed_value(box);
+    XrXirValue value = boxed_argument(box, source);
     XR_CHECK(!root->pending.type, "copy publishes into the rooted pending owner");
     boxed_require(xr_xir_value_copy(&value, &root->pending), source);
     return boxed_publish(root, source);
@@ -142,7 +160,7 @@ XRAY_API void xrt_boxed_drop(XrtBoxed *box, uint32_t source) {
     xr_xir_value_drop(&value);
 }
 XRAY_API bool xrt_boxed_present(const XrtBoxed *box, uint32_t source) {
-    XrXirValue value = boxed_value(box);
+    XrXirValue value = boxed_argument(box, source);
     bool some = false;
     const XrXirValue *payload;
     if (!xr_xir_nullable_view(&value, &some, &payload)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
@@ -150,7 +168,7 @@ XRAY_API bool xrt_boxed_present(const XrtBoxed *box, uint32_t source) {
 }
 XRAY_API uint64_t xrt_boxed_field(const XrtBoxed *box, uint32_t field, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    XrXirValue value = boxed_value(box);
+    XrXirValue value = boxed_argument(box, source);
     const XrXirTypeArena *arena = xr_xir_value_arena(&value);
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
     XrXirValueStatus status;
@@ -177,7 +195,8 @@ XR_FUNC XrXirValueStatus xrt_boxed_owned_copy(const XrtBoxed *box, const XrXirTy
     XrXirType type, XrtBoxed **empty) {
     if (!box || !empty || *empty) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = boxed_value(box), received = {0};
-    if (xr_xir_value_arena(&value) != arena || value.type != (uint32_t)type ||
+    if (value.type < XR_XIR_CONSTRUCTED_TYPE_BASE || !xrt_boxed_type(arena, type) ||
+        xr_xir_value_arena(&value) != arena || value.type != (uint32_t)type ||
         !xr_xir_value_argument(&value, arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = xr_xir_value_copy(&value, &received);
     if (status == XR_XIR_VALUE_OK) *empty = (XrtBoxed *)(intptr_t)received.payload;

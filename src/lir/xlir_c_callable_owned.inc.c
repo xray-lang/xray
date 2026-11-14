@@ -62,6 +62,7 @@ static void c_callable_owned_target(LirC *c, uint32_t target) {
 }
 static void c_callable_owned_catalog(LirC *c) {
     if (!c->owned_entry_count && !c->boxed) return;
+    if (!c_request_poll(c)) return;
     uint32_t count = xr_lir_constructed_type_count(c->request->module), capacity = 0;
     for (uint32_t t = 0; t < count; ++t) {
         XrLirCallableType signature;

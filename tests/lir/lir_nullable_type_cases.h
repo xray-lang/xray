@@ -51,17 +51,31 @@ static void nullable_type_owners(void) {
     XrLirScalarPart part;
     OK(xr_lir_type_scalar(module, twice, 18, &part));
     CHECK(part.type == XR_LIR_U8 && part.offset == 18);
+    OK(xr_lir_nullable_type(module, XR_LIR_STRING, &nullable));
+    OK(xr_lir_nullable_type(module, nullable, &twice));
+    OK(xr_lir_type_layout(module, twice, &layout));
+    CHECK(layout.managed && layout.size == sizeof(void *) && layout.scalar_count == 0 &&
+        xr_lir_boxed_type(module, nullable) && xr_lir_boxed_type(module, twice));
     xr_lir_module_destroy(module);
 }
 
 static void nullable_type_rejections(void) {
-    const XrLirType invalid[] = {XR_LIR_STRING, XR_LIR_ARRAY, XR_LIR_PTR, XR_LIR_STATE_REF,
+    const XrLirType invalid[] = {XR_LIR_ARRAY, XR_LIR_PTR, XR_LIR_STATE_REF,
         XR_LIR_I64_CELL, (XrLirType)UINT32_MAX};
     for (uint32_t n = 0; n < sizeof(invalid) / sizeof(*invalid); ++n) {
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
         XrLirType output = XR_LIR_I64;
         CHECK(xr_lir_nullable_type(module, invalid[n], &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
+        xr_lir_module_destroy(module);
+    }
+    for (unsigned n = 0; n < 2; ++n) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType type, output = XR_LIR_I64;
+        if (n) OK(xr_lir_cell_type(module, (XrLirCellType){XR_LIR_I64,0}, &type));
+        else { XrLirCallableType shape = {.result=XR_LIR_I64}; OK(xr_lir_callable_type(module, &shape, &type)); }
+        CHECK(xr_lir_nullable_type(module, type, &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
         xr_lir_module_destroy(module);
     }
     for (uint32_t n = 0; n < 3; ++n) {

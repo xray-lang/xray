@@ -1,0 +1,13 @@
+fn snapshot<T>(value:T)->T { return value }
+var current={name:"first",score:41}
+const before=snapshot(current)
+current={name:"second",score:99}
+print(before.name)
+print(before.score)
+print(current.name)
+const nested={child:before,ready:true,ratio:1.25}
+const saved=snapshot(nested)
+print(saved.child.name)
+print(saved.ready)
+print(saved.ratio)
+print(current.score)

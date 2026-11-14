@@ -30,12 +30,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct LowerRecordFrame LowerRecordFrame;
 typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
     XrLirModule *module;
     XrLirType *constructed_types;
-    uint32_t *constructed_stack;
+    LowerRecordFrame *constructed_frames;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
     XrLirType owned_i64_cell, owned_map_cell;
@@ -303,6 +304,7 @@ static bool lower_build(Lower *c, XrLirStatus status) {
 
 static bool lower_receive_type(Lower *, XrXirType);
 #include "xlir_lower_callable_types.inc.c"
+#include "xlir_lower_record_types.inc.c"
 
 /* Only admitted payloads and signatures receive physical type identities.
  * An unused source descriptor cannot change the retained program's frontier. */
@@ -310,33 +312,9 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
     if (node && node->kind == XR_XIR_TYPE_CALLABLE) return lower_receive_callable(c, type, node);
     XrXirTypeDescription description = {0};
-    const XrXirCompileContext *context = xr_xir_compile_artifact_context(c->request->closed);
-    if (node && node->kind == XR_XIR_TYPE_NOMINAL &&
-        xr_xir_compile_type_description(context, c->source->types, type, &description) == XR_XIR_OK &&
-        ((description.definition ? description.definition->flags : description.identity->flags) & XR_XIR_NOMINAL_RECORD)) {
-        if (!c->constructed_types)
-            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
-        if (!c->constructed_types) return false;
-        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (c->constructed_types[index]) return true;
-        uint32_t count = node->nominal.field_count;
-        XrLirRecordField *fields = count ? lower_alloc(c, count, sizeof(*fields)) : NULL;
-        if (count && !fields) return false;
-        bool good = true;
-        for (uint32_t n = 0; n < count && good; ++n) {
-            XrXirFieldDescription member = {0};
-            good = xr_xir_compile_description_field(context, &description, n, &member) == XR_XIR_OK && member.resolved;
-            if (!good) { lower_unsupported(c, "record field has no resolved Checked description"); break; }
-            good = lower_receive_type(c, member.type);
-            XrLirType field = lower_type(c, member.type);
-            if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
-                xr_lir_boxed_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
-            fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field};
-        }
-        if (good) good = lower_build(c, xr_lir_record_type(c->module, fields, count, &c->constructed_types[index]));
-        xr_free(fields);
-        return good;
-    }
+    if (node && (node->kind == XR_XIR_TYPE_NULLABLE ||
+        (node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, type, &description))))
+        return lower_receive_record_shapes(c, type);
     if (node && node->kind == XR_XIR_TYPE_TUPLE) {
         for (uint32_t p = 0; p < node->parameter_count; ++p)
             if (node->parameters[p].type != XR_XIR_I64)
@@ -348,39 +326,14 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         return c->constructed_types[index] || lower_build(c,
             xr_lir_tuple_i64_type(c->module, node->parameter_count, &c->constructed_types[index]));
     }
-    if (!node || (node->kind != XR_XIR_TYPE_FIXED_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return true;
+    if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY) return true;
     if (!c->constructed_types) {
         c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
         if (!c->constructed_types) return false;
     }
-    if (node->kind == XR_XIR_TYPE_NULLABLE && !c->constructed_stack) {
-        c->constructed_stack = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_stack));
-        if (!c->constructed_stack) return false;
-    }
-    uint32_t depth = 0;
-    while (node && (node->kind == XR_XIR_TYPE_FIXED_ARRAY || node->kind == XR_XIR_TYPE_NULLABLE)) {
-        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (c->constructed_types[index]) break;
-        if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
-            if (!lower_build(c, xr_lir_fixed_array_type(c->module, lower_type(c, node->element),
-                node->parameter_count, &c->constructed_types[index]))) return false;
-            break;
-        }
-        XR_DCHECK(depth < c->source->types->count, "nullable dependencies follow the owned acyclic type pool");
-        c->constructed_stack[depth++] = index;
-        type = node->element;
-        node = xr_xir_type_node(c->source->types, type);
-    }
-    if (node && node->kind == XR_XIR_TYPE_NOMINAL && !lower_receive_type(c, type)) return false;
-    XrLirType element = lower_pod_element(c, type);
-    if (!element || element == XR_LIR_ARRAY)
-        return lower_unsupported(c, "Nullable payload has no inline POD layout");
-    while (depth) {
-        uint32_t index = c->constructed_stack[--depth];
-        if (!lower_build(c, xr_lir_nullable_type(c->module, element, &element))) return false;
-        c->constructed_types[index] = element;
-    }
-    return true;
+    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    return c->constructed_types[index] || lower_build(c, xr_lir_fixed_array_type(c->module,
+        lower_type(c, node->element), node->parameter_count, &c->constructed_types[index]));
 }
 
 static bool lower_known(XrXirOp op) {
@@ -569,7 +522,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 
 static void lower_modules_free(Lower *c) {
     xr_free(c->constructed_types);
-    xr_free(c->constructed_stack);
+    xr_free(c->constructed_frames);
     if (c->module_cells)
         for (uint32_t f = 0; f < c->source->function_count; ++f)
             xr_free(c->module_cells[f]);

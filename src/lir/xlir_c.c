@@ -1285,6 +1285,10 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     }
     if (!c_request_poll(&c))
         return c.status;
+    if (xr_lir_boxed_type(request->module, entry.result)) {
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "standalone boxed results require an external outcome owner");
+        return c.status;
+    }
     XrLirCallableType callable_result;
     if (xr_lir_callable_type_view(request->module, entry.result, &callable_result) == XR_LIR_OK) {
         c_error(&c, XR_LIR_C_UNSUPPORTED, "standalone callable results require an external outcome owner");
@@ -1307,7 +1311,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         return c.status;
     c_prepare_types(&c);
     uint32_t literal_count = xr_lir_literal_count(request->module);
-    if (literal_count) {
+    if (literal_count && c.status == XR_LIR_C_OK) {
         void *used = NULL;
         if (c_resource(&c, xr_compile_resources_calloc(request->resources, literal_count, 1, &used)))
             c.used_literals = used;

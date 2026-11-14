@@ -57,9 +57,9 @@ XR_FUNC uint32_t xr_lir_constructed_type_count(const XrLirModule *);
  * No descriptor borrows a frontend type pool or allocates an execution value. */
 XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *, XrLirType element,
     uint32_t count, XrLirType *output);
-/* Nullable stores an inline tag and exact POD payload. Scalar data, fixed
- * bytes and earlier Nullable types are admitted; managed values and authority
- * capabilities have no nullable physical projection through this operation. */
+/* Nullable keeps an inline tag for POD payloads. String and canonical record
+ * payloads use independently owned canonical objects. Authority capabilities
+ * have no nullable physical projection through this operation. */
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLirType *output);
 /* This physical Tuple family contains count I64 fields in logical order.
  * Other Tuple payload families require their own admitted exact layout. */

@@ -12,16 +12,7 @@ static bool rbc_boxed_operation(XrRbcAggregateOperation operation) {
 static const XrXirTypeNode *rbc_boxed_type(const XrRbcModule *module, uint32_t type) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(module->closure_types);
     const XrXirTypeNode *node = xr_xir_type_node(types, (XrXirType)type);
-    if (!node) return NULL;
-    if (node->kind == XR_XIR_TYPE_NOMINAL && types->nominals && types->nominals->identities &&
-        (types->nominals->identities[node->nominal.declaration].flags & XR_XIR_NOMINAL_RECORD)) return node;
-    if (node->kind != XR_XIR_TYPE_NULLABLE) return NULL;
-    const XrXirTypeNode *leaf = node;
-    while (leaf && leaf->kind == XR_XIR_TYPE_NULLABLE) {
-        if (leaf->element == XR_XIR_STRING) return node;
-        leaf = xr_xir_type_node(types, leaf->element);
-    }
-    return leaf && leaf->kind == XR_XIR_TYPE_NOMINAL ? node : NULL;
+    return node && xrt_boxed_type(module->closure_types, (XrXirType)type) ? node : NULL;
 }
 static uint32_t rbc_boxed_register_type(const XrRbcFunction *function, uint32_t index) {
     return function->register_boxed_types && index < function->register_boxed_type_count ?

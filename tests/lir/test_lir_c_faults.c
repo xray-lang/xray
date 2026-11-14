@@ -79,6 +79,10 @@ static void refusal(XrLirCRequest *request, XrLirCStatus expected) {
     uint64_t held = sdk_stats(request->resources).held_bytes;
     CHECK(xr_lir_emit_c(request, &output, &diagnostic) == expected);
     CHECK(!output.bytes && !output.length && !output.entry_result);
+    if (diagnostic.status != expected || sdk_stats(request->resources).held_bytes != held)
+        fprintf(stderr, "C refusal expected=%u actual=%u held=%llu prior=%llu allocation=%zu: %s\n",
+            (unsigned)expected, (unsigned)diagnostic.status, (unsigned long long)sdk_stats(request->resources).held_bytes,
+            (unsigned long long)held, runtime_attempts, diagnostic.message);
     CHECK(diagnostic.status == expected && sdk_stats(request->resources).held_bytes == held);
 }
 static void control_boundaries(XrLirCRequest *request) {
@@ -195,6 +199,21 @@ static XrLirCOutput memory_boundaries(XrLirCRequest *request) {
         sites, (unsigned long long)measured.peak_bytes);
     return output;
 }
+#include "lir_record_fixture.h"
+static void record_memory_boundaries(void) {
+    XrLirFunction root = {0};
+    XrLirModule *module = record_fixture(&root);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module, root, resources, "record-publication-fault", NULL};
+    uint64_t held = sdk_stats(resources).held_bytes;
+    XrLirCOutput output = memory_boundaries(&request);
+    xr_lir_module_destroy(module);
+    CHECK(strstr(output.bytes, "xrt_boxed_new") && strstr(output.bytes, "xrt_boxed_field"));
+    xr_lir_c_output_free(&output);
+    CHECK(sdk_stats(resources).held_bytes == held);
+    xr_compile_resources_release(resources);
+}
 static void literal_memory_boundaries(void) {
     XrLirModule *module = NULL;
     CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
@@ -282,6 +301,7 @@ static void fixed_memory_boundaries(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 1) record_memory_boundaries();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
     XrLirModule *module = NULL;

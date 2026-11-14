@@ -11,6 +11,7 @@
 #include "xray_native_boxed.h"
 #include "xir/xxir_value.h"
 struct XrtValueRoot;
+XR_FUNC bool xrt_boxed_type(const XrXirTypeArena *, XrXirType);
 XR_FUNC XrtBoxed *xrt_boxed_create(const XrXirTypeArena *, XrXirType,
     const uint64_t *fields, uint32_t count, uint32_t source);
 XR_FUNC void xrt_boxed_root_drain(struct XrtValueRoot *);

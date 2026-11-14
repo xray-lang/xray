@@ -113,8 +113,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
     }
     if (shape.kind != XR_LIR_TYPE_NULLABLE || shape.count ||
         shape.element >= XR_LIR_TYPE_COUNT + ordinal) return false;
-    if (shape.element == XR_LIR_STRING || (shape.element >= XR_LIR_TYPE_COUNT &&
-        m->types[shape.element - XR_LIR_TYPE_COUNT].layout.managed)) {
+    if (shape.element == XR_LIR_STRING || xr_lir_boxed_type(m, shape.element)) {
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
@@ -347,32 +346,9 @@ XR_FUNC XrLirStatus xr_lir_import_type(XrLirModule *target, const XrLirModule *s
     XrLirTypeView view;
     if (!output || xr_lir_type_view(source, type, &view) != XR_LIR_OK)
         return lir_fail(target, XR_LIR_INVALID_ARGUMENT);
-    if (view.kind == XR_LIR_TYPE_CALLABLE || view.kind == XR_LIR_TYPE_CELL)
-        return lir_import_callable(target, source, type, output);
-    uint32_t depth = 0;
-    while (view.kind == XR_LIR_TYPE_NULLABLE) {
-        ++depth;
-        type = view.element;
-        if (xr_lir_type_view(source, type, &view) != XR_LIR_OK)
-            return lir_fail(target, XR_LIR_INVALID_ARGUMENT);
-    }
-    XrLirType imported = type;
-    if (view.kind == XR_LIR_TYPE_RECORD) {
-        const XrLirRecordField *fields = source->types[type - XR_LIR_TYPE_COUNT].fields;
-        XrLirRecordField *received = view.count ? lir_copy(target, fields, view.count, sizeof(*fields)) : NULL;
-        if (view.count && !received) return target->failure;
-        for (uint32_t f = 0; f < view.count && status == XR_LIR_OK; ++f)
-            status = xr_lir_import_type(target, source, fields[f].type, &received[f].type);
-        if (status == XR_LIR_OK) status = xr_lir_record_type(target, received, view.count, &imported);
-        xr_free(received);
-    }
-    if (view.kind == XR_LIR_TYPE_FIXED_ARRAY)
-        status = xr_lir_fixed_array_type(target, view.element, view.count, &imported);
-    else if (view.kind == XR_LIR_TYPE_TUPLE)
-        status = xr_lir_tuple_i64_type(target, view.count, &imported);
-    for (; depth && status == XR_LIR_OK; --depth) status = xr_lir_nullable_type(target, imported, &imported);
-    if (status == XR_LIR_OK) *output = imported;
-    return status;
+    if (type >= XR_LIR_TYPE_COUNT) return lir_import_dependencies(target, source, type, output);
+    *output = type;
+    return XR_LIR_OK;
 }
 
 XR_FUNC XrLirStatus xr_lir_copy_types(XrLirModule *target, const XrLirModule *source) {

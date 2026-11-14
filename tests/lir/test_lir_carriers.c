@@ -406,6 +406,58 @@ static XrLirModule *transport(XrLirType type, uint64_t bits) {
     ret(m, b, constant(m, b, type, bits));
     OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL)); return m;
 }
+static void record_metadata(void) {
+    XrLirModule *source = NULL, *target = NULL;
+    OK(xr_lir_module_create(NULL, &source)); OK(xr_lir_module_create(NULL, &target));
+    char name[] = "name";
+    XrLirRecordField field = {name, 4, XR_LIR_STRING};
+    XrLirType type, unused, received;
+    OK(xr_lir_record_type(source, &field, 1, &type));
+    memset(name, 'x', sizeof(name));
+    for (unsigned n = 0; n < 512; ++n) {
+        field = (XrLirRecordField){"child", 5, type};
+        OK(xr_lir_record_type(source, &field, 1, &type));
+    }
+    OK(xr_lir_nullable_type(source, type, &type));
+    OK(xr_lir_fixed_array_type(target, XR_LIR_U8, 3, &unused));
+    OK(xr_lir_import_type(target, source, type, &received));
+    CHECK(type != received && xr_lir_boxed_type(target, received));
+    xr_lir_module_destroy(source);
+    XrLirTypeView view;
+    OK(xr_lir_type_view(target, received, &view));
+    CHECK(view.kind == XR_LIR_TYPE_NULLABLE);
+    type = view.element;
+    for (unsigned n = 0; n < 513; ++n) {
+        const XrLirRecordField *fields = NULL;
+        uint32_t count = 0;
+        OK(xr_lir_record_fields(target, type, &fields, &count));
+        CHECK(count == 1 && fields[0].name_length == (n == 512 ? 4u : 5u));
+        CHECK(!memcmp(fields[0].name, n == 512 ? "name" : "child", fields[0].name_length));
+        type = fields[0].type;
+    }
+    CHECK(type == XR_LIR_STRING);
+    xr_lir_module_destroy(target);
+}
+static void boxed_entry_frontier(void) {
+    XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+    XrLirRecordField field = {"score", 5, XR_LIR_I64};
+    XrLirType type; OK(xr_lir_record_type(m, &field, 1, &type));
+    XrLirFunction root = function(m, "boxed", NULL, 0, type);
+    XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
+    XrLirValue input = constant(m, b, XR_LIR_I64, 7), result;
+    XrLirInstruction value = {.op=XR_LIR_RECORD_NEW, .type=type, .operands=&input, .operand_count=1};
+    OK(xr_lir_emit_value(m, b, &value, &result)); ret(m, b, result);
+    OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL));
+    XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
+    XrLirCRequest request = {.module=m, .entry=root, .resources=resources, .translation_unit="boxed-entry.c"};
+    CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED && !out.bytes);
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
+    xr_lir_module_destroy(m);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_INVALID && !execution);
+    xr_rbc_program_destroy(program); xr_compile_resources_release(resources);
+}
 static void test_frontier(void) {
     const XrLirType native_rejected[] = {XR_LIR_F32};
     for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
@@ -447,7 +499,8 @@ static void test_frontier(void) {
 int main(int argc, char **argv) {
     const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_PTR};
     if (argc == 1) {
-        test_frontier(); f64_owned_programs(); reject_float_operations(); native_negation();
+        test_frontier(); record_metadata(); boxed_entry_frontier();
+        f64_owned_programs(); reject_float_operations(); native_negation();
         for (size_t i = 0; i < 4; ++i) {
             for (unsigned output = 0; output <= (types[i] == XR_LIR_PTR ? 1u : 0u); ++output) {
                 XrLirModule *m = make_carrier(types[i], output != 0, 0); observe(m, types[i], false);

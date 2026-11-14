@@ -1,0 +1,16 @@
+fn snapshot(name:string?)->string? { return name }
+fn greet(name:string?)->string {
+    if(name==null) { return "guest" }
+    return "hello, ${name!}"
+}
+var name:string?=null
+print(greet(snapshot(name)))
+name="alice"
+const saved={name:snapshot(name),score:95}
+name=null
+print(greet(saved.name))
+print(saved.score)
+fn some<T>(value:T)->T? { return value }
+const outer=some({name:some("alice"),score:7})
+print(outer!.name!)
+print(outer!.score)

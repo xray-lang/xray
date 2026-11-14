@@ -13,6 +13,9 @@ static NativeArrayBlock native_array_blocks[256];
 static size_t native_array_calls, native_array_live, native_array_bytes;
 static size_t native_array_fail_at = SIZE_MAX;
 static bool native_array_injected, native_array_pending_failure;
+#if defined(XR_NATIVE_BOXED_ALLOCATIONS)
+static bool native_boxed_pending_failure;
+#endif
 static void (*native_array_before_allocate)(void);
 static void (*native_array_before_free)(void);
 static bool native_array_fail(void) {
@@ -25,6 +28,9 @@ static bool native_array_fail(void) {
     native_array_injected = true;
     XrtValueRoot *root = xrt_value_root_active();
     if (root && root->pending.type == XR_XIR_STRING) native_array_pending_failure = true;
+#if defined(XR_NATIVE_BOXED_ALLOCATIONS)
+    if (root && root->pending.type >= XR_XIR_CONSTRUCTED_TYPE_BASE) native_boxed_pending_failure = true;
+#endif
     return true;
 }
 static void native_array_record(void *pointer, size_t bytes) {
@@ -105,6 +111,9 @@ static void *native_array_realloc(void *pointer, size_t bytes) {
 #include "xir/xxir_value.c"
 #include "runtime/native/xnative_module_state.c"
 #include "runtime/native/xnative_view.c"
+#if defined(XR_NATIVE_BOXED_ALLOCATIONS)
+#include "runtime/native/xnative_boxed.c"
+#endif
 #pragma pop_macro("xr_free_aligned")
 #pragma pop_macro("xr_malloc_aligned")
 #pragma pop_macro("xr_realloc")

@@ -133,16 +133,28 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
             status = xr_lir_tuple_i64_type(*module, n, &tuple);
             if (status != XR_LIR_OK) REQUIRE(tuple == XR_LIR_I64);
         }
+        if (status == XR_LIR_OK) {
+            XrLirRecordField fields[] = {{"name", 4, XR_LIR_STRING}, {"score", 5, XR_LIR_I64}};
+            XrLirType record = XR_LIR_I64;
+            status = xr_lir_record_type(*module, fields, 2, &record);
+            if (status != XR_LIR_OK) REQUIRE(record == XR_LIR_I64);
+        }
     }
     return status;
 }
 
-static void callable_import_failures(bool cells) {
+static void callable_import_failures(bool cells, bool records) {
     fail_at = SIZE_MAX;
     XrLirModule *source = NULL;
     REQUIRE(xr_lir_module_create(NULL, &source) == XR_LIR_OK);
     XrLirType type = XR_LIR_I64;
     for (uint32_t i = 0; i < 16; ++i) {
+        if (records) {
+            XrLirRecordField field = {"child", 5, type};
+            REQUIRE(xr_lir_record_type(source, &field, 1, &type) == XR_LIR_OK);
+            REQUIRE(xr_lir_nullable_type(source, type, &type) == XR_LIR_OK);
+            continue;
+        }
         if (cells) REQUIRE(xr_lir_cell_type(source, (XrLirCellType){type, 0}, &type) == XR_LIR_OK);
         XrLirCallableParameter parameter = {.type=type, .mode=cells ? XR_PARAM_REF : XR_PARAM_READ};
         XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=type};
@@ -172,7 +184,8 @@ static void callable_import_failures(bool cells) {
     REQUIRE(xr_lir_verify(source, NULL) == XR_LIR_OK);
     xr_lir_module_destroy(source);
     REQUIRE(!live_allocations && !live_bytes);
-    printf("callable%s cross-owner import failures covered %zu allocation sites\n", cells ? "/Cell" : "", sites);
+    printf("%s cross-owner import failures covered %zu allocation sites\n",
+        records ? "Record/Nullable" : cells ? "Fn/Cell" : "Fn", sites);
 }
 
 static void type_pool_failures(void) {
@@ -288,8 +301,9 @@ int main(void) {
     map_catalog_failures();
     callable_parameter_failures(false);
     callable_parameter_failures(true);
-    callable_import_failures(false);
-    callable_import_failures(true);
+    callable_import_failures(false, false);
+    callable_import_failures(true, false);
+    callable_import_failures(false, true);
     type_pool_failures();
     creation_failure(0);
     creation_failure(2);

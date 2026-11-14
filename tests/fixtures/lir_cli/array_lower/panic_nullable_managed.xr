@@ -1,0 +1,4 @@
+fn snapshot(name:string?)->string? { return name }
+const name:string?=null
+const record={name:snapshot(name),score:1}
+print(record.name!)

@@ -45,7 +45,8 @@ static bool rbc_array_metadata_valid(const XrRbcFunction *f) {
         (f->array_accesses ? f->array_access_count > 65536 : f->array_access_count != 0) ||
         f->array_operand_count > UINT32_MAX || (!f->array_operands && f->array_operand_count)) return false;
     for (uint32_t i = 0; i < f->reference_spill_count; ++i)
-        if (!rbc_managed_kind(rbc_reference_spill_kind(f, i))) return false;
+        if (!rbc_managed_kind(rbc_reference_spill_kind(f, i)) ||
+            rbc_reference_spill_kind(f, i) == XR_RBC_BOXED) return false;
     for (size_t i = 0; i < f->array_operand_count; ++i)
         if (!rbc_array_location_valid(f, f->array_operands[i])) return false;
     for (size_t i = 0; i < f->array_access_count; ++i) {

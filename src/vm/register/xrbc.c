@@ -19,6 +19,7 @@
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
 #include "runtime/native/xnative_map.h"
+#include "runtime/native/xnative_boxed.h"
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
@@ -304,7 +305,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_RET:
         return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
             (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
-                rbc_direct_managed_kind(function->result_kind));
+                function->result_kind == XR_RBC_BOXED || rbc_direct_managed_kind(function->result_kind));
     case XR_RBC_RET0:
         return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
@@ -423,7 +424,6 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
 #include "xrbc_view_execute.inc.c"
-#include "runtime/native/xnative_boxed.h"
 #include "xrbc_aggregate_execute.inc.c"
 static bool xr_rbc_captured_cell_value(const XrRbcModule *, const XrRbcStack *,
     XrRbcRegisterKind, uint64_t, XrXirType, XrXirValue *);
@@ -458,7 +458,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
     bool inject_state = module->state_layout && entry == module->state_entry;
-    if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION ||
+    if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION || function->result_kind == XR_RBC_BOXED ||
         function->capture_count || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
