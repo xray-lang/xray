@@ -12,6 +12,7 @@ The earlier canonical-access experiment remains separately archived at
 |---|---|---|
 | `push` | Push 5,000,000 i64 values, then sum them | `12499997500000` |
 | `push-prepared` | The complete same push input inside a trusted prepared window | `12499997500000` |
+| `push-direct` | The complete same push input with scalar locals in the hot loop | `12499997500000` |
 | `record` | Construct `{x:i,y:i+1}` 3,000,000 times and sum fields | `9000000000000` |
 | `map` | Seed `{"seed":0}`, insert and look up 200,000 `"k${i}"` keys | `19999900000` |
 | `map-take` | The complete same Map input, transferring each owned insertion key | `19999900000` |
@@ -63,6 +64,17 @@ abort/refund, all COW allocation failures, failed growth, refreshed pointers,
 RHS rebinding, bounds before allocation, and invalidated descriptors before
 retain/alias/call/rebind. These are native C protocol tests, not a language loan,
 module effect proof, Root/longjmp test, or support for class/for-ref.
+
+`push-direct` retains the original `push-prepared` as an ABI-cost control. Its
+hot iterations hold owner/data/length/capacity as ordinary C locals and store
+elements plus canonical length directly. Only cold preparation constructs and
+receives descriptors; no large result is built at each fast iteration. The
+shared range helper moves one real reference in and returns the current owner
+even after failure. Zero iterations do not prepare a borrow. State checks run
+that same helper with a committed prefix, local/shared aliases, zero count and
+every measured allocation failure. The fixed CLI workload still appends all
+5,000,000 values. No volatile, forced inlining, compiler flag or allocator change
+is used, and this introduces no product access authority or new runtime carrier.
 
 `record` is an inline two-i64 value. Ordinary scalar replacement and loop
 folding are allowed in both implementations. A folded loop or startup-limited
