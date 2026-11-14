@@ -138,28 +138,28 @@ jobs:
         shell: cmd
         run: |
           chcp 65001 >nul
-          python scripts/array_access_benchmark.py prepare --root . --build build --cc "%ARRAY_CC%" --work array-performance-prepare --case push --case inplace
+          python scripts/array_access_benchmark.py prepare --root . --build build --cc "%ARRAY_CC%" --work build/array-performance-prepare --case push --case inplace
       - name: Prepare Unix Array performance gates
         if: runner.os != 'Windows'
         run: >-
           python scripts/array_access_benchmark.py prepare --root . --build build
-          --cc "$ARRAY_CC" --work array-performance-prepare --case push --case inplace
+          --cc "$ARRAY_CC" --work build/array-performance-prepare --case push --case inplace
       - name: Measure native Array performance
         run: >-
           python scripts/array_access_benchmark.py measure
-          --prepared array-performance-prepare/prepared.json --work array-performance-measured
+          --prepared build/array-performance-prepare/prepared.json --work build/array-performance-measured
       - name: Enforce native Array ratio limits
         run: >-
           python scripts/array_access_benchmark.py assert --scope native
-          --prepared array-performance-prepare/prepared.json
-          --result array-performance-measured/result.json
+          --prepared build/array-performance-prepare/prepared.json
+          --result build/array-performance-measured/result.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: current-${{ matrix.os }}-${{ github.sha }}
           path: |
-            array-performance-prepare/
-            array-performance-measured/
+            build/array-performance-prepare/
+            build/array-performance-measured/
             current-evidence/
             build/Testing/Temporary/LastTest.log
             build/smoke/
@@ -212,21 +212,21 @@ jobs:
         shell: cmd
         run: |
           chcp 65001 >nul
-          python bench/managed-value-layout/run.py prepare --cc "%LAYOUT_CC%" --work layout-prepare
+          python bench/managed-value-layout/run.py prepare --cc "%LAYOUT_CC%" --work build/layout-prepare
       - name: Prepare the Unix layout experiment
         if: runner.os != 'Windows'
-        run: python bench/managed-value-layout/run.py prepare --cc "$LAYOUT_CC" --work layout-prepare
+        run: python bench/managed-value-layout/run.py prepare --cc "$LAYOUT_CC" --work build/layout-prepare
       - name: Measure and gate the standalone layout
         run: >-
           python bench/managed-value-layout/run.py measure --gate
-          --prepared layout-prepare/prepared.json --work layout-measured
+          --prepared build/layout-prepare/prepared.json --work build/layout-measured
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: layout-${{ matrix.os }}-${{ matrix.cc }}-${{ github.sha }}
           path: |
-            layout-prepare/
-            layout-measured/
+            build/layout-prepare/
+            build/layout-measured/
 
   scalar-performance:
     if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
