@@ -414,8 +414,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             if (xr_lir_map_intrinsic_valid(m, entry)) {
                 if (entry->operation == XR_LIR_MAP_OP_NEW) {
                     if (v->type != XR_LIR_MAP_STRING_I64 || v->operand_count % 2) goto invalid;
-                    for (uint32_t p = 0; p < v->operand_count; ++p)
-                        if (f->values[v->operands[p] - 1].type != (p % 2 ? XR_LIR_I64 : XR_LIR_STRING)) goto invalid;
+                    for (uint32_t p = 0; p < v->operand_count; ++p) {
+                        XrLirType expected = p % 2 ? XR_LIR_I64 : XR_LIR_STRING;
+                        if (f->values[v->operands[p] - 1].type != expected) goto invalid;
+                    }
                 } else if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
                 return XR_LIR_OK;
             }
