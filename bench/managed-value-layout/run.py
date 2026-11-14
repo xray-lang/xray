@@ -91,7 +91,8 @@ def prepare(args) -> None:
         dependencies = list(directory.glob("*.c")) + list(directory.glob("*.h"))
         dependencies += [Path(__file__), Path(evidence.__file__), Path(xray_process.__file__), compiler]
         dependencies += [ROOT / "src/base" / name for name in
-                         ("xhash.h", "xmalloc.h", "xdefs.h", "xplatform.h", "xposix_compat.h")]
+                         ("xhash.h", "xmalloc.h", "xdefs.h", "xplatform.h", "xposix_compat.h",
+                          "xsigned_rc.h")]
         dependencies += [path for path in args.work.rglob("*") if path.is_file()
                          and path.name != "preparation.json"]
         if source_identity() != initial:
