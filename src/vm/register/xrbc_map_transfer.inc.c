@@ -90,7 +90,7 @@ static bool rbc_map_transfer(RbcStringAdmission *s, XrRbcArrayAccess a) {
     if (a.operation == XR_RBC_ARRAY_SET || a.operation == XR_RBC_ARRAY_REF_SET ||
         a.operation == XR_RBC_MAP_CLEAR || a.operation == XR_RBC_MAP_REF_CLEAR) return true;
     if (!rbc_array_destination(s, a.result)) return false;
-    rbc_array_define(s, a.result, a.operation == XR_RBC_ARRAY_LEN || a.operation == XR_RBC_MAP_CONTAINS ||
+    rbc_array_define(s, a.result, a.operation == XR_RBC_MAP_INDEX || a.operation == XR_RBC_ARRAY_LEN || a.operation == XR_RBC_MAP_CONTAINS ||
         a.operation == XR_RBC_MAP_REMOVE || a.operation == XR_RBC_MAP_REF_REMOVE ?
         RBC_BITS : RBC_STRING_OWNED, 0);
     return true;

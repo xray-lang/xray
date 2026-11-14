@@ -133,6 +133,6 @@ static void test_raw_fixed_no_value_callee(void) {
     XrRbcModule module = {.functions=functions, .function_count=2, .aggregate_types=&type, .aggregate_type_count=1};
     uint64_t bits = 0;
     XrRbcStatus status = execute(&module, 0, NULL, 0, &bits);
-    if (status != XR_RBC_ARITHMETIC_PANIC) fprintf(stderr, "fixed empty callee status %u\n", (unsigned)status);
-    CHECK(status == XR_RBC_ARITHMETIC_PANIC);
+    if (status != XR_RBC_TYPED_PANIC) fprintf(stderr, "fixed empty callee status %u\n", (unsigned)status);
+    CHECK(status == XR_RBC_TYPED_PANIC);
 }

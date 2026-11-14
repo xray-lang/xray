@@ -110,6 +110,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_step(const XrRbcModule *module, XrRbcS
     switch (a.operation) {
     case XR_RBC_ARRAY_LEN: result->bits = (uint64_t)xrt_map_length(first->map, source); break;
     case XR_RBC_MAP_CONTAINS: result->bits = xrt_map_string_i64_contains(first->map, second->string, source); break;
+    case XR_RBC_MAP_INDEX: result->bits = (uint64_t)xrt_map_string_i64_index(first->map, second->string, source); break;
     case XR_RBC_ARRAY_GET: {
         XrRbcAggregateValue home = f->aggregate_values[a.result.index];
         uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, home);

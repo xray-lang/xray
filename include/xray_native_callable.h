@@ -16,12 +16,14 @@ typedef enum XrtCallableValueKind {
 typedef struct XrtCallableValueSpec { XrtCallableValueKind kind; uint32_t type; } XrtCallableValueSpec;
 typedef enum XrtCallableShapeKind {
     XRT_CALLABLE_FIXED_BYTES, XRT_CALLABLE_NULLABLE, XRT_CALLABLE_SIGNATURE, XRT_CALLABLE_CELL,
-    XRT_CALLABLE_TUPLE_I64
+    XRT_CALLABLE_TUPLE_I64, XRT_CALLABLE_RECORD
 } XrtCallableShapeKind;
 typedef struct XrtCallableParameterSpec {
     XrtCallableValueSpec value;
     uint32_t mode;
     bool escaping;
+    const char *name;
+    uint32_t name_length;
 } XrtCallableParameterSpec;
 /* Dependencies name earlier receiving rows. Array families are I64, String,
  * U8 and U64. Shape metadata grants no executable address. */

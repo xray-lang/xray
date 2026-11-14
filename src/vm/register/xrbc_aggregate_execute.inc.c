@@ -84,9 +84,12 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
 }
 
 #include "xrbc_string_library.inc.c"
+#include "xrbc_boxed_execute.inc.c"
 
 static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame, const XrRbcFunction *f, uint32_t index, uint32_t source) {
+    if (rbc_boxed_operation(f->aggregate_accesses[index].operation))
+        return xr_rbc_boxed_step(module, stack, frame, f, index, source);
     if (f->aggregate_accesses[index].operation == XR_RBC_STATE_GROUP_INITIALIZE) {
         if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
         XrRbcAggregateAccess access = f->aggregate_accesses[index];

@@ -61,12 +61,17 @@ static void c_callable_owned_target(LirC *c, uint32_t target) {
     if (!c->owned_entries[target - 1]) c->owned_entries[target - 1] = ++c->owned_entry_count;
 }
 static void c_callable_owned_catalog(LirC *c) {
-    if (!c->owned_entry_count) return;
+    if (!c->owned_entry_count && !c->boxed) return;
     uint32_t count = xr_lir_constructed_type_count(c->request->module), capacity = 0;
     for (uint32_t t = 0; t < count; ++t) {
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(c->request->module, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK &&
             signature.parameter_count > capacity) capacity = signature.parameter_count;
+    }
+    for (uint32_t t = 0; t < count; ++t) {
+        XrLirTypeView shape;
+        if (xr_lir_type_view(c->request->module, XR_LIR_TYPE_COUNT + t, &shape) == XR_LIR_OK &&
+            shape.kind == XR_LIR_TYPE_RECORD && shape.count > capacity) capacity = shape.count;
     }
     XrtCallableParameterSpec *parameters = NULL;
     void *storage = NULL;
@@ -82,10 +87,18 @@ static void c_callable_owned_catalog(LirC *c) {
         }
         if (!spec.parameter_count) continue;
         c_format(c, "static const XrtCallableParameterSpec xrl_callable_parameters_%" PRIu32 "[] = {\n", t);
-        for (uint32_t p = 0; p < spec.parameter_count; ++p)
-            c_format(c, "    {{%u, %" PRIu32 "}, %" PRIu32 ", %u},\n",
+        for (uint32_t p = 0; p < spec.parameter_count; ++p) {
+            c_format(c, "    {{%u, %" PRIu32 "}, %" PRIu32 ", %u, ",
                 (unsigned)parameters[p].value.kind, parameters[p].value.type,
                 parameters[p].mode, (unsigned)parameters[p].escaping);
+            if (parameters[p].name_length) {
+                c_text(c, "\"");
+                for (uint32_t b = 0; b < parameters[p].name_length; ++b)
+                    c_format(c, "\\x%02x", (unsigned)(uint8_t)parameters[p].name[b]);
+                c_text(c, "\"");
+            } else c_text(c, "NULL");
+            c_format(c, ", %" PRIu32 "},\n", parameters[p].name_length);
+        }
         c_text(c, "};\n");
     }
     c_text(c, "static const XrtCallableTypeSpec xrl_callable_types[] = {\n");
@@ -104,6 +117,8 @@ static void c_callable_owned_catalog(LirC *c) {
             spec.parameter_count, (unsigned)spec.result.kind, spec.result.type, spec.flags);
     }
     c_text(c, "};\n");
+    if (c->boxed) c_format(c, "static const XrtBoxedImage xrl_boxed_image = {xrl_callable_types, %" PRIu32 "};\n", count);
+    if (!c->owned_entry_count) { xr_compile_resources_free(parameters); return; }
     uint32_t next = 0;
     for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
         if (!c->owned_entries[f]) continue;

@@ -49,7 +49,8 @@ XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *left, const Xrt
             (a.parameter_count && (!a.parameters || !b.parameters))) return false;
         for (uint32_t p = 0; p < a.parameter_count; ++p) {
             XrtCallableParameterSpec x = a.parameters[p], y = b.parameters[p];
-            if (x.value.kind != y.value.kind || x.value.type != y.value.type || x.mode != y.mode || x.escaping != y.escaping)
+            if (x.value.kind != y.value.kind || x.value.type != y.value.type || x.mode != y.mode || x.escaping != y.escaping ||
+                x.name_length != y.name_length || (x.name_length && (!x.name || !y.name || memcmp(x.name, y.name, x.name_length))))
                 return false;
         }
     }
@@ -62,6 +63,8 @@ static XrXirValueStatus callable_resource_status(XrCompileResourceStatus status)
         status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_VALUE_OVERFLOW : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 
+#include "xnative_record_types.inc.c"
+
 XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *specs, uint32_t count,
     uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes) {
     if (!empty || *empty || !bytes || (count && !specs)) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -70,7 +73,7 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     size_t parameter_count = 0;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec spec = specs[t];
-        if ((uint32_t)spec.kind > XRT_CALLABLE_TUPLE_I64 || spec.parameter_count > 65536 ||
+        if ((uint32_t)spec.kind > XRT_CALLABLE_RECORD || spec.parameter_count > 65536 ||
             (spec.parameter_count && !spec.parameters)) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (spec.throws) return XR_XIR_VALUE_UNSUPPORTED;
         if (spec.parameter_count > SIZE_MAX - parameter_count) return XR_XIR_VALUE_OVERFLOW;
@@ -97,6 +100,8 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         parameters = storage;
     }
     XrXirValueStatus status = resource == XR_COMPILE_RESOURCE_OK ? XR_XIR_VALUE_OK : callable_resource_status(resource);
+    RecordProjection records = {0};
+    if (status == XR_XIR_VALUE_OK) status = record_project(specs, count, nodes, context.resources, &records);
     static const XrXirType elements[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_U8, XR_XIR_U64};
     if (status == XR_XIR_VALUE_OK)
         for (uint32_t a = 0; a < 4; ++a) nodes[a] = (XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY, .element=elements[a]};
@@ -106,6 +111,7 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     for (uint32_t t = 0; t < count && status == XR_XIR_VALUE_OK; ++t) {
         XrtCallableTypeSpec spec = specs[t];
         XrXirTypeNode *node = &nodes[t + XRT_CALLABLE_PREFIX_COUNT];
+        if (spec.kind == XRT_CALLABLE_RECORD) continue;
         if (spec.kind == XRT_CALLABLE_SIGNATURE) {
             if (spec.count || spec.element.kind != XRT_CALLABLE_SCALAR || spec.element.type ||
                 (spec.flags & ~3u) || ((spec.flags & 2u) && !(spec.flags & 1u)) ||
@@ -157,7 +163,8 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
         }
     }
     if (status == XR_XIR_VALUE_OK) {
-        XrXirTypes types = {.nodes=nodes, .count=count + XRT_CALLABLE_PREFIX_COUNT};
+        XrXirTypes types = {.nodes=nodes, .count=count + XRT_CALLABLE_PREFIX_COUNT,
+            .nominals=records.table.count ? &records.table : NULL};
         status = xr_xir_compile_type_arena_new(&context, &types, empty);
     }
     XrXirTypeArena *owned_map = NULL;
@@ -178,6 +185,7 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
     xr_xir_compile_type_arena_drop(owned_map);
     xr_compile_resources_free(parameters);
     xr_compile_resources_free(nodes);
+    record_projection_free(&records);
     if (status == XR_XIR_VALUE_OK) {
         XrCompileResourceStats stats = {0};
         if (xr_compile_resources_stats(context.resources, &stats) != XR_COMPILE_RESOURCE_OK) {

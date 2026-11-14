@@ -39,7 +39,19 @@ static inline XrLirStatus lir_native_callable_spec(const XrLirModule *module, Xr
     XrLirTypeView view = {0};
     if (!output || xr_lir_type_view(module, type, &view) != XR_LIR_OK) return XR_LIR_INVALID_ARGUMENT;
     XrtCallableTypeSpec spec = {0};
-    if (view.kind == XR_LIR_TYPE_CALLABLE) {
+    if (view.kind == XR_LIR_TYPE_RECORD) {
+        const XrLirRecordField *fields;
+        uint32_t count;
+        if (xr_lir_record_fields(module, type, &fields, &count) != XR_LIR_OK ||
+            count > capacity || (count && !parameters)) return XR_LIR_INVALID_ARGUMENT;
+        spec.kind = XRT_CALLABLE_RECORD;
+        spec.parameters = count ? parameters : NULL;
+        spec.parameter_count = count;
+        for (uint32_t f = 0; f < count; ++f) {
+            parameters[f] = (XrtCallableParameterSpec){.name=fields[f].name, .name_length=fields[f].name_length};
+            if (!lir_native_callable_value(fields[f].type, 0, &parameters[f].value)) return XR_LIR_UNSUPPORTED;
+        }
+    } else if (view.kind == XR_LIR_TYPE_CALLABLE) {
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK ||
             signature.parameter_count > capacity || (signature.parameter_count && !parameters))
@@ -52,6 +64,7 @@ static inline XrLirStatus lir_native_callable_spec(const XrLirModule *module, Xr
         if (!lir_native_callable_value(signature.result, signature.result_element, &spec.result)) return XR_LIR_UNSUPPORTED;
         for (uint32_t p = 0; p < signature.parameter_count; ++p) {
             XrLirCallableParameter from = signature.parameters[p];
+            parameters[p] = (XrtCallableParameterSpec){0};
             if (!lir_native_callable_value(from.type, from.array_element, &parameters[p].value)) return XR_LIR_UNSUPPORTED;
             parameters[p].mode = (uint32_t)from.mode;
             parameters[p].escaping = from.escaping;

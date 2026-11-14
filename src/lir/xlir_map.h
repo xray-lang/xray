@@ -21,6 +21,7 @@ typedef enum XrLirMapOperation {
     XR_LIR_MAP_OP_NEW = 1024,
     XR_LIR_MAP_OP_LEN,
     XR_LIR_MAP_OP_GET,
+    XR_LIR_MAP_OP_INDEX,
     XR_LIR_MAP_OP_CONTAINS,
     XR_LIR_MAP_OP_SET,
     XR_LIR_MAP_OP_REMOVE,

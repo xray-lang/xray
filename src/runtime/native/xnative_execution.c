@@ -168,7 +168,7 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
         xrt_value_failure_report(failure->detail.value.status, source);
         _Exit(1);
     }
-    XR_CHECK(failure->kind == XRT_FAILURE_ARITHMETIC_PANIC, "Native failure has a known physical carrier");
+    XR_CHECK(failure->kind == XRT_FAILURE_TYPED_PANIC, "Native failure has a known physical carrier");
     XrValueFormatSink sink = {NULL, panic_write};
     if (!xr_value_format_panic(sink, failure->detail.panic.code, 0, 0, 0, 0, NULL, 0, 0)) {
         static const char fallback[] = "XR_RUN_6005: cannot render uncaught typed panic\n";
@@ -190,12 +190,12 @@ XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32
     if (!xr_xir_range_valid(start, end, length)) xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
 }
 
-XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
+XRAY_API_NORET void xrt_typed_panic(uint32_t code, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
-    XR_CHECK(binding && (code == 420 || code == 421 || code == 422) && source_id <= binding->map.count,
-        "Arithmetic panic requires an active execution, valid code and source id");
+    XR_CHECK(binding && (code == 420 || code == 421 || code == 422 || code == 431) && source_id <= binding->map.count,
+        "Typed panic requires an active execution, admitted code and source id");
     if (binding->target) {
-        binding->failure->kind = XRT_FAILURE_ARITHMETIC_PANIC;
+        binding->failure->kind = XRT_FAILURE_TYPED_PANIC;
         binding->failure->detail.panic = (XrtArithmeticPanic) {code, source_id};
         longjmp(*binding->target, 1);
     }
@@ -205,6 +205,10 @@ XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
         (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
     }
     _Exit(1);
+}
+XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
+    XR_CHECK(code == 420 || code == 421 || code == 422, "arithmetic operations use their admitted panic codes");
+    xrt_typed_panic(code, source_id);
 }
 
 static XR_NORET void clock_failure(uint32_t kind, uint32_t source_id, XrtHostClockReason reason) {

@@ -44,6 +44,7 @@ static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_NULLABLE &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_TUPLE_I64 &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_CALLABLE &&
+                 layout.types[layout.slots[i].type].kind != XRT_MODULE_BOXED &&
                  layout.types[layout.slots[i].type].kind != XRT_MODULE_CELL_ARRAY_I64)) return false;
     } else if (module->state_entry) return false;
     for (size_t f = 0; f < module->function_count; ++f) {

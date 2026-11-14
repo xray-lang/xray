@@ -21,7 +21,7 @@ static bool rbc_direct_managed_kind(XrRbcRegisterKind kind) {
     return kind == XR_RBC_STRING || rbc_array_kind(kind);
 }
 static bool rbc_managed_kind(XrRbcRegisterKind kind) {
-    return kind == XR_RBC_MAP_STRING_I64 || rbc_direct_managed_kind(kind);
+    return kind == XR_RBC_BOXED || kind == XR_RBC_MAP_STRING_I64 || rbc_direct_managed_kind(kind);
 }
 static XrRbcRegisterKind rbc_array_cell_payload(XrRbcRegisterKind kind) {
     for (uint32_t i = 0; i < XR_RBC_ARRAY_FAMILY_COUNT; ++i)

@@ -30,7 +30,7 @@ static bool rbc_callable_canonical_type(const XrRbcModule *module, XrRbcCallable
 
 static bool rbc_callable_directory_valid(const XrRbcModule *module) {
     if (!module->closure_entry_count)
-        return !module->closure_types && !module->closure_entries && !module->closure_targets &&
+        return !module->closure_entries && !module->closure_targets &&
             !module->closure_signatures && !module->closure_signature_count;
     if (!module->closure_types || !module->closure_entries || !module->closure_targets ||
         !module->closure_signatures || !module->code_lease.owner || !module->callable_type_count ||

@@ -84,3 +84,8 @@ XR_LIR_OP(MAP_CELL_DROP, "map_cell_drop", 1)
 XR_LIR_OP(MAP_BORROW, "map_borrow", 1)
 XR_LIR_OP(MAP_REF_READ, "map_ref_read", 1)
 XR_LIR_OP(MAP_REF_WRITE, "map_ref_write", 2)
+/* Canonical boxes preserve their exact constructed identity through copies. */
+XR_LIR_OP(VALUE_RETAIN, "value_retain", 1)
+XR_LIR_OP(VALUE_DROP, "value_drop", 1)
+XR_LIR_OP(RECORD_NEW, "record_new", -1)
+XR_LIR_OP(RECORD_FIELD, "record_field", 1)

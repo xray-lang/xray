@@ -57,6 +57,7 @@ static bool rbc_lir_array_append(RbcLirCompiler *c, XrRbcArrayAccess row, const 
 }
 static bool rbc_lir_array_move(RbcLirCompiler *c, XrRbcRegisterKind kind, uint32_t destination, uint32_t source) {
     if (destination == source) return true;
+    if (kind == XR_RBC_BOXED) return rbc_lir_boxed_take(c, destination, source);
     if (kind == XR_RBC_MAP_STRING_I64 || xr_rbc_array_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT) {
         XrRbcArrayLocation operand = {source, false};
         XrRbcArrayAccess row = {.operation=XR_RBC_ARRAY_TAKE, .kind=kind,

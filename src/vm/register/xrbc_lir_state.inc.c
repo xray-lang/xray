@@ -33,7 +33,7 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         uint32_t type;
         if (source.payload == XR_LIR_VIEW_CELL) {
             type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count;
-        } else if (rbc_lir_callable_type(input, source.payload)) {
+        } else if (rbc_lir_callable_type(input, source.payload) || xr_lir_boxed_type(input, source.payload)) {
             type = LIR_STATE_CONSTRUCTED_BASE + (uint32_t)program->module.aggregate_type_count +
                 lir_state_has_view_cells(&layout) + source.payload - XR_LIR_TYPE_COUNT;
         } else if (source.payload >= XR_LIR_TYPE_COUNT) {
@@ -52,12 +52,15 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
     if (status == XR_RBC_COMPILE_OK) {
         uint32_t callable_count = 0, parameter_capacity = 0;
         for (uint32_t s = 0; s < layout.slot_count; ++s)
-            if (rbc_lir_callable_type(input, layout.slots[s].payload))
+            if (rbc_lir_callable_type(input, layout.slots[s].payload) || xr_lir_boxed_type(input, layout.slots[s].payload))
                 callable_count = xr_lir_constructed_type_count(input);
         XrtCallableTypeSpec *callables = callable_count ? xr_calloc(callable_count, sizeof(*callables)) : NULL;
         XrtCallableParameterSpec *parameters = NULL;
         for (uint32_t t = 0; t < callable_count; ++t) {
             XrLirCallableType signature;
+            XrLirTypeView shape;
+            xr_lir_type_view(input, XR_LIR_TYPE_COUNT + t, &shape);
+            if (shape.kind == XR_LIR_TYPE_RECORD && shape.count > parameter_capacity) parameter_capacity = shape.count;
             if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK &&
                 signature.parameter_count > parameter_capacity) parameter_capacity = signature.parameter_count;
         }
@@ -94,8 +97,10 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             if (lir_state_has_view_cells(&layout)) types[first++] =
                 (XrtModuleTypeSpec){XRT_MODULE_CELL_ARRAY_I64, 0};
             for (uint32_t t = 0; t < callable_count; ++t) types[first + t] = (XrtModuleTypeSpec){
+                xr_lir_boxed_type(input, XR_LIR_TYPE_COUNT + t) ? XRT_MODULE_BOXED :
                 callables && callables[t].kind == XRT_CALLABLE_SIGNATURE ? XRT_MODULE_CALLABLE : XRT_MODULE_UNIT,
-                callables && callables[t].kind == XRT_CALLABLE_SIGNATURE ? t : 0};
+                xr_lir_boxed_type(input, XR_LIR_TYPE_COUNT + t) ||
+                (callables && callables[t].kind == XRT_CALLABLE_SIGNATURE) ? t : 0};
         }
         XrtModuleLayoutSpec spec = {types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,

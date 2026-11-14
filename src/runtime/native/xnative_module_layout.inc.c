@@ -111,8 +111,12 @@ XRAY_API void xrt_module_layout_drop(XrtModuleLayout **owner) {
     xr_xir_compile_type_arena_drop(layout->callable_types);
     xr_xir_compile_type_arena_drop(layout->map_types);
     if (layout->view.callable_types) {
-        for (uint32_t t = 0; t < layout->view.callable_type_count; ++t)
+        for (uint32_t t = 0; t < layout->view.callable_type_count; ++t) {
+            const XrtCallableTypeSpec *type = &layout->view.callable_types[t];
+            for (uint32_t p = 0; type->parameters && p < type->parameter_count; ++p)
+                xr_free((void *)type->parameters[p].name);
             xr_free((void *)layout->view.callable_types[t].parameters);
+        }
         xr_free((void *)layout->view.callable_types);
     }
     xr_free(layout->types); xr_free(layout->slot_counts); xr_free(layout);
@@ -156,6 +160,20 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
             types[t].parameters = module_copy_array(from.parameters, from.parameter_count, sizeof(*from.parameters));
             if (from.parameter_count && !types[t].parameters) {
                 xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM;
+            }
+            XrtCallableParameterSpec *parameters = (XrtCallableParameterSpec *)types[t].parameters;
+            for (uint32_t p = 0; p < from.parameter_count; ++p) parameters[p].name = NULL;
+            for (uint32_t p = 0; p < from.parameter_count; ++p) {
+                XrtCallableParameterSpec field = from.parameters[p];
+                if (!field.name_length) {
+                    if (field.name) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT; }
+                    continue;
+                }
+                if (!field.name || !module_charge(&callable_bytes, field.name_length, 1)) {
+                    xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
+                }
+                parameters[p].name = module_copy_array(field.name, field.name_length, 1);
+                if (!parameters[p].name) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
             }
         }
         if (callable_bytes > spec->byte_limit) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT; }
@@ -209,7 +227,7 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         if (slot->size > layout->scratch_size) layout->scratch_size = slot->size;
     }
     for (uint32_t t = 0; t < spec->type_count; ++t)
-        layout->types[t].arena = layout->types[t].kind == XRT_MODULE_CALLABLE ? layout->callable_types :
+        layout->types[t].arena = layout->types[t].kind == XRT_MODULE_CALLABLE || layout->types[t].kind == XRT_MODULE_BOXED ? layout->callable_types :
             layout->types[t].kind == XRT_MODULE_MAP_STRING_I64 ? layout->map_types : layout->array_types;
     uint64_t peak = layout->bytes;
     if (!module_charge(&peak, spec->module_count, 1 + 2 * sizeof(uint32_t)) || peak > spec->byte_limit) {

@@ -16,6 +16,7 @@
 #include "xnative_map.h"
 #include "xnative_module_cell.h"
 #include "xnative_callable.h"
+#include "xnative_boxed.h"
 #include "xnative_value.h"
 #include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
@@ -198,14 +199,37 @@ static void module_map_drop(const XrtModuleType *type, void *storage) {
     memcpy(&map, storage, sizeof(map)); memset(storage, 0, sizeof(map));
     xrt_map_owned_drop(&map);
 }
+static XrXirValueStatus module_boxed_copy(const XrtModuleType *type, const void *source, void *empty) {
+    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrtBoxed *value = NULL, *received = NULL;
+    memcpy(&value, source, sizeof(value));
+    XrXirValueStatus status = xrt_boxed_owned_copy(value, type->arena, type->callable, &received);
+    if (status == XR_XIR_VALUE_OK) memcpy(empty, &received, sizeof(received));
+    return status;
+}
+static void module_boxed_drop(const XrtModuleType *type, void *storage) {
+    (void)type;
+    XrtBoxed *value = NULL;
+    memcpy(&value, storage, sizeof(value));
+    memset(storage, 0, sizeof(value));
+    xrt_boxed_owned_drop(&value);
+}
 static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
     const XrtModuleTypeSpec *spec = &layout->types[ordinal];
     XrtModuleType *type = &types[ordinal];
     if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE &&
-        spec->kind != XRT_MODULE_CALLABLE && spec->kind != XRT_MODULE_TUPLE_I64 && spec->argument) return false;
+        spec->kind != XRT_MODULE_CALLABLE && spec->kind != XRT_MODULE_TUPLE_I64 && spec->kind != XRT_MODULE_BOXED && spec->argument) return false;
     XrtModuleTypeKind kind = spec->kind;
     *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
     switch (kind) {
+    case XRT_MODULE_BOXED:
+        if (spec->argument >= layout->callable_type_count ||
+            (layout->callable_types[spec->argument].kind != XRT_CALLABLE_RECORD &&
+             layout->callable_types[spec->argument].kind != XRT_CALLABLE_NULLABLE)) return false;
+        type->size = sizeof(void *); type->alignment = _Alignof(void *);
+        type->copy = module_boxed_copy; type->drop = module_boxed_drop;
+        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + spec->argument);
+        return true;
     case XRT_MODULE_TUPLE_I64:
         if (!spec->argument || spec->argument > UINT32_MAX / 8) return false;
         type->size = spec->argument * 8; type->alignment = 8; return true;

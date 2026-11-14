@@ -39,7 +39,8 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_NULLABLE,
     XRT_MODULE_CELL_ARRAY_I64,
     XRT_MODULE_CALLABLE,
-    XRT_MODULE_TUPLE_I64
+    XRT_MODULE_TUPLE_I64,
+    XRT_MODULE_BOXED
 } XrtModuleTypeKind;
 /* Fixed U8 and I64 Tuple arguments are their nonzero field counts. Nullable
  * argument is an earlier type ordinal in this catalog. Other kinds require zero. Nullable admits

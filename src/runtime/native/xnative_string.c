@@ -18,6 +18,7 @@
 #include "xnative_string.h"
 #include "xray_native_string.h"
 #include "xnative_callable.h"
+#include "xnative_boxed.h"
 #include "xir/xxir_value_place.h"
 #include "xnative_array.h"
 #include "xnative_map.h"
@@ -303,6 +304,7 @@ XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id) 
 }
 XR_FUNC void xrt_value_root_drain(XrtValueRoot *root) {
     xrt_callable_root_drain(root);
+    xrt_boxed_root_drain(root);
     xrt_view_root_drain(root);
     xr_xir_value_drop(&root->pending);
     xrt_array_root_drain(root);

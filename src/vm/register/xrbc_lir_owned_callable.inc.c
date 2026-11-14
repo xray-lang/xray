@@ -6,7 +6,7 @@
  * xrbc_lir_owned_callable.inc.c - Owned canonical code and capture directories
  */
 static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const uint32_t *ids,
-    uint32_t functions, XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
+    uint32_t functions, XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic, bool code) {
     uint32_t count = xr_lir_constructed_type_count(input);
     XrtCallableTypeSpec *specs = xr_calloc(count, sizeof(*specs));
     XrtCallableParameterSpec *parameters = NULL;
@@ -15,6 +15,12 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
     if (count && !specs) goto done;
     for (uint32_t t = 0; t < count; ++t) {
         XrLirCallableType signature;
+        XrLirTypeView shape;
+        xr_lir_type_view(input, XR_LIR_TYPE_COUNT + t, &shape);
+        if (shape.kind == XR_LIR_TYPE_RECORD) {
+            if (shape.count > SIZE_MAX - parameter_count) { status = XR_RBC_COMPILE_LIMIT; goto done; }
+            parameter_count += shape.count;
+        }
         if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK) {
             if (signature.parameter_count > SIZE_MAX - parameter_count) { status = XR_RBC_COMPILE_LIMIT; goto done; }
             parameter_count += signature.parameter_count;
@@ -42,6 +48,7 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
             built == XR_XIR_VALUE_LIMIT || built == XR_XIR_VALUE_MEMORY_LIMIT ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_UNSUPPORTED;
         goto done;
     }
+    if (!code) { status = XR_RBC_COMPILE_OK; goto done; }
     program->closure_mapping = xr_malloc((size_t)functions * sizeof(*program->closure_mapping));
     XrtCallableEntry *entries = xr_calloc(functions, sizeof(*entries));
     uint32_t *targets = xr_calloc(functions, sizeof(*targets));

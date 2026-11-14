@@ -37,7 +37,7 @@ typedef struct XrtHostClockFailure {
 
 typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_OUTPUT,
-    XRT_FAILURE_ARITHMETIC_PANIC,
+    XRT_FAILURE_TYPED_PANIC,
     XRT_FAILURE_HOST_CLOCK,
     XRT_FAILURE_VALUE,
     XRT_FAILURE_NULL_UNWRAP

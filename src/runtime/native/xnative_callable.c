@@ -21,6 +21,7 @@
 #include "base/xchecks.h"
 #include <stdatomic.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "xnative_callable_types.inc.c"
 

@@ -268,6 +268,11 @@ XRAY_API bool xrt_map_string_i64_contains(const XrtMap *map, const XrtString *ke
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
     return found;
 }
+XRAY_API int64_t xrt_map_string_i64_index(const XrtMap *map, const XrtString *key, uint32_t source) {
+    int64_t value = 0;
+    if (!xrt_map_string_i64_get(map, key, &value, source)) xrt_typed_panic(431, source);
+    return value;
+}
 typedef enum MapMutation { MAP_SET, MAP_REMOVE, MAP_CLEAR } MapMutation;
 static bool map_mutate(XrtMap **binding, bool registered, const XrtString *key,
     int64_t number, MapMutation operation, uint32_t source) {

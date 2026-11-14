@@ -75,6 +75,7 @@ typedef struct XrLirTypeData {
     XrLirTypeLayout layout;
     XrLirCallableType callable;
     XrLirType cell_element;
+    const XrLirRecordField *fields;
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;

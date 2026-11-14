@@ -65,6 +65,13 @@ static void c_prepare_types(LirC *c) {
             }
             continue;
         }
+        if (xr_lir_boxed_type(module, type)) {
+            c->boxed = c->runtime = true;
+            xr_lir_type_view(module, type, &owned->shape);
+            xr_lir_type_layout(module, type, &owned->layout);
+            snprintf(owned->name, sizeof(owned->name), "XrlValue_%" PRIu32, type);
+            continue;
+        }
         if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||
             xr_lir_type_layout(module, type, &owned->layout) != XR_LIR_OK ||
             (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE &&
@@ -90,7 +97,9 @@ static void c_prepare_types(LirC *c) {
 static void c_constructed_types(LirC *c) {
     for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
         const LirCConstructedType *type = &c->constructed_types[n];
-        if (type->shape.kind == XR_LIR_TYPE_CELL) {
+        if (xr_lir_boxed_type(c->request->module, XR_LIR_TYPE_COUNT + n)) {
+            c_format(c, "typedef XrtBoxed *%s;\n", type->name);
+        } else if (type->shape.kind == XR_LIR_TYPE_CELL) {
             c_format(c, "typedef XrtCapturedCell *%s;\n", type->name);
         } else if (type->shape.kind == XR_LIR_TYPE_CALLABLE) {
             c_callable_type(c, XR_LIR_TYPE_COUNT + n);

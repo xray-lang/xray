@@ -222,7 +222,7 @@ static void check_source_failure(XrRbcOutcome *outcome, const XrtSourceLocation 
 static void check_arithmetic_panic(XrRbcOutcome *outcome, uint32_t code, const char *path) {
     XrtArithmeticPanic facts;
     const XrtLocationOwner *owner = NULL;
-    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_ARITHMETIC_PANIC);
+    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_TYPED_PANIC);
     CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &owner));
     CHECK(facts.code == code && facts.source_id == 3);
     const XrtSourceLocation *source = xrt_locations_get(owner, facts.source_id);
@@ -282,7 +282,7 @@ static void nested_execution(const char *path, bool string_output) {
         CHECK(xrt_run_embedded(owner, failure, nested_root, nested) == XRT_EXECUTION_FAILURE);
         CHECK(nested->after_inner == 1 && !nested->after_outer && xrt_locations_get(owner, 1)->line == 33);
         if (nested->outer_panic) {
-            CHECK(failure->kind == XRT_FAILURE_ARITHMETIC_PANIC);
+            CHECK(failure->kind == XRT_FAILURE_TYPED_PANIC);
             CHECK(failure->detail.panic.code == 421 && failure->detail.panic.source_id == 1);
         } else {
             CHECK(failure->kind == XRT_FAILURE_OUTPUT);
@@ -291,7 +291,7 @@ static void nested_execution(const char *path, bool string_output) {
         xr_rbc_execution_free(&nested->execution);
         xr_rbc_program_destroy(program);
         CHECK(nested->outcome && xr_rbc_outcome_status(nested->outcome) ==
-            (inner == 0 ? XR_RBC_OK : inner == 1 ? XR_RBC_ARITHMETIC_PANIC : XR_RBC_OUTPUT_FAILURE));
+            (inner == 0 ? XR_RBC_OK : inner == 1 ? XR_RBC_TYPED_PANIC : XR_RBC_OUTPUT_FAILURE));
         if (inner == 1) check_arithmetic_panic(nested->outcome, 420, path);
         if (inner == 2) check_failure(nested->outcome, path, true, false, false, false);
         xr_rbc_outcome_free(&nested->outcome);

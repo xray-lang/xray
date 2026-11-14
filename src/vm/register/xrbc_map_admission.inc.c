@@ -20,6 +20,7 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
     case XR_RBC_ARRAY_NEW: if (a.count % 2) return false; count = a.count; break;
     case XR_RBC_ARRAY_LEN: result = XR_RBC_BITS; break;
     case XR_RBC_ARRAY_GET: count = 2; break;
+    case XR_RBC_MAP_INDEX: count = 2; result = XR_RBC_BITS; break;
     case XR_RBC_MAP_CONTAINS: count = 2; result = XR_RBC_BITS; break;
     case XR_RBC_ARRAY_RETAIN: case XR_RBC_ARRAY_TAKE: break;
     case XR_RBC_MAP_STATE_READ: receiver = XR_RBC_STATE_REF; break;

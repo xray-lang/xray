@@ -22,6 +22,8 @@ typedef struct XrtMapOwner XrtMapOwner;
 typedef struct XrtViewRegistry XrtViewRegistry;
 typedef struct XrtCallableRegistry XrtCallableRegistry;
 typedef struct XrtCallableScope XrtCallableScope;
+typedef struct XrtBoxedOwner XrtBoxedOwner;
+typedef struct XrtBoxedCatalog XrtBoxedCatalog;
 
 typedef struct XrtValueRoot {
     XrXirDomain *domain;
@@ -43,6 +45,10 @@ typedef struct XrtValueRoot {
     XrtCallableRegistry *callables;
     XrtCallableScope *callable_scope;
     uint64_t callable_identity;
+    XrtBoxedOwner *boxed;
+    XrtBoxedCatalog *boxed_catalogs;
+    void *boxed_scratch;
+    size_t boxed_scratch_size;
 } XrtValueRoot;
 
 typedef struct XrtValueBinding {
@@ -64,6 +70,7 @@ static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
         !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
         !root->array_held && !root->map_types && !root->maps && !root->map_capacity &&
         !root->map_count && !root->map_held && !root->views && !root->callables && !root->callable_scope &&
-        !root->pending.type && !root->pending.reserved && !root->pending.payload;
+        !root->pending.type && !root->pending.reserved && !root->pending.payload &&
+        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size;
 }
 #endif // XNATIVE_VALUE_H

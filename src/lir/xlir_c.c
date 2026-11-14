@@ -53,7 +53,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     uint32_t *owned_entries, owned_entry_count;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, maps;
+    bool boxed, runtime, runtime_header, f64, state, arrays, views, displays, string_library, maps;
     bool string_cursor, stack_environments, callable_scopes;
     XrLirStateLayout state_layout;
 } LirC;
@@ -182,6 +182,7 @@ static void c_callable_type(LirC *, XrLirType);
 static bool c_scalar(LirC *, XrLirType);
 #include "xlir_c_fixed.inc.c"
 #include "xlir_c_nullable.inc.c"
+#include "xlir_c_boxed.inc.c"
 #include "xlir_c_callable.inc.c"
 static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(c, type))
@@ -305,7 +306,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else ++c->location_count;
         }
     }
-    if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_view_point(c, v) ||
+    if (c_boxed_point(c, v) || c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_view_point(c, v) ||
         (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
         if (c_located(&v->source)) {
@@ -314,6 +315,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else ++c->location_count;
         }
     }
+    if (c_boxed_point(c, v)) { c->boxed = true; return; }
     if (c_display_point(c, v)) { c->displays = true; return; }
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_map_point(c, v)) { c->maps = true; return; }
@@ -556,7 +558,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_view_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_boxed_point(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_view_point(c, &v) &&
                      !c_arithmetic_point(c, &v) && !c_callable_owned_point(&v) && !c_callable_scope_point(&v) &&
                      v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
@@ -841,6 +843,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_callable_instruction(c, v);
         return;
     }
+    if (c_boxed_point(c, v)) { c_boxed_instruction(c, v); return; }
     if (v->op >= XR_LIR_NULLABLE_NONE && v->op <= XR_LIR_NULLABLE_UNWRAP) {
         c_nullable_instruction(c, v);
         return;
@@ -1185,6 +1188,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (root_result == XR_LIR_MAP_STRING_I64)
         c_text(c, "extern XrtMap *xrt_map_root_take(XrtMap *map);\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
+    if (c->boxed) c_text(c, "#include \"xray_native_boxed.h\"\n#include <string.h>\n");
     c_constructed_types(c);
     c_callable_owned_catalog(c);
     c_display_catalog(c);

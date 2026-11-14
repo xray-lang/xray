@@ -15,7 +15,7 @@ static bool lower_edge_copy(LowerFunction *f, XrLirBlock block, XrLirValue value
 static bool lower_edge_owners(LowerFunction *f, XrLirBlock block, XrLirEdge *edge) {
     XrLirValue *args = (XrLirValue *)edge->arguments;
     bool managed = false;
-    for (uint32_t a = 0; a < edge->argument_count; ++a) managed |= lower_managed_type(lower_value_type(f, args[a]));
+    for (uint32_t a = 0; a < edge->argument_count; ++a) managed |= lower_managed_type(f->owner, lower_value_type(f, args[a]));
     if (!managed) return true;
     uint32_t values = f->owner->module->functions[f->function.id - 1].value_count;
     uint8_t *seen = lower_alloc(f->owner, values, 1);
@@ -23,7 +23,7 @@ static bool lower_edge_owners(LowerFunction *f, XrLirBlock block, XrLirEdge *edg
     bool good = true;
     for (uint32_t a = 0; a < edge->argument_count; ++a) {
         const XrLirValueData *value = &f->owner->module->functions[f->function.id - 1].values[args[a].id - 1];
-        if (!lower_managed_type(value->type)) continue;
+        if (!lower_managed_type(f->owner, value->type)) continue;
         bool copy = (value->parameter && !value->block) || seen[args[a].id - 1];
         seen[args[a].id - 1] = 1;
         if (copy) {
@@ -105,7 +105,7 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
         cells |= lower_array_cells_edge(f, b, e);
     for (uint32_t e = 0; e < term->edge_count; ++e)
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a)
-            managed |= lower_managed_type(lower_value_type(f, term->edges[e].arguments[a]));
+            managed |= lower_managed_type(f->owner, lower_value_type(f, term->edges[e].arguments[a]));
     if (!managed && !cells) return true;
     size_t capacity = (size_t)term->edges[0].argument_count + term->edges[1].argument_count;
     if (capacity < term->edges[0].argument_count) {
@@ -120,7 +120,7 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
             XrLirValue id = term->edges[e].arguments[a];
             const XrLirValueData *value = &c->module->functions[f->function.id - 1].values[id.id - 1];
-            if (!lower_managed_type(value->type)) continue;
+            if (!lower_managed_type(f->owner, value->type)) continue;
             if (value->parameter && !value->block) continue;
             if (!positions[id.id - 1]) {
                 owners[count] = id;

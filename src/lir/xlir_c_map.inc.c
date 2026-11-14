@@ -58,7 +58,7 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
     }
     if (role) {
         const char *operation = role == XR_LIR_MAP_OP_LEN ? "length" : role == XR_LIR_MAP_OP_CONTAINS ?
-            "string_i64_contains" : role == XR_LIR_MAP_OP_SET ? "string_i64_set" :
+            "string_i64_contains" : role == XR_LIR_MAP_OP_INDEX ? "string_i64_index" : role == XR_LIR_MAP_OP_SET ? "string_i64_set" :
             role == XR_LIR_MAP_OP_REMOVE ? "string_i64_remove" : "clear";
         c_text(c, "    ");
         if (v->type != XR_LIR_UNIT) c_format(c, "v%" PRIu32 " = ", v->result);

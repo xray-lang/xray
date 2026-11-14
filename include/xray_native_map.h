@@ -36,6 +36,7 @@ XRAY_API void xrt_map_assign(XrtMap **, const XrtMap *, uint32_t source);
 XRAY_API int64_t xrt_map_length(const XrtMap *, uint32_t source);
 /* A miss writes zero and returns false. Failure publishes no result. */
 XRAY_API bool xrt_map_string_i64_get(const XrtMap *, const XrtString *, int64_t *value, uint32_t source);
+XRAY_API int64_t xrt_map_string_i64_index(const XrtMap *, const XrtString *, uint32_t source);
 XRAY_API bool xrt_map_string_i64_contains(const XrtMap *, const XrtString *, uint32_t source);
 XRAY_API void xrt_map_string_i64_set(XrtMap **, const XrtString *, int64_t value, uint32_t source);
 XRAY_API bool xrt_map_string_i64_remove(XrtMap **, const XrtString *, uint32_t source);

@@ -138,6 +138,23 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
+        case XR_LIR_VALUE_RETAIN:
+            return v->type == a && xr_lir_boxed_type(m, a);
+        case XR_LIR_VALUE_DROP:
+            return v->type == XR_LIR_UNIT && xr_lir_boxed_type(m, a);
+        case XR_LIR_RECORD_NEW: {
+            const XrLirRecordField *fields;
+            uint32_t count;
+            if (xr_lir_record_fields(m, v->type, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
+            for (uint32_t n = 0; n < count; ++n)
+                if (f->values[v->operands[n] - 1].type != fields[n].type) return false;
+            return true;
+        }
+        case XR_LIR_RECORD_FIELD: {
+            const XrLirRecordField *fields;
+            uint32_t count;
+            return xr_lir_record_fields(m, a, &fields, &count) == XR_LIR_OK && v->bits < count && fields[v->bits].type == v->type;
+        }
         case XR_LIR_FUNCTION_SCOPE_ENTER:
             return v->type == XR_LIR_FUNCTION_SCOPE && v->operand_count <= 1 &&
                 (!v->operand_count || a == XR_LIR_FUNCTION_SCOPE);

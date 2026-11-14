@@ -42,6 +42,7 @@ static bool rbc_lir_map_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
     case XR_LIR_MAP_OP_NEW: operation = XR_RBC_ARRAY_NEW; break;
     case XR_LIR_MAP_OP_LEN: operation = XR_RBC_ARRAY_LEN; break;
     case XR_LIR_MAP_OP_GET: operation = XR_RBC_ARRAY_GET; break;
+    case XR_LIR_MAP_OP_INDEX: operation = XR_RBC_MAP_INDEX; break;
     case XR_LIR_MAP_OP_CONTAINS: operation = XR_RBC_MAP_CONTAINS; break;
     case XR_LIR_MAP_OP_SET: operation = XR_RBC_ARRAY_SET; break;
     case XR_LIR_MAP_OP_REMOVE: operation = XR_RBC_MAP_REMOVE; break;

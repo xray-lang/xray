@@ -65,6 +65,7 @@ static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess ac
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
+    if (rbc_boxed_operation(access.operation)) return rbc_boxed_transfer(s, access);
     if (access.operation == XR_RBC_STATE_GROUP_INITIALIZE)
         return s->state[access.source] == RBC_STATE_BORROWED && s->aggregates[access.destination];
     if (access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) {

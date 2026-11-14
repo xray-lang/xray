@@ -20,7 +20,8 @@ typedef enum XrLirTypeKind {
     XR_LIR_TYPE_NULLABLE,
     XR_LIR_TYPE_CALLABLE,
     XR_LIR_TYPE_CELL,
-    XR_LIR_TYPE_TUPLE
+    XR_LIR_TYPE_TUPLE,
+    XR_LIR_TYPE_RECORD
 } XrLirTypeKind;
 
 typedef struct XrLirTypeView {
@@ -40,6 +41,12 @@ typedef struct XrLirScalarPart {
     uint64_t offset;
 } XrLirScalarPart;
 
+typedef struct XrLirRecordField {
+    const char *name;
+    uint32_t name_length;
+    XrLirType type;
+} XrLirRecordField;
+
 /* Finished-module inventory. An unreadable module returns zero. Constructed
  * ordinals start at XR_LIR_TYPE_COUNT and follow their owned interning order. */
 XR_FUNC uint32_t xr_lir_constructed_type_count(const XrLirModule *);
@@ -57,6 +64,13 @@ XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLir
 /* This physical Tuple family contains count I64 fields in logical order.
  * Other Tuple payload families require their own admitted exact layout. */
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *, uint32_t count, XrLirType *output);
+/* Structural fields are in canonical key order. The receiving module owns
+ * every field name and exact dependency; no frontend metadata is borrowed. */
+XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordField *,
+    uint32_t count, XrLirType *output);
+XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *, XrLirType,
+    const XrLirRecordField **, uint32_t *count);
+XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
 /* POD queries accept a live, unfailed construction or a finished module.
  * They preserve output on failure. Capabilities retain their dedicated ABI
  * and have no ordinary storage layout or scalar-leaf projection here. */

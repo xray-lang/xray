@@ -317,7 +317,7 @@ static void cell_growth(bool panic) {
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
         XR_CHECK(outcome && !xr_rbc_execution_run(execution), "one owned cell outcome");
         XR_CHECK(xr_rbc_outcome_status(outcome) == (growth_fails ? XR_RBC_OUT_OF_MEMORY :
-            panic ? XR_RBC_ARITHMETIC_PANIC : XR_RBC_OK), "cell outcome classification");
+            panic ? XR_RBC_TYPED_PANIC : XR_RBC_OK), "cell outcome classification");
         xr_rbc_execution_free(&execution);
         if (!panic && !growth_fails)
             XR_CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 136,
@@ -424,7 +424,7 @@ static void spill_growth(bool panic) {
         XR_CHECK(status==XR_RBC_OK&&execution,"spill caller prepared");
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t bits=99;
         XrRbcStatus expected=expected_fault==SPILL_GROWTH_FAILURE?XR_RBC_OUT_OF_MEMORY:
-            panic?XR_RBC_ARITHMETIC_PANIC:XR_RBC_OK;
+            panic?XR_RBC_TYPED_PANIC:XR_RBC_OK;
         XR_CHECK(outcome&&xr_rbc_outcome_status(outcome)==expected&&fault==NO_FAILURE,"spill result first cause");
         XR_CHECK(xr_rbc_outcome_bits(outcome,&bits)==(expected==XR_RBC_OK),"spill result status gates bits");
         XR_CHECK(bits==(expected==XR_RBC_OK?47u:99u),"caller cell and String survive moving spill storage");
@@ -498,7 +498,7 @@ static void frame_cell_growth(unsigned requested_fault,bool panic) {
         observed_cell_drops=observed_cell_writes=0;observe_frame_drops=true;
         XrtExecutionStatus status=xrt_run_embedded_owned(locations,&o.failure,observe_frame_root,&o,&o.strings);
         observe_frame_drops=false;
-        if(panic)XR_CHECK(status==XRT_EXECUTION_FAILURE && o.failure.kind==XRT_FAILURE_ARITHMETIC_PANIC &&
+        if(panic)XR_CHECK(status==XRT_EXECUTION_FAILURE && o.failure.kind==XRT_FAILURE_TYPED_PANIC &&
             o.failure.detail.panic.code==420 && o.failure.detail.panic.source_id==1 && !o.before_drain,
             "live Cell panic retains its first exact cause");
         else if(requested_fault!=NO_FAILURE)XR_CHECK(status==XRT_EXECUTION_COMPLETED && o.status==XR_RBC_OUT_OF_MEMORY &&

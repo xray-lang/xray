@@ -228,7 +228,7 @@ static void test_immediate_selection(void) {
             if (cases[n].op == XR_LIR_REM) {
                 uint64_t bits = UINT64_MAX;
                 if (!rhs) {
-                    CHECK(execute(program, &inputs[a], 1, &bits) == XR_RBC_ARITHMETIC_PANIC);
+                    CHECK(execute(program, &inputs[a], 1, &bits) == XR_RBC_TYPED_PANIC);
                     continue;
                 }
                 int64_t left, right;
@@ -388,7 +388,7 @@ static void test_arithmetic(void) {
             CHECK(run(program, values, 2) == (uint64_t) (operations[n] == XR_LIR_DIV ? -2 : -1));
             values[1] = 0;
             uint64_t sentinel = 123;
-            CHECK(execute(program, values, 2, &sentinel) == XR_RBC_ARITHMETIC_PANIC);
+            CHECK(execute(program, values, 2, &sentinel) == XR_RBC_TYPED_PANIC);
             CHECK(sentinel == 123);
         }
         xr_rbc_program_destroy(program);
@@ -991,7 +991,7 @@ static void test_owned_arithmetic_panics(void) {
                         xr_rbc_program_destroy(program);
                     for (unsigned h = 0; h < 2; ++h) {
                         XrRbcOutcome *outcome = outcomes[h];
-                        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_ARITHMETIC_PANIC);
+                        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_TYPED_PANIC);
                         uint64_t bits = 919;
                         CHECK(!xr_rbc_outcome_bits(outcome, &bits) && bits == 919);
                         XrtArithmeticPanic facts = {77, 88};

@@ -33,6 +33,7 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
 }
 
 static inline bool lir_definition_type(const XrLirModule *module, XrLirType type) {
+    if (xr_lir_boxed_type(module, type)) return true;
     if (lir_builtin_or_fixed_type(module, type)) return true;
     XrLirCallableType signature;
     XrLirCellType cell;

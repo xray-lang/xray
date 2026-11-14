@@ -57,6 +57,7 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     switch (op->op) {
     case XR_XIR_MAP_NEW: operation = XR_LIR_MAP_OP_NEW; break;
     case XR_XIR_MAP_GET: operation = XR_LIR_MAP_OP_GET; break;
+    case XR_XIR_MAP_INDEX: operation = XR_LIR_MAP_OP_INDEX; break;
     case XR_XIR_MAP_SET: operation = XR_LIR_MAP_OP_SET; break;
     case XR_XIR_HASH_LEN: operation = XR_LIR_MAP_OP_LEN; break;
     case XR_XIR_HASH_CONTAINS: operation = XR_LIR_MAP_OP_CONTAINS; break;

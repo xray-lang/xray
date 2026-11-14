@@ -397,7 +397,7 @@ static void receipt(const char *path, const Eval *e, const Sample *samples, uint
         "\"owner_path_matches_original\":%s,\"failure_facts\":{\"domain\":%u,\"code\":%u,"
         "\"operation\":%u,\"source_id\":%u,\"broken_pipe\":%s},"
         "\"arithmetic_facts\":{\"code\":%u,\"source_id\":%u},\"formal_performance\":false}\n",
-        e->arithmetic_failure ? "XR_RBC_ARITHMETIC_PANIC" :
+        e->arithmetic_failure ? "XR_RBC_TYPED_PANIC" :
             e->output_failure ? "XR_RBC_OUTPUT_FAILURE" : "XR_RBC_OK",
         failed ? "true" : "false", e->failure_location.line, e->failure_location.column,
         e->failure_location.end_line, e->failure_location.end_column, failed ? "true" : "false",
@@ -430,7 +430,7 @@ static void run_vm(Eval *e, XrRbcProgram **program, Sample *sample, const char *
     } else {
         bool arithmetic = failure_order >= 3;
         CHECK(xr_rbc_outcome_status(outcome) ==
-            (arithmetic ? XR_RBC_ARITHMETIC_PANIC : XR_RBC_OUTPUT_FAILURE));
+            (arithmetic ? XR_RBC_TYPED_PANIC : XR_RBC_OUTPUT_FAILURE));
         uint64_t missing_bits = UINT64_MAX;
         CHECK(!xr_rbc_outcome_bits(outcome, &missing_bits) && missing_bits == UINT64_MAX);
         XrtOutputFailure facts = {0}; const XrtLocationOwner *owner = NULL;

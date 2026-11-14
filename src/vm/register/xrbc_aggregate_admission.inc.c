@@ -156,6 +156,10 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
         if (!rbc_array_location_valid(f, f->aggregate_operands[n])) return false;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         XrRbcAggregateAccess access = f->aggregate_accesses[n];
+        if (rbc_boxed_operation(access.operation)) {
+            if (!rbc_boxed_access_valid(module, f, access)) return false;
+            continue;
+        }
         if (access.operation == XR_RBC_STATE_GROUP_INITIALIZE) {
             XrtModuleLayoutSpec layout;
             if (access.first || access.count || access.callee || access.window ||

@@ -176,6 +176,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 #include "xrbc_state_admission.inc.c"
 #include "xrbc_view_admission.inc.c"
 #include "xrbc_callable_admission.inc.c"
+#include "xrbc_boxed_admission.inc.c"
 #include "xrbc_aggregate_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
@@ -194,7 +195,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_MAP_STRING_I64_REF ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_BOXED ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -333,7 +334,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
         if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
     if (!rbc_callable_metadata_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f)
-        if (!rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
+        if (!rbc_boxed_function_valid(module, &module->functions[f]) || !rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
@@ -422,6 +423,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_array_execute.inc.c"
 #include "xrbc_view_execute.inc.c"
+#include "runtime/native/xnative_boxed.h"
 #include "xrbc_aggregate_execute.inc.c"
 static bool xr_rbc_captured_cell_value(const XrRbcModule *, const XrRbcStack *,
     XrRbcRegisterKind, uint64_t, XrXirType, XrXirValue *);
@@ -592,8 +594,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         xr_rbc_root, execution);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
-    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC)
-        outcome->status = XR_RBC_ARITHMETIC_PANIC;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)
+        outcome->status = XR_RBC_TYPED_PANIC;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_NULL_UNWRAP)
         outcome->status = XR_RBC_NULL_UNWRAP;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_HOST_CLOCK)
@@ -694,7 +696,7 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
 
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations) {
-    if (!outcome || outcome->status != XR_RBC_ARITHMETIC_PANIC || !facts || !borrowed_locations)
+    if (!outcome || outcome->status != XR_RBC_TYPED_PANIC || !facts || !borrowed_locations)
         return false;
     *facts = outcome->failure.detail.panic;
     *borrowed_locations = outcome->locations;

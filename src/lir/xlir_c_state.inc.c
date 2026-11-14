@@ -17,7 +17,7 @@ static bool c_state_point(const XrLirInstructionView *v) {
 
 static uint32_t c_state_payload(LirC *c, XrLirType type, XrLirType element) {
     XrLirCallableType callable;
-    if (xr_lir_callable_type_view(c->request->module, type, &callable) == XR_LIR_OK)
+    if (xr_lir_boxed_type(c->request->module, type) || xr_lir_callable_type_view(c->request->module, type, &callable) == XR_LIR_OK)
         return c->state_type_base + c->pod_count + lir_state_has_view_cells(&c->state_layout) +
             type - XR_LIR_TYPE_COUNT;
     if (type == XR_LIR_VIEW_CELL) return c->state_type_base + c->pod_count;
@@ -57,12 +57,13 @@ static void c_state_layout(LirC *c) {
             shape.kind == XR_LIR_TYPE_TUPLE ? "XRT_MODULE_TUPLE_I64" : "XRT_MODULE_FIXED_U8", argument);
     }
     if (lir_state_has_view_cells(layout)) c_text(c, "    {XRT_MODULE_CELL_ARRAY_I64, 0},\n");
-    if (c->owned_entry_count)
+    if (c->owned_entry_count || c->boxed)
         for (uint32_t t = 0; t < c->constructed_count; ++t) {
             XrLirCallableType signature;
             bool callable = xr_lir_callable_type_view(c->request->module, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK;
             c_format(c, "    {%s, UINT32_C(%" PRIu32 ")},\n",
-                callable ? "XRT_MODULE_CALLABLE" : "XRT_MODULE_UNIT", callable ? t : 0);
+                xr_lir_boxed_type(c->request->module, XR_LIR_TYPE_COUNT + t) ? "XRT_MODULE_BOXED" : callable ? "XRT_MODULE_CALLABLE" : "XRT_MODULE_UNIT",
+                callable || xr_lir_boxed_type(c->request->module, XR_LIR_TYPE_COUNT + t) ? t : 0);
         }
     c_text(c, "};\n");
     if (layout->module_count) c_text(c, "static const XrtModuleSpec xrl_state_modules[] = {\n");
@@ -87,14 +88,14 @@ static void c_state_layout(LirC *c) {
     c_text(c, "static const XrtModuleLayoutSpec xrl_state_spec = {\n");
     c_format(c, "    xrl_state_types, %u, %s, UINT32_C(%" PRIu32 "),\n",
         c->state_type_base + c->pod_count + lir_state_has_view_cells(layout) +
-            (c->owned_entry_count ? c->constructed_count : 0),
+            ((c->owned_entry_count || c->boxed) ? c->constructed_count : 0),
         layout->module_count ? "xrl_state_modules" : "NULL", layout->module_count);
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         layout->dependency_count ? "xrl_state_dependencies" : "NULL", layout->dependency_count,
         layout->slot_count ? "xrl_state_slots" : "NULL", layout->slot_count);
     c_format(c, "    UINT64_C(%" PRIu64 "), UINT64_MAX, UINT32_C(%" PRIu32 "),\n",
         layout->payload_size, layout->payload_alignment);
-    if (c->owned_entry_count)
+    if (c->owned_entry_count || c->boxed)
         c_format(c, "    xrl_callable_types, UINT32_C(%" PRIu32 ")\n};\n\n", c->constructed_count);
     else c_text(c, "    NULL, 0\n};\n\n");
 }
@@ -154,6 +155,11 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     }
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
+        if (xr_lir_boxed_type(c->request->module, shape.payload)) {
+            c_format(c, "    v%" PRIu32 " = xrt_boxed_retain(*(XrtBoxed *const *)xrl_access%" PRIu32 ".payload, %" PRIu32 ");\n",
+                v->result, reference, source);
+            return;
+        }
         if (shape.payload >= XR_LIR_TYPE_COUNT) {
             c_format(c, "    memcpy(&v%" PRIu32 ", xrl_access%" PRIu32 ".payload, sizeof(v%" PRIu32 "));\n",
                 v->result, reference, v->result);
@@ -248,6 +254,7 @@ static void c_state_root(LirC *c, XrLirType result) {
     c_text(c, "static void xrl_invoke(void *context, XrtModuleState *state) {\n");
     if (lir_state_has_callables(c->request->module, &c->state_layout))
         c_text(c, "    xrt_callable_state_prepare(state, &xrl_callable_image, 0);\n");
+    if (c->boxed) c_text(c, "    xrt_boxed_state_prepare(state, &xrl_boxed_image, 0);\n");
     if (result == XR_LIR_UNIT) c_text(c, "    (void)context;\n    ");
     else if (result == XR_LIR_STRING || result == XR_LIR_ARRAY || result == XR_LIR_MAP_STRING_I64) c_format(c, "    %s owned = ", type);
     else c_format(c, "    *(%s *)context = ", type);

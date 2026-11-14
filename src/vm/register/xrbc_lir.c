@@ -109,7 +109,7 @@ typedef struct {
     uint32_t *code, *source_ids;
     uint64_t *constants;
     XrRbcRegisterKind *register_kinds, *cell_kinds;
-    uint32_t *register_callables;
+    uint32_t *register_callables, *register_boxed_types;
     XrRbcCallableValue *captures;
     XrRbcEnvironment *environments;
     size_t environment_count, environment_capacity;
@@ -256,10 +256,12 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     }
 }
 
+static bool rbc_lir_boxed_take(RbcLirCompiler *, uint32_t, uint32_t);
 #include "xrbc_lir_array.inc.c"
 #include "xrbc_lir_map.inc.c"
 #include "xrbc_lir_view.inc.c"
 #include "xrbc_lir_aggregate.inc.c"
+#include "xrbc_lir_boxed.inc.c"
 #include "xrbc_lir_callable_scope.inc.c"
 
 static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstructionView *i) {
@@ -472,7 +474,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && v->result != XR_LIR_MAP_STRING_I64 &&
          v->result != XR_LIR_SLICE_I64 &&
-         !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_aggregate_type(input, v->result))) {
+         !xr_lir_boxed_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
             rbc_lir_value_source(input, f, v, 0, d));
@@ -501,7 +503,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
              type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 && type != XR_LIR_FUNCTION_SCOPE &&
              type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
-             !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) &&
+             !xr_lir_boxed_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -530,6 +532,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
+    if (rbc_lir_boxed_payload(input, function, i)) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op == XR_LIR_MAP_BORROW && i->operand_count == 1) {
@@ -732,6 +735,7 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
             if (c->view.parameters[p] == value) return XR_RBC_CAPTURED_CELL_BORROW;
         return XR_RBC_CAPTURED_CELL;
     }
+    if (xr_lir_boxed_type(c->input, type)) return XR_RBC_BOXED;
     if (type == XR_LIR_MAP_STRING_I64) return XR_RBC_MAP_STRING_I64;
     if (type == XR_LIR_MAP_STRING_I64_CELL) return XR_RBC_MAP_STRING_I64_CELL;
     if (type == XR_LIR_MAP_STRING_I64_REF) return XR_RBC_MAP_STRING_I64_REF;
@@ -912,7 +916,21 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
             type == XR_LIR_FUNCTION_SCOPE) continue;
         XrRbcRegisterKind kind = rbc_lir_register_kind(c, v, type);
         uint32_t slot = c->slots[v];
+        if (kind == XR_RBC_BOXED && c->spill_home[v] != UINT32_MAX)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "boxed values exceed the typed register bank");
         if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
+        if (kind == XR_RBC_BOXED) {
+            if (c->spill_home[v] != UINT32_MAX)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "boxed values exceed the typed register bank");
+            if (!c->register_boxed_types) {
+                c->register_boxed_types = xr_calloc(c->register_count, sizeof(*c->register_boxed_types));
+                if (!c->register_boxed_types) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own boxed register identities");
+            }
+            uint32_t identity = rbc_lir_boxed_identity(type);
+            if (c->register_boxed_types[slot] && c->register_boxed_types[slot] != identity)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "register coalescing crosses boxed identities");
+            c->register_boxed_types[slot] = identity;
+        }
         if (kind == XR_RBC_FUNCTION) {
             if (!c->register_callables) {
                 c->register_callables = xr_calloc(c->register_count, sizeof(*c->register_callables));
@@ -1290,6 +1308,7 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    if (rbc_lir_boxed_payload(c->input, c->function, i)) return rbc_lir_boxed_emit(c, i);
     if (rbc_lir_callable_scope_point(i)) return rbc_lir_callable_scope_emit(c, i);
     if (xr_lir_range_point(c->input, i) || xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
@@ -1566,7 +1585,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .array_accesses=c->array_accesses,.array_access_count=c->array_access_count,
         .array_operands=c->array_operands,.array_operand_count=c->array_operand_count,
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
-        .result_kind=c->view.result == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 : c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
+        .result_kind=xr_lir_boxed_type(c->input, c->view.result) ? XR_RBC_BOXED : c->view.result == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 : c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
             c->view.result == XR_LIR_SLICE_I64 ? XR_RBC_SLICE_I64 :
             rbc_lir_callable_type(c->input, c->view.result) ? XR_RBC_FUNCTION : XR_RBC_BITS,
@@ -1578,6 +1597,9 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .aggregate_operand_count=c->aggregate_operand_count,
         .aggregate_parameters=c->aggregate_parameters, .aggregate_parameter_count=c->aggregate_parameter_count,
         .aggregate_arguments=c->aggregate_arguments, .aggregate_argument_count=c->aggregate_argument_count,
+        .register_boxed_types=c->register_boxed_types,
+        .register_boxed_type_count=c->register_boxed_types ? c->register_count : 0,
+        .result_boxed_type=xr_lir_boxed_type(c->input, c->view.result) ? rbc_lir_boxed_identity(c->view.result) : 0,
         .register_callables=c->register_callables,
         .register_callable_count=c->register_callables ? c->register_count : 0,
         .captures=c->captures, .capture_count=target.capture_count, .state_capture=target.state_capture,
@@ -1600,6 +1622,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].source_ids);
         xr_free((void *) program->module.functions[f].register_kinds);
         xr_free((void *) program->module.functions[f].register_callables);
+        xr_free((void *) program->module.functions[f].register_boxed_types);
         xr_free((void *) program->module.functions[f].captures);
         xr_free((void *) program->module.functions[f].environments);
         xr_free((void *) program->module.functions[f].cell_kinds);
@@ -1737,6 +1760,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.source_ids);
             xr_free(c.register_kinds);
             xr_free(c.register_callables);
+            xr_free(c.register_boxed_types);
             xr_free(c.captures);
             xr_free(c.environments);
             xr_free(c.cell_kinds);
@@ -1887,8 +1911,10 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         status = d->status;
         goto done;
     }
-    if (owned_closures) {
-        status = rbc_lir_owned_callable(input, ids, count, p, d);
+    bool boxed = false;
+    for (uint32_t t = 0; t < xr_lir_constructed_type_count(input); ++t) boxed |= xr_lir_boxed_type(input, XR_LIR_TYPE_COUNT + t);
+    if (owned_closures || boxed) {
+        status = rbc_lir_owned_callable(input, ids, count, p, d, owned_closures);
         if (status != XR_RBC_COMPILE_OK) goto done;
     }
     status = rbc_lir_callable_parameters(input, ids, count, p);

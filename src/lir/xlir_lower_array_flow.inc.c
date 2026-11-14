@@ -111,13 +111,13 @@ static bool lower_array_flow_values(LowerFunction *f) {
                 uint32_t value = lower_operand_at(source, op, a);
                 uint32_t use_block = op->op == XR_XIR_PHI ? source->operands[op->args[0] + a - 1] : b;
                 bool parameter = value < source->parameter_count;
-                if ((parameter && (source->parameters[value] != XR_XIR_STRING || !use_block)) ||
+                if ((parameter && (!lower_managed_type(c, lower_type(c, source->parameters[value])) || !use_block)) ||
                     f->value_blocks[value] == use_block ||
                     f->array_values[value] != UINT32_MAX) continue;
                 const XrXirInstruction *definition = parameter ? NULL :
                     &source->instructions[value - source->parameter_count];
                 XrXirType type = parameter ? source->parameters[value] : definition->type;
-                if (!lower_managed_type(lower_type(c, type)) || (definition &&
+                if (!lower_managed_type(f->owner, lower_type(c, type)) || (definition &&
                     (definition->op == XR_XIR_CELL_PLACE || definition->op == XR_XIR_SLOT_PLACE ||
                      definition->op == XR_XIR_LOCAL_NEW))) continue;
                 XR_DCHECK(f->cell_count < f->value_count, "each managed state has a distinct source value");

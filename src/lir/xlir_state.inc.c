@@ -22,6 +22,9 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
     case XR_LIR_VIEW_CELL:
         *size = 16; *alignment = 8; return true;
     default: {
+        if (xr_lir_boxed_type(m, type)) {
+            *size = sizeof(void *); *alignment = _Alignof(void *); return true;
+        }
         XrLirTypeView view;
         XrLirTypeLayout layout;
         XrLirCallableType callable;

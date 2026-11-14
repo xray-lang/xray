@@ -591,7 +591,7 @@ static void test_rejections(void) {
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
     XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_ARITHMETIC_PANIC);
+    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_TYPED_PANIC);
     CHECK(result == 42);
     reject_prepare(&module, 1, args, 2);
     reject_prepare(&module, 0, NULL, 2);

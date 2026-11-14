@@ -15,6 +15,7 @@ static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
 static bool rbc_lir_aggregate_type(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
     return type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(module, type, &shape) == XR_LIR_OK &&
+        !xr_lir_boxed_type(module, type) &&
         (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_NULLABLE ||
          shape.kind == XR_LIR_TYPE_TUPLE);
 }

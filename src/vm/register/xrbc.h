@@ -127,7 +127,7 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
     XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64, XR_RBC_STRING_REF, XR_RBC_FUNCTION,
     XR_RBC_I64_BINDING, XR_RBC_CAPTURED_CELL, XR_RBC_CAPTURED_CELL_BORROW,
-    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF
+    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF, XR_RBC_BOXED
 } XrRbcRegisterKind;
 
 typedef enum XrRbcViewOperation {
@@ -146,7 +146,7 @@ typedef enum XrRbcArrayOperation {
     XR_RBC_ARRAY_REF_SET, XR_RBC_ARRAY_REF_PUSH, XR_RBC_ARRAY_DISPLAY,
     XR_RBC_MAP_CONTAINS, XR_RBC_MAP_REMOVE, XR_RBC_MAP_CLEAR,
     XR_RBC_MAP_REF_REMOVE, XR_RBC_MAP_REF_CLEAR,
-    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE
+    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE, XR_RBC_MAP_INDEX
 } XrRbcArrayOperation;
 
 /* A location names one activation-owned bank. Variadic operands remain real
@@ -187,7 +187,11 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_FUNCTION_STATE_READ, XR_RBC_FUNCTION_STATE_WRITE,
     XR_RBC_FUNCTION_STATE_CONSTRUCT, XR_RBC_FUNCTION_STATE_INITIALIZE,
     XR_RBC_CAPTURED_CELL_NEW, XR_RBC_CAPTURED_CELL_READ, XR_RBC_CAPTURED_CELL_WRITE, XR_RBC_CAPTURED_CELL_BIND,
-    XR_RBC_STATE_GROUP_INITIALIZE
+    XR_RBC_STATE_GROUP_INITIALIZE,
+    XR_RBC_BOXED_NEW, XR_RBC_BOXED_RETAIN, XR_RBC_BOXED_DROP,
+    XR_RBC_BOXED_FIELD, XR_RBC_BOXED_PRESENT, XR_RBC_BOXED_TAKE,
+    XR_RBC_BOXED_STATE_READ, XR_RBC_BOXED_STATE_WRITE,
+    XR_RBC_BOXED_STATE_CONSTRUCT, XR_RBC_BOXED_STATE_INITIALIZE
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;
@@ -268,6 +272,11 @@ typedef struct {
     bool state_capture;
     const XrRbcEnvironment *environments;
     uint32_t environment_count, environment_size;
+    /* Exact canonical identities for boxed registers and the ordinary result.
+     * Zero denotes every register outside this managed physical family. */
+    const uint32_t *register_boxed_types;
+    size_t register_boxed_type_count;
+    uint32_t result_boxed_type;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -366,7 +375,7 @@ typedef enum {
     XR_RBC_OK,
     XR_RBC_INVALID,
     XR_RBC_OUT_OF_MEMORY,
-    XR_RBC_ARITHMETIC_PANIC,
+    XR_RBC_TYPED_PANIC,
     XR_RBC_NULL_UNWRAP,
     XR_RBC_OUTPUT_FAILURE,
     XR_RBC_HOST_CLOCK_FAILURE,
