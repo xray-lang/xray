@@ -215,13 +215,16 @@ def main():
         assert run('panic-empty', 1, mode='panic-div', location=0) == (
             1, b'', b'[Uncaught Panic] E0420: division by zero\n')
         assert run('panic-sink-error', mode='panic-sink-error', location=0) == (1, b'', b'')
-        for label, mode, client, location in [('panic-bad-id', 'panic-div', 0, 2),
-                                               ('panic-empty-id', 'panic-div', 1, 1),
-                                               ('panic-bad-code', 'panic-bad-code', 0, 0),
-                                               ('panic-unbound', 'unbound-panic', 0, 0)]:
+        typed_guard = b'Typed panic requires an active execution, admitted code and source id'
+        arithmetic_guard = b'arithmetic operations use their admitted panic codes'
+        for label, mode, client, location, guard in [
+                ('panic-bad-id', 'panic-div', 0, 2, typed_guard),
+                ('panic-empty-id', 'panic-div', 1, 1, typed_guard),
+                ('panic-bad-code', 'panic-bad-code', 0, 0, arithmetic_guard),
+                ('panic-unbound', 'unbound-panic', 0, 0, typed_guard)]:
             code, output, error = run(label, client, mode=mode, location=location)
             assert code not in (0, 1, 74) and not output, (label, code, output, error)
-            assert b'Arithmetic panic requires an active execution, valid code and source id' in error
+            assert guard in error, (label, error)
             assert b'[Uncaught Panic]' not in error, (label, error)
         cases = [
             ('location', 0, 1, b'source\\x0a.xrc:3:5-7:9'),
