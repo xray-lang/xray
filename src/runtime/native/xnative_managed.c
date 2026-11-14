@@ -17,7 +17,7 @@
 
 struct XrtBillingOwner {
     _Atomic(int32_t) references;
-    atomic_flag lock;
+    _Atomic(bool) lock;
     _Atomic(size_t) bytes, blocks, allocations, fail_after;
     _Atomic(bool) closed;
     size_t limit;
@@ -37,10 +37,10 @@ struct XrtManagedOps {
 };
 
 static void billing_lock(XrtBillingOwner *owner) {
-    while (atomic_flag_test_and_set_explicit(&owner->lock, memory_order_acquire)) {}
+    while (atomic_exchange_explicit(&owner->lock, true, memory_order_acquire)) {}
 }
 static void billing_unlock(XrtBillingOwner *owner) {
-    atomic_flag_clear_explicit(&owner->lock, memory_order_release);
+    atomic_store_explicit(&owner->lock, false, memory_order_release);
 }
 static bool lease_valid(XrtManagedLease lease) {
     return (lease.retain && lease.drop) || (!lease.context && !lease.retain && !lease.drop);
@@ -69,13 +69,13 @@ XR_FUNCDEF XrtManagedStatus xrt_billing_owner_new(const XrtManagedAllocator *inp
     if (!owner) { lease_drop(allocator.lease); return XRT_MANAGED_OOM; }
     memset(owner, 0, sizeof(*owner));
     atomic_init(&owner->references, -1);
-    atomic_flag_clear(&owner->lock);
+    atomic_init(&owner->lock, false);
     atomic_init(&owner->bytes, sizeof(*owner));
     atomic_init(&owner->blocks, 1);
     atomic_init(&owner->allocations, 1);
     atomic_init(&owner->fail_after, SIZE_MAX);
     atomic_init(&owner->closed, false);
-    owner->limit = limit; owner->allocator = allocator;
+    owner->limit = limit; owner->allocator = allocator; owner->weak_ops = NULL;
     *output = owner;
     return XRT_MANAGED_OK;
 }

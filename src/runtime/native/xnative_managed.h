@@ -45,7 +45,9 @@ typedef struct XrtManagedLease {
 /* NULL selects the static xr_malloc/xr_free provider without a synthetic lease.
  * A supplied provider owns its context/code through lease and supports concurrent
  * free. Callbacks run without an index lock. Allocate reports failure only by
- * returning NULL; it must not leave its reservation through a nonlocal exit. */
+ * returning NULL; it must not leave its reservation through a nonlocal exit.
+ * Successful storage has malloc/max_align_t alignment and remains valid until
+ * the matching deallocate call. */
 typedef struct XrtManagedAllocator {
     void *context;
     void *(*allocate)(void *, size_t);
