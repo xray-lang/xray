@@ -74,7 +74,9 @@ static void native_callable_binding_snapshot(void) {
 }
 
 static void native_callable_projection(void) {
-    XrtCallableParameterSpec parameter = {{XRT_CALLABLE_CONSTRUCTED, 1}, XR_PARAM_MOVE, true};
+    XrtCallableParameterSpec parameter = {
+        .value = {XRT_CALLABLE_CONSTRUCTED, 1}, .mode = XR_PARAM_MOVE,
+        .escaping = true, .name = NULL, .name_length = 0};
     XrtCallableTypeSpec specs[] = {
         {.kind=XRT_CALLABLE_CELL, .element={XRT_CALLABLE_SCALAR, XR_POD_I64}},
         {.kind=XRT_CALLABLE_SIGNATURE, .result={XRT_CALLABLE_SCALAR, XR_POD_I64}, .flags=1},
