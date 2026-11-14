@@ -24,6 +24,8 @@ REQUIRED = (
     # Exercise Array ownership, failure cleanup and complete Source/native parity.
     "test_native_array", "test_native_array_allocations", "test_lir_array",
     "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
+    # Canonical Record/String? ownership, external schemas and failure cleanup.
+    "test_native_boxed", "test_native_boxed_allocations",
 )
 
 
