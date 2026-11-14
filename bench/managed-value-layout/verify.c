@@ -40,13 +40,14 @@ static bool mvl_verify_array(void) {
     for (size_t budget = 0; budget < 2; ++budget) {
         domain.fail_after = budget;
         MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OOM);
-        MVL_REQUIRE(array == before && snapshot->header.refs == 2);
+        MVL_REQUIRE(array == before && xr_signed_rc_read(&snapshot->header.refs) == 2);
         MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
     }
     domain.fail_after = SIZE_MAX;
     MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OK);
     MVL_REQUIRE(array != snapshot && array->length == 5 && snapshot->length == 4);
-    MVL_REQUIRE(array->data[4] == 4 && snapshot->data[3] == 3 && snapshot->header.refs == 1);
+    MVL_REQUIRE(array->data[4] == 4 && snapshot->data[3] == 3 &&
+        xr_signed_rc_read(&snapshot->header.refs) == 1);
     xr_mvl_drop(&snapshot->header);
     snapshot = NULL;
     MVL_REQUIRE(xr_mvl_retain(&array->header));
@@ -76,20 +77,22 @@ static bool mvl_verify_map(void) {
     bool ok = true;
     MVL_REQUIRE(map && seed && key);
     MVL_REQUIRE(xr_mvl_map_set(&map, seed, 7) == XR_MVL_OK);
-    MVL_REQUIRE(seed->header.refs == 2 && xr_mvl_retain(&map->header));
+    MVL_REQUIRE(xr_signed_rc_read(&seed->header.refs) == 2 && xr_mvl_retain(&map->header));
     snapshot = map;
     size_t bytes = domain.live_bytes, blocks = domain.live_blocks;
     for (size_t budget = 0; budget < 2; ++budget) {
         domain.fail_after = budget;
         MVL_REQUIRE(xr_mvl_map_set(&map, key, 11) == XR_MVL_OOM);
-        MVL_REQUIRE(map == snapshot && map->length == 1 && map->header.refs == 2);
-        MVL_REQUIRE(key->header.refs == 1 && seed->header.refs == 2);
+        MVL_REQUIRE(map == snapshot && map->length == 1 && xr_signed_rc_read(&map->header.refs) == 2);
+        MVL_REQUIRE(xr_signed_rc_read(&key->header.refs) == 1 &&
+            xr_signed_rc_read(&seed->header.refs) == 2);
         MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
     }
     domain.fail_after = SIZE_MAX;
     MVL_REQUIRE(xr_mvl_map_set(&map, key, 11) == XR_MVL_OK);
     int64_t value;
-    MVL_REQUIRE(map != snapshot && key->header.refs == 2 && seed->header.refs == 3);
+    MVL_REQUIRE(map != snapshot && xr_signed_rc_read(&key->header.refs) == 2 &&
+        xr_signed_rc_read(&seed->header.refs) == 3);
     MVL_REQUIRE(!xr_mvl_map_get(snapshot, key, &value));
     MVL_REQUIRE(xr_mvl_map_get(map, key, &value) && value == 11);
     domain.fail_after = 0;
@@ -115,14 +118,14 @@ static bool mvl_verify_record(void) {
     XrMvlPairObject *second = xr_mvl_pair_new(&domain, (XrMvlPair) {3, 4});
     bool ok = true;
     MVL_REQUIRE(first && second);
-    MVL_REQUIRE(xr_mvl_pair_escape(first) && first->header.refs == 2);
+    MVL_REQUIRE(xr_mvl_pair_escape(first) && xr_signed_rc_read(&first->header.refs) == 2);
     MVL_REQUIRE(xr_mvl_pair_escaped() == first);
     MVL_REQUIRE(xr_mvl_pair_escape(second));
-    MVL_REQUIRE(first->header.refs == 1 && first->value.y == 2);
-    MVL_REQUIRE(second->header.refs == 2 && xr_mvl_pair_escaped()->value.x == 3);
-    first->header.refs = SIZE_MAX;
+    MVL_REQUIRE(xr_signed_rc_read(&first->header.refs) == 1 && first->value.y == 2);
+    MVL_REQUIRE(xr_signed_rc_read(&second->header.refs) == 2 && xr_mvl_pair_escaped()->value.x == 3);
+    atomic_store_explicit(&first->header.refs, INT32_MAX, memory_order_relaxed);
     bool retained = xr_mvl_pair_escape(first);
-    first->header.refs = 1;
+    atomic_store_explicit(&first->header.refs, 1, memory_order_relaxed);
     MVL_REQUIRE(!retained && xr_mvl_pair_escaped() == second);
 cleanup:
     xr_mvl_pair_escape_clear();
@@ -156,10 +159,10 @@ static bool mvl_verify_map_growth(void) {
     MVL_REQUIRE(xr_mvl_map_set(&map, key, 6) == XR_MVL_OOM);
     MVL_REQUIRE(map->slots == slots && map->capacity == 8 && map->length == 6);
     MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
-    MVL_REQUIRE(key->header.refs == 1);
+    MVL_REQUIRE(xr_signed_rc_read(&key->header.refs) == 1);
     domain.fail_after = SIZE_MAX;
     MVL_REQUIRE(xr_mvl_map_set(&map, key, 6) == XR_MVL_OK);
-    MVL_REQUIRE(map->capacity == 16 && map->length == 7 && key->header.refs == 2);
+    MVL_REQUIRE(map->capacity == 16 && map->length == 7 && xr_signed_rc_read(&key->header.refs) == 2);
 cleanup:
     if (key)
         xr_mvl_drop(&key->header);
@@ -168,9 +171,32 @@ cleanup:
     return ok && domain.live_blocks == 0 && domain.live_bytes == 0;
 }
 
+static bool mvl_verify_header_counter(void) {
+    static XrMvlDomain domain;
+    xr_mvl_domain_init(&domain);
+    XrMvlString *string = xr_mvl_string_new(&domain, "counter", 7);
+    bool ok = true;
+    MVL_REQUIRE(string);
+    /* This leaf has no child graph. The test establishes a shared counter,
+     * not a public graph-publication or cross-execution entry point. */
+    atomic_store_explicit(&string->header.refs, -1, memory_order_release);
+    MVL_REQUIRE(xr_mvl_retain(&string->header));
+    MVL_REQUIRE(xr_signed_rc_read(&string->header.refs) == -2);
+    MVL_REQUIRE(!xr_signed_rc_unique(&string->header.refs));
+    xr_mvl_drop(&string->header);
+    MVL_REQUIRE(xr_signed_rc_read(&string->header.refs) == -1);
+    MVL_REQUIRE(xr_signed_rc_unique(&string->header.refs));
+    MVL_REQUIRE(xr_signed_rc_read(&string->header.refs) == 1);
+cleanup:
+    if (string)
+        xr_mvl_drop(&string->header);
+    return ok && domain.live_blocks == 0 && domain.live_bytes == 0;
+}
+
 XR_FUNCDEF bool xr_mvl_verify(void) {
     size_t capacity;
     if (xr_mvl_capacity(0, SIZE_MAX, sizeof(int64_t), &capacity))
         return false;
-    return mvl_verify_array() && mvl_verify_map() && mvl_verify_map_growth() && mvl_verify_record();
+    return mvl_verify_array() && mvl_verify_map() && mvl_verify_map_growth() &&
+        mvl_verify_record() && mvl_verify_header_counter();
 }
