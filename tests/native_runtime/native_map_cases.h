@@ -12,6 +12,24 @@
  *   Each failure preserves the old value and leaves allocation accounting whole.
  */
 #include "runtime/native/xnative_map.h"
+static void native_map_scalar_header(void *opaque) {
+    const XirObject *header = opaque;
+    (void)xrt_map_retain((const XrtMap *)header, 1);
+}
+static void native_map_bad_headers(XrtLocationOwner *locations) {
+    const XrXirType scalars[] = {XR_XIR_I64, XR_XIR_F64};
+    for (unsigned n = 0; n < sizeof(scalars) / sizeof(*scalars); ++n) {
+        /* The type field is readable while the arena is deliberately invalid. */
+        XirObject header = {.arena=(XrXirTypeArena *)(uintptr_t)1, .type=scalars[n]};
+        XrtExecutionFailure failure = {0};
+        CHECK(xrt_run_embedded(locations, &failure, native_map_scalar_header, &header) ==
+            XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE &&
+            failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT);
+    }
+    puts("Native Map rejects scalar headers before reading their arena");
+}
+
 typedef struct NativeMapProbe {
     XrtModuleState *state;
     XrtMap *saved;
@@ -206,6 +224,7 @@ static void native_map_layout_budget(XrtModuleLayoutSpec spec) {
 }
 #include "native_map_captured_cases.h"
 static void native_map_cases(XrtLocationOwner *locations) {
+    native_map_bad_headers(locations);
     native_map_captured_cases(locations);
 #if defined(XR_NATIVE_ARRAY_ALLOCATIONS)
     native_map_retirement_callback(locations);
