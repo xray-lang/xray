@@ -96,10 +96,14 @@ static bool mvl_raw_grow(MvlRawMap *map) {
     if (!slots)
         return false;
     memset(slots, 0, capacity * sizeof(*slots));
-    MvlRawMap destination = {slots, 0, capacity};
-    for (size_t i = 0; i < map->capacity; ++i)
-        if (map->slots[i].key)
-            slots[mvl_raw_probe(&destination, map->slots[i].key)] = map->slots[i];
+    for (size_t i = 0; i < map->capacity; ++i) {
+        if (!map->slots[i].key)
+            continue;
+        size_t index = (size_t) map->slots[i].hash & (capacity - 1);
+        while (slots[index].key)
+            index = (index + 1) & (capacity - 1);
+        slots[index] = map->slots[i];
+    }
     xr_free(map->slots);
     map->slots = slots;
     map->capacity = capacity;

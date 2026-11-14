@@ -57,6 +57,13 @@ helpers in `algorithms.h`. The raw-C control shares these algorithms, not a
 managed-value runtime. Domain accounting is constant-time on allocation/free;
 ordinary element access does not consult it.
 
+The intentional representation differences are managed heap headers/domain
+accounting, real RC on copied/retained objects, and COW when an object is shared.
+The raw control manually transfers unique key storage and has no RC or COW.
+Growth/rehash/hash/equality/key bytes are identical; the managed slow helper also
+reloads/reprobes its current binding at a growth boundary. Neither difference is
+a claim that the compiler has proved hoisting or escape analysis.
+
 ## COW, borrow, cleanup and future execution integration
 
 Each logical heap copy owns a real RC reference. This experiment supports local,
@@ -100,6 +107,13 @@ optimization flags and allocator backend for both:
 cl /std:c11 /O2 /DNDEBUG /DXR_OS_WINDOWS /I <source>/src main.c layout.c verify.c escape.c /Fe:managed.exe
 cl /std:c11 /O2 /DNDEBUG /DXR_OS_WINDOWS /I <source>/src raw.c raw_keys.c /Fe:raw.exe
 ```
+
+The Windows evidence commands also use `/W4 /WX /MT /utf-8` and the existing
+`_CRT_SECURE_NO_WARNINGS` definition required by the shared compatibility header.
+MSVC alone uses `/wd4200` for its diagnostic on standard C11 flexible array
+members; other warnings remain errors. The first command missing these settings
+is preserved as a failed attempt. Domain instances and TypeOps in this prototype
+have static storage duration; they outlive escaped records.
 
 Use separate output directories and record actual commands, provider, source
 hashes, executable hashes, stdout/stderr and failures. There is no timer in the
