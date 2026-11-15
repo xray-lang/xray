@@ -66,6 +66,7 @@ set_tests_properties(native_value_plan PROPERTIES LABELS "unit;native-runtime;ow
 add_executable(test_native_managed_status test_managed_status.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
@@ -127,6 +128,7 @@ set_tests_properties(native_string_backing_ops PROPERTIES LABELS "unit;native-ru
 add_executable(test_native_backing test_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"

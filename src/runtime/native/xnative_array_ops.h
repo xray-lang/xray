@@ -13,6 +13,7 @@
 #ifndef XNATIVE_ARRAY_OPS_H
 #define XNATIVE_ARRAY_OPS_H
 #include "xnative_array_backing.h"
+#include "xnative_place.h"
 
 typedef struct XrtArrayItem {
     XrtBackingArrayKind kind;
@@ -47,6 +48,17 @@ XR_FUNC XrtManagedStatus xrt_array_backing_try_update(XrtArrayBacking *,
  * discarded source elements are never copied or needlessly retained. */
 XR_FUNC XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const XrtArrayBacking *, const XrtArrayUpdate *);
+/* The receiving boundary has already admitted a real Array owner in binding.
+ * binding_kind comes from that binding's exact payload descriptor,
+ * independently of the RHS item. A mismatch rejects before payload access.
+ * This is not validation of arbitrary headers or a grant of mutation rights.
+ * The caller keeps types and all RHS borrows live. The candidate is a distinct
+ * true-empty workspace in an active stable frame. No extra binding reference
+ * is acquired; failure preserves the binding and empties this workspace.
+ * Both in-place retirement and allocating replacement retain the actual
+ * domains through callbacks. The caller may fail nonlocally only after return. */
+XR_FUNC XrtManagedStatus xrt_array_update_place(XrtPlace, XrtBackingArrayKind binding_kind,
+    XrtManagedFrame *, size_t temporary, const XrtBackingTypes *, const XrtArrayUpdate *);
 
 /* Scalar results are copied. A String result is only a synchronous borrow of
  * its source tail owner; an independent binding must retain it explicitly.

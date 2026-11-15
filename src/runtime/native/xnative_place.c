@@ -55,6 +55,30 @@ static void place_unlock_pair(PlaceLocation destination, PlaceLocation source) {
     *source.slot.busy = false;
     *destination.slot.busy = false;
 }
+XR_FUNCDEF XrtManagedStatus xrt_place_replacement_begin(XrtPlace binding, XrtManagedFrame *frame,
+    size_t index, XrtPlaceReplacement *output) {
+    if (!output || output->root) return XRT_MANAGED_ARGUMENT;
+    PlaceLocation source={0},candidate={0};
+    XrtManagedStatus status=place_location(binding,&source);
+    if (status==XRT_MANAGED_OK) status=place_location((XrtPlace){.frame=frame,.slot=index,
+        .nulls=XRT_PLACE_NONNULL},&candidate);
+    if (status!=XRT_MANAGED_OK) return status;
+    if (source.slot.owner==candidate.slot.owner) return XRT_MANAGED_ARGUMENT;
+    status=place_lock_pair(candidate,source);
+    if (status!=XRT_MANAGED_OK) return status;
+    status=place_check(source,XRT_PLACE_REPLACE);
+    if (status==XRT_MANAGED_OK) status=place_check(candidate,XRT_PLACE_REPLACE);
+    if (status==XRT_MANAGED_OK && (!*source.slot.owner || *candidate.slot.owner)) status=XRT_MANAGED_ARGUMENT;
+    if (status==XRT_MANAGED_OK) status=xrt_managed_slot_reserved_begin(frame,index,source.slot,output);
+    if (status!=XRT_MANAGED_OK) place_unlock_pair(candidate,source);
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_place_replacement_publish(XrtPlaceReplacement *replacement) {
+    return xrt_managed_slot_reserved_publish(replacement);
+}
+XR_FUNCDEF XrtManagedStatus xrt_place_replacement_end(XrtPlaceReplacement *replacement) {
+    return xrt_managed_slot_reserved_end(replacement);
+}
 XRAY_API XrtManagedStatus xrt_place_borrow(XrtPlace place, const XrtManagedHeader **output) {
     if (!output) return XRT_MANAGED_ARGUMENT;
     PlaceLocation location;
