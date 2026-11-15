@@ -34,6 +34,7 @@ static void c_edge_events_prepare(LirC *c, const XrLirValueHomes *homes, LirCEdg
         capacity *= 2;
     }
     void *index = NULL;
+    if (!c_request_poll(c)) return;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, capacity, sizeof(size_t), &index))) return;
     events->index = index; events->capacity = capacity;
     for (size_t i = 0; i < homes->event_count && c_request_poll(c); ++i) {
