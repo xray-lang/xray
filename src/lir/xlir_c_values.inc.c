@@ -215,7 +215,8 @@ static void c_values_replace_begin(LirC *c, uint32_t value, uint32_t source) {
         home->offset, home->temporary_offset, home->first_owner, home->temporary_first_owner);
     c_format(c, "        &(XrtInlineValueSpec){%zu, %zu, (const size_t[]){", spec->size, spec->alignment);
     for (size_t i = 0; i < spec->owned_count && c_request_poll(c); ++i) {
-        if (i) c_text(c, ", "); c_format(c, "%zu", spec->owned_offsets[i]);
+        if (i) c_text(c, ", ");
+        c_format(c, "%zu", spec->owned_offsets[i]);
     }
     c_format(c, "}, %zu}, ", spec->owned_count);
 }
@@ -306,7 +307,8 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         bool first = true;
         for (uint32_t a = 0; a < edge->argument_count && c_request_poll(c); ++a)
             if (!c->homes->values[edge->arguments[a]].type) {
-                if (!first) c_text(c, ", "); first = false;
+                if (!first) c_text(c, ", ");
+                first = false;
                 c_text(c, "&"); c_value(c, target.parameters[a]); c_text(c, ", "); c_value(c, edge->arguments[a]);
                 if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
                     c_format(c, ", &xrl_access%" PRIu32 ", xrl_access%" PRIu32, target.parameters[a], edge->arguments[a]);
