@@ -54,6 +54,27 @@ typedef struct XrLirCDiagnostic {
     char message[192];
 } XrLirCDiagnostic;
 
+typedef struct XrLirValueLayouts XrLirValueLayouts;
+typedef struct XrLirCValueTypesRequest {
+    const XrLirValueLayouts *layouts;
+    XrCompileResources *resources;
+    const char *translation_unit;
+    XrCompileRequestControl *control;
+} XrLirCValueTypesRequest;
+
+/* Emit the receiving value plans as portable typed C declarations, without
+ * consulting a compiler type pool. XrlValue_N names the set's one-based
+ * dependency type ID; Record fields use fN and Nullable uses tag/payload.
+ * Every owning leaf is an actual XrtManagedHeader* field. The fragment contains
+ * only standard headers and an incomplete managed Header declaration, never
+ * private runtime includes or an executable binding. It grants no ownership or
+ * mutation permission. The borrowed set remains live throughout emission.
+ * Output is empty on entry; successful text owns its receiving resource block
+ * and survives set retirement. Entry facts stay zero. W1-W4 runs before text
+ * publication, including for a declaration-only translation unit. */
+XR_FUNC XrLirCStatus xr_lir_emit_c_value_types(const XrLirCValueTypesRequest *,
+    XrLirCOutput *, XrLirCDiagnostic *);
+
 /* The public consumption boundary validates the finished module, then admits
  * only the selected direct-call closure. Inputs are borrowed synchronously.
  * Diagnostics borrow source paths until module destruction. Output must be
