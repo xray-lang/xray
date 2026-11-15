@@ -440,6 +440,7 @@ XR_ALIGN(64)
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
     (void)locations;
+    XR_DCHECK(stack->call_locations==locations,"prepared native calls borrow the retained source owner");
     const XrRbcFunction *function;
     const uint32_t *code;
     const uint64_t *constants;
@@ -517,6 +518,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         return XR_RBC_OUT_OF_MEMORY;
     }
     execution->pending->locations = locations;
+    execution->stack.call_locations=locations;
     execution->pending->status = XR_RBC_INVALID;
     execution->pending->result_kind = function->result_kind;
     execution->stack.entries = execution->entries;
@@ -571,7 +573,6 @@ static void xr_rbc_root(void *context) {
     execution->pending->status = xr_rbc_values_begin(execution->module, &execution->stack,
         (uint32_t)execution->stack.frames[0].function, 0);
     if (execution->pending->status != XR_RBC_OK) return;
-    execution->stack.call_locations=execution->pending->locations;
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
         execution->pending->locations, &execution->pending->value, execution->entries);
 }
