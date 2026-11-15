@@ -1,0 +1,353 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_value_plan.c - Independent metadata and real inline ownership leaves
+ *
+ * KEY CONCEPT:
+ *   Source descriptions retire independently; retained metadata, payload owners
+ *   and code providers each finish only after their actual last reference.
+ */
+#include "runtime/native/xnative_value_plan.h"
+#include "runtime/native/xnative_string_backing.h"
+#include "base/xmalloc.h"
+#include "base/xmax_align.h"
+#include <limits.h>
+#include <stdalign.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
+#define OK(c) CHECK((c) == XRT_MANAGED_OK)
+#define STATUS(c,s) CHECK((c) == (s))
+typedef struct Audit {
+    _Atomic(size_t) leases, bytes, blocks, finalized, remaining, calls, frees;
+    void *watched[2];
+    const void *observed;
+    bool retired[2];
+} Audit;
+typedef struct Fixture {
+    Audit audit;
+    XrtBillingOwner *billing;
+    XrtBackingTypes types;
+    XrtManagedRoot *root;
+    XrtManagedFrame *frame;
+} Fixture;
+static bool provider_retain(void *context) {
+    atomic_fetch_add(&((Audit *)context)->leases, 1); return true;
+}
+static void provider_drop(void *context) {
+    Audit *audit = context;
+    size_t count = atomic_fetch_sub(&audit->leases, 1); CHECK(count);
+    if (count == 1) {
+        CHECK(!atomic_load(&audit->bytes) && !atomic_load(&audit->blocks));
+        atomic_fetch_add(&audit->finalized, 1);
+    }
+}
+static void *provider_allocate(void *context, size_t bytes) {
+    Audit *audit = context;
+    atomic_fetch_add(&audit->calls, 1);
+    size_t remaining = atomic_load(&audit->remaining);
+    while (remaining != SIZE_MAX) {
+        if (!remaining) return NULL;
+        if (atomic_compare_exchange_weak(&audit->remaining, &remaining, remaining - 1)) break;
+    }
+    void *memory = xr_malloc(bytes);
+    if (memory) { atomic_fetch_add(&audit->bytes, bytes); atomic_fetch_add(&audit->blocks, 1); }
+    return memory;
+}
+static void provider_free(void *context, void *memory, size_t bytes) {
+    Audit *audit = context;
+    if (audit->observed) {
+        for (size_t i = 0; i < 2; ++i) {
+            XrtManagedHeader *installed = NULL;
+            memcpy(&installed, (const unsigned char *)audit->observed + i * sizeof(installed), sizeof(installed));
+            if (audit->watched[i] == memory) { CHECK(!installed); audit->retired[i] = true; }
+            if (audit->retired[i]) CHECK(!installed);
+        }
+    }
+    CHECK(atomic_fetch_sub(&audit->bytes, bytes) >= bytes);
+    CHECK(atomic_fetch_sub(&audit->blocks, 1));
+    atomic_fetch_add(&audit->frees, 1);
+    xr_free(memory);
+}
+static void fixture_init(Fixture *f, size_t limit, bool storage) {
+    *f = (Fixture){0}; atomic_init(&f->audit.leases, 1); atomic_init(&f->audit.remaining, SIZE_MAX);
+    XrtManagedAllocator allocator = {&f->audit, provider_allocate, provider_free,
+        {&f->audit, provider_retain, provider_drop}};
+    OK(xrt_billing_owner_new(&allocator, limit, &f->billing));
+    if (storage) {
+        OK(xrt_backing_types_init(f->billing, &f->types));
+        OK(xrt_managed_root_new(f->billing, &f->root));
+        OK(xrt_managed_frame_enter(f->root, 4, &f->frame));
+    }
+}
+static void fixture_retire(Fixture *f) {
+    OK(xrt_managed_root_destroy(&f->root)); f->frame = NULL;
+    xrt_backing_types_drop(&f->types);
+    xrt_billing_owner_drop(f->billing); f->billing = NULL;
+    provider_drop(&f->audit);
+}
+static void fixture_done(Fixture *f) {
+    fixture_retire(f); CHECK(atomic_load(&f->audit.finalized) == 1);
+}
+static void same_bill(Fixture *f, XrtBillingStats before) {
+    XrtBillingStats after = xrt_billing_owner_stats(f->billing);
+    CHECK(before.bytes == after.bytes && before.blocks == after.blocks);
+    CHECK(after.bytes == atomic_load(&f->audit.bytes) && after.blocks == atomic_load(&f->audit.blocks));
+}
+static XrtValuePlan *new_plan(Fixture *f, XrtValuePlanSpec spec) {
+    XrtValuePlan *plan = NULL; OK(xrt_value_plan_new(f->billing, &spec, &plan)); return plan;
+}
+static XrtValuePlan *scalar(Fixture *f, XrtValueKind kind, size_t size, size_t alignment) {
+    return new_plan(f, (XrtValuePlanSpec){.kind=kind, .size=size, .alignment=alignment});
+}
+static XrtValuePlan *reference(Fixture *f, XrtValueKind kind) {
+    size_t offset = 0;
+    return new_plan(f, (XrtValuePlanSpec){.kind=kind, .size=sizeof(void *), .alignment=alignof(void *),
+        .owned_offsets=&offset, .owned_count=1});
+}
+static XrtManagedHeader *owned_string(Fixture *f, const char *bytes) {
+    OK(xrt_string_backing_create(f->frame, 0, &f->types, bytes, strlen(bytes), 0));
+    XrtManagedHeader *owned = NULL; OK(xrt_managed_slot_take(f->frame, 0, &owned)); return owned;
+}
+typedef struct Record { XrtManagedHeader *left, *right; int64_t number; } Record;
+static XrtValuePlan *record_plan(Fixture *f) {
+    XrtValuePlan *text = reference(f, XRT_VALUE_STRING), *integer = scalar(f, XRT_VALUE_I64, 8, 8);
+    char names[][7] = {"left", "right", "number"};
+    XrtValueSlotSpec fields[] = {{text,0,names[0],4},{text,8,names[1],5},{integer,16,names[2],6}};
+    size_t offsets[] = {0,8};
+    XrtValuePlan *plan = new_plan(f, (XrtValuePlanSpec){.kind=XRT_VALUE_RECORD, .size=sizeof(Record), .alignment=alignof(Record),
+        .owned_offsets=offsets, .owned_count=2, .fields=fields, .field_count=3});
+    memset(fields, 0xa5, sizeof(fields)); memset(names, 'x', sizeof(names)); offsets[0] = SIZE_MAX;
+    xrt_value_plan_drop(text); xrt_value_plan_drop(integer);
+    return plan;
+}
+static void inline_owners(void) {
+    Fixture metadata, data; fixture_init(&metadata, SIZE_MAX, false); fixture_init(&data, SIZE_MAX, true);
+    XrtValuePlan *plan = record_plan(&metadata);
+    XrtValuePlanSpec view; OK(xrt_value_plan_view(plan, &view));
+    CHECK(view.size == sizeof(Record) && view.owned_offsets[0] == 0 && view.owned_offsets[1] == 8);
+    CHECK(!memcmp(view.fields[0].name, "left", 4) && !memcmp(view.fields[2].name, "number", 6));
+    Record first = {owned_string(&data,"left"), owned_string(&data,"right"), 42}, second, moved;
+    OK(xrt_value_zero(plan, &second)); OK(xrt_value_zero(plan, &moved));
+    XrtBillingStats before = xrt_billing_owner_stats(metadata.billing);
+    size_t calls = atomic_load(&data.audit.calls);
+    OK(xrt_value_copy_empty(plan, &first, &second)); CHECK(second.number == 42 && second.left == first.left);
+    CHECK(xr_signed_rc_read(&first.left->references) == 2 && xr_signed_rc_read(&first.right->references) == 2);
+    STATUS(xrt_value_copy_empty(plan, &first, &second), XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_value_copy_empty(plan, &first, &first), XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_value_move_empty(plan, &first, &first), XRT_MANAGED_ARGUMENT);
+    OK(xrt_value_move_empty(plan, &second, &moved)); CHECK(!second.left && !second.right && !second.number);
+    CHECK(moved.left == first.left && moved.number == 42 && xr_signed_rc_read(&first.left->references) == 2);
+    xrt_value_drop(plan, &first);
+    CHECK(!first.left && !first.right && !first.number && xr_signed_rc_read(&moved.left->references) == 1);
+    CHECK(atomic_load(&data.audit.calls) == calls); same_bill(&metadata, before);
+    fixture_retire(&data); CHECK(!atomic_load(&data.audit.finalized));
+    data.audit.observed = &moved.left; data.audit.watched[0] = moved.left; data.audit.watched[1] = moved.right;
+    xrt_value_drop(plan, &moved);
+    CHECK(data.audit.retired[0] && data.audit.retired[1] && atomic_load(&data.audit.finalized) == 1);
+    CHECK(!moved.left && !moved.right && !moved.number);
+    xrt_value_plan_drop(plan); fixture_done(&metadata);
+    puts("inline record copy/move/drop, source retirement and visible sibling clearing passed");
+}
+static void retain_failure_and_alias(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX, true);
+    XrtValuePlan *plan = record_plan(&f);
+    Record source = {owned_string(&f,"first"), owned_string(&f,"second"), 99}, empty;
+    OK(xrt_value_zero(plan, &empty)); empty.number = 77;
+    atomic_store(&source.left->references, -1);
+    atomic_store(&source.right->references, INT32_MAX);
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    size_t calls = atomic_load(&f.audit.calls);
+    STATUS(xrt_value_copy_empty(plan, &source, &empty), XRT_MANAGED_REFCOUNT);
+    CHECK(!empty.left && !empty.right && !empty.number);
+    CHECK(xr_signed_rc_read(&source.left->references) == -1 && source.number == 99);
+    atomic_store(&source.right->references, 1);
+    xrt_managed_drop(source.right);
+    source.right = source.left; CHECK(xrt_managed_retain(source.right));
+    OK(xrt_value_copy_empty(plan, &source, &empty));
+    CHECK(xr_signed_rc_read(&source.left->references) == -4);
+    xrt_value_drop(plan, &source); CHECK(xr_signed_rc_read(&empty.left->references) == -2);
+    xrt_value_drop(plan, &empty);
+    CHECK(atomic_load(&f.audit.calls) == calls);
+    CHECK(xrt_billing_owner_stats(f.billing).bytes < before.bytes);
+    XrtValuePlan *pod = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_U8,.size=8,.alignment=1,.count=8});
+    unsigned char overlapping[16]; memset(overlapping, 0x5a, sizeof(overlapping));
+    STATUS(xrt_value_copy_empty(pod, overlapping, overlapping+1), XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_value_move_empty(pod, overlapping+1, overlapping), XRT_MANAGED_ARGUMENT);
+    for (size_t i = 0; i < sizeof(overlapping); ++i) CHECK(overlapping[i] == 0x5a);
+    xrt_value_plan_drop(pod); xrt_value_plan_drop(plan); fixture_done(&f);
+    puts("inline partial retain rollback, duplicate real owners and overlap rejection passed");
+}
+static void nullable_values(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX, true);
+    XrtValuePlan *text = reference(&f, XRT_VALUE_STRING);
+    size_t offset = 8;
+    XrtValuePlanSpec spec = {.kind=XRT_VALUE_NULLABLE,.size=16,.alignment=8,.owned_offsets=&offset,.owned_count=1,
+        .nullable={0,8,text}};
+    XrtValuePlan *optional = new_plan(&f,spec);
+    size_t outer_offset = 16;
+    XrtValuePlan *outer = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_NULLABLE,.size=24,.alignment=8,
+        .owned_offsets=&outer_offset,.owned_count=1,.nullable={0,8,optional}});
+    xrt_value_plan_drop(text); xrt_value_plan_drop(optional);
+    alignas(XrMaxAlignment) unsigned char none[24], some[24], copy[24];
+    memset(none,0xa5,sizeof(none)); OK(xrt_value_zero(outer,none)); OK(xrt_value_zero(outer,some)); OK(xrt_value_zero(outer,copy));
+    XrtManagedHeader *child = (XrtManagedHeader *)(uintptr_t)1;
+    memcpy(&child,none+16,sizeof(child)); CHECK(!child && !none[0] && !none[8]);
+    OK(xrt_value_copy_empty(outer,none,copy)); CHECK(!memcmp(none,copy,sizeof(none)));
+    child = owned_string(&f,"some"); memcpy(some+16,&child,sizeof(child)); some[0] = some[8] = 1;
+    OK(xrt_value_copy_empty(outer,some,copy)); CHECK(xr_signed_rc_read(&child->references)==2);
+    xrt_value_drop(outer,some); CHECK(xr_signed_rc_read(&child->references)==1);
+    CHECK(!memcmp(some,none,sizeof(none))); xrt_value_drop(outer,copy);
+    CHECK(!memcmp(copy,none,sizeof(none)));
+    XrtValuePlan *unit = scalar(&f,XRT_VALUE_UNIT,0,1);
+    OK(xrt_value_zero(unit,NULL)); OK(xrt_value_copy_empty(unit,NULL,NULL)); OK(xrt_value_move_empty(unit,NULL,NULL)); xrt_value_drop(unit,NULL);
+    XrtValuePlan *unit_optional = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_NULLABLE,.size=1,.alignment=1,.nullable={0,1,unit}});
+    uint8_t byte = 0xa5; OK(xrt_value_zero(unit_optional,&byte)); CHECK(!byte);
+    xrt_value_plan_drop(unit_optional); xrt_value_plan_drop(unit); xrt_value_plan_drop(outer); fixture_done(&f);
+    puts("Nullable None true NULL inventory, nested Some owners and Unit payloads passed");
+}
+typedef struct CodeAudit { _Atomic(size_t) retains, drops, finalized; bool reject; XrtBillingOwner *billing; size_t final_bytes; } CodeAudit;
+typedef struct CodeOwner { _Atomic(size_t) references; CodeAudit *audit; char *constants; } CodeOwner;
+static bool code_retain(void *context) {
+    CodeOwner *code = context;
+    if (code->audit->reject) return false;
+    atomic_fetch_add(&code->references,1); atomic_fetch_add(&code->audit->retains,1); return true;
+}
+static void code_drop(void *context) {
+    CodeOwner *code = context; CodeAudit *audit = code->audit;
+    atomic_fetch_add(&audit->drops,1);
+    if (atomic_fetch_sub(&code->references,1)==1) {
+        CHECK(!memcmp(code->constants,"unbound bytes",13));
+        if (audit->billing) CHECK(xrt_billing_owner_stats(audit->billing).bytes==audit->final_bytes);
+        xr_free(code->constants); xr_free(code); atomic_fetch_add(&audit->finalized,1);
+    }
+}
+static CodeOwner *code_new(CodeAudit *audit) {
+    CodeOwner *owner = xr_malloc(sizeof(*owner)); CHECK(owner);
+    owner->constants = xr_malloc(14); CHECK(owner->constants); memcpy(owner->constants,"unbound bytes",14);
+    atomic_init(&owner->references,1); owner->audit = audit; return owner;
+}
+static void typed_metadata_and_code(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,false);
+    size_t owner_bytes=xrt_billing_owner_stats(f.billing).bytes;
+    XrtValuePlan *integer = scalar(&f,XRT_VALUE_I64,8,8), *map = reference(&f,XRT_VALUE_MAP_STRING_I64);
+    size_t pointer_offset = 0;
+    XrtValuePlan *cell = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_CELL,.size=8,.alignment=8,
+        .owned_offsets=&pointer_offset,.owned_count=1,.element=map});
+    char argument[]="value", capture[]="cache";
+    XrtValueParameterSpec parameter={integer,XR_PARAM_READ,false,argument,5};
+    size_t function_owner=16;
+    XrtValuePlan *signature = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,
+        .owned_offsets=&function_owner,.owned_count=1,.signature={&parameter,1,integer,XRT_VALUE_NO_SUSPEND,false}});
+    CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
+    XrtValueSlotSpec captures[]={{integer,0,NULL,0},{cell,8,capture,5},{signature,16,NULL,0}};
+    size_t owned[]={8,32};
+    XrtValuePlan *env = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=40,.alignment=8,
+        .owned_offsets=owned,.owned_count=2,.captures=captures,.capture_count=3,.entry={7,signature},
+        .code={code,code_retain,code_drop}});
+    memset(argument,'x',5); memset(capture,'x',5); memset(captures,0xa5,sizeof(captures));
+    memset(&parameter,0xa5,sizeof(parameter)); owned[0]=SIZE_MAX;
+    xrt_value_plan_drop(signature); xrt_value_plan_drop(cell); xrt_value_plan_drop(map); xrt_value_plan_drop(integer);
+    code_drop(code); CHECK(!atomic_load(&audit.finalized));
+    XrtValuePlanSpec view, fn, captured_cell;
+    OK(xrt_value_plan_view(env,&view)); CHECK(view.entry.ordinal==7 && view.capture_count==3 && view.owned_offsets[1]==32);
+    CHECK(!memcmp(view.captures[1].name,"cache",5));
+    OK(xrt_value_plan_view(view.entry.signature,&fn));
+    CHECK(fn.signature.flags==XRT_VALUE_NO_SUSPEND && fn.signature.parameter_count==1 && !memcmp(fn.signature.parameters[0].name,"value",5));
+    CHECK(fn.signature.parameters[0].mode==XR_PARAM_READ && !fn.signature.parameters[0].escaping);
+    OK(xrt_value_plan_view(view.captures[1].type,&captured_cell)); CHECK(captured_cell.kind==XRT_VALUE_CELL && captured_cell.element);
+    audit.billing=f.billing; audit.final_bytes=xrt_billing_owner_stats(f.billing).bytes;
+    XrtBillingStats held=xrt_billing_owner_stats(f.billing);
+    CHECK(held.blocks==6); /* Billing plus five independently owned metadata blocks. */
+    XrtManagedLease lease=xrt_value_plan_lease(env);
+    XrtRuntimeTypePlan *physical=NULL;
+    XrtRuntimeTypeSpec physical_spec={.fixed_size=16,.alignment=8,.capacity_offset=SIZE_MAX,.code=lease};
+    OK(xrt_runtime_type_plan_new(f.billing,&physical_spec,&physical));
+    CHECK(atomic_load(&audit.retains)==1);
+    xrt_value_plan_drop(env); CHECK(!atomic_load(&audit.finalized));
+    audit.final_bytes=owner_bytes;
+    xrt_billing_owner_close(f.billing);
+    fixture_retire(&f); CHECK(!atomic_load(&f.audit.finalized));
+    xrt_runtime_type_plan_drop(physical);
+    CHECK(atomic_load(&audit.finalized)==1 && atomic_load(&audit.drops)==2 && atomic_load(&f.audit.finalized)==1);
+    puts("typed captures, signature copies and independent CodeOwner/provider retirement passed");
+}
+static void failures_and_admission(void) {
+    Fixture f; fixture_init(&f,8192,false);
+    XrtValuePlan *integer=scalar(&f,XRT_VALUE_I64,8,8), *text=reference(&f,XRT_VALUE_STRING);
+    XrtValuePlan *array=reference(&f,XRT_VALUE_ARRAY_I64);
+    XrtBillingStats before=xrt_billing_owner_stats(f.billing);
+    CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
+    XrtValuePlanSpec plain={.kind=XRT_VALUE_I64,.size=8,.alignment=8,.code={code,code_retain,code_drop}};
+    XrtValuePlan *empty=NULL;
+    atomic_store(&f.audit.remaining,0);
+    STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_OOM); CHECK(!empty); same_bill(&f,before);
+    atomic_store(&f.audit.remaining,SIZE_MAX);
+    xrt_billing_owner_fail_after(f.billing,0);
+    STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_OOM); CHECK(!empty); same_bill(&f,before);
+    xrt_billing_owner_fail_after(f.billing,SIZE_MAX);
+    audit.reject=true;
+    STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_REFCOUNT); CHECK(!empty); same_bill(&f,before);
+    audit.reject=false;
+    XrtValueSlotSpec fields[]={{array,0,"array",5}}; size_t zero=0;
+    XrtValuePlanSpec record={.kind=XRT_VALUE_RECORD,.size=8,.alignment=8,.fields=fields,.field_count=1,.owned_offsets=&zero,.owned_count=1};
+    STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_ARGUMENT); CHECK(!empty);
+    XrtValuePlanSpec nullable={.kind=XRT_VALUE_NULLABLE,.size=16,.alignment=8,.owned_offsets=&zero,.owned_count=1,
+        .nullable={0,8,array}};
+    STATUS(xrt_value_plan_new(f.billing,&nullable,&empty),XRT_MANAGED_ARGUMENT);
+    XrtValuePlanSpec cell={.kind=XRT_VALUE_CELL,.size=8,.alignment=8,.owned_offsets=&zero,.owned_count=1,.element=text};
+    STATUS(xrt_value_plan_new(f.billing,&cell,&empty),XRT_MANAGED_ARGUMENT);
+    fields[0].type=text; size_t wrong=8; record.owned_offsets=&wrong;
+    STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_ARGUMENT); record.owned_offsets=&zero;
+    fields[0].offset=1; STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_ARGUMENT); fields[0].offset=0;
+    XrtValueParameterSpec invalid={integer,XR_PARAM_READ,true,NULL,0}; size_t owner=16;
+    XrtValuePlanSpec function={.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,.owned_offsets=&owner,.owned_count=1,
+        .signature={&invalid,1,integer,0,false}};
+    STATUS(xrt_value_plan_new(f.billing,&function,&empty),XRT_MANAGED_ARGUMENT);
+    invalid.escaping=false; function.signature.throws=true;
+    STATUS(xrt_value_plan_new(f.billing,&function,&empty),XRT_MANAGED_ARGUMENT);
+    XrtValuePlanSpec overflow=record; overflow.field_count=SIZE_MAX;
+    STATUS(xrt_value_plan_new(f.billing,&overflow,&empty),XRT_MANAGED_OVERFLOW);
+    overflow=record; fields[0].name_length=SIZE_MAX;
+    STATUS(xrt_value_plan_new(f.billing,&overflow,&empty),XRT_MANAGED_OVERFLOW); fields[0].name_length=5;
+    same_bill(&f,before);
+    plain=(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_U8,.size=16000,.alignment=1,.count=16000,.code={code,code_retain,code_drop}};
+    /* Names consume actual metadata bytes; the inline payload itself is not allocated. */
+    char *large_name=xr_malloc(16000); CHECK(large_name); memset(large_name,'a',16000);
+    fields[0]=(XrtValueSlotSpec){text,0,large_name,16000}; record.code=(XrtManagedLease){code,code_retain,code_drop};
+    STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_LIMIT); CHECK(!empty); xr_free(large_name); same_bill(&f,before);
+    void *memory=NULL; STATUS(xrt_managed_metadata_allocate(f.billing,0,&memory),XRT_MANAGED_ARGUMENT);
+    OK(xrt_managed_metadata_allocate(f.billing,31,&memory)); CHECK(memory);
+    void *occupied=memory; STATUS(xrt_managed_metadata_allocate(f.billing,1,&occupied),XRT_MANAGED_ARGUMENT); CHECK(occupied==memory);
+    xrt_managed_metadata_free(f.billing,memory,31); same_bill(&f,before);
+    xrt_billing_owner_close(f.billing);
+    STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_CLOSED); CHECK(!empty); same_bill(&f,before);
+    code_drop(code); CHECK(atomic_load(&audit.finalized)==1);
+    xrt_value_plan_drop(array); xrt_value_plan_drop(text); xrt_value_plan_drop(integer); fixture_done(&f);
+    puts("metadata admission, allocation/quota/lease failures and exact cold refunds passed");
+}
+static void deep_metadata(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,false);
+    XrtBillingStats baseline=xrt_billing_owner_stats(f.billing);
+    XrtValuePlan *current=scalar(&f,XRT_VALUE_I64,8,8);
+    for (size_t i=0;i<100000;++i) {
+        XrtValuePlan *next=new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_NULLABLE,.size=(i+2)*8,.alignment=8,
+            .nullable={0,8,current}});
+        xrt_value_plan_drop(current); current=next;
+    }
+    size_t calls=atomic_load(&f.audit.calls);
+    atomic_store(&f.audit.remaining,0); xrt_billing_owner_fail_after(f.billing,0);
+    xrt_value_plan_drop(current); CHECK(atomic_load(&f.audit.calls)==calls);
+    same_bill(&f,baseline); fixture_done(&f);
+    puts("100000 immutable metadata dependencies retired iteratively on the default stack");
+}
+int main(void) {
+    inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code();
+    failures_and_admission(); deep_metadata();
+    puts("immutable ValuePlan and inline ownership kernel passed");
+    return 0;
+}

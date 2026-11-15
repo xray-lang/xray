@@ -1,0 +1,113 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_value_plan.h - Independent typed metadata for inline owned values
+ *
+ * KEY CONCEPT:
+ *   Immutable plans own receiving descriptions and code leases. Inline payloads
+ *   own only their declared Header leaves, without allocating a record box.
+ */
+#ifndef XNATIVE_VALUE_PLAN_H
+#define XNATIVE_VALUE_PLAN_H
+#include "xnative_managed.h"
+#include "shared/xr_param_mode.h"
+
+typedef struct XrtValuePlan XrtValuePlan;
+typedef enum XrtValueKind {
+    XRT_VALUE_UNIT, XRT_VALUE_BOOL, XRT_VALUE_RUNE,
+    XRT_VALUE_I8, XRT_VALUE_I16, XRT_VALUE_I32, XRT_VALUE_I64,
+    XRT_VALUE_U8, XRT_VALUE_U16, XRT_VALUE_U32, XRT_VALUE_U64,
+    XRT_VALUE_F32, XRT_VALUE_F64, XRT_VALUE_STRING,
+    XRT_VALUE_ARRAY_I64, XRT_VALUE_ARRAY_STRING, XRT_VALUE_ARRAY_U8, XRT_VALUE_ARRAY_U64,
+    XRT_VALUE_MAP_STRING_I64, XRT_VALUE_FIXED_U8, XRT_VALUE_TUPLE_I64,
+    XRT_VALUE_RECORD, XRT_VALUE_NULLABLE, XRT_VALUE_FUNCTION, XRT_VALUE_CELL,
+    XRT_VALUE_ENVIRONMENT
+} XrtValueKind;
+typedef struct XrtValueSlotSpec {
+    const XrtValuePlan *type;
+    size_t offset;
+    const char *name;
+    size_t name_length;
+} XrtValueSlotSpec;
+typedef struct XrtValueParameterSpec {
+    const XrtValuePlan *type;
+    XrParamMode mode;
+    bool escaping;
+    const char *name;
+    size_t name_length;
+} XrtValueParameterSpec;
+enum { XRT_VALUE_NO_SUSPEND = 1u, XRT_VALUE_C_ABI = 2u };
+typedef struct XrtValueSignatureSpec {
+    const XrtValueParameterSpec *parameters;
+    size_t parameter_count;
+    const XrtValuePlan *result;
+    uint32_t flags;
+    bool throws;
+} XrtValueSignatureSpec;
+typedef struct XrtValueNullableSpec {
+    size_t tag_offset, payload_offset;
+    const XrtValuePlan *element;
+} XrtValueNullableSpec;
+typedef struct XrtValueEntrySpec {
+    uint32_t ordinal;
+    const XrtValuePlan *signature;
+} XrtValueEntrySpec;
+typedef struct XrtValuePlanSpec {
+    XrtValueKind kind;
+    size_t size, alignment, count;
+    const size_t *owned_offsets;
+    size_t owned_count;
+    const XrtValueSlotSpec *fields;
+    size_t field_count;
+    XrtValueNullableSpec nullable;
+    const XrtValueSlotSpec *captures;
+    size_t capture_count;
+    XrtValueSignatureSpec signature;
+    XrtValueEntrySpec entry;
+    const XrtValuePlan *element; /* Cell's admitted payload description. */
+    XrtManagedLease code;
+} XrtValuePlanSpec;
+
+/* Earlier plans are independent immutable runtime owners, never compiler pool
+ * rows. The constructor copies all vectors and name bytes, retains every plan
+ * dependency and takes its own optional code lease. Code context must be an
+ * independent owner of executable code, unbound raw constants/bytes and
+ * complete read-only descriptions; bound managed payloads are forbidden. It
+ * must not own Layout, State, ValuePlan, Ops or value RuntimeTypePlan objects.
+ * An entry ordinal describes metadata and grants no executable address.
+ * Plans describe the admitted subset; they grant no new language admission,
+ * escaping permission, exclusive mutation authority or reference-cycle support.
+ * Metadata references remain in the shared counter band. */
+XR_FUNC XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *, const XrtValuePlanSpec *, XrtValuePlan **empty);
+XR_FUNC bool xrt_value_plan_retain(XrtValuePlan *);
+XR_FUNC void xrt_value_plan_drop(XrtValuePlan *);
+/* All returned slices and dependency pointers borrow the retained plan. */
+XR_FUNC XrtManagedStatus xrt_value_plan_view(const XrtValuePlan *, XrtValuePlanSpec *);
+/* This describes, but does not acquire, a reference. RuntimeTypePlan takes its
+ * own reference when it receives the lease; ValuePlan never owns that plan. */
+XR_FUNC XrtManagedLease xrt_value_plan_lease(XrtValuePlan *);
+
+/* Payload memory has the plan's size/alignment and a real active lifetime.
+ * Zero is only for storage without live owners; it initializes every owned
+ * pointer to true NULL. Retire live owners with drop rather than zero. Empty destinations have
+ * NULL in all owned slots; other bytes may be scratch. Copy/move reject exact
+ * and partial overlap and allocate nothing. Argument rejection preserves both
+ * inputs; a failed retain preserves source and leaves destination canonically
+ * zero with true NULL owners.
+ * Copy retains every source owner before writing any destination byte. Move
+ * transfers owners and zeroes the complete source. The caller keeps source,
+ * destination and plan exclusively available through the operation; READ
+ * borrows and observers cannot overlap this mutation. */
+XR_FUNC XrtManagedStatus xrt_value_zero(const XrtValuePlan *, void *);
+XR_FUNC XrtManagedStatus xrt_value_copy_empty(const XrtValuePlan *, const void *, void *);
+XR_FUNC XrtManagedStatus xrt_value_move_empty(const XrtValuePlan *, void *, void *);
+/* Each owned slot is cleared before dropping its real reference. A cleanup
+ * callback can observe NULL retired siblings and still-live unvisited siblings,
+ * never a freed sibling still installed in a slot. It must not mutate this
+ * payload or retire its borrowed plan. Payload bytes finish empty. No payload
+ * callback interprets tags or recurses into records. */
+XR_FUNC void xrt_value_drop(const XrtValuePlan *, void *);
+#endif // XNATIVE_VALUE_PLAN_H
