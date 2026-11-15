@@ -13,6 +13,7 @@
 #include "../lir/lir_test_programs.h"
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
+#include "xray_native_string_value.h"
 
 static size_t attempts, fail_at = SIZE_MAX, tracked_live;
 static void *watched_program, *watched_layout;
@@ -90,7 +91,7 @@ static XrLirModule *fixture(unsigned kind, XrLirFunction *root) {
     }
     if (kind == 1) {
         XrLirModule *module = NULL;
-        callable_factory_fixture(&module, root, false);
+        callable_factory_fixture_mode(&module, root, true, true);
         return module;
     }
     if (kind == 2) return fixed_bytecode_state_fixture(17, 0, root);
@@ -121,11 +122,10 @@ static void check_result(XrRbcExecution **execution, unsigned kind) {
     CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
     xr_rbc_execution_free(execution);
     if (kind == 3) {
-        const XrtString *string = NULL;
+        const XrtManagedHeader *string = NULL;
         CHECK(xr_rbc_outcome_string(outcome, &string));
-        size_t length = 0;
-        const char *bytes = xrt_string_bytes(string, &length);
-        CHECK(length == 4 && !memcmp(bytes, "\303\251\0x", 4));
+        const XrtStringBacking *text = (const XrtStringBacking *)string;
+        CHECK(text->length == 4 && !memcmp(text->bytes, "\303\251\0x", 4));
     } else {
         uint64_t value = UINT64_MAX;
         CHECK(xr_rbc_outcome_bits(outcome, &value));
@@ -140,9 +140,9 @@ static void prepared_after_program(unsigned kind) {
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
     CHECK(execution->module != &program->module && execution->module == &execution->module_snapshot);
-    watched_program = program; watched_layout = program->module.state_layout;
+    watched_program = program; watched_layout = execution->layout;
     program_freed = layout_freed = false;
-    if (watched_layout) CHECK(atomic_load(&program->module.state_layout->references) == 3);
+    if (watched_layout) CHECK(atomic_load(&execution->layout->references) == 2);
     xr_rbc_program_destroy(program);
     CHECK(program_freed && (!watched_layout || !layout_freed));
     check_result(&execution, kind);
@@ -155,11 +155,17 @@ static void code_lease_is_leaf(void) {
     XrRbcCodeLease lease = program->module.code_lease;
     CHECK(lease.owner && lease.owner != program && lease.retain(lease.owner));
     XrRbcCodeImage *image = lease.owner;
-    CHECK(!image->module.state_layout && image->module.functions == program->module.functions);
-    watched_program = program; watched_layout = program->module.state_layout;
+    CHECK(image->module.state_spec == program->module.state_spec &&
+        image->module.functions == program->module.functions);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    CHECK(execution->layout && execution->state);
+    watched_program = program; watched_layout = execution->layout;
     program_freed = layout_freed = false;
     xr_rbc_program_destroy(program);
-    CHECK(program_freed && layout_freed && tracked_live && image->module.function_count);
+    CHECK(program_freed && !layout_freed && tracked_live && image->module.function_count);
+    xr_rbc_execution_free(&execution);
+    CHECK(layout_freed && tracked_live && atomic_load(&image->code.references) == 1);
     CHECK(image->module.functions[0].code_count && xrt_locations_count(image->locations));
     watched_program = watched_layout = NULL;
     lease.release(lease.owner);
@@ -170,13 +176,15 @@ static void raw_borrow_and_refusal(void) {
     size_t baseline = tracked_live;
     XrRbcExecution *execution = NULL;
     XrRbcCodeImage *image = program->image;
-    atomic_store(&image->references, UINT32_MAX);
+    atomic_store(&image->code.references, UINT32_MAX);
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_VALUE_FAILURE && !execution);
-    atomic_store(&image->references, 1); CHECK(tracked_live == baseline);
-    atomic_store(&program->module.state_layout->references, SIZE_MAX);
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_VALUE_FAILURE && !execution);
-    atomic_store(&program->module.state_layout->references, 1);
-    CHECK(tracked_live == baseline && atomic_load(&image->references) == 1);
+    atomic_store(&image->code.references, 1); CHECK(tracked_live == baseline);
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    atomic_store(&execution->layout->references, INT32_MAX);
+    CHECK(!xrt_module_layout_retain(execution->layout));
+    atomic_store(&execution->layout->references, 2);
+    xr_rbc_execution_free(&execution);
+    CHECK(tracked_live == baseline && atomic_load(&image->code.references) == 1);
     XrRbcModule raw = program->module;
     raw.code_lease = (XrRbcCodeLease){0};
     CHECK(xr_rbc_module_prepare(&raw, 0, NULL, 0, program->locations, &execution) == XR_RBC_OK);
