@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -91,6 +92,79 @@ class CleanupTests(unittest.TestCase):
         self.data["min_age_hours"] = 0
         again, _ = self.run_cleanup(True)
         self.assertEqual(again["deletedFiles"], 0)
+
+    def test_directory_index_size_is_not_a_file_identity_change(self):
+        paths = self.three()
+        watched = paths[0] / "products"
+        original = Path.lstat
+        sizes = []
+
+        def index_size(path, *args, **kwargs):
+            info = original(path, *args, **kwargs)
+            if path != watched:
+                return info
+            size = 4096 if len(sizes) % 2 else 0
+            sizes.append(size)
+            return SimpleNamespace(st_mode=info.st_mode, st_size=size,
+                st_mtime_ns=info.st_mtime_ns, st_dev=info.st_dev, st_ino=info.st_ino,
+                st_file_attributes=getattr(info, "st_file_attributes", 0))
+
+        with patch.object(Path, "lstat", index_size):
+            report, _ = self.run_cleanup(True)
+        self.assertEqual(report["deletedFiles"], 5)
+        self.assertGreater(len(sizes), 2)
+        self.assertEqual(set(sizes), {0, 4096})
+        self.assertTrue(all((path / "products/test.exe").exists() for path in paths[1:]))
+
+    def test_stale_directory_enumeration_does_not_replace_full_identity(self):
+        paths = self.three()
+        original = cleanup.os.scandir
+
+        class Entry:
+            def __init__(self, entry):
+                self.entry, self.path = entry, entry.path
+
+            def stat(self, **kwargs):
+                info = self.entry.stat(**kwargs)
+                if not cleanup.stat.S_ISDIR(info.st_mode):
+                    return info
+                return SimpleNamespace(st_mode=info.st_mode, st_size=0,
+                    st_mtime_ns=info.st_mtime_ns - 1, st_dev=0, st_ino=0,
+                    st_file_attributes=getattr(info, "st_file_attributes", 0))
+
+        @contextmanager
+        def cached(directory):
+            with original(directory) as entries:
+                yield (Entry(entry) for entry in entries)
+
+        with patch.object(cleanup.os, "scandir", cached):
+            report, _ = self.run_cleanup(True)
+        self.assertEqual(report["deletedFiles"], 5)
+        self.assertTrue(all((path / "products/test.exe").exists() for path in paths[1:]))
+
+    def test_only_explicit_copied_archives_are_reclaimed(self):
+        paths = self.three()
+        for path in paths:
+            stamp = (path / "result.json").stat().st_mtime_ns
+            (path / "copied").mkdir()
+            for name in ("copied/runtime.lib", "copied/libruntime.a", "copied/unregistered.lib", "input/vendor.lib"):
+                (path / name).write_bytes(b"copied static archive")
+            for item in sorted(path.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+                os.utime(item, ns=(stamp, stamp))
+            os.utime(path, ns=(stamp, stamp))
+        self.data["roots"][0]["native_artifacts"] += ["copied/runtime.lib", "copied/libruntime.a", "input/vendor.lib"]
+        report, events = self.run_cleanup(True)
+        self.assertEqual(report["deletedFiles"], 7)
+        self.assertEqual(len(events), 7)
+        for name in ("copied/runtime.lib", "copied/libruntime.a"):
+            self.assertFalse((paths[0] / name).exists())
+            self.assertTrue(all((path / name).exists() for path in paths[1:]))
+        self.assertTrue((paths[0] / "copied/unregistered.lib").exists())
+        self.assertTrue((paths[0] / "input/vendor.lib").exists())
+        for name in ("program.xr", "main.c", "result.json"):
+            self.data["roots"][0]["native_artifacts"] = [name]
+            with self.assertRaises(ValueError):
+                self.policy()
 
     def test_failed_unknown_and_nonobject_receipts_stay(self):
         self.three()
