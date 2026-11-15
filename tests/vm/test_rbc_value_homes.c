@@ -82,7 +82,7 @@ static void scalar_zero_frame(void) {
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
     OK(xr_lir_set_terminator(module, block, &ret)); OK(xr_lir_module_finish(module, NULL));
     XrRbcProgram *program = compile(module, function); xr_lir_module_destroy(module);
-    CHECK(!xr_rbc_program_view(program)->functions[0].value_homes && run(program) == 42);
+    CHECK(!xr_rbc_module_value_homes(xr_rbc_program_view(program), 0) && run(program) == 42);
     XrtManagedFrame *frame = NULL;
     MANAGED(xr_rbc_value_homes_enter(NULL, NULL, &frame)); CHECK(!frame);
     xr_rbc_program_destroy(program);
@@ -95,7 +95,7 @@ static void real_compiler_and_root(void) {
     CHECK(run(program) == 100);
     const XrRbcModule *code = xr_rbc_program_view(program);
     CHECK(code->function_count == 2);
-    const XrLirValueHomes *homes = code->functions[0].value_homes, *callee = code->functions[1].value_homes;
+    const XrLirValueHomes *homes = xr_rbc_module_value_homes(code, 0), *callee = xr_rbc_module_value_homes(code, 1);
     CHECK(homes && callee && !homes->unmodeled && !callee->unmodeled);
     CHECK(homes->call_count == 1 && homes->calls[0].callee == callee->source_function && homes->calls[0].count == 1);
     uint32_t actual = homes->arguments[homes->calls[0].first], formal = 0, local = 0;
@@ -115,8 +115,17 @@ static void real_compiler_and_root(void) {
     for (size_t i = 0; i < callee->event_count; ++i)
         saw_return |= callee->events[i].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER && callee->events[i].source == local;
     CHECK(saw_return);
-    XrRbcCodeLease lease = code->code_lease; CHECK(lease.retain(lease.owner));
+    XrRbcModule snapshot = *code;
+    XrRbcCodeLease lease = snapshot.code_lease; CHECK(lease.retain(lease.owner));
+    CHECK(!xr_rbc_module_value_homes(NULL, 0) && !xr_rbc_module_value_homes(&snapshot, UINT32_MAX));
+    XrRbcModule raw = snapshot; raw.code_lease = (XrRbcCodeLease){0};
+    CHECK(!xr_rbc_module_value_homes(&raw, 0));
+    raw = snapshot; --raw.function_count;
+    CHECK(!xr_rbc_module_value_homes(&raw, 0));
+    raw = snapshot; raw.functions = NULL;
+    CHECK(!xr_rbc_module_value_homes(&raw, 0));
     xr_rbc_program_destroy(program);
+    CHECK(xr_rbc_module_value_homes(&snapshot, 0) == homes && xr_rbc_module_value_homes(&snapshot, 1) == callee);
     XrtBillingOwner *billing = NULL; XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
     XrtBackingTypes types = {0}; MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
     MANAGED(xrt_backing_types_init(billing, &types)); MANAGED(xrt_managed_root_new(billing, &root));
@@ -155,7 +164,7 @@ static void state_snapshots_and_ref_boundaries(void) {
     const XrRbcModule *code = xr_rbc_program_view(program);
     bool read_owner = false, raw_ref = false;
     for (size_t f = 0; f < code->function_count; ++f) {
-        const XrLirValueHomes *homes = code->functions[f].value_homes; CHECK(homes);
+        const XrLirValueHomes *homes = xr_rbc_module_value_homes(code, (uint32_t)f); CHECK(homes);
         raw_ref |= (homes->unmodeled & XR_LIR_OWNERSHIP_UNMODELED_REFERENCE) != 0;
         for (size_t e = 0; e < homes->event_count; ++e) {
             XrLirHomeEvent event = homes->events[e];
@@ -283,7 +292,7 @@ static void pod_needs_no_owner_frame(void) {
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
     OK(xr_lir_set_terminator(module, block, &ret)); OK(xr_lir_module_finish(module, NULL));
     XrRbcProgram *program = compile(module, function); xr_lir_module_destroy(module);
-    const XrLirValueHomes *homes = xr_rbc_program_view(program)->functions[0].value_homes;
+    const XrLirValueHomes *homes = xr_rbc_module_value_homes(xr_rbc_program_view(program), 0);
     CHECK(homes && !homes->owned_frame_needed && !homes->frame.slot_count && !homes->event_count);
     CHECK(homes->values[record.id].size == sizeof(int64_t) && homes->values[record.id].byte_count == 1);
     CHECK(homes->values[record.id].temporary_offset == SIZE_MAX && homes->values[record.id].temporary_first_owner == SIZE_MAX);
@@ -362,7 +371,7 @@ static XrRbcProgram *multi_return_fixture(void) {
 static void complete_multi_leaf_return(void) {
     XrRbcProgram *program = multi_return_fixture(); CHECK(run(program) == 42);
     const XrRbcModule *code = xr_rbc_program_view(program);
-    const XrLirValueHomes *caller = code->functions[0].value_homes, *callee = code->functions[1].value_homes;
+    const XrLirValueHomes *caller = xr_rbc_module_value_homes(code, 0), *callee = xr_rbc_module_value_homes(code, 1);
     uint32_t result = caller->calls[0].result, returned = 0;
     for (size_t i = 0; i < callee->event_count; ++i)
         if (callee->events[i].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER) returned = callee->events[i].source;

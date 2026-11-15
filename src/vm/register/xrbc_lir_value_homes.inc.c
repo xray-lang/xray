@@ -93,11 +93,13 @@ static XrRbcCompileStatus rbc_lir_value_homes(const XrLirModule *input, const ui
                 diagnostic->function = invalid.function; diagnostic->block = invalid.block; diagnostic->instruction = invalid.instruction;
                 rbc_lir_error(diagnostic, status, invalid.message, invalid.source);
             } else {
+                program->value_homes = xr_calloc(program->module.function_count, sizeof(*program->value_homes));
+                if (!program->value_homes) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
                 for (size_t f = 0; f < program->module.function_count && status == XR_RBC_COMPILE_OK; ++f) {
                     XrLirValueHomes *homes = NULL;
                     XrLirValueHomesRequest request = {input, {input, ids[f]}, layouts, ownership};
                     status = rbc_home_layout_status(xr_lir_value_homes_create(&request, &homes));
-                    if (status == XR_RBC_COMPILE_OK) ((XrRbcFunction *)program->module.functions)[f].value_homes = homes;
+                    if (status == XR_RBC_COMPILE_OK) program->value_homes[f] = homes;
                     else diagnostic->function = ids[f];
                 }
             }
