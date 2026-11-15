@@ -22,7 +22,6 @@
 #include "lir/xlir_view.h"
 #include "lir/xlir_display.h"
 #include "lir/xlir_builtin_admission.h"
-#include "lir/xlir_native_callable.h"
 #include "lir/xlir_value_layout.h"
 #include "xrbc_value_homes.h"
 #include "lir/xlir_state_projection.h"

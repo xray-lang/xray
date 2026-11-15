@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_native_pod.h - Exact inline data layouts and synchronous display
+ * xray_native_pod.h - Exact inline scalar and aggregate data layouts
  */
 #ifndef XRAY_NATIVE_POD_H
 #define XRAY_NATIVE_POD_H
@@ -52,16 +52,4 @@ static inline bool xr_pod_tuple_i64_layout(uint32_t count, XrPodLayout *output) 
     return true;
 }
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-/* Synchronously borrows an admitted receiver-owned catalog or compiler-emitted
- * immutable catalog and its exact value span. Construction/admission establishes
- * complete shape and display qualification. This call validates the span and
- * dynamic data, then publishes one independently owned String. */
-XRAY_API XrtString *xrt_pod_display(const XrPodType *types, uint32_t count,
-    uint32_t type, const void *bytes, size_t size, uint32_t source);
-#ifdef __cplusplus
-}
-#endif
 #endif // XRAY_NATIVE_POD_H

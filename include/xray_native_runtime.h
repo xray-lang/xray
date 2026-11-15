@@ -56,34 +56,6 @@ XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
 XRAY_API uint64_t xrt_i64_to_f64(int64_t value);
 XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id);
 
-// These handles point to the canonical shared String object, never a second
-// native representation. New/retain results own one reference in this root.
-// Inputs are borrowed synchronously. Allocation/refcount failures end the root
-// with their original value status; an unsuccessful helper never returns NULL.
-typedef struct XirString XrtString;
-XRAY_API XrtString *xrt_string_new(const char *bytes, size_t length, uint32_t source_id);
-// Borrow the root's object for a literal span; retain it to own a reference.
-// The span stays at its address, unchanged, until the root ends. The root keeps
-// one object per (address, length) span until it ends, so evaluating the same
-// literal again allocates nothing.
-XRAY_API XrtString *xrt_string_literal(const char *bytes, size_t length, uint32_t source_id);
-XRAY_API XrtString *xrt_string_i64(int64_t value, uint32_t source_id);
-// Exact binary64 object bits use the canonical shortest decimal formatter.
-XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id);
-XRAY_API XrtString *xrt_string_concat(const XrtString *left, const XrtString *right, uint32_t source_id);
-XRAY_API XrtString *xrt_string_retain(const XrtString *string, uint32_t source_id);
-// Move requires an empty destination and consumes the actual source owner.
-// It allocates nothing. Drop consumes one owner and clears its handle.
-XRAY_API void xrt_string_move(XrtString **destination, XrtString **source);
-XRAY_API void xrt_string_drop(XrtString **string);
-// Release only a reference explicitly transferred out of a root/outcome.
-// This operation never edits any active root's registered references.
-XRAY_API void xrt_string_owned_drop(XrtString **string);
-// Borrow the exact byte span, including NUL, while the String owner is alive.
-XRAY_API const char *xrt_string_bytes(const XrtString *string, size_t *length);
-// Borrow the cached Unicode scalar count while the String owner is alive.
-XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id);
-
 // Define this strong external symbol once in the standalone program. The
 // descriptor, locations and path bytes remain immutable and image-owned.
 // Empty maps use {NULL, 0}; nonempty maps have at most UINT32_MAX entries.

@@ -5,12 +5,11 @@ if(WIN32)
     set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_output_win.c")
 endif()
 add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnative_status.c
-    xnative_execution.c xnative_string.c xnative_array.c xnative_view.c xnative_pod.c xnative_float.c xnative_module_state.c
-    xnative_callable.c xnative_map.c xnative_boxed.c xnative_managed.c xnative_managed_root.c xnative_place.c
+    xnative_execution.c xnative_float.c xnative_module_state.c
+    xnative_managed.c xnative_managed_root.c xnative_place.c
     xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c xnative_values.c
     xnative_array_backing.c xnative_array_ops.c xnative_map_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
     "${native_output_platform}" "${native_clock_platform}")
-target_link_libraries(xray_native_runtime PUBLIC xray_xir_scalar)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(xray_native_runtime PUBLIC c_std_11)
@@ -35,10 +34,7 @@ if(NOT WIN32)
 endif()
 
 # Direct generated-C clients consume the same canonical archive closure.
-set(XRAY_NATIVE_RUNTIME_LINK_INPUTS
-    $<TARGET_FILE:xray_native_runtime> $<TARGET_FILE:xray_xir_scalar>
-    $<TARGET_FILE:xray_xir_admission> $<TARGET_FILE:xray_xir_declarations>
-    $<TARGET_FILE:xray_compile_resources>)
+set(XRAY_NATIVE_RUNTIME_LINK_INPUTS $<TARGET_FILE:xray_native_runtime>)
 if(WIN32)
     list(APPEND XRAY_NATIVE_RUNTIME_LINK_INPUTS advapi32.lib userenv.lib)
 endif()

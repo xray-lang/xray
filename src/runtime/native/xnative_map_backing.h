@@ -14,28 +14,7 @@
 #define XNATIVE_MAP_BACKING_H
 #include "xnative_string_backing.h"
 
-typedef struct XrtMapBackingRow {
-    XrtStringBacking *key;
-    int64_t value;
-    uint64_t hash;
-    size_t entry_order, bucket, order, rank;
-} XrtMapBackingRow;
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4200) /* C11 flexible array member */
-#endif
-typedef struct XrtMapBacking {
-    XrtManagedHeader managed;
-    size_t length, capacity, order_count;
-    XrtMapBackingRow rows[];
-} XrtMapBacking;
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-_Static_assert(offsetof(XrtMapBacking, length) == 16 && offsetof(XrtMapBacking, capacity) == 24 &&
-    offsetof(XrtMapBacking, order_count) == 32 && offsetof(XrtMapBacking, rows) == 40 &&
-    sizeof(XrtMapBacking) == 40 && sizeof(XrtMapBackingRow) == 56 &&
-    offsetof(XrtMapBackingRow, key) == 0, "Map has a fixed prefix and one owner in each repeated row");
+#include "xray_native_map.h"
 
 typedef enum XrtMapUpdateKind {
     XRT_MAP_UPDATE_SET, XRT_MAP_UPDATE_REMOVE, XRT_MAP_UPDATE_CLEAR

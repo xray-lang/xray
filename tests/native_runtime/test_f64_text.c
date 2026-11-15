@@ -11,6 +11,9 @@
 #include "base/xchecks.h"
 #include "vm/register/xrbc_lir.h"
 #include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_values.h"
+#include "runtime/native/xnative_string_backing_ops.h"
+#include "xray_native_values.h"
 #include <fenv.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,24 +35,33 @@ static const struct { uint64_t bits; const char *text; } witnesses[] = {
 };
 XR_STATIC_ASSERT(sizeof(witnesses)/sizeof(witnesses[0])==290,"Every original binary64 text witness is present");
 
-static void text_equal(const XrtString *value, const char *expected) {
-    size_t size=0;
-    const char *bytes=xrt_string_bytes(value,&size);
-    CHECK(size==strlen(expected) && !memcmp(bytes,expected,size));
+static void text_equal(const XrtManagedHeader *value, const char *expected) {
+    const XrtStringBacking *text=(const XrtStringBacking *)value;
+    CHECK(text->length==strlen(expected) && !memcmp(text->bytes,expected,text->length));
+}
+static void retire_text(XrtManagedHeader **owner) {
+    XrtManagedHeader *value=*owner; *owner=NULL; xrt_managed_drop(value);
+}
+static void text_require(XrtManagedStatus status) {
+    if(status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,0);
 }
 typedef struct NativeText {
     unsigned index;
     XrtValueRoot strings;
-    XrtString *escaped;
+    XrtManagedHeader *escaped;
     bool take;
 } NativeText;
 static void native_text(void *data) {
     NativeText *context=data;
-    XrtString *value=xrt_string_f64(witnesses[context->index].bits,0);
+    XrtManagedRoot *root=xrt_native_managed_root(0); XrtManagedFrame *frame=NULL;
+    text_require(xrt_managed_frame_enter(root,1,&frame));
+    const XrtBackingTypes *types=NULL;
+    text_require(xrt_native_values_backings(&context->strings,&types));
+    text_require(xrt_string_backing_f64_create(frame,0,types,witnesses[context->index].bits));
+    XrtManagedHeader *value=NULL; text_require(xrt_managed_slot_borrow(frame,0,&value));
     text_equal(value,witnesses[context->index].text);
-    if(context->take) context->escaped=xrt_string_root_take(value);
-    else xrt_string_drop(&value);
-    CHECK(!context->strings.held);
+    if(context->take) text_require(xrt_managed_slot_take(frame,0,&context->escaped));
+    text_require(xrt_managed_frame_leave(root,frame));
 }
 static XrLirModule *text_module(XrLirType parameter, XrLirType result, unsigned arity,
     XrLirFunction *function,XrLirStatus *rejected) {
@@ -111,21 +123,21 @@ static void retired_results(XrtLocationOwner *locations) {
     for(unsigned order=0;order<2;++order) {
         XrRbcProgram *program=text_program();
         XrRbcOutcome *outcome=rbc_text(program,1);
-        XrtString *escaped=NULL;
+        XrtManagedHeader *escaped=NULL;
         if(!order) CHECK(xr_rbc_outcome_take_string(outcome,&escaped) && escaped);
         xr_rbc_program_destroy(program);
         if(order) {
-            const XrtString *borrowed=NULL;
+            const XrtManagedHeader *borrowed=NULL;
             CHECK(xr_rbc_outcome_string(outcome,&borrowed));text_equal(borrowed,witnesses[1].text);
             CHECK(xr_rbc_outcome_take_string(outcome,&escaped) && escaped);
         }
         xr_rbc_outcome_free(&outcome);text_equal(escaped,witnesses[1].text);
-        xrt_string_owned_drop(&escaped);CHECK(!escaped);
+        retire_text(&escaped);CHECK(!escaped);
         NativeText context={.index=1,.take=true};XrtExecutionFailure failure={0};
         CHECK(xrt_run_embedded_owned(locations,&failure,native_text,&context,&context.strings)==XRT_EXECUTION_COMPLETED);
-        CHECK(!context.strings.held && !context.strings.domain && context.escaped);
+        CHECK(xrt_value_root_empty(&context.strings) && context.escaped);
         text_equal(context.escaped,witnesses[1].text);
-        xrt_string_owned_drop(&context.escaped);CHECK(!context.escaped);
+        retire_text(&context.escaped);CHECK(!context.escaped);
     }
 }
 static void environment_check(int round,unsigned csr) {
@@ -160,12 +172,12 @@ static void environment_cases(XrtLocationOwner *locations) {
             NativeText context={.index=i};XrtExecutionFailure failure={0};
             CHECK(xrt_run_embedded_owned(locations,&failure,native_text,&context,&context.strings)==XRT_EXECUTION_COMPLETED);
             environment_check(round,csr);
-            CHECK(!context.strings.held && !context.strings.domain);
-            XrRbcOutcome *outcome=rbc_text(program,i);XrtString *escaped=NULL;
+            CHECK(xrt_value_root_empty(&context.strings));
+            XrRbcOutcome *outcome=rbc_text(program,i);XrtManagedHeader *escaped=NULL;
             environment_check(round,csr);
             CHECK(xr_rbc_outcome_take_string(outcome,&escaped));
             xr_rbc_outcome_free(&outcome);text_equal(escaped,witnesses[i].text);
-            xrt_string_owned_drop(&escaped);CHECK(!escaped);
+            retire_text(&escaped);CHECK(!escaped);
             environment_check(round,csr);
         }
     }

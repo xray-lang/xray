@@ -1329,12 +1329,12 @@ target_link_libraries(xray PRIVATE xray_cli_lir)
 
 set(_native_crt_name "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>")
 set(_native_crt "$<IF:$<STREQUAL:${_native_crt_name},MultiThreaded>,0,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebug>,1,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebugDLL>,3,2>>>")
-set(_native_link_header "#ifndef XRAY_NATIVE_LINK_PATHS_H\n#define XRAY_NATIVE_LINK_PATHS_H\n#define XRT_NATIVE_LIBRARY_COUNT 5\n")
+set(_native_link_header "#ifndef XRAY_NATIVE_LINK_PATHS_H\n#define XRAY_NATIVE_LINK_PATHS_H\n#define XRT_NATIVE_LIBRARY_COUNT 1\n")
 string(APPEND _native_link_header "#define XRT_NATIVE_CRT ${_native_crt}\n#define XRT_NATIVE_ASAN $<OR:$<BOOL:${ENABLE_ASAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n#define XRT_NATIVE_UBSAN $<OR:$<BOOL:${ENABLE_UBSAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n")
 file(TO_CMAKE_PATH "${CMAKE_C_COMPILER}" _native_build_compiler)
 string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_COMPILER \"${_native_build_compiler}\"\n")
 string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_EXECUTABLE \"$<TARGET_FILE:xray>\"\n")
-set(_native_link_targets xray_native_runtime xray_xir_scalar xray_xir_admission xray_xir_declarations xray_compile_resources)
+set(_native_link_targets xray_native_runtime)
 string(APPEND _native_link_header "static const char *const xrt_native_development_libraries[] = {\n")
 foreach(_native_target IN LISTS _native_link_targets)
     string(APPEND _native_link_header "    \"$<TARGET_FILE:${_native_target}>\",\n")
@@ -1347,10 +1347,7 @@ endforeach()
 string(APPEND _native_link_header "};\n#endif\n")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_native_link_paths.h" CONTENT "${_native_link_header}")
 install(FILES include/xray_native_runtime.h include/xray_native_state.h include/xray_native_array.h
-    include/xray_native_map.h
-    include/xray_native_boxed.h
-    include/xray_native_view.h include/xray_native_pod.h include/xray_native_string.h
-    include/xray_string_cursor.h include/xray_native_callable.h include/xray_export.h
+    include/xray_native_map.h include/xray_native_pod.h include/xray_string_cursor.h include/xray_export.h
     include/xray_native_managed.h include/xray_native_managed_root.h include/xray_native_place.h
     include/xray_native_value_image.h include/xray_native_values.h include/xray_native_string_value.h
     DESTINATION lib/xray/native/include COMPONENT XrayRuntime)
