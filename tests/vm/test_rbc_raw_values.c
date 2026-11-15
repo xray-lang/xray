@@ -127,7 +127,7 @@ static void scalar_and_mapping(void) {
         .operands=&value,.operand_count=1}));
     XrLirFunction unused = test_function(module,"unused_string",NULL,0,XR_LIR_STRING);
     XrLirBlock unused_block = test_block(module,unused,NULL,0); OK(xr_lir_set_entry(module,unused,unused_block));
-    XrLirLiteral literal; OK(xr_lir_add_literal(module,"unused",6,&literal));
+    XrLirLiteral literal = {0}; OK(xr_lir_add_literal(module,"unused",6,&literal));
     XrLirValue text = record_fixture_value(module,unused_block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,
         NULL,0,literal.id,(XrLirFunction){0});
     OK(xr_lir_set_terminator(module,unused_block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
