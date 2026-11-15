@@ -126,7 +126,9 @@ static bool native_inputs_open(XrCompileResources *resources, NativeInputs *inpu
     bool exists = false;
     static const char *headers[] = {"xray_native_runtime.h", "xray_native_state.h",
         "xray_native_array.h", "xray_native_map.h", "xray_native_boxed.h", "xray_native_view.h", "xray_native_pod.h", "xray_native_string.h",
-        "xray_native_callable.h", "xray_export.h"};
+        "xray_native_callable.h", "xray_native_managed.h", "xray_native_managed_root.h",
+        "xray_native_place.h", "xray_native_value_image.h", "xray_native_values.h",
+        "xray_native_string_value.h", "xray_export.h"};
     for (size_t i = 0; okay && i < sizeof(headers) / sizeof(headers[0]); ++i) {
         okay = xr_path_join_owned(&policy, inputs->include, headers[i], &header) == XR_OS_IO_OK &&
             xr_os_io_is_file(&policy, header, &exists) == XR_OS_IO_OK && exists;
@@ -228,6 +230,7 @@ static bool native_compile(NativeCommand *command, const XtcHostToolchainView *h
         native_arg(command, "/utf-8") && native_arg(command, "/W4") && native_arg(command, "/WX") &&
         native_arg(command, "/O2") && native_arg(command, crt[XRT_NATIVE_CRT]) &&
         native_arg(command, host->msvc.clang ? "/clang:-ffp-contract=off" : "/fp:precise");
+    if (okay && !host->msvc.clang) okay = native_arg(command, "/experimental:c11atomics");
     /* Integer division is checked before C emission. IEEE floating division
      * by a literal zero remains a valid source operation under MSVC C4723. */
     if (okay && !host->msvc.clang) okay = native_arg(command, "/wd4723");
