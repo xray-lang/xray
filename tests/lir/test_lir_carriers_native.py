@@ -11,6 +11,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
+from xraytest.artifacts import complete_native_artifacts
 
 
 def run(command, cwd):
@@ -595,6 +596,7 @@ def main():
             (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
     _f64_cases(args, root, results)
     _fneg_cases(args, root, results)
+    complete_native_artifacts(root)
     print('Typed carriers and explicit target frontiers passed across separate native TUs', flush=True)
 
 

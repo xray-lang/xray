@@ -9,6 +9,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
+from xraytest.artifacts import complete_native_artifacts
 
 
 def run(command, cwd):
@@ -85,6 +86,7 @@ def main():
             results.append({'case': case, 'mode': mode, 'expectedHex': answer.hex(),
                             'generated': str(generated), 'compile': compiled, 'native': native, 'vm': vm})
             (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
+    complete_native_artifacts(root)
     print('Direct inlining: eight cases before/after in real C/VM passed', flush=True)
 
 

@@ -9,6 +9,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
+from xraytest.artifacts import complete_native_artifacts
 
 
 def run(command, cwd):
@@ -76,6 +77,7 @@ def main():
         vm = run([args.driver, case], root)
         assert native.stdout == vm.stdout == answer, (case, native.stdout, vm.stdout, answer)
         assert native.stderr == vm.stderr == b''
+    complete_native_artifacts(root)
     print('Owned reconstruction: five real C/VM consumers passed', flush=True)
 
 
