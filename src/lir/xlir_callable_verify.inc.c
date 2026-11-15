@@ -47,18 +47,18 @@ static bool lir_callable_parameter_persistent(const XrLirFunctionData *f, uint32
 }
 
 /* One seed rule serves validation and the constructor's memoized snapshot.
- * parameter is one-based, zero requests discovery, UINT32_MAX excludes a formal.
+ * parameter is one-based, zero requests discovery, UINT64_MAX excludes a formal.
  * An alias returns false plus next; a terminal seed returns next=0. */
 static bool lir_callable_persistence_seed(const XrLirFunctionData *f, uint32_t value,
-    uint32_t parameter, uint32_t *next) {
+    uint64_t parameter, uint32_t *next) {
     *next = 0;
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, value);
     if (!definition) {
         if (!parameter)
             for (uint32_t p = 0; p < f->parameter_count; ++p)
                 if (f->parameters[p] == value) { parameter = p + 1; break; }
-        return parameter && parameter != UINT32_MAX && parameter <= f->parameter_count &&
-            lir_callable_parameter_persistent(f, parameter - 1, NULL);
+        return parameter && parameter != UINT64_MAX && parameter <= f->parameter_count &&
+            lir_callable_parameter_persistent(f, (uint32_t)(parameter - 1), NULL);
     }
     if (definition->op == XR_LIR_FUNCTION_REF)
         return definition->bits == XR_LIR_CLOSURE_OWNED || !definition->operand_count;

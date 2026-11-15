@@ -70,22 +70,23 @@ static LirCallableFunctionFacts *lir_callable_function_allocate(uint32_t values,
 /* Links are compressed once. Scope geometry and constructor captures are
  * copied, not recomputed along each alias chain. */
 static bool lir_callable_facts_resolve(XrLirCallableValueFact *rows, uint32_t count,
-    uint32_t *links, uint32_t *path) {
-    for (uint32_t v = 1; v <= count; ++v) {
+    uint32_t *links, uint32_t *path, uint8_t *colors) {
+    for (uint32_t index = 0; index < count; ++index) {
+        uint32_t v = index + 1;
         if (!rows[v].type || !links[v]) continue;
         uint32_t current = v, depth = 0;
-        while (links[current] && links[current] != UINT32_MAX) {
+        while (links[current] && colors[current] != 1) {
             uint32_t next = links[current];
             if (!next || next > count || !rows[next].type || depth == count) return false;
-            path[depth++] = current; links[current] = UINT32_MAX; current = next;
+            path[depth++] = current; colors[current] = 1; current = next;
         }
-        bool persistent = links[current] == UINT32_MAX ? false : rows[current].persistent;
-        uint32_t origin = links[current] == UINT32_MAX ? 0 : rows[current].origin;
+        bool persistent = colors[current] == 1 ? false : rows[current].persistent;
+        uint32_t origin = colors[current] == 1 ? 0 : rows[current].origin;
         while (depth) {
             uint32_t value = path[--depth];
             rows[value].persistent = persistent; rows[value].origin = origin;
             rows[value].known_target = origin ? rows[origin].known_target : 0;
-            links[value] = 0;
+            links[value] = 0; colors[value] = 2;
         }
     }
     return true;
@@ -95,7 +96,8 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     uint32_t function, LirCallableGeometry geometry, XrLirCallableFacts **output) {
     if (!output || !lir_function_has_callables(m, f)) return XR_LIR_OK;
     uint32_t captures = 0;
-    for (uint32_t v = 1; v <= f->value_count; ++v) {
+    for (uint32_t index = 0; index < f->value_count; ++index) {
+        uint32_t v = index + 1;
         const XrLirInstructionView *op = xr_lir_internal_value_definition(f, v);
         if (!op || op->op != XR_LIR_FUNCTION_REF) continue;
         if (op->operand_count > UINT32_MAX - captures) return XR_LIR_OUT_OF_MEMORY;
@@ -105,18 +107,20 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     if (!*output) return XR_LIR_OUT_OF_MEMORY;
     LirCallableFunctionFacts *received = lir_callable_function_allocate(f->value_count, captures);
     size_t count = (size_t)f->value_count + 1;
-    uint32_t *scratch = count && count <= SIZE_MAX / (2 * sizeof(uint32_t)) ?
-        xr_calloc(count * 2, sizeof(uint32_t)) : NULL;
+    size_t stride = 2 * sizeof(uint32_t) + sizeof(uint8_t);
+    uint32_t *scratch = count && count <= SIZE_MAX / stride ? xr_calloc(count, stride) : NULL;
     if (!received || !scratch) { xr_free(received); xr_free(scratch); return XR_LIR_OUT_OF_MEMORY; }
     XrLirCallableValueFact *rows = (XrLirCallableValueFact *)received->view.values;
     uint32_t *captured = (uint32_t *)received->view.captures, *links = scratch, *path = scratch + count;
+    uint8_t *colors = (uint8_t *)(path + count);
     uint32_t contract = 0;
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         rows[f->parameters[p]].parameter = p + 1;
         rows[f->parameters[p]].persistent = lir_callable_parameter_persistent(f, p, &contract);
     }
     uint32_t next_capture = 0;
-    for (uint32_t v = 1; v <= f->value_count; ++v) {
+    for (uint32_t index = 0; index < f->value_count; ++index) {
+        uint32_t v = index + 1;
         XrLirCallableType signature;
         bool callable = xr_lir_callable_type_view(m, f->values[v - 1].type, &signature) == XR_LIR_OK;
         if (!callable && f->values[v - 1].type != XR_LIR_FUNCTION_SCOPE) {
@@ -124,10 +128,11 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
         }
         XrLirCallableValueFact *row = &rows[v];
         row->type = f->values[v - 1].type; row->origin = v; row->frame_floor = UINT32_MAX;
+        row->block = f->values[v - 1].block;
         row->owner_scope = callable && geometry.owners ? geometry.owners[v] : 0;
         const XrLirInstructionView *op = xr_lir_internal_value_definition(f, v);
         if (op) {
-            row->operation = op->op; row->block = f->values[v - 1].block;
+            row->operation = op->op;
             row->instruction = f->values[v - 1].instruction + 1;
             if (op->op == XR_LIR_FUNCTION_REF) {
                 row->known_target = op->callee; row->constructor_storage = (uint32_t)op->bits;
@@ -144,12 +149,12 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
                 row->receiving_scope = op->operand_count ? op->operands[0] : 0;
         }
         if (callable && !row->parameter) {
-            row->persistent = lir_callable_persistence_seed(f, v, UINT32_MAX, &links[v]);
+            row->persistent = lir_callable_persistence_seed(f, v, UINT64_MAX, &links[v]);
             row->alias_source = links[v];
         }
     }
     XR_DCHECK(next_capture == captures, "every constructor operand has one owned capture ordinal");
-    bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path);
+    bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path, colors);
     xr_free(scratch);
     if (!resolved) { xr_free(received); return XR_LIR_VERIFY_ERROR; }
     XR_DCHECK(!(*output)->functions[function - 1], "each final function publishes one callable snapshot");
