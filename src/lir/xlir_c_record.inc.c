@@ -25,7 +25,8 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, "    { const %s input = {", c_type(c, v->type));
         if (!v->operand_count) c_text(c, "0");
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
-            if (a) c_text(c, ", "); c_value(c, v->operands[a]);
+            if (a) c_text(c, ", ");
+            c_value(c, v->operands[a]);
         }
         c_text(c, "};\n");
         if (owned) { c_values_replace_begin(c, destination, source); c_text(c, "&input"); c_values_replace_end(c, source); }

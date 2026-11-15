@@ -82,7 +82,12 @@ static const XrLirHomeWorkspace *c_array_workspace(LirC *c) {
     c_error(c,XR_LIR_C_INVALID_LIR,"Array mutation has no common pending workspace"); return NULL;
 }
 static void c_array_item(LirC *c, XrLirType element, uint32_t operand) {
-    c_format(c, "{%s, {. %s = ",c_array_kind(element),c_array_member(element));
+    const char *kind = c_array_kind(element);
+    if (!kind) {
+        c_error(c, XR_LIR_C_UNSUPPORTED, "Array element has no target receiver");
+        return;
+    }
+    c_format(c, "{%s, {. %s = ", kind, c_array_member(element));
     if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)");
     c_value(c,operand); c_text(c,"}}");
 }
@@ -101,7 +106,9 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         else {
             c_format(c,"(%s[]){",element==XR_LIR_STRING ? "XrtStringBacking *" : c_type(c,element));
             for (uint32_t i=0;i<v->operand_count;++i) {
-                if (i) c_text(c,", "); if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)"); c_value(c,v->operands[i]);
+                if (i) c_text(c,", ");
+                if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)");
+                c_value(c,v->operands[i]);
             }
             c_text(c,"}");
         }
