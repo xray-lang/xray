@@ -181,6 +181,20 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *frame, size
     *output = frame_slots(frame)[index].committed;
     return XRT_MANAGED_OK;
 }
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *frame, size_t index,
+    XrtManagedHeader **output) {
+    if (!output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlot *slot = slot_begin(frame, index);
+    if (!slot) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = !slot->committed || slot->pending.value || slot->pending.allocation_bytes ?
+        XRT_MANAGED_ARGUMENT : XRT_MANAGED_OK;
+    if (status == XRT_MANAGED_OK) {
+        *output = slot->committed;
+        slot->committed = NULL;
+    }
+    frame->root->busy = false;
+    return status;
+}
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
     XrtManagedFrame *source, size_t from) {
     if (!source || !destination || !source->root || source->root != destination->root ||

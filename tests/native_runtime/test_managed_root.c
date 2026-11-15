@@ -77,6 +77,9 @@ static void payload_drop(XrtManagedHeader *value, void *context) {
         OK(xrt_managed_slot_borrow(audit->watch, 0, &current));
         CHECK(current == audit->replacement);
         BAD(xrt_managed_slot_drop(audit->watch, 0));
+        XrtManagedHeader *taken = NULL;
+        BAD(xrt_managed_slot_take(audit->watch, 0, &taken));
+        CHECK(!taken);
         audit->published = true;
     }
 }
@@ -170,6 +173,68 @@ static void aliases_and_return(void) {
     OK(xrt_managed_root_destroy(&root));
     same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
     fixture_finish(&fixture);
+}
+static void independent_taken_owner(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    OK(xrt_managed_frame_enter(root, 3, &frame));
+    XrtManagedHeader *value = make_value(&fixture, 41), *alias = value, *output = NULL;
+    CHECK(xrt_managed_retain(alias) && xr_signed_rc_read(&value->references) == 2);
+    OK(xrt_managed_slot_adopt(frame, 0, &value));
+    OK(xrt_managed_slot_adopt(frame, 1, &alias));
+    BAD(xrt_managed_slot_take(frame, 3, &output));
+    BAD(xrt_managed_slot_take(frame, 2, &output));
+    BAD(xrt_managed_slot_take(frame, 0, NULL));
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_managed_slot_take(frame, 0, &output));
+    CHECK(output && ((Payload *)output)->id == 41 && xr_signed_rc_read(&output->references) == 2);
+    same_storage(before, xrt_billing_owner_stats(fixture.billing));
+    CHECK(before.allocations == xrt_billing_owner_stats(fixture.billing).allocations);
+    XrtManagedHeader *borrowed = NULL;
+    OK(xrt_managed_slot_borrow(frame, 0, &borrowed));
+    CHECK(!borrowed);
+    OK(xrt_managed_slot_borrow(frame, 1, &borrowed));
+    CHECK(borrowed == output);
+    BAD(xrt_managed_slot_take(frame, 1, &output));
+    CHECK(xr_signed_rc_read(&output->references) == 2);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    Payload *pending = prepare_value(&fixture, frame, 1, 42);
+    pending->capacity = SIZE_MAX;
+    BAD(xrt_managed_slot_commit(frame, 1));
+    XrtManagedHeader *other = NULL;
+    BAD(xrt_managed_slot_take(frame, 1, &other));
+    CHECK(!other);
+    borrowed = NULL;
+    OK(xrt_managed_slot_borrow(frame, 1, &borrowed));
+    CHECK(borrowed == output && xr_signed_rc_read(&borrowed->references) == 2);
+    OK(xrt_managed_slot_abort(frame, 1));
+    CHECK(fixture.audit.count == 1 && fixture.audit.events[0] == 42);
+    same_storage(before, xrt_billing_owner_stats(fixture.billing));
+    xrt_billing_owner_close(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    before = xrt_billing_owner_stats(fixture.billing);
+    OK(xrt_managed_slot_take(frame, 1, &other));
+    CHECK(other == output && xr_signed_rc_read(&output->references) == 2);
+    same_storage(before, xrt_billing_owner_stats(fixture.billing));
+    CHECK(before.allocations == xrt_billing_owner_stats(fixture.billing).allocations);
+    xrt_managed_drop(other);
+    CHECK(xr_signed_rc_read(&output->references) == 1 && fixture.audit.count == 1);
+    OK(xrt_managed_root_destroy(&root));
+    xrt_managed_ops_drop(fixture.ops);
+    xrt_runtime_type_plan_drop(fixture.plan);
+    xrt_billing_owner_drop(fixture.billing);
+    provider_drop(fixture.provider);
+    fixture.ops = NULL; fixture.plan = NULL; fixture.billing = NULL; fixture.provider = NULL;
+    CHECK(!fixture.audit.finalized && fixture.audit.bytes && fixture.audit.blocks);
+    CHECK(((Payload *)output)->id == 41 && !((Payload *)output)->child);
+    xrt_managed_drop(output);
+    CHECK(fixture.audit.finalized == 1 && fixture.audit.count == 2 && fixture.audit.events[1] == 41);
+    CHECK(!fixture.audit.bytes && !fixture.audit.blocks);
+    puts("Taken real owner survives closed billing, Root and creator retirement PASS");
 }
 static void replacement_and_extent(void) {
     Fixture fixture;
@@ -354,6 +419,7 @@ static void scalar_and_closed(void) {
 }
 int main(void) {
     aliases_and_return();
+    independent_taken_owner();
     replacement_and_extent();
     partial_children();
     nonlocal_cleanup();
