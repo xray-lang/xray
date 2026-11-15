@@ -32,7 +32,7 @@ _Static_assert(offsetof(XrtManagedHeader, references) == 0 &&
 typedef enum XrtManagedStatus {
     XRT_MANAGED_OK, XRT_MANAGED_ARGUMENT, XRT_MANAGED_OOM,
     XRT_MANAGED_LIMIT, XRT_MANAGED_CLOSED, XRT_MANAGED_REFCOUNT,
-    XRT_MANAGED_BAD_UTF8, XRT_MANAGED_OVERFLOW
+    XRT_MANAGED_BAD_UTF8, XRT_MANAGED_OVERFLOW, XRT_MANAGED_BOUNDS
 } XrtManagedStatus;
 
 /* Every callback in this interface must return normally, without longjmp,
