@@ -185,10 +185,8 @@ static void c_values_declarations(LirC *c) {
 static bool c_values_declare(LirC *c, uint32_t value) {
     if (c->homes && c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW)
         c_format(c, "    XrtExternalOwner xrl_array_binding%" PRIu32 ";\n", value);
-    if (!c->homes || !c->homes->values[value].owner_count) return false;
-    c_format(c, "    %s *v%" PRIu32 " = NULL;\n    (void)&v%" PRIu32 ";\n",
-        c_type(c, c_value_type(c, value)), value, value);
-    return true;
+    return c->homes && (c->homes->values[value].owner_count ||
+        (c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_LOCAL));
 }
 static void c_values_ensure(LirC *c, uint32_t source) {
     XR_CHECK(c->homes && c->homes->owned_frame_needed, "owned production has a stable receiving frame");
@@ -197,18 +195,6 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     c_format(c, "        XrtManagedStatus status = xrl_frame_%" PRIu32 "_enter(xrl_root, &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
     c_text(c, "    }\n");
-    /* Pure frame projections must dominate each consumer without requiring
-     * host compilers to correlate separate lazy acquisition guards. */
-    for (uint32_t v = 1; v <= c->view.value_count && c_request_poll(c); ++v) {
-        const XrLirValueHome *home = &c->homes->values[v];
-        if (home->owner_count && !home->parameter)
-            c_format(c, "    v%" PRIu32 " = (void *)((unsigned char *)xrl_payload + %zu);\n", v, home->offset);
-    }
-    if (c->homes->bindings) for (uint32_t v=1;v<=c->view.value_count;++v) {
-        const XrLirHomeBinding *binding=&c->homes->bindings[v];
-        if (binding->kind==XR_LIR_HOME_BINDING_LOCAL)
-            c_format(c, "    v%" PRIu32 " = (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL};\n", v, binding->first_owner);
-    }
 }
 static uint32_t c_values_scalar_count(LirC *c, const XrLirEdgeView *edge) {
     uint32_t count = 0;
@@ -354,8 +340,8 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_values_ensure(c, source);
         const XrLirValueHome *home = &c->homes->values[v->result];
         c_text(c, "    "); c_function_name(c, v->callee);
-        c_format(c, "((XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, v%" PRIu32 ", (void *)((unsigned char *)xrl_payload + %zu)}",
-            v->callee, home->first_owner, home->temporary_first_owner, v->result, home->temporary_offset);
+        c_format(c, "((XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
+            v->callee, home->first_owner, home->temporary_first_owner, home->offset, home->temporary_offset);
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
             c_text(c, ", "); c_value(c, v->operands[a]);
         }
