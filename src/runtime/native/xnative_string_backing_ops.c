@@ -1,0 +1,282 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_string_backing_ops.c - Shared text algorithms with real slot owners
+ *
+ * KEY CONCEPT:
+ *   Admitted sources need no UTF-8 revalidation. Complete derived bytes and
+ *   cached scalar counts precede publication and release of the old owner.
+ */
+#include "xnative_string_backing_ops.h"
+#include "xnative_array_backing.h"
+#include "base/xchecks.h"
+#include "shared/xr_string_core.h"
+#include "shared/xr_text_kernel.h"
+#include "shared/xr_float_to_decimal.h"
+#include <limits.h>
+
+static XrtManagedStatus string_prepare(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, size_t length, size_t runes, XrtStringBacking **output) {
+    if (!types || !types->string) return XRT_MANAGED_ARGUMENT;
+    if (length > SIZE_MAX - sizeof(XrtStringBacking) - 1) return XRT_MANAGED_OVERFLOW;
+    XrtManagedHeader *payload = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->string,
+        sizeof(XrtStringBacking) + length + 1, &payload);
+    if (status == XRT_MANAGED_OK) {
+        XrtStringBacking *string = (XrtStringBacking *)payload;
+        XR_CHECK(string->capacity == length + 1, "derived bytes use the actual pending extent");
+        string->length = length;
+        string->runes = runes;
+        string->bytes[length] = 0;
+        *output = string;
+    }
+    return status;
+}
+static XrtManagedStatus string_finish(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedStatus status = xrt_managed_slot_commit(frame, slot);
+    if (status != XRT_MANAGED_OK)
+        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "abort only this operation's prepared token");
+    return status;
+}
+static XrtManagedStatus string_bytes_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const char *bytes, size_t length, size_t runes) {
+    XrtStringBacking *string = NULL;
+    XrtManagedStatus status = string_prepare(frame, slot, types, length, runes, &string);
+    if (status != XRT_MANAGED_OK) return status;
+    if (length) memcpy(string->bytes, bytes, length);
+    return string_finish(frame, slot);
+}
+static XrtManagedStatus search_extent(const XrtStringBacking *text, const XrtStringBacking *search) {
+    if (!text || !search) return XRT_MANAGED_ARGUMENT;
+    if (text->runes > INT64_MAX || text->length > PTRDIFF_MAX || search->length > PTRDIFF_MAX)
+        return XRT_MANAGED_OVERFLOW;
+    return XRT_MANAGED_OK;
+}
+static size_t scalar_offset(const XrtStringBacking *text, size_t index) {
+    if (text->length == text->runes || index == text->runes) return index == text->runes ? text->length : index;
+    size_t offset = 0;
+    bool found = xr_string_core_utf8_rune_at(text->bytes, text->length, index, NULL, &offset);
+    XR_CHECK(found, "an admitted scalar index has a byte boundary");
+    return offset;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_counts(const XrtStringBacking *text, size_t *bytes, size_t *runes) {
+    if (!text || !bytes || !runes) return XRT_MANAGED_ARGUMENT;
+    *bytes = text->length;
+    *runes = text->runes;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_compare(const XrtStringBacking *left, const XrtStringBacking *right, int *order) {
+    if (!left || !right || !order) return XRT_MANAGED_ARGUMENT;
+    *order = xr_text_compare((const uint8_t *)left->bytes, left->length, (const uint8_t *)right->bytes, right->length);
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_test(const XrtStringBacking *text, const XrtStringBacking *pattern,
+    XrtStringTest test, bool *output) {
+    if (!text || !pattern || !output) return XRT_MANAGED_ARGUMENT;
+    bool result;
+    switch (test) {
+        case XRT_STRING_CONTAINS:
+            if (text->length > PTRDIFF_MAX || pattern->length > PTRDIFF_MAX) return XRT_MANAGED_OVERFLOW;
+            result = xr_string_core_contains(text->bytes, text->length, pattern->bytes, pattern->length); break;
+        case XRT_STRING_STARTS_WITH:
+            result = xr_string_core_starts_with(text->bytes, text->length, pattern->bytes, pattern->length); break;
+        case XRT_STRING_ENDS_WITH:
+            result = xr_string_core_ends_with(text->bytes, text->length, pattern->bytes, pattern->length); break;
+        default: return XRT_MANAGED_ARGUMENT;
+    }
+    *output = result;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_index_of(const XrtStringBacking *text, const XrtStringBacking *search,
+    int64_t start, int64_t *output) {
+    if (!output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = search_extent(text, search);
+    if (status != XRT_MANAGED_OK) return status;
+    if (start < 0 || (uint64_t)start > text->runes) return XRT_MANAGED_BOUNDS;
+    if (!search->length) { *output = start; return XRT_MANAGED_OK; }
+    size_t offset = scalar_offset(text, (size_t)start);
+    ptrdiff_t found = xr_string_core_index_of(text->bytes + offset, text->length - offset, search->bytes, search->length);
+    *output = found < 0 ? -1 : start + (int64_t)xr_text_scalar_count((const uint8_t *)text->bytes + offset, (size_t)found);
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_last_index_of(const XrtStringBacking *text,
+    const XrtStringBacking *search, int64_t *output) {
+    if (!output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = search_extent(text, search);
+    if (status != XRT_MANAGED_OK) return status;
+    ptrdiff_t found = xr_string_core_last_index_of(text->bytes, text->length, search->bytes, search->length);
+    *output = found < 0 ? -1 : (int64_t)xr_text_scalar_count((const uint8_t *)text->bytes, (size_t)found);
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_rune_at(const XrtStringBacking *text, int64_t index, uint32_t *output) {
+    if (!text || !output) return XRT_MANAGED_ARGUMENT;
+    if (index < 0 || (uint64_t)index >= text->runes) return XRT_MANAGED_BOUNDS;
+    uint32_t rune = 0;
+    bool found = xr_string_core_utf8_rune_at(text->bytes, text->length, (size_t)index, &rune, NULL);
+    XR_CHECK(found, "a cached admitted scalar exists");
+    *output = rune;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_rune_next(const XrtStringBacking *text, size_t *cursor,
+    uint32_t *rune, bool *has) {
+    if (!text || !cursor || !rune || !has) return XRT_MANAGED_ARGUMENT;
+    if (*cursor > text->length) return XRT_MANAGED_BOUNDS;
+    if (*cursor == text->length) { *has = false; return XRT_MANAGED_OK; }
+    if (((uint8_t)text->bytes[*cursor] & UINT8_C(0xc0)) == UINT8_C(0x80)) return XRT_MANAGED_BOUNDS;
+    uint32_t value = 0;
+    size_t width = (size_t)xr_string_core_utf8_decode(text->bytes + *cursor, text->length - *cursor, &value);
+    XR_CHECK(width && width <= text->length - *cursor, "an admitted cursor advances by one complete scalar");
+    *cursor += width;
+    *rune = value;
+    *has = true;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_copy_into(XrtManagedFrame *frame, size_t slot, const XrtStringBacking *source) {
+    if (!source) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *owned = (XrtManagedHeader *)&source->managed;
+    if (!xrt_managed_retain(owned)) return XRT_MANAGED_REFCOUNT;
+    XrtManagedStatus status = xrt_managed_slot_replace(frame, slot, &owned);
+    xrt_managed_drop(owned);
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_slice_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtStringBacking *text, int64_t start, int64_t end) {
+    if (!text || !types || !types->string) return XRT_MANAGED_ARGUMENT;
+    if (start < 0 || end < start || (uint64_t)end > text->runes) return XRT_MANAGED_BOUNDS;
+    size_t first = scalar_offset(text, (size_t)start), last = scalar_offset(text, (size_t)end);
+    return string_bytes_create(frame, slot, types, text->bytes + first, last - first, (size_t)(end - start));
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_repeat_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtStringBacking *text, int64_t count) {
+    if (!text || !types || !types->string) return XRT_MANAGED_ARGUMENT;
+    XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(text->bytes, text->length, count);
+    if (plan.kind == XR_STRING_CORE_REPEAT_INVALID) return XRT_MANAGED_OVERFLOW;
+    if (plan.kind == XR_STRING_CORE_REPEAT_ORIGINAL) return xrt_string_backing_copy_into(frame, slot, text);
+    size_t runes = 0;
+    if (count > 0 && text->runes) {
+        if ((uint64_t)count > SIZE_MAX / text->runes) return XRT_MANAGED_OVERFLOW;
+        runes = text->runes * (size_t)count;
+    }
+    XrtStringBacking *string = NULL;
+    XrtManagedStatus status = string_prepare(frame, slot, types, plan.len, runes, &string);
+    if (status != XRT_MANAGED_OK) return status;
+    XR_CHECK(xr_string_core_repeat_write(string->bytes, text->bytes, text->length, count) == plan.len,
+        "the shared repetition plan and writer agree");
+    return string_finish(frame, slot);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_replace_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtStringBacking *text, XrtStringReplacement request) {
+    if (!types || !types->string || !request.replacement) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = search_extent(text, request.search);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrtStringBacking *search = request.search, *replacement = request.replacement;
+    XrStringCoreReplacePlan plan = xr_string_core_replace_plan(text->bytes, text->length,
+        search->bytes, search->length, replacement->bytes, replacement->length, request.all);
+    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID) return XRT_MANAGED_OVERFLOW;
+    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL) return xrt_string_backing_copy_into(frame, slot, text);
+    XR_CHECK(search->runes && plan.count <= text->runes / search->runes, "nonoverlapping matches consume admitted scalars");
+    size_t runes = text->runes - plan.count * search->runes;
+    if (replacement->runes && plan.count > (SIZE_MAX - runes) / replacement->runes) return XRT_MANAGED_OVERFLOW;
+    runes += plan.count * replacement->runes;
+    XrtStringBacking *string = NULL;
+    status = string_prepare(frame, slot, types, plan.len, runes, &string);
+    if (status != XRT_MANAGED_OK) return status;
+    XR_CHECK(xr_string_core_replace_write(string->bytes, text->bytes, text->length, search->bytes,
+        search->length, replacement->bytes, replacement->length, plan, request.all) == plan.len,
+        "the shared replacement plan and writer agree");
+    return string_finish(frame, slot);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_copy_bytes_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtStringBacking *text) {
+    if (!text) return XRT_MANAGED_ARGUMENT;
+    return xrt_array_backing_u8_create(frame, slot, types, (const uint8_t *)text->bytes, text->length, text->length);
+}
+XR_FUNCDEF XrtStringSplitResult xrt_string_backing_split_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtStringBacking *text, const XrtStringBacking *separator, size_t workspace) {
+    XrtStringSplitResult result = {XRT_MANAGED_ARGUMENT, false};
+    if (!types || !types->string || !types->arrays[XRT_BACKING_ARRAY_STRING] || !text || !separator || slot == workspace)
+        return result;
+    XrtManagedHeader *borrowed = NULL;
+    result.status = xrt_managed_slot_borrow(frame, workspace, &borrowed);
+    if (result.status != XRT_MANAGED_OK || borrowed) { result.status = XRT_MANAGED_ARGUMENT; return result; }
+    if (!separator->length) return (XrtStringSplitResult){XRT_MANAGED_OK, true};
+    result.status = search_extent(text, separator);
+    if (result.status != XRT_MANAGED_OK) return result;
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan(text->bytes, text->length, separator->bytes, separator->length);
+    if (plan.kind == XR_STRING_CORE_SPLIT_INVALID || plan.count > (SIZE_MAX - sizeof(XrtArrayBacking)) / sizeof(borrowed))
+        return (XrtStringSplitResult){XRT_MANAGED_OVERFLOW, false};
+    result.status = xrt_managed_slot_prepare(frame, slot, types->arrays[XRT_BACKING_ARRAY_STRING],
+        sizeof(XrtArrayBacking) + plan.count * sizeof(borrowed), &borrowed);
+    if (result.status != XRT_MANAGED_OK) return result;
+    XrtArrayBacking *array = (XrtArrayBacking *)borrowed;
+    size_t position = 0;
+    for (size_t i = 0; i < plan.count; ++i) {
+        ptrdiff_t found = xr_string_core_index_of(text->bytes + position, text->length - position,
+            separator->bytes, separator->length);
+        size_t length = found < 0 ? text->length - position : (size_t)found;
+        size_t runes = xr_text_scalar_count((const uint8_t *)text->bytes + position, length);
+        result.status = string_bytes_create(frame, workspace, types, text->bytes + position, length, runes);
+        if (result.status != XRT_MANAGED_OK) {
+            XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "partial split owns its Array token");
+            return result;
+        }
+        XrtManagedHeader *owned = NULL;
+        XR_CHECK(xrt_managed_slot_take(frame, workspace, &owned) == XRT_MANAGED_OK,
+            "the exclusive split workspace moves one complete owner");
+        memcpy(array->elements + i * sizeof(owned), &owned, sizeof(owned));
+        array->length = i + 1;
+        if (found >= 0) position += length + separator->length;
+    }
+    result.status = string_finish(frame, slot);
+    return result;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_try_append_exclusive(XrtStringBacking *text,
+    const XrtStringBacking *suffix, bool *appended) {
+    if (!text || !suffix || !appended) return XRT_MANAGED_ARGUMENT;
+    if (suffix->length > SIZE_MAX - text->length || suffix->runes > SIZE_MAX - text->runes)
+        return XRT_MANAGED_OVERFLOW;
+    size_t length = text->length + suffix->length, runes = text->runes + suffix->runes;
+    if (length == SIZE_MAX) return XRT_MANAGED_OVERFLOW;
+    if (length >= text->capacity || !xr_signed_rc_unique(&text->managed.references)) {
+        *appended = false;
+        return XRT_MANAGED_OK;
+    }
+    if (suffix->length) memmove(text->bytes + text->length, suffix->bytes, suffix->length);
+    text->bytes[length] = 0;
+    text->length = length;
+    text->runes = runes;
+    *appended = true;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_i64_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, int64_t value) {
+    uint8_t bytes[XR_TEXT_I64_DISPLAY_MAX];
+    size_t length = xr_text_display_i64(value, bytes);
+    return string_bytes_create(frame, slot, types, (const char *)bytes, length, length);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_u64_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, uint64_t value) {
+    uint8_t bytes[XR_TEXT_U64_DISPLAY_MAX];
+    size_t length = xr_text_display_u64(value, bytes);
+    return string_bytes_create(frame, slot, types, (const char *)bytes, length, length);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_f64_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, uint64_t bits) {
+    char bytes[32]; size_t length = 0;
+    XR_CHECK(xr_float_to_decimal(64, bits, bytes, sizeof(bytes), &length), "every binary64 pattern has canonical text");
+    return string_bytes_create(frame, slot, types, bytes, length, length);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_bool_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, bool value) {
+    return string_bytes_create(frame, slot, types, value ? "true" : "false", value ? 4 : 5, value ? 4 : 5);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_rune_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, uint32_t value) {
+    uint8_t bytes[XR_TEXT_RUNE_UTF8_MAX];
+    size_t length = xr_text_encode_rune(value, bytes);
+    if (!length) return XRT_MANAGED_ARGUMENT;
+    return string_bytes_create(frame, slot, types, (const char *)bytes, length, 1);
+}
