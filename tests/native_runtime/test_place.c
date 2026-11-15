@@ -276,7 +276,51 @@ static void edge_guards_and_retirement(void) {
     OK(xrt_place_move_replace(slot(&fixture, 4), field));
     fixture_done(&fixture);
 }
+static void inline_home_transfers(void) {
+    typedef struct Homes { XrtManagedHeader *left, *right; } Homes;
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedFrame *outer = fixture.frame;
+    fixture.frame = NULL;
+    size_t offsets[] = {offsetof(Homes, left), offsetof(Homes, right), SIZE_MAX, SIZE_MAX};
+    XrtManagedFrameSpec spec = {4, sizeof(Homes), alignof(Homes), offsets};
+    OK(xrt_managed_frame_enter_layout(fixture.root, &spec, &fixture.frame));
+    void *payload = NULL;
+    size_t bytes = 0;
+    OK(xrt_managed_frame_payload(fixture.frame, &payload, &bytes));
+    CHECK(bytes == sizeof(Homes));
+    Homes *homes = payload;
+    XrtManagedHeader *one = make(&fixture, 0, 1), *two = make(&fixture, 1, 2);
+    CHECK(homes->left == one && homes->right == two);
+    XrtPlaceEdge swap[] = {{slot(&fixture, 0), slot(&fixture, 1), slot(&fixture, 2)},
+        {slot(&fixture, 1), slot(&fixture, 0), slot(&fixture, 3)}};
+    size_t allocations = atomic_load(&fixture.audit.allocations);
+    OK(xrt_place_edge_move(swap, 2));
+    CHECK(homes->left == two && homes->right == one);
+    fixture.audit.watch = true;
+    fixture.audit.observed_destination = &homes->right;
+    fixture.audit.expected = two;
+    fixture.audit.reenter = slot(&fixture, 1);
+    OK(xrt_place_copy_replace(slot(&fixture, 1), slot(&fixture, 0)));
+    CHECK(homes->left == two && homes->right == two && xr_signed_rc_read(&two->references) == 2);
+    CHECK(atomic_load(&fixture.audit.allocations) == allocations);
+    fixture.audit.watch = false;
+    OK(xrt_place_edge_move(swap, 2));
+    CHECK(homes->left == two && homes->right == two && xr_signed_rc_read(&two->references) == 2);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame, 0, fixture.ops, sizeof(Payload), &pending));
+    ((Payload *)pending)->value = 3;
+    BAD(xrt_place_edge_move(swap, 2));
+    CHECK(homes->left == two && homes->right == two);
+    OK(xrt_managed_slot_abort(fixture.frame, 0));
+    OK(xrt_managed_frame_leave(fixture.root, fixture.frame));
+    fixture.frame = outer;
+    CHECK(atomic_load(&fixture.audit.retired) == 3);
+    fixture_done(&fixture);
+    puts("inline owner places: parallel swaps, real aliases and publish-before-drop PASS");
+}
 int main(void) {
+    inline_home_transfers();
     root_transfers(); external_transfers(); edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
     puts("stable places: guarded replacement, whole-edge moves and complete owner/code retirement passed");
     return 0;

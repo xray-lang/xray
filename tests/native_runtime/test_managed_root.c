@@ -11,6 +11,7 @@
  */
 #include "runtime/native/xnative_managed_root.h"
 #include "base/xmalloc.h"
+#include "base/xmax_align.h"
 #include <setjmp.h>
 #include <stdalign.h>
 #include <stdio.h>
@@ -469,6 +470,134 @@ static void scalar_and_closed(void) {
     CHECK(fixture.audit.count == 2 && fixture.audit.events[0] == 31 && fixture.audit.events[1] == 30);
     fixture_finish(&fixture);
 }
+typedef struct InlineHomes {
+    int64_t tag;
+    XrtManagedHeader *first;
+    double scalar;
+    XrtManagedHeader *second;
+} InlineHomes;
+static void inline_payload_homes(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL, *child = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    size_t offsets[] = {offsetof(InlineHomes, first), offsetof(InlineHomes, second), SIZE_MAX, SIZE_MAX};
+    XrtManagedFrameSpec spec = {4, sizeof(InlineHomes), alignof(XrMaxAlignment), offsets};
+    OK(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    CHECK(xrt_billing_owner_stats(fixture.billing).allocations == baseline.allocations + 1);
+    void *memory = NULL;
+    size_t bytes = 0;
+    OK(xrt_managed_frame_payload(frame, &memory, &bytes));
+    CHECK(memory && bytes == sizeof(InlineHomes) && (uintptr_t)memory % alignof(XrMaxAlignment) == 0);
+    InlineHomes *homes = memory;
+    CHECK(!homes->first && !homes->second);
+    homes->tag = 17;
+    homes->scalar = 1.25;
+    /* Neither the spec nor its borrowed vector remains in the stable frame. */
+    offsets[0] = offsets[1] = SIZE_MAX;
+    spec = (XrtManagedFrameSpec){0};
+    XrtManagedSlotLocation first, second;
+    OK(xrt_managed_slot_location(frame, 0, &first));
+    OK(xrt_managed_slot_location(frame, 1, &second));
+    CHECK(first.owner == &homes->first && second.owner == &homes->second);
+    Payload *old = prepare_value(&fixture, frame, 0, 40);
+    CHECK(!homes->first);
+    OK(xrt_managed_slot_commit(frame, 0));
+    CHECK(homes->first == &old->header);
+    Payload *replacement = prepare_value(&fixture, frame, 0, 41);
+    fixture.audit.watch = frame;
+    fixture.audit.watch_id = 40;
+    fixture.audit.replacement = &replacement->header;
+    OK(xrt_managed_slot_commit(frame, 0));
+    CHECK(fixture.audit.published && homes->first == &replacement->header);
+    fixture.audit.watch = NULL;
+    OK(xrt_managed_slot_move(frame, 1, frame, 0));
+    CHECK(!homes->first && homes->second == &replacement->header);
+    XrtBillingStats with_frame = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    size_t child_offsets[] = {offsetof(InlineHomes, first)};
+    XrtManagedFrameSpec child_spec = {1, sizeof(InlineHomes), alignof(InlineHomes), child_offsets};
+    CHECK(xrt_managed_frame_enter_layout(root, &child_spec, &child) == XRT_MANAGED_OOM && !child);
+    same_storage(with_frame, xrt_billing_owner_stats(fixture.billing));
+    CHECK(homes->tag == 17 && homes->scalar == 1.25 && homes->second == &replacement->header);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    OK(xrt_managed_frame_enter_layout(root, &child_spec, &child));
+    OK(xrt_managed_slot_move(child, 0, frame, 1));
+    CHECK(!homes->second);
+    OK(xrt_managed_frame_leave(root, child));
+    CHECK(fixture.audit.count == 2);
+    OK(xrt_managed_frame_leave(root, frame));
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_root_destroy(&root));
+    fixture_finish(&fixture);
+    puts("inline frame homes: real Header fields, one allocation, atomic publication and source retirement PASS");
+}
+static void inline_payload_rejection(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    size_t offsets[] = {8, 8};
+    XrtManagedFrameSpec spec = {2, 32, alignof(XrtManagedHeader *), offsets};
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    offsets[0] = 24; offsets[1] = 8;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    offsets[0] = 1; offsets[1] = 16;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    offsets[0] = 0; offsets[1] = 32;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    offsets[1] = 24; spec.payload_size = 31;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    spec.payload_size = 32; spec.payload_alignment = 1;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    spec.payload_alignment = 3;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    spec.payload_alignment = alignof(XrMaxAlignment) * 2;
+    BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    spec = (XrtManagedFrameSpec){SIZE_MAX, 0, 1, NULL};
+    CHECK(xrt_managed_frame_enter_layout(root, &spec, &frame) == XRT_MANAGED_OVERFLOW);
+    spec = (XrtManagedFrameSpec){1, SIZE_MAX, 1, NULL};
+    CHECK(xrt_managed_frame_enter_layout(root, &spec, &frame) == XRT_MANAGED_OVERFLOW);
+    CHECK(!frame);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_root_destroy(&root));
+    fixture_finish(&fixture);
+}
+static void run_inline_jump(Fixture *fixture, XrtManagedRoot *root) {
+    jmp_buf target;
+    if (setjmp(target) == 0) {
+        size_t offsets[] = {offsetof(InlineHomes, first), offsetof(InlineHomes, second)};
+        XrtManagedFrameSpec spec = {2, sizeof(InlineHomes), alignof(InlineHomes), offsets};
+        XrtManagedFrame *frame = NULL;
+        OK(xrt_managed_frame_enter_layout(root, &spec, &frame));
+        Payload *parent = prepare_value(fixture, frame, 0, 50);
+        OK(xrt_managed_slot_commit(frame, 0));
+        XrtManagedFrame *callee = NULL;
+        OK(xrt_managed_frame_enter_layout(root, &spec, &callee));
+        Payload *pending = prepare_value(fixture, callee, 0, 51);
+        CHECK(xrt_managed_retain(&parent->header));
+        pending->child = &parent->header;
+        longjmp(target, 1);
+    }
+    OK(xrt_managed_root_drain(root));
+}
+static void inline_payload_jump(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    run_inline_jump(&fixture, root);
+    CHECK(fixture.audit.count == 2 && fixture.audit.events[0] == 51 && fixture.audit.events[1] == 50);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_root_destroy(&root));
+    fixture_finish(&fixture);
+    puts("inline frame longjmp: stable pending aborted before real aggregate owners PASS");
+}
 int main(void) {
     aliases_and_return();
     independent_taken_owner();
@@ -478,6 +607,9 @@ int main(void) {
     nonlocal_cleanup();
     metadata_failures();
     scalar_and_closed();
+    inline_payload_homes();
+    inline_payload_rejection();
+    inline_payload_jump();
     puts("Stable managed Root/Frame: real aliases, publication, extent rollback and longjmp drain PASS");
     return 0;
 }
