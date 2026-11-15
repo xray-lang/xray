@@ -281,9 +281,6 @@ typedef struct {
     const uint32_t *register_boxed_types;
     size_t register_boxed_type_count;
     uint32_t result_boxed_type;
-    /* Pointer-free physical identities and verified owner positions are code
-     * assets. Runtime plans and stable activation owners belong to executions. */
-    const struct XrLirValueHomes *value_homes;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;

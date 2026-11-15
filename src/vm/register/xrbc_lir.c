@@ -38,6 +38,7 @@ typedef struct XrRbcCodeImage {
     _Atomic(uint32_t) references;
     XrRbcModule module;
     XrtLocationOwner *locations;
+    XrLirValueHomes **value_homes;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
 } XrRbcCodeImage;
 
@@ -51,6 +52,7 @@ struct XrRbcProgram {
     uint32_t *physical_callables;
     XrRbcCodeImage *image;
     uint32_t *closure_mapping;
+    XrLirValueHomes **value_homes;
 };
 
 static bool rbc_code_retain(void *owner) {
@@ -64,6 +66,16 @@ static bool rbc_code_retain(void *owner) {
 }
 
 static void rbc_code_release(void *owner);
+
+XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *module, uint32_t function) {
+    if (!module || function >= module->function_count || !module->code_lease.owner ||
+        module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release)
+        return NULL;
+    const XrRbcCodeImage *image = module->code_lease.owner;
+    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
+        return NULL;
+    return image->value_homes ? image->value_homes[function] : NULL;
+}
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
@@ -1648,6 +1660,12 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
 
 #include "xrbc_lir_value_homes.inc.c"
 
+static void rbc_value_homes_clear(XrLirValueHomes **homes, size_t count) {
+    if (!homes) return;
+    for (size_t f = 0; f < count; ++f) xr_lir_value_homes_destroy(homes[f]);
+    xr_free(homes);
+}
+
 static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
     for (size_t f = 0; f < module.function_count; ++f) {
         xr_free((void *) module.functions[f].code);
@@ -1669,7 +1687,6 @@ static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
         xr_free((void *) module.functions[f].aggregate_operands);
         xr_free((void *) module.functions[f].aggregate_parameters);
         xr_free((void *) module.functions[f].aggregate_arguments);
-        xr_lir_value_homes_destroy((XrLirValueHomes *)module.functions[f].value_homes);
     }
     xr_free((void *) module.functions);
     for (size_t i = 0; i < module.literal_count; ++i)
@@ -1706,6 +1723,7 @@ static void rbc_code_release(void *owner) {
     XR_CHECK(count, "a code image retires only after its final actual lease");
     if (count != 1) return;
     XR_CHECK(!image->module.state_layout, "code assets never retain a runtime layout");
+    rbc_value_homes_clear(image->value_homes, image->module.function_count);
     rbc_code_clear(image->module, image->locations);
     xr_free(image);
 }
@@ -1716,6 +1734,8 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
     image->module = program->module;
     image->module.state_layout = NULL;
     image->locations = program->locations;
+    image->value_homes = program->value_homes;
+    program->value_homes = NULL;
     if (image->module.native_count) {
         memcpy(image->natives, program->module.natives, image->module.native_count * sizeof(*image->natives));
         image->module.natives = image->natives;
@@ -1730,7 +1750,10 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
     xrt_module_layout_drop(&program->module.state_layout);
     if (program->image) rbc_code_release(program->image);
-    else rbc_code_clear(program->module, program->locations);
+    else {
+        rbc_value_homes_clear(program->value_homes, program->module.function_count);
+        rbc_code_clear(program->module, program->locations);
+    }
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
     xr_free(program->closure_mapping);
