@@ -24,6 +24,7 @@ PUBLIC_HEADERS = (
     "xray_native_map.h", "xray_native_pod.h", "xray_string_cursor.h", "xray_export.h",
     "xray_native_managed.h", "xray_native_managed_root.h", "xray_native_place.h",
     "xray_native_value_image.h", "xray_native_values.h", "xray_native_string_value.h",
+    "xray_native_function.h",
 )
 
 
