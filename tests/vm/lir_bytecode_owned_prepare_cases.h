@@ -86,6 +86,7 @@ static void owned_program_admission(void) {
     CHECK(xr_rbc_module_prepare(&raw, 0, &argument, 1,
         xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
     function = view->functions[0];
+    raw.functions=view->functions;
     unsigned before = admission_source_map_passes;
     CHECK(xr_rbc_module_prepare(&raw, 0, &argument, 1,
         xr_rbc_program_locations(program), &execution) == XR_RBC_OK);

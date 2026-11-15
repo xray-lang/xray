@@ -240,7 +240,12 @@ static void test_state_reference_string_retirement(void) {
     test_return(m, entry, state_transport_read(m, entry, reference, XR_LIR_STRING));
     OK(xr_lir_module_finish(m, NULL));
     XrRbcProgram *program = compile(m, root);
-    state_transport_copies(&xr_rbc_program_view(program)->functions[0], true);
+    const XrRbcModule *physical=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(physical,0);
+    CHECK(code && reference.id<=code->value_count);
+    CHECK(code->locations[reference.id].kind==XR_RBC_VALUE_SPILL &&
+        code->locations[reference.id].index<physical->functions[0].spill_count);
+
     xr_lir_module_destroy(m);
     XrRbcExecution *executions[3] = {0};
     XrRbcOutcome *outcomes[3] = {0};
@@ -258,10 +263,11 @@ static void test_state_reference_string_retirement(void) {
     }
     xr_rbc_program_destroy(program);
     for (unsigned n = 0; n < 3; ++n) {
-        const XrtString *result = NULL;
+        const XrtManagedHeader *result = NULL;
         CHECK(xr_rbc_outcome_string(outcomes[n], &result));
-        size_t length = 0;
-        const char *actual = xrt_string_bytes(result, &length);
+        const XrtStringBacking *backing=(const XrtStringBacking *)result;
+        size_t length=backing->length;
+        const char *actual=backing->bytes;
         CHECK(length == sizeof(bytes) && !memcmp(actual, bytes, sizeof(bytes) - 1));
         CHECK(actual[sizeof(bytes) - 1] == (char)('0' + n));
         xr_rbc_outcome_free(&outcomes[n]);

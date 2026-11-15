@@ -9,6 +9,8 @@
 #include "../lir/lir_test_programs.h"
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_value_code.h"
+#include "xray_native_string_value.h"
 
 
 // The sole guest result is owned; this test helper consumes it after inspection.
@@ -1272,8 +1274,8 @@ static void test_string_edge_swap(void) {
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution);CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK);
         xr_rbc_execution_free(&execution);
         if(flag_value){xr_rbc_program_destroy(program);program=NULL;}
-        const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
-        size_t size=0;const char *bytes=xrt_string_bytes(text,&size);
+        const XrtManagedHeader *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
+        const XrtStringBacking *backing=(const XrtStringBacking *)text;size_t size=backing->length;const char *bytes=backing->bytes;
         CHECK(size==2&&!memcmp(bytes,flag_value?"AB":"BA",2));xr_rbc_outcome_free(&outcome);
     }
 }
@@ -1323,7 +1325,7 @@ static void test_sequential_string_owners(void) {
         CHECK(xr_rbc_program_prepare(program,arguments,2,&execution)==XR_RBC_OK);outcomes[choice]=xr_rbc_execution_run(execution);
         CHECK(outcomes[choice]&&xr_rbc_outcome_status(outcomes[choice])==XR_RBC_OK);xr_rbc_execution_free(&execution);}
     xr_rbc_program_destroy(program);
-    for(unsigned choice=0;choice<4;++choice){const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcomes[choice],&text));size_t size=0;const char *bytes=xrt_string_bytes(text,&size);
+    for(unsigned choice=0;choice<4;++choice){const XrtManagedHeader *text=NULL;CHECK(xr_rbc_outcome_string(outcomes[choice],&text));const XrtStringBacking *backing=(const XrtStringBacking *)text;size_t size=backing->length;const char *bytes=backing->bytes;
         const unsigned char expected[]={'A',0,(choice&1u)?'L':'R',(choice&2u)?'L':'R',(choice&1u)?'L':'R'};
         CHECK(size==sizeof(expected)&&!memcmp(bytes,expected,size));xr_rbc_outcome_free(&outcomes[choice]);}
 }
@@ -1400,7 +1402,7 @@ static void frame_drop(XrLirModule *m,XrLirBlock block,XrLirValue value,bool cel
         .type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_effect(m,block,&op));
 }
-static void test_frame_cell_aliases(void) {
+static void test_unbound_string_cell_rejection(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
     XrLirType bit=XR_LIR_I1,cells[]={XR_LIR_STRING_CELL,XR_LIR_STRING_CELL};
     XrLirFunction root=test_function(m,"frame_alias_caller",&bit,1,XR_LIR_I64);
@@ -1429,10 +1431,10 @@ static void test_frame_cell_aliases(void) {
     OK(xr_lir_emit_value(m,body,&op,&read));
     op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&read,.operand_count=1};
     OK(xr_lir_emit_value(m,body,&op,&length));frame_drop(m,body,read,false);test_return(m,body,length);
-    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=compile(m,root);xr_lir_module_destroy(m);
-    uint64_t flag=0;CHECK(run(program,&flag,1)==3);flag=1;CHECK(run(program,&flag,1)==5);
-    flag=0;CHECK(run(program,&flag,1)==3);xr_rbc_program_destroy(program);
-    puts("frame Cells preserve real same-actual alias effects through distinct formal identities");
+    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(m,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED && !program);
+    xr_lir_module_destroy(m);
+
 }
 
 static void test_typed_spill_copy_cycle(void) {
@@ -1443,7 +1445,7 @@ static void test_typed_spill_copy_cycle(void) {
     XrLirBlock body=test_block(m,f,NULL,0),done=test_block(m,f,NULL,0);
     OK(xr_lir_set_entry(m,f,entry));
     for(uint32_t n=0;n<260;++n)(void)test_constant(m,entry,integer,n);
-    // Force both typed scratch banks while keeping String ownership local.
+    // A local String uses its real owner home beside the parallel scalar edge.
     XrLirValue text=frame_text(m,entry,"temporary",9);frame_drop(m,entry,text,false);
     XrLirValue initial[]={test_constant(m,entry,integer,1),test_constant(m,entry,integer,2),parameter(m,f,0)};
     test_branch(m,entry,loop,initial,3);
@@ -1454,19 +1456,22 @@ static void test_typed_spill_copy_cycle(void) {
     XrLirValue next=test_binary(m,body,XR_LIR_SUB,carried[2],test_constant(m,body,integer,1),XR_LIR_PREDICATE_NONE);
     XrLirValue swapped[]={carried[1],carried[0],next};test_branch(m,body,loop,swapped,3);
     test_return(m,done,carried[0]);OK(xr_lir_module_finish(m,NULL));
-    XrRbcProgram *program=compile(m,f);const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
-    CHECK(physical->spill_count);
-    bool bits_move=false;uint32_t string_registers=0;
-    for(uint32_t r=0;r<physical->register_count;++r)
-        string_registers+=physical->register_kinds[r]==XR_RBC_STRING;
-    for(size_t pc=0;pc<physical->code_count;++pc) {
-        XrRbcOp op=(XrRbcOp)(physical->code[pc]&255);
-        if(op==XR_RBC_MOV) {
-            uint32_t destination=(physical->code[pc]>>8)&255;
-            CHECK(physical->register_kinds[destination]==XR_RBC_BITS);bits_move=true;
-        }
+    XrRbcProgram *program=compile(m,f);
+    const XrRbcModule *physical=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(physical,0);
+    CHECK(code && code->homes && physical->functions[0].spill_count);
+    CHECK(code->homes->values[text.id].owner_count==1 &&
+        code->locations[text.id].kind==XR_RBC_VALUE_NOWHERE);
+    bool parallel=false;
+    for(size_t index=0;index<code->access_count;++index) {
+        const XrRbcValueAccess *access=&code->accesses[index];
+        if(access->operation!=XR_RBC_VALUE_EDGE || access->count!=3)continue;
+        const uint32_t *pairs=code->arguments+access->first;
+        parallel|=pairs[0]==carried[1].id && pairs[1]==carried[0].id &&
+            pairs[2]==carried[0].id && pairs[3]==carried[1].id &&
+            pairs[4]==next.id && pairs[5]==carried[2].id;
     }
-    CHECK(bits_move && string_registers>=2);xr_lir_module_destroy(m);
+    CHECK(parallel);xr_lir_module_destroy(m);
     for(uint64_t n=0;n<4;++n)CHECK(run(program,&n,1)==(n%2?2u:1u));
     xr_rbc_program_destroy(program);
 }
@@ -1486,16 +1491,15 @@ static void test_backward_owned_dag(void) {
     XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
     CHECK(xr_rbc_compile(m,f,&program,&diagnostic)==XR_RBC_COMPILE_OK);
     CHECK(program && diagnostic.status==XR_RBC_COMPILE_OK);
-    const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
-    CHECK(physical->register_kind_count==physical->register_count &&
-        physical->reference_spill_count<=physical->spill_count);
-    uint32_t string_homes=0;
-    for(uint32_t slot=0;slot<physical->register_count;++slot)
-        string_homes+=physical->register_kinds[slot]==XR_RBC_STRING;
-    for(uint32_t slot=0;slot<physical->reference_spill_count;++slot)
-        CHECK(physical->reference_spill_kinds[slot]==XR_RBC_STRING);
-    CHECK(string_homes || physical->reference_spill_count);
-    xr_lir_module_destroy(m);
+    const XrRbcModule *physical=xr_rbc_program_view(program);
+    const XrLirValueHomes *homes=xr_rbc_module_value_homes(physical,0);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(physical,0);
+    CHECK(homes && code && homes->values[text.id].owner_count==1 && homes->values[value.id].owner_count==1);
+    CHECK(code->locations[text.id].kind==XR_RBC_VALUE_NOWHERE && code->locations[value.id].kind==XR_RBC_VALUE_NOWHERE);
+    bool transfer=false;
+    for(size_t n=0;n<homes->transfer_count;++n)
+        transfer|=homes->transfers[n].source==text.id && homes->transfers[n].target==value.id;
+    CHECK(transfer);xr_lir_module_destroy(m);
     CHECK(run(program,NULL,0)==5);
     xr_rbc_program_destroy(program);
 }
@@ -1511,7 +1515,7 @@ int main(void) {
     test_many_spilled_conditions();
     test_typed_spill_copy_cycle();
     test_backward_owned_dag();
-    test_frame_cell_aliases();
+    test_unbound_string_cell_rejection();
     test_scalar_spill_branches();
     test_scalar_spills();
     test_sequential_string_owners();
