@@ -245,16 +245,7 @@ static void test_f64_negation(void) {
             kinds[position]=XR_RBC_BITS;
         }
     }
-    // Scalar unary work remains valid beside a live owned String.
-    emit(code,0,XR_RBC_STRING_LITERAL,2,0,0); emit(code,1,XR_RBC_FNEG,1,0,0);
-    emit(code,2,XR_RBC_STRING_DROP,2,0,0); emit(code,3,XR_RBC_RET,1,0,0);
-    XrRbcRegisterKind managed[] = {XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
-    f=(XrRbcFunction){.code=code,.code_count=4,.register_count=3,.parameter_count=1,
-        .register_kinds=managed,.register_kind_count=3};
-    XrRbcLiteral literal = {"kept",4};
-    module=(XrRbcModule){.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
-    uint64_t result=99;
-    CHECK(execute(&module,0,&argument,1,&result)==XR_RBC_OK && result==UINT64_C(0x8000000000000000));
+
 }
 
 static void test_f64_family(void) {
@@ -375,14 +366,7 @@ static void test_float_kinds_and_spills(void) {
     CHECK(execute(&module,0,args,2,&result)==XR_RBC_OK && result==UINT64_C(0x4008000000000000));
     immediate(code,0,XR_RBC_SPILL,0,0);reject_prepare(&module,0,args,2);
     immediate(code,0,XR_RBC_SPILL,0,1);immediate(code,1,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,args,2);
-    immediate(code,0,XR_RBC_STRING_LITERAL,3,0);emit(code,1,XR_RBC_FADD,2,0,1);
-    emit(code,2,XR_RBC_STRING_DROP,3,0,0);emit(code,3,XR_RBC_RET,2,0,0);
-    XrRbcRegisterKind managed[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
-    f=(XrRbcFunction){.code=code,.code_count=4,.register_count=4,.parameter_count=2,
-        .register_kinds=managed,.register_kind_count=4};
-    XrRbcLiteral literal={"kept",4};module.literals=&literal;module.literal_count=1;
-    CHECK(execute(&module,0,args,2,&result)==XR_RBC_OK && result==UINT64_C(0x4008000000000000));
-    emit(code,1,XR_RBC_FADD,2,3,1);reject_prepare(&module,0,args,2);
+
 }
 
 static void test_float_constant_comparison(void) {
@@ -950,130 +934,49 @@ static void test_offset_window(void) {
     native=XR_RBC_NATIVE_UTC_OFFSET_AT;immediate(code,1,XR_RBC_LOADI,254,1);result=91;
     CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_INVALID && result==91);
 }
-static void test_string_length(void) {
-    uint32_t code[6];
-    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS};
-    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
-    emit(code,1,XR_RBC_STRING_LEN,1,0,0);
-    emit(code,2,XR_RBC_STRING_LEN,2,0,0);
-    emit(code,3,XR_RBC_STRING_DROP,0,0,0);
-    emit(code,4,XR_RBC_ADD,3,1,2);
-    emit(code,5,XR_RBC_RET,3,0,0);
-    XrRbcLiteral literal={"\xc3\xa9\0Z",4};
-    XrRbcFunction f={.code=code,.code_count=6,.register_count=4,
-        .register_kinds=kinds,.register_kind_count=4};
-    XrRbcModule module={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
-    uint64_t result=UINT64_MAX;
-    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==6);
-    literal=(XrRbcLiteral){"",0};
-    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==0);
-    literal=(XrRbcLiteral){"\xc3\xa9\0Z",4};
-    kinds[1]=XR_RBC_STRING;reject_prepare(&module,0,NULL,0);kinds[1]=XR_RBC_BITS;
-    kinds[0]=XR_RBC_BITS;reject_prepare(&module,0,NULL,0);kinds[0]=XR_RBC_STRING;
-    f.register_kinds=NULL;f.register_kind_count=0;reject_prepare(&module,0,NULL,0);
-    f.register_kinds=kinds;f.register_kind_count=4;
-    code[1]|=UINT32_C(1)<<24;reject_prepare(&module,0,NULL,0);
-    emit(code,1,XR_RBC_STRING_LEN,1,0,0);
-    emit(code,0,XR_RBC_STRING_LEN,1,0,0);reject_prepare(&module,0,NULL,0);
-    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
-    emit(code,1,XR_RBC_STRING_DROP,0,0,0);reject_prepare(&module,0,NULL,0);
-    uint32_t bare[]={XR_RBC_STRING_LEN+(UINT32_C(1)<<16),XR_RBC_RET0};
-    XrRbcFunction missing={.code=bare,.code_count=2,.register_count=2};
-    XrRbcModule untyped={.functions=&missing,.function_count=1};reject_prepare(&untyped,0,NULL,0);
-}
 static void test_spills(void) {
-    uint32_t code[10];
-    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS};
-    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
+    uint32_t code[5];
+    immediate(code,0,XR_RBC_LOADI,0,42);
     immediate(code,1,XR_RBC_SPILL,0,0);
-    immediate(code,2,XR_RBC_RELOAD,0,0);
-    emit(code,3,XR_RBC_STRING_LEN,1,0,0);
-    immediate(code,4,XR_RBC_SPILL,1,1);
-    immediate(code,5,XR_RBC_SPILL,0,0);
-    immediate(code,6,XR_RBC_RELOAD,0,0);
-    emit(code,7,XR_RBC_STRING_DROP,0,0,0);
-    immediate(code,8,XR_RBC_RELOAD,1,1);
-    emit(code,9,XR_RBC_RET,1,0,0);
-    XrRbcLiteral literal={"\xc3\xa9\0Z",4};
-    XrRbcFunction f={.code=code,.code_count=10,.register_count=2,.register_kinds=kinds,
-        .register_kind_count=2,.spill_count=2,.reference_spill_count=1};
-    XrRbcModule module={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
-    uint64_t result=91;CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==3);
-    uint32_t saved=code[1];immediate(code,1,XR_RBC_SPILL,0,1);reject_prepare(&module,0,NULL,0);code[1]=saved;
-    saved=code[5];immediate(code,5,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,NULL,0);code[5]=saved;
-    saved=code[1];immediate(code,1,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,NULL,0);code[1]=saved;
-    saved=code[0];immediate(code,0,XR_RBC_SPILL,0,0);reject_prepare(&module,0,NULL,0);code[0]=saved;
-    saved=code[4];immediate(code,4,XR_RBC_RELOAD,1,1);reject_prepare(&module,0,NULL,0);code[4]=saved;
-    saved=code[9];emit(code,9,XR_RBC_SPILL,1,0,0);reject_prepare(&module,0,NULL,0);code[9]=saved;
-    f.reference_spill_count=3;reject_prepare(&module,0,NULL,0);f.reference_spill_count=1;
-    f.spill_count=65536;reject_prepare(&module,0,NULL,0);f.spill_count=2;
-    uint32_t word=73;CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_SPILL,0,0,0,65535})&&word==73);
-    CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_RELOAD,0,0,0,65535})&&word==73);
-    saved=code[1];code[1]=(uint32_t)XR_RBC_SPILL+(UINT32_C(65535)<<16);reject_prepare(&module,0,NULL,0);code[1]=saved;
+    immediate(code,2,XR_RBC_LOADI,0,7);
+    immediate(code,3,XR_RBC_RELOAD,1,0);
+    emit(code,4,XR_RBC_RET,1,0,0);
+    XrRbcFunction function={.code=code,.code_count=5,.register_count=2,.spill_count=1};
+    XrRbcModule module={.functions=&function,.function_count=1};
+    uint64_t result=0;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==42);
+    uint32_t saved=code[1];
+    immediate(code,1,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,NULL,0);code[1]=saved;
+    saved=code[3];immediate(code,3,XR_RBC_RELOAD,1,1);reject_prepare(&module,0,NULL,0);code[3]=saved;
+    function.reference_spill_count=2;reject_prepare(&module,0,NULL,0);function.reference_spill_count=0;
+    function.spill_count=65536;reject_prepare(&module,0,NULL,0);function.spill_count=1;
+    uint32_t word=73;
+    CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_SPILL,0,0,0,65535}) && word==73);
+    CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_RELOAD,0,0,0,65535}) && word==73);
+    saved=code[1];code[1]=(uint32_t)XR_RBC_SPILL+(UINT32_C(65535)<<16);
+    reject_prepare(&module,0,NULL,0);code[1]=saved;
+    function.spill_count=65535;
+    immediate(code,1,XR_RBC_SPILL,0,65534);immediate(code,3,XR_RBC_RELOAD,1,65534);
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==42);
+    /* An unused scalar spill is permitted; reference-bank ownership is not. */
+    emit(code,3,XR_RBC_RET0,0,0,0);function.code_count=4;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && !result);
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS};
+    function.register_kinds=kinds;function.register_kind_count=2;
+    reject_prepare(&module,0,NULL,0);
     uint32_t edge[4];immediate(edge,0,XR_RBC_LOADI,0,0);
     CHECK(xr_rbc_jump(edge+1,1,3,4));emit(edge,2,XR_RBC_RET0,0,0,0);emit(edge,3,XR_RBC_RET0,0,0,0);
-    XrRbcFunction branching={.code=edge,.code_count=4,.register_count=1,.spill_count=1};
-    XrRbcModule forward={.functions=&branching,.function_count=1};
-    CHECK(execute(&forward,0,NULL,0,&result)==XR_RBC_OK && !result);
+    function=(XrRbcFunction){.code=edge,.code_count=4,.register_count=1,.spill_count=1};
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && !result);
     CHECK(xr_rbc_jump(edge+1,1,1,4));
-    // Admission terminates for an infinite guest loop; never execute this case.
-    XrRbcExecution *loop=NULL;
-    XrtLocationOwner *locations=NULL;
+    /* Admission must terminate even though this guest loop intentionally does not. */
+    XrRbcExecution *loop=NULL; XrtLocationOwner *locations=NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
-    CHECK(xr_rbc_module_prepare(&forward,0,NULL,0,locations,&loop)==XR_RBC_OK && loop);
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&loop)==XR_RBC_OK && loop);
     xr_rbc_execution_free(&loop);xrt_locations_release(locations);
-    uint32_t upper[6];immediate(upper,0,XR_RBC_STRING_LITERAL,0,0);
-    immediate(upper,1,XR_RBC_SPILL,0,65534);immediate(upper,2,XR_RBC_RELOAD,0,65534);
-    emit(upper,3,XR_RBC_STRING_DROP,0,0,0);immediate(upper,4,XR_RBC_LOADI,1,42);emit(upper,5,XR_RBC_RET,1,0,0);
-    f.code=upper;f.code_count=6;f.spill_count=f.reference_spill_count=65535;
-    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK&&result==42);
-    f.code_count=3;emit(upper,2,XR_RBC_RET0,0,0,0);reject_prepare(&module,0,NULL,0);
-    uint32_t collision[6];immediate(collision,0,XR_RBC_STRING_LITERAL,0,0);
-    immediate(collision,1,XR_RBC_SPILL,0,0);immediate(collision,2,XR_RBC_STRING_LITERAL,0,0);
-    immediate(collision,3,XR_RBC_RELOAD,0,0);emit(collision,4,XR_RBC_STRING_DROP,0,0,0);
-    emit(collision,5,XR_RBC_RET0,0,0,0);
-    f.code=collision;f.code_count=6;f.spill_count=f.reference_spill_count=1;
-    reject_prepare(&module,0,NULL,0);
-    uint32_t owner[6],borrow[4];
-    immediate(owner,0,XR_RBC_STRING_LITERAL,0,0);emit(owner,1,XR_RBC_MOV,3,0,0);
-    immediate(owner,2,XR_RBC_CALL,2,1);emit(owner,3,XR_RBC_MOV,1,2,0);
-    emit(owner,4,XR_RBC_STRING_DROP,0,0,0);emit(owner,5,XR_RBC_RET,1,0,0);
-    immediate(borrow,0,XR_RBC_SPILL,0,0);immediate(borrow,1,XR_RBC_RELOAD,0,0);
-    emit(borrow,2,XR_RBC_STRING_DROP,0,0,0);emit(borrow,3,XR_RBC_RET0,0,0,0);
-    XrRbcRegisterKind outer_kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
-    XrRbcFunction functions[]={
-        {.code=owner,.code_count=6,.register_count=4,.register_kinds=outer_kinds,.register_kind_count=4},
-        {.code=borrow,.code_count=4,.register_count=1,.parameter_count=1,.register_kinds=kinds,
-         .register_kind_count=1,.spill_count=1,.reference_spill_count=1}};
-    XrRbcModule borrowed={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
-    reject_prepare(&borrowed,0,NULL,0);
 }
+
 static void test_spill_branches(void) {
-    uint32_t code[13];
-    immediate(code,0,XR_RBC_LOADI,2,0);emit(code,1,XR_RBC_EQ,0,2,0);
-    CHECK(xr_rbc_jump(code+2,2,6,13));
-    immediate(code,3,XR_RBC_STRING_LITERAL,1,0);immediate(code,4,XR_RBC_SPILL,1,0);
-    CHECK(xr_rbc_jump(code+5,5,9,13));
-    immediate(code,6,XR_RBC_STRING_LITERAL,1,1);immediate(code,7,XR_RBC_SPILL,1,0);
-    CHECK(xr_rbc_jump(code+8,8,9,13));
-    immediate(code,9,XR_RBC_RELOAD,1,0);emit(code,10,XR_RBC_STRING_LEN,2,1,0);
-    emit(code,11,XR_RBC_STRING_DROP,1,0,0);emit(code,12,XR_RBC_RET,2,0,0);
-    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_STRING,XR_RBC_BITS};
-    XrRbcLiteral literals[]={{"\xc3\xa9\0Z",4},{"no",2}};
-    XrRbcFunction f={.code=code,.code_count=13,.register_count=3,.parameter_count=1,
-        .register_kinds=kinds,.register_kind_count=3,.spill_count=1,.reference_spill_count=1};
-    XrRbcModule module={.functions=&f,.function_count=1,.literals=literals,.literal_count=2};
-    for (uint64_t flag=0; flag<2; ++flag) {
-        uint64_t result=99;
-        CHECK(execute(&module,0,&flag,1,&result)==XR_RBC_OK && result==(flag?3u:2u));
-    }
-    uint64_t flag=0;
-    uint32_t saved=code[7];emit(code,7,XR_RBC_STRING_DROP,1,0,0);
-    reject_prepare(&module,0,&flag,1);code[7]=saved;
-    saved=code[9];emit(code,9,XR_RBC_RET0,0,0,0);f.code_count=10;
-    reject_prepare(&module,0,&flag,1);code[9]=saved;f.code_count=13;
-    f.register_kinds=NULL;f.register_kind_count=0;reject_prepare(&module,0,&flag,1);
-    f.register_kinds=kinds;f.register_kind_count=3;
     uint32_t scalar[11];
     immediate(scalar,0,XR_RBC_LOADI,1,0);emit(scalar,1,XR_RBC_EQ,0,1,0);
     CHECK(xr_rbc_jump(scalar+2,2,6,11));
@@ -1082,13 +985,14 @@ static void test_spill_branches(void) {
     immediate(scalar,6,XR_RBC_LOADI,1,43);immediate(scalar,7,XR_RBC_SPILL,1,0);
     CHECK(xr_rbc_jump(scalar+8,8,9,11));
     immediate(scalar,9,XR_RBC_RELOAD,1,0);emit(scalar,10,XR_RBC_RET,1,0,0);
-    f=(XrRbcFunction){.code=scalar,.code_count=11,.register_count=2,.parameter_count=1,.spill_count=1};
-    module=(XrRbcModule){.functions=&f,.function_count=1};
+    XrRbcFunction f={.code=scalar,.code_count=11,.register_count=2,.parameter_count=1,.spill_count=1};
+    XrRbcModule module={.functions=&f,.function_count=1};
+    uint64_t flag;
     for (flag=0; flag<2; ++flag) {
         uint64_t result=99;
         CHECK(execute(&module,0,&flag,1,&result)==XR_RBC_OK && result==(flag?42u:43u));
     }
-    saved=scalar[7];immediate(scalar,7,XR_RBC_LOADI,1,0);
+    uint32_t saved=scalar[7];immediate(scalar,7,XR_RBC_LOADI,1,0);
     reject_prepare(&module,0,&flag,1);scalar[7]=saved;
 }
 static void test_spill_layout_and_overwrite(void) {
@@ -1174,38 +1078,15 @@ static void test_spill_late_predecessor(void) {
     reject_prepare(&m,0,&flag,1);flag=0;reject_prepare(&m,0,&flag,1);
 }
 
-static void test_spill_managed_backedge(void) {
-    uint32_t code[4];immediate(code,0,XR_RBC_STRING_LITERAL,1,0);
-    immediate(code,1,XR_RBC_SPILL,1,0);immediate(code,2,XR_RBC_LOADI,0,1);
-    CHECK(xr_rbc_jump(code+3,3,3,4));
-    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_STRING};
-    XrRbcLiteral literal={"owned",5};
-    XrRbcFunction f={.code=code,.code_count=4,.register_count=2,.register_kinds=kinds,
-        .register_kind_count=2,.spill_count=1,.reference_spill_count=1};
-    XrRbcModule m={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
-    XrtLocationOwner *locations = NULL;
-    CHECK(xrt_locations_create(NULL, 0, &locations) == XR_XIR_VALUE_OK);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_module_prepare(&m,0,NULL,0,locations,&execution) == XR_RBC_OK && execution);
-    xr_rbc_execution_free(&execution);
-    // Each live String has an established owner at the loop's incoming state.
-    immediate(code,1,XR_RBC_LOADI,0,1);
-    CHECK(xr_rbc_module_prepare(&m,0,NULL,0,locations,&execution) == XR_RBC_OK && execution);
-    xr_rbc_execution_free(&execution);
-    // A scalar write cannot overwrite that owner while preserving its kind.
-    immediate(code,1,XR_RBC_LOADI,1,1);reject_prepare(&m,0,NULL,0);
-    xrt_locations_release(locations);
-}
 
 static void test_module_capabilities(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
+    XrtValueImageType type = {.kind=XRT_VALUE_I64, .size=8, .alignment=8};
+    XrtValueImage values = {.types=&type, .type_count=1};
     XrtModuleSpec owner = {0, 0};
-    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleSlotSpec slot = {0, 1, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.values=&values, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
-        .payload_alignment=8, .byte_limit=UINT64_MAX};
-    XrtModuleLayout *storage = NULL;
-    CHECK(xrt_module_layout_new(&layout, &storage) == 0);
+        .payload_alignment=8};
     XrRbcStateAccess accesses[] = {{0, 0, 1}, {0, 0, 0}};
     XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF,
         XR_RBC_BITS, XR_RBC_STATE_REF};
@@ -1226,12 +1107,12 @@ static void test_module_capabilities(void) {
     CHECK(xr_rbc_jump(code + 13, 13, 14, 18));
     immediate(code, 14, XR_RBC_STATE_REFERENCE, 4, 1);
     immediate(code, 15, XR_RBC_STATE_REFERENCE, 4, 1);
-    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_MODULE_I64);
+    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_VALUE_I64);
     emit(code, 17, XR_RBC_RET, 1, 0, 0);
     XrRbcFunction function = {.code=code, .code_count=18, .register_count=5,
         .parameter_count=1, .register_kinds=kinds, .register_kind_count=5,
         .state_accesses=accesses, .state_access_count=2};
-    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_spec=&layout};
     uint64_t result = 0;
     for (unsigned i = 0; i < 2; ++i)
         CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 42);
@@ -1242,7 +1123,7 @@ static void test_module_capabilities(void) {
     reject_prepare(&module, 0, NULL, 0);
     code[14] = saved14;
     code[15] = saved15;
-    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_MODULE_F64);
+    emit(code, 16, XR_RBC_STATE_READ, 1, 4, XRT_VALUE_F64);
     reject_prepare(&module, 0, NULL, 0);
     code[16] = saved16;
     emit(code, 14, XR_RBC_MOV, 4, 1, 0);
@@ -1253,63 +1134,31 @@ static void test_module_capabilities(void) {
     accesses[1].slot = UINT32_MAX;
     reject_prepare(&module, 0, NULL, 0);
     accesses[1].slot = 0;
-    module.state_layout = NULL;
+    module.state_spec = NULL;
     reject_prepare(&module, 0, NULL, 0);
-    module.state_layout = storage;
+    module.state_spec = &layout;
     /* INITIALIZE cannot replace the construction/publication of a mutable slot. */
     immediate(code, 2, XR_RBC_STATE_INITIALIZE, 0, 0);
     emit(code, 3, XR_RBC_RET0, 0, 0, 0);
     function.code_count = 4;
     reject_prepare(&module, 0, NULL, 0);
-    xrt_module_layout_drop(&storage);
+
 }
 
 #include "register_state_cases.h"
-#include "register_array_cases.h"
-#include "register_set_cases.h"
-#include "register_array_display_cases.h"
-#include "register_array_unsigned_cases.h"
-#include "register_array_ref_cases.h"
 
 #include "register_fixed_type_cases.h"
 #include "register_nullable_cases.h"
-#include "register_pod_display_cases.h"
-#include "register_string_library_cases.h"
 #include "register_fixed_value_cases.h"
 #include "register_fixed_call_cases.h"
 #include "register_range_cases.h"
 #include "register_callable_contract_cases.h"
-#include "register_boxed_cases.h"
 
 int main(int argc, char **argv) {
-    test_raw_boxed();
     test_raw_callable_contracts();
-    test_raw_view_cold_returns();
     test_raw_range_checks();
-    test_raw_string_references();
     test_raw_fixed_calls();
     test_raw_fixed_no_value_callee();
-    test_raw_arrays();
-    test_raw_sets();
-    test_raw_set_result();
-    test_raw_array_display();
-    test_raw_pod_display();
-    test_raw_array_repeat();
-    test_raw_unsigned_arrays();
-    test_raw_array_reference_lifetime();
-    test_raw_array_reference_growth();
-    test_raw_array_reference_publication();
-    test_raw_array_reference_byte_bits();
-    test_raw_array_reference_join();
-    test_raw_array_spills();
-    test_raw_array_wide_return();
-    test_raw_array_local_cells();
-    test_raw_array_string_state();
-    test_raw_array_backedges();
-    test_raw_array_cell_identity();
-    test_raw_array_cell_moves();
-    test_raw_array_cell_mutation_failure();
-    test_raw_array_cell_move_entry();
     test_raw_state_deferred_publication();
     test_raw_callable_state_requires_typed_transport();
     test_raw_state_spill_transport();
@@ -1327,13 +1176,11 @@ int main(int argc, char **argv) {
     test_spill_layout_and_overwrite();
     test_spill_loop();
     test_spill_late_predecessor();
-    test_spill_managed_backedge();
     test_f64_family();
     test_float_kinds_and_spills();
     test_f64_negation();
     test_spill_branches();
     test_spills();
-    test_string_length();
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();
         return 0;

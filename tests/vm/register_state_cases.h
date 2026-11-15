@@ -10,7 +10,11 @@
 #define REGISTER_STATE_CASES_H
 
 typedef struct RawStateTransport {
-    XrtModuleLayout *layout;
+    XrtValueImageType types[3];
+    XrtValueImage values;
+    XrtModuleSpec owner;
+    XrtModuleSlotSpec slots[4];
+    XrtModuleLayoutSpec layout;
     XrRbcModule module;
     XrRbcFunction function;
     XrRbcRegisterKind kinds[7];
@@ -19,27 +23,26 @@ typedef struct RawStateTransport {
 } RawStateTransport;
 
 static void test_raw_state_deferred_publication(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
+    XrtValueImageType type = {.kind=XRT_VALUE_I64, .size=8, .alignment=8};
+    XrtValueImage values = {.types=&type, .type_count=1};
     XrtModuleSpec owner = {0};
-    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleSlotSpec slot = {0, 1, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.values=&values, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
-        .payload_alignment=8, .byte_limit=UINT64_MAX};
-    XrtModuleLayout *storage = NULL;
-    CHECK(xrt_module_layout_new(&layout, &storage) == 0);
+        .payload_alignment=8};
     uint32_t code[7], ids[] = {1, 1, 1, 1, 1, 2, 2};
     XrRbcStateAccess accesses[] = {{0}, {0, 0, 1}};
     XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF, XR_RBC_STATE_REF};
     XrRbcFunction function = {.code=code, .code_count=7, .register_count=4,
         .parameter_count=1, .register_kinds=kinds, .register_kind_count=4,
         .state_accesses=accesses, .state_access_count=2, .source_ids=ids, .source_id_count=7};
-    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_spec=&layout};
     immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
     immediate(code, 1, XR_RBC_STATE_REFERENCE, 2, 0);
     immediate(code, 2, XR_RBC_LOADI, 1, 37);
     immediate(code, 3, XR_RBC_STATE_CONSTRUCT, 3, 1);
     emit(code, 4, XR_RBC_STATE_PUBLISH, 3, 0, 0);
-    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_I64);
+    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_VALUE_I64);
     emit(code, 6, XR_RBC_RET, 1, 0, 0);
     XrtSourceLocation points[] = {{.path="reference.xr", .path_length=12, .line=3, .column=1},
         {.path="actual-access.xr", .path_length=16, .line=37, .column=9}};
@@ -54,7 +57,7 @@ static void test_raw_state_deferred_publication(void) {
     for (unsigned write = 0; write < 2; ++write) {
         immediate(code, 0, XR_RBC_STATE_REFERENCE, 2, 0);
         emit(code, 1, write ? XR_RBC_STATE_WRITE : XR_RBC_STATE_READ,
-            write ? 2u : 1u, write ? 1u : 2u, XRT_MODULE_I64);
+            write ? 2u : 1u, write ? 1u : 2u, XRT_VALUE_I64);
         emit(code, 2, XR_RBC_RET, 1, 0, 0);
         ids[1] = ids[2] = 2;
         function.code_count = function.source_id_count = 3;
@@ -67,25 +70,29 @@ static void test_raw_state_deferred_publication(void) {
         CHECK(status == XR_XIR_VALUE_BAD_ARGUMENT && source == 2 && borrowed == locations);
         xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
     }
-    xrt_locations_release(locations); xrt_module_layout_drop(&storage);
+    xrt_locations_release(locations);
 }
 
 static void raw_state_transport(RawStateTransport *f) {
     memset(f, 0, sizeof(*f));
-    XrtModuleTypeSpec types[] = {{XRT_MODULE_I64, 0}, {XRT_MODULE_BOOL, 0}, {XRT_MODULE_STRING, 0}};
-    XrtModuleSpec owner = {0};
-    XrtModuleSlotSpec slots[] = {
-        {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8},
-        {0, 1, XRT_MODULE_SLOT_MUTABLE, 8, 1, 1},
-        {0, 0, 0, 16, 8, 8},
-        {0, 2, XRT_MODULE_SLOT_MUTABLE, 24, sizeof(void *), _Alignof(void *)}
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_BOOL,.size=1,.alignment=1},
+        {.kind=XRT_VALUE_F64,.size=8,.alignment=8}
     };
-    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=3, .modules=&owner,
-        .module_count=1, .slots=slots, .slot_count=4, .payload_size=32,
-        .payload_alignment=8, .byte_limit=UINT64_MAX};
-    CHECK(xrt_module_layout_new(&layout, &f->layout) == 0);
+    memcpy(f->types,types,sizeof(types));
+    f->values=(XrtValueImage){.types=f->types,.type_count=3};
+    const XrtModuleSlotSpec slots[] = {
+        {0,1,XRT_MODULE_SLOT_MUTABLE,0,8,8},
+        {0,2,XRT_MODULE_SLOT_MUTABLE,8,1,1},
+        {0,1,0,16,8,8},
+        {0,3,XRT_MODULE_SLOT_MUTABLE,24,8,8}
+    };
+    memcpy(f->slots,slots,sizeof(slots));
+    f->layout=(XrtModuleLayoutSpec){.values=&f->values,.modules=&f->owner,
+        .module_count=1,.slots=f->slots,.slot_count=4,.payload_size=32,.payload_alignment=8};
     const XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_STATE, XR_RBC_BITS,
-        XR_RBC_STATE_REF, XR_RBC_STATE_REF, XR_RBC_BITS, XR_RBC_STRING};
+        XR_RBC_STATE_REF, XR_RBC_STATE_REF, XR_RBC_BITS, XR_RBC_BITS};
     memcpy(f->kinds, kinds, sizeof(kinds));
     const XrRbcStateAccess accesses[] = {
         {0, 1, 2}, {1, 1, 2}, {2, 0, 2},
@@ -96,10 +103,7 @@ static void raw_state_transport(RawStateTransport *f) {
         .parameter_count=2, .register_kinds=f->kinds, .register_kind_count=7,
         .state_accesses=f->accesses, .state_access_count=8, .spill_count=1};
     f->module = (XrRbcModule){.functions=&f->function, .function_count=1,
-        .state_layout=f->layout};
-    static const XrRbcLiteral literal = {"owned", 5};
-    f->module.literals = &literal;
-    f->module.literal_count = 1;
+        .state_spec=&f->layout};
     immediate(f->code, 0, XR_RBC_MODULE_BEGIN, 1, 0);
     immediate(f->code, 1, XR_RBC_LOADI, 2, 11);
     immediate(f->code, 2, XR_RBC_STATE_CONSTRUCT, 3, 0);
@@ -109,10 +113,10 @@ static void raw_state_transport(RawStateTransport *f) {
     emit(f->code, 6, XR_RBC_STATE_PUBLISH, 3, 0, 0);
     immediate(f->code, 7, XR_RBC_LOADI, 2, 33);
     immediate(f->code, 8, XR_RBC_STATE_INITIALIZE, 1, 2);
-    immediate(f->code, 9, XR_RBC_STRING_LITERAL, 6, 0);
+    immediate(f->code, 9, XR_RBC_LOADI, 6, 0);
     immediate(f->code, 10, XR_RBC_STATE_CONSTRUCT, 3, 7);
     emit(f->code, 11, XR_RBC_STATE_PUBLISH, 3, 0, 0);
-    emit(f->code, 12, XR_RBC_STRING_DROP, 6, 0, 0);
+    immediate(f->code, 12, XR_RBC_LOADI, 6, 0);
     immediate(f->code, 13, XR_RBC_MODULE_READY, 1, 0);
     immediate(f->code, 14, XR_RBC_LOADI, 2, 0);
     emit(f->code, 15, XR_RBC_EQ, 0, 2, 0);
@@ -126,7 +130,7 @@ static void raw_state_transport(RawStateTransport *f) {
     immediate(f->code, 23, XR_RBC_STATE_REFERENCE, 3, 4);
     CHECK(xr_rbc_jump(f->code + 24, 24, 25, 28));
     immediate(f->code, 25, XR_RBC_RELOAD, 4, 0);
-    emit(f->code, 26, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_I64);
+    emit(f->code, 26, XR_RBC_STATE_READ, 5, 4, XRT_VALUE_I64);
     emit(f->code, 27, XR_RBC_RET, 5, 0, 0);
 }
 
@@ -150,9 +154,9 @@ static void test_raw_state_spill_transport(void) {
     immediate(f.code, 21, XR_RBC_STATE_REFERENCE, 3, 4);
     reject_prepare(&f.module, 0, &choice, 1);
     immediate(f.code, 21, XR_RBC_STATE_REFERENCE, 3, 3);
-    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_BOOL);
+    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_VALUE_BOOL);
     reject_prepare(&f.module, 0, &choice, 1);
-    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_I64);
+    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_VALUE_I64);
     immediate(f.code, 25, XR_RBC_LOADI, 4, 1);
     reject_prepare(&f.module, 0, &choice, 1);
     immediate(f.code, 25, XR_RBC_RELOAD, 4, 0);
@@ -161,7 +165,6 @@ static void test_raw_state_spill_transport(void) {
     f.kinds[4] = XR_RBC_STATE_REF;
     f.function.reference_spill_count = 1;
     reject_prepare(&f.module, 0, &choice, 1);
-    xrt_module_layout_drop(&f.layout);
 }
 
 static void test_raw_state_spill_shapes(void) {
@@ -171,17 +174,16 @@ static void test_raw_state_spill_shapes(void) {
     immediate(f.code, 17, XR_RBC_STATE_REFERENCE, 3, 5);
     immediate(f.code, 21, XR_RBC_STATE_REFERENCE, 3, 5);
     CHECK(execute(&f.module, 0, &choice, 1, &result) == XR_RBC_OK && result == 33);
-    emit(f.code, 26, XR_RBC_STATE_WRITE, 4, 2, XRT_MODULE_I64);
+    emit(f.code, 26, XR_RBC_STATE_WRITE, 4, 2, XRT_VALUE_I64);
     reject_prepare(&f.module, 0, &choice, 1);
     emit(f.code, 26, XR_RBC_STATE_PUBLISH, 4, 0, 0);
     reject_prepare(&f.module, 0, &choice, 1);
-    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_I64);
+    emit(f.code, 26, XR_RBC_STATE_READ, 5, 4, XRT_VALUE_I64);
     immediate(f.code, 21, XR_RBC_STATE_REFERENCE, 3, 3);
     reject_prepare(&f.module, 0, &choice, 1);
     immediate(f.code, 17, XR_RBC_STATE_REFERENCE, 3, 6);
     immediate(f.code, 21, XR_RBC_STATE_REFERENCE, 3, 6);
     reject_prepare(&f.module, 0, &choice, 1);
-    xrt_module_layout_drop(&f.layout);
 }
 
 static void test_raw_state_bool_bits(void) {
@@ -194,7 +196,6 @@ static void test_raw_state_bool_bits(void) {
         XrRbcStatus status = execute(&f.module, 0, &choice, 1, &result);
         CHECK(status == (inputs[i] <= 1 && inputs[i] >= 0 ? XR_RBC_OK : XR_RBC_INVALID));
     }
-    xrt_module_layout_drop(&f.layout);
 }
 
 static void test_raw_state_fused_read_entries(void) {
@@ -205,10 +206,10 @@ static void test_raw_state_fused_read_entries(void) {
     immediate(f.code, 15, XR_RBC_EQI, 0, 0);
     CHECK(xr_rbc_jump(f.code + 16, 16, 20, 25));
     immediate(f.code, 17, XR_RBC_LOADI, 5, 33);
-    emit(f.code, 18, XR_RBC_STATE_WRITE, 4, 5, XRT_MODULE_I64);
+    emit(f.code, 18, XR_RBC_STATE_WRITE, 4, 5, XRT_VALUE_I64);
     immediate(f.code, 19, XR_RBC_STATE_REFERENCE, 4, 3);
-    emit(f.code, 20, XR_RBC_STATE_READ, 5, 4, XRT_MODULE_I64);
-    emit(f.code, 21, XR_RBC_STATE_READ, 2, 4, XRT_MODULE_I64);
+    emit(f.code, 20, XR_RBC_STATE_READ, 5, 4, XRT_VALUE_I64);
+    emit(f.code, 21, XR_RBC_STATE_READ, 2, 4, XRT_VALUE_I64);
     CHECK(xr_rbc_encode(f.code + 22, (XrRbcOperands){XR_RBC_MULI, 5, 5, 0, 100}));
     emit(f.code, 23, XR_RBC_ADD, 5, 5, 2);
     emit(f.code, 24, XR_RBC_RET, 5, 0, 0);
@@ -224,25 +225,23 @@ static void test_raw_state_fused_read_entries(void) {
     reject_prepare(&f.module, 0, &choice, 1);
     f.function.code_count = 21;
     reject_prepare(&f.module, 0, &choice, 1);
-    xrt_module_layout_drop(&f.layout);
 }
 
 static void test_raw_fixed_state_frontier(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_FIXED_U8, 17};
+    XrtValueImageType type = {.kind=XRT_VALUE_FIXED_U8,.count=17,.size=17,.alignment=1};
+    XrtValueImage values = {.types=&type,.type_count=1};
     XrtModuleSpec owner = {0};
-    XrtModuleSlotSpec slot = {.size=17, .alignment=1};
-    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleSlotSpec slot = {.type=1,.size=17, .alignment=1};
+    XrtModuleLayoutSpec spec = {.values=&values, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=17,
-        .payload_alignment=1, .byte_limit=UINT64_MAX};
-    XrtModuleLayout *layout = NULL;
-    CHECK(xrt_module_layout_new(&spec, &layout) == 0);
+        .payload_alignment=1};
     uint32_t code[4];
     immediate(code, 0, XR_RBC_LOADI, 1, 0);
     emit(code, 1, XR_RBC_RET, 1, 0, 0);
     XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
     XrRbcFunction function = {.code=code, .code_count=2, .register_count=2,
         .parameter_count=1, .register_kinds=kinds, .register_kind_count=2};
-    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=layout};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_spec=&spec};
     uint64_t result = 91;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && !result);
     XrRbcStateAccess reference = {0};
@@ -252,36 +251,32 @@ static void test_raw_fixed_state_frontier(void) {
     function.code_count = 4;
     immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
     immediate(code, 1, XR_RBC_STATE_REFERENCE, 2, 0);
-    emit(code, 2, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_FIXED_U8);
+    emit(code, 2, XR_RBC_STATE_READ, 1, 2, XRT_VALUE_FIXED_U8);
     emit(code, 3, XR_RBC_RET, 1, 0, 0);
     reject_prepare(&module, 0, NULL, 0);
-    xrt_module_layout_drop(&layout);
 }
 
 static void test_raw_callable_state_requires_typed_transport(void) {
-    XrtCallableTypeSpec callable = {.kind=XRT_CALLABLE_SIGNATURE, .result={XRT_CALLABLE_SCALAR, XR_POD_I64}};
-    XrtModuleTypeSpec type = {XRT_MODULE_CALLABLE, 0};
-    XrtModuleSpec owner = {0};
-    XrtModuleSlotSpec slot = {.module=0, .type=0, .size=sizeof(void *), .alignment=_Alignof(void *)};
-    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner, .module_count=1,
-        .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
-        .byte_limit=UINT64_MAX, .callable_types=&callable, .callable_type_count=1};
-    for (unsigned mutable = 0; mutable < 2; ++mutable) {
-        slot.flags = mutable ? XRT_MODULE_SLOT_MUTABLE : 0;
-        XrtModuleLayout *layout = NULL;
-        CHECK(xrt_module_layout_new(&spec, &layout) == 0);
+    size_t owned=16;
+    XrtValueImageType types[] = {{.kind=XRT_VALUE_I64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,.owned_count=1,.result=1}};
+    XrtValueImage values={.types=types,.type_count=2,.owned_offsets=&owned,.owned_count=1};
+    XrtModuleSpec owner={0};
+    XrtModuleSlotSpec slot={.type=2,.size=24,.alignment=8};
+    XrtModuleLayoutSpec spec={.values=&values,.modules=&owner,.module_count=1,
+        .slots=&slot,.slot_count=1,.payload_size=24,.payload_alignment=8};
+    for(unsigned mutable=0;mutable<2;++mutable) {
+        slot.flags=mutable ? XRT_MODULE_SLOT_MUTABLE : 0;
         uint32_t code[4];
-        XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
-        XrRbcStateAccess access = {0, 0, 1};
-        XrRbcFunction function = {.code=code, .code_count=4, .register_count=3, .parameter_count=1,
-            .register_kinds=kinds, .register_kind_count=3, .state_accesses=&access, .state_access_count=1};
-        XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=layout};
-        immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
-        immediate(code, 1, XR_RBC_LOADI, 1, 1);
-        immediate(code, 2, mutable ? XR_RBC_STATE_CONSTRUCT : XR_RBC_STATE_INITIALIZE, mutable ? 2 : 0, 0);
-        emit(code, 3, XR_RBC_RET0, 0, 0, 0);
-        reject_prepare(&module, 0, NULL, 0);
-        xrt_module_layout_drop(&layout);
+        XrRbcRegisterKind kinds[]={XR_RBC_STATE,XR_RBC_BITS,XR_RBC_STATE_REF};
+        XrRbcStateAccess access={0,0,1};
+        XrRbcFunction function={.code=code,.code_count=4,.register_count=3,.parameter_count=1,
+            .register_kinds=kinds,.register_kind_count=3,.state_accesses=&access,.state_access_count=1};
+        XrRbcModule module={.functions=&function,.function_count=1,.state_spec=&spec};
+        immediate(code,0,XR_RBC_MODULE_BEGIN,0,0);immediate(code,1,XR_RBC_LOADI,1,1);
+        immediate(code,2,mutable ? XR_RBC_STATE_CONSTRUCT : XR_RBC_STATE_INITIALIZE,mutable ? 2 : 0,0);
+        emit(code,3,XR_RBC_RET0,0,0,0);
+        reject_prepare(&module,0,NULL,0);
     }
 }
 

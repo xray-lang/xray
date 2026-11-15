@@ -15,10 +15,10 @@
 
 static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
-    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
+    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, CFG_INDEX_FAILURE, CFG_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE,
     ENTRY_TABLE_FAILURE, ENTRY_TARGET_FAILURE, FRAME_GROWTH_FAILURE, STATE_CACHE_FAILURE,
-    ARRAY_ARGUMENT_FAILURE, AGGREGATE_STATE_FAILURE, AGGREGATE_OUTCOME_FAILURE } fault;
+    AGGREGATE_STATE_FAILURE, AGGREGATE_OUTCOME_FAILURE } fault;
 static bool observe_fixed_moves;
 static unsigned fixed_register_moves, fixed_spill_moves;
 static bool observe_aggregate_allocations;
@@ -32,17 +32,6 @@ static bool nullable_allocation_fails(void) {
     return true;
 }
 static size_t spill_state_failure_entries=2;
-static bool observe_frame_drops;
-static unsigned observed_cell_drops,observed_cell_writes;
-static void observed_string_drop(XrtString **value,const XrRbcFunction *function,size_t pc) {
-    if(observe_frame_drops) {
-        XrRbcOp op=(XrRbcOp)(function->code[pc]&255);
-        observed_cell_drops+=op==XR_RBC_STRING_CELL_DROP;
-        observed_cell_writes+=op==XR_RBC_CELL_WRITE;
-    }
-    xrt_string_drop(value);
-}
-
 static void *real_malloc(size_t size) { return xr_malloc(size); }
 static void *execution_malloc(size_t size);
 static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, size); }
@@ -99,18 +88,15 @@ static void moving_free(void *pointer) {
 #define xr_calloc(count, size) execution_calloc(count, size)
 #define xr_realloc(pointer, size) moving_realloc(pointer, size)
 #define xr_free(pointer) moving_free(pointer)
-#define xrt_string_drop(value) observed_string_drop((value),function,pc-1)
 #include "vm/register/xrbc.c"
-#undef xrt_string_drop
 
 static void *execution_malloc(size_t size) {
     if (nullable_allocation_fails()) return NULL;
     if (fault == AGGREGATE_OUTCOME_FAILURE && size == 17) { fault = NO_FAILURE; return NULL; }
-    if (fault == ARRAY_ARGUMENT_FAILURE && size == 2 * sizeof(XrRbcRegister)) { fault = NO_FAILURE; return NULL; }
     if ((fault == ENTRY_TABLE_FAILURE && size == sizeof(XrRbcEntry)) ||
         (fault == ENTRY_TARGET_FAILURE && size == 11)) { fault=NO_FAILURE; return NULL; }
     if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_entries * sizeof(RbcSpillState)) { fault=NO_FAILURE;return NULL; }
-    if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
+    if (fault == CFG_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
     void *memory = real_malloc(size);
     if (memory && nullable_observe) ++nullable_live;
     return memory;
@@ -125,7 +111,7 @@ static void *execution_calloc(size_t count, size_t size) {
         fault = NO_FAILURE;
         return NULL;
     }
-    if (fault == STRING_JOIN_FAILURE) { fault = NO_FAILURE; return NULL; }
+    if (fault == CFG_JOIN_FAILURE) { fault = NO_FAILURE; return NULL; }
     if (fault == OUTCOME_FAILURE && size == sizeof(XrRbcOutcome)) {
         fault = NO_FAILURE;
         return NULL;
@@ -338,42 +324,16 @@ static void cell_growth(bool panic) {
         XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all moving buffers reclaimed");
 }
 
-static void string_admission_oom(void) {
-    uint32_t code[5];
-    XR_CHECK(xr_rbc_encode(&code[0],(XrRbcOperands){XR_RBC_STRING_LITERAL,0,0,0,0}),"String producer");
-    XR_CHECK(xr_rbc_jump(&code[1],1,3,5),"forward String edge");
-    XR_CHECK(xr_rbc_encode(&code[2],(XrRbcOperands){XR_RBC_RET0,0,0,0,0}),"unreachable return");
-    XR_CHECK(xr_rbc_encode(&code[3],(XrRbcOperands){XR_RBC_STRING_DROP,0,0,0,0}),"owned String retirement");
-    code[4]=code[2];
-    XrRbcRegisterKind kind=XR_RBC_STRING;
-    XrRbcFunction function={.code=code,.code_count=5,.register_count=1,.register_kinds=&kind,.register_kind_count=1};
-    XrRbcLiteral literal={"s",1}; XrRbcModule module={.functions=&function,.function_count=1,.literals=&literal,.literal_count=1};
-    XrtLocationOwner *owner=NULL; XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"String image");
-    for (unsigned i=0;i<3;++i) {
-        fault=i==0?STRING_INDEX_FAILURE:i==1?STRING_JOIN_FAILURE:NO_FAILURE;
-        XrRbcExecution *execution=NULL; XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
-        XR_CHECK(fault==NO_FAILURE,"representative String admission allocation reached");
-        if(i<2) XR_CHECK(status==XR_RBC_OUT_OF_MEMORY&&!execution,"String verifier OOM publishes nothing");
-        else {
-            XR_CHECK(status==XR_RBC_OK&&execution,"String admission recovers after allocation failures");
-            XrRbcOutcome *outcome=xr_rbc_execution_run(execution);XR_CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK,"same String graph executes");
-            xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
-        }
-    }
-    xrt_locations_release(owner);
-    for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"String execution buffers reclaimed");
-}
 static void spill_branch_admission_oom(void) {
     uint32_t code[7];
-    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);immediate(code,1,XR_RBC_SPILL,0,0);
-    XR_CHECK(xr_rbc_jump(code+2,2,4,7),"forward spilled String edge");
+    immediate(code,0,XR_RBC_LOADI,0,42);immediate(code,1,XR_RBC_SPILL,0,0);
+    XR_CHECK(xr_rbc_jump(code+2,2,4,7),"forward spilled scalar edge");
     emit(code,3,XR_RBC_RET0,0,0,0);immediate(code,4,XR_RBC_RELOAD,0,0);
-    emit(code,5,XR_RBC_STRING_DROP,0,0,0);emit(code,6,XR_RBC_RET0,0,0,0);
-    XrRbcRegisterKind kind=XR_RBC_STRING;
+    emit(code,5,XR_RBC_RET,0,0,0);emit(code,6,XR_RBC_RET0,0,0,0);
+    XrRbcRegisterKind kind=XR_RBC_BITS;
     XrRbcFunction function={.code=code,.code_count=7,.register_count=1,.register_kinds=&kind,
-        .register_kind_count=1,.spill_count=1,.reference_spill_count=1};
-    XrRbcLiteral literal={"\xc3\xa9\0",3};
-    XrRbcModule module={.functions=&function,.function_count=1,.literals=&literal,.literal_count=1};
+        .register_kind_count=1,.spill_count=1};
+    XrRbcModule module={.functions=&function,.function_count=1};
     XrtLocationOwner *owner=NULL;
     XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"spilled branch location owner");
     /* Two saved entries and the current state have distinct spill storage. */
@@ -387,7 +347,8 @@ static void spill_branch_admission_oom(void) {
         else {
             XR_CHECK(status==XR_RBC_OK && execution,"identical spilled branch request recovers");
             XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
-            XR_CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK,"spilled branch String retires");
+            uint64_t value=0;
+            XR_CHECK(outcome && xr_rbc_outcome_bits(outcome,&value) && value==42,"spilled branch scalar returns");
             xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
         }
     }
@@ -398,21 +359,20 @@ static void spill_branch_admission_oom(void) {
 static void spill_growth(bool panic) {
     uint32_t caller[11],callee[5];
     immediate(caller,0,XR_RBC_LOADI,3,5);immediate(caller,1,XR_RBC_CELL_NEW,3,0);
-    immediate(caller,2,XR_RBC_STRING_LITERAL,0,0);immediate(caller,3,XR_RBC_SPILL,0,0);
+    immediate(caller,2,XR_RBC_LOADI,0,39);immediate(caller,3,XR_RBC_SPILL,0,0);
     immediate(caller,4,XR_RBC_CALL,4,1);emit(caller,5,XR_RBC_MOV,2,4,0);
     emit(caller,6,XR_RBC_CELL_READ,1,3,0);emit(caller,7,XR_RBC_ADD,2,2,1);
-    immediate(caller,8,XR_RBC_RELOAD,0,0);emit(caller,9,XR_RBC_STRING_DROP,0,0,0);
+    immediate(caller,8,XR_RBC_RELOAD,0,0);emit(caller,9,XR_RBC_ADD,2,2,0);
     emit(caller,10,XR_RBC_RET,2,0,0);
     immediate(callee,0,XR_RBC_LOADI,0,panic?0:42);immediate(callee,1,XR_RBC_SPILL,0,31);
     immediate(callee,2,XR_RBC_RELOAD,0,31);
     emit(callee,3,panic?XR_RBC_DIV:XR_RBC_RET,0,0,0);emit(callee,4,XR_RBC_RET,0,0,0);
-    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_CALL_WINDOW};
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_CALL_WINDOW};
     XrRbcFunction functions[]={
         {.code=caller,.code_count=11,.register_count=5,.cell_count=1,.register_kinds=kinds,
-         .register_kind_count=5,.spill_count=1,.reference_spill_count=1},
+         .register_kind_count=5,.spill_count=1},
         {.code=callee,.code_count=panic?5u:4u,.register_count=1,.spill_count=32}};
-    XrRbcLiteral literal={"live across spill relocation",28};
-    XrRbcModule module={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
+    XrRbcModule module={.functions=functions,.function_count=2};
     XrtLocationOwner *owner=NULL;XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"spill location owner");
     unsigned expected_fault=fault;XrRbcExecution *execution=NULL;
     XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
@@ -427,112 +387,12 @@ static void spill_growth(bool panic) {
             panic?XR_RBC_TYPED_PANIC:XR_RBC_OK;
         XR_CHECK(outcome&&xr_rbc_outcome_status(outcome)==expected&&fault==NO_FAILURE,"spill result first cause");
         XR_CHECK(xr_rbc_outcome_bits(outcome,&bits)==(expected==XR_RBC_OK),"spill result status gates bits");
-        XR_CHECK(bits==(expected==XR_RBC_OK?47u:99u),"caller cell and String survive moving spill storage");
+        XR_CHECK(bits==(expected==XR_RBC_OK?86u:99u),"caller scalar spill and cell survive moving storage");
         xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
     }
     xrt_locations_release(owner);
     for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"all four moving buffers reclaimed");
 }
-typedef struct FrameObservation {
-    XrRbcExecution *execution;
-    XrtValueRoot strings;
-    XrtExecutionFailure failure;
-    XrRbcRegister result;
-    XrRbcStatus status;
-    bool before_drain;
-} FrameObservation;
-static void observe_frame_root(void *data) {
-    FrameObservation *o=data;
-    o->status=xr_rbc_execute(o->execution->module,&o->execution->stack,
-        o->execution->pending->locations,&o->result,o->execution->entries);
-    if(o->status!=XR_RBC_OK)return;
-    if(o->execution->pending->result_kind==XR_RBC_STRING)
-        o->result.string=xrt_string_root_take(o->result.string);
-    XR_CHECK(!o->execution->stack.depth && !o->strings.held,
-        "actual normal Cell DROP precedes frame retirement and root drain");
-    o->before_drain=true;
-}
-static void frame_cell_growth(unsigned requested_fault,bool panic) {
-    uint32_t root[12],body[23];
-    immediate(root,0,XR_RBC_STRING_LITERAL,0,0);emit(root,1,XR_RBC_STRING_CELL_NEW,1,0,0);
-    emit(root,2,XR_RBC_STRING_DROP,0,0,0);immediate(root,3,XR_RBC_LOADI,4,40);
-    emit(root,4,XR_RBC_MOV,5,1,0);immediate(root,5,XR_RBC_CALL,3,1);
-    emit(root,6,XR_RBC_CELL_READ,2,1,0);emit(root,7,XR_RBC_STRING_LEN,4,2,0);
-    emit(root,8,XR_RBC_STRING_DROP,2,0,0);emit(root,9,XR_RBC_ADD,3,3,4);
-    emit(root,10,XR_RBC_STRING_CELL_DROP,1,0,0);emit(root,11,XR_RBC_RET,3,0,0);
-    immediate(body,0,XR_RBC_STRING_LITERAL,2,1);emit(body,1,XR_RBC_STRING_CELL_NEW,3,2,0);
-    emit(body,2,XR_RBC_STRING_DROP,2,0,0);immediate(body,3,XR_RBC_LOADI,4,1);
-    immediate(body,4,XR_RBC_LOADI,6,0);emit(body,5,XR_RBC_EQ,0,6,0);
-    XR_CHECK(xr_rbc_jump(body+6,6,12,23),"base return path");emit(body,7,XR_RBC_SUB,5,0,4);
-    emit(body,8,XR_RBC_MOV,12,5,0);emit(body,9,XR_RBC_MOV,13,1,0);
-    immediate(body,10,XR_RBC_CALL,11,1);XR_CHECK(xr_rbc_jump(body+11,11,13,23),"normal join");
-    if(panic)emit(body,12,XR_RBC_DIV,11,0,0);else immediate(body,12,XR_RBC_LOADI,11,0);
-    emit(body,13,XR_RBC_CELL_READ,7,1,0);emit(body,14,XR_RBC_STRING_LEN,9,7,0);
-    emit(body,15,XR_RBC_STRING_DROP,7,0,0);emit(body,16,XR_RBC_CELL_READ,8,3,0);
-    emit(body,17,XR_RBC_STRING_LEN,10,8,0);emit(body,18,XR_RBC_STRING_DROP,8,0,0);
-    emit(body,19,XR_RBC_ADD,10,10,9);emit(body,20,XR_RBC_ADD,10,10,11);
-    emit(body,21,XR_RBC_STRING_CELL_DROP,3,0,0);emit(body,22,XR_RBC_RET,10,0,0);
-    XrRbcRegisterKind outer[]={XR_RBC_STRING,XR_RBC_STRING_CELL,XR_RBC_STRING,
-        XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
-    XrRbcRegisterKind inner[]={XR_RBC_BITS,XR_RBC_STRING_CELL,XR_RBC_STRING,XR_RBC_STRING_CELL,
-        XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_STRING,XR_RBC_BITS,XR_RBC_BITS,
-        XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
-    uint32_t ids[23]={0};ids[12]=panic?1u:0u;
-    XrRbcRegisterKind cell=XR_RBC_STRING;
-    XrRbcFunction functions[]={
-        {.code=root,.code_count=12,.register_count=6,.cell_count=1,.register_kinds=outer,
-         .register_kind_count=6,.cell_kinds=&cell,.cell_kind_count=1},
-        {.code=body,.code_count=23,.register_count=14,.parameter_count=2,.cell_count=1,
-         .register_kinds=inner,.register_kind_count=14,.cell_kinds=&cell,.cell_kind_count=1,
-         .source_ids=ids,.source_id_count=23}};
-    XrRbcLiteral literals[]={{"ancestor",8},{"frame",5}};
-    XrRbcModule module={.functions=functions,.function_count=2,.literals=literals,.literal_count=2};
-    XrtLocationOwner *locations=NULL;XrtSourceLocation point={"frame-cells.xr",14,20,3,20,8};
-    XR_CHECK(xrt_locations_create(&point,1,&locations)==XRT_LOCATION_OK,"frame failure location");
-    FrameObservation o={.status=XR_RBC_INVALID};
-    fault=requested_fault;XrRbcStatus prepared=xr_rbc_module_prepare(&module,0,NULL,0,locations,&o.execution);
-    if(requested_fault==CELL_INITIAL_FAILURE) {
-        XR_CHECK(prepared==XR_RBC_OUT_OF_MEMORY && !o.execution && fault==NO_FAILURE,"real Cell bank initial failure");
-    } else {
-        XR_CHECK(prepared==XR_RBC_OK && o.execution,"complete frame Cell graph prepared");
-        observed_cell_drops=observed_cell_writes=0;observe_frame_drops=true;
-        XrtExecutionStatus status=xrt_run_embedded_owned(locations,&o.failure,observe_frame_root,&o,&o.strings);
-        observe_frame_drops=false;
-        if(panic)XR_CHECK(status==XRT_EXECUTION_FAILURE && o.failure.kind==XRT_FAILURE_TYPED_PANIC &&
-            o.failure.detail.panic.code==420 && o.failure.detail.panic.source_id==1 && !o.before_drain,
-            "live Cell panic retains its first exact cause");
-        else if(requested_fault!=NO_FAILURE)XR_CHECK(status==XRT_EXECUTION_COMPLETED && o.status==XR_RBC_OUT_OF_MEMORY &&
-            !o.before_drain && fault==NO_FAILURE,"real moving bank OOM is not a normal guest return");
-        else XR_CHECK(status==XRT_EXECUTION_COMPLETED && o.status==XR_RBC_OK && o.before_drain &&
-            o.result.bits==541 && observed_cell_drops==42 && !observed_cell_writes,
-            "42 actual Cell drops precede successful drain after moving banks");
-        XR_CHECK(!o.strings.domain && !o.strings.held,"failure or completed boundary reclaimed its root");
-        xr_rbc_execution_free(&o.execution);
-    }
-    xrt_locations_release(locations);
-    for(unsigned i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"all relocated banks reclaimed");
-}
-static void frame_cell_string_result(void) {
-    uint32_t code[7];immediate(code,0,XR_RBC_STRING_LITERAL,0,0);emit(code,1,XR_RBC_STRING_CELL_NEW,1,0,0);
-    emit(code,2,XR_RBC_STRING_DROP,0,0,0);XR_CHECK(xr_rbc_jump(code+3,3,4,7),"result forward edge");
-    emit(code,4,XR_RBC_CELL_READ,0,1,0);emit(code,5,XR_RBC_STRING_CELL_DROP,1,0,0);emit(code,6,XR_RBC_RET,0,0,0);
-    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_STRING_CELL},cell=XR_RBC_STRING;
-    XrRbcFunction function={.code=code,.code_count=7,.register_count=2,.cell_count=1,.register_kinds=kinds,
-        .register_kind_count=2,.cell_kinds=&cell,.cell_kind_count=1,.result_kind=XR_RBC_STRING};
-    XrRbcLiteral literal={"cell\0\xc3\xa9",7};XrRbcModule module={.functions=&function,.function_count=1,.literals=&literal,.literal_count=1};
-    XrtLocationOwner *locations=NULL;XR_CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK,"result location");
-    FrameObservation o={.status=XR_RBC_INVALID};fault=NO_FAILURE;
-    XR_CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&o.execution)==XR_RBC_OK,"owned Cell result prepared");
-    observed_cell_drops=0;observe_frame_drops=true;
-    XR_CHECK(xrt_run_embedded_owned(locations,&o.failure,observe_frame_root,&o,&o.strings)==XRT_EXECUTION_COMPLETED,
-        "owned result actually transfers before successful root drain");observe_frame_drops=false;
-    XR_CHECK(o.before_drain && observed_cell_drops==1,"actual Cell drop did not consume the retained result");
-    size_t length=0;const char *bytes=xrt_string_bytes(o.result.string,&length);
-    XR_CHECK(length==7&&!memcmp(bytes,literal.bytes,7),"result survives its physical Cell and root");
-    xrt_string_owned_drop(&o.result.string);xr_rbc_execution_free(&o.execution);xrt_locations_release(locations);
-    for(unsigned i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"result banks retired");
-}
-
 static void spill_cycle_admission_oom(void) {
     uint32_t code[3];immediate(code,0,XR_RBC_LOADI,0,42);
     immediate(code,1,XR_RBC_SPILL,0,0);XR_CHECK(xr_rbc_jump(code+2,2,0,3),"cycle to actual entry");
@@ -541,7 +401,7 @@ static void spill_cycle_admission_oom(void) {
     XrtLocationOwner *owner=NULL;
     XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"cycle location owner");
     for(unsigned i=0;i<4;++i) {
-        fault=i==0?STRING_INDEX_FAILURE:i==1?STRING_JOIN_FAILURE:i==2?SPILL_STATE_FAILURE:NO_FAILURE;
+        fault=i==0?CFG_INDEX_FAILURE:i==1?CFG_JOIN_FAILURE:i==2?SPILL_STATE_FAILURE:NO_FAILURE;
         XrRbcExecution *execution=NULL;
         XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
         XR_CHECK(fault==NO_FAILURE,"actual graph allocation fault reached");
@@ -555,28 +415,27 @@ static void spill_cycle_admission_oom(void) {
 }
 
 static void module_state_cache_failure(void) {
-    XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
+    XrtValueImageType type = {.kind=XRT_VALUE_I64, .size=8, .alignment=8};
+    XrtValueImage values = {.types=&type, .type_count=1};
     XrtModuleSpec owner = {0, 0};
-    XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleSlotSpec slot = {0, 1, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
+    XrtModuleLayoutSpec layout = {.values=&values, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
-        .payload_alignment=8, .byte_limit=UINT64_MAX};
-    XrtModuleLayout *storage = NULL;
-    XR_CHECK(xrt_module_layout_new(&layout, &storage) == 0, "owned module layout");
+        .payload_alignment=8};
     uint32_t code[7];
     immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
     immediate(code, 1, XR_RBC_LOADI, 1, 42);
     immediate(code, 2, XR_RBC_STATE_CONSTRUCT, 2, 0);
     emit(code, 3, XR_RBC_STATE_PUBLISH, 2, 0, 0);
     immediate(code, 4, XR_RBC_MODULE_READY, 0, 0);
-    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_MODULE_I64);
+    emit(code, 5, XR_RBC_STATE_READ, 1, 2, XRT_VALUE_I64);
     emit(code, 6, XR_RBC_RET, 1, 0, 0);
     XrRbcStateAccess access = {0, 0, 1};
     XrRbcRegisterKind kinds[] = {XR_RBC_STATE, XR_RBC_BITS, XR_RBC_STATE_REF};
     XrRbcFunction function = {.code=code, .code_count=7, .register_count=3,
         .parameter_count=1, .register_kinds=kinds, .register_kind_count=3,
         .state_accesses=&access, .state_access_count=1};
-    XrRbcModule module = {.functions=&function, .function_count=1, .state_layout=storage};
+    XrRbcModule module = {.functions=&function, .function_count=1, .state_spec=&layout};
     XrtLocationOwner *locations = NULL;
     XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "empty image owner");
     XrRbcExecution *execution = NULL;
@@ -596,44 +455,10 @@ static void module_state_cache_failure(void) {
         xr_rbc_execution_free(&execution);
     }
     xrt_locations_release(locations);
-    xrt_module_layout_drop(&storage);
+
 }
 
-#include "register_state_fusion_cases.h"
 
-static void array_argument_failures(void) {
-    uint32_t code[4];
-    immediate(code, 0, XR_RBC_LOADI, 0, 7);
-    immediate(code, 1, XR_RBC_LOADI, 1, 9);
-    immediate(code, 2, XR_RBC_ARRAY_ACCESS, 0, 0);
-    emit(code, 3, XR_RBC_RET, 2, 0, 0);
-    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS, XR_RBC_ARRAY_I64};
-    XrRbcArrayLocation arguments[] = {{0, false}, {1, false}};
-    XrRbcArrayAccess access = {.operation=XR_RBC_ARRAY_NEW, .kind=XR_RBC_ARRAY_I64,
-        .result={2, false}, .count=2};
-    XrRbcFunction function = {.code=code, .code_count=4, .register_count=3,
-        .register_kinds=kinds, .register_kind_count=3, .result_kind=XR_RBC_ARRAY_I64,
-        .array_accesses=&access, .array_access_count=1, .array_operands=arguments, .array_operand_count=2};
-    XrRbcModule module = {.functions=&function, .function_count=1};
-    XrtLocationOwner *locations = NULL;
-    XR_CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK, "Array fault location owner");
-    XrRbcExecution *execution = NULL;
-    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK, "Array fault prepared");
-    fault = ARRAY_ARGUMENT_FAILURE;
-    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-    XR_CHECK(fault == NO_FAILURE && xr_rbc_outcome_status(outcome) == XR_RBC_OUT_OF_MEMORY,
-        "real variadic gather allocation failure publishes no Array");
-    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
-    FrameObservation o = {0};
-    XR_CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &o.execution) == XR_RBC_OK, "Array native failure prepared");
-    o.strings.byte_limit = 1;
-    XR_CHECK(xrt_run_embedded_owned(locations, &o.failure, observe_frame_root, &o, &o.strings) == XRT_EXECUTION_FAILURE &&
-        o.failure.kind == XRT_FAILURE_VALUE && o.failure.detail.value.status == XR_XIR_VALUE_LIMIT,
-        "real canonical Array failure crosses the shared longjmp boundary");
-    XR_CHECK(xrt_value_root_empty(&o.strings), "Array native failure drains the sole value root");
-    xr_rbc_execution_free(&o.execution); xrt_locations_release(locations);
-    for (size_t i = 0; i < 4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all Array fault stack banks retired");
-}
 
 #include "register_fixed_call_fixture.h"
 
@@ -738,24 +563,15 @@ int main(void) {
     nullable_allocation_failures();
     aggregate_call_failures();
     aggregate_bank_failures();
-    array_argument_failures();
-    module_state_fused_retain_failure();
     module_state_cache_failure();
     entry_initialization();
     spill_cycle_admission_oom();
-    frame_cell_growth(NO_FAILURE,false);
-    frame_cell_growth(CELL_INITIAL_FAILURE,false);
-    frame_cell_growth(CELL_GROWTH_FAILURE,false);
-    frame_cell_growth(GROWTH_FAILURE,false);
-    frame_cell_growth(NO_FAILURE,true);
-    frame_cell_string_result();
     spill_branch_admission_oom();
     spill_growth(false);
     fault=SPILL_STATE_FAILURE;spill_growth(false);
     fault=SPILL_INITIAL_FAILURE;spill_growth(false);
     fault=SPILL_GROWTH_FAILURE;spill_growth(false);
     spill_growth(true);
-    string_admission_oom();
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);
     XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
