@@ -65,7 +65,7 @@ static bool c_value_mark(LirC *c, uint8_t *needed, size_t count, XrLirType type)
         c_error(c, XR_LIR_C_INVALID_LIR, "C value has an invalid physical type identity");
         return false;
     }
-    if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || type == XR_LIR_STRING || type >= XR_LIR_TYPE_COUNT)
+    if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || c_managed_leaf(type) || type >= XR_LIR_TYPE_COUNT)
         needed[type] = 1;
     return true;
 }
@@ -78,7 +78,7 @@ static void c_values_prepare(LirC *c) {
     size_t type_count = (size_t)XR_LIR_TYPE_COUNT + c->constructed_count;
     void *flags = NULL, *memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + 4, 1, &flags))) return;
-    uint8_t *needed = flags; bool projected = c->state || c->arrays;
+    uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps;
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
         XrLirType payload = c->state_layout.slots[slot].payload;
@@ -88,10 +88,10 @@ static void c_values_prepare(LirC *c) {
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
         XrLirFunction function = {module, c->closure[i]}; XrLirFunctionView view;
         xr_lir_function_view(module, function, &view);
-        projected |= view.result == XR_LIR_STRING || view.result >= XR_LIR_TYPE_COUNT;
+        projected |= c_managed_leaf(view.result) || view.result >= XR_LIR_TYPE_COUNT;
         if (!c_value_mark(c, needed, type_count, view.result)) break;
         for (uint32_t p = 0; p < view.parameter_count && c_request_poll(c); ++p) {
-            projected |= view.parameter_types[p] == XR_LIR_STRING || view.parameter_types[p] >= XR_LIR_TYPE_COUNT;
+            projected |= c_managed_leaf(view.parameter_types[p]) || view.parameter_types[p] >= XR_LIR_TYPE_COUNT;
             if (!c_value_mark(c, needed, type_count, view.parameter_types[p])) break;
         }
         for (uint32_t v = 1; v <= view.value_count && c_request_poll(c); ++v) {
@@ -103,7 +103,7 @@ static void c_values_prepare(LirC *c) {
                 }
                 c_values_array_mark(needed,type_count,shape.element);
             }
-            projected |= type == XR_LIR_STRING || type >= XR_LIR_TYPE_COUNT;
+            projected |= c_managed_leaf(type) || type >= XR_LIR_TYPE_COUNT;
             if (!c_value_mark(c, needed, type_count, type)) break;
         }
     }
@@ -178,7 +178,7 @@ static void c_values_function(LirC *c) {
     c->home_edge_cursor = 0;
 }
 static void c_values_declarations(LirC *c) {
-    if ((c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY)) c_text(c, "    (void)xrl_result;\n");
+    if (c_managed_leaf(c->view.result)) c_text(c, "    (void)xrl_result;\n");
     if (!c->homes || !c->homes->owned_frame_needed) return;
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
 }
@@ -235,7 +235,7 @@ static void c_values_helpers(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         c_values_function(c);
         if (!c->homes) continue;
-        if ((c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY)) {
+        if (c_managed_leaf(c->view.result)) {
             bool returns = false;
             for (size_t event = 0; event < c->homes->event_count; ++event)
                 returns |= c->homes->events[event].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER;
@@ -243,7 +243,7 @@ static void c_values_helpers(LirC *c) {
         }
         if (!c->homes->owned_frame_needed) continue;
         c_value_frame(c, c->homes);
-        if ((c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY)) c_value_returns(c, c->homes);
+        if (c_managed_leaf(c->view.result)) c_value_returns(c, c->homes);
         LirCEdgeEvents events = {0}; c_edge_events_prepare(c, c->homes, &events);
         for (size_t e = 0; e < c->homes->edge_count && c_request_poll(c); ++e) {
             const XrLirHomeEdge *edge = &c->homes->edges[e];
@@ -299,7 +299,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     return true;
 }
 static bool c_values_signature(LirC *c, bool definition) {
-    if ((c->view.result != XR_LIR_STRING && c->view.result != XR_LIR_ARRAY)) return false;
+    if (!c_managed_leaf(c->view.result)) return false;
     c_text(c, "static void "); c_function_name(c, c->function.id);
     c_format(c, "(XrlLanding_%" PRIu32 " xrl_result", c->function.id);
     for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
@@ -336,7 +336,7 @@ static void c_values_root(LirC *c) {
     c_text(c, "    return result;\n}\n");
 }
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
-    if (v->op == XR_LIR_CALL && (v->type == XR_LIR_STRING || v->type == XR_LIR_ARRAY)) {
+    if (v->op == XR_LIR_CALL && c_managed_leaf(v->type)) {
         c_values_ensure(c, source);
         const XrLirValueHome *home = &c->homes->values[v->result];
         c_text(c, "    "); c_function_name(c, v->callee);
@@ -348,7 +348,7 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_text(c, ");\n");
         return true;
     }
-    if (v->op == XR_LIR_RET && (c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY)) {
+    if (v->op == XR_LIR_RET && c_managed_leaf(c->view.result)) {
         c_format(c, "    { XrtManagedStatus status = xrl_return_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(xrl_root, xrl_frame, xrl_payload, xrl_result);\n",
             c->function.id, c->block, c->instruction);
         c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n      return; }\n", source);
