@@ -67,7 +67,9 @@ XR_FUNCDEF XrtManagedStatus xrt_place_borrow(XrtPlace place, const XrtManagedHea
     *location.slot.busy = false;
     return status;
 }
-static XrtManagedStatus place_replace(XrtPlace destination, XrtPlace source, bool copy) {
+static XrtManagedStatus place_replace(XrtPlace destination, XrtPlace source, bool copy,
+    const XrtPlacePublication *publication) {
+    if (publication && !publication->publish) return XRT_MANAGED_ARGUMENT;
     PlaceLocation to = {0}, from = {0};
     XrtManagedStatus status = place_location(destination, &to);
     if (status == XRT_MANAGED_OK) status = place_location(source, &from);
@@ -78,24 +80,30 @@ static XrtManagedStatus place_replace(XrtPlace destination, XrtPlace source, boo
     if (status == XRT_MANAGED_OK) status = place_check(to, XRT_PLACE_REPLACE);
     if (status == XRT_MANAGED_OK && !*from.slot.owner && to.nulls != XRT_PLACE_NULLABLE)
         status = XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *old = NULL;
     if (status == XRT_MANAGED_OK && to.slot.owner != from.slot.owner) {
         XrtManagedHeader *value = *from.slot.owner;
         if (copy && value && !xrt_managed_retain(value)) status = XRT_MANAGED_REFCOUNT;
         else {
-            XrtManagedHeader *old = *to.slot.owner;
+            old = *to.slot.owner;
             *to.slot.owner = value;
             if (!copy) *from.slot.owner = NULL;
-            xrt_managed_drop(old);
         }
+    }
+    if (status == XRT_MANAGED_OK) {
+        if (publication) publication->publish(publication->context);
+        xrt_managed_drop(old);
     }
     place_unlock_pair(to, from);
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source) {
-    return place_replace(destination, source, true);
+XR_FUNCDEF XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source,
+    const XrtPlacePublication *publication) {
+    return place_replace(destination, source, true, publication);
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source) {
-    return place_replace(destination, source, false);
+XR_FUNCDEF XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
+    const XrtPlacePublication *publication) {
+    return place_replace(destination, source, false, publication);
 }
 
 static XrtPlace edge_place(const XrtPlaceEdge *edges, size_t index) {
@@ -140,8 +148,9 @@ static XrtManagedStatus edge_preflight(const XrtPlaceEdge *edges, size_t count) 
     }
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t count) {
-    if (count && !edges) return XRT_MANAGED_ARGUMENT;
+XR_FUNCDEF XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t count,
+    const XrtPlacePublication *publication) {
+    if ((count && !edges) || (publication && !publication->publish)) return XRT_MANAGED_ARGUMENT;
     if (count > SIZE_MAX / 3) return XRT_MANAGED_OVERFLOW;
     size_t nodes = count * 3;
     for (size_t i = 0; i < nodes; ++i) {
@@ -172,6 +181,7 @@ XR_FUNCDEF XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_
             *destination.slot.owner = *temporary.slot.owner;
             *temporary.slot.owner = old;
         }
+        if (publication) publication->publish(publication->context);
         for (size_t n = 0; n < count; ++n) {
             PlaceLocation temporary = edge_location(edges, n * 3 + 2);
             XrtManagedHeader *old = *temporary.slot.owner;
