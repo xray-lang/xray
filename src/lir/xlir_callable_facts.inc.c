@@ -31,10 +31,16 @@ XR_FUNC void xr_lir_callable_facts_destroy(XrLirCallableFacts *facts) {
     xr_free(facts);
 }
 
+static bool lir_callable_extent(size_t *bytes, size_t count, size_t stride) {
+    if (stride && count > (SIZE_MAX - *bytes) / stride) return false;
+    *bytes += count * stride;
+    return true;
+}
+
 static XrLirCallableFacts *lir_callable_facts_allocate(uint32_t functions) {
-    if (functions > (SIZE_MAX - sizeof(XrLirCallableFacts)) / sizeof(LirCallableFunctionFacts *)) return NULL;
-    XrLirCallableFacts *facts = xr_calloc(1,
-        sizeof(*facts) + (size_t)functions * sizeof(LirCallableFunctionFacts *));
+    size_t bytes = sizeof(XrLirCallableFacts);
+    if (!lir_callable_extent(&bytes, functions, sizeof(LirCallableFunctionFacts *))) return NULL;
+    XrLirCallableFacts *facts = xr_calloc(1, bytes);
     if (facts) {
         facts->function_count = functions;
         facts->functions = (LirCallableFunctionFacts **)(facts + 1);
@@ -53,10 +59,9 @@ static bool lir_function_has_callables(const XrLirModule *m, const XrLirFunction
 
 static LirCallableFunctionFacts *lir_callable_function_allocate(uint32_t values, uint32_t captures) {
     size_t rows = (size_t)values + 1;
-    if (!rows || rows > (SIZE_MAX - sizeof(LirCallableFunctionFacts)) / sizeof(XrLirCallableValueFact)) return NULL;
-    size_t bytes = sizeof(LirCallableFunctionFacts) + rows * sizeof(XrLirCallableValueFact);
-    if (captures > (SIZE_MAX - bytes) / sizeof(uint32_t)) return NULL;
-    bytes += (size_t)captures * sizeof(uint32_t);
+    size_t bytes = sizeof(LirCallableFunctionFacts);
+    if (!rows || !lir_callable_extent(&bytes, rows, sizeof(XrLirCallableValueFact)) ||
+        !lir_callable_extent(&bytes, captures, sizeof(uint32_t))) return NULL;
     LirCallableFunctionFacts *facts = xr_calloc(1, bytes);
     if (!facts) return NULL;
     facts->bytes = bytes;
