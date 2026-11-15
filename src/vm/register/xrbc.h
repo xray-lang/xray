@@ -54,18 +54,8 @@
     X(CELL_NEW, ABX)                                                                               \
     X(CELL_READ, AB)                                                                               \
     X(CELL_WRITE, AB)                                                                              \
-    X(STRING_LITERAL, ABX)                                                                         \
-    X(STRING_I64, AB)                                                                              \
-    X(STRING_CONCAT, ABC)                                                                          \
-    X(STRING_RETAIN, AB)                                                                           \
-    X(STRING_DROP, A)                                                                              \
-    X(STRING_PRINT, A)                                                                             \
-    X(STRING_TAKE, AB)                                                                             \
-    X(STRING_CELL_NEW, ABC)                                                                        \
-    X(STRING_CELL_DROP, A)                                                                         \
     X(RET, A)                                                                                      \
     X(RET0, NONE)                                                                                  \
-    X(STRING_LEN, AB)                                                                              \
     X(SPILL, ABX)                                                                                  \
     X(RELOAD, ABX)                                                                                 \
     X(FNEG, AB)                                                                                    \
@@ -79,7 +69,6 @@
     X(FLE, ABC)                                                                                    \
     X(FGT, ABC)                                                                                    \
     X(FGE, ABC)                                                                                    \
-    X(STRING_F64, AB)                                                                               \
     X(ITOF, AB)                                                                                     \
     X(FTOI, AB)                                                                                     \
     X(ADDI, ABS8)                                                                                  \
@@ -100,10 +89,8 @@
     X(STATE_REFERENCE, ABX)                                                                        \
     X(STATE_READ, ABK8)                                                                            \
     X(STATE_WRITE, ABK8)                                                                            \
-    X(ARRAY_ACCESS, ABX)                                                                            \
     X(AGGREGATE_ACCESS, ABX)                                                                        \
-    X(VALUE_ACCESS, ABX)                                                                            \
-    X(VIEW_ACCESS, ABX)
+    X(VALUE_ACCESS, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

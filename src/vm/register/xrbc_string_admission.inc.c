@@ -61,9 +61,7 @@ static bool rbc_cell_parameter_origin(uint32_t parameter, uint32_t *origin) {
 static bool rbc_string_source(const RbcStringAdmission *s, uint32_t r) {
     return rbc_register_kind(s->function, r) == XR_RBC_STRING && rbc_string_state(s->state[r]);
 }
-static bool rbc_string_destination(RbcStringAdmission *s, uint32_t r) {
-    return rbc_register_kind(s->function, r) == XR_RBC_STRING && s->state[r] == RBC_EMPTY;
-}
+
 static bool rbc_bits_destination(RbcStringAdmission *s, uint32_t r) {
     XrRbcRegisterKind kind = rbc_register_kind(s->function, r);
     return (kind == XR_RBC_BITS || kind == XR_RBC_CALL_WINDOW) &&
@@ -81,8 +79,7 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v);
 #include "xrbc_aggregate_transfer.inc.c"
 static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
     uint8_t *state = s->state;
-    switch (v.op) {
-    case XR_RBC_MOV:
+    if (v.op != XR_RBC_MOV) return false;
         if (state[v.b] == RBC_CAPTURED_CELL) {
             XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
             if (kind != rbc_register_kind(s->function, v.b)) return false;
@@ -146,59 +143,15 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
             state[v.a] = RBC_BITS;
         }
         return true;
-    case XR_RBC_STRING_LITERAL:
-        if (!rbc_string_destination(s, v.a)) return false;
-        break;
-    case XR_RBC_STRING_I64: case XR_RBC_STRING_F64:
-        if (!rbc_string_destination(s, v.a) || state[v.b] != RBC_BITS) return false;
-        break;
-    case XR_RBC_STRING_RETAIN:
-        if (!rbc_string_destination(s, v.a) || !rbc_string_source(s, v.b)) return false;
-        break;
-    case XR_RBC_STRING_CONCAT:
-        if (!rbc_string_destination(s, v.a) || !rbc_string_source(s, v.b) ||
-            !rbc_string_source(s, v.c)) return false;
-        break;
-    case XR_RBC_STRING_TAKE:
-        if (!rbc_string_destination(s, v.a) || state[v.b] != RBC_STRING_OWNED ||
-            (rbc_register_kind(s->function, v.b) != XR_RBC_CALL_WINDOW &&
-             rbc_register_kind(s->function, v.b) != XR_RBC_STRING) ||
-            (rbc_register_kind(s->function, v.b) == XR_RBC_CALL_WINDOW && s->origin[v.b] != XR_RBC_STRING)) return false;
-        state[v.b] = RBC_EMPTY;
-        rbc_string_forget_borrows(s, v.b);
-        break;
-    case XR_RBC_STRING_DROP:
-        if (rbc_register_kind(s->function, v.a) != XR_RBC_STRING || state[v.a] != RBC_STRING_OWNED) return false;
-        state[v.a] = RBC_EMPTY;
-        rbc_string_forget_borrows(s, v.a);
-        return true;
-    case XR_RBC_STRING_PRINT:
-        return rbc_string_source(s, v.a);
-    case XR_RBC_STRING_LEN:
-        if (!rbc_bits_destination(s, v.a) || !rbc_string_source(s, v.b)) return false;
-        state[v.a] = RBC_BITS;
-        return true;
-    default: return false;
-    }
-    state[v.a] = RBC_STRING_OWNED;
-    return true;
 }
 static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
     uint8_t *state = s->state;
-    if (v.op == XR_RBC_STRING_CELL_NEW || v.op == XR_RBC_CELL_NEW)
+    if (v.op == XR_RBC_CELL_NEW)
         while (s->published < f->cell_count && f->cell_kinds &&
             rbc_indexed_cell_kind(f->cell_kinds[s->published]))
             ++s->published;
-    if (v.op == XR_RBC_STRING_CELL_NEW) {
-        if (rbc_register_kind(f, v.a) != XR_RBC_STRING_CELL || state[v.a] != RBC_EMPTY ||
-            !rbc_string_source(s, v.b) || v.c != s->published ||
-            !f->cell_kinds || f->cell_kinds[v.c] != XR_RBC_STRING) return false;
-        ++s->published;
-        state[v.a] = RBC_CELL_OWNED;
-        s->origin[v.a] = v.c + 1;
-        return true;
-    }
+
     if (v.op == XR_RBC_CELL_NEW) {
         uint32_t index = (uint32_t)v.immediate;
         if (rbc_register_kind(f, v.a) == XR_RBC_I64_BINDING) {
@@ -214,13 +167,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
         if (index == s->published) ++s->published;
         return true;
     }
-    if (v.op == XR_RBC_STRING_CELL_DROP) {
-        if (state[v.a] != RBC_CELL_OWNED || !s->origin[v.a]) return false;
-        uint32_t origin = s->origin[v.a];
-        for (uint32_t r = 0; r < f->register_count; ++r)
-            if ((rbc_cell_state(state[r]) || state[r] == RBC_ARRAY_REF_CELL) && s->origin[r] == origin) state[r] = RBC_EMPTY;
-        return true;
-    }
+
     uint32_t cell = v.op == XR_RBC_CELL_READ ? v.b : v.a;
     if (rbc_register_kind(f, cell) == XR_RBC_I64_BINDING) {
         if (state[cell] != RBC_CELL_BORROWED) return false;
@@ -230,14 +177,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
         } else if (state[v.b] != RBC_BITS) return false;
         return true;
     }
-    if (rbc_register_kind(f, cell) == XR_RBC_STRING_CELL) {
-        if (!rbc_cell_state(state[cell])) return false;
-        if (v.op == XR_RBC_CELL_READ) {
-            if (!rbc_string_destination(s, v.a)) return false;
-            state[v.a] = RBC_STRING_OWNED;
-        } else if (!rbc_string_source(s, v.b)) return false;
-        return true;
-    }
+
     if (state[cell] != RBC_BITS) return false;
     if (v.op == XR_RBC_CELL_READ) {
         if (!rbc_bits_destination(s, v.a)) return false;
@@ -289,22 +229,16 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     if ((v.op == XR_RBC_RET || v.op == XR_RBC_RET0) && rbc_scope_current(s)) return false;
         switch (v.op) {
         case XR_RBC_VALUE_ACCESS: return rbc_value_transfer(s, (uint32_t)v.immediate);
-        case XR_RBC_VIEW_ACCESS: return false;
-        case XR_RBC_ARRAY_ACCESS: return false;
         case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
         case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
         case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE:
         case XR_RBC_STATE_READ: case XR_RBC_STATE_WRITE:
             return rbc_state_transfer(s, v);
-        case XR_RBC_MOV: case XR_RBC_STRING_LITERAL: case XR_RBC_STRING_I64: case XR_RBC_STRING_F64:
-        case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_CONCAT: case XR_RBC_STRING_TAKE:
-        case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_LEN:
-            if (!rbc_strings_value(s, v)) return false;
+        case XR_RBC_MOV: if (!rbc_strings_value(s, v)) return false;
             break;
         case XR_RBC_CELL_NEW: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
-        case XR_RBC_STRING_CELL_NEW: case XR_RBC_STRING_CELL_DROP:
-            if (!rbc_strings_cell(s, v)) return false;
+        if (!rbc_strings_cell(s, v)) return false;
             break;
         case XR_RBC_CALL: case XR_RBC_CALLN:
             if (!rbc_strings_call(s, v)) return false;
@@ -737,8 +671,6 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t pc = 0; pc < f->code_count; ++pc) {
         uint32_t word = f->code[pc], op = word & 255;
         numeric_conversion |= op == XR_RBC_ITOF || op == XR_RBC_FTOI;
-        managed |= op >= XR_RBC_STRING_LITERAL && op <= XR_RBC_STRING_CELL_DROP;
-        managed |= op == XR_RBC_STRING_LEN || op == XR_RBC_STRING_F64;
         if (op == XR_RBC_CALL) {
             const XrRbcFunction *callee = &module->functions[word >> 16];
             managed |= rbc_managed_kind(callee->result_kind);
