@@ -1,0 +1,16 @@
+fn lookup(items: Map<string,i64>, key: string) -> i64? { return items.get(key) }
+fn forward(items: Map<string,i64>, key: string) -> i64? { return lookup(items,key) }
+fn pair(items: Map<string,i64>) -> (i64,i64) { return (len(items),items["x"]) }
+fn bytes(items: Map<string,i64>) -> [u8;3] { return len(items)==1 ? b"abc" : b"XYZ" }
+fn withText() -> (i64,i64) { const text="ok"; return (len(text),9) }
+fn plain() -> (i64,i64) { return withText() }
+const items = #{"x":42}
+print(forward(items,"x") ?? -1)
+print(forward(items,"absent") ?? -1)
+const (count,value) = pair(items)
+print(count)
+print(value)
+print(bytes(items)[1])
+const (length,number) = plain()
+print(length)
+print(number)

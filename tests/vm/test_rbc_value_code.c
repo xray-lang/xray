@@ -342,6 +342,7 @@ static void map_outcome_lifetime(void) {
     static const uint8_t bytes[]={'A',0xc3,0xa9,0,0xe4,0xb8,0xad};
     XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
     OK(xr_lir_map_catalog_install(module,false,false,false,false,false));
+    XrLirType optional=0; OK(xr_lir_nullable_type(module,XR_LIR_I64,&optional));
     XrLirFunction root={0},echo={0}; XrLirType map_type=XR_LIR_MAP_STRING_I64;
     XrLirFunctionSpec spec={.name="map_result",.name_length=10,.result=map_type};
     OK(xr_lir_declare_function(module,&spec,&root)); OK(xr_lir_define_function(module,root));
@@ -351,11 +352,28 @@ static void map_outcome_lifetime(void) {
     XrLirValue parameter={0}; OK(xr_lir_function_parameter(module,echo,0,&parameter));
     XrLirValue copy=managed_state_value(module,body,XR_LIR_MAP_RETAIN,map_type,&parameter,1,0);
     OK(xr_lir_set_terminator(module,body,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&copy,.operand_count=1}));
+    XrLirType lookup_parameters[]={map_type,XR_LIR_STRING}; XrLirFunction lookup={0};
+    spec=(XrLirFunctionSpec){.name="map_lookup",.name_length=10,.parameters=lookup_parameters,.parameter_count=2,.result=optional};
+    OK(xr_lir_declare_function(module,&spec,&lookup)); OK(xr_lir_define_function(module,lookup));
+    body=(XrLirBlock){0}; OK(xr_lir_add_block(module,lookup,NULL,0,&body)); OK(xr_lir_set_entry(module,lookup,body));
+    XrLirValue lookup_args[2]; OK(xr_lir_function_parameter(module,lookup,0,&lookup_args[0]));
+    OK(xr_lir_function_parameter(module,lookup,1,&lookup_args[1])); uint32_t getter=0;
+    OK(xr_lir_map_operation(module,XR_LIR_MAP_OP_GET,map_type,&getter)); XrLirValue selected={0};
+    OK(xr_lir_emit_value(module,body,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=optional,.intrinsic=getter,
+        .operands=lookup_args,.operand_count=2},&selected));
+    OK(xr_lir_set_terminator(module,body,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&selected,.operand_count=1}));
     XrLirBlock block={0}; OK(xr_lir_add_block(module,root,NULL,0,&block)); OK(xr_lir_set_entry(module,root,block));
     XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,bytes,sizeof(bytes),&literal));
     XrLirValue text=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
     XrLirValue value=managed_state_value(module,block,XR_LIR_CONST,XR_LIR_I64,NULL,0,42),args[]={text,value},map={0};
     uint32_t constructor=0; OK(xr_lir_map_operation(module,XR_LIR_MAP_OP_NEW,map_type,&constructor));
+    OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=map_type,
+        .intrinsic=constructor,.operands=args,.operand_count=2},&map));
+    XrLirValue from_lookup={0},actuals[]={map,text};
+    OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=optional,.callee=lookup,
+        .operands=actuals,.operand_count=2},&from_lookup));
+    args[1]=managed_state_value(module,block,XR_LIR_NULLABLE_UNWRAP,XR_LIR_I64,&from_lookup,1,0);
+    managed_state_effect(module,block,XR_LIR_MAP_DROP,&map,1,0);
     OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=map_type,
         .intrinsic=constructor,.operands=args,.operand_count=2},&map));
     XrLirValue result={0}; OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=map_type,
@@ -392,6 +410,28 @@ static void map_outcome_lifetime(void) {
     CHECK(key->length==sizeof(bytes) && !memcmp(key->bytes,bytes,sizeof(bytes))); xrt_managed_drop(owned);
     printf("Map typed code: %zu allocation rollback sites; real UTF-8 key and call/result owner survive code retirement\n",sites);
 }
+static void pod_outcome_lifetime(void) {
+    XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
+    XrLirType optional=0; OK(xr_lir_nullable_type(module,XR_LIR_I64,&optional));
+    XrLirFunction root={0}; XrLirFunctionSpec spec={.name="pod_result",.name_length=10,.result=optional};
+    OK(xr_lir_declare_function(module,&spec,&root)); OK(xr_lir_define_function(module,root));
+    XrLirBlock block={0}; OK(xr_lir_add_block(module,root,NULL,0,&block)); OK(xr_lir_set_entry(module,root,block));
+    XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,(const uint8_t *)"temporary",9,&literal));
+    XrLirValue text=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+    managed_state_effect(module,block,XR_LIR_STRING_DROP,&text,1,0);
+    XrLirValue value=managed_state_value(module,block,XR_LIR_CONST,XR_LIR_I64,NULL,0,42);
+    value=managed_state_value(module,block,XR_LIR_NULLABLE_SOME,optional,&value,1,0);
+    OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1}));
+    OK(xr_lir_module_finish(module,NULL)); XrRbcProgram *program=compile(module,root); check_receiving(program);
+    xr_lir_module_destroy(module); XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK); xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution); CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+    xr_rbc_execution_free(&execution); XrPodType type={0}; const uint8_t *payload=NULL; int64_t result=0;
+    CHECK(xr_rbc_outcome_aggregate(outcome,&type,&payload) && type.kind==XR_POD_NULLABLE && type.element==XR_POD_I64);
+    CHECK(type.physical.size==16 && payload[0]==1); memcpy(&result,payload+8,8); CHECK(result==42);
+    xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
+    puts("POD outcome: typed body publishes inline Nullable bytes after code retirement passed");
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
@@ -399,7 +439,7 @@ int main(void) {
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
     allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
-    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); CHECK(!compiler_live_allocations);
+    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }

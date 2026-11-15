@@ -25,8 +25,8 @@ def main() -> None:
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding", "tuple_values", "tuple_flow",
-             "map_values", "map_bindings", "record_values", "record_nullable", "record_lifetimes", "nullable_managed",
-             "panic_map_index_missing", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
+             "map_values", "map_bindings", "map_pod_calls", "map_fixed_operations", "record_values", "record_nullable", "record_lifetimes", "nullable_managed",
+             "panic_map_index_missing", "panic_map_direct_missing", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
@@ -89,8 +89,8 @@ def main() -> None:
             result = run(name + f"-vm-{repeat}", [binary, "run", source], 1 if panic else 0)
             _, out, err = result
             if panic:
-                diagnostic = b"[Uncaught Panic] E0431:" if name == "panic_map_index_missing" else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
-                if out or diagnostic not in err or (name != "panic_map_index_missing" and source.name.encode() not in err):
+                diagnostic = b"[Uncaught Panic] E0431:" if name.startswith("panic_map_") else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
+                if out or diagnostic not in err or (not name.startswith("panic_map_") and source.name.encode() not in err):
                     failures.append((name, "VM runtime diagnostic", out, err))
             elif out != source.with_suffix(".out").read_bytes() or err:
                 failures.append((name, "VM output", out, err))
@@ -116,8 +116,8 @@ def main() -> None:
                 result = run(name + f"-native-{ordinal}-{repeat}", [executable], 1 if panic else 0)
                 _, out, err = result
                 if panic:
-                    diagnostic = b"[Uncaught Panic] E0431:" if name == "panic_map_index_missing" else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
-                    if out or diagnostic not in err or (name != "panic_map_index_missing" and source.name.encode() not in err):
+                    diagnostic = b"[Uncaught Panic] E0431:" if name.startswith("panic_map_") else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
+                    if out or diagnostic not in err or (not name.startswith("panic_map_") and source.name.encode() not in err):
                         failures.append((name, "runtime diagnostic", out, err))
                 elif out != source.with_suffix(".out").read_bytes() or err:
                     failures.append((name, "output", out, err))

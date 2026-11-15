@@ -107,7 +107,7 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     XrRbcValueAccess access=code->accesses[index];
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
-    case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64:
+    case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64: case XR_RBC_VALUE_DISPLAY:
         return rbc_value_flow_bits(state,code,access.source);
     case XR_RBC_VALUE_STRING_LENGTH:
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
@@ -128,7 +128,9 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_RETURN: {
         if (rbc_scope_current(state)) return false;
         const XrLirValueHome *home=rbc_value_home(code,access.source);
-        if (rbc_managed_kind(state->function->result_kind)) {
+        if (state->function->aggregate_result_type) {
+            if (!rbc_value_flow_bits(state,code,access.source)) return false;
+        } else if (rbc_managed_kind(state->function->result_kind)) {
             if (!home || !home->owner_count) return false;
         } else if (state->function->result_kind!=XR_RBC_BITS ||
             (access.source && !rbc_value_flow_bits(state,code,access.source))) return false;

@@ -100,7 +100,7 @@ typedef struct {
     const XrLirValueHomes *homes;
     XrRbcValueCode *value_code;
     uint32_t *value_edges;
-    size_t value_access_capacity, value_argument_capacity;
+    size_t value_access_capacity, value_argument_capacity, value_display_capacity;
     bool typed_values;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
@@ -526,7 +526,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
-    if (xr_lir_string_role(input,i) || (xr_lir_display_point(input,i) && i->type == XR_LIR_STRING)) return false;
+    if (xr_lir_string_role(input,i)) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return false;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;

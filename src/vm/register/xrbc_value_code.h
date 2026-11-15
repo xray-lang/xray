@@ -13,6 +13,7 @@
 #ifndef XRBC_VALUE_CODE_H
 #define XRBC_VALUE_CODE_H
 #include "xrbc_value_homes.h"
+#include "xray_native_pod.h"
 
 typedef enum XrRbcValueLocationKind {
     XR_RBC_VALUE_NOWHERE, XR_RBC_VALUE_REGISTER, XR_RBC_VALUE_SPILL, XR_RBC_VALUE_AGGREGATE
@@ -30,7 +31,7 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_STATE_CONSTRUCT, XR_RBC_VALUE_STATE_INITIALIZE,
     XR_RBC_VALUE_CALL, XR_RBC_VALUE_RETURN, XR_RBC_VALUE_EDGE,
     XR_RBC_VALUE_ARRAY, XR_RBC_VALUE_BINDING_NEW, XR_RBC_VALUE_BINDING_READ,
-    XR_RBC_VALUE_BINDING_WRITE, XR_RBC_VALUE_BINDING_DROP, XR_RBC_VALUE_MAP
+    XR_RBC_VALUE_BINDING_WRITE, XR_RBC_VALUE_BINDING_DROP, XR_RBC_VALUE_MAP, XR_RBC_VALUE_DISPLAY
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -60,6 +61,8 @@ typedef struct XrRbcValueCode {
     size_t access_count;
     const uint32_t *arguments;
     size_t argument_count;
+    const struct XrtPodDisplay *displays;
+    size_t display_count;
 } XrRbcValueCode;
 
 /* Descriptions borrow the actual code lease, as the existing common homes do.

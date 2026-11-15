@@ -12,6 +12,7 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->parameters);
     xr_free((void *)code->accesses);
     xr_free((void *)code->arguments);
+    xr_free((void *)code->displays);
     xr_free(code);
 }
 static void rbc_lir_value_codes_free(XrRbcValueCode **codes, size_t count) {
@@ -141,6 +142,31 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     }
     return rbc_lir_value_append(c,access);
 }
+static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
+    XrLirType type=rbc_lir_value_type(c,i->operands[0]);
+    XrLirTypeLayout layout={0};
+    if (xr_lir_type_layout(c->input,type,&layout)!=XR_LIR_OK || layout.managed || layout.size>UINT32_MAX)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"display value has no exact inline scalar layout");
+    XrtPodDisplay display={.physical={(uint32_t)layout.size,layout.alignment,layout.scalar_count}};
+    while (type>=XR_LIR_TYPE_COUNT) {
+        XrLirTypeView shape={0};
+        if (xr_lir_type_view(c->input,type,&shape)!=XR_LIR_OK || shape.kind!=XR_LIR_TYPE_NULLABLE || shape.element>=type ||
+            display.nullable_depth==UINT32_MAX)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"display lost its closed Nullable scalar");
+        ++display.nullable_depth; type=shape.element;
+    }
+    display.scalar=lir_pod_scalar(type);
+    XrRbcValueCode *code=c->value_code;
+    if (display.scalar>=XR_POD_SCALAR_COUNT || code->display_count>UINT32_MAX)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"display description exceeds its scalar or index range");
+    void *storage=(void *)code->displays;
+    if (!rbc_lir_grow(c,&storage,&c->value_display_capacity,code->display_count+1,sizeof(display))) return false;
+    code->displays=storage;
+    access->index=(uint32_t)code->display_count;
+    ((XrtPodDisplay *)storage)[code->display_count++]=display;
+    access->operation=XR_RBC_VALUE_DISPLAY;
+    return true;
+}
 static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionView *i, bool *handled) {
     *handled = false;
     if (!c->typed_values) return true;
@@ -172,6 +198,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     }
     case XR_LIR_CALL_INTRINSIC: {
+        if (xr_lir_display_point(c->input,i)) {
+            if (!rbc_lir_value_display(c,i,&access)) return false;
+            break;
+        }
         XrLirArrayIntrinsic shape={0};
         uint32_t map=rbc_lir_map_role(c->input,i);
         if (!map && (xr_lir_array_intrinsic_view(c->input,i->intrinsic,&shape)!=XR_LIR_OK || !shape.id)) return true;
