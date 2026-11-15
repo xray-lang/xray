@@ -76,17 +76,12 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
 static bool lir_home_spec(LirHomeBuilder *b, XrLirValueLayoutKey key,
     XrtValuePlanSpec *spec, uint32_t *ordinal) {
     const XrtValuePlan *plan = NULL;
-    if (xr_lir_value_layouts_get(b->layouts, key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
+    uint32_t id = 0;
+    if (xr_lir_value_layouts_lookup(b->layouts, key, &plan, &id) != XR_LIR_VALUE_LAYOUT_OK ||
         xrt_value_plan_view(plan, spec) != XRT_MANAGED_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "value lost its common receiving layout");
-    size_t count = xr_lir_value_layouts_count(b->layouts);
-    if (count > UINT32_MAX) return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OVERFLOW, "value layout ordinals exceed bytecode capacity");
-    for (size_t i = 0; i < count; ++i) {
-        const XrtValuePlan *candidate = NULL; XrLirValueLayoutKey candidate_key;
-        if (xr_lir_value_layouts_at(b->layouts, i, &candidate_key, &candidate) != XR_LIR_VALUE_LAYOUT_OK) break;
-        if (candidate == plan) { *ordinal = (uint32_t)i; return true; }
-    }
-    return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "value layout has no receiving ordinal");
+    *ordinal = id - 1;
+    return true;
 }
 static bool lir_home_reserve(LirHomeBuilder *b, const XrtValuePlanSpec *spec, size_t *offset, size_t *first) {
     size_t size = b->homes->frame.payload_size;
