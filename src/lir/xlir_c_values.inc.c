@@ -94,6 +94,13 @@ static void c_values_prepare(LirC *c) {
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
         XrLirFunction function = {module, c->closure[i]}; XrLirFunctionView view;
         xr_lir_function_view(module, function, &view);
+        if (c->callable_used && c->callable_used[function.id - 1]) {
+            XrLirClosureTarget target = {0};
+            XR_CHECK(xr_lir_closure_target_view(module,function,&target) == XR_LIR_OK && target.callable,
+                "an admitted callable entry keeps its exact target signature");
+            projected = true;
+            if (!c_value_mark(c,needed,type_count,target.callable)) break;
+        }
         projected |= c_managed_leaf(view.result) || view.result >= XR_LIR_TYPE_COUNT;
         if (!c_value_mark(c, needed, type_count, view.result)) break;
         for (uint32_t p = 0; p < view.parameter_count && c_request_poll(c); ++p) {

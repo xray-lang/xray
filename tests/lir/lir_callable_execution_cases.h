@@ -120,6 +120,31 @@ static void callable_entry_signature_frontiers(void) {
         xr_lir_module_destroy(c.module);
     }
 }
+static void callable_direct_weak_fixture(XrLirModule **output, XrLirFunction *root) {
+    CArrayFixture c = {0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter parameter = {.type=XR_LIR_I64};
+    XrLirCallableType signature = {.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64,
+        .flags=XR_LIR_CALLABLE_NO_SUSPEND};
+    XrLirType strong = 0, weak = 0;
+    OK(xr_lir_callable_type(c.module,&signature,&strong));
+    signature.flags = 0; OK(xr_lir_callable_type(c.module,&signature,&weak));
+    XrLirType scalar = XR_LIR_I64; XrLirFunction target = {0};
+    XrLirFunctionSpec spec = {.name="target",.name_length=6,.parameters=&scalar,.parameter_count=1,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&target));
+    OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=strong}));
+    OK(xr_lir_define_function(c.module,target)); XrLirBlock block = {0};
+    OK(xr_lir_add_block(c.module,target,NULL,0,&block)); OK(xr_lir_set_entry(c.module,target,block));
+    XrLirValue input = {0}; OK(xr_lir_function_parameter(c.module,target,0,&input));
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,input,ca_constant(&c,block,1)));
+    spec = (XrLirFunctionSpec){.name="root",.name_length=4,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,root)); OK(xr_lir_define_function(c.module,*root));
+    OK(xr_lir_add_block(c.module,*root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,*root,block));
+    XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=weak,.callee=target};
+    XrLirValue function = {0}; OK(xr_lir_emit_value(c.module,block,&reference,&function));
+    XrLirValue arguments[] = {function,ca_constant(&c,block,41)};
+    ca_return(&c,block,ca_value(&c,block,XR_LIR_CALL_INDIRECT,scalar,arguments,2));
+    OK(xr_lir_module_finish(c.module,NULL)); *output = c.module;
+}
 
 typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
 
@@ -223,6 +248,9 @@ static void callable_vm_execution(void) {
     callable_entry_signature_frontiers();
     XrLirModule *captured = NULL;
     XrLirFunction captured_root = {0};
+    callable_direct_weak_fixture(&captured,&captured_root);
+    callable_c_frame(captured,captured_root); callable_transforms(captured,captured_root);
+    xr_lir_module_destroy(captured); captured = NULL;
     callable_fixture_capture(&captured, &captured_root, true);
     callable_c_frame(captured,captured_root);
     callable_transforms(captured, captured_root);
