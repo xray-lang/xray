@@ -124,6 +124,93 @@ static void array_place_updates(void) {
     child.audit.observe=NULL; CHECK(watch.retirements==1 && !watch.allocations);
     CHECK(tail((XrtArrayBacking *)borrow(&child,0),0)==&next->managed); fixture_done(&child);
 }
+typedef struct MapPlaceWatch {
+    Fixture *fixture;
+    XrtPlace place;
+    XrtMapUpdate update;
+    XrtManagedHeader *old;
+    bool *removed;
+    size_t allocations, retirements;
+} MapPlaceWatch;
+static void map_place_observe(void *context, void *memory, bool allocating) {
+    MapPlaceWatch *watch = context;
+    XrtManagedHeader *before = borrow(watch->fixture, 0);
+    bool removed = true;
+    BAD(xrt_map_update_place(watch->place, watch->fixture->frame, 1, &watch->fixture->types, &watch->update, &removed));
+    CHECK(removed && !*watch->removed && borrow(watch->fixture, 0) == before);
+    const XrtManagedHeader *unpublished = NULL;
+    BAD(xrt_place_borrow(watch->place, &unpublished)); CHECK(!unpublished);
+    if (allocating) { CHECK(before == watch->old); ++watch->allocations; }
+    if (memory == watch->old) {
+        CHECK(before != watch->old && !borrow(watch->fixture, 1));
+        ++watch->retirements;
+    }
+}
+static void map_place_updates(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    XrtStringBacking *keys[5]; int64_t values[] = {1, 2, 3, 4};
+    for (size_t i = 0; i < 5; ++i) { char key = (char)('a' + i); keys[i] = map_key(&f, i + 3, &key, 1); }
+    OK(xrt_map_backing_create(f.frame, 0, &f.types, keys, values, 4));
+    XrtPlace binding = {.frame=f.frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
+    XrtManagedHeader *original = borrow(&f, 0);
+    XrtMapUpdate edit = {XRT_MAP_UPDATE_SET, keys[0], 42}; bool removed = true;
+    XrtBillingStats baseline = xrt_billing_owner_stats(f.billing);
+    xrt_billing_owner_fail_after(f.billing, 0);
+    int32_t refs = xr_signed_rc_read(&keys[0]->managed.references);
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    CHECK(!removed && borrow(&f, 0) == original && xr_signed_rc_read(&keys[0]->managed.references) == refs);
+    CHECK(xrt_billing_owner_stats(f.billing).allocations == baseline.allocations); same_bill(f.billing, baseline);
+    map_value((XrtMapBacking *)original, keys[0], true, 42);
+    OK(xrt_backing_slot_copy(f.frame, 2, original));
+    edit = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, keys[4], 0}; removed = true;
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    CHECK(!removed && borrow(&f, 0) == original && xr_signed_rc_read(&original->references) == 2);
+    edit = (XrtMapUpdate){XRT_MAP_UPDATE_SET, keys[0], 99}; removed = true;
+    CHECK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed) == XRT_MANAGED_OOM);
+    CHECK(removed && borrow(&f, 0) == original && !borrow(&f, 1)); same_bill(f.billing, baseline);
+    xrt_billing_owner_fail_after(f.billing, SIZE_MAX);
+    int32_t key_refs = xr_signed_rc_read(&keys[1]->managed.references);
+    atomic_store(&keys[1]->managed.references, INT32_MIN);
+    CHECK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed) == XRT_MANAGED_REFCOUNT);
+    atomic_store(&keys[1]->managed.references, key_refs);
+    CHECK(removed && borrow(&f, 0) == original && !borrow(&f, 1)); same_bill(f.billing, baseline);
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    CHECK(!removed && borrow(&f, 0) != original && borrow(&f, 2) == original);
+    map_value((XrtMapBacking *)original, keys[0], true, 42);
+    OK(xrt_managed_slot_drop(f.frame, 2)); original = borrow(&f, 0);
+    edit = (XrtMapUpdate){XRT_MAP_UPDATE_SET, keys[4], 5}; removed = true;
+    baseline = xrt_billing_owner_stats(f.billing); xrt_billing_owner_fail_after(f.billing, 0);
+    CHECK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed) == XRT_MANAGED_OOM);
+    CHECK(removed && borrow(&f, 0) == original && !borrow(&f, 1)); same_bill(f.billing, baseline);
+    xrt_billing_owner_fail_after(f.billing, SIZE_MAX); removed = false;
+    MapPlaceWatch watch = {.fixture=&f, .place=binding, .update=edit, .old=original, .removed=&removed};
+    f.audit.observe = map_place_observe; f.audit.observer = &watch;
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    f.audit.observe = NULL;
+    CHECK(!removed && watch.allocations && watch.retirements == 1 && !borrow(&f, 1));
+    map_check((XrtMapBacking *)borrow(&f, 0), keys, 5);
+    BAD(xrt_map_update_place(binding, f.frame, 0, &f.types, &edit, &removed));
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(f.frame, 1, f.types.map, sizeof(XrtMapBacking), &pending));
+    BAD(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    XrtManagedSlotLocation location; OK(xrt_managed_slot_location(f.frame, 1, &location));
+    CHECK(location.pending->value == pending); OK(xrt_managed_slot_abort(f.frame, 1));
+    edit = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, keys[4], 0};
+    OK(xrt_managed_slot_drop(f.frame, 7));
+    watch = (MapPlaceWatch){.fixture=&f, .place=binding, .update=edit, .old=&keys[4]->managed, .removed=&removed};
+    f.audit.observe = map_place_observe; f.audit.observer = &watch;
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    f.audit.observe = NULL; CHECK(removed && watch.retirements == 1 && !watch.allocations);
+    edit = (XrtMapUpdate){.operation=XRT_MAP_UPDATE_CLEAR};
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    CHECK(!removed && !((XrtMapBacking *)borrow(&f, 0))->length);
+    OK(xrt_backing_slot_copy(f.frame, 2, borrow(&f, 0)));
+    baseline = xrt_billing_owner_stats(f.billing); xrt_billing_owner_fail_after(f.billing, 0);
+    OK(xrt_map_update_place(binding, f.frame, 1, &f.types, &edit, &removed));
+    CHECK(borrow(&f, 0) == borrow(&f, 2)); same_bill(f.billing, baseline);
+    fixture_done(&f);
+}
+
 typedef struct ArrayFieldGuard { XrtManagedHeader *owner; bool busy,ready,mutable; size_t borrows,replaces; } ArrayFieldGuard;
 static XrtManagedStatus array_field_guard(void *context, XrtPlaceAction action) {
     ArrayFieldGuard *field=context;
@@ -132,6 +219,31 @@ static XrtManagedStatus array_field_guard(void *context, XrtPlaceAction action) 
     if (action==XRT_PLACE_REPLACE) ++field->replaces;
     return field->ready && (action!=XRT_PLACE_REPLACE || field->mutable) && action!=XRT_PLACE_MOVE_FROM ?
         XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
+static void map_place_guards(void) {
+    Fixture source, destination; fixture_init(&source, SIZE_MAX); fixture_init(&destination, SIZE_MAX);
+    XrtStringBacking *key = map_key(&source, 3, "key", 3);
+    OK(xrt_map_backing_create(source.frame, 0, &source.types, NULL, NULL, 0));
+    ArrayFieldGuard field = {.ready=true}; OK(xrt_managed_slot_take(source.frame, 0, &field.owner));
+    XrtExternalOwner external = {&field.owner, &field.busy, array_field_guard, &field};
+    XrtPlace binding = {.external=&external, .nulls=XRT_PLACE_NONNULL};
+    XrtMapUpdate edit = {XRT_MAP_UPDATE_SET, key, 42}; bool removed = true;
+    XrtManagedHeader *before = field.owner;
+    BAD(xrt_map_update_place(binding, destination.frame, 1, &destination.types, &edit, &removed));
+    CHECK(removed && field.owner == before && field.replaces == 1 && !field.busy);
+    field.mutable = true; field.ready = false;
+    BAD(xrt_map_update_place(binding, destination.frame, 1, &destination.types, &edit, &removed));
+    CHECK(removed && field.owner == before && !field.busy); field.ready = true;
+    OK(xrt_map_update_place(binding, destination.frame, 1, &destination.types, &edit, &removed));
+    CHECK(!removed && field.owner != before && !field.busy && !borrow(&destination, 1));
+    map_value((XrtMapBacking *)field.owner, key, true, 42);
+    before = field.owner; xrt_billing_owner_fail_after(destination.billing, 0);
+    edit.value = 99;
+    OK(xrt_map_update_place(binding, destination.frame, 1, &destination.types, &edit, &removed));
+    CHECK(field.owner == before && !field.busy); map_value((XrtMapBacking *)field.owner, key, true, 99);
+    fixture_retire(&destination); CHECK(!atomic_load(&destination.audit.finalized));
+    xrt_managed_drop(field.owner); field.owner = NULL;
+    CHECK(atomic_load(&destination.audit.finalized) == 1); fixture_done(&source);
 }
 static void array_place_guards(void) {
     Fixture left,right; fixture_init(&left,SIZE_MAX); fixture_init(&right,SIZE_MAX);

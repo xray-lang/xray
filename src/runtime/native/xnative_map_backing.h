@@ -13,17 +13,9 @@
 #ifndef XNATIVE_MAP_BACKING_H
 #define XNATIVE_MAP_BACKING_H
 #include "xnative_string_backing.h"
+#include "xnative_place.h"
 
 #include "xray_native_map.h"
-
-typedef enum XrtMapUpdateKind {
-    XRT_MAP_UPDATE_SET, XRT_MAP_UPDATE_REMOVE, XRT_MAP_UPDATE_CLEAR
-} XrtMapUpdateKind;
-typedef struct XrtMapUpdate {
-    XrtMapUpdateKind operation;
-    const XrtStringBacking *key;
-    int64_t value;
-} XrtMapUpdate;
 
 /* Keys are admitted live String borrows. Equal bytes replace the value while
  * preserving the first stored key and its insertion position. Hashing uses the
@@ -46,4 +38,11 @@ XR_FUNC XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *,
  * allocating a candidate for an already complete no-op. */
 XR_FUNC XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const XrtMapBacking *, const XrtMapUpdate *, bool *removed);
+/* The caller already owns mutation authority for this exact String/I64 Map
+ * binding. REPLACE and a distinct empty workspace are reserved together; no
+ * extra source retain forces COW. Publication precedes old-owner retirement,
+ * and failure preserves the binding and removed while emptying this workspace.
+ * Both storage domains reject reentry through allocation and retirement. */
+XR_FUNC XrtManagedStatus xrt_map_update_place(XrtPlace, XrtManagedFrame *, size_t workspace,
+    const XrtBackingTypes *, const XrtMapUpdate *, bool *removed);
 #endif // XNATIVE_MAP_BACKING_H
