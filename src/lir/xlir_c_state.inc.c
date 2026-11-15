@@ -79,7 +79,14 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     c_state_check_access(c, reference, source);
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
-        if (c_managed_leaf(shape.payload)) {
+        if (v->result && c->homes && c->homes->values[v->result].owner_count && shape.payload >= XR_LIR_TYPE_COUNT) {
+            c_text(c, "    { const void *borrowed = NULL;\n    xrt_module_require(xrt_module_borrow(");
+            c_value(c, reference); c_text(c, ", &borrowed)"); c_state_require_end(c, source);
+            c_values_replace_begin(c, v->result, source);
+            c_text(c, "borrowed");
+            c_values_replace_end(c, source);
+            c_text(c, "    }\n");
+        } else if (c_managed_leaf(shape.payload)) {
             c_values_ensure(c, source);
             c_text(c, "    { XrtExternalOwner binding;\n    xrt_module_require(xrt_module_external_owner(");
             c_value(c, reference); c_text(c, ", 0, &binding)"); c_state_require_end(c, source);

@@ -56,7 +56,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, maps;
-    bool string_cursor, string_values;
+    bool string_cursor, string_values, inline_values;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -79,6 +79,8 @@ static bool c_values_signature(LirC *, bool);
 static void c_values_root(LirC *);
 static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t);
 static void c_values_ensure(LirC *, uint32_t);
+static void c_values_replace_begin(LirC *, uint32_t, uint32_t);
+static void c_values_replace_end(LirC *, uint32_t);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -223,7 +225,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
         type == XR_LIR_SLICE_I64 || type == XR_LIR_STRING_REF || type == XR_LIR_FUNCTION_SCOPE ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(c->request->module, type, &shape) == XR_LIR_OK &&
             (shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_CELL ||
-             xr_lir_boxed_type(c->request->module, type)))) {
+             (shape.kind == XR_LIR_TYPE_NULLABLE && xr_lir_boxed_type(c->request->module, type))))) {
         char message[128];
         snprintf(message, sizeof(message), "value type %" PRIu32 " has no bound target C execution interface", type);
         c_error(c, XR_LIR_C_UNSUPPORTED, message);
@@ -269,6 +271,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 #include "xlir_c_state.inc.c"
 #include "xlir_c_array.inc.c"
 #include "xlir_c_map.inc.c"
+#include "xlir_c_record.inc.c"
 #include "xlir_c_view.inc.c"
 #include "xlir_c_display.inc.c"
 #include "xlir_c_string_library.inc.c"
@@ -337,17 +340,16 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (v->op == XR_LIR_STRING_F64 || xr_lir_string_role(c->request->module, v)) {
+    if (xr_lir_string_role(c->request->module, v)) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "String operation has no target execution binding");
         return;
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN ||
         v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE || v->op == XR_LIR_FUNCTION_BIND ||
-        ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) && !c_array_point(c, v) && !c_map_point(c, v)) ||
-        v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD || v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP) {
+        ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) && !c_array_point(c, v) && !c_map_point(c, v))) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "value operation has no bound target C execution interface"); return;
     }
-    if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_view_point(c, v) ||
+    if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_record_point(v) || c_view_point(c, v) ||
         (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
         if (c_located(&v->source)) {
@@ -358,6 +360,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     }
     if (c_display_point(c, v)) { c->displays = true; return; }
     if (xr_lir_range_point(c->request->module, v)) return;
+    if (c_record_point(v)) return;
     if (c_map_point(c, v)) { c->maps = true; return; }
     if (xr_lir_string_role(c->request->module, v)) { c->string_library = true; return; }
     if (c_view_point(c, v)) return;
@@ -548,7 +551,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_view_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
                      !c_arithmetic_point(c, &v) &&
                      v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
@@ -808,6 +811,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_nullable_instruction(c, v);
         return;
     }
+    if (c_record_point(v)) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_record_instruction(c, v, source);
+        return;
+    }
     if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET ||
         v->op == XR_LIR_TUPLE_NEW || v->op == XR_LIR_TUPLE_FIELD) {
         c_fixed_instruction(c, v);
@@ -1014,8 +1022,9 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->string_values || c->arrays || c->maps) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
+    if (c->string_values || c->arrays || c->maps || c->inline_values) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
+    if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
     if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
