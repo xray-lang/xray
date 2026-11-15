@@ -1072,6 +1072,11 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirOwn
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||
             !f->parameter_count || f->parameter_types[f->parameter_count - 1] != XR_LIR_STATE))
             return xr_lir_internal_error(d, "injected entry lacks its trailing state", index + 1, 0, 0, NULL);
+        /* Snapshot classification precedes definition/graph traversal, so no
+         * value ordinal may reach constructed metadata before its type check. */
+        for (uint32_t value = 0; value < f->value_count; ++value)
+            if (!xr_lir_internal_type_valid(m, f->values[value].type, true))
+                return xr_lir_internal_error(d, "SSA value type is invalid", index + 1, 0, 0, NULL);
         if (!lir_plan_function(plan, m, f, index + 1)) {
             lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "constructed ownership facts are missing");
             if (d) d->function = index + 1;

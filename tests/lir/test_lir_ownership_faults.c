@@ -8,6 +8,7 @@
  */
 #include "base/xmalloc.h"
 #include "lir/xlir_ownership.h"
+#include "lir/xlir_value_layout.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,16 +52,18 @@ static void ownership_free(void *memory) {
 #include "lir/xlir_verify.c"
 #include "lir_array_fixture.h"
 #include "lir_ownership_fixture.h"
+#include "lir_record_fixture.h"
 
-static void sweep(XrLirModule *input) {
+static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
+    XrLirOwnershipRequest request={input,types,type_count};
     CHECK(!live && !live_bytes);
     attempt = 0;
     OK(xr_lir_verify(input, NULL));
     size_t verification = attempt;
     CHECK(!live && !live_bytes);
     attempt = 0;
-    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input}, &output, NULL));
+    OK(xr_lir_ownership_plan_create(&request, &output, NULL));
     size_t count = attempt;
     CHECK(count > verification && live && live_bytes);
     xr_lir_ownership_plan_destroy(output); output = NULL;
@@ -68,18 +71,18 @@ static void sweep(XrLirModule *input) {
     for (size_t point = 0; point < count; ++point) {
         attempt = 0; fail_at = point;
         XrLirDiagnostic diagnostic;
-        CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input}, &output, &diagnostic) == XR_LIR_OUT_OF_MEMORY);
+        CHECK(xr_lir_ownership_plan_create(&request, &output, &diagnostic) == XR_LIR_OUT_OF_MEMORY);
         CHECK(!output && diagnostic.status == XR_LIR_OUT_OF_MEMORY && attempt > point &&
             !live && !live_bytes);
         fail_at = SIZE_MAX;
         OK(xr_lir_verify(input, NULL));
         CHECK(!live && !live_bytes);
     }
-    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input}, &output, NULL));
+    OK(xr_lir_ownership_plan_create(&request, &output, NULL));
     size_t occupied_count = live, occupied_bytes = live_bytes;
     XrLirOwnershipPlan *saved = output;
     attempt = 0; fail_at = 0;
-    CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input}, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
+    CHECK(xr_lir_ownership_plan_create(&request, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
         output == saved && !attempt && live == occupied_count && live_bytes == occupied_bytes);
     fail_at = SIZE_MAX;
     xr_lir_module_destroy(input);
@@ -115,16 +118,24 @@ int main(void) {
     for (uint32_t i = 0; i < 4; ++i) {
         XrLirModule *input = NULL;
         OK(array_fixture_create(elements[i], &input));
-        sweep(input);
+        sweep(input,NULL,0);
     }
     for (uint32_t i = 0; i < 3; ++i) {
         XrLirModule *input = NULL;
         OK(ownership_fixture(i == 1 ? XR_LIR_MAP_STRING_I64 : XR_LIR_STRING, i == 2, 2, &input));
-        sweep(input);
+        sweep(input,NULL,0);
     }
     XrLirModule *grown = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &grown));
-    sweep(grown);
+    sweep(grown,NULL,0);
+    XrLirFunction record_root={0}; XrLirModule *record=record_fixture(&record_root);
+    XrtBillingOwner *billing=NULL; XrLirValueLayouts *layouts=NULL;
+    CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
+    XrLirValueLayoutKey key={record->functions[1].result,0};
+    CHECK(xr_lir_value_layouts_create(record,&key,1,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
+    const XrLirOwnershipTypeFact *types=NULL; uint32_t type_count=0;
+    CHECK(xr_lir_value_layouts_ownership(layouts,&types,&type_count)==XR_LIR_VALUE_LAYOUT_OK&&type_count==2);
+    sweep(record,types,type_count); xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing);
     rejected_after_collection();
     puts("LIR ownership snapshot allocation failures passed");
     return 0;

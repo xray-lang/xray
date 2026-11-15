@@ -11,6 +11,8 @@
 #include "lir/xlir_string_elide.h"
 #include "lir/xlir_sccp.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_value_layout.h"
+#include "lir/xlir_cell.h"
 #include "lir_array_fixture.h"
 #include "lir_array_repeat_fixture.h"
 #include "lir_array_ref_fixture.h"
@@ -44,6 +46,37 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
             hash = hash * UINT64_C(16777619) + fields[p];
     }
     return hash;
+}
+
+static XrLirOwnershipPlan *constructed_plan(const XrLirModule *m,
+    const XrLirValueLayoutKey *roots, size_t count) {
+    XrtBillingOwner *billing=NULL; XrLirValueLayouts *layouts=NULL;
+    CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
+    size_t baseline=xrt_billing_owner_stats(billing).bytes;
+    CHECK(xr_lir_value_layouts_create(m,roots,count,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
+    const XrLirOwnershipTypeFact *types=NULL; uint32_t type_count=0;
+    CHECK(xr_lir_value_layouts_ownership(layouts,&types,&type_count)==XR_LIR_VALUE_LAYOUT_OK);
+    for (uint32_t i=0;i<type_count;++i) {
+        const XrtValuePlan *received=NULL; XrtValuePlanSpec view;
+        CHECK(xr_lir_value_layouts_get(layouts,(XrLirValueLayoutKey){types[i].type,0},&received)==XR_LIR_VALUE_LAYOUT_OK);
+        CHECK(xrt_value_plan_view(received,&view)==XRT_MANAGED_OK && types[i].has_owned==(view.owned_count!=0));
+    }
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){m,types,type_count},&plan,NULL));
+    xrt_billing_owner_close(billing);
+    xr_lir_value_layouts_destroy(layouts);
+    CHECK(xrt_billing_owner_stats(billing).bytes==baseline && xrt_billing_owner_stats(billing).blocks==1);
+    xrt_billing_owner_drop(billing);
+    return plan;
+}
+
+static uint32_t typed_count(const XrLirOwnershipPlan *plan,XrLirOwnershipFactKind kind,XrLirType type) {
+    uint32_t count=0;
+    for (uint32_t i=0;i<xr_lir_ownership_fact_count(plan);++i) {
+        XrLirOwnershipFact fact; OK(xr_lir_ownership_fact_at(plan,i,&fact));
+        count+=fact.kind==kind&&fact.type==type;
+    }
+    return count;
 }
 
 static void arrays(XrLirType element) {
@@ -307,6 +340,19 @@ static void malformed(void) {
     root->values[saved - 1].array_element = shape;
     OK(xr_lir_verify(m, NULL));
     xr_lir_module_destroy(m);
+    m=NULL;
+    OK(ownership_fixture(XR_LIR_STRING,false,2,&m));
+    CHECK(!m->type_count);
+    XrLirType original=m->functions[0].values[0].type;
+    XrLirType invalid[]={XR_LIR_TYPE_COUNT,UINT32_MAX};
+    for (size_t i=0;i<sizeof(invalid)/sizeof(*invalid);++i) {
+        m->functions[0].values[0].type=invalid[i];
+        reject(m);
+        XrLirDiagnostic diagnostic;
+        CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR&&strstr(diagnostic.message,"SSA value type is invalid"));
+    }
+    m->functions[0].values[0].type=original; OK(xr_lir_verify(m,NULL)); xr_lir_module_destroy(m);
+    puts("invalid constructed value ordinals reject before ownership metadata lookup");
     CHECK(!xr_lir_ownership_function_count(NULL) && !xr_lir_ownership_fact_count(NULL));
     xr_lir_ownership_plan_destroy(NULL);
 }
@@ -367,6 +413,23 @@ static void boxed_selected_edges(void) {
     XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,.edge_count=2,
         .edges={{blocks[1],owners,2},{blocks[2],reverse,2}}};
     OK(xr_lir_set_terminator(m,blocks[0],&branch)); OK(xr_lir_module_finish(m,NULL));
+    XrLirValueLayoutKey key={type,0};
+    XrLirOwnershipPlan *plan=constructed_plan(m,&key,1);
+    CHECK(typed_count(plan,XR_LIR_OWNERSHIP_PARAMETER_BORROW,type)==1 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RESULT_OWNER,type)==2 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_BLOCK_OWNER,type)==4 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,type)==4 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RELEASE,type)==2 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RETURN_TRANSFER,type)==2);
+    for (uint32_t i=0;i<xr_lir_ownership_fact_count(plan);++i) {
+        XrLirOwnershipFact fact; OK(xr_lir_ownership_fact_at(plan,i,&fact)); CHECK(fact.type==type&&!fact.array_element);
+        if (fact.kind!=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) continue;
+        CHECK(fact.block==1&&fact.instruction==3&&fact.edge>=1&&fact.edge<=2&&fact.argument<2);
+        const XrLirEdgeView *edge=&m->functions[0].blocks[0].instructions[2].view.edges[fact.edge-1];
+        CHECK(fact.value==edge->arguments[fact.argument]&&fact.target_block==edge->target&&
+            fact.target_value==m->functions[0].blocks[edge->target-1].parameters[fact.argument]);
+    }
+    uint64_t before=digest(plan);
     XrLirInstructionView *term=&m->functions[0].blocks[0].instructions[2].view;
     uint32_t *arguments=(uint32_t *)term->edges[0].arguments, saved=arguments[1]; arguments[1]=arguments[0];
     XrLirDiagnostic diagnostic;
@@ -375,13 +438,110 @@ static void boxed_selected_edges(void) {
     arguments=(uint32_t *)term->edges[1].arguments; saved=arguments[0]; arguments[0]=input.id;
     CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR&&strstr(diagnostic.message,"edge requires a distinct owned reference"));
     arguments[0]=saved; OK(xr_lir_verify(m,NULL)); xr_lir_module_destroy(m);
+    CHECK(digest(plan)==before); xr_lir_ownership_plan_destroy(plan);
     puts("boxed selected edges preserve distinct real owners and reject borrowed transfers");
+}
+
+static void constructed_snapshots(void) {
+    XrLirFunction root={0}; XrLirModule *m=record_fixture(&root);
+    XrLirType record=m->functions[1].result, optional=m->types[record-XR_LIR_TYPE_COUNT].fields[0].type;
+    XrLirValueLayoutKey key={record,0};
+    XrLirOwnershipPlan *plan=constructed_plan(m,&key,1);
+    CHECK(typed_count(plan,XR_LIR_OWNERSHIP_PARAMETER_BORROW,record)==1 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RESULT_OWNER,record)==3 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RELEASE,record)==2 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RETURN_TRANSFER,record)==1);
+    CHECK(typed_count(plan,XR_LIR_OWNERSHIP_RESULT_OWNER,optional)==2 &&
+        typed_count(plan,XR_LIR_OWNERSHIP_RELEASE,optional)==2);
+    for (uint32_t function=1;function<=2;++function) {
+        XrLirOwnershipFunction view; OK(xr_lir_ownership_function_at(plan,function,&view)); CHECK(!view.unmodeled);
+    }
+    uint64_t before=digest(plan); xr_lir_module_destroy(m); CHECK(digest(plan)==before);
+    xr_lir_ownership_plan_destroy(plan);
+    puts("Record and managed Nullable facts survive layout, billing and final IR retirement");
+}
+
+static void constructed_requests(void) {
+    XrLirFunction root={0}; XrLirModule *m=record_fixture(&root);
+    XrLirValueLayoutKey key={m->functions[1].result,0};
+    XrtBillingOwner *billing=NULL; XrLirValueLayouts *layouts=NULL;
+    CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
+    CHECK(xr_lir_value_layouts_create(m,&key,1,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
+    const XrLirOwnershipTypeFact *types=NULL; uint32_t count=0;
+    CHECK(xr_lir_value_layouts_ownership(layouts,&types,&count)==XR_LIR_VALUE_LAYOUT_OK&&count==2);
+    XrLirOwnershipTypeFact changed[2]={types[0],types[1]};
+    XrLirOwnershipRequest request={m,changed,2}; XrLirOwnershipPlan *plan=NULL;
+    changed[1]=changed[0]; CHECK(xr_lir_ownership_plan_create(&request,&plan,NULL)==XR_LIR_INVALID_ARGUMENT&&!plan);
+    changed[1]=types[1]; changed[0].type=XR_LIR_I64;
+    CHECK(xr_lir_ownership_plan_create(&request,&plan,NULL)==XR_LIR_INVALID_ARGUMENT&&!plan);
+    changed[0]=types[0]; changed[1].type=XR_LIR_TYPE_COUNT+xr_lir_constructed_type_count(m);
+    CHECK(xr_lir_ownership_plan_create(&request,&plan,NULL)==XR_LIR_INVALID_ARGUMENT&&!plan);
+    changed[1]=types[1]; request.type_count=1;
+    CHECK(xr_lir_ownership_plan_create(&request,&plan,NULL)==XR_LIR_INVALID_ARGUMENT&&!plan);
+    request.type_count=2; OK(xr_lir_ownership_plan_create(&request,&plan,NULL));
+    uint64_t before=digest(plan); memset(changed,0xa5,sizeof(changed));
+    xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing); xr_lir_module_destroy(m);
+    CHECK(digest(plan)==before); xr_lir_ownership_plan_destroy(plan);
+    puts("constructed facts reject duplicate, illegal and missing rows and own their input vector");
+}
+
+static void pod_function(XrLirModule *m,XrLirType type,const char *name) {
+    XrLirFunction f={0}; XrLirFunctionSpec spec={.name=name,.name_length=(uint32_t)strlen(name),
+        .parameters=&type,.parameter_count=1,.result=type};
+    OK(xr_lir_declare_function(m,&spec,&f)); OK(xr_lir_define_function(m,f));
+    XrLirBlock block={0}; XrLirValue input={0},result={0};
+    OK(xr_lir_add_block(m,f,NULL,0,&block)); OK(xr_lir_set_entry(m,f,block)); OK(xr_lir_function_parameter(m,f,0,&input));
+    result=input;
+    if (xr_lir_boxed_type(m,type)) {
+        XrLirInstruction copy={.op=XR_LIR_VALUE_RETAIN,.type=type,.operands=&input,.operand_count=1};
+        OK(xr_lir_emit_value(m,block,&copy,&result));
+    }
+    XrLirInstruction ret={.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1};
+    OK(xr_lir_set_terminator(m,block,&ret));
+}
+
+static void pod_facts(void) {
+    XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
+    XrLirType record,optional,integer_optional; XrLirRecordField field={"score",5,XR_LIR_I64};
+    OK(xr_lir_record_type(m,&field,1,&record)); OK(xr_lir_nullable_type(m,record,&optional));
+    OK(xr_lir_nullable_type(m,XR_LIR_I64,&integer_optional));
+    pod_function(m,record,"pod_record"); pod_function(m,optional,"pod_record_optional"); pod_function(m,integer_optional,"pod_i64_optional");
+    OK(xr_lir_module_finish(m,NULL));
+    XrLirValueLayoutKey keys[]={{record,0},{optional,0},{integer_optional,0}};
+    XrLirOwnershipPlan *plan=constructed_plan(m,keys,3); CHECK(!xr_lir_ownership_fact_count(plan));
+    for (uint32_t i=1;i<=3;++i) {
+        XrLirOwnershipFunction view; OK(xr_lir_ownership_function_at(plan,i,&view)); CHECK(!view.unmodeled&&!view.fact_count);
+    }
+    XrLirInstructionView *ret=&m->functions[0].blocks[0].instructions[1].view;
+    uint32_t *operand=(uint32_t *)ret->operands,saved=*operand; *operand=m->functions[0].parameters[0];
+    XrLirDiagnostic diagnostic;
+    CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR&&strstr(diagnostic.message,"Managed transfer requires"));
+    *operand=saved; OK(xr_lir_verify(m,NULL)); xr_lir_module_destroy(m);
+    CHECK(!xr_lir_ownership_fact_count(plan)); xr_lir_ownership_plan_destroy(plan);
+    puts("POD Record and Nullable emit no RC events while boxed IR lifetime remains checked");
+}
+
+static void unmodeled_constructed(void) {
+    XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
+    XrLirType callable,cell,fixed;
+    OK(xr_lir_callable_type(m,&(XrLirCallableType){.result=XR_LIR_I64,.flags=XR_LIR_CALLABLE_NO_SUSPEND},&callable));
+    OK(xr_lir_cell_type(m,(XrLirCellType){XR_LIR_I64,0},&cell)); OK(xr_lir_fixed_array_type(m,XR_LIR_U8,4,&fixed));
+    XrLirType parameters[]={callable,cell,fixed}; XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="unmodeled",.name_length=9,.parameters=parameters,.parameter_count=3,.result=XR_LIR_UNIT};
+    OK(xr_lir_declare_function(m,&spec,&function)); OK(xr_lir_define_function(m,function));
+    XrLirBlock block={0}; OK(xr_lir_add_block(m,function,NULL,0,&block)); OK(xr_lir_set_entry(m,function,block));
+    XrLirInstruction ret={.op=XR_LIR_RET,.type=XR_LIR_UNIT}; OK(xr_lir_set_terminator(m,block,&ret)); OK(xr_lir_module_finish(m,NULL));
+    XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m},&plan,NULL));
+    XrLirOwnershipFunction view; OK(xr_lir_ownership_function_at(plan,1,&view));
+    CHECK(view.unmodeled==(XR_LIR_OWNERSHIP_UNMODELED_CELL|XR_LIR_OWNERSHIP_UNMODELED_CALLABLE|XR_LIR_OWNERSHIP_UNMODELED_CONSTRUCTED));
+    xr_lir_module_destroy(m); xr_lir_ownership_plan_destroy(plan);
 }
 
 int main(void) {
     XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t i = 0; i < 4; ++i) arrays(elements[i]);
     copies(); other_shapes(); rebuilt_fact_identity(); malformed(); boxed_lifetimes(); boxed_selected_edges();
+    constructed_snapshots(); constructed_requests(); pod_facts(); unmodeled_constructed();
     puts("LIR ownership snapshots passed");
     return 0;
 }

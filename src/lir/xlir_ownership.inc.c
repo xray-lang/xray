@@ -31,10 +31,13 @@ static const XrLirOwnershipTypeFact *lir_plan_type(const XrLirOwnershipPlan *pla
     }
     return first < plan->type_count && plan->types[first].type == type ? &plan->types[first] : NULL;
 }
+static const XrLirTypeData *lir_plan_constructed_type(const XrLirModule *m, XrLirType type) {
+    if (type < XR_LIR_TYPE_COUNT || !xr_lir_internal_type_valid(m, type, true)) return NULL;
+    return &m->types[type - XR_LIR_TYPE_COUNT];
+}
 static bool lir_plan_constructed_value(const XrLirModule *m, XrLirType type) {
-    if (type < XR_LIR_TYPE_COUNT) return false;
-    XrLirTypeKind kind = m->types[type - XR_LIR_TYPE_COUNT].shape.kind;
-    return kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_NULLABLE;
+    const XrLirTypeData *value = lir_plan_constructed_type(m, type);
+    return value && (value->shape.kind == XR_LIR_TYPE_RECORD || value->shape.kind == XR_LIR_TYPE_NULLABLE);
 }
 static uint32_t lir_plan_unmodeled(const XrLirModule *m, const XrLirOwnershipPlan *plan, XrLirType type) {
     switch (type) {
@@ -48,9 +51,11 @@ static uint32_t lir_plan_unmodeled(const XrLirModule *m, const XrLirOwnershipPla
         case XR_LIR_FUNCTION_SCOPE: return XR_LIR_OWNERSHIP_UNMODELED_CALLABLE;
         default:
             if (type < XR_LIR_TYPE_COUNT || lir_plan_type(plan, type)) return 0;
-            if (m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_CALLABLE)
+            const XrLirTypeData *value = lir_plan_constructed_type(m, type);
+            if (!value) return XR_LIR_OWNERSHIP_UNMODELED_CONSTRUCTED;
+            if (value->shape.kind == XR_LIR_TYPE_CALLABLE)
                 return XR_LIR_OWNERSHIP_UNMODELED_CALLABLE;
-            if (m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_CELL)
+            if (value->shape.kind == XR_LIR_TYPE_CELL)
                 return XR_LIR_OWNERSHIP_UNMODELED_CELL;
             return XR_LIR_OWNERSHIP_UNMODELED_CONSTRUCTED;
     }
