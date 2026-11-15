@@ -15,6 +15,7 @@
 #include "xrbc_internal.h"
 #include "xrbc_value_code.h"
 #include "lir/xlir_string.h"
+#include "lir/xlir_map.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_values.h"
@@ -201,13 +202,15 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     return rbc_array_metadata_valid(function);
 }
 
-static bool xr_rbc_typed_array_function_valid(const XrRbcModule *module,const XrRbcFunction *function) {
+static bool xr_rbc_typed_container_function_valid(const XrRbcModule *module,const XrRbcFunction *function) {
     const XrRbcValueCode *code=rbc_value_code(module,function);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!code || !code->homes || !image || !image->types || !code->homes->result_type ||
         code->homes->result_type>image->type_count) return false;
     XrtValueKind kind=image->types[code->homes->result_type-1].kind;
-    if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
+    if (kind==XRT_VALUE_MAP_STRING_I64) {
+        if (function->result_kind!=XR_RBC_MAP_STRING_I64) return false;
+    } else if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
         function->result_kind!=xr_rbc_array_kind_at((uint32_t)(kind-XRT_VALUE_ARRAY_I64))) return false;
     /* Only the sealed CodeOwner grants this extension. Keep the raw function
      * validator and every other physical descriptor obligation unchanged. */
@@ -329,7 +332,7 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
         if (!xr_rbc_function_valid(&module->functions[f]) &&
-            !xr_rbc_typed_array_function_valid(module,&module->functions[f])) return XR_RBC_INVALID;
+            !xr_rbc_typed_container_function_valid(module,&module->functions[f])) return XR_RBC_INVALID;
     if (!rbc_callable_metadata_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f)
         if (!rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
@@ -671,6 +674,16 @@ XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *outcome, XrtManagedHeader *
         !outcome->value.array || !output || *output) return false;
     *output = outcome->value.array; outcome->value.array = NULL;
     return true;
+}
+XR_FUNC bool xr_rbc_outcome_map(const XrRbcOutcome *outcome, const XrtManagedHeader **borrowed) {
+    if (!outcome || outcome->status!=XR_RBC_OK || outcome->result_kind!=XR_RBC_MAP_STRING_I64 ||
+        !outcome->value.string || !borrowed) return false;
+    *borrowed=outcome->value.string; return true;
+}
+XR_FUNC bool xr_rbc_outcome_take_map(XrRbcOutcome *outcome, XrtManagedHeader **output) {
+    if (!outcome || outcome->status!=XR_RBC_OK || outcome->result_kind!=XR_RBC_MAP_STRING_I64 ||
+        !outcome->value.string || !output || *output) return false;
+    *output=outcome->value.string; outcome->value.string=NULL; return true;
 }
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **locations) {

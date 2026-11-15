@@ -23,7 +23,7 @@ static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
 }
 static bool xr_rbc_state_payload_kind(uint32_t kind) {
     XrRbcRegisterKind payload;
-    return (kind>=XRT_VALUE_ARRAY_I64 && kind<=XRT_VALUE_ARRAY_U64) || rbc_state_register_kind(kind,&payload);
+    return kind==XRT_VALUE_MAP_STRING_I64 || (kind>=XRT_VALUE_ARRAY_I64 && kind<=XRT_VALUE_ARRAY_U64) || rbc_state_register_kind(kind,&payload);
 }
 static bool rbc_state_span(size_t first, size_t count, size_t total) {
     return (!count ? !first : first <= total && count <= total - first);

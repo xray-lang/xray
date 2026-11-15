@@ -9,7 +9,7 @@
 static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value) {
     const XrLirHomeBinding *binding=rbc_value_binding(code,value); XrtValueKind kind=rbc_value_kind(module,code,value);
-    if (!binding || kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
+    if (!binding || (kind!=XRT_VALUE_MAP_STRING_I64 && (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64)) ||
         code->locations[value].kind!=XR_RBC_VALUE_NOWHERE) return false;
     if (binding->kind==XR_LIR_HOME_BINDING_LOCAL)
         return binding->first_owner<code->homes->frame.slot_count && code->homes->frame.owned_offsets &&
@@ -31,11 +31,11 @@ static bool rbc_value_binding_access_valid(const XrRbcModule *module,const XrRbc
     if (a.operation==XR_RBC_VALUE_BINDING_DROP)
         return !a.result && !a.other && binding->kind==XR_LIR_HOME_BINDING_LOCAL;
     if (a.operation==XR_RBC_VALUE_BINDING_NEW)
-        return !a.other && binding->kind==XR_LIR_HOME_BINDING_LOCAL && rbc_value_array(module,code,a.source,false) &&
+        return !a.other && binding->kind==XR_LIR_HOME_BINDING_LOCAL && rbc_value_container(module,code,a.source,false) &&
             binding->type==rbc_value_home(code,a.source)->type;
     if (a.operation==XR_RBC_VALUE_BINDING_READ)
-        return !a.other && rbc_value_array(module,code,a.result,true) && binding->type==rbc_value_home(code,a.result)->type;
-    return !a.result && rbc_value_array(module,code,a.other,false) && binding->type==rbc_value_home(code,a.other)->type;
+        return !a.other && rbc_value_container(module,code,a.result,true) && binding->type==rbc_value_home(code,a.result)->type;
+    return !a.result && rbc_value_container(module,code,a.other,false) && binding->type==rbc_value_home(code,a.other)->type;
 }
 static bool rbc_value_array_item_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value,XrtValueKind kind) {
