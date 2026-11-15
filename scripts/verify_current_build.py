@@ -27,7 +27,7 @@ REQUIRED = (
     # Canonical Record/String? ownership, external schemas and failure cleanup.
     "test_native_boxed", "test_native_boxed_allocations",
     # Physical metadata, allocator and foreign-thread owner retirement.
-    "native_managed_kernel", "native_managed_root", "native_backing",
+    "native_managed_kernel", "native_managed_root", "native_backing", "native_string_backing_ops",
     # Shared scalar decoding and text must retain independent native/RBC witnesses.
     "native_f64_i64_conversion", "native_f64_text",
 )
