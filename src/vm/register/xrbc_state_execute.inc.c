@@ -4,27 +4,28 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrbc_state_execute.inc.c - Prepared metadata for typed module accesses
+ * xrbc_state_execute.inc.c - Bound State caches and exact scalar transport
  *
  * KEY CONCEPT:
- *   Metadata is prepared without granting publication. A reference checks its
- *   flags at its actual instruction and borrows the execution's stable cache.
+ *   Caches borrow the receiving Layout and State for one execution. Registers
+ *   transport scalar bits or owner borrows, never independent owned fields.
  */
-static XrXirValueStatus xr_rbc_state_caches(XrtModuleLayout *layout, XrtModuleState *state,
+static XrtManagedStatus xr_rbc_state_caches(XrtModuleLayout *layout, XrtModuleState *state,
     XrtModuleAccess **out) {
-    XrtModuleLayoutSpec view = {0};
-    XrXirValueStatus status = xrt_module_layout_view(layout, &view);
-    if (status != XR_XIR_VALUE_OK || !view.slot_count) return status;
+    if (!state || !out || *out) return XRT_MANAGED_ARGUMENT;
+    XrtModuleLayoutView view = {0};
+    XrtManagedStatus status = xrt_module_layout_view(layout,&view);
+    if (status != XRT_MANAGED_OK || !view.slot_count) return status;
     size_t count = view.slot_count;
-    if (count > SIZE_MAX / sizeof(XrtModuleAccess) / 2) return XR_XIR_VALUE_OOM;
-    XrtModuleAccess *accesses = xr_calloc(count * 2, sizeof(*accesses));
-    if (!accesses) return XR_XIR_VALUE_OOM;
+    if (count > SIZE_MAX / sizeof(XrtModuleAccess) / 2) return XRT_MANAGED_OVERFLOW;
+    XrtModuleAccess *accesses = xr_calloc(count * 2,sizeof(*accesses));
+    if (!accesses) return XRT_MANAGED_OOM;
     for (size_t slot = 0; slot < count; ++slot) {
-        status = xrt_module_cache(state, (uint32_t)slot, &accesses[slot * 2 + 1]);
-        if (status != XR_XIR_VALUE_OK) { xr_free(accesses); return status; }
+        status = xrt_module_cache(state,(uint32_t)slot,&accesses[slot * 2 + 1]);
+        if (status != XRT_MANAGED_OK) { xr_free(accesses); return status; }
     }
     *out = accesses;
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
 
 static XR_AINLINE void xr_rbc_state_ready(const XrtModuleAccess *access, uint32_t source) {
@@ -32,29 +33,62 @@ static XR_AINLINE void xr_rbc_state_ready(const XrtModuleAccess *access, uint32_
         xrt_module_uninitialized(source);
 }
 
-static XR_AINLINE void xr_rbc_state_read(const XrtModuleAccess *access,
-    XrRbcRegister *registers, uint32_t word, uint32_t source) {
-    uint32_t destination = (word >> 8) & 255, kind = word >> 24;
-    if (kind == XRT_MODULE_STRING) {
-        XrtString *string;
-        memcpy(&string, access->payload, sizeof(string));
-        registers[destination].string = xrt_string_retain(string, source);
-    } else if (xr_rbc_state_array(kind)) {
-        XrtArray *array;
-        memcpy(&array, access->payload, sizeof(array));
-        registers[destination].array = xrt_array_retain(array, source);
-    } else if (kind == XRT_MODULE_BOOL) {
-        bool boolean;
-        memcpy(&boolean, access->payload, sizeof(boolean));
-        registers[destination].bits = boolean;
-    } else if (kind != XRT_MODULE_UNIT) {
-        memcpy(&registers[destination].bits, access->payload, sizeof(uint64_t));
+/* Exact-width objects also make these transfers independent of host byte
+ * order. A signed narrow load extends its value into the register lane. */
+static XR_AINLINE bool rbc_state_scalar_load(XrtValueKind kind, const void *payload, uint64_t *bits) {
+#define RBC_STATE_LOAD(k,t,convert) case k: { t value; memcpy(&value,payload,sizeof(value)); *bits = (convert); return true; }
+    switch (kind) {
+    case XRT_VALUE_UNIT: return true;
+    RBC_STATE_LOAD(XRT_VALUE_BOOL,uint8_t,(uint64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_I8,int8_t,(uint64_t)(int64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_I16,int16_t,(uint64_t)(int64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_I32,int32_t,(uint64_t)(int64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_U8,uint8_t,(uint64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_U16,uint16_t,(uint64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_U32,uint32_t,(uint64_t)value)
+    RBC_STATE_LOAD(XRT_VALUE_F32,uint32_t,(uint64_t)value)
+    case XRT_VALUE_RUNE: case XRT_VALUE_I64: case XRT_VALUE_U64: case XRT_VALUE_F64:
+        memcpy(bits,payload,sizeof(*bits)); return true;
+    default: return false;
     }
+#undef RBC_STATE_LOAD
 }
 
-/* Accesses borrow stable execution metadata and cannot grow a register bank.
- * Inline them so each scalar load avoids publishing the interpreter's frame.
- * Callers pass a temporary cursor to keep the dispatch cursor address private. */
+static XR_AINLINE bool rbc_state_scalar_store(XrtValueKind kind, uint64_t bits, void *payload) {
+    int64_t signed_value;
+    memcpy(&signed_value,&bits,sizeof(signed_value));
+#define RBC_STATE_STORE(k,t,check,convert) case k: { if (!(check)) return false; \
+    t value = (convert); memcpy(payload,&value,sizeof(value)); return true; }
+    switch (kind) {
+    case XRT_VALUE_UNIT: return true;
+    RBC_STATE_STORE(XRT_VALUE_BOOL,uint8_t,bits <= 1,(uint8_t)bits)
+    RBC_STATE_STORE(XRT_VALUE_I8,int8_t,signed_value >= INT8_MIN && signed_value <= INT8_MAX,(int8_t)signed_value)
+    RBC_STATE_STORE(XRT_VALUE_I16,int16_t,signed_value >= INT16_MIN && signed_value <= INT16_MAX,(int16_t)signed_value)
+    RBC_STATE_STORE(XRT_VALUE_I32,int32_t,signed_value >= INT32_MIN && signed_value <= INT32_MAX,(int32_t)signed_value)
+    RBC_STATE_STORE(XRT_VALUE_U8,uint8_t,bits <= UINT8_MAX,(uint8_t)bits)
+    RBC_STATE_STORE(XRT_VALUE_U16,uint16_t,bits <= UINT16_MAX,(uint16_t)bits)
+    RBC_STATE_STORE(XRT_VALUE_U32,uint32_t,bits <= UINT32_MAX,(uint32_t)bits)
+    RBC_STATE_STORE(XRT_VALUE_F32,uint32_t,bits <= UINT32_MAX,(uint32_t)bits)
+    case XRT_VALUE_RUNE:
+        if (bits > 0x10ffff || (bits >= 0xd800 && bits <= 0xdfff)) return false;
+        memcpy(payload,&bits,sizeof(bits)); return true;
+    case XRT_VALUE_I64: case XRT_VALUE_U64: case XRT_VALUE_F64:
+        memcpy(payload,&bits,sizeof(bits)); return true;
+    default: return false;
+    }
+#undef RBC_STATE_STORE
+}
+
+static XR_AINLINE XrRbcStatus xr_rbc_state_read(const XrtModuleAccess *access,
+    XrRbcRegister *registers, uint32_t word) {
+    uint32_t destination = (word >> 8) & 255, kind = word >> 24;
+    if ((uint32_t)access->kind != kind ||
+        !rbc_state_scalar_load(access->kind,access->payload,&registers[destination].bits)) return XR_RBC_INVALID;
+    return XR_RBC_OK;
+}
+
+/* Metadata references do not observe publication. Fused reads check readiness
+ * at their own source point, and use the same scalar receiver as plain reads. */
 static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
     XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source,
     size_t *pc) {
@@ -63,70 +97,64 @@ static XR_AINLINE XrRbcStatus xr_rbc_state_access(const XrRbcFunction *function,
         XrRbcStateAccess row = function->state_accesses[word >> 16];
         XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
         registers[a].state_ref = published;
-        /* A reference supplies metadata without observing publication. An
-         * adjacent read checks readiness at its own actual source point. */
         if (*pc < function->code_count) {
             uint32_t next = function->code[*pc];
             if ((next & 255) == XR_RBC_STATE_READ && ((next >> 16) & 255) == a) {
                 uint32_t read_source = function->source_ids ? function->source_ids[*pc] : 0;
                 ++*pc;
-                xr_rbc_state_ready(published, read_source);
-                xr_rbc_state_read(published, registers, next, read_source);
+                xr_rbc_state_ready(published,read_source);
+                return xr_rbc_state_read(published,registers,next);
             }
         }
         return XR_RBC_OK;
     }
     XrtModuleAccess *access = registers[op == XR_RBC_STATE_READ ? b : a].state_ref;
-    xr_rbc_state_ready(access, source);
-    if (op == XR_RBC_STATE_READ) {
-        xr_rbc_state_read(access, registers, word, source);
-    } else if (c == XRT_MODULE_STRING || xr_rbc_state_array(c)) {
-        XrXirValueStatus status = xrt_module_replace(access->reference, &registers[b]);
-        if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
-    } else if (c == XRT_MODULE_BOOL) {
-        if (registers[b].bits > 1) return XR_RBC_INVALID;
-        bool boolean = registers[b].bits != 0;
-        memcpy(access->payload, &boolean, sizeof(boolean));
-    } else if (c != XRT_MODULE_UNIT) {
-        memcpy(access->payload, &registers[b].bits, sizeof(uint64_t));
-    }
+    if ((uint32_t)access->kind != c) return XR_RBC_INVALID;
+    xr_rbc_state_ready(access,source);
+    if (op == XR_RBC_STATE_READ) return xr_rbc_state_read(access,registers,word);
+    if (!access->is_mutable) return XR_RBC_INVALID;
+    if (c == XRT_VALUE_STRING) {
+        /* The register lends an owner kept alive by its actual SSA home. The
+         * transactional State kernel retains before changing the binding. */
+        XrtManagedHeader *borrow;
+        memcpy(&borrow,&registers[b].bits,sizeof(borrow));
+        xrt_module_require(xrt_module_replace(access->reference,&borrow),source);
+    } else if (!rbc_state_scalar_store(access->kind,registers[b].bits,access->payload)) return XR_RBC_INVALID;
     return XR_RBC_OK;
 }
 
-/* Initialization and publication use runtime ownership leaves. Keep their
- * calls outside the scalar dispatch function's register allocation. */
+/* The local payload contains only scalar bytes or an owner borrow. Any real
+ * reference acquired by construction belongs to State before failure exits. */
 static XR_NOINLINE XrRbcStatus xr_rbc_state_step(const XrRbcFunction *function,
     XrRbcRegister *registers, XrtModuleAccess *accesses, uint32_t word, uint32_t source) {
     uint32_t op = word & 255, a = (word >> 8) & 255;
-    XrXirValueStatus status;
+    XrtManagedStatus status;
     if (op == XR_RBC_MODULE_BEGIN || op == XR_RBC_MODULE_READY) {
-        status = op == XR_RBC_MODULE_BEGIN ? xrt_module_begin(registers[a].state, word >> 16) :
-            xrt_module_ready(registers[a].state, word >> 16);
+        status = op == XR_RBC_MODULE_BEGIN ? xrt_module_begin(registers[a].state,word >> 16) :
+            xrt_module_ready(registers[a].state,word >> 16);
     } else if (op == XR_RBC_STATE_PUBLISH) {
         status = xrt_module_publish(registers[a].state_ref->reference);
     } else {
         XrRbcStateAccess row = function->state_accesses[word >> 16];
         XrtModuleAccess *published = &accesses[(size_t)row.slot * 2 + 1];
         XrtModuleState *state = registers[op == XR_RBC_STATE_INITIALIZE ? a : row.state].state;
-        const void *value = &registers[row.value];
-        bool boolean = false;
-        if (published->kind == XRT_MODULE_UNIT) value = NULL;
-        else if (published->kind == XRT_MODULE_BOOL) {
-            if (registers[row.value].bits > 1) return XR_RBC_INVALID;
-            boolean = registers[row.value].bits != 0;
-            value = &boolean;
-        }
-        if (op == XR_RBC_STATE_INITIALIZE) status = xrt_module_initialize(state, row.slot, value);
+        union { uint64_t bits; XrtManagedHeader *borrow; } payload = {0};
+        const void *value = &payload;
+        if (published->kind == XRT_VALUE_UNIT) value = NULL;
+        else if (published->kind == XRT_VALUE_STRING)
+            memcpy(&payload.borrow,&registers[row.value].bits,sizeof(payload.borrow));
+        else if (!rbc_state_scalar_store(published->kind,registers[row.value].bits,&payload)) return XR_RBC_INVALID;
+        if (op == XR_RBC_STATE_INITIALIZE) status = xrt_module_initialize(state,row.slot,value);
         else {
             XrtModuleRef *reference = NULL;
-            status = xrt_module_construct(state, row.slot, value, &reference);
-            if (status == XR_XIR_VALUE_OK) {
+            status = xrt_module_construct(state,row.slot,value,&reference);
+            if (status == XRT_MANAGED_OK) {
                 XrtModuleAccess *initial = &accesses[(size_t)row.slot * 2];
-                status = xrt_module_reference_cache(reference, initial);
-                if (status == XR_XIR_VALUE_OK) registers[a].state_ref = initial;
+                status = xrt_module_reference_cache(reference,initial);
+                if (status == XRT_MANAGED_OK) registers[a].state_ref = initial;
             }
         }
     }
-    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
+    xrt_module_require(status,source);
     return XR_RBC_OK;
 }
