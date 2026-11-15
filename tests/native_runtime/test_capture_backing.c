@@ -212,6 +212,12 @@ static void creator_retirement(void) {
     fixture_retire(&metadata); fixture_retire(&objects); fixture_retire(&data);
     CHECK(!atomic_load(&metadata.audit.finalized)&&!atomic_load(&objects.audit.finalized)&&!atomic_load(&data.audit.finalized));
     CHECK(!atomic_load(&code_audit.finalized));
+    size_t metadata_calls=atomic_load(&metadata.audit.calls),object_calls=atomic_load(&objects.audit.calls);
+    size_t data_calls=atomic_load(&data.audit.calls),code_retains=atomic_load(&code_audit.retains),code_drops=atomic_load(&code_audit.drops);
+    environment=(XrtEnvironmentBorrow){0}; OK(xrt_environment_borrow_owned(escaped,&environment));
+    CHECK(environment.owner==escaped&&environment.plan==plan&&environment.payload==(const void *)(escaped+1));
+    XrtValuePlanSpec recovered; OK(xrt_value_plan_view(environment.plan,&recovered));
+    CHECK(recovered.entry.ordinal==3&&recovered.entry.signature&&recovered.code.context==code);
     const XrtValuePlan *capture_type=NULL; const void *payload=NULL;
     OK(xrt_environment_capture_borrow(&environment,0,&capture_type,&payload)); int64_t seed=0; memcpy(&seed,payload,8); CHECK(seed==42);
     capture_type=NULL; payload=NULL; OK(xrt_environment_capture_borrow(&environment,1,&capture_type,&payload));
@@ -222,10 +228,58 @@ static void creator_retirement(void) {
     capture_type=NULL; payload=NULL; OK(xrt_environment_capture_borrow(&environment,3,&capture_type,&payload));
     XrtMapCell *saved_cell=NULL; memcpy(&saved_cell,payload,sizeof(saved_cell)); CHECK(saved_cell->value==saved_map);
     capture_type=NULL; payload=NULL; STATUS(xrt_environment_capture_borrow(&environment,4,&capture_type,&payload),XRT_MANAGED_BOUNDS); CHECK(!capture_type&&!payload);
+    CHECK(atomic_load(&metadata.audit.calls)==metadata_calls&&atomic_load(&objects.audit.calls)==object_calls&&atomic_load(&data.audit.calls)==data_calls);
+    CHECK(atomic_load(&code_audit.retains)==code_retains&&atomic_load(&code_audit.drops)==code_drops);
     xrt_managed_drop(escaped);
     CHECK(atomic_load(&metadata.audit.finalized)==1&&atomic_load(&objects.audit.finalized)==1&&atomic_load(&data.audit.finalized)==1);
     CHECK(atomic_load(&code_audit.retains)==1&&atomic_load(&code_audit.drops)==2&&atomic_load(&code_audit.finalized)==1);
     puts("escaping captures survive Setup/creator/code/provider retirement with paired views");
+}
+static void owned_environment_context(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,true);
+    XrtValuePlan *integer=integer_plan(&f),*signature=signature_plan(&f,integer),*cell=cell_plan(&f,integer);
+    XrtValueSlotSpec capture={integer,0,"seed",4};
+    XrtValuePlan *plan=plan_new(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,
+        .captures=&capture,.capture_count=1,.entry={7,signature}});
+    XrtCaptureType *type=type_new(&f,plan),*cell_type=type_new(&f,cell);
+    int64_t seed=42; OK(xrt_environment_create(f.frame,0,type,&seed));
+    OK(xrt_i64_cell_create(f.frame,1,cell_type,9));
+    OK(xrt_string_backing_create(f.frame,2,&f.types,"foreign",7,0));
+    /* Matching geometry and an ordinary ValuePlan lease do not establish the
+     * environment factory's producer identity. */
+    XrtManagedLease ordinary=xrt_value_plan_lease(plan);
+    XrtRuntimeTypeSpec physical={.fixed_size=sizeof(XrtManagedHeader)+8,.alignment=alignof(XrtManagedHeader),
+        .capacity_offset=SIZE_MAX,.code=ordinary};
+    XrtRuntimeTypePlan *runtime=NULL; XrtManagedOps *ops=NULL;
+    OK(xrt_runtime_type_plan_new(f.billing,&physical,&runtime)); OK(xrt_managed_ops_bind(f.billing,runtime,&ops));
+    XrtManagedHeader *foreign=NULL; OK(xrt_managed_slot_prepare(f.frame,3,ops,physical.fixed_size,&foreign));
+    memcpy(foreign+1,&seed,8); OK(xrt_managed_slot_commit(f.frame,3));
+    xrt_managed_ops_drop(ops); xrt_runtime_type_plan_drop(runtime);
+    xrt_capture_type_drop(&type); xrt_capture_type_drop(&cell_type);
+    xrt_value_plan_drop(plan); xrt_value_plan_drop(cell); xrt_value_plan_drop(signature); xrt_value_plan_drop(integer);
+    XrtBillingStats before=xrt_billing_owner_stats(f.billing); size_t calls=atomic_load(&f.audit.calls);
+    XrtManagedHeader *owner=borrow(&f,0); int32_t references=xr_signed_rc_read(&owner->references);
+    atomic_store(&f.audit.remaining,0); xrt_billing_owner_fail_after(f.billing,0); xrt_billing_owner_close(f.billing);
+    XrtEnvironmentBorrow view={0}; OK(xrt_environment_borrow_owned(owner,&view));
+    CHECK(view.owner==owner&&view.plan==plan&&view.payload==(const void *)(owner+1));
+    const XrtValuePlan *capture_type=NULL; const void *payload=NULL;
+    OK(xrt_environment_capture_borrow(&view,0,&capture_type,&payload));
+    int64_t answer=0; memcpy(&answer,payload,8); CHECK(answer==42);
+    STATUS(xrt_environment_borrow_owned(owner,&view),XRT_MANAGED_ARGUMENT);
+    CHECK(view.owner==owner&&view.plan==plan&&view.payload==(const void *)(owner+1));
+    STATUS(xrt_environment_borrow_owned(owner,NULL),XRT_MANAGED_ARGUMENT);
+    XrtEnvironmentBorrow empty={0}; STATUS(xrt_environment_borrow_owned(NULL,&empty),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_environment_borrow_owned(borrow(&f,1),&empty),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_environment_borrow_owned(borrow(&f,2),&empty),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_environment_borrow_owned(foreign,&empty),XRT_MANAGED_ARGUMENT);
+    CHECK(!empty.owner&&!empty.plan&&!empty.payload);
+    const XrtRuntimeTypeSpec *borrowed=NULL;
+    STATUS(xrt_managed_producer_borrow(foreign,provider_retain,ordinary.drop,&borrowed),XRT_MANAGED_ARGUMENT); CHECK(!borrowed);
+    OK(xrt_managed_producer_borrow(foreign,ordinary.retain,ordinary.drop,&borrowed));
+    CHECK(borrowed->code.context==plan&&borrowed->fixed_size==physical.fixed_size);
+    CHECK(xr_signed_rc_read(&owner->references)==references&&atomic_load(&f.audit.calls)==calls); same_bill(&f,before);
+    fixture_done(&f);
+    puts("retired setup queries reject Cells and foreign Ops without allocation or retain");
 }
 static void failures_and_pending(void) {
     Fixture f; fixture_init(&f,32768,true);
@@ -325,11 +379,15 @@ static void empty_and_deep_environments(void) {
     xrt_capture_type_drop(&empty_type); xrt_capture_type_drop(&chain_type);
     xrt_value_plan_drop(empty); xrt_value_plan_drop(chain); xrt_value_plan_drop(signature); xrt_value_plan_drop(integer);
     size_t calls=atomic_load(&f.audit.calls); atomic_store(&f.audit.remaining,0); xrt_billing_owner_fail_after(f.billing,0);
+    view=(XrtEnvironmentBorrow){0}; OK(xrt_environment_borrow_owned(borrow(&f,1),&view));
+    XrtValuePlanSpec shape; OK(xrt_value_plan_view(view.plan,&shape)); CHECK(!shape.size&&!shape.capture_count&&!shape.owned_count);
+    payload_type=NULL; payload=NULL; STATUS(xrt_environment_capture_borrow(&view,0,&payload_type,&payload),XRT_MANAGED_BOUNDS);
+    CHECK(!payload_type&&!payload&&atomic_load(&f.audit.calls)==calls);
     OK(xrt_managed_root_drain(f.root)); f.frame=NULL; CHECK(atomic_load(&f.audit.calls)==calls);
     fixture_done(&f);
     puts("empty environment and 100000 escaping capture links retire on the default stack");
 }
 int main(void) {
-    identity_cells(); creator_retirement(); failures_and_pending(); actual_payload_quota(); empty_and_deep_environments();
+    identity_cells(); creator_retirement(); owned_environment_context(); failures_and_pending(); actual_payload_quota(); empty_and_deep_environments();
     puts("escaping environment and necessary Cell kernel passed"); return 0;
 }
