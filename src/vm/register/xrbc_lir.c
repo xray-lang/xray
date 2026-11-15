@@ -24,6 +24,8 @@
 #include "lir/xlir_display.h"
 #include "lir/xlir_builtin_admission.h"
 #include "lir/xlir_native_callable.h"
+#include "lir/xlir_value_layout.h"
+#include "xrbc_value_homes.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
@@ -1619,6 +1621,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     return true;
 }
 
+#include "xrbc_lir_value_homes.inc.c"
+
 static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
     for (size_t f = 0; f < module.function_count; ++f) {
         xr_free((void *) module.functions[f].code);
@@ -1640,6 +1644,7 @@ static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
         xr_free((void *) module.functions[f].aggregate_operands);
         xr_free((void *) module.functions[f].aggregate_parameters);
         xr_free((void *) module.functions[f].aggregate_arguments);
+        xr_lir_value_homes_destroy((XrLirValueHomes *)module.functions[f].value_homes);
     }
     xr_free((void *) module.functions);
     for (size_t i = 0; i < module.literal_count; ++i)
@@ -1981,6 +1986,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     p->module.functions = functions;
     p->module.function_count = count;
     status = rbc_lir_build(input, ids, mapping, p, d);
+    if (status == XR_RBC_COMPILE_OK) status = rbc_lir_value_homes(input, ids, p, d);
     if (status == XR_RBC_COMPILE_OK) {
         if (!rbc_lir_seal(p)) {
             status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,

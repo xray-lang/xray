@@ -14,7 +14,7 @@ else()
 endif()
 
 # Cold physical projection consumes admitted LIR and independent runtime plans.
-add_library(xray_lir_value_layout STATIC xlir_value_layout.c)
+add_library(xray_lir_value_layout STATIC xlir_value_layout.c xlir_value_homes.c)
 target_link_libraries(xray_lir_value_layout PUBLIC xray_lir xray_native_runtime)
 target_include_directories(xray_lir_value_layout PUBLIC "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(xray_lir_value_layout PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
