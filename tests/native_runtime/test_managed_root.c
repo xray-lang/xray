@@ -12,6 +12,7 @@
 #include "runtime/native/xnative_managed_root.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_string_backing.h"
+#include "runtime/native/xnative_values.h"
 #include "xray_native_values.h"
 #include "base/xmalloc.h"
 #include "base/xmax_align.h"
@@ -669,6 +670,52 @@ static void fixed_scalar_root(void *context) {
     ++call->after;
 }
 
+static void cold_owner_reentry(void *context) {
+    ExecutionValues *call = context;
+    XrtExecutionFailure failure, before;
+    memset(&failure, 0xa5, sizeof(failure)); before = failure;
+    CHECK(xrt_native_values_prepared(call->owner));
+    CHECK(xrt_run_embedded_owned(call->locations, &failure, fixed_scalar_root,
+        call, call->owner) == XRT_EXECUTION_INVALID);
+    CHECK(!memcmp(&failure, &before, sizeof(failure)) && !call->after);
+    ++call->after;
+}
+
+static void fixed_cold_setup(void) {
+    XrtValueRoot owner = {0}; XrtBillingOwner *billing = NULL, *again = NULL;
+    BAD(xrt_native_values_prepare(NULL, &billing));
+    OK(xrt_native_values_prepare(&owner, &billing));
+    CHECK(billing && owner.managed && !xrt_value_root_empty(&owner) && xrt_native_values_prepared(&owner));
+    XrtBillingStats setup = xrt_billing_owner_stats(billing);
+    OK(xrt_native_values_prepare(&owner, &again)); CHECK(again == billing);
+    same_storage(setup, xrt_billing_owner_stats(billing));
+    BAD(xrt_native_values_prepare(&owner, &again)); CHECK(again == billing);
+    CHECK(xrt_billing_owner_retain(billing));
+    XrtSourceLocation location = {"cold-state.xr", 13, 1, 1, 0, 0};
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(&location, 1, &locations) == XRT_LOCATION_OK);
+    XrtExecutionFailure failure = {0};
+    ExecutionValues call = {.locations=locations, .owner=&owner};
+    CHECK(xrt_run_embedded_owned(locations, &failure, cold_owner_reentry, &call, &owner) == XRT_EXECUTION_COMPLETED);
+    CHECK(call.after == 1 && xrt_value_root_empty(&owner));
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing); billing = NULL;
+    OK(xrt_native_values_prepare(&owner, &billing));
+    CHECK(xrt_billing_owner_retain(billing));
+    xrt_billing_owner_close(billing);
+    Fixture fixture; fixture_init(&fixture); call.fixture = &fixture; call.after = 0;
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner) == XRT_EXECUTION_FAILURE);
+    CHECK(!call.after && xrt_value_root_empty(&owner) && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing); fixture_finish(&fixture);
+    billing = NULL;
+    OK(xrt_native_values_prepare(&owner, &billing)); CHECK(xrt_billing_owner_retain(billing));
+    xrt_value_root_drain(&owner);
+    CHECK(xrt_value_root_empty(&owner) && xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing); xrt_locations_release(locations);
+    puts("cold execution billing: real setup owner, failed setup drain and active ancestor rejection PASS");
+}
+
 static void fixed_execution_boundary(void) {
     Fixture fixture; fixture_init(&fixture);
     XrtSourceLocation location = {"fixed-values.xr", 15, 7, 4, 7, 5};
@@ -732,6 +779,7 @@ int main(void) {
     inline_payload_rejection();
     inline_payload_jump();
     fixed_execution_boundary();
+    fixed_cold_setup();
     puts("Stable managed Root/Frame: real aliases, publication, extent rollback and longjmp drain PASS");
     return 0;
 }
