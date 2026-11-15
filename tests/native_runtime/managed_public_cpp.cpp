@@ -14,6 +14,7 @@
 template<class T, class = void> struct Complete : std::false_type {};
 template<class T> struct Complete<T, decltype(void(sizeof(T)))> : std::true_type {};
 static_assert(!Complete<XrtManagedHeader>::value, "C++ cannot fabricate a C atomic Header");
+static_assert(!Complete<XrtStringBacking>::value, "C++ borrows opaque C-owned String storage");
 int main() {
     XrtBillingOwner *billing = nullptr;
     XrtManagedRoot *root = nullptr;

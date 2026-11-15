@@ -13,22 +13,7 @@
 #define XNATIVE_STRING_BACKING_H
 #include "xnative_backing_types.h"
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4200) /* C11 flexible array member */
-#endif
-typedef struct XrtStringBacking {
-    XrtManagedHeader managed;
-    size_t length, runes, capacity;
-    char bytes[];
-} XrtStringBacking;
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-_Static_assert(sizeof(size_t) == 8 && offsetof(XrtStringBacking, length) == 16 &&
-    offsetof(XrtStringBacking, runes) == 24 && offsetof(XrtStringBacking, capacity) == 32 &&
-    offsetof(XrtStringBacking, bytes) == 40 && sizeof(XrtStringBacking) == 40,
-    "String backing has a fixed forty-byte prefix");
+#include "xray_native_string_value.h"
 
 /* Reserve counts tail bytes, including the terminator; zero selects length+1.
  * Inputs are synchronous borrows. The stable pending slot exists before any

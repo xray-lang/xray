@@ -622,7 +622,7 @@ static void fixed_execution_root(void *context) {
     CHECK(root && root == xrt_native_managed_root(1) && call->owner->managed);
     CHECK(root != call->outer_root);
     XrtManagedFrame *parent = NULL, *child = NULL;
-    fixed_require(xrt_managed_frame_enter(root, 2, &parent));
+    fixed_require(xrt_managed_frame_enter(root, 3, &parent));
     XrtManagedHeader *value = make_value(call->fixture, 70);
     OK(xrt_managed_slot_adopt(parent, 0, &value)); CHECK(!value);
     xrt_native_string_create(parent, 1, "fixed\0text", 10, 1);
@@ -630,6 +630,12 @@ static void fixed_execution_root(void *context) {
     OK(xrt_managed_slot_borrow(parent, 1, &header));
     const XrtStringBacking *text = (const XrtStringBacking *)header;
     CHECK(text->length == 10 && text->runes == 10 && !memcmp(text->bytes, "fixed\0text", 10));
+    xrt_native_string_concat_create(parent, 2, header, header, 1);
+    XrtManagedHeader *concatenated = NULL;
+    OK(xrt_managed_slot_borrow(parent, 2, &concatenated));
+    const XrtStringBacking *joined = (const XrtStringBacking *)concatenated;
+    CHECK(joined->length == 20 && joined->runes == 20 && !memcmp(joined->bytes, text->bytes, 10));
+    CHECK(!memcmp(joined->bytes + 10, text->bytes, 10) && text->length == 10);
     if (call->nested) {
         XrtValueRoot inner_owner = {0}; XrtExecutionFailure inner_failure = {0};
         ExecutionValues inner = {.fixture=call->fixture, .locations=call->locations,
