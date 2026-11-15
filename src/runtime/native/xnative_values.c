@@ -28,34 +28,47 @@ XRAY_API_NORET void xrt_native_managed_failure(XrtManagedStatus status, uint32_t
     xrt_value_failure(xrt_managed_value_status(status), source_id);
 }
 
-static struct XrtNativeValues *native_values(uint32_t source_id) {
-    XrtValueRoot *owner = xrt_value_root_current(source_id);
-    XR_CHECK(!owner->draining, "cleanup callbacks cannot reenter the retiring execution");
+XR_FUNC XrtManagedStatus xrt_native_values_prepare(XrtValueRoot *owner, XrtBillingOwner **output) {
+    if (!owner || owner->draining || !output || *output) return XRT_MANAGED_ARGUMENT;
     if (!owner->managed) {
         XrtBillingOwner *billing = NULL;
         size_t limit = SIZE_MAX;
         if (owner->byte_limit) {
 #if SIZE_MAX < UINT64_MAX
-            if (owner->byte_limit > SIZE_MAX) xrt_native_managed_failure(XRT_MANAGED_LIMIT, source_id);
+            if (owner->byte_limit > SIZE_MAX) return XRT_MANAGED_LIMIT;
 #endif
             limit = (size_t)owner->byte_limit;
         }
         XrtManagedStatus status = xrt_billing_owner_new(NULL, limit, &billing);
-        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+        if (status != XRT_MANAGED_OK) return status;
         void *memory = NULL;
         status = xrt_managed_metadata_allocate(billing, sizeof(struct XrtNativeValues), &memory);
         if (status != XRT_MANAGED_OK) {
             xrt_billing_owner_drop(billing);
-            xrt_native_managed_failure(status, source_id);
+            return status;
         }
         memset(memory, 0, sizeof(struct XrtNativeValues));
         struct XrtNativeValues *values = memory;
         values->billing = billing;
         owner->managed = values;
     }
+    *output = owner->managed->billing;
+    return XRT_MANAGED_OK;
+}
+
+XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *owner) {
+    return owner && xrt_value_root_storage_empty(owner) &&
+        (!owner->managed || (!owner->managed->root && !owner->managed->backings.string));
+}
+
+static struct XrtNativeValues *native_values(uint32_t source_id) {
+    XrtValueRoot *owner = xrt_value_root_current(source_id);
+    XrtBillingOwner *billing = NULL;
+    XrtManagedStatus status = xrt_native_values_prepare(owner, &billing);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     struct XrtNativeValues *values = owner->managed;
     if (!values->root) {
-        XrtManagedStatus status = xrt_managed_root_new(values->billing, &values->root);
+        status = xrt_managed_root_new(billing, &values->root);
         if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     }
     return values;

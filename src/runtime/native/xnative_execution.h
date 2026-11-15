@@ -68,6 +68,9 @@ typedef enum XrtExecutionStatus {
 // restored on either return. No target crosses yield, thread handoff or FFI.
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context);
+/* An outer owner is either empty or contains constructor-produced cold billing
+ * setup only. An active ancestor's owner cannot be reused by a nested execution.
+ * Both successful and failed execution drain the supplied outer owner. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings);
 

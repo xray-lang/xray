@@ -66,14 +66,22 @@ XR_FUNC void xrt_value_root_drain(XrtValueRoot *root);
 XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id);
 XR_FUNC XrtValueRoot *xrt_value_root_active(void);
 XR_FUNC XrXirDomain *xrt_value_root_domain(XrtValueRoot *, uint32_t source_id);
-static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
+/* The caller owns this mutable root outside its setjmp function. Retirement
+ * runs under the execution's cleanup boundary and never invokes guest code. */
+XR_FUNC void xrt_native_values_drain(XrtValueRoot *);
+/* Only a constructor-produced cold context, with no activation or guest values,
+ * is eligible to enter an execution after explicit prebinding setup. */
+XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *);
+static inline bool xrt_value_root_storage_empty(const XrtValueRoot *root) {
     return !root->domain && !root->table && !root->literals && !root->held &&
         !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
         !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
         !root->array_held && !root->map_types && !root->maps && !root->map_capacity &&
         !root->map_count && !root->map_held && !root->views && !root->callables && !root->callable_scope &&
         !root->pending.type && !root->pending.reserved && !root->pending.payload &&
-        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size &&
-        !root->managed && !root->draining;
+        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size && !root->draining;
+}
+static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
+    return xrt_value_root_storage_empty(root) && !root->managed;
 }
 #endif // XNATIVE_VALUE_H

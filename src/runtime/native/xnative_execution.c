@@ -130,8 +130,10 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings) {
-    if (!locations || !failure || !root || !strings || !xrt_value_root_empty(strings))
+    if (!locations || !failure || !root || !strings || !xrt_native_values_prepared(strings))
         return XRT_EXECUTION_INVALID;
+    for (const XrtExecutionBinding *active = current_execution; active; active = active->previous)
+        if (active->strings == strings) return XRT_EXECUTION_INVALID;
     XrtSourceMap map = {xrt_locations_get(locations, 1), xrt_locations_count(locations)};
     return run_bound(&map, failure, root, context, strings);
 }
