@@ -129,6 +129,13 @@ add_test(NAME lir_c_value_transfers_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRE
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/value-transfers" ${lir_c_transfer_options})
 set_tests_properties(lir_c_value_transfers_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 30)
+add_test(NAME lir_c_managed_strings_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_managed_strings_native.py"
+    --driver $<TARGET_FILE:lir_c_run> --faults $<TARGET_FILE:test_lir_c_faults>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work "${CMAKE_CURRENT_BINARY_DIR}/managed-strings" ${lir_c_transfer_options})
+set_tests_properties(lir_c_managed_strings_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 30)
 add_test(NAME lir_c_value_types_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_value_types_native.py"
     --driver $<TARGET_FILE:test_lir_c_value_types>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

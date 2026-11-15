@@ -1,0 +1,6 @@
+fn work(divisor: i64) {
+    const text = "live" + " before panic"
+    print(len(text))
+    print(9 / divisor)
+}
+work(0)

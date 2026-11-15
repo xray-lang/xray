@@ -300,7 +300,51 @@ static void fixed_memory_boundaries(void) {
     puts("fixed type workspace FI and retired-producer result shape PASS");
 }
 
+static void managed_string_boundaries(const char *path) {
+    XrLirModule *module = NULL;
+    CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    XrLirLiteral literal = {0};
+    const unsigned char bytes[] = {'A', 0, 0xc3, 0xa9};
+    CHECK(xr_lir_add_literal(module, bytes, sizeof(bytes), &literal) == XR_LIR_OK);
+    XrLirFunction entry = {0}; XrLirBlock block = {0};
+    XrLirFunctionSpec spec = {.name="owned", .name_length=5, .result=XR_LIR_STRING};
+    CHECK(xr_lir_declare_function(module, &spec, &entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module, entry) == XR_LIR_OK);
+    CHECK(xr_lir_add_block(module, entry, NULL, 0, &block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module, entry, block) == XR_LIR_OK);
+    XrLirValue input = {0}, copy = {0}, joined = {0};
+    XrLirInstruction op = {.op=XR_LIR_STRING_LITERAL, .type=XR_LIR_STRING, .bits=literal.id};
+    CHECK(xr_lir_emit_value(module, block, &op, &input) == XR_LIR_OK);
+    op = (XrLirInstruction){.op=XR_LIR_STRING_RETAIN, .type=XR_LIR_STRING, .operands=&input, .operand_count=1};
+    CHECK(xr_lir_emit_value(module, block, &op, &copy) == XR_LIR_OK);
+    XrLirValue inputs[] = {input, copy};
+    op = (XrLirInstruction){.op=XR_LIR_STRING_CONCAT, .type=XR_LIR_STRING, .operands=inputs, .operand_count=2};
+    CHECK(xr_lir_emit_value(module, block, &op, &joined) == XR_LIR_OK);
+    for (unsigned i = 0; i < 2; ++i) {
+        op = (XrLirInstruction){.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT, .operands=&inputs[i], .operand_count=1};
+        CHECK(xr_lir_emit_effect(module, block, &op) == XR_LIR_OK);
+    }
+    op = (XrLirInstruction){.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&joined, .operand_count=1};
+    CHECK(xr_lir_set_terminator(module, block, &op) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XrLirCRequest request = {module, entry, resources, "managed-string-publication", NULL};
+    control_boundaries(&request);
+    XrLirCOutput output = memory_boundaries(&request);
+    CHECK(strstr(output.bytes, "xrt_native_string_create(") && strstr(output.bytes, "xrt_managed_slot_replace(") &&
+        strstr(output.bytes, "xrt_native_string_concat_create(") && !strstr(output.bytes, "xrt_string_retain("));
+    xr_lir_module_destroy(module); xr_compile_resources_release(resources);
+    memset(&request, 0xa5, sizeof(request));
+    FILE *file = fopen(path, "wb");
+    CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && fclose(file) == 0);
+    xr_lir_c_output_free(&output);
+    CHECK(!runtime_live && !runtime_bytes);
+    puts("managed String receiving metadata, actual allocation faults and producer retirement PASS");
+}
 int main(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "--managed-string")) {
+        managed_string_boundaries(argv[2]); return 0;
+    }
     if (argc == 1) record_memory_boundaries();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
