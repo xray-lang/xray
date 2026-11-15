@@ -196,17 +196,19 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
     c_format(c, "        XrtManagedStatus status = xrl_frame_%" PRIu32 "_enter(xrl_root, &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+    c_text(c, "    }\n");
+    /* Pure frame projections must dominate each consumer without requiring
+     * host compilers to correlate separate lazy acquisition guards. */
     for (uint32_t v = 1; v <= c->view.value_count && c_request_poll(c); ++v) {
         const XrLirValueHome *home = &c->homes->values[v];
         if (home->owner_count && !home->parameter)
-            c_format(c, "        v%" PRIu32 " = (void *)((unsigned char *)xrl_payload + %zu);\n", v, home->offset);
+            c_format(c, "    v%" PRIu32 " = (void *)((unsigned char *)xrl_payload + %zu);\n", v, home->offset);
     }
     if (c->homes->bindings) for (uint32_t v=1;v<=c->view.value_count;++v) {
         const XrLirHomeBinding *binding=&c->homes->bindings[v];
         if (binding->kind==XR_LIR_HOME_BINDING_LOCAL)
-            c_format(c, "        v%" PRIu32 " = (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL};\n", v, binding->first_owner);
+            c_format(c, "    v%" PRIu32 " = (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL};\n", v, binding->first_owner);
     }
-    c_text(c, "    }\n");
 }
 static uint32_t c_values_scalar_count(LirC *c, const XrLirEdgeView *edge) {
     uint32_t count = 0;
