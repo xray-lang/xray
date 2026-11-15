@@ -71,8 +71,19 @@ static bool rbc_value_map(const XrRbcModule *module,const XrRbcValueCode *code,u
 static bool rbc_value_container(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     return rbc_value_array(module,code,value,destination) || rbc_value_map(module,code,value,destination);
 }
+static bool rbc_value_inline(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!home || !home->type || !image || !image->types || home->type>image->type_count ||
+        code->locations[value].kind!=XR_RBC_VALUE_NOWHERE) return false;
+    const XrtValueImageType *type=&image->types[home->type-1];
+    return (type->kind==XRT_VALUE_RECORD || type->kind==XRT_VALUE_NULLABLE) && home->size==type->size &&
+        home->owner_count==type->owned_count && (!destination || (!home->parameter && home->offset!=SIZE_MAX &&
+            (!home->owner_count || (home->temporary_offset!=SIZE_MAX && home->temporary_first_owner<code->homes->frame.slot_count))));
+}
 static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
-    return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination);
+    return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination) ||
+        rbc_value_inline(module,code,value,destination);
 }
 static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value,uint32_t result) {
@@ -155,6 +166,7 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
     }
     return false;
 }
+#include "xrbc_value_inline_admission.inc.c"
 static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, uint32_t word) {
     if ((word & 255) != XR_RBC_VALUE_ACCESS || ((word >> 8) & 255)) return false;
@@ -164,11 +176,11 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         !code->locations || (code->homes && code->homes->value_count != code->value_count)) return false;
     XrRbcValueAccess a = code->accesses[index];
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
-        a.operation!=XR_RBC_VALUE_MAP && (a.first || a.count || a.window)) return false;
+        a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_RECORD_NEW && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
-        a.operation!=XR_RBC_VALUE_DISPLAY && a.index) return false;
+        a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.index) return false;
     switch (a.operation) {
     case XR_RBC_VALUE_STRING_LITERAL:
         return !a.source && !a.other && a.index < module->literal_count && rbc_value_string(module,code,a.result,true);
@@ -236,6 +248,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!rbc_value_scalar(code,function,source,kind)) return false;
             }
         }
+        if (callee && rbc_value_inline(module,code,a.result,true))
+            return callee->homes->result_type==rbc_value_home(code,a.result)->type;
         if (target->aggregate_result_type)
             return callee && rbc_value_pod(module,code,function,a.result,target->aggregate_result_type) &&
                 callee->homes->result_type==rbc_value_home(code,a.result)->type;
@@ -243,6 +257,10 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             callee->homes->result_type==rbc_value_home(code,a.result)->type :
             target->result_kind==XR_RBC_BITS && (!a.result || rbc_value_scalar(code,function,a.result,XR_RBC_BITS));
     }
+    case XR_RBC_VALUE_RECORD_NEW: case XR_RBC_VALUE_RECORD_FIELD:
+    case XR_RBC_VALUE_NULLABLE_NONE: case XR_RBC_VALUE_NULLABLE_SOME:
+    case XR_RBC_VALUE_NULLABLE_IS_SOME: case XR_RBC_VALUE_NULLABLE_UNWRAP:
+        return rbc_value_inline_access_valid(module,code,function,a);
     case XR_RBC_VALUE_RETURN:
         if (a.result || a.other) return false;
         if (function->aggregate_result_type)

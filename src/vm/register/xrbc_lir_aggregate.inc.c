@@ -6,6 +6,13 @@
  *
  * xrbc_lir_aggregate.inc.c - Owned physical homes and real typed operand spans
  */
+/* This selects the existing admitted inline family, never its owned count or
+ * physical offsets. Those facts come exclusively from the common image. */
+static bool rbc_lir_inline_type(const XrLirModule *module,XrLirType type) {
+    XrLirTypeView shape={0};
+    return type>=XR_LIR_TYPE_COUNT && xr_lir_type_view(module,type,&shape)==XR_LIR_OK &&
+        (shape.kind==XR_LIR_TYPE_RECORD || (shape.kind==XR_LIR_TYPE_NULLABLE && xr_lir_boxed_type(module,type)));
+}
 static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
     return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
         instruction->op == XR_LIR_TUPLE_NEW || instruction->op == XR_LIR_TUPLE_FIELD ||

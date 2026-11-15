@@ -147,16 +147,25 @@ static void scalar_and_mapping(void) {
     XrtValueKind kind = XRT_VALUE_STRING; CHECK(xr_pod_value_kind(XR_POD_UNIT,&kind) && kind == XRT_VALUE_UNIT);
     CHECK(!xr_pod_value_kind(XR_POD_SCALAR_COUNT,&kind) && kind == XRT_VALUE_UNIT);
 }
-static void unsupported_targets(void) {
-    XrLirFunction root; XrLirModule *module = record_fixture(&root);
-    XrRbcProgram *program = NULL; XrRbcCompileDiagnostic diagnostic = {0};
-    CHECK(xr_rbc_compile(module,root,&program,&diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    if (strcmp(diagnostic.message,"operation has no admitted bytecode implementation"))
-        fprintf(stderr,"unsupported target diagnostic: %s\n",diagnostic.message);
-    CHECK(strcmp(diagnostic.message,"operation has no admitted bytecode implementation") == 0);
-    xr_lir_module_destroy(module);
+static void inline_targets(void) {
+    XrLirFunction root={0}; XrLirModule *module=record_fixture(&root);
+    XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_OK && program);
+    XrRbcExecution *execution=NULL; CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_lir_module_destroy(module); xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution); uint64_t bits=0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==100);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    module=NULL; OK(xr_lir_module_create(NULL,&module)); XrLirType type=0;
+    XrLirRecordField field={"score",5,XR_LIR_I64}; OK(xr_lir_record_type(module,&field,1,&type));
+    root=test_function(module,"external_record",NULL,0,type); XrLirBlock block=test_block(module,root,NULL,0);
+    OK(xr_lir_set_entry(module,root,block)); XrLirValue number=test_constant(module,block,XR_LIR_I64,42);
+    XrLirValue value=record_fixture_value(module,block,XR_LIR_RECORD_NEW,type,&number,1,0,(XrLirFunction){0});
+    OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1}));
+    OK(xr_lir_module_finish(module,NULL)); program=NULL; XrRbcCompileDiagnostic diagnostic={0};
+    CHECK(xr_rbc_compile(module,root,&program,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED && !program);
+    CHECK(!strcmp(diagnostic.message,"inline value results require an internal typed caller")); xr_lir_module_destroy(module);
 }
 int main(void) {
-    scalar_and_mapping(); unsupported_targets(); state_code_retirement(); scalar_entry_receives_state_descriptions();
+    scalar_and_mapping(); inline_targets(); state_code_retirement(); scalar_entry_receives_state_descriptions();
     puts("raw CodeImage State metadata and independent prepare passed"); return 0;
 }
