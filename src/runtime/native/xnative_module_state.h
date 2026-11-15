@@ -12,9 +12,7 @@
 #ifndef XNATIVE_MODULE_STATE_H
 #define XNATIVE_MODULE_STATE_H
 #include "xray_native_state.h"
-#include "xir/xxir_value.h"
-XR_FUNC bool xrt_module_callable_signature(const XrtModuleLayout *, uint32_t type,
-    const XrXirTypeArena **, XrXirType *);
-XR_FUNC XrXirTypeArena *xrt_module_callable_catalog(const XrtModuleLayout *);
-XR_FUNC XrXirTypeArena *xrt_module_state_callables(const XrtModuleState *, const XrtCallableImage *);
+#include "xnative_value_image.h"
+XR_FUNC XrtManagedStatus xrt_module_layout_plan(const XrtModuleLayout *, uint32_t type,
+    const XrtValuePlan **empty);
 #endif // XNATIVE_MODULE_STATE_H

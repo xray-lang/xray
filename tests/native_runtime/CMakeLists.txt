@@ -240,13 +240,27 @@ else()
 endif()
 add_test(NAME native_string_admission COMMAND test_native_string_admission)
 set_tests_properties(native_string_admission PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 10)
-add_executable(test_native_module_state test_module_state.c)
-target_link_libraries(test_native_module_state PRIVATE xray_native_runtime)
-target_include_directories(test_native_module_state PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_executable(test_native_module_state test_module_state.c
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_module_state.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_image.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_map_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c")
+target_include_directories(test_native_module_state PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_module_state PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_module_state PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_module_state PRIVATE /experimental:c11atomics)
+    endif()
 else()
+    target_compile_definitions(test_native_module_state PRIVATE _POSIX_C_SOURCE=200809L)
     target_compile_options(test_native_module_state PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
 add_test(NAME native_module_state_owner COMMAND test_native_module_state)

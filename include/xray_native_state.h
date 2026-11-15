@@ -13,7 +13,8 @@
 #ifndef XRAY_NATIVE_STATE_H
 #define XRAY_NATIVE_STATE_H
 #include "xray_native_runtime.h"
-#include "xray_native_callable.h"
+#include "xray_native_place.h"
+#include "xray_native_value_image.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -23,41 +24,26 @@ extern "C" {
 typedef struct XrtModuleLayout XrtModuleLayout;
 typedef struct XrtModuleState XrtModuleState;
 typedef struct XrtModuleRef XrtModuleRef;
-/* Zero denotes success. Nonzero values retain the shared value kernel's exact
- * status and are passed unchanged to xrt_module_require inside a guest root. */
-typedef uint32_t XrtModuleStatus;
-
-typedef enum XrtModuleTypeKind {
-    XRT_MODULE_TYPE_INVALID,
-    XRT_MODULE_UNIT, XRT_MODULE_BOOL, XRT_MODULE_RUNE,
-    XRT_MODULE_I8, XRT_MODULE_I16, XRT_MODULE_I32, XRT_MODULE_I64,
-    XRT_MODULE_U8, XRT_MODULE_U16, XRT_MODULE_U32, XRT_MODULE_U64,
-    XRT_MODULE_F32, XRT_MODULE_F64, XRT_MODULE_STRING,
-    XRT_MODULE_ARRAY_I64, XRT_MODULE_ARRAY_STRING, XRT_MODULE_ARRAY_U8, XRT_MODULE_ARRAY_U64,
-    XRT_MODULE_MAP_STRING_I64,
-    XRT_MODULE_FIXED_U8,
-    XRT_MODULE_NULLABLE,
-    XRT_MODULE_CELL_ARRAY_I64,
-    XRT_MODULE_CALLABLE,
-    XRT_MODULE_TUPLE_I64,
-    XRT_MODULE_BOXED
-} XrtModuleTypeKind;
-/* Fixed U8 and I64 Tuple arguments are their nonzero field counts. Nullable
- * argument is an earlier type ordinal in this catalog. Other kinds require zero. Nullable admits
- * inline scalar, Fixed U8 and Nullable payloads with independently owned types. */
-typedef struct XrtModuleTypeSpec {
-    XrtModuleTypeKind kind;
-    uint32_t argument;
-} XrtModuleTypeSpec;
+typedef XrtManagedStatus XrtModuleStatus;
 typedef struct XrtModuleSpec { uint32_t first_dependency, dependency_count; } XrtModuleSpec;
 enum { XRT_MODULE_SLOT_MUTABLE = 1u };
 typedef struct XrtModuleSlotSpec {
     uint32_t module, type, flags;
-    uint64_t offset;
-    uint32_t size, alignment;
+    size_t offset, size, alignment;
 } XrtModuleSlotSpec;
 typedef struct XrtModuleLayoutSpec {
-    const XrtModuleTypeSpec *types;
+    const XrtValueImage *values;
+    const XrtModuleSpec *modules;
+    uint32_t module_count;
+    const uint32_t *dependencies;
+    uint32_t dependency_count;
+    const XrtModuleSlotSpec *slots;
+    uint32_t slot_count;
+    size_t payload_size, payload_alignment;
+} XrtModuleLayoutSpec;
+/* A bound view borrows owned metadata, never the raw receiving image. Type ids
+ * remain one-based ordinals in that exact image. */
+typedef struct XrtModuleLayoutView {
     uint32_t type_count;
     const XrtModuleSpec *modules;
     uint32_t module_count;
@@ -65,23 +51,21 @@ typedef struct XrtModuleLayoutSpec {
     uint32_t dependency_count;
     const XrtModuleSlotSpec *slots;
     uint32_t slot_count;
-    uint64_t payload_size, byte_limit;
-    uint32_t payload_alignment;
-    const XrtCallableTypeSpec *callable_types;
-    uint32_t callable_type_count;
-} XrtModuleLayoutSpec;
-
-/* Input arrays are copied. Runtime-selected copy/drop callbacks and their type
- * contexts are owned by the retained layout, with no caller code/context borrow.
- * Counts and indices, canonical nonoverlapping offsets and exact type layouts
- * are validated. Zero byte limits allow zero bytes; UINT64_MAX is unbounded. */
-XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *, XrtModuleLayout **);
+    size_t payload_size, payload_alignment;
+} XrtModuleLayoutView;
+/* Binding copies all input descriptions and names through the supplied billing
+ * owner. Code pins the raw input throughout provider callbacks; only plans that
+ * need executable code keep that lease afterwards. Layout never owns State.
+ * All payload owner fields are declared XrtManagedHeader*. Fn, Cell and View
+ * payloads are unsupported until their complete target plans are admitted. */
+XRAY_API XrtModuleStatus xrt_module_layout_new(XrtBillingOwner *, const XrtModuleLayoutSpec *,
+    XrtManagedLease code, XrtModuleLayout **);
 XRAY_API bool xrt_module_layout_retain(XrtModuleLayout *);
 XRAY_API void xrt_module_layout_drop(XrtModuleLayout **);
-XRAY_API XrtModuleStatus xrt_module_layout_view(const XrtModuleLayout *, XrtModuleLayoutSpec *);
-/* The state budget includes its retained layout and all payload/log/scratch
- * storage. A state remains live until its execution owner drops it. */
-XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *, uint64_t byte_limit, XrtModuleState **);
+XRAY_API XrtModuleStatus xrt_module_layout_view(const XrtModuleLayout *, XrtModuleLayoutView *);
+/* State allocation and scratch are charged to this actual execution owner,
+ * independently of the retained immutable layout's billing owner. */
+XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *, XrtBillingOwner *, XrtModuleState **);
 XRAY_API void xrt_module_state_drop(XrtModuleState **);
 XRAY_API XrtModuleStatus xrt_module_begin(XrtModuleState *, uint32_t module);
 XRAY_API XrtModuleStatus xrt_module_ready(XrtModuleState *, uint32_t module);
@@ -98,8 +82,17 @@ XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *, uint3
     uint32_t count, const int64_t *values);
 XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *, uint32_t slot, XrtModuleRef **);
 XRAY_API XrtModuleStatus xrt_module_borrow(const XrtModuleRef *, const void **value);
-/* Copy finishes in empty scratch before the old value is changed. Copy failure
- * releases any partial output, leaves scratch empty and preserves the slot.
+/* The destination is stable registered owning storage, or an owner synchronously
+ * retired before any nonlocal failure. Its leaves start NULL. Failure preserves
+ * both payloads; success makes an independent snapshot without allocating. */
+XRAY_API XrtModuleStatus xrt_module_copy(const XrtModuleRef *, void *empty_value);
+/* A binding place does not grant mutation authority. Existing admission proves
+ * the borrow; its guard only checks readiness/mutability and forbids MOVE_FROM. */
+XRAY_API XrtModuleStatus xrt_module_external_owner(const XrtModuleRef *, size_t leaf,
+    XrtExternalOwner *);
+/* Inputs are admitted typed values and remain borrowed through this call; they
+ * may alias the binding. Copy finishes in empty scratch before the old value is
+ * changed. Failure leaves scratch empty and preserves the complete binding.
  * An initializer reference requires construction; an ordinary one publication.
  * Immutable replacement is rejected. Self-aliasing source values are valid. */
 XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *, const void *value);
@@ -108,13 +101,14 @@ typedef struct XrtModuleAccess {
     void *payload;
     const uint8_t *flags;
     uint8_t required_flags;
-    uint32_t size, alignment;
-    XrtModuleTypeKind kind;
+    size_t size, alignment;
+    uint32_t type;
+    XrtValueKind kind;
     bool is_mutable;
 } XrtModuleAccess;
 /* Cache queries read metadata only. A scalar access checks required_flags at
- * the actual guest instruction before dereferencing payload. String reads use
- * xrt_string_retain to create a guest owner from the independently held value.
+ * the actual guest instruction before dereferencing payload. Ordinary owned
+ * reads use xrt_module_copy to obtain an independent snapshot.
  * Managed writes always use the transactional replace operation. */
 XRAY_API XrtModuleStatus xrt_module_cache(const XrtModuleState *, uint32_t slot, XrtModuleAccess *);
 XRAY_API XrtModuleStatus xrt_module_reference_cache(const XrtModuleRef *, XrtModuleAccess *);
