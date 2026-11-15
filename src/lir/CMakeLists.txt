@@ -13,6 +13,20 @@ else()
     target_compile_options(xray_lir PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
 
+# Cold physical projection consumes admitted LIR and independent runtime plans.
+add_library(xray_lir_value_layout STATIC xlir_value_layout.c)
+target_link_libraries(xray_lir_value_layout PUBLIC xray_lir xray_native_runtime)
+target_include_directories(xray_lir_value_layout PUBLIC "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(xray_lir_value_layout PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(xray_lir_value_layout PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(xray_lir_value_layout PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(xray_lir_value_layout PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+
 # Reuse the existing verifier implementation without the legacy C generator.
 add_library(xray_lir_c STATIC xlir_c.c "${PROJECT_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c")
 target_include_directories(xray_lir_c PRIVATE "${PROJECT_SOURCE_DIR}/include")
