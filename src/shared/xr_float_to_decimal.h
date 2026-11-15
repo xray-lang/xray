@@ -4,20 +4,23 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_float_format.inc.c - Shortest decimal text from exact rounding intervals
+ * xr_float_to_decimal.h - Shortest decimal text from exact rounding intervals
  *
  * KEY CONCEPT:
- *   Integer margins preserve asymmetric spacing at normal powers of two.
+ *   One integer-only formatter serves checked constants and runtime Strings.
  */
-#include "../shared/xr_decimal_float.h"
+#ifndef XR_FLOAT_TO_DECIMAL_H
+#define XR_FLOAT_TO_DECIMAL_H
+#include "xr_decimal_float.h"
+#include "xr_ieee_core.h"
 
-static XrDecimalInteger float_decimal_integer(uint64_t value) {
+static inline XrDecimalInteger float_decimal_integer(uint64_t value) {
     XrDecimalInteger result = {{0}, 0};
     if (value) { result.words[0] = (uint32_t) value; result.count = 1; }
     if (value >> 32) { result.words[1] = (uint32_t) (value >> 32); result.count = 2; }
     return result;
 }
-static bool float_decimal_add(XrDecimalInteger *a, const XrDecimalInteger *b) {
+static inline bool float_decimal_add(XrDecimalInteger *a, const XrDecimalInteger *b) {
     unsigned count = a->count > b->count ? a->count : b->count;
     uint64_t carry = 0;
     for (unsigned i = 0; i < count; ++i) {
@@ -31,13 +34,13 @@ static bool float_decimal_add(XrDecimalInteger *a, const XrDecimalInteger *b) {
     }
     return true;
 }
-static void float_decimal_carry(char *digits, unsigned *count, int *exponent) {
+static inline void float_decimal_carry(char *digits, unsigned *count, int *exponent) {
     unsigned index = *count;
     while (index && digits[index - 1] == '9') digits[--index] = '0';
     if (index) ++digits[index - 1];
     else { digits[0] = '1'; *count = 1; ++*exponent; }
 }
-static bool float_decimal_digits(const FloatFormat *format, FloatParts parts,
+static inline bool float_decimal_digits(const XrIeeeFormat *format, XrIeeeParts parts,
     char *digits, unsigned *count, int *exponent) {
     bool inclusive = !(parts.significand & 1);
     bool asymmetric = parts.significand == (UINT64_C(1) << format->fraction) &&
@@ -93,7 +96,7 @@ static bool float_decimal_digits(const FloatFormat *format, FloatParts parts,
     }
     return false;
 }
-static size_t float_decimal_text(char *text, const char *digits, unsigned count, int exponent) {
+static inline size_t float_decimal_text(char *text, const char *digits, unsigned count, int exponent) {
     size_t used = 0;
     if (exponent >= -4 && exponent < 16) {
         int point = exponent + 1;
@@ -121,13 +124,13 @@ static size_t float_decimal_text(char *text, const char *digits, unsigned count,
     }
     return used;
 }
-XR_FUNC bool xr_xir_float_format(uint32_t bits, uint64_t input,
+static inline bool xr_float_to_decimal(uint32_t bits, uint64_t input,
     char *bytes, size_t capacity, size_t *length) {
     if (length) *length = 0;
     if (bytes && capacity) bytes[0] = 0;
     if (!bytes || !length) return false;
-    FloatFormat format; FloatParts parts;
-    if (!float_format(bits, &format) || !float_decode(bits, input, &parts)) return false;
+    XrIeeeFormat format; XrIeeeParts parts;
+    if (!xr_ieee_format(bits, &format) || !xr_ieee_decode(bits, input, &parts)) return false;
     char text[32]; size_t used = 0;
     if (parts.nan) { memcpy(text, "nan", 3); used = 3; }
     else {
@@ -144,3 +147,4 @@ XR_FUNC bool xr_xir_float_format(uint32_t bits, uint64_t input,
     memcpy(bytes, text, used); bytes[used] = 0; *length = used;
     return true;
 }
+#endif // XR_FLOAT_TO_DECIMAL_H

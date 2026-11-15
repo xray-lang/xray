@@ -10,36 +10,9 @@
  *   A finite value is a signed integer significand times a power of two.
  */
 #include "xxir_float.h"
+#include "../shared/xr_ieee_core.h"
+#include "../shared/xr_float_to_decimal.h"
 
-typedef struct FloatFormat {
-    unsigned fraction;
-    int bias;
-    uint64_t sign, infinity, nan;
-} FloatFormat;
-typedef struct FloatParts {
-    uint64_t significand;
-    int exponent;
-    bool negative, infinite, nan;
-} FloatParts;
-static bool float_format(uint32_t bits, FloatFormat *format) {
-    if (bits == 32) *format = (FloatFormat) {23, 127, UINT64_C(0x80000000),
-        UINT64_C(0x7f800000), UINT64_C(0x7fc00000)};
-    else if (bits == 64) *format = (FloatFormat) {52, 1023, UINT64_C(0x8000000000000000),
-        UINT64_C(0x7ff0000000000000), UINT64_C(0x7ff8000000000000)};
-    else return false;
-    return true;
-}
-static bool float_decode(uint32_t bits, uint64_t input, FloatParts *parts) {
-    FloatFormat format;
-    if (!float_format(bits, &format) || (bits == 32 && input > UINT32_MAX)) return false;
-    uint64_t fraction = input & ((UINT64_C(1) << format.fraction) - 1);
-    unsigned exponent = (unsigned) ((input & format.infinity) >> format.fraction);
-    bool special = (input & format.infinity) == format.infinity;
-    *parts = (FloatParts) {fraction, (exponent ? (int) exponent : 1) - format.bias - (int) format.fraction,
-        (input & format.sign) != 0, special && !fraction, special && fraction != 0};
-    if (exponent && !special) parts->significand |= UINT64_C(1) << format.fraction;
-    return true;
-}
 static uint64_t float_round_right(uint64_t value, unsigned shift) {
     if (!shift) return value;
     if (shift > 64) return 0;
@@ -49,7 +22,7 @@ static uint64_t float_round_right(uint64_t value, unsigned shift) {
     uint64_t half = UINT64_C(1) << (shift - 1);
     return whole + (tail > half || (tail == half && (whole & 1)));
 }
-static uint64_t float_pack(const FloatFormat *format, FloatParts parts) {
+static uint64_t float_pack(const XrIeeeFormat *format, XrIeeeParts parts) {
     uint64_t sign = parts.negative ? format->sign : 0;
     if (parts.nan) return format->nan;
     if (parts.infinite) return sign | format->infinity;
@@ -76,28 +49,28 @@ XrXirNumericStatus xr_xir_float_convert(uint32_t source_bits, uint32_t target_bi
     uint64_t input, uint64_t *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = 0;
-    FloatFormat target; FloatParts parts;
-    if (!float_format(target_bits, &target) || !float_decode(source_bits, input, &parts)) return XR_XIR_NUMERIC_BAD_ARGUMENT;
+    XrIeeeFormat target; XrIeeeParts parts;
+    if (!xr_ieee_format(target_bits, &target) || !xr_ieee_decode(source_bits, input, &parts)) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = float_pack(&target, parts); return XR_XIR_NUMERIC_OK;
 }
 XrXirNumericStatus xr_xir_integer_to_float(XrXirIntegerFormat source,
     uint32_t target_bits, int64_t input, uint64_t *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = 0;
-    FloatFormat target; int64_t validated;
-    if (!float_format(target_bits, &target) || xr_xir_integer_convert(source, source, input, &validated) != XR_XIR_RUN_OK)
+    XrIeeeFormat target; int64_t validated;
+    if (!xr_ieee_format(target_bits, &target) || xr_xir_integer_convert(source, source, input, &validated) != XR_XIR_RUN_OK)
         return XR_XIR_NUMERIC_BAD_ARGUMENT;
     bool negative = source.is_signed && validated < 0;
     uint64_t magnitude = negative ? UINT64_C(0) - (uint64_t) validated : (uint64_t) validated;
-    *output = float_pack(&target, (FloatParts) {magnitude, 0, negative, false, false});
+    *output = float_pack(&target, (XrIeeeParts) {magnitude, 0, negative, false, false});
     return XR_XIR_NUMERIC_OK;
 }
 XrXirNumericStatus xr_xir_float_to_integer(uint32_t source_bits,
     XrXirIntegerFormat target, uint64_t input, int64_t *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = 0;
-    FloatParts parts; int64_t validated;
-    if (!float_decode(source_bits, input, &parts) || xr_xir_integer_convert(target, target, 0, &validated) != XR_XIR_RUN_OK)
+    XrIeeeParts parts; int64_t validated;
+    if (!xr_ieee_decode(source_bits, input, &parts) || xr_xir_integer_convert(target, target, 0, &validated) != XR_XIR_RUN_OK)
         return XR_XIR_NUMERIC_BAD_ARGUMENT;
     if (parts.nan || parts.infinite) return XR_XIR_NUMERIC_RANGE;
     uint64_t magnitude;
@@ -116,8 +89,8 @@ XrXirNumericStatus xr_xir_float_compare(uint32_t bits,
     uint64_t left, uint64_t right, XrXirFloatOrder *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = XR_XIR_FLOAT_EQUAL;
-    FloatParts first, second; FloatFormat format;
-    if (!float_decode(bits, left, &first) || !float_decode(bits, right, &second) || !float_format(bits, &format))
+    XrIeeeParts first, second; XrIeeeFormat format;
+    if (!xr_ieee_decode(bits, left, &first) || !xr_ieee_decode(bits, right, &second) || !xr_ieee_format(bits, &format))
         return XR_XIR_NUMERIC_BAD_ARGUMENT;
     if (first.nan || second.nan) { *output = XR_XIR_FLOAT_UNORDERED; return XR_XIR_NUMERIC_OK; }
     uint64_t a = left & ~format.sign, b = right & ~format.sign;
@@ -128,13 +101,16 @@ XrXirNumericStatus xr_xir_float_compare(uint32_t bits,
 XrXirNumericStatus xr_xir_float_negate(uint32_t bits, uint64_t input, uint64_t *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = 0;
-    FloatParts parts; FloatFormat format;
-    if (!float_decode(bits, input, &parts) || !float_format(bits, &format)) return XR_XIR_NUMERIC_BAD_ARGUMENT;
+    XrIeeeParts parts; XrIeeeFormat format;
+    if (!xr_ieee_decode(bits, input, &parts) || !xr_ieee_format(bits, &format)) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = parts.nan ? format.nan : input ^ format.sign; return XR_XIR_NUMERIC_OK;
 }
 
 #include "xxir_float_arithmetic.inc.c"
-#include "xxir_float_format.inc.c"
+XR_FUNC bool xr_xir_float_format(uint32_t bits, uint64_t input,
+    char *bytes, size_t capacity, size_t *length) {
+    return xr_float_to_decimal(bits, input, bytes, capacity, length);
+}
 
 static XrXirRunStatus floating_result(XrXirNumericStatus status) {
     return status == XR_XIR_NUMERIC_OK ? XR_XIR_RUN_OK :
