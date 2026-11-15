@@ -21,86 +21,11 @@ static bool rbc_array_destination(const RbcStringAdmission *s, XrRbcArrayLocatio
 static bool rbc_array_source(const RbcStringAdmission *s, XrRbcArrayLocation location) {
     return rbc_string_state(rbc_array_state(s, location));
 }
-#include "xrbc_array_ref_transfer.inc.c"
-#include "xrbc_map_transfer.inc.c"
-static bool rbc_array_transfer(RbcStringAdmission *s, uint32_t index) {
-    XrRbcArrayAccess access = s->function->array_accesses[index];
-    if (access.kind == XR_RBC_MAP_STRING_I64) return rbc_map_transfer(s, access);
-    const XrRbcArrayLocation *operands = access.count ? s->function->array_operands + access.first : NULL;
-    uint8_t source = access.count ? rbc_array_state(s, operands[0]) : RBC_EMPTY;
-    if (access.operation == XR_RBC_ARRAY_BORROW || access.operation == XR_RBC_ARRAY_REF_READ ||
-        access.operation == XR_RBC_ARRAY_REF_WRITE || access.operation == XR_RBC_ARRAY_REF_SET ||
-        access.operation == XR_RBC_ARRAY_REF_PUSH) return rbc_array_ref_transfer(s, access, operands);
-    if (access.operation == XR_RBC_ARRAY_NEW) {
-        if (!rbc_array_destination(s, access.result)) return false;
-        for (uint32_t p = 0; p < access.count; ++p) {
-            if (access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, operands[p]) != RBC_BITS :
-                !rbc_array_source(s, operands[p])) return false;
-        }
-        rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
-        return true;
-    }
-    if (access.operation == XR_RBC_ARRAY_REPEAT) {
-        if (!rbc_array_destination(s, access.result) || source != RBC_BITS) return false;
-        if (access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, operands[1]) != RBC_BITS :
-            !rbc_array_source(s, operands[1])) return false;
-        rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
-        return true;
-    }
-    bool cell = access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH ||
-        access.operation == XR_RBC_ARRAY_CELL_READ || access.operation == XR_RBC_ARRAY_CELL_WRITE ||
-        access.operation == XR_RBC_ARRAY_CELL_DROP;
-    if (cell ? !rbc_cell_state(source) : !rbc_array_source(s, operands[0])) return false;
-    if (access.operation == XR_RBC_ARRAY_CELL_NEW) {
-        if (!rbc_array_destination(s, access.result)) return false;
-        for (uint32_t r=0;r<s->function->register_count;++r)
-            if (rbc_cell_state(s->state[r]) && s->origin[r]==access.cell+1) return false;
-        rbc_array_define(s, access.result, RBC_CELL_OWNED, access.cell + 1);
-        return true;
-    }
-    if (access.operation == XR_RBC_ARRAY_DROP || access.operation == XR_RBC_ARRAY_CELL_DROP ||
-        access.operation == XR_RBC_ARRAY_TAKE) {
-        if (source != (cell ? RBC_CELL_OWNED : RBC_STRING_OWNED)) return false;
-        if (access.operation == XR_RBC_ARRAY_TAKE) {
-            if (!rbc_array_destination(s, access.result)) return false;
-            if (!operands[0].spill && rbc_register_kind(s->function, operands[0].index) == XR_RBC_CALL_WINDOW &&
-                s->origin[operands[0].index] != (uint32_t)access.kind) return false;
-            rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
-        }
-        uint32_t origin = operands[0].spill ? 0 : s->origin[operands[0].index];
-        rbc_array_define(s, operands[0], RBC_EMPTY, 0);
-        if (cell) {
-            for (uint32_t r = 0; r < s->function->register_count; ++r)
-                if ((rbc_cell_state(s->state[r]) || s->state[r] == RBC_ARRAY_REF_CELL) &&
-                    s->origin[r] == origin) s->state[r] = RBC_EMPTY;
-        } else if (!operands[0].spill) rbc_string_forget_borrows(s, operands[0].index);
-        return true;
-    }
-    if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_GET)
-        if (rbc_array_state(s, operands[1]) != RBC_BITS) return false;
-    if (access.operation == XR_RBC_ARRAY_SET || access.operation == XR_RBC_ARRAY_PUSH) {
-        XrRbcArrayLocation value = operands[access.operation == XR_RBC_ARRAY_SET ? 2 : 1];
-        return access.kind != XR_RBC_ARRAY_STRING ? rbc_array_state(s, value) == RBC_BITS : rbc_array_source(s, value);
-    }
-    if (access.operation == XR_RBC_ARRAY_CELL_WRITE) return rbc_array_source(s, operands[1]);
-    if (!rbc_array_destination(s, access.result)) return false;
-    rbc_array_define(s, access.result, access.operation == XR_RBC_ARRAY_LEN ||
-        (access.operation == XR_RBC_ARRAY_GET && access.kind != XR_RBC_ARRAY_STRING) ? RBC_BITS : RBC_STRING_OWNED, 0);
-    return true;
-}
-
 static bool rbc_call_parameter_matches(const RbcStringAdmission *s, uint32_t actual, XrRbcRegisterKind formal) {
     uint8_t state = s->state[actual];
-    if (formal == XR_RBC_MAP_STRING_I64_REF)
-        return rbc_array_ref_state(state) && rbc_array_ref_payload(s, state, s->origin[actual]) == XR_RBC_MAP_STRING_I64;
-    if (formal == XR_RBC_STRING_REF)
-        return rbc_array_ref_state(state) && rbc_array_ref_payload(s, state, s->origin[actual]) == XR_RBC_STRING;
-    if (formal == XR_RBC_VIEW_CELL) return state == RBC_VIEW_CELL;
-    if (formal == XR_RBC_SLICE_I64) return state == RBC_VIEW_SLICE;
-    uint32_t reference = xr_rbc_array_ref_family(formal);
-    if (reference < XR_RBC_ARRAY_FAMILY_COUNT)
-        return rbc_array_ref_state(state) &&
-            rbc_array_ref_payload(s, state, s->origin[actual]) == xr_rbc_array_kind_at(reference);
+    if (formal == XR_RBC_MAP_STRING_I64_REF || formal == XR_RBC_STRING_REF ||
+        formal == XR_RBC_VIEW_CELL || formal == XR_RBC_SLICE_I64 ||
+        xr_rbc_array_ref_family(formal) < XR_RBC_ARRAY_FAMILY_COUNT) return false;
     if (rbc_managed_kind(formal)) {
         uint32_t source = s->origin[actual];
         return state == RBC_STRING_BORROWED && source && source <= s->function->register_count &&

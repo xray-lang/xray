@@ -61,72 +61,14 @@ static bool rbc_nullable_transfer(RbcStringAdmission *s, XrRbcAggregateAccess ac
     return true;
 }
 
-#include "xrbc_string_library_transfer.inc.c"
 
 static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     XrRbcAggregateAccess access = s->function->aggregate_accesses[index];
-    if (rbc_boxed_operation(access.operation)) return rbc_boxed_transfer(s, access);
     if (access.operation == XR_RBC_STATE_GROUP_INITIALIZE)
         return s->state[access.source] == RBC_STATE_BORROWED && s->aggregates[access.destination];
-    if (access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) {
-        bool map = rbc_captured_map_type(s->module, (XrXirType)access.slot);
-        if (access.operation == XR_RBC_CAPTURED_CELL_NEW) {
-            if (map ? !rbc_array_source(s, s->function->aggregate_operands[access.first]) :
-                    s->state[access.source] != RBC_BITS) return false;
-        } else if (s->state[access.source] != RBC_CAPTURED_CELL || s->origin[access.source] != access.slot) return false;
-        if (access.operation == XR_RBC_CAPTURED_CELL_WRITE) return map ?
-            rbc_array_source(s, s->function->aggregate_operands[access.first]) : s->state[access.window] == RBC_BITS;
-        uint32_t result = access.result.index;
-        if (access.operation == XR_RBC_CAPTURED_CELL_READ) {
-            if (map) {
-                if (!rbc_array_destination(s, access.result)) return false;
-                rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
-                return true;
-            }
-            if (!rbc_bits_destination(s, result)) return false;
-            s->state[result] = RBC_BITS;
-            return true;
-        }
-        if (s->state[result] != RBC_EMPTY && s->state[result] != RBC_CAPTURED_CELL) return false;
-        uint32_t scope = rbc_scope_current(s);
-        if (access.operation == XR_RBC_CAPTURED_CELL_BIND) {
-            if (!rbc_scope_contains(rbc_function_scopes(s->module, s->function), access.destination, scope)) return false;
-            scope = access.destination;
-        }
-        s->state[result] = RBC_CAPTURED_CELL;
-        s->origin[result] = access.slot;
-        rbc_scope_define(s, result, scope);
-        return true;
-    }
-    if (access.operation >= XR_RBC_FUNCTION_STATE_READ && access.operation <= XR_RBC_FUNCTION_STATE_INITIALIZE) {
-        bool read = access.operation == XR_RBC_FUNCTION_STATE_READ;
-        bool construct = access.operation == XR_RBC_FUNCTION_STATE_CONSTRUCT;
-        bool initialize = access.operation == XR_RBC_FUNCTION_STATE_INITIALIZE;
-        uint32_t shape;
-        if (construct || initialize) {
-            if (s->state[access.source] != RBC_STATE_BORROWED) return false;
-            shape = xr_rbc_state_shape(s->module, access.destination);
-        } else {
-            if (s->state[access.source] != RBC_STATE_REFERENCE) return false;
-            shape = s->origin[access.source];
-        }
-        if (!shape || rbc_callable_state_type(s->module, (shape >> 1) - 1) != access.slot) return false;
-        if (read) {
-            uint32_t result = access.result.index;
-            if (s->state[result] != RBC_EMPTY && !rbc_function_state(s->state[result])) return false;
-            s->state[result] = RBC_FUNCTION_OWNED;
-            s->origin[result] = access.slot;
-            rbc_scope_define(s, result, rbc_scope_current(s));
-            return true;
-        }
-        if ((!initialize && !(shape & 1u)) || s->state[access.window] != RBC_FUNCTION_OWNED ||
-            !rbc_callable_accepts(s->module, access.slot, s->origin[access.window])) return false;
-        if (construct) {
-            s->state[access.result.index] = RBC_STATE_REFERENCE;
-            s->origin[access.result.index] = shape;
-        }
-        return true;
-    }
+    if ((access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) ||
+        (access.operation >= XR_RBC_FUNCTION_STATE_READ && access.operation <= XR_RBC_FUNCTION_STATE_INITIALIZE) ||
+        access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE) return false;
     if (access.operation >= XR_RBC_FUNCTION_SCOPE_ENTER && access.operation <= XR_RBC_FUNCTION_BIND)
         return rbc_callable_scope_transfer(s, access);
     if (access.operation == XR_RBC_RANGE_CHECK) {
@@ -136,23 +78,9 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
     }
     if (access.operation == XR_RBC_FUNCTION_RETURN || access.operation == XR_RBC_FUNCTION_SCOPE_RETURN)
         return rbc_string_step(s, (XrRbcOperands){.op=access.count ? XR_RBC_RET : XR_RBC_RET0, .a=access.source});
-    if (access.operation == XR_RBC_FUNCTION_REFERENCE || access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE) {
+    if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
         uint32_t frame_scope = 0;
-        if (access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE) {
-            for (uint32_t p = 0; p < access.count; ++p) {
-                XrRbcArrayLocation location = s->function->aggregate_operands[access.first + p];
-                XrRbcCallableValue capture = s->module->functions[access.callee].captures[p];
-                if (capture.kind == XR_RBC_CALLABLE_CELL) {
-                    if (location.spill || s->state[location.index] != RBC_CAPTURED_CELL ||
-                        s->origin[location.index] != capture.type) return false;
-                } else if (capture.kind == XR_RBC_CALLABLE_FUNCTION) {
-                    if (location.spill || s->state[location.index] != RBC_FUNCTION_OWNED ||
-                        !rbc_callable_accepts(s->module, capture.type + 1, s->origin[location.index])) return false;
-                } else if (capture.kind == XR_RBC_CALLABLE_REFERENCE) {
-                    if (!rbc_array_source(s, location)) return false;
-                } else if (rbc_array_state(s, location) != RBC_BITS) return false;
-            }
-        } else if (access.destination) {
+        if (access.destination) {
             size_t home = s->function->aggregate_value_count + access.destination - 1;
             if (s->aggregates[home]) return false;
             for (uint32_t p = 0; p < access.count; ++p) {
@@ -161,16 +89,7 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
                 XrRbcRegisterKind kind = rbc_array_location_kind(s->function, location);
                 const XrRbcFunction *callee = &s->module->functions[access.callee];
                 if (p < callee->capture_count && callee->captures[p].kind == XR_RBC_CALLABLE_FUNCTION) return false;
-                if (kind == XR_RBC_CAPTURED_CELL || kind == XR_RBC_CAPTURED_CELL_BORROW) {
-                    if (location.spill || state != RBC_CAPTURED_CELL ||
-                        s->origin[location.index] != s->module->functions[access.callee].captures[p].type) return false;
-                    const uint32_t *scopes = rbc_scope_state(s);
-                    uint32_t owner = scopes ? scopes[location.index + 1] : 0;
-                    XrRbcFunctionScopes shape = rbc_function_scopes(s->module, s->function);
-                    if (rbc_scope_contains(shape, frame_scope, owner)) frame_scope = owner;
-                    else if (!rbc_scope_contains(shape, owner, frame_scope)) return false;
-                    continue;
-                }
+
                 if (kind == XR_RBC_STATE ? state != RBC_STATE_BORROWED :
                     kind == XR_RBC_I64_BINDING ? state != RBC_CELL_BORROWED : state != RBC_BITS) return false;
             }
@@ -178,7 +97,7 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
         }
         uint32_t r = access.result.index;
         if (s->state[r] != RBC_EMPTY && !rbc_function_state(s->state[r])) return false;
-        s->state[r] = access.operation == XR_RBC_FUNCTION_OWNED_REFERENCE || !access.destination ?
+        s->state[r] = !access.destination ?
             RBC_FUNCTION_OWNED : RBC_FUNCTION;
         s->origin[r] = access.slot;
         rbc_scope_define(s, r, s->state[r] == RBC_FUNCTION && rbc_scope_captured_cells(s->function) ?
@@ -203,17 +122,8 @@ static bool rbc_aggregate_transfer(RbcStringAdmission *s, uint32_t index) {
         s->origin[access.window] = result;
         return true;
     }
-    if (access.operation == XR_RBC_STRING_LIBRARY) {
-        return rbc_string_library_transfer(s, access);
-    }
-    if (access.operation == XR_RBC_AGGREGATE_DISPLAY) {
-        if (!rbc_array_destination(s, access.result)) return false;
-        if (access.slot >= XR_POD_SCALAR_COUNT) {
-            if (!s->aggregates[access.source]) return false;
-        } else if (rbc_array_state(s, s->function->aggregate_operands[access.first]) != RBC_BITS) return false;
-        rbc_array_define(s, access.result, RBC_STRING_OWNED, 0);
-        return true;
-    }
+    if (access.operation == XR_RBC_STRING_LIBRARY || access.operation == XR_RBC_AGGREGATE_DISPLAY) return false;
+
     if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)
         return rbc_nullable_transfer(s, access);
     if (access.operation == XR_RBC_AGGREGATE_CALL) {

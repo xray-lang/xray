@@ -72,10 +72,8 @@ static void rbc_string_forget_borrows(RbcStringAdmission *s, uint32_t owner) {
             s->state[r] = RBC_EMPTY;
 }
 #include "xrbc_array_transfer.inc.c"
-#include "xrbc_view_transfer.inc.c"
 static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v);
 static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v);
-#include "xrbc_boxed_transfer.inc.c"
 #include "xrbc_aggregate_transfer.inc.c"
 static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
     uint8_t *state = s->state;
@@ -115,19 +113,7 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
             state[v.a] = state[v.b]; s->origin[v.a] = s->origin[v.b];
             return true;
         }
-        if (rbc_array_ref_state(state[v.b])) {
-            XrRbcRegisterKind payload = rbc_array_ref_payload(s, state[v.b], s->origin[v.b]);
-            XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
-            XrRbcRegisterKind reference = payload == XR_RBC_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64_REF : payload == XR_RBC_STRING ? XR_RBC_STRING_REF :
-                xr_rbc_array_ref_at(xr_rbc_array_family(payload));
-            if ((!rbc_managed_kind(payload)) ||
-                (kind != XR_RBC_CALL_WINDOW && kind != reference) ||
-                state[v.a] == RBC_STRING_OWNED || state[v.a] == RBC_CELL_OWNED) return false;
-            state[v.a] = state[v.b]; s->origin[v.a] = s->origin[v.b];
-            uint32_t *scopes = rbc_scope_state(s);
-            if (scopes) scopes[v.a + 1] = scopes[v.b + 1];
-            return true;
-        }
+
         if (state[v.b] == RBC_STATE_BORROWED || state[v.b] == RBC_STATE_REFERENCE) {
             XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
             if (state[v.a] == RBC_STRING_OWNED || state[v.a] == RBC_CELL_OWNED) return false;
@@ -281,11 +267,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
                 !rbc_callable_accepts(s->module, callee->register_callables[p], s->origin[v.a + 1 + p])) return false;
             continue;
         }
-        if (kind == XR_RBC_BOXED) {
-            uint32_t origin = s->origin[v.a + 1 + p];
-            if (!origin || origin > f->register_count ||
-                rbc_boxed_register_type(f, origin - 1) != rbc_boxed_register_type(callee, p)) return false;
-        }
+
         if (rbc_register_kind(f, v.a + 1 + p) != XR_RBC_CALL_WINDOW ||
             !rbc_call_parameter_matches(s, v.a + 1 + p, kind)) return false;
     }
@@ -293,7 +275,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     s->state[v.a] = callee->result_kind == XR_RBC_FUNCTION ? RBC_FUNCTION_OWNED :
         callee->result_kind == XR_RBC_SLICE_I64 ? RBC_VIEW_SLICE :
         rbc_managed_kind(callee->result_kind) ? RBC_STRING_OWNED : RBC_BITS;
-    s->origin[v.a] = callee->result_kind == XR_RBC_BOXED ? callee->result_boxed_type : callee->result_kind == XR_RBC_FUNCTION ? s->module->callable_results[v.immediate] : callee->result_kind;
+    s->origin[v.a] = callee->result_kind == XR_RBC_FUNCTION ? s->module->callable_results[v.immediate] : callee->result_kind;
     if (callee->result_kind == XR_RBC_FUNCTION) rbc_scope_define(s, v.a, rbc_scope_current(s));
     return true;
 }
@@ -301,8 +283,8 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
     if ((v.op == XR_RBC_RET || v.op == XR_RBC_RET0) && rbc_scope_current(s)) return false;
         switch (v.op) {
-        case XR_RBC_VIEW_ACCESS: return rbc_view_transfer(s, (uint32_t)v.immediate);
-        case XR_RBC_ARRAY_ACCESS: return rbc_array_transfer(s, (uint32_t)v.immediate);
+        case XR_RBC_VIEW_ACCESS: return false;
+        case XR_RBC_ARRAY_ACCESS: return false;
         case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
         case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
@@ -328,8 +310,7 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
                     !rbc_callable_accepts(s->module, result, s->origin[v.a])) return false;
             } else if (rbc_managed_kind(f->result_kind)) {
                 if (v.op != XR_RBC_RET || s->state[v.a] != RBC_STRING_OWNED ||
-                    rbc_register_kind(f, v.a) != f->result_kind ||
-                    (f->result_kind == XR_RBC_BOXED && rbc_boxed_register_type(f, v.a) != f->result_boxed_type)) return false;
+                    rbc_register_kind(f, v.a) != f->result_kind) return false;
                 s->state[v.a] = RBC_EMPTY;
             } else if (f->result_kind == XR_RBC_SLICE_I64) {
                 if (v.op != XR_RBC_RET || s->state[v.a] != RBC_VIEW_RETURNED ||
@@ -458,7 +439,7 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
             }
         }
         if ((to->state[r] == RBC_STRING_BORROWED || rbc_cell_state(to->state[r]) ||
-             rbc_function_state(to->state[r]) || to->state[r] == RBC_STATE_REFERENCE || rbc_array_ref_state(to->state[r])) &&
+             rbc_function_state(to->state[r]) || to->state[r] == RBC_STATE_REFERENCE) &&
             to->origin[r] != from->origin[r]) return false;
     }
     for (uint32_t i=0; i<from->function->spill_count; ++i) {
@@ -656,11 +637,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
         }
         if (r < f->parameter_count && rbc_managed_kind(kind)) g->work.state[r] = RBC_STRING_BORROWED;
         if (r < f->parameter_count && kind == XR_RBC_STATE) g->work.state[r] = RBC_STATE_BORROWED;
-        if (r < f->parameter_count && xr_rbc_view_kind(kind)) g->work.state[r] = rbc_view_state(kind);
-        if (r < f->parameter_count && (kind == XR_RBC_MAP_STRING_I64_REF || kind == XR_RBC_STRING_REF || xr_rbc_array_ref_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT)) {
-            g->work.state[r] = RBC_ARRAY_REF_FORMAL;
-            if (!rbc_cell_parameter_origin(r, &g->work.origin[r])) return XR_RBC_INVALID;
-        }
+
         if (r < f->parameter_count && (kind == XR_RBC_STRING_CELL || rbc_array_cell_kind(kind))) {
             g->work.state[r] = RBC_CELL_BORROWED;
             /* Local cells use ordinals 1..65536. Parameters are separate
@@ -722,11 +699,10 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
 }
 
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
-    bool managed = rbc_managed_kind(f->result_kind) || f->array_access_count != 0 || f->view_access_count != 0;
+    bool managed = rbc_managed_kind(f->result_kind) || f->array_access_count != 0;
     bool range = rbc_function_scopes(module, f).count != 0;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
-        managed |= rbc_boxed_operation(f->aggregate_accesses[n].operation);
     }
     bool numeric_conversion = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
