@@ -1,21 +1,25 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_bytecode_cases.h"
 
-static void callable_c_unavailable(const XrLirModule *module, XrLirFunction root) {
+static void callable_c_rejected(const XrLirModule *module, XrLirFunction root, XrLirCStatus expected) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrLirCRequest request = {.module=module, .entry=root, .resources=resources,
         .translation_unit="callable-frontier.c"};
     XrLirCOutput output = {0};
-    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
+    XrLirCDiagnostic diagnostic = {0};
+    XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
+    if (status != expected || output.bytes || output.length)
+        fprintf(stderr, "callable C f%u status=%u: %s\n", root.id, (unsigned)status, diagnostic.message);
+    CHECK(status == expected && !output.bytes && !output.length);
     xr_compile_resources_release(resources);
 }
 static void callable_execution_unavailable(const XrLirModule *module, XrLirFunction root) {
     OK(xr_lir_verify(module, NULL));
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    callable_c_unavailable(module, root);
+    callable_c_rejected(module, root, XR_LIR_C_UNSUPPORTED);
 }
 
 typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
@@ -128,7 +132,7 @@ static void callable_vm_execution(void) {
     captured_program = NULL;
     xr_lir_module_destroy(captured);
     callable_fixture_capture(&captured, &captured_root, 2);
-    callable_c_unavailable(captured, captured_root);
+    callable_c_rejected(captured, captured_root, XR_LIR_C_UNSUPPORTED);
     callable_transforms(captured, captured_root);
     CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
     callable_frame_receiving(captured_program);
