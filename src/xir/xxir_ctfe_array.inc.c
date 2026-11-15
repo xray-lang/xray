@@ -199,7 +199,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
     if (op->op==XR_XIR_CELL_PROJECT) return ctfe_projection_step(run,vm,state);
     if (op->op==XR_XIR_RANGE_CHECK) {
         const uint32_t *range=&run->function->operands[op->args[0]];
-        if (!xr_xir_range_valid(ctfe_array_operand(run,range[0]).payload,
+        if (!xr_range_valid(ctfe_array_operand(run,range[0]).payload,
                 ctfe_array_operand(run,range[1]).payload,ctfe_array_operand(run,range[2]).payload)) return XR_XIR_CTFE_NUMERIC_RANGE;
         ++vm->instruction;return XR_XIR_CTFE_OK;
     }
