@@ -20,7 +20,7 @@
 #include "lir_array_repeat_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
-#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 #include "lir_array_c_fixture.h"
 #include "lir_array_unsigned_frontier_cases.h"
