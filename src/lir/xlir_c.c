@@ -224,8 +224,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
         type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL ||
         type == XR_LIR_SLICE_I64 || type == XR_LIR_STRING_REF || type == XR_LIR_FUNCTION_SCOPE ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(c->request->module, type, &shape) == XR_LIR_OK &&
-            (shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_CELL ||
-             (shape.kind == XR_LIR_TYPE_NULLABLE && xr_lir_boxed_type(c->request->module, type))))) {
+            (shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_CELL))) {
         char message[128];
         snprintf(message, sizeof(message), "value type %" PRIu32 " has no bound target C execution interface", type);
         c_error(c, XR_LIR_C_UNSUPPORTED, message);
@@ -350,6 +349,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "value operation has no bound target C execution interface"); return;
     }
     if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_record_point(v) || c_view_point(c, v) ||
+        c_nullable_managed_point(c, v) ||
         (v->op == XR_LIR_FIXED_ARRAY_GET || v->op == XR_LIR_NULLABLE_UNWRAP)) {
         c->runtime = true;
         if (c_located(&v->source)) {
@@ -552,6 +552,7 @@ static void c_locations(LirC *c) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
+                     !c_nullable_managed_point(c, &v) &&
                      !c_arithmetic_point(c, &v) &&
                      v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
                     continue;
