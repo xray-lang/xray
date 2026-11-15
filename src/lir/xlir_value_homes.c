@@ -8,6 +8,7 @@
  */
 #include "xlir_value_homes.h"
 #include "base/xmalloc.h"
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct LirHomeVector { void *data; size_t count, capacity, stride; } LirHomeVector;
@@ -296,9 +297,17 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
     }
     return true;
 }
-static bool lir_home_positions(LirHomeBuilder *b) {
+static int lir_home_edge_order(const void *left, const void *right) {
+    const XrLirHomeEvent *a = *(const XrLirHomeEvent *const *)left;
+    const XrLirHomeEvent *c = *(const XrLirHomeEvent *const *)right;
+    if (a->block != c->block) return a->block < c->block ? -1 : 1;
+    if (a->edge != c->edge) return a->edge < c->edge ? -1 : 1;
+    return a->argument < c->argument ? -1 : a->argument != c->argument;
+}
+static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *selected, size_t selected_count) {
     LirHomeCompiler *c = &b->compiler;
     const XrLirValueHome *values = b->homes->values;
+    size_t position = 0;
     for (uint32_t block = 0; block < c->view.block_count; ++block) {
         XrLirBlock id; XrLirBlockView view;
         xr_lir_block_at(c->input, c->function, block, &id); xr_lir_block_view(c->input, id, &view);
@@ -323,18 +332,50 @@ static bool lir_home_positions(LirHomeBuilder *b) {
                 xr_lir_block_view(c->input, (XrLirBlock){c->input, c->function.id, edge.target}, &target);
                 XrLirHomeEdge row = {id.id, e + 1, edge.target, b->transfers.count, 0};
                 for (uint32_t p = 0; p < edge.argument_count; ++p) {
+                    const XrLirHomeEvent *event = position < selected_count ? selected[position] : NULL;
+                    bool matched = event && event->block == id.id && event->edge == e + 1 && event->argument == p;
+                    if (matched) {
+                        if (event->source != edge.arguments[p] || event->target != target.parameters[p] ||
+                            event->target_block != edge.target || event->instruction != n + 1)
+                            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected transfer lost its verified source or target");
+                        ++position;
+                    }
                     if (values[target.parameters[p]].type == 0) continue;
                     if (values[edge.arguments[p]].type != values[target.parameters[p]].type ||
                         values[target.parameters[p]].temporary_offset == SIZE_MAX)
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected edge lost its exact receiving homes");
-                    if (!lir_home_append(b, &b->transfers, &(XrLirHomeTransfer){edge.arguments[p], target.parameters[p]})) return false;
+                    if (values[target.parameters[p]].owner_count && !matched)
+                        return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned edge has no verified transfer event");
+                    XrLirHomeTransfer transfer = {.source=edge.arguments[p],.target=target.parameters[p],
+                        .transfer_mode=matched ? event->transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE};
+                    if (!lir_home_append(b, &b->transfers, &transfer)) return false;
                     ++row.count;
                 }
                 if (row.count && !lir_home_append(b, &b->edges, &row)) return false;
             }
         }
     }
-    return true;
+    return position == selected_count || lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected transfer has no matching edge");
+}
+/* Callable and ordinary owner events are collected independently. Sort only
+ * their existing positions once, then merge while projecting real LIR edges. */
+static bool lir_home_edges(LirHomeBuilder *b) {
+    size_t count = 0;
+    const XrLirHomeEvent *events = b->events.data;
+    for (size_t i = 0; i < b->events.count; ++i)
+        count += events[i].kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER;
+    if (!count) return lir_home_positions(b, NULL, 0);
+    if (count > SIZE_MAX / sizeof(XrLirHomeEvent *))
+        return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OVERFLOW, "edge event index overflows");
+    const XrLirHomeEvent **selected = xr_malloc(count * sizeof(*selected));
+    if (!selected) return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OOM, "edge event index allocation failed");
+    size_t next = 0;
+    for (size_t i = 0; i < b->events.count; ++i)
+        if (events[i].kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) selected[next++] = &events[i];
+    qsort(selected, count, sizeof(*selected), lir_home_edge_order);
+    bool result = lir_home_positions(b, selected, count);
+    xr_free(selected);
+    return result;
 }
 static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *ownership) {
     XrLirOwnershipFunction function;
@@ -362,7 +403,7 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
             .operation=fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
                 fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,
             .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,
-            .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize};
+            .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize,.transfer_mode=fact.transfer_mode};
         if (!lir_home_append(b, &b->events, &row)) return false;
     }
     for (uint32_t v = 1; b->homes->bindings && v <= b->homes->value_count; ++v) {
@@ -370,7 +411,7 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         if (row->type && row->kind == XR_LIR_HOME_BINDING_NONE)
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding has no verified source event");
     }
-    return lir_home_positions(b);
+    return lir_home_edges(b);
 }
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHomesRequest *request,
     XrLirValueHomes **output) {

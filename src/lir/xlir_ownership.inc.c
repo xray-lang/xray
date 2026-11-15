@@ -107,9 +107,14 @@ static bool lir_plan_value(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
     XrLirOwnershipFactKind kind, uint32_t function, uint32_t block,
     uint32_t instruction, uint32_t value, uint32_t argument) {
     if (!plan) return true;
+    XrLirOwnershipTransferMode mode = XR_LIR_OWNERSHIP_TRANSFER_NONE;
+    if (kind == XR_LIR_OWNERSHIP_PARAMETER_BORROW || kind == XR_LIR_OWNERSHIP_OPERAND_BORROW)
+        mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
+    else if (kind == XR_LIR_OWNERSHIP_APPEND_TRANSFER || kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER)
+        mode = XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     return lir_plan_add(plan, (XrLirOwnershipFact){.kind=kind, .function=function,
         .block=block, .instruction=instruction, .value=value, .argument=argument,
-        .type=f->values[value - 1].type, .array_element=f->values[value - 1].array_element});
+        .type=f->values[value - 1].type, .array_element=f->values[value - 1].array_element,.transfer_mode=mode});
 }
 
 /* Both lifetime checking and event collection consume this transfer identity. */
@@ -156,17 +161,29 @@ static bool lir_plan_callable_row(const XrLirCallableFunctionFacts *facts, uint3
 static bool lir_plan_callable_owned(const XrLirCallableFunctionFacts *facts, uint32_t value) {
     return lir_plan_callable_row(facts,value) && facts->values[value].transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
 }
+static XrLirOwnershipTransferMode lir_plan_callable_mode(XrLirCallableTransport transport,
+    XrLirOwnershipTransferMode owned, XrLirOwnershipTransferMode borrowed) {
+    if (transport == XR_LIR_CALLABLE_TRANSPORT_OWNED) return owned;
+    if (transport == XR_LIR_CALLABLE_TRANSPORT_FRAME || transport == XR_LIR_CALLABLE_TRANSPORT_BORROW) return borrowed;
+    return XR_LIR_OWNERSHIP_TRANSFER_NONE;
+}
 static XrLirStatus lir_plan_callable_events(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
     uint32_t function, XrLirCallableFunctionFacts facts, const uint32_t *scope_heads, const uint32_t *next) {
     for (uint32_t i = 0; i < f->value_count; ++i) {
         uint32_t value = i + 1;
         if (!lir_plan_callable_row(&facts,value)) continue;
         XrLirCallableValueFact row = facts.values[value];
+        XrLirOwnershipTransferMode mode = XR_LIR_OWNERSHIP_TRANSFER_NONE;
+        if (row.operation == XR_LIR_FUNCTION_BIND || row.operation == XR_LIR_FUNCTION_WEAKEN)
+            mode = lir_plan_callable_mode(row.transport,XR_LIR_OWNERSHIP_TRANSFER_COPY,XR_LIR_OWNERSHIP_TRANSFER_BORROW);
+        else if (row.operation == XR_LIR_FUNCTION_SCOPE_LEAVE)
+            mode = lir_plan_callable_mode(row.transport,XR_LIR_OWNERSHIP_TRANSFER_MOVE,XR_LIR_OWNERSHIP_TRANSFER_BORROW);
         XrLirOwnershipFact fact = {.kind=XR_LIR_OWNERSHIP_CALLABLE_VALUE,.function=function,
-            .block=row.block,.instruction=row.instruction,.value=value,.argument=row.parameter ? row.parameter - 1 : 0,
+            .block=row.block,.instruction=row.instruction,.value=value,
+            .argument=row.parameter ? row.parameter - 1 : row.instruction ? 0 : f->values[value - 1].instruction,
             .target_value=row.alias_source,.type=row.type,.callable_transport=row.transport,.callable_operation=row.operation,
             .callable_function=row.operation == XR_LIR_FUNCTION_REF ? row.known_target : 0,
-            .callable_scope=row.owner_scope,.callable_materialize=row.materialize};
+            .callable_scope=row.owner_scope,.callable_materialize=row.materialize,.transfer_mode=mode};
         if (!lir_plan_add(plan,fact)) return XR_LIR_OUT_OF_MEMORY;
         if (row.parameter && !lir_plan_value(plan,f,XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,value,row.parameter - 1))
             return XR_LIR_OUT_OF_MEMORY;
@@ -184,17 +201,27 @@ static XrLirStatus lir_plan_callable_events(XrLirOwnershipPlan *plan, const XrLi
         for (uint32_t n = 0; n < block->instruction_count; ++n) {
             const XrLirInstructionView *v = &block->instructions[n].view;
             for (uint32_t p = 0; p < v->operand_count; ++p) {
-                if (!lir_plan_callable_row(&facts,v->operands[p])) continue;
+                uint32_t value = v->operands[p];
+                if (!lir_plan_callable_row(&facts,value)) continue;
                 XrLirOwnershipFactKind kind = v->op == XR_LIR_RET ?
                     XR_LIR_OWNERSHIP_RETURN_TRANSFER : XR_LIR_OWNERSHIP_OPERAND_BORROW;
-                if (!lir_plan_value(plan,f,kind,function,b + 1,n + 1,v->operands[p],p)) return XR_LIR_OUT_OF_MEMORY;
+                XrLirCallableTransport transport = facts.values[value].transport;
+                XrLirOwnershipTransferMode mode = kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER ?
+                    lir_plan_callable_mode(transport,XR_LIR_OWNERSHIP_TRANSFER_MOVE,XR_LIR_OWNERSHIP_TRANSFER_COPY) :
+                    XR_LIR_OWNERSHIP_TRANSFER_BORROW;
+                if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=kind,.function=function,.block=b + 1,.instruction=n + 1,
+                    .value=value,.argument=p,.type=f->values[value - 1].type,.callable_transport=transport,.transfer_mode=mode}))
+                    return XR_LIR_OUT_OF_MEMORY;
             }
             if (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) {
                 uint32_t scope = v->operands[0];
+                uint32_t keep = v->operand_count == 2 ? v->operands[1] : 0;
+                XrLirOwnershipTransferMode mode = !keep ? XR_LIR_OWNERSHIP_TRANSFER_NONE :
+                    lir_plan_callable_mode(facts.values[keep].transport,XR_LIR_OWNERSHIP_TRANSFER_MOVE,XR_LIR_OWNERSHIP_TRANSFER_BORROW);
                 if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT,
                     .function=function,.block=b + 1,.instruction=n + 1,
-                    .value=v->operand_count == 2 ? v->operands[1] : 0,.target_value=v->result,
-                    .callable_scope=scope,.callable_operation=v->op})) return XR_LIR_OUT_OF_MEMORY;
+                    .value=keep,.target_value=v->result,
+                    .callable_scope=scope,.callable_operation=v->op,.transfer_mode=mode})) return XR_LIR_OUT_OF_MEMORY;
                 for (uint32_t value = scope_heads[scope]; value; value = next[value])
                     if (!lir_plan_value(plan,f,XR_LIR_OWNERSHIP_RELEASE,function,b + 1,n + 1,value,0)) return XR_LIR_OUT_OF_MEMORY;
             }
@@ -208,7 +235,9 @@ static XrLirStatus lir_plan_callable_events(XrLirOwnershipPlan *plan, const XrLi
                 if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
                     .function=function,.block=b + 1,.instruction=block->instruction_count,.value=value,.argument=p,
                     .edge=e + 1,.target_block=edge->target,.target_value=f->blocks[edge->target - 1].parameters[p],
-                    .type=f->values[value - 1].type,.callable_transport=facts.values[value].transport})) return XR_LIR_OUT_OF_MEMORY;
+                    .type=f->values[value - 1].type,.callable_transport=facts.values[value].transport,
+                    .transfer_mode=lir_plan_callable_mode(facts.values[value].transport,
+                        XR_LIR_OWNERSHIP_TRANSFER_COPY,XR_LIR_OWNERSHIP_TRANSFER_BORROW)})) return XR_LIR_OUT_OF_MEMORY;
             }
         }
     }
@@ -302,7 +331,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
                             .argument=a,.edge=e + 1,.target_block=edge->target,
                             .target_value=f->blocks[edge->target - 1].parameters[a],
-                            .type=f->values[id - 1].type,.array_element=f->values[id - 1].array_element}))
+                            .type=f->values[id - 1].type,.array_element=f->values[id - 1].array_element,
+                            .transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_MOVE}))
                         return XR_LIR_OUT_OF_MEMORY;
                 }
             }

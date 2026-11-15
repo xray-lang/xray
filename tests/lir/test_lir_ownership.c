@@ -53,7 +53,11 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
             a.array_operation == b.array_operation && a.map_operation == b.map_operation &&
             a.callable_transport==b.callable_transport && a.callable_operation==b.callable_operation &&
             a.callable_function==b.callable_function && a.callable_scope==b.callable_scope &&
-            a.callable_materialize==b.callable_materialize);
+            a.callable_materialize==b.callable_materialize && a.transfer_mode==b.transfer_mode);
+        if (a.kind==XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER || a.kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER ||
+            a.kind==XR_LIR_OWNERSHIP_APPEND_TRANSFER) CHECK(a.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+        if (a.kind==XR_LIR_OWNERSHIP_PARAMETER_BORROW || a.kind==XR_LIR_OWNERSHIP_OPERAND_BORROW)
+            CHECK(a.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
     }
     xr_lir_ownership_plan_destroy(internal);
 }
@@ -66,7 +70,8 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
         uint32_t fields[] = {(uint32_t)f.kind, f.function, f.block, f.instruction,
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
             f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation,
-            (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize};
+            (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize,
+            (uint32_t)f.transfer_mode};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }
