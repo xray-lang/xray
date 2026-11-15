@@ -10,6 +10,7 @@
 #include "lir/xlir_internal.h"
 #include "lir/xlir_verify.h"
 #include "vm/register/xrbc_lir.h"
+#include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
