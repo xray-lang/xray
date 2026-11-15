@@ -10,6 +10,10 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
+#include "xray_native_function.h"
+enum { XR_RBC_FUNCTION_LANES = sizeof(XrtFunction) / sizeof(uint64_t) };
+_Static_assert(sizeof(XrtFunction) % sizeof(uint64_t) == 0 &&
+    _Alignof(XrtFunction) <= _Alignof(uint64_t), "indexed callable storage fits complete register lanes");
 static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *accesses,
     size_t count, uint32_t word) {
     return (word & 255) == XR_RBC_AGGREGATE_ACCESS && accesses && (word >> 16) < count &&

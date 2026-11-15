@@ -10,6 +10,7 @@
 #include "lir/xlir_internal.h"
 #include "lir/xlir_verify.h"
 #include "vm/register/xrbc_lir.h"
+#include "xray_native_function.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,16 @@ static void pure_captures(void) {
             callable_raw_receiving(program);
             callable_narrow_argument(program);
         }
+        /* Raw callers keep these exact immutable assets alive themselves;
+         * losing the optional lease does not grant an escaping Fn lifetime. */
+        XrRbcModule raw = *xr_rbc_program_view(program);
+        raw.code_lease = (XrRbcCodeLease){0};
+        XrRbcExecution *borrowed = NULL;
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&borrowed) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(borrowed);
+        uint64_t bits = 0;
+        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits == 42);
+        xr_rbc_execution_free(&borrowed); xr_rbc_outcome_free(&outcome);
         execute(program,42);
     }
 }
