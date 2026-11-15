@@ -119,6 +119,9 @@ static XrtModuleLayout *layout_new(XrtBillingOwner *billing, const uint32_t *ids
 static XrtManagedHeader *borrow(XrtManagedFrame *frame, size_t slot) {
     XrtManagedHeader *value = NULL; OK(xrt_managed_slot_borrow(frame,slot,&value)); CHECK(value); return value;
 }
+static bool empty_slot(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedHeader *value=NULL; OK(xrt_managed_slot_borrow(frame,slot,&value)); return !value;
+}
 static void atomic_record(void) {
     Audit meta = {0}, values = {0};
     XrtBillingOwner *mb = billing_new(&meta,SIZE_MAX), *vb = billing_new(&values,SIZE_MAX);
@@ -210,11 +213,20 @@ static void family_borrows(void) {
     CHECK(atomic_load(&array->managed.references) == 1);
     XrtArrayUpdate update = {.operation=XRT_ARRAY_UPDATE_SET,.index=0,
         .item={.kind=XRT_BACKING_ARRAY_I64,.value.i64=42}}; bool applied = false;
-    OK(xrt_array_backing_try_update(array,&update,&applied)); CHECK(applied);
+    XrtExternalOwner external; OK(xrt_module_external_owner(references[0],0,&external));
+    XrtPlace binding={.external=&external,.nulls=XRT_PLACE_NONNULL};
+    XrtBillingStats before=xrt_billing_owner_stats(billing); xrt_billing_owner_fail_after(billing,0);
+    OK(xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,6,&setup,&update));
+    CHECK(atomic_load(&array->managed.references)==1 && xrt_billing_owner_stats(billing).allocations==before.allocations);
     XrtManagedHeader *snapshot = NULL; OK(xrt_module_copy(references[0],&snapshot));
     CHECK(atomic_load(&array->managed.references) == 2);
-    update.item.value.i64 = 99; applied = true;
-    OK(xrt_array_backing_try_update(array,&update,&applied)); CHECK(!applied);
+    update.item.value.i64 = 99;
+    CHECK(xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,6,&setup,&update)==XRT_MANAGED_OOM);
+    OK(xrt_module_borrow(references[0],&payload)); CHECK(*(XrtManagedHeader *const *)payload==&array->managed);
+    CHECK(empty_slot(frame,6)); xrt_billing_owner_fail_after(billing,SIZE_MAX);
+    OK(xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,6,&setup,&update));
+    OK(xrt_module_borrow(references[0],&payload)); CHECK(*(XrtManagedHeader *const *)payload!=&array->managed);
+    CHECK(empty_slot(frame,6));
     xrt_managed_drop(snapshot);
     OK(xrt_module_borrow(references[4],&payload)); XrtMapBacking *map = (XrtMapBacking *)*(XrtManagedHeader *const *)payload;
     CHECK(atomic_load(&map->managed.references) == 1);
@@ -229,6 +241,38 @@ static void family_borrows(void) {
     CHECK(audit.blocks == 1); xrt_billing_owner_drop(billing);
     CHECK(!audit.leases && !audit.blocks && !audit.bytes);
     puts("four Array families and Map borrow the actual unique State binding");
+}
+static void array_state_guards(void) {
+    for (unsigned mutable=0;mutable<2;++mutable) {
+        Audit audit={0}; XrtBillingOwner *billing=billing_new(&audit,SIZE_MAX);
+        XrtBackingTypes setup={0}; OK(xrt_backing_types_init(billing,&setup));
+        XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
+        OK(xrt_managed_root_new(billing,&root)); OK(xrt_managed_frame_enter(root,2,&frame));
+        int64_t value=7; OK(xrt_array_backing_i64_create(frame,0,&setup,&value,1,2));
+        XrtManagedHeader *array=borrow(frame,0);
+        XrtModuleLayout *layout=layout_new(billing,(uint32_t[]){5},1,mutable!=0);
+        XrtModuleState *state=NULL; OK(xrt_module_state_new(layout,billing,&state)); OK(xrt_module_begin(state,0));
+        XrtModuleAccess published; OK(xrt_module_cache(state,0,&published));
+        XrtExternalOwner external; OK(xrt_module_external_owner(published.reference,0,&external));
+        XrtPlace binding={.external=&external,.nulls=XRT_PLACE_NONNULL};
+        XrtArrayUpdate update={XRT_ARRAY_UPDATE_SET,0,{.kind=XRT_BACKING_ARRAY_I64,.value.i64=42}};
+        BAD(xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,1,&setup,&update));
+        if (mutable) {
+            XrtModuleRef *initial=NULL; OK(xrt_module_construct(state,0,&array,&initial));
+            BAD(xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,1,&setup,&update));
+            OK(xrt_module_publish(initial));
+        } else OK(xrt_module_initialize(state,0,&array));
+        OK(xrt_managed_slot_drop(frame,0)); OK(xrt_module_ready(state,0));
+        const XrtManagedHeader *read=NULL; OK(xrt_place_borrow(binding,&read)); CHECK(read==array);
+        xrt_billing_owner_fail_after(billing,0);
+        XrtManagedStatus status=xrt_array_update_place(binding,XRT_BACKING_ARRAY_I64,frame,1,&setup,&update);
+        CHECK(status==(mutable ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT));
+        uint64_t bits=0; OK(xrt_array_backing_read_bits((const XrtArrayBacking *)array,XRT_BACKING_ARRAY_I64,0,&bits));
+        CHECK(bits==(mutable ? 42u : 7u) && empty_slot(frame,1));
+        xrt_module_state_drop(&state); xrt_module_layout_drop(&layout); OK(xrt_managed_root_destroy(&root));
+        xrt_backing_types_drop(&setup); xrt_billing_owner_drop(billing);
+        CHECK(!audit.leases && !audit.bytes && !audit.blocks);
+    }
 }
 static void allocation_failures(void) {
     Audit audit = {0}; XrtBillingOwner *billing = billing_new(&audit,SIZE_MAX);
@@ -340,7 +384,7 @@ static void deep_nullable(void) {
     puts("deep inline Nullable traversal is iterative and needs no managed frame");
 }
 int main(void) {
-    atomic_record(); family_borrows(); allocation_failures(); scalar_admission();
+    atomic_record(); family_borrows(); array_state_guards(); allocation_failures(); scalar_admission();
     metadata_and_rejection(); deep_nullable();
     puts("fixed module State kernel passed"); return 0;
 }

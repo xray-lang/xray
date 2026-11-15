@@ -32,6 +32,11 @@ struct XrtManagedRoot {
     XrtManagedFrame *top;
     XrtManagedOps *frame_ops;
     bool busy;
+    const XrtManagedSlotReservation *reservation;
+    XrtManagedFrame *reserved_frame;
+    size_t reserved_index;
+    XrtManagedSlotLocation reserved_binding;
+    unsigned reserved_phase;
 };
 
 /* The allocation owns a fixed, checked tail, not an independently movable bank. */
@@ -112,6 +117,11 @@ XRAY_API XrtManagedStatus xrt_managed_root_new(XrtBillingOwner *billing,
         XrtManagedRoot *root = (XrtManagedRoot *)pending.value;
         root->top = NULL;
         root->busy = false;
+        root->reservation = NULL;
+        root->reserved_frame = NULL;
+        root->reserved_index = 0;
+        root->reserved_binding = (XrtManagedSlotLocation){0};
+        root->reserved_phase = 0;
         root->frame_ops = frame_ops;
         frame_ops = NULL;
         XrtManagedHeader *committed = NULL;
@@ -293,19 +303,13 @@ XRAY_API XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t i
     frame->root->busy = false;
     return status;
 }
-XRAY_API XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, size_t index,
-    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
-    if (!ops || !output || *output) return XRT_MANAGED_ARGUMENT;
-    XrtManagedSlot *slot = slot_begin(frame, index);
-    if (!slot) return XRT_MANAGED_ARGUMENT;
+static XrtManagedStatus slot_prepare_active(XrtManagedSlot *slot, XrtManagedOps *ops,
+    size_t bytes, XrtManagedHeader **output) {
     XrtManagedStatus status = xrt_managed_prepare(ops, bytes, &slot->pending);
     if (status == XRT_MANAGED_OK) *output = slot->pending.value;
-    frame->root->busy = false;
     return status;
 }
-XRAY_API XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size_t index) {
-    XrtManagedSlot *slot = slot_begin(frame, index);
-    if (!slot) return XRT_MANAGED_ARGUMENT;
+static XrtManagedStatus slot_commit_active(XrtManagedFrame *frame, XrtManagedSlot *slot) {
     XrtManagedHeader *replacement = NULL;
     XrtManagedStatus status = xrt_managed_commit(&slot->pending, &replacement);
     if (status == XRT_MANAGED_OK) {
@@ -313,6 +317,21 @@ XRAY_API XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size_t
         *frame_owner(frame, slot) = replacement;
         xrt_managed_drop(old);
     }
+    return status;
+}
+XRAY_API XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, size_t index,
+    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
+    if (!ops || !output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlot *slot = slot_begin(frame, index);
+    if (!slot) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = slot_prepare_active(slot,ops,bytes,output);
+    frame->root->busy = false;
+    return status;
+}
+XRAY_API XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size_t index) {
+    XrtManagedSlot *slot = slot_begin(frame, index);
+    if (!slot) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = slot_commit_active(frame,slot);
     frame->root->busy = false;
     return status;
 }
@@ -328,5 +347,99 @@ XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size
     if (!output || !frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = &frame_slots(frame)[index];
     *output = (XrtManagedSlotLocation){frame_owner(frame, slot), &slot->pending, &frame->root->busy};
+    return XRT_MANAGED_OK;
+}
+
+enum { RESERVED_EMPTY, RESERVED_PENDING, RESERVED_COMMITTED, RESERVED_PUBLISHED, RESERVED_CALLBACK };
+static XrtManagedSlot *reserved_slot(const XrtManagedSlotReservation *handle) {
+    if (!handle || !handle->root) return NULL;
+    XrtManagedRoot *root=handle->root;
+    XrtManagedFrame *frame=root->reserved_frame;
+    if (root->reservation!=handle || !root->busy || root->reserved_phase==RESERVED_CALLBACK ||
+        !frame || frame->root!=root || root->reserved_index>=frame->slot_count ||
+        !root->reserved_binding.owner || !root->reserved_binding.busy || !*root->reserved_binding.busy) return NULL;
+    return &frame_slots(frame)[root->reserved_index];
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *frame, size_t index,
+    XrtManagedSlotLocation binding, XrtManagedSlotReservation *handle) {
+    if (!frame || !frame->root || !handle || handle->root || index>=frame->slot_count ||
+        !binding.owner || !binding.busy || !*binding.busy || !*binding.owner) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=frame->root;
+    XrtManagedSlot *slot=&frame_slots(frame)[index];
+    if (!root->busy || root->reservation || !slot_empty(frame,slot) ||
+        frame_owner(frame,slot)==binding.owner) return XRT_MANAGED_ARGUMENT;
+    root->reservation=handle; root->reserved_frame=frame; root->reserved_index=index;
+    root->reserved_binding=binding; root->reserved_phase=RESERVED_EMPTY;
+    handle->root=root;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReservation *handle,
+    XrtManagedReservedApply apply, void *context) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot || !apply || handle->root->reserved_phase!=RESERVED_EMPTY) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    root->reserved_phase=RESERVED_CALLBACK;
+    XrtManagedStatus status=apply(*root->reserved_binding.owner,context);
+    root->reserved_phase=RESERVED_EMPTY;
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotReservation *handle,
+    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot || !ops || !output || *output || handle->root->reserved_phase!=RESERVED_EMPTY)
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    root->reserved_phase=RESERVED_CALLBACK;
+    XrtManagedStatus status=slot_prepare_active(slot,ops,bytes,output);
+    root->reserved_phase=status==XRT_MANAGED_OK ? RESERVED_PENDING : RESERVED_EMPTY;
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_commit(const XrtManagedSlotReservation *handle) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot || handle->root->reserved_phase!=RESERVED_PENDING) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    root->reserved_phase=RESERVED_CALLBACK;
+    XrtManagedStatus status=slot_commit_active(root->reserved_frame,slot);
+    root->reserved_phase=status==XRT_MANAGED_OK ? RESERVED_COMMITTED : RESERVED_PENDING;
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_abort(const XrtManagedSlotReservation *handle) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot || handle->root->reserved_phase==RESERVED_COMMITTED ||
+        handle->root->reserved_phase==RESERVED_PUBLISHED) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    root->reserved_phase=RESERVED_CALLBACK;
+    xrt_managed_abort(&slot->pending);
+    root->reserved_phase=RESERVED_EMPTY;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_publish(XrtManagedSlotReservation *handle) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot || handle->root->reserved_phase!=RESERVED_COMMITTED ||
+        slot->pending.value || slot->pending.allocation_bytes) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    XrtManagedHeader **candidate=frame_owner(root->reserved_frame,slot);
+    if (!*candidate) return XRT_MANAGED_ARGUMENT;
+    root->reserved_phase=RESERVED_CALLBACK;
+    XrtManagedHeader *old=*root->reserved_binding.owner;
+    *root->reserved_binding.owner=*candidate; *candidate=NULL;
+    xrt_managed_drop(old);
+    root->reserved_phase=RESERVED_PUBLISHED;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_end(XrtManagedSlotReservation *handle) {
+    XrtManagedSlot *slot=reserved_slot(handle);
+    if (!slot) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root=handle->root;
+    root->reserved_phase=RESERVED_CALLBACK;
+    xrt_managed_abort(&slot->pending);
+    XrtManagedHeader **candidate=frame_owner(root->reserved_frame,slot);
+    XrtManagedHeader *discard=*candidate; *candidate=NULL;
+    xrt_managed_drop(discard);
+    bool *binding_busy=root->reserved_binding.busy;
+    root->reservation=NULL; root->reserved_frame=NULL; root->reserved_index=0;
+    root->reserved_binding=(XrtManagedSlotLocation){0}; root->reserved_phase=RESERVED_EMPTY;
+    handle->root=NULL;
+    *binding_busy=false; root->busy=false;
     return XRT_MANAGED_OK;
 }
