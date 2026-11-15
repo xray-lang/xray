@@ -7,7 +7,7 @@ endif()
 add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnative_status.c
     xnative_execution.c xnative_string.c xnative_array.c xnative_view.c xnative_pod.c xnative_float.c xnative_module_state.c
     xnative_callable.c xnative_map.c xnative_set.c xnative_boxed.c xnative_managed.c xnative_managed_root.c xnative_place.c
-    xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c
+    xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c xnative_values.c
     xnative_array_backing.c xnative_array_ops.c xnative_map_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
     "${native_output_platform}" "${native_clock_platform}")
 target_link_libraries(xray_native_runtime PUBLIC xray_xir_scalar)

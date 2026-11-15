@@ -7,6 +7,7 @@
  * managed_public_client.c - Public C11 storage, stable slots and payload publication
  */
 #include "xray_native_managed.h"
+#include "xray_native_values.h"
 #include "xray_native_managed_root.h"
 #include "xray_native_place.h"
 #include <stdio.h>

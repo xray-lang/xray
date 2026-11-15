@@ -54,6 +54,8 @@ typedef struct XrtValueRoot {
     XrtBoxedCatalog *boxed_catalogs;
     void *boxed_scratch;
     size_t boxed_scratch_size;
+    struct XrtNativeValues *managed;
+    bool draining;
 } XrtValueRoot;
 
 typedef struct XrtValueBinding {
@@ -77,6 +79,7 @@ static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
         !root->map_count && !root->map_held && !root->set_types && !root->sets &&
         !root->set_capacity && !root->set_count && !root->set_held && !root->views && !root->callables && !root->callable_scope &&
         !root->pending.type && !root->pending.reserved && !root->pending.payload &&
-        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size;
+        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size &&
+        !root->managed && !root->draining;
 }
 #endif // XNATIVE_VALUE_H
