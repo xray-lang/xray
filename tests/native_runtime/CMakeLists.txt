@@ -1,3 +1,21 @@
+add_executable(test_native_place test_place.c
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c")
+target_include_directories(test_native_place PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_place PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_place PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_place PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_definitions(test_native_place PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_options(test_native_place PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_place COMMAND test_native_place)
+set_tests_properties(native_place PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+
 add_executable(test_native_string_backing_ops test_string_backing_ops.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"

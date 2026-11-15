@@ -62,4 +62,16 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *, size_t,
     XrtManagedOps *, size_t bytes, XrtManagedHeader **borrowed_payload);
 XR_FUNC XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *, size_t);
 XR_FUNC XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *, size_t);
+
+/* Internal location resolution for a bounded ownership transaction. The caller
+ * borrows an active frame, acquires the returned busy domain before inspecting
+ * pending/owner state, and releases it only after retirement callbacks finish.
+ * These addresses never grant guest borrowing or mutation permissions. */
+typedef struct XrtManagedSlotLocation {
+    XrtManagedHeader **owner;
+    const XrtManagedPending *pending;
+    bool *busy;
+} XrtManagedSlotLocation;
+XR_FUNC XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *, size_t,
+    XrtManagedSlotLocation *);
 #endif // XNATIVE_MANAGED_ROOT_H
