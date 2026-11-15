@@ -267,3 +267,10 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *frame, size_
     frame->root->busy = false;
     return XRT_MANAGED_OK;
 }
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size_t index,
+    XrtManagedSlotLocation *output) {
+    if (!output || !frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlot *slot = &frame_slots(frame)[index];
+    *output = (XrtManagedSlotLocation){&slot->committed, &slot->pending, &frame->root->busy};
+    return XRT_MANAGED_OK;
+}
