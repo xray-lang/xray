@@ -74,21 +74,6 @@ XR_RBC_NEXT();
 xr_rbc_next : XR_RBC_FETCH();
 switch (op) {
 #endif
-XR_RBC_CASE(VALUE_ACCESS) {
-    XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE());
-    if (status != XR_RBC_OK) return status;
-    if (!stack->depth) {
-        if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0];
-        return XR_RBC_OK;
-    }
-    frame = &stack->frames[stack->depth - 1];
-    function = &module->functions[frame->function];
-    registers = stack->slots + frame->base;
-    code = function->code;
-    constants = function->constants;
-    pc = frame->pc;
-    XR_RBC_NEXT();
-}
 XR_RBC_CASE(MOV) {
     XR_RBC_SLOT(a) = XR_RBC_SLOT(b);
     XR_RBC_NEXT();
@@ -414,6 +399,21 @@ XR_RBC_CASE(RET0) {
     registers = stack->slots + frame->base;
     XR_RBC_SLOT(destination) = value;
     function = &module->functions[frame->function];
+    code = function->code;
+    constants = function->constants;
+    pc = frame->pc;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(VALUE_ACCESS) {
+    XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE());
+    if (status != XR_RBC_OK) return status;
+    if (!stack->depth) {
+        if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0];
+        return XR_RBC_OK;
+    }
+    frame = &stack->frames[stack->depth - 1];
+    function = &module->functions[frame->function];
+    registers = stack->slots + frame->base;
     code = function->code;
     constants = function->constants;
     pc = frame->pc;

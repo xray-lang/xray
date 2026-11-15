@@ -512,7 +512,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     stack->cell_count=frame.cell_base; stack->spill_count=frame.spill_base; --stack->depth;
     return XR_RBC_OK;
 }
-static XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
     if ((!activation || activation->depth!=stack->depth) && stack->depth) {
