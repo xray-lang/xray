@@ -20,6 +20,7 @@
 #include "runtime/native/xnative_array.h"
 #include "runtime/native/xnative_map.h"
 #include "runtime/native/xnative_boxed.h"
+#include "runtime/native/xnative_values.h"
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_types.h"
@@ -120,6 +121,8 @@ struct XrRbcExecution {
     XrRbcEntry *entries;
     XrRbcStack stack;
     XrRbcOutcome *pending;
+    XrtValueRoot values;
+    XrtModuleLayout *layout;
     XrtModuleState *state;
     XrRbcCodeLease code_lease;
     bool consumed;
@@ -454,6 +457,23 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
 #include "xrbc_dispatch.inc.c"
 }
 
+static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution) {
+    XrtBillingOwner *billing = NULL;
+    XrtManagedStatus status = xrt_native_values_prepare(&execution->values, &billing);
+    const XrRbcModule *module = execution->module;
+    XrRbcCodeLease code = execution->code_lease;
+    if (status == XRT_MANAGED_OK)
+        status = xrt_module_layout_new(billing, module->state_spec,
+            (XrtManagedLease){code.owner, code.retain, code.release}, &execution->layout);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_module_state_new(execution->layout, billing, &execution->state);
+    if (status == XRT_MANAGED_OK)
+        status = xr_rbc_state_caches(execution->layout, execution->state,
+            &execution->stack.module_accesses);
+    return status == XRT_MANAGED_OK ? XR_RBC_OK :
+        status == XRT_MANAGED_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
+}
+
 XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output) {
@@ -461,7 +481,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    bool inject_state = module->state_layout && entry == module->state_entry;
+    bool inject_state = module->state_spec && entry == module->state_entry;
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION || function->result_kind == XR_RBC_BOXED ||
         function->capture_count || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
@@ -485,15 +505,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         execution->code_lease = module->code_lease;
     }
     execution->module_snapshot = *module;
-    execution->module_snapshot.state_layout = NULL;
     execution->module = &execution->module_snapshot;
-    if (module->state_layout) {
-        if (!xrt_module_layout_retain(module->state_layout)) {
-            xr_rbc_execution_free(&execution);
-            return XR_RBC_VALUE_FAILURE;
-        }
-        execution->module_snapshot.state_layout = module->state_layout;
-    }
     module = execution->module;
     if (module->closure_entry_count) {
         XrRbcCodeLease lease = module->code_lease;
@@ -536,13 +548,10 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         execution->stack.aggregate_result = execution->pending->aggregate_bytes;
     }
     if (inject_state) {
-        XrXirValueStatus status = xrt_module_state_new(module->state_layout, UINT64_MAX, &execution->state);
-        if (status == XR_XIR_VALUE_OK)
-            status = xr_rbc_state_caches(module->state_layout, execution->state,
-                &execution->stack.module_accesses);
-        if (status != XR_XIR_VALUE_OK) {
+        XrRbcStatus status = xr_rbc_prepare_state(execution);
+        if (status != XR_RBC_OK) {
             xr_rbc_execution_free(&execution);
-            return status == XR_XIR_VALUE_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
+            return status;
         }
     }
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
@@ -615,8 +624,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
     if (!execution || execution->consumed) return NULL;
     execution->consumed = true;
     XrRbcOutcome *outcome = execution->pending;
-    XrtExecutionStatus status = xrt_run_embedded(outcome->locations, &outcome->failure,
-        xr_rbc_root, execution);
+    XrtExecutionStatus status = xrt_run_embedded_owned(outcome->locations, &outcome->failure,
+        xr_rbc_root, execution, &execution->values);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)
@@ -648,7 +657,8 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     xrt_module_state_drop(&owned->state);
     xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
-    xrt_module_layout_drop(&owned->module_snapshot.state_layout);
+    xrt_module_layout_drop(&owned->layout);
+    xrt_value_root_drain(&owned->values);
     if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
 }
