@@ -1,0 +1,93 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xrbc_value_map_execute.inc.c - Fixed Map owners and common binding updates
+ */
+static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *activation,
+    XrRbcValueAccess access,const XrtBackingTypes *types) {
+    size_t count=access.count/2;
+    if (count>activation->snapshot_capacity/(sizeof(XrtStringBacking *)+sizeof(int64_t))) return XRT_MANAGED_ARGUMENT;
+    XrtStringBacking **keys=(XrtStringBacking **)activation->snapshots;
+    int64_t *values=(int64_t *)(activation->snapshots+count*sizeof(*keys));
+    for (uint32_t p=0;p<access.count;p+=2) {
+        const XrtStringBacking *key=NULL;
+        XrtManagedStatus status=rbc_value_string_borrow(activation,activation->code->arguments[access.first+p],&key);
+        if (status!=XRT_MANAGED_OK) return status;
+        XrRbcRegister *value=rbc_value_register(stack,activation,activation->code->arguments[access.first+p+1]);
+        if (!value) return XRT_MANAGED_ARGUMENT;
+        keys[p/2]=(XrtStringBacking *)key;
+        memcpy(&values[p/2],&value->bits,8);
+    }
+    const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+    XrtManagedStatus status=xrt_map_backing_create(activation->frame,home->temporary_first_owner,types,keys,values,count);
+    return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+}
+static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
+    const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
+    bool mutate=access.index==XR_LIR_MAP_OP_SET || access.index==XR_LIR_MAP_OP_REMOVE || access.index==XR_LIR_MAP_OP_CLEAR;
+    const XrtBackingTypes *types=NULL;
+    if (access.index==XR_LIR_MAP_OP_NEW || mutate) {
+        XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+        if (status!=XRT_MANAGED_OK) return status;
+    }
+    if (access.index==XR_LIR_MAP_OP_NEW) return rbc_value_map_new(stack,activation,access,types);
+    if (mutate) {
+        XrtExternalOwner external; XrtPlace binding;
+        XrtManagedStatus status=rbc_value_binding_place(stack,rbc_value_origin(activation,args[0]),&external,&binding);
+        XrtMapUpdate update={.operation=access.index==XR_LIR_MAP_OP_SET ? XRT_MAP_UPDATE_SET :
+            access.index==XR_LIR_MAP_OP_REMOVE ? XRT_MAP_UPDATE_REMOVE : XRT_MAP_UPDATE_CLEAR};
+        if (status==XRT_MANAGED_OK && access.count>1) status=rbc_value_string_borrow(activation,args[1],&update.key);
+        if (status!=XRT_MANAGED_OK) return status;
+        if (access.index==XR_LIR_MAP_OP_SET) {
+            XrRbcRegister *value=rbc_value_register(stack,activation,args[2]);
+            if (!value) return XRT_MANAGED_ARGUMENT;
+            memcpy(&update.value,&value->bits,8);
+        }
+        const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
+        bool removed=false;
+        status=xrt_map_update_place(binding,activation->frame,workspace->first_owner,types,&update,&removed);
+        if (status==XRT_MANAGED_OK && access.result) {
+            XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
+            if (!result) return XRT_MANAGED_ARGUMENT;
+            result->bits=removed;
+        }
+        return status;
+    }
+    XrtPlace place; const XrtManagedHeader *header=NULL;
+    XrtManagedStatus status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
+    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    if (status!=XRT_MANAGED_OK) return status;
+    const XrtMapBacking *map=(const XrtMapBacking *)header;
+    if (access.index==XR_LIR_MAP_OP_LEN) {
+        XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
+        if (!result) return XRT_MANAGED_ARGUMENT;
+        if (map->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
+        result->bits=map->length; return XRT_MANAGED_OK;
+    }
+    const XrtStringBacking *key=NULL;
+    status=rbc_value_string_borrow(activation,args[1],&key);
+    int64_t value=0; bool found=false;
+    if (status==XRT_MANAGED_OK) status=xrt_map_backing_get(map,key,&value,&found);
+    if (status!=XRT_MANAGED_OK) return status;
+    if (access.index==XR_LIR_MAP_OP_GET) {
+        RbcValuePayload payload;
+        status=rbc_value_payload(module,stack,(RbcValueOrigin){activation,access.result},&payload);
+        if (status!=XRT_MANAGED_OK) return status;
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+        const XrtValueImageType *type=&activation->image->types[home->type-1];
+        memset(payload.address,0,payload.size);
+        payload.address[type->nullable_tag]=(uint8_t)found;
+        memcpy(payload.address+type->nullable_payload,&value,8);
+        return XRT_MANAGED_OK;
+    }
+    if (access.index==XR_LIR_MAP_OP_INDEX && !found) xrt_typed_panic(431,source);
+    XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
+    if (!result) return XRT_MANAGED_ARGUMENT;
+    if (access.index==XR_LIR_MAP_OP_CONTAINS) result->bits=found;
+    else memcpy(&result->bits,&value,8);
+    return XRT_MANAGED_OK;
+}
