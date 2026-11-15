@@ -91,8 +91,9 @@ static void fixture_init(Fixture *fixture) {
         {provider, provider_retain, provider_drop}};
     OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &fixture->billing));
     size_t child = offsetof(Payload, child);
-    XrtRuntimeTypeSpec spec = {sizeof(Payload), alignof(Payload), offsetof(Payload, capacity),
-        1, &child, 1, payload_drop, {provider, provider_retain, provider_drop}};
+    XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(Payload), .alignment=alignof(Payload),
+        .capacity_offset=offsetof(Payload, capacity), .stride=1, .child_offsets=&child,
+        .child_count=1, .drop_payload=payload_drop, .code={provider, provider_retain, provider_drop}};
     OK(xrt_runtime_type_plan_new(fixture->billing, &spec, &fixture->plan));
     OK(xrt_managed_ops_bind(fixture->billing, fixture->plan, &fixture->ops));
 }

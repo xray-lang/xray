@@ -88,10 +88,11 @@ static bool slot_empty(const XrtManagedSlot *slot) {
 XR_FUNCDEF XrtManagedStatus xrt_managed_root_new(XrtBillingOwner *billing,
     XrtManagedRoot **output) {
     if (!billing || !output || *output) return XRT_MANAGED_ARGUMENT;
-    const XrtRuntimeTypeSpec root_spec = {sizeof(XrtManagedRoot), alignof(XrtManagedRoot),
-        SIZE_MAX, 0, NULL, 0, root_dispose, {0}};
-    const XrtRuntimeTypeSpec frame_spec = {sizeof(XrtManagedFrame), alignof(XrtManagedFrame),
-        offsetof(XrtManagedFrame, slot_count), sizeof(XrtManagedSlot), NULL, 0, frame_dispose, {0}};
+    const XrtRuntimeTypeSpec root_spec = {.fixed_size=sizeof(XrtManagedRoot),
+        .alignment=alignof(XrtManagedRoot), .capacity_offset=SIZE_MAX, .drop_payload=root_dispose};
+    const XrtRuntimeTypeSpec frame_spec = {.fixed_size=sizeof(XrtManagedFrame),
+        .alignment=alignof(XrtManagedFrame), .capacity_offset=offsetof(XrtManagedFrame, slot_count),
+        .stride=sizeof(XrtManagedSlot), .drop_payload=frame_dispose};
     XrtRuntimeTypePlan *root_plan = NULL, *frame_plan = NULL;
     XrtManagedOps *root_ops = NULL, *frame_ops = NULL;
     XrtManagedPending pending = {0};
