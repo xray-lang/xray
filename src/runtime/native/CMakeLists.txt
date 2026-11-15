@@ -4,7 +4,7 @@ if(WIN32)
     set(native_clock_platform "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
     set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_output_win.c")
 endif()
-add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c
+add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnative_status.c
     xnative_execution.c xnative_string.c xnative_array.c xnative_view.c xnative_pod.c xnative_float.c xnative_module_state.c
     xnative_callable.c xnative_map.c xnative_set.c xnative_boxed.c xnative_managed.c xnative_managed_root.c xnative_place.c
     xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c
