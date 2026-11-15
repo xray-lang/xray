@@ -24,9 +24,9 @@ static const struct { uint64_t bits; const char *text; } f64_text_witnesses[]={
 };
 XR_STATIC_ASSERT(sizeof(f64_text_source)-1==138,"The complete Source text remains unchanged");
 XR_STATIC_ASSERT(sizeof(f64_text_witnesses)/sizeof(f64_text_witnesses[0])==290,"Every original binary64 text witness is present");
-static void source_f64_text_result(const XrtString *value,unsigned index) {
+static void source_f64_text_result(const XrtManagedHeader *value,unsigned index) {
     size_t length=0;
-    const char *bytes=xrt_string_bytes(value,&length),*expected=f64_text_witnesses[index].text;
+    const char *bytes=source_string_bytes(value,&length),*expected=f64_text_witnesses[index].text;
     CHECK(length==strlen(expected)+2 && !memcmp(bytes,"v=",2) && !memcmp(bytes+2,expected,length-2));
 }
 static void source_f64_text_vectors(void) {
@@ -38,10 +38,10 @@ static void source_f64_text_vectors(void) {
             XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
             CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
             xr_rbc_execution_free(&execution);
-            XrtString *escaped=NULL;
+            XrtManagedHeader *escaped=NULL;
             CHECK(xr_rbc_outcome_take_string(outcome,&escaped) && escaped);
             xr_rbc_outcome_free(&outcome);
-            source_f64_text_result(escaped,i);xrt_string_owned_drop(&escaped);CHECK(!escaped);
+            source_f64_text_result(escaped,i);source_string_owned_drop(&escaped);CHECK(!escaped);
         }
     xr_rbc_program_destroy(program);
 }
