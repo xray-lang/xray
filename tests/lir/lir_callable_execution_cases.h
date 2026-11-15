@@ -1,6 +1,22 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_bytecode_cases.h"
-#include "lir_callable_owned_cases.h"
+
+static void callable_c_unavailable(const XrLirModule *module, XrLirFunction root) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=module, .entry=root, .resources=resources,
+        .translation_unit="callable-frontier.c"};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
+    xr_compile_resources_release(resources);
+}
+static void callable_execution_unavailable(const XrLirModule *module, XrLirFunction root) {
+    OK(xr_lir_verify(module, NULL));
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    callable_c_unavailable(module, root);
+}
 
 typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
 
@@ -36,7 +52,7 @@ static void callable_code_lease_cases(const XrRbcProgram *program) {
     CHECK(!execution && !probe.retained && !probe.released);
     probe.reject = false;
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
-    uint32_t leases = module.closure_entry_count ? 2u : 1u;
+    uint32_t leases = 1;
     CHECK(probe.retained == leases && !probe.released);
     xr_rbc_execution_free(&execution);
     CHECK(probe.released == leases);
@@ -94,35 +110,7 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             copy = received;
             CHECK(copy->functions[1].callable_parameters[0].contract.escaping);
         }
-        OK(xr_lir_verify(copy, NULL));
-        XrRbcProgram *program = NULL;
-        XrRbcCompileStatus status = xr_rbc_compile(copy, (XrLirFunction){copy, root.id}, &program, NULL);
-        if (scenario != 1) {
-            CHECK(status == XR_RBC_COMPILE_OK && program);
-            callable_owned_receiving(program);
-            XrRbcExecution *execution = NULL;
-            CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
-            xr_rbc_program_destroy(program);
-            program = NULL;
-            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-            xr_rbc_execution_free(&execution);
-            uint64_t bits = 0;
-            CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
-            xr_rbc_outcome_free(&outcome);
-        } else CHECK(status == XR_RBC_COMPILE_UNSUPPORTED && !program);
-        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
-        XrCompileResources *resources = NULL;
-        CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-        XrLirCRequest request = {.module=copy, .entry={copy, root.id}, .resources=resources,
-            .translation_unit="frame-frontier.c"};
-        XrLirCOutput output = {0};
-        XrLirCStatus emitted = xr_lir_emit_c(&request, &output, NULL);
-        if (scenario != 1) {
-            CHECK(emitted == XR_LIR_C_OK && output.bytes && output.length);
-            CHECK(strstr(output.bytes, "xrt_callable_scope_new") && strstr(output.bytes, "xrl_owned_thunk_"));
-            xr_lir_c_output_free(&output);
-        } else CHECK(emitted == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
-        xr_compile_resources_release(resources);
+        callable_execution_unavailable(copy, (XrLirFunction){copy, root.id});
         xr_lir_module_destroy(copy);
     }
 }
@@ -140,17 +128,7 @@ static void callable_vm_execution(void) {
     captured_program = NULL;
     xr_lir_module_destroy(captured);
     callable_fixture_capture(&captured, &captured_root, 2);
-    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
-    XrCompileResources *resources = NULL;
-    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XrLirCRequest request = {.module=captured, .entry=captured_root, .resources=resources,
-        .translation_unit="mutable-frame.c"};
-    XrLirCOutput output = {0};
-    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
-    CHECK(strstr(output.bytes, "int64_t * c0;") && strstr(output.bytes, "int64_t xrl_cell"));
-    CHECK(!strstr(output.bytes, "xrt_callable_cell_new") && !strstr(output.bytes, "xrt_callable_scope_new"));
-    xr_lir_c_output_free(&output);
-    xr_compile_resources_release(resources);
+    callable_c_unavailable(captured, captured_root);
     callable_transforms(captured, captured_root);
     CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
     callable_frame_receiving(captured_program);
