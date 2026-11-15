@@ -43,121 +43,129 @@ static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_ARRAY_CELL);
 }
-static bool c_array_move_pair(LirC *c, const XrLirInstructionView *v,
-    const XrLirInstructionView *next) {
-    if (v->operand_count != 1 || next->operand_count != 1 || v->operands[0] != next->operands[0])
-        return false;
-    bool create = v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_ARRAY_CELL && next->op == XR_LIR_ARRAY_DROP;
-    bool read = v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY && next->op == XR_LIR_ARRAY_CELL_DROP;
-    if (!create && !read) return false;
-    if (!c_request_poll(c)) return true;
-    if (c->string_cursor)
-        c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
-    if (c_located(&v->source)) ++c->location_cursor;
-    /* The adjacent verified DROP consumes that actual owner. Transfer its one
-     * canonical reference into or out of the Cell without creating a copy. */
-    if (create) {
-        c_format(c, "    XrtArray *xrl_cell%" PRIu32 " = ", v->result);
-        c_value(c, v->operands[0]);
-        c_text(c, ";\n    "); c_value(c, v->operands[0]);
-        c_format(c, " = NULL;\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n", v->result, v->result);
-    } else {
-        c_format(c, "    v%" PRIu32 " = *", v->result); c_value(c, v->operands[0]);
-        c_text(c, ";\n    *"); c_value(c, v->operands[0]); c_text(c, " = NULL;\n");
+static const char *c_array_kind(XrLirType element) {
+    switch (element) {
+    case XR_LIR_I64: return "XRT_BACKING_ARRAY_I64";
+    case XR_LIR_STRING: return "XRT_BACKING_ARRAY_STRING";
+    case XR_LIR_U8: return "XRT_BACKING_ARRAY_U8";
+    case XR_LIR_U64: return "XRT_BACKING_ARRAY_U64";
+    default: return NULL;
     }
-    return true;
+}
+static const char *c_array_member(XrLirType element) {
+    return element==XR_LIR_STRING ? "string" : element==XR_LIR_U8 ? "u8" : element==XR_LIR_U64 ? "u64" : "i64";
+}
+static void c_array_require(LirC *c, uint32_t source) {
+    c_format(c, "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+}
+static void c_array_finish(LirC *c, uint32_t value, uint32_t source) {
+    const XrLirValueHome *home=&c->homes->values[value];
+    c_format(c, "    { XrtManagedStatus status = xrt_place_move_replace((XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE},\n", home->first_owner);
+    c_format(c, "        (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}, NULL);\n", home->temporary_first_owner);
+    c_array_require(c,source); c_text(c, "    }\n");
+}
+/* Borrowed input stays protected by its actual caller or source home. Retain
+ * and adoption return normally before a failure can leave the C activation. */
+static void c_array_copy_end(LirC *c, uint32_t value, uint32_t source) {
+    const XrLirValueHome *home=&c->homes->values[value];
+    c_text(c, ";\n");
+    c_format(c, "    if (!xrt_managed_retain(owner)) xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, UINT32_C(%" PRIu32 "));\n",source);
+    c_format(c, "    XrtManagedStatus status=xrt_managed_slot_replace(xrl_frame, %zu, &owner);\n",home->temporary_first_owner);
+    c_text(c, "    if (status != XRT_MANAGED_OK) { xrt_managed_drop(owner);\n"); c_array_require(c,source);
+    c_text(c, "    } }\n"); c_array_finish(c,value,source);
+}
+static const XrLirHomeWorkspace *c_array_workspace(LirC *c) {
+    for (size_t i=0;i<c->homes->workspace_count;++i) {
+        const XrLirHomeWorkspace *workspace=&c->homes->workspaces[i];
+        if (workspace->block==c->block && workspace->instruction==c->instruction) return workspace;
+    }
+    c_error(c,XR_LIR_C_INVALID_LIR,"Array mutation has no common pending workspace"); return NULL;
+}
+static void c_array_item(LirC *c, XrLirType element, uint32_t operand) {
+    c_format(c, "{%s, {. %s = ",c_array_kind(element),c_array_member(element));
+    if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)");
+    c_value(c,operand); c_text(c,"}}");
 }
 static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
+    XrLirType element=v->type==XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
+    const char *kind=c_array_kind(element);
+    if (!kind) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array element has no target receiver"); return; }
+    if (shape->operation != XR_LIR_ARRAY_OP_LEN &&
+        (shape->operation != XR_LIR_ARRAY_OP_GET || element == XR_LIR_STRING)) c_values_ensure(c,source);
+    const XrLirValueHome *home=v->result ? &c->homes->values[v->result] : NULL;
     switch (shape->operation) {
-    case XR_LIR_ARRAY_OP_NEW: case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_GET:
-    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: case XR_LIR_ARRAY_OP_REPEAT:
-    case XR_LIR_ARRAY_OP_DISPLAY: break;
-    default:
-        c_error(c, XR_LIR_C_UNSUPPORTED, "Array role has no native implementation");
-        return;
-    }
-    bool mutator = shape->operation == XR_LIR_ARRAY_OP_SET || shape->operation == XR_LIR_ARRAY_OP_PUSH;
-    XrLirType receiver = mutator ? c_value_type(c, v->operands[0]) : XR_LIR_TYPE_INVALID;
-    if (mutator && receiver != XR_LIR_ARRAY_CELL && receiver != XR_LIR_ARRAY_REF) {
-        c_error(c, XR_LIR_C_UNSUPPORTED, "Array mutator receiver has no native implementation");
-        return;
-    }
-    XrLirType element = v->type == XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
-    const char *family;
-    switch (element) {
-    case XR_LIR_I64: family = "i64"; break;
-    case XR_LIR_STRING: family = "string"; break;
-    case XR_LIR_U8: family = "u8"; break;
-    case XR_LIR_U64: family = "u64"; break;
-    default: c_error(c, XR_LIR_C_UNSUPPORTED, "Array element has no native implementation"); return;
-    }
-    c_text(c, "    ");
-    if (v->result) c_format(c, "v%" PRIu32 " = ", v->result);
-    if (shape->operation == XR_LIR_ARRAY_OP_NEW) {
-        c_format(c, "xrt_array_%s_new(", family);
-        if (v->operand_count) {
-            if (element == XR_LIR_STRING) c_text(c, "(XrtString *const[]){");
-            else c_format(c, "(const %s[]){", c_type(c, element));
-            for (uint32_t p = 0; p < v->operand_count; ++p) {
-                if (p) c_text(c, ", ");
-                c_value(c, v->operands[p]);
+    case XR_LIR_ARRAY_OP_NEW:
+        c_format(c,"    xrt_native_array_create(xrl_frame, %zu, &(XrtArrayInput){%s, ",home->temporary_first_owner,kind);
+        if (!v->operand_count) c_text(c,"NULL");
+        else {
+            c_format(c,"(%s[]){",element==XR_LIR_STRING ? "XrtStringBacking *" : c_type(c,element));
+            for (uint32_t i=0;i<v->operand_count;++i) {
+                if (i) c_text(c,", "); if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)"); c_value(c,v->operands[i]);
             }
-            c_text(c, "}");
-        } else c_text(c, "NULL");
-        c_format(c, ", UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "));\n", v->operand_count, source);
-        return;
+            c_text(c,"}");
+        }
+        c_format(c,", %" PRIu32 "}, UINT32_C(%" PRIu32 "));\n",v->operand_count,source);
+        c_array_finish(c,v->result,source); return;
+    case XR_LIR_ARRAY_OP_LEN:
+        c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
+        c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
+    case XR_LIR_ARRAY_OP_GET:
+        c_text(c,"    { XrtArrayItem item = {0};\n    xrt_native_array_get("); c_value(c,v->operands[0]);
+        c_format(c,", %s, ",kind); c_value(c,v->operands[1]);
+        c_format(c,", &item, UINT32_C(%" PRIu32 "));\n",source);
+        if (element==XR_LIR_STRING) { c_text(c,"    { XrtManagedHeader *owner = &item.value.string->managed"); c_array_copy_end(c,v->result,source); }
+        else c_format(c,"    v%" PRIu32 " = item.value.%s;\n",v->result,c_array_member(element));
+        c_text(c,"    }\n"); return;
+    case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: {
+        const XrLirHomeWorkspace *workspace=c_array_workspace(c); if (!workspace) return;
+        const XrLirHomeBinding *binding=&c->homes->bindings[v->operands[0]];
+        if (!binding->type || workspace->type!=binding->type) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"Array mutation workspace lost its exact binding type"); return;
+        }
+        c_text(c,"    xrt_native_array_update_place("); c_value(c,v->operands[0]);
+        c_format(c,", %s, xrl_frame, %zu, &(XrtArrayUpdate){%s, ",kind,workspace->first_owner,
+            shape->operation==XR_LIR_ARRAY_OP_SET ? "XRT_ARRAY_UPDATE_SET" : "XRT_ARRAY_UPDATE_PUSH");
+        if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,v->operands[1]); else c_text(c,"0");
+        c_text(c,", "); c_array_item(c,element,v->operands[v->operand_count-1]);
+        c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source); return;
     }
-    if (shape->operation == XR_LIR_ARRAY_OP_LEN) c_text(c, "xrt_array_length(");
-    else c_format(c, "xrt_array_%s%s_%s(", receiver == XR_LIR_ARRAY_REF ? "ref_" : "", family,
-        shape->operation == XR_LIR_ARRAY_OP_GET ? "get" :
-        shape->operation == XR_LIR_ARRAY_OP_SET ? "set" : shape->operation == XR_LIR_ARRAY_OP_PUSH ? "push" :
-        shape->operation == XR_LIR_ARRAY_OP_REPEAT ? "repeat" : "display");
-    for (uint32_t p = 0; p < v->operand_count; ++p) {
-        if (p) c_text(c, ", ");
-        c_value(c, v->operands[p]);
+    case XR_LIR_ARRAY_OP_REPEAT:
+        c_format(c,"    xrt_native_array_repeat(xrl_frame, %zu, &(XrtArrayItem)",home->temporary_first_owner);
+        c_array_item(c,element,v->operands[1]); c_text(c,", "); c_value(c,v->operands[0]);
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_array_finish(c,v->result,source); return;
+    case XR_LIR_ARRAY_OP_DISPLAY:
+        c_format(c,"    xrt_native_array_display(xrl_frame, %zu, ",home->temporary_first_owner); c_value(c,v->operands[0]);
+        c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_array_finish(c,v->result,source); return;
+    default: c_error(c,XR_LIR_C_UNSUPPORTED,"Array operation has no target receiver"); return;
     }
-    c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
 }
 static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
-    XrLirArrayIntrinsic shape = {0};
-    if (c_array_intrinsic(c, v, &shape)) { c_array_call(c, v, &shape, source); return; }
-    if (v->op == XR_LIR_ARRAY_BORROW) {
-        XrLirArrayShape reference = {0};
-        XrLirValue result = {c->request->module, c->function.id, v->result};
-        xr_lir_array_shape_view(c->request->module, result, &reference);
-        const char *kind = reference.element == XR_LIR_I64 ? "XRT_MODULE_ARRAY_I64" :
-            reference.element == XR_LIR_STRING ? "XRT_MODULE_ARRAY_STRING" :
-            reference.element == XR_LIR_U8 ? "XRT_MODULE_ARRAY_U8" : "XRT_MODULE_ARRAY_U64";
-        c_format(c, "    v%" PRIu32 " = xrt_array_ref_%s(", v->result,
-            c_value_type(c, v->operands[0]) == XR_LIR_STATE_REF ? "state" : "local");
-        c_value(c, v->operands[0]);
-        c_format(c, ", %s, UINT32_C(%" PRIu32 "));\n", kind, source);
-    } else if (v->op == XR_LIR_ARRAY_REF_READ) {
-        c_format(c, "    v%" PRIu32 " = xrt_array_ref_read(", v->result);
-        c_value(c, v->operands[0]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
-    } else if (v->op == XR_LIR_ARRAY_REF_WRITE) {
-        c_text(c, "    xrt_array_ref_write("); c_value(c, v->operands[0]);
-        c_text(c, ", "); c_value(c, v->operands[1]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
-    } else if (v->op == XR_LIR_CELL_NEW) {
-        c_format(c, "    XrtArray *xrl_cell%" PRIu32 " = xrt_array_retain(", v->result);
-        c_value(c, v->operands[0]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n",
-            source, v->result, v->result);
-    } else if (v->op == XR_LIR_CELL_WRITE) {
-        c_text(c, "    xrt_array_assign("); c_value(c, v->operands[0]);
-        c_text(c, ", "); c_value(c, v->operands[1]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
-    } else if (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_ARRAY_CELL_DROP) {
-        c_text(c, "    xrt_array_drop(");
-        if (v->op == XR_LIR_ARRAY_DROP) c_text(c, "&");
-        c_value(c, v->operands[0]); c_text(c, ");\n");
+    XrLirArrayIntrinsic shape={0};
+    if (c_array_intrinsic(c,v,&shape)) { c_array_call(c,v,&shape,source); return; }
+    if (v->op!=XR_LIR_ARRAY_BORROW) c_values_ensure(c,source);
+    if (v->op==XR_LIR_ARRAY_BORROW) {
+        const XrLirHomeBinding *binding=&c->homes->bindings[v->result];
+        if (binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW) {
+            c_text(c,"    { XrtManagedStatus status=xrt_module_external_owner("); c_value(c,binding->source);
+            c_format(c,", 0, &xrl_array_binding%" PRIu32 ");\n",v->result); c_array_require(c,source); c_text(c,"    }\n");
+            c_format(c,"    v%" PRIu32 " = (XrtPlace){.external=&xrl_array_binding%" PRIu32 ", .nulls=XRT_PLACE_NONNULL};\n",v->result,v->result);
+        } else { c_format(c,"    v%" PRIu32 " = ",v->result); c_value(c,binding->source); c_text(c,";\n"); }
+    } else if (v->op==XR_LIR_ARRAY_RETAIN) {
+        c_text(c,"    { XrtManagedHeader *owner = "); c_value(c,v->operands[0]); c_array_copy_end(c,v->result,source);
+    } else if (v->op==XR_LIR_ARRAY_DROP || v->op==XR_LIR_ARRAY_CELL_DROP) {
+        size_t slot=v->op==XR_LIR_ARRAY_DROP ? c->homes->values[v->operands[0]].first_owner : c->homes->bindings[v->operands[0]].first_owner;
+        c_format(c,"    { XrtManagedStatus status=xrt_managed_slot_drop(xrl_frame, %zu);\n",slot); c_array_require(c,source); c_text(c,"    }\n");
     } else {
-        c_format(c, "    v%" PRIu32 " = xrt_array_retain(", v->result);
-        if (v->op == XR_LIR_CELL_READ) c_text(c, "*");
-        c_value(c, v->operands[0]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        bool read=v->op==XR_LIR_CELL_READ || v->op==XR_LIR_ARRAY_REF_READ;
+        const XrLirValueHome *home=&c->homes->values[read ? v->result : v->operands[v->operand_count-1]];
+        if (!read && (!home->owner_count || home->parameter)) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array assignment requires its final owned source home"); return; }
+        c_text(c,"    { XrtManagedStatus status=xrt_place_copy_replace(");
+        if (read) c_format(c,"(XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE}",home->first_owner);
+        else c_value(c,v->op==XR_LIR_CELL_NEW ? v->result : v->operands[0]);
+        c_text(c,", ");
+        if (read) c_value(c,v->operands[0]);
+        else c_format(c,"(XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}",home->first_owner);
+        c_text(c,", NULL);\n"); c_array_require(c,source); c_text(c,"    }\n");
     }
 }

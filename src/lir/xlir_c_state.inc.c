@@ -79,7 +79,7 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     c_state_check_access(c, reference, source);
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
-        if (shape.payload == XR_LIR_STRING) {
+        if ((shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY)) {
             c_values_ensure(c, source);
             c_text(c, "    { XrtExternalOwner binding;\n    xrt_module_require(xrt_module_external_owner(");
             c_value(c, reference); c_text(c, ", 0, &binding)"); c_state_require_end(c, source);
@@ -91,7 +91,7 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
             c_format(c, "    memcpy(&v%" PRIu32 ", xrl_access%" PRIu32 ".payload, sizeof(v%" PRIu32 "));\n",
                 v->result, reference, v->result);
         }
-    } else if (shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_UNIT || shape.payload >= XR_LIR_TYPE_COUNT) {
+    } else if ((shape.payload == XR_LIR_STRING || shape.payload == XR_LIR_ARRAY) || shape.payload == XR_LIR_UNIT || shape.payload >= XR_LIR_TYPE_COUNT) {
         c_text(c, "    xrt_module_require(xrt_module_replace("); c_value(c, reference); c_text(c, ", ");
         if (shape.payload == XR_LIR_UNIT) c_text(c, "NULL");
         else { c_text(c, "&"); c_value(c, v->operands[1]); }
