@@ -19,15 +19,29 @@ add_executable(test_lir_bytecode ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_b
 target_link_libraries(test_lir_bytecode PRIVATE xray_lir_bytecode)
 add_executable(test_lir_bytecode_alloc
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_bytecode_alloc.c)
-target_link_libraries(test_lir_bytecode_alloc PRIVATE xray_register_vm xray_lir xray_native_runtime)
+target_link_libraries(test_lir_bytecode_alloc PRIVATE xray_register_vm xray_lir_value_layout xray_native_runtime)
 add_test(NAME lir_bytecode COMMAND test_lir_bytecode)
 add_test(NAME lir_bytecode_alloc COMMAND test_lir_bytecode_alloc)
 set_tests_properties(lir_bytecode lir_bytecode_alloc PROPERTIES LABELS "unit;vm;lir;fast" TIMEOUT 30)
 
 add_executable(test_rbc_code_owner ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_rbc_code_owner.c)
-target_link_libraries(test_rbc_code_owner PRIVATE xray_register_vm xray_lir xray_native_runtime)
+target_link_libraries(test_rbc_code_owner PRIVATE xray_register_vm xray_lir_value_layout xray_native_runtime)
 add_test(NAME rbc_code_owner COMMAND test_rbc_code_owner)
 set_tests_properties(rbc_code_owner PROPERTIES LABELS "unit;vm;lir;ownership" TIMEOUT 30)
+
+add_executable(test_rbc_value_homes ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_rbc_value_homes.c)
+target_link_libraries(test_rbc_value_homes PRIVATE xray_lir_bytecode)
+set_target_properties(test_rbc_value_homes PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_rbc_value_homes PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_rbc_value_homes PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_rbc_value_homes PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME rbc_value_homes COMMAND test_rbc_value_homes)
+set_tests_properties(rbc_value_homes PROPERTIES LABELS "unit;vm;lir;ownership" TIMEOUT 30)
 
 add_executable(lir_vm_run ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/lir_vm_run.c)
 add_executable(test_lir_bytecode_source
