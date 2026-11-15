@@ -65,7 +65,10 @@ static bool c_value_mark(LirC *c, uint8_t *needed, size_t count, XrLirType type)
         c_error(c, XR_LIR_C_INVALID_LIR, "C value has an invalid physical type identity");
         return false;
     }
-    if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || c_managed_leaf(type) || type >= XR_LIR_TYPE_COUNT)
+    /* Arrays are keyed by their admitted element shape in the separate family
+     * bitmap; the bare Array tag cannot name a receiving value layout. */
+    if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || type==XR_LIR_STRING ||
+        type==XR_LIR_MAP_STRING_I64 || type >= XR_LIR_TYPE_COUNT)
         needed[type] = 1;
     return true;
 }
