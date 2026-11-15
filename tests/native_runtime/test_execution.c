@@ -116,25 +116,53 @@ static void managed_root(void *context) {
     if (call->mode == 1) xrt_native_string_create(frame,0,"\xff",1,1);
     if (call->mode == 2) xrt_arithmetic_panic(422,1);
     if (call->mode == 3) managed_require(xrt_managed_slot_take(frame,2,&call->escaped));
-    if (call->mode == 4) {
+    if (call->mode == 5) xrt_print_string(bytes->bytes,bytes->length,1);
+    if (call->mode == 4 || call->mode >= 6) {
         XrtValueRoot inner_owner = {0}; XrtExecutionFailure failure = {0};
-        ManagedCall inner = {.owner=&inner_owner,.locations=call->locations,.outer=root};
-        CHECK(xrt_run_embedded_owned(call->locations,&failure,managed_root,&inner,&inner_owner) == XRT_EXECUTION_COMPLETED);
-        CHECK(inner.after == 1 && xrt_value_root_empty(&inner_owner) && xrt_native_managed_root(1) == root);
+        ManagedCall inner = {.owner=&inner_owner,.locations=call->locations,.outer=root,
+            .mode=call->mode == 6 ? 1u : call->mode == 7 ? 2u : call->mode == 8 ? 5u : 0u};
+        SavedOutput saved = (SavedOutput)0;
+        if (call->mode == 8) saved = disable_output();
+        XrtExecutionStatus status = xrt_run_embedded_owned(call->locations,&failure,
+            managed_root,&inner,&inner_owner);
+        if (call->mode == 8) restore_output(saved);
+        if (call->mode == 4) CHECK(status == XRT_EXECUTION_COMPLETED && inner.after == 1);
+        else {
+            CHECK(status == XRT_EXECUTION_FAILURE && !inner.after);
+            if (call->mode == 6) CHECK(failure.kind == XRT_FAILURE_VALUE &&
+                failure.detail.value.status == XR_XIR_VALUE_BAD_UTF8);
+            if (call->mode == 7) CHECK(failure.kind == XRT_FAILURE_TYPED_PANIC &&
+                failure.detail.panic.code == 422);
+            if (call->mode == 8) CHECK(failure.kind == XRT_FAILURE_OUTPUT &&
+                failure.detail.output.source_id == 1 && failure.detail.output.io.failed);
+        }
+        CHECK(xrt_value_root_empty(&inner_owner) && xrt_value_root_current(1) == call->owner &&
+            xrt_native_managed_root(1) == root);
+        XrtManagedHeader *preserved = NULL;
+        managed_require(xrt_managed_slot_borrow(frame,1,&preserved));
+        CHECK(preserved == joined && ((const XrtStringBacking *)preserved)->length == 10);
+        managed_require(xrt_managed_slot_drop(frame,0));
+        xrt_native_string_create(frame,0,"continued",9,1);
     }
     managed_require(xrt_managed_frame_leave(root,frame)); ++call->after;
 }
 static void managed_scopes(void) {
     XrtLocationOwner *map = locations("fixed-execution.xr");
-    for (unsigned mode = 0; mode < 5; ++mode) {
+    for (unsigned mode = 0; mode < 9; ++mode) {
         XrtValueRoot owner = {0}; XrtExecutionFailure failure = {0};
         ManagedCall call = {.owner=&owner,.locations=map,.mode=mode};
+        SavedOutput saved = (SavedOutput)0;
+        if (mode == 5) saved = disable_output();
         XrtExecutionStatus status = xrt_run_embedded_owned(map,&failure,managed_root,&call,&owner);
+        if (mode == 5) restore_output(saved);
         CHECK(xrt_value_root_empty(&owner) && !xrt_value_root_active());
         if (mode == 1) CHECK(status == XRT_EXECUTION_FAILURE && !call.after && failure.kind == XRT_FAILURE_VALUE &&
             failure.detail.value.status == XR_XIR_VALUE_BAD_UTF8 && failure.detail.value.source_id == 1);
         else if (mode == 2) CHECK(status == XRT_EXECUTION_FAILURE && !call.after &&
             failure.kind == XRT_FAILURE_TYPED_PANIC && failure.detail.panic.code == 422);
+        else if (mode == 5) CHECK(status == XRT_EXECUTION_FAILURE && !call.after &&
+            failure.kind == XRT_FAILURE_OUTPUT && failure.detail.output.source_id == 1 &&
+            failure.detail.output.operation == XRT_OUTPUT_WRITE && failure.detail.output.io.failed);
         else CHECK(status == XRT_EXECUTION_COMPLETED && call.after == 1);
         if (call.escaped) {
             const XrtStringBacking *value = (const XrtStringBacking *)call.escaped;
