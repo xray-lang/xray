@@ -172,10 +172,13 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
                 if (!rbc_aggregate_bits_location(f, f->aggregate_operands[access.first + p])) return false;
             continue;
         }
-        /* Owning String results, closures and boxed values require the common
-         * typed owner homes. These transport operations cannot create them. */
-        if ((access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_CAPTURED_CELL_BIND) ||
-            access.operation == XR_RBC_STRING_LIBRARY || access.operation == XR_RBC_AGGREGATE_DISPLAY) return false;
+        if (access.operation >= XR_RBC_FUNCTION_REFERENCE && access.operation <= XR_RBC_CAPTURED_CELL_BIND) {
+            if (!rbc_callable_access_valid(module, f, access)) return false;
+            continue;
+        }
+        /* Owning String results and boxed values require the common typed
+         * owner homes; pure code tokens retain their separate scope checks. */
+        if (access.operation == XR_RBC_STRING_LIBRARY || access.operation == XR_RBC_AGGREGATE_DISPLAY) return false;
         if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP) {
             if (!rbc_nullable_access_valid(module, f, access)) return false;
             continue;
