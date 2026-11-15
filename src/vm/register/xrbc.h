@@ -21,7 +21,6 @@
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
 #include "xray_native_values.h"
-typedef struct XrtArray XrtArray;
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -418,10 +417,10 @@ XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     XrPodType *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *,
     uint32_t ordinal, XrPodType *type);
-XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
-XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
-XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);
-XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtArray **empty);
+XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtManagedHeader **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtManagedHeader **output);
+XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtManagedHeader **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtManagedHeader **empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
