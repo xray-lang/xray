@@ -115,6 +115,10 @@ def main():
     cases['literal-terminator'] = (original_terminator, terminator_oracle)
     cases['literal-terminator-optimized'] = (original_terminator, terminator_oracle)
     cases['literal-utf8-nul'] = ('print("A\\0é")\nprint(7)\nprint("")\n', b'A\x00\xc3\xa9\n7\n\n')
+    arrays = Path(__file__).resolve().parents[1] / 'fixtures/lir_cli/array_lower'
+    for name in ('local_loop', 'values', 'snapshots'):
+        source = arrays / (name + '.xr')
+        cases['array-' + name] = (source, source.with_suffix('.out').read_bytes())
     cases['module-order'] = ('var first=3\nvar second=first+4\n'
         'fn adjust(n:i64)->i64{first=first+n\nsecond=second+first\nreturn second}\n'
         'print(first)\nprint(second)\nprint(adjust(2))\nprint(first)\nprint(second)\n',
