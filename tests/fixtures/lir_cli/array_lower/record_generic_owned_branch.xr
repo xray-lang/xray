@@ -1,0 +1,39 @@
+fn choose_optional<T>(value:T,keep:bool)->T? {
+    if(keep) { return value }
+    return null
+}
+fn loop(n:i64)->i64 {
+    var i=0
+    var total=0
+    while(i<n) {
+        const row={first:"left ${i}",meta:{ready:i%2==0,score:i},second:"right ${i}"}
+        const selected=choose_optional(row,i%2==0)
+        const skipped=choose_optional(row,false)
+        if(selected!=null) {
+            total=total+len(selected!.first)+len(selected!.second)+selected!.meta.score
+        }
+        if(skipped==null) { total=total+1 }
+        i=i+1
+    }
+    return total
+}
+var original={first:"alpha",meta:{ready:true,score:17},second:"beta"}
+const saved=choose_optional(original,true)
+const missing=choose_optional(original,false)
+print(saved!.first)
+print(saved!.second)
+print(saved!.meta.score)
+print(saved!.meta.ready)
+print(missing==null ? 1 : 0)
+print(original.first)
+print(original.second)
+original={first:"gamma",meta:{ready:false,score:42},second:"delta"}
+const changed=choose_optional(original,true)
+print(original.first)
+print(changed!.second)
+print(changed!.meta.score)
+print(changed!.meta.ready)
+print(saved!.first)
+print(saved!.second)
+print(saved!.meta.score)
+print(loop(6))
