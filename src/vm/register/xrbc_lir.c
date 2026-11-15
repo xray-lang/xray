@@ -886,6 +886,7 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, v}, &type);
         if (c->output.literals[v] || c->output.lengths[v] || rbc_lir_aggregate_type(c->input, type) ||
             type == XR_LIR_FUNCTION_SCOPE) continue;
+        if (rbc_lir_common_value(c, v) && c->slots[v] == UINT32_MAX) continue;
         XrRbcRegisterKind kind = rbc_lir_register_kind(c, v, type);
         uint32_t slot = c->slots[v];
         if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
