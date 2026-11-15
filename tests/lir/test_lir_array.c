@@ -444,8 +444,6 @@ static void array_c_output(const char *name, const char *path) {
     if (status != XR_LIR_C_OK) fprintf(stderr, "C emission status=%u %s\n", (unsigned)status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes);
     if (!strcmp(name, "state-layout")) {
-        CHECK(strstr(output.bytes, "static const XrtValueImage xrl_value_image") &&
-            strstr(output.bytes, "XRT_BACKING_ARRAY_I64") && strstr(output.bytes, "XRT_BACKING_ARRAY_STRING"));
         XrRbcProgram *program = NULL;
         CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
         xr_rbc_program_destroy(program);

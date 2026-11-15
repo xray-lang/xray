@@ -25,6 +25,25 @@ def run(command, cwd, expected_exit=0):
 
 def adapter(name, generated):
     prefix = '#include <inttypes.h>\n#include <stdio.h>\n#include <string.h>\n' + f'#include "{generated.name}"\n'
+    if name == 'state-layout':
+        return prefix + '''int main(void) {
+    const XrtModuleLayoutSpec *spec = &xrl_state_spec;
+    const XrtValueImage *image = spec->values;
+    if (!image || !image->types || !spec->slots || spec->slot_count != 1 || spec->module_count != 1)
+        return 1;
+    const XrtModuleSlotSpec *slot = &spec->slots[0];
+    if (!slot->type || slot->type > image->type_count || slot->module || slot->offset ||
+        slot->flags != XRT_MODULE_SLOT_MUTABLE || slot->size != sizeof(XrtManagedHeader *) ||
+        slot->alignment != _Alignof(XrtManagedHeader *) || spec->payload_size != slot->size ||
+        spec->payload_alignment != slot->alignment) return 1;
+    const XrtValueImageType *type = &image->types[slot->type - 1];
+    if (type->kind != XRT_VALUE_ARRAY_I64 || type->size != slot->size || type->alignment != slot->alignment ||
+        type->owned_count != 1 || !image->owned_offsets || type->first_owned >= image->owned_count ||
+        image->owned_offsets[type->first_owned] != 0) return 1;
+    printf("%" PRId64 "\\n", xray_lir_entry());
+    return 0;
+}
+'''
     if not name.startswith('return-'):
         return prefix + 'int main(void) { printf("%" PRId64 "\\n", xray_lir_entry()); return 0; }\n'
     kind = ('XRT_BACKING_ARRAY_STRING' if name.endswith('string') else
@@ -85,9 +104,6 @@ def main():
         assert '({' not in text
         if name == 'large':
             assert ', 300}, UINT32_C(' in text and '(int64_t[]){' in text
-        if name == 'state-layout':
-            assert 'static const XrtValueImage xrl_value_image' in text
-            assert 'XRT_BACKING_ARRAY_I64' in text and 'XRT_BACKING_ARRAY_STRING' in text
         client.write_text(adapter(name, generated), encoding='ascii')
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
