@@ -14,6 +14,7 @@ typedef struct RbcValuePreparation {
 } RbcValuePreparation;
 static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     uint32_t value, XrLirType type, XrLirValueLayoutKey *key) {
+    if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) type = XR_LIR_ARRAY;
     bool plain = type >= XR_LIR_UNIT && type <= XR_LIR_F64;
     if (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape;

@@ -506,8 +506,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
                 rbc_lir_value_source(input, f, v, value, d));
             return false;
         }
-        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
-            type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
+        if (type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
             type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF) {
             rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"selected value family has no fixed execution plan",
                 rbc_lir_value_source(input,f,v,value,d));
@@ -516,7 +515,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         if (type == XR_LIR_STATE_REF) {
             XrLirStateReference shape = {0};
             if (xr_lir_state_reference_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
-                (shape.payload != XR_LIR_STRING && !rbc_lir_scalar(shape.payload) && shape.payload != XR_LIR_UNIT &&
+                (shape.payload != XR_LIR_STRING && shape.payload != XR_LIR_ARRAY && !rbc_lir_scalar(shape.payload) && shape.payload != XR_LIR_UNIT &&
                  !rbc_lir_aggregate_type(input,shape.payload))) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "module reference has no bytecode element implementation", (XrLirSource){0});
                 return false;
@@ -574,14 +573,14 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        if (rbc_lir_map_role(input,i) ||
-            (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id)) return false;
+        if (rbc_lir_map_role(input,i)) return false;
+        if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
         return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);
     }
     case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return false;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
-    case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return false;
+    case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
     case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return false;
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
