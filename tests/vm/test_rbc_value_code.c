@@ -174,13 +174,76 @@ static void scalar_state(void) {
     CHECK(!xr_rbc_module_value_code(xr_rbc_program_view(program),0));
     xr_lir_module_destroy(module); run_after_input_retirement(program,42);
 }
+static void scalar_body_calls(void) {
+    for (unsigned typed = 0; typed < 2; ++typed) {
+        XrLirModule *module = NULL; CHECK(xr_lir_module_create(NULL,&module) == XR_LIR_OK);
+        XrLirType integer = XR_LIR_I64; XrLirFunction callee = {0}, root = {0};
+        XrLirFunctionSpec spec = {.name="body_length",.name_length=11,.parameters=&integer,
+            .parameter_count=1,.result=integer};
+        CHECK(xr_lir_declare_function(module,&spec,&callee) == XR_LIR_OK && xr_lir_define_function(module,callee) == XR_LIR_OK);
+        XrLirBlock block = {0}; CHECK(xr_lir_add_block(module,callee,NULL,0,&block) == XR_LIR_OK);
+        CHECK(xr_lir_set_entry(module,callee,block) == XR_LIR_OK);
+        XrLirValue parameter = {0}; CHECK(xr_lir_function_parameter(module,callee,0,&parameter) == XR_LIR_OK);
+        XrLirLiteral literal = {0}; CHECK(xr_lir_add_literal(module,(const uint8_t *)"body",4,&literal) == XR_LIR_OK);
+        XrLirValue text = managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+        XrLirValue length = managed_state_value(module,block,XR_LIR_STRING_LEN,integer,&text,1,0), add[] = {parameter,length};
+        XrLirValue result = managed_state_value(module,block,XR_LIR_ADD,integer,add,2,0);
+        managed_state_effect(module,block,XR_LIR_STRING_DROP,&text,1,0);
+        CHECK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+            .operands=&result,.operand_count=1}) == XR_LIR_OK);
+        const char *name = typed ? "typed_caller" : "scalar_caller";
+        spec = (XrLirFunctionSpec){.name=name,.name_length=strlen(name),.result=integer};
+        CHECK(xr_lir_declare_function(module,&spec,&root) == XR_LIR_OK && xr_lir_define_function(module,root) == XR_LIR_OK);
+        block = (XrLirBlock){0}; CHECK(xr_lir_add_block(module,root,NULL,0,&block) == XR_LIR_OK);
+        CHECK(xr_lir_set_entry(module,root,block) == XR_LIR_OK);
+        XrLirValue caller_text = {0};
+        if (typed) {
+            literal = (XrLirLiteral){0}; CHECK(xr_lir_add_literal(module,(const uint8_t *)"caller",6,&literal) == XR_LIR_OK);
+            caller_text = managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+        }
+        XrLirValue results[2] = {{0},{0}};
+        for (unsigned n = 0; n < 2; ++n) {
+            XrLirValue argument = managed_state_value(module,block,XR_LIR_CONST,integer,NULL,0,38 + n);
+            CHECK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=integer,.callee=callee,
+                .operands=&argument,.operand_count=1},&results[n]) == XR_LIR_OK);
+        }
+        result = managed_state_value(module,block,XR_LIR_ADD,integer,results,2,0);
+        if (typed) {
+            length = managed_state_value(module,block,XR_LIR_STRING_LEN,integer,&caller_text,1,0);
+            add[0] = result; add[1] = length;
+            result = managed_state_value(module,block,XR_LIR_ADD,integer,add,2,0);
+            managed_state_effect(module,block,XR_LIR_STRING_DROP,&caller_text,1,0);
+        }
+        CHECK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+            .operands=&result,.operand_count=1}) == XR_LIR_OK);
+        CHECK(xr_lir_module_finish(module,NULL) == XR_LIR_OK);
+        XrRbcProgram *program = compile(module,root);
+        const XrRbcModule *code = xr_rbc_program_view(program);
+        CHECK(code->function_count == 2);
+        const XrRbcValueCode *body = xr_rbc_module_value_code(code,1), *caller = xr_rbc_module_value_code(code,0);
+        CHECK(body && body->homes->owned_frame_needed && body->parameter_count == 1);
+        CHECK(typed ? caller != NULL : caller == NULL);
+        unsigned ordinary_calls = 0;
+        for (size_t pc = 0; pc < code->functions[0].code_count; ++pc)
+            ordinary_calls += (code->functions[0].code[pc] & 255) == XR_RBC_CALL;
+        CHECK(ordinary_calls == 2);
+        for (size_t n = 0; caller && n < caller->access_count; ++n)
+            CHECK(caller->accesses[n].operation != XR_RBC_VALUE_CALL);
+        bool typed_return = false;
+        for (size_t n = 0; n < body->access_count; ++n)
+            typed_return |= body->accesses[n].operation == XR_RBC_VALUE_RETURN;
+        CHECK(typed_return);
+        xr_lir_module_destroy(module); run_after_input_retirement(program,typed ? 91 : 85);
+    }
+    puts("typed scalar bodies: ordinary calls lazily enter and return to scalar and typed callers passed");
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
     const XrRbcValueCode *callee = xr_rbc_module_value_code(xr_rbc_program_view(program),1);
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
-    allocation_failures(); scalar_state(); CHECK(!live);
+    allocation_failures(); scalar_state(); scalar_body_calls(); CHECK(!live);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
