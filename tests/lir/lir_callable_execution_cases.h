@@ -21,6 +21,105 @@ static void callable_execution_unavailable(const XrLirModule *module, XrLirFunct
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
     callable_c_rejected(module, root, XR_LIR_C_UNSUPPORTED);
 }
+static void callable_c_frame(const XrLirModule *module, XrLirFunction root) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=module, .entry=root, .resources=resources,
+        .translation_unit="callable-frame.c"};
+    XrLirCOutput output = {0}; XrLirCDiagnostic diagnostic = {0};
+    XrLirCStatus status = xr_lir_emit_c(&request,&output,&diagnostic);
+    if (status != XR_LIR_C_OK) fprintf(stderr,"Frame C: %s\n",diagnostic.message);
+    CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
+    CHECK(strstr(output.bytes,"XrtFunction") && strstr(output.bytes,"XrlFnEntry"));
+    CHECK(!strstr(output.bytes,"xrt_environment_create"));
+    xr_lir_c_output_free(&output); xr_compile_resources_release(resources);
+}
+/* Reusing one constructor's stack cell would change the previous iteration's
+ * immutable capture before it is invoked. Keep this valid LIR rejected until
+ * independent snapshots exist, rather than emitting a program that returns 2
+ * instead of 1. The entry constructor itself is outside the cycle. */
+static void callable_reentry_snapshot_frontier(void) {
+    CArrayFixture c = {0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirType callable = 0;
+    XrLirCallableType signature = {.result=XR_LIR_I64};
+    OK(xr_lir_callable_type(c.module,&signature,&callable));
+    XrLirFunction leaf = {0}, root = {0}; XrLirType scalar = XR_LIR_I64;
+    XrLirFunctionSpec spec = {.name="capture",.name_length=7,.parameters=&scalar,.parameter_count=1,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&leaf));
+    OK(xr_lir_set_closure_target(c.module,leaf,(XrLirClosureTarget){.callable=callable,.capture_count=1}));
+    OK(xr_lir_define_function(c.module,leaf)); XrLirBlock body = {0};
+    OK(xr_lir_add_block(c.module,leaf,NULL,0,&body)); OK(xr_lir_set_entry(c.module,leaf,body));
+    XrLirValue captured = {0}; OK(xr_lir_function_parameter(c.module,leaf,0,&captured)); ca_return(&c,body,captured);
+    spec = (XrLirFunctionSpec){.name="root",.name_length=4,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_define_function(c.module,root));
+    XrLirBlock entry = {0}, loop = {0}, done = {0}; XrLirType types[] = {scalar,callable};
+    OK(xr_lir_add_block(c.module,root,NULL,0,&entry)); OK(xr_lir_add_block(c.module,root,types,2,&loop));
+    OK(xr_lir_add_block(c.module,root,&scalar,1,&done)); OK(xr_lir_set_entry(c.module,root,entry));
+    XrLirValue zero = ca_constant(&c,entry,0), initial = {0};
+    XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=leaf,.operands=&zero,.operand_count=1};
+    OK(xr_lir_emit_value(c.module,entry,&reference,&initial));
+    XrLirValue first[] = {zero,initial};
+    XrLirInstruction branch = {.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,.edges={{loop,first,2}}};
+    OK(xr_lir_set_terminator(c.module,entry,&branch));
+    XrLirValue index = {0}, previous = {0};
+    OK(xr_lir_block_parameter(c.module,loop,0,&index)); OK(xr_lir_block_parameter(c.module,loop,1,&previous));
+    XrLirValue one = ca_constant(&c,loop,1), next = ca_binary(&c,loop,XR_LIR_ADD,index,one), value = {0};
+    reference.operands = &next; OK(xr_lir_emit_value(c.module,loop,&reference,&value));
+    XrLirValue observed = ca_value(&c,loop,XR_LIR_CALL_INDIRECT,scalar,&previous,1), condition = {0};
+    XrLirValue compare[] = {index,one};
+    XrLirInstruction less = {.op=XR_LIR_ICMP,.type=XR_LIR_I1,.predicate=XR_LIR_LT,.operands=compare,.operand_count=2};
+    OK(xr_lir_emit_value(c.module,loop,&less,&condition));
+    XrLirValue again[] = {next,value};
+    branch = (XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+        .edge_count=2,.edges={{loop,again,2},{done,&observed,1}}};
+    OK(xr_lir_set_terminator(c.module,loop,&branch));
+    OK(xr_lir_block_parameter(c.module,done,0,&observed)); ca_return(&c,done,observed);
+    OK(xr_lir_module_finish(c.module,NULL));
+    callable_c_rejected(c.module,root,XR_LIR_C_UNSUPPORTED);
+    xr_lir_module_destroy(c.module);
+}
+static void callable_entry_signature_frontiers(void) {
+    for (unsigned shape = 0; shape < 5; ++shape) {
+        CArrayFixture c = {0}; OK(xr_lir_module_create(NULL,&c.module));
+        XrLirType callable = 0, child = 0;
+        XrLirCallableParameter parameter = {0};
+        XrLirCallableType signature = {.result=XR_LIR_STRING};
+        if (shape == 1) {
+            XrLirCallableType leaf = {.result=XR_LIR_F32};
+            OK(xr_lir_callable_type(c.module,&leaf,&child));
+            parameter.type = child;
+            signature = (XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+        } else if (shape >= 2) {
+            child = shape == 2 ? XR_LIR_STRING : shape == 3 ? XR_LIR_ARRAY : XR_LIR_MAP_STRING_I64;
+            parameter = (XrLirCallableParameter){.type=child,.mode=XR_PARAM_MOVE};
+            if (shape == 3) parameter.array_element = XR_LIR_I64;
+            signature = (XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+        }
+        OK(xr_lir_callable_type(c.module,&signature,&callable));
+        XrLirFunction target = {0}, root = {0};
+        XrLirFunctionSpec spec = {.name="target",.name_length=6,.parameters=shape ? &child : NULL,
+            .parameter_count=shape ? 1u : 0u,.result=signature.result};
+        OK(xr_lir_declare_function(c.module,&spec,&target));
+        if (shape == 3) {
+            XrLirValue argument = {0}; XrLirArrayShape element = {XR_LIR_I64};
+            OK(xr_lir_function_parameter(c.module,target,0,&argument));
+            OK(xr_lir_set_array_shape(c.module,argument,&element));
+        }
+        OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=callable}));
+        OK(xr_lir_define_function(c.module,target)); XrLirBlock block = {0};
+        OK(xr_lir_add_block(c.module,target,NULL,0,&block)); OK(xr_lir_set_entry(c.module,target,block));
+        ca_return(&c,block,shape ? ca_constant(&c,block,42) : ca_text(&c,block,"x",1));
+        spec = (XrLirFunctionSpec){.name="root",.name_length=4,.result=XR_LIR_I64};
+        OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_define_function(c.module,root));
+        OK(xr_lir_add_block(c.module,root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,root,block));
+        XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target};
+        XrLirValue unused = {0}; OK(xr_lir_emit_value(c.module,block,&reference,&unused));
+        ca_return(&c,block,ca_constant(&c,block,42)); OK(xr_lir_module_finish(c.module,NULL));
+        callable_c_rejected(c.module,root,XR_LIR_C_UNSUPPORTED);
+        xr_lir_module_destroy(c.module);
+    }
+}
 
 typedef struct CallableCodeLeaseProbe { uint32_t retained, released; bool reject; } CallableCodeLeaseProbe;
 
@@ -120,9 +219,12 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
 }
 
 static void callable_vm_execution(void) {
+    callable_reentry_snapshot_frontier();
+    callable_entry_signature_frontiers();
     XrLirModule *captured = NULL;
     XrLirFunction captured_root = {0};
     callable_fixture_capture(&captured, &captured_root, true);
+    callable_c_frame(captured,captured_root);
     callable_transforms(captured, captured_root);
     callable_frame_frontiers(captured, captured_root);
     XrRbcProgram *captured_program = NULL;
@@ -132,7 +234,7 @@ static void callable_vm_execution(void) {
     captured_program = NULL;
     xr_lir_module_destroy(captured);
     callable_fixture_capture(&captured, &captured_root, 2);
-    callable_c_rejected(captured, captured_root, XR_LIR_C_UNSUPPORTED);
+    callable_c_frame(captured, captured_root);
     callable_transforms(captured, captured_root);
     CHECK(xr_rbc_compile(captured, captured_root, &captured_program, NULL) == XR_RBC_COMPILE_OK);
     callable_frame_receiving(captured_program);
