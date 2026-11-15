@@ -11,6 +11,7 @@
  *   and code providers each finish only after their actual last reference.
  */
 #include "runtime/native/xnative_value_plan.h"
+#include "runtime/native/xnative_value_image.h"
 #include "runtime/native/xnative_string_backing.h"
 #include "base/xmalloc.h"
 #include "base/xmax_align.h"
@@ -18,6 +19,7 @@
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
 #define OK(c) CHECK((c) == XRT_MANAGED_OK)
@@ -27,6 +29,8 @@ typedef struct Audit {
     void *watched[2];
     const void *observed;
     bool retired[2];
+    void (*deferred_drop)(void *);
+    void *deferred_context;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -53,6 +57,12 @@ static void *provider_allocate(void *context, size_t bytes) {
     while (remaining != SIZE_MAX) {
         if (!remaining) return NULL;
         if (atomic_compare_exchange_weak(&audit->remaining, &remaining, remaining - 1)) break;
+    }
+    if (audit->deferred_drop) {
+        void (*drop)(void *) = audit->deferred_drop;
+        void *context_to_drop = audit->deferred_context;
+        audit->deferred_drop = NULL; audit->deferred_context = NULL;
+        drop(context_to_drop);
     }
     void *memory = xr_malloc(bytes);
     if (memory) { atomic_fetch_add(&audit->bytes, bytes); atomic_fetch_add(&audit->blocks, 1); }
@@ -345,6 +355,127 @@ static void deep_metadata(void) {
     same_bill(&f,baseline); fixture_done(&f);
     puts("100000 immutable metadata dependencies retired iteratively on the default stack");
 }
+typedef struct RawImageFixture {
+    XrtValueImageType types[7];
+    XrtValueImageSlot slots[4];
+    XrtValueImageParameter parameter;
+    size_t owned[5];
+    char names[20];
+    XrtValueImage image;
+} RawImageFixture;
+static void raw_image_fixture(RawImageFixture *raw) {
+    *raw=(RawImageFixture){0};
+    memcpy(raw->names,"leftrightnumbervalue",20);
+    raw->owned[0]=0; raw->owned[1]=8; raw->owned[2]=8; raw->owned[3]=16; raw->owned[4]=16;
+    raw->slots[0]=(XrtValueImageSlot){2,0,0,4};
+    raw->slots[1]=(XrtValueImageSlot){2,8,4,5};
+    raw->slots[2]=(XrtValueImageSlot){1,16,9,6};
+    raw->slots[3]=(XrtValueImageSlot){1,0,0,0};
+    raw->parameter=(XrtValueImageParameter){1,XR_PARAM_READ,0,15,5};
+    raw->types[0]=(XrtValueImageType){.kind=XRT_VALUE_I64,.size=8,.alignment=8};
+    raw->types[1]=(XrtValueImageType){.kind=XRT_VALUE_STRING,.size=8,.alignment=8,.owned_count=1};
+    raw->types[2]=(XrtValueImageType){.kind=XRT_VALUE_RECORD,.size=24,.alignment=8,.owned_count=2,.field_count=3};
+    raw->types[3]=(XrtValueImageType){.kind=XRT_VALUE_NULLABLE,.size=32,.alignment=8,
+        .first_owned=2,.owned_count=2,.nullable_element=3,.nullable_payload=8};
+    raw->types[4]=(XrtValueImageType){.kind=XRT_VALUE_RECORD,.size=1,.alignment=1};
+    raw->types[5]=(XrtValueImageType){.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,
+        .first_owned=4,.owned_count=1,.parameter_count=1,.result=1,.flags=XRT_VALUE_NO_SUSPEND};
+    raw->types[6]=(XrtValueImageType){.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,
+        .first_capture=3,.capture_count=1,.entry_ordinal=42,.entry_signature=6};
+    raw->image=(XrtValueImage){raw->types,7,raw->slots,4,&raw->parameter,1,raw->owned,5,raw->names,20};
+}
+static void raw_image_retirement(void) {
+    Fixture metadata,data; fixture_init(&metadata,SIZE_MAX,false); fixture_init(&data,SIZE_MAX,true);
+    RawImageFixture raw; raw_image_fixture(&raw);
+    CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
+    /* The provider retires the creator during the first receiving allocation. */
+    metadata.audit.deferred_drop=code_drop; metadata.audit.deferred_context=code;
+    XrtValueImagePlans *set=NULL;
+    OK(xrt_value_image_bind(metadata.billing,&raw.image,(XrtManagedLease){code,code_retain,code_drop},&set));
+    CHECK(xrt_value_image_count(set)==7 && !metadata.audit.deferred_drop && !atomic_load(&audit.finalized));
+    const XrtValuePlan *record=NULL,*nullable=NULL,*environment=NULL;
+    OK(xrt_value_image_get(set,3,&record)); OK(xrt_value_image_get(set,4,&nullable));
+    OK(xrt_value_image_get(set,7,&environment));
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)record) && xrt_value_plan_retain((XrtValuePlan *)nullable) &&
+        xrt_value_plan_retain((XrtValuePlan *)environment));
+    memset(&raw,0xa5,sizeof(raw));
+    xrt_value_image_drop(&set); CHECK(!set);
+    fixture_retire(&metadata); CHECK(!atomic_load(&metadata.audit.finalized));
+    XrtValuePlanSpec view={0}; OK(xrt_value_plan_view(environment,&view));
+    CHECK(view.entry.ordinal==42 && !memcmp(((CodeOwner *)view.code.context)->constants,"unbound bytes",13));
+    OK(xrt_value_plan_view(record,&view));
+    CHECK(view.field_count==3 && view.owned_count==2 && !memcmp(view.fields[0].name,"left",4));
+    Record source={owned_string(&data,"left"),owned_string(&data,"right"),91};
+    fixture_retire(&data); CHECK(!atomic_load(&data.audit.finalized));
+    Record copied={0}; OK(xrt_value_copy_empty(record,&source,&copied));
+    CHECK(copied.number==91 && ((XrtStringBacking *)copied.left)->length==4);
+    xrt_value_drop(record,&source);
+    typedef struct OptionalRecord { uint8_t present; Record payload; } OptionalRecord;
+    _Static_assert(sizeof(OptionalRecord)==32 && offsetof(OptionalRecord,payload)==8,
+        "optional records have an inline tag and naturally aligned payload");
+    OptionalRecord some={.present=1}, received={0};
+    OK(xrt_value_move_empty(record,&copied,&some.payload));
+    OK(xrt_value_copy_empty(nullable,&some,&received));
+    CHECK(received.present==1 && received.payload.number==91);
+    xrt_value_drop(nullable,&some); xrt_value_drop(nullable,&received);
+    CHECK(atomic_load(&data.audit.finalized)==1);
+    xrt_value_plan_drop((XrtValuePlan *)environment); CHECK(atomic_load(&audit.finalized)==1);
+    CHECK(!atomic_load(&metadata.audit.finalized));
+    xrt_value_plan_drop((XrtValuePlan *)nullable); xrt_value_plan_drop((XrtValuePlan *)record);
+    CHECK(atomic_load(&metadata.audit.finalized)==1);
+    puts("raw value image: creator retirement, independent names/code and real inline owner copies passed");
+}
+static void raw_image_failures(void) {
+    Fixture f; fixture_init(&f,8192,false);
+    XrtBillingStats baseline=xrt_billing_owner_stats(f.billing);
+    RawImageFixture raw; raw_image_fixture(&raw);
+    CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
+    XrtManagedLease lease={code,code_retain,code_drop};
+    XrtValueImagePlans *set=NULL;
+    for (unsigned fault=0;fault<8;++fault) {
+        raw_image_fixture(&raw);
+        switch (fault) {
+        case 0: raw.types[2].first_field=UINT32_MAX; break;
+        case 1: raw.slots[0].type=3; break;
+        case 2: raw.types[5].result=7; break;
+        case 3: raw.parameter.mode=UINT32_MAX; break;
+        case 4: raw.image.name_bytes=1; break;
+        case 5: raw.owned[0]=SIZE_MAX; break;
+        case 6: raw.types[6].alignment=3; break;
+        default: raw.image.types=NULL; break;
+        }
+        STATUS(xrt_value_image_bind(f.billing,&raw.image,lease,&set),XRT_MANAGED_ARGUMENT);
+        CHECK(!set && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    }
+    raw_image_fixture(&raw); audit.reject=true;
+    STATUS(xrt_value_image_bind(f.billing,&raw.image,lease,&set),XRT_MANAGED_REFCOUNT);
+    audit.reject=false;
+    atomic_store(&f.audit.remaining,0);
+    STATUS(xrt_value_image_bind(f.billing,&raw.image,lease,&set),XRT_MANAGED_OOM);
+    atomic_store(&f.audit.remaining,SIZE_MAX);
+    size_t sites=0;
+    for (size_t i=0;i<32;++i) {
+        xrt_billing_owner_fail_after(f.billing,i);
+        XrtManagedStatus status=xrt_value_image_bind(f.billing,&raw.image,lease,&set);
+        xrt_billing_owner_fail_after(f.billing,SIZE_MAX);
+        if (status==XRT_MANAGED_OK) { xrt_value_image_drop(&set); break; }
+        CHECK(status==XRT_MANAGED_OOM && !set); ++sites;
+        CHECK(atomic_load(&code->references)==1); same_bill(&f,baseline);
+    }
+    CHECK(sites>=9 && !set && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    char *large=xr_malloc(16000); CHECK(large); memset(large,'x',16000);
+    raw.slots[0].name_length=16000; raw.image.names=large; raw.image.name_bytes=16000;
+    STATUS(xrt_value_image_bind(f.billing,&raw.image,lease,&set),XRT_MANAGED_LIMIT);
+    xr_free(large); CHECK(!set && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    XrtValueImage empty={0};
+    size_t calls=atomic_load(&f.audit.calls);
+    xrt_billing_owner_fail_after(f.billing,0);
+    OK(xrt_value_image_bind(f.billing,&empty,(XrtManagedLease){0},&set));
+    CHECK(!set && !xrt_value_image_count(set) && atomic_load(&f.audit.calls)==calls);
+    xrt_billing_owner_fail_after(f.billing,SIZE_MAX);
+    code_drop(code); CHECK(atomic_load(&audit.finalized)==1); fixture_done(&f);
+    printf("raw value image: malformed spans/forward references, %zu OOM sites and quota refunds passed\n",sites);
+}
 static void empty_record_storage(void) {
     Fixture f; fixture_init(&f,SIZE_MAX,false);
     XrtBillingStats baseline=xrt_billing_owner_stats(f.billing);
@@ -370,6 +501,7 @@ static void empty_record_storage(void) {
     puts("empty records keep a shared one-byte C11 home without logical fields or owners");
 }
 int main(void) {
+    raw_image_retirement(); raw_image_failures();
     empty_record_storage();
     inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code();
     failures_and_admission(); deep_metadata();
