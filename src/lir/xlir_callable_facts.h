@@ -19,6 +19,8 @@ typedef struct XrLirCallableFacts XrLirCallableFacts;
 typedef struct XrLirCallableValueFact {
     XrLirType type;
     XrLirOp operation;
+    /* Positions are one-based. Formals have block=0 and parameter!=0; block
+     * arguments have their actual block, instruction=0 and parameter=0. */
     uint32_t block, instruction, parameter;
     uint32_t origin, alias_source, known_target;
     uint32_t first_capture, capture_count;
