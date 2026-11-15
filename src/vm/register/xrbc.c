@@ -166,6 +166,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 #include "xrbc_state_admission.inc.c"
 #include "xrbc_callable_admission.inc.c"
 #include "xrbc_aggregate_admission.inc.c"
+#include "xrbc_value_admission.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     if (!(function->code && function->code_count && function->register_count &&
@@ -213,6 +214,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
+    case XR_RBC_VALUE_ACCESS:
+        return xr_rbc_value_instruction_valid(module, function, word) &&
+            (xr_rbc_value_return_word(module, function, word) || remaining > 1);
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;
         if (xr_rbc_aggregate_return_word(function->aggregate_accesses, function->aggregate_access_count, word)) return true;
@@ -419,6 +423,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
+#include "xrbc_value_execute.inc.c"
 
 /* Keep dispatch handlers independent of unrelated cold code placement. MSVC
  * uses a dedicated executable section because its function alignment attribute
@@ -558,11 +563,15 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
 
 static void xr_rbc_root(void *context) {
     XrRbcExecution *execution = context;
+    execution->pending->status = xr_rbc_values_begin(execution->module, &execution->stack,
+        (uint32_t)execution->stack.frames[0].function, 0);
+    if (execution->pending->status != XR_RBC_OK) return;
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
         execution->pending->locations, &execution->pending->value, execution->entries);
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_rbc_values_free(stack);
     xr_free(stack->closure_scopes);
     xr_free(stack->spills);
     xr_free(stack->cells);
