@@ -12,7 +12,10 @@
  */
 #ifndef XRAY_NATIVE_FUNCTION_H
 #define XRAY_NATIVE_FUNCTION_H
-#include "xray_native_managed.h"
+#include <stddef.h>
+#include <stdint.h>
+
+typedef struct XrtManagedHeader XrtManagedHeader;
 
 typedef struct XrtFunction {
     /* An immutable backend entry object, never a converted function pointer. */

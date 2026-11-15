@@ -1350,6 +1350,7 @@ install(FILES include/xray_native_runtime.h include/xray_native_state.h include/
     include/xray_native_map.h include/xray_native_pod.h include/xray_string_cursor.h include/xray_export.h
     include/xray_native_managed.h include/xray_native_managed_root.h include/xray_native_place.h
     include/xray_native_value_image.h include/xray_native_values.h include/xray_native_string_value.h
+    include/xray_native_function.h
     DESTINATION lib/xray/native/include COMPONENT XrayRuntime)
 
 if(BUILD_TESTS)

@@ -9,6 +9,7 @@
 #include "lir/xlir_builder.h"
 #include "lir/xlir_c.h"
 #include "lir/xlir_value_layout.h"
+#include "lir/xlir_callable.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,8 +22,8 @@
 typedef struct Fixture {
     XrLirValueLayouts *layouts;
     XrtBillingOwner *billing;
-    XrLirType record, nullable, pod, empty, unit, nested;
-    size_t record_row, nullable_row, pod_row, empty_row, unit_row;
+    XrLirType record, nullable, pod, empty, unit, nested, callable;
+    size_t record_row, nullable_row, pod_row, empty_row, unit_row, callable_row;
     XrtBillingStats initial;
 } Fixture;
 static size_t row_of(const XrLirValueLayouts *set, XrLirType type) {
@@ -53,18 +54,22 @@ static Fixture fixture(void) {
     LIR(xr_lir_tuple_i64_type(m, 3, &tuple));
     LIR(xr_lir_nullable_type(m, XR_LIR_F32, &optional_f32));
     LIR(xr_lir_nullable_type(m, f.empty, &optional_empty));
+    XrLirCallableParameter argument = {.type=XR_LIR_I64};
+    XrLirCallableType signature = {.parameters=&argument, .parameter_count=1, .result=XR_LIR_I64};
+    LIR(xr_lir_callable_type(m, &signature, &f.callable));
     LIR(xr_lir_module_finish(m, NULL));
     XrLirValueLayoutKey roots[] = {{f.nested, 0}, {optional_string, 0}, {f.pod, 0}, {optional_empty, 0},
         {f.unit, 0}, {fixed, 0}, {tuple, 0}, {optional_f32, 0}, {XR_LIR_ARRAY, XR_LIR_I64},
         {XR_LIR_ARRAY, XR_LIR_STRING}, {XR_LIR_ARRAY, XR_LIR_U8}, {XR_LIR_ARRAY, XR_LIR_U64},
         {XR_LIR_MAP_STRING_I64, 0}, {XR_LIR_I8, 0}, {XR_LIR_I16, 0}, {XR_LIR_I32, 0},
-        {XR_LIR_U8, 0}, {XR_LIR_U16, 0}, {XR_LIR_U32, 0}, {XR_LIR_U64, 0}};
+        {XR_LIR_U8, 0}, {XR_LIR_U16, 0}, {XR_LIR_U32, 0}, {XR_LIR_U64, 0}, {f.callable, 0}};
     MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &f.billing));
     f.initial = xrt_billing_owner_stats(f.billing);
     LAYOUT(xr_lir_value_layouts_create(m, roots, sizeof(roots) / sizeof(roots[0]), f.billing, &f.layouts));
     f.record_row = row_of(f.layouts, f.record); f.nullable_row = row_of(f.layouts, f.nullable);
     f.pod_row = row_of(f.layouts, f.pod); f.empty_row = row_of(f.layouts, f.empty);
     f.unit_row = row_of(f.layouts, f.unit);
+    f.callable_row = row_of(f.layouts, f.callable);
     xr_lir_module_destroy(m);
     return f;
 }
@@ -128,11 +133,15 @@ static void write_output(const char *path, const XrLirCOutput *output, const Fix
         "    XrlValue_%zu pod = {1, 1.5, INT64_C(-7)};\n"
         "    XrlValue_%zu empty = {0};\n"
         "    XrlValue_%zu unit = {1};\n"
+        "    const int code_entry = 7;\n"
+        "    XrlValue_%zu callable = {&code_entry, UINTPTR_MAX, NULL};\n"
+        "    XrtFunction copied = callable;\n"
         "    return !(some.tag && some.payload.f0 && !some.payload.f1 && some.payload.f2 == INT64_C(42)\n"
         "        && !none.tag && !none.payload.f1 && pod.f1 == 1.5 && pod.f2 == INT64_C(-7)\n"
-        "        && !empty.padding && unit.tag);\n}\n",
+        "        && !empty.padding && unit.tag && copied.entry == &code_entry\n"
+        "        && copied.environment == UINTPTR_MAX && !copied.owner);\n}\n",
         f->record_row, f->record_row, f->record_row, f->record_row, f->nullable_row,
-        f->nullable_row, f->pod_row, f->empty_row, f->unit_row) > 0);
+        f->nullable_row, f->pod_row, f->empty_row, f->unit_row, f->callable_row) > 0);
     CHECK(fclose(stream) == 0);
 }
 int main(int argc, char **argv) {
@@ -147,6 +156,7 @@ int main(int argc, char **argv) {
     CHECK(xr_lir_emit_c_value_types(&request, &output, &diagnostic) == XR_LIR_C_OK);
     CHECK(output.bytes[output.length] == '\0' && !output.entry_result && !output.entry_layout.size);
     CHECK(strstr(output.bytes, "typedef XrtManagedHeader *") && strstr(output.bytes, "nullable payload"));
+    CHECK(strstr(output.bytes, "typedef XrtFunction ") && strstr(output.bytes, "function owner"));
     CHECK(!strstr(output.bytes, "XrtBoxed") && !strstr(output.bytes, "Xir") && !strstr(output.bytes, "../src") &&
         !strstr(output.bytes, "xray_native_runtime.h") && !strstr(output.bytes, "({"));
     xr_lir_value_layouts_destroy(f.layouts);
