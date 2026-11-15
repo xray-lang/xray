@@ -433,6 +433,7 @@ static void array_c_output(const char *name, const char *path) {
     else if (!strcmp(name, "function-owned")) callable_fixture_capture(&m, &root, 3);
     else if (!strcmp(name, "function-owned-return")) callable_factory_fixture(&m, &root, false);
     else if (!strcmp(name, "function-scoped-owned-return")) callable_factory_fixture_mode(&m, &root, false, true);
+    else if (!strcmp(name,"callable-weaken")) callable_direct_weak_fixture(&m,&root);
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
