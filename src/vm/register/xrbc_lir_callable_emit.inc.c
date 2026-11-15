@@ -16,7 +16,8 @@ static bool rbc_lir_callable_emit(RbcLirCompiler *c, const XrLirInstructionView 
             .callee=c->functions[instruction->callee - 1] - 1};
         if (instruction->operand_count) {
             uint32_t count = instruction->operand_count;
-            if (c->environment_count == UINT32_MAX || count > (UINT32_MAX - c->environment_size) / 8u ||
+            if (c->environment_count == UINT32_MAX || c->environment_size > UINT32_MAX - sizeof(XrtFunction) ||
+                count > (UINT32_MAX - c->environment_size - sizeof(XrtFunction)) / 8u ||
                 c->aggregate_operand_count > UINT32_MAX - count)
                 return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "frame captures exceed indexed capacity");
             void *storage = c->aggregate_operands;
@@ -32,7 +33,7 @@ static bool rbc_lir_callable_emit(RbcLirCompiler *c, const XrLirInstructionView 
             access.destination = (uint32_t)c->environment_count + 1;
             c->environments[c->environment_count++] = (XrRbcEnvironment){access.callee,
                 c->environment_size, (uint32_t)c->aggregate_access_count};
-            c->environment_size += count * 8u;
+            c->environment_size += (uint32_t)sizeof(XrtFunction) + count * 8u;
             for (uint32_t p = 0; p < count; ++p)
                 c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, instruction->operands[p]);
         }

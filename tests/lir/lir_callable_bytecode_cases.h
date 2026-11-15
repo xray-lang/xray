@@ -85,7 +85,7 @@ static void callable_narrow_argument(const XrRbcProgram *program) {
 static void callable_frame_receiving(const XrRbcProgram *program) {
     const XrRbcModule *original = xr_rbc_program_view(program);
     const XrRbcFunction *root = &original->functions[0];
-    CHECK(root->environment_count == 1 && root->environment_size == 8);
+    CHECK(root->environment_count == 1 && root->environment_size == sizeof(XrtFunction) + sizeof(uint64_t));
     XrRbcEnvironment environment = root->environments[0];
     uint32_t callee = environment.callee, producer = environment.producer;
     bool binding = original->functions[callee].captures[0].kind == XR_RBC_CALLABLE_BINDING;

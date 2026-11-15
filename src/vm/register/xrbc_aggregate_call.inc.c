@@ -33,9 +33,13 @@ static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *
     if (!(token & 1u)) {
         uint64_t code = token >> 1;
         if (!code || code > module->function_count) return false;
-        *callee = (uint32_t)(code - 1);
-        *environment = SIZE_MAX;
-        return !module->functions[*callee].capture_count && !module->functions[*callee].state_capture;
+        uint32_t target = (uint32_t)(code - 1);
+        XrtFunction binding = {&module->functions[target], SIZE_MAX, NULL};
+        const XrRbcFunction *entry = binding.entry;
+        if (entry->capture_count || entry->state_capture) return false;
+        *callee = target;
+        *environment = binding.environment;
+        return true;
     }
     uint64_t slot = token >> 1;
     if (!slot || (uint64_t)(size_t)(slot - 1) != slot - 1) return false;
@@ -51,8 +55,14 @@ static bool xr_rbc_callable_target(const XrRbcModule *module, const XrRbcStack *
             XrRbcEnvironment home = function->environments[e];
             size_t index = first + home.offset / sizeof(*stack->spills);
             if (slot == index) {
+                XrtFunction binding;
+                memcpy(&binding, stack->spills + index, sizeof(binding));
+                /* The entry object has the code's leased or raw borrowed
+                 * lifetime. An index never grants a different entry or owner. */
+                if (binding.entry != &module->functions[home.callee] || binding.owner ||
+                    binding.environment != index + XR_RBC_FUNCTION_LANES) return false;
                 *callee = home.callee;
-                *environment = index;
+                *environment = binding.environment;
                 return true;
             }
         }
@@ -110,6 +120,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
             size_t first = frame->aggregate_base - 1 + offset / sizeof(*stack->spills) +
                 function->environments[access.destination - 1].offset / sizeof(*stack->spills);
             const XrRbcFunction *callee = &module->functions[access.callee];
+            XrtFunction binding = {callee, first + XR_RBC_FUNCTION_LANES, NULL};
             for (uint32_t p = 0; p < callee->capture_count; ++p) {
                 uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, function->aggregate_operands[access.first + p])->bits;
                 if (callee->captures[p].kind == XR_RBC_CALLABLE_BINDING ?
@@ -117,9 +128,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
                     !xr_rbc_callable_scalar_valid(callee->captures[p], bits)) return XR_RBC_INVALID;
             }
             for (uint32_t p = 0; p < access.count; ++p)
-                stack->spills[first + p] = *xr_rbc_aggregate_scalar(stack, frame,
+                stack->spills[binding.environment + p] = *xr_rbc_aggregate_scalar(stack, frame,
                     function->aggregate_operands[access.first + p]);
-
+            memcpy(stack->spills + first, &binding, sizeof(binding));
             token = ((uint64_t)(first + 1) << 1) | 1u;
         }
         stack->slots[frame->base + access.result.index].bits = token;

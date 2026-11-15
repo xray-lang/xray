@@ -146,11 +146,12 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
                 !f->aggregate_accesses || environment.producer >= f->aggregate_access_count) return false;
             const XrRbcFunction *callee = &m->functions[environment.callee];
             uint32_t count = callee->capture_count + callee->state_capture;
-            if (!count || count > (UINT32_MAX - bytes) / 8u) return false;
+            if (!count || bytes > UINT32_MAX - sizeof(XrtFunction) ||
+                count > (UINT32_MAX - bytes - sizeof(XrtFunction)) / 8u) return false;
             XrRbcAggregateAccess access = f->aggregate_accesses[environment.producer];
             if (access.operation != XR_RBC_FUNCTION_REFERENCE || access.destination != e + 1 ||
                 access.callee != environment.callee || access.count != count) return false;
-            bytes += count * 8u;
+            bytes += (uint32_t)sizeof(XrtFunction) + count * 8u;
         }
         size_t offset, total;
         if (bytes != f->environment_size || !xr_rbc_activation_size(f, &offset, &total)) return false;
