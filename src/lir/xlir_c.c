@@ -21,6 +21,7 @@
 #include "xlir_state.h"
 #include "xlir_state_projection.h"
 #include "xlir_native_callable.h"
+#include "xlir_value_layout.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -1255,6 +1256,25 @@ XR_FUNC void xr_lir_c_output_free(XrLirCOutput *output) {
     xr_compile_resources_free(output->bytes);
     *output = (XrLirCOutput) {0};
 }
+static void c_verify_text(LirC *c) {
+    if (!c_request_poll(c)) return;
+    XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(c->request->resources,
+        c->text, c->length, c->request->translation_unit);
+    if (verified == XI_CGEN_VERIFY_PASSED) return;
+    XrLirCStatus mapped;
+    switch (verified) {
+        case XI_CGEN_VERIFY_OUT_OF_MEMORY: mapped = XR_LIR_C_OUT_OF_MEMORY; break;
+        case XI_CGEN_VERIFY_MEMORY_LIMIT: mapped = XR_LIR_C_MEMORY_LIMIT; break;
+        case XI_CGEN_VERIFY_OVERFLOW: mapped = XR_LIR_C_OVERFLOW; break;
+        case XI_CGEN_VERIFY_BUDGET: mapped = XR_LIR_C_BUDGET; break;
+        case XI_CGEN_VERIFY_CANCELLED: mapped = XR_LIR_C_CANCELLED; break;
+        case XI_CGEN_VERIFY_DEADLINE: mapped = XR_LIR_C_DEADLINE; break;
+        case XI_CGEN_VERIFY_CLOCK_FAILURE: mapped = XR_LIR_C_CLOCK_FAILURE; break;
+        default: mapped = XR_LIR_C_BAD_ARGUMENT; break;
+    }
+    c_error(c, mapped, "C output verifier could not complete");
+}
+#include "xlir_c_value_types.inc.c"
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic, bool standalone) {
     if (diagnostic)
@@ -1333,24 +1353,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         else
             c_text(&c, "\nint main(void) {\n    (void)xray_lir_entry();\n    return 0;\n}\n");
     }
-    if (c_request_poll(&c)) {
-        XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(request->resources,
-            c.text, c.length, request->translation_unit);
-        if (verified != XI_CGEN_VERIFY_PASSED) {
-            XrLirCStatus mapped;
-            switch (verified) {
-                case XI_CGEN_VERIFY_OUT_OF_MEMORY: mapped = XR_LIR_C_OUT_OF_MEMORY; break;
-                case XI_CGEN_VERIFY_MEMORY_LIMIT: mapped = XR_LIR_C_MEMORY_LIMIT; break;
-                case XI_CGEN_VERIFY_OVERFLOW: mapped = XR_LIR_C_OVERFLOW; break;
-                case XI_CGEN_VERIFY_BUDGET: mapped = XR_LIR_C_BUDGET; break;
-                case XI_CGEN_VERIFY_CANCELLED: mapped = XR_LIR_C_CANCELLED; break;
-                case XI_CGEN_VERIFY_DEADLINE: mapped = XR_LIR_C_DEADLINE; break;
-                case XI_CGEN_VERIFY_CLOCK_FAILURE: mapped = XR_LIR_C_CLOCK_FAILURE; break;
-                default: mapped = XR_LIR_C_BAD_ARGUMENT; break;
-            }
-            c_error(&c, mapped, "C output verifier could not complete");
-        }
-    }
+    c_verify_text(&c);
 
     if (c_request_poll(&c)) {
         XrLirTypeView shape = {0};
