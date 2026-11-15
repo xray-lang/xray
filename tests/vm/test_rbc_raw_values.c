@@ -151,9 +151,9 @@ static void unsupported_targets(void) {
     XrLirFunction root; XrLirModule *module = record_fixture(&root);
     XrRbcProgram *program = NULL; XrRbcCompileDiagnostic diagnostic = {0};
     CHECK(xr_rbc_compile(module,root,&program,&diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    if (strcmp(diagnostic.message,"owned callable, Cell, boxed and View execution plans are not available"))
+    if (strcmp(diagnostic.message,"operation has no admitted bytecode implementation"))
         fprintf(stderr,"unsupported target diagnostic: %s\n",diagnostic.message);
-    CHECK(strcmp(diagnostic.message,"owned callable, Cell, boxed and View execution plans are not available") == 0);
+    CHECK(strcmp(diagnostic.message,"operation has no admitted bytecode implementation") == 0);
     xr_lir_module_destroy(module);
 }
 int main(void) {
