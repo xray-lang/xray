@@ -18,15 +18,12 @@ import time
 
 
 TIMEOUT = 30
-LIBRARY_NAMES = (
-    "libxray_native_runtime.a", "libxray_xir_scalar.a",
-    "libxray_xir_admission.a", "libxray_xir_declarations.a",
-    "libxray_compile_resources.a",
-)
+LIBRARY_NAMES = ("libxray_native_runtime.a",)
 PUBLIC_HEADERS = (
     "xray_native_runtime.h", "xray_native_state.h", "xray_native_array.h",
-    "xray_native_view.h", "xray_native_pod.h", "xray_native_string.h",
-    "xray_native_callable.h", "xray_native_metadata.h", "xray_string_cursor.h", "xray_export.h",
+    "xray_native_map.h", "xray_native_pod.h", "xray_string_cursor.h", "xray_export.h",
+    "xray_native_managed.h", "xray_native_managed_root.h", "xray_native_place.h",
+    "xray_native_value_image.h", "xray_native_values.h", "xray_native_string_value.h",
 )
 
 
@@ -197,13 +194,19 @@ def main() -> int:
             raise ValueError("CLI differs from the recorded native development executable")
         if (cli.parent.parent / "lib/xray/native").exists():
             raise ValueError("an installed native prefix takes precedence over this development directory")
+        if not re.search(r'^#define XRT_NATIVE_LIBRARY_COUNT 1$', header, re.MULTILINE):
+            raise ValueError("unexpected native archive count")
         match = re.search(r'xrt_native_development_libraries\[\]\s*=\s*\{(.*?)\};', header, re.DOTALL)
         if match is None:
-            raise ValueError("missing the five-archive native directory")
+            raise ValueError("missing the current native archive directory")
         libraries = [Path(c_string(value)) for value in
                      re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1))]
         if tuple(path.name for path in libraries) != LIBRARY_NAMES:
-            raise ValueError("unexpected archive order or membership")
+            raise ValueError("unexpected native archive membership")
+        match = re.search(r'xrt_native_library_names\[\]\s*=\s*\{(.*?)\};', header, re.DOTALL)
+        if match is None or tuple(c_string(value) for value in re.findall(
+                r'"((?:\\.|[^"\\])*)"', match.group(1))) != LIBRARY_NAMES:
+            raise ValueError("unexpected native archive manifest")
         sanitizer_flags = []
         for name, flag in (("XRT_NATIVE_ASAN", "-fsanitize=address"),
                            ("XRT_NATIVE_UBSAN", "-fsanitize=undefined")):
