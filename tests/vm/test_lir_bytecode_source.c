@@ -14,11 +14,26 @@
 #include "lir/xlir_sccp.h"
 #include "vm/register/xrbc_lir.h"
 #include "f64_family_vectors.h"
+#include "xray_native_backing.h"
 #include <fenv.h>
 #if defined(XR_ARCH_X86_64)
 #include <xmmintrin.h>
 #endif
 
+
+/* These helpers inspect the current fixed backing directly; they do not
+ * recreate the retired runtime value wrapper or retain a second owner. */
+static const char *source_string_bytes(const XrtManagedHeader *owner, size_t *length) {
+    CHECK(owner && length);
+    const XrtStringBacking *backing = (const XrtStringBacking *)owner;
+    *length = backing->length;
+    return (const char *)backing->bytes;
+}
+static void source_string_owned_drop(XrtManagedHeader **owner) {
+    CHECK(owner);
+    xrt_managed_drop(*owner);
+    *owner = NULL;
+}
 
 // The sole guest result is owned; this test helper consumes it after inspection.
 static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
@@ -558,19 +573,19 @@ static void owned_string_result(const char *path) {
         if (run) {xr_rbc_program_destroy(program);program=NULL;}
         uint64_t bits = 99;
         CHECK(!xr_rbc_outcome_bits(outcome,&bits) && bits==99);
-        const XrtString *borrowed = NULL;
+        const XrtManagedHeader *borrowed = NULL;
         CHECK(xr_rbc_outcome_string(outcome,&borrowed));
         size_t length = 0;
-        const char *bytes = xrt_string_bytes(borrowed,&length);
+        const char *bytes = source_string_bytes(borrowed,&length);
         CHECK(length==5 && !memcmp(bytes,"\xc3\xa9\0" "73",5));
         if (!run) {
-            XrtString *owned = NULL;
+            XrtManagedHeader *owned = NULL;
             CHECK(xr_rbc_outcome_take_string(outcome,&owned));
             CHECK(!xr_rbc_outcome_string(outcome,&borrowed));
             xr_rbc_outcome_free(&outcome);
-            bytes=xrt_string_bytes(owned,&length);
+            bytes=source_string_bytes(owned,&length);
             CHECK(length==5 && !memcmp(bytes,"\xc3\xa9\0" "73",5));
-            xrt_string_owned_drop(&owned);CHECK(!owned);
+            source_string_owned_drop(&owned);CHECK(!owned);
         } else xr_rbc_outcome_free(&outcome);
     }
     if (path) {
@@ -621,9 +636,9 @@ static void frame_cell_result(const char *path) {
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
         CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);xr_rbc_execution_free(&execution);
         if(run){xr_rbc_program_destroy(program);program=NULL;}
-        XrtString *owned=NULL;CHECK(xr_rbc_outcome_take_string(outcome,&owned));xr_rbc_outcome_free(&outcome);
-        size_t length=0;const char *actual=xrt_string_bytes(owned,&length);
-        CHECK(length==sizeof(bytes) && !memcmp(actual,bytes,sizeof(bytes)));xrt_string_owned_drop(&owned);
+        XrtManagedHeader *owned=NULL;CHECK(xr_rbc_outcome_take_string(outcome,&owned));xr_rbc_outcome_free(&outcome);
+        size_t length=0;const char *actual=source_string_bytes(owned,&length);
+        CHECK(length==sizeof(bytes) && !memcmp(actual,bytes,sizeof(bytes)));source_string_owned_drop(&owned);
     }
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fwrite(output.bytes,1,output.length,file)==output.length && fclose(file)==0);
@@ -724,8 +739,8 @@ static void constant_string_branch(const char *directory) {
         XrRbcExecution *execution=NULL;CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution);CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK);
         xr_rbc_execution_free(&execution);xr_rbc_program_destroy(program);
-        const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
-        size_t length=0;const char *bytes=xrt_string_bytes(text,&length);CHECK(length==4&&!memcmp(bytes,"kept",4));
+        const XrtManagedHeader *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
+        size_t length=0;const char *bytes=source_string_bytes(text,&length);CHECK(length==4&&!memcmp(bytes,"kept",4));
         xr_rbc_outcome_free(&outcome);
         if(directory) {
             char path[1024];int size=snprintf(path,sizeof(path),"%s/%s.c",directory,i?"sccp":"raw");
