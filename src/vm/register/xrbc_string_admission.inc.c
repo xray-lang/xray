@@ -12,6 +12,7 @@ enum { RBC_BITS, RBC_STRING_BORROWED, RBC_STRING_OWNED, RBC_CELL_BORROWED,
        RBC_VIEW_FRAME, RBC_VIEW_CELL, RBC_VIEW_SLICE, RBC_VIEW_RETURNED, RBC_FUNCTION, RBC_FUNCTION_OWNED, RBC_CAPTURED_CELL };
 static bool rbc_function_state(uint8_t state) { return state == RBC_FUNCTION || state == RBC_FUNCTION_OWNED; }
 typedef struct RbcSpillState { uint32_t origin; uint8_t state; } RbcSpillState;
+typedef struct RbcValueEdgeState { RbcSpillState value; uint32_t scope; } RbcValueEdgeState;
 typedef struct RbcStringAdmission {
     const XrRbcModule *module;
     const XrRbcFunction *function;
@@ -20,6 +21,8 @@ typedef struct RbcStringAdmission {
     uint32_t published;
     RbcSpillState *spills;
     uint8_t *aggregates;
+    RbcValueEdgeState *value_edges;
+    size_t value_edge_capacity;
 } RbcStringAdmission;
 
 typedef struct RbcStringIncoming {
@@ -35,6 +38,7 @@ typedef struct RbcStringGraph {
     uint32_t *indices;
     RbcSpillState *spills;
     uint8_t *aggregates;
+    RbcValueEdgeState *value_edges;
     size_t count;
     uint32_t head, tail;
     bool parameters_only;
@@ -242,6 +246,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
     return true;
 }
 #include "xrbc_state_transfer.inc.c"
+#include "xrbc_value_transfer.inc.c"
 
 static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
@@ -283,6 +288,7 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
     if ((v.op == XR_RBC_RET || v.op == XR_RBC_RET0) && rbc_scope_current(s)) return false;
         switch (v.op) {
+        case XR_RBC_VALUE_ACCESS: return rbc_value_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_VIEW_ACCESS: return false;
         case XR_RBC_ARRAY_ACCESS: return false;
         case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
@@ -531,6 +537,7 @@ static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
     return true;
 }
 static void rbc_string_graph_free(RbcStringGraph *g) {
+    xr_free(g->value_edges);
     xr_free(g->aggregates);
     xr_free(g->spills);
     xr_free(g->incoming);
@@ -540,6 +547,18 @@ static void rbc_string_graph_free(RbcStringGraph *g) {
 static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     const XrRbcFunction *f = g->work.function;
     if (!f->code_count) return XR_RBC_INVALID;
+    const XrRbcValueCode *values = rbc_value_code(g->work.module, f);
+    size_t edge_capacity = 0;
+    for (size_t n = 0; values && n < values->access_count; ++n)
+        if (values->accesses[n].operation == XR_RBC_VALUE_EDGE && values->accesses[n].count > edge_capacity)
+            edge_capacity = values->accesses[n].count;
+    if (edge_capacity) {
+        if (edge_capacity > SIZE_MAX / sizeof(*g->value_edges)) return XR_RBC_OUT_OF_MEMORY;
+        g->value_edges = xr_malloc(edge_capacity * sizeof(*g->value_edges));
+        if (!g->value_edges) return XR_RBC_OUT_OF_MEMORY;
+        g->work.value_edges = g->value_edges;
+        g->work.value_edge_capacity = edge_capacity;
+    }
     if (f->code_count > SIZE_MAX / sizeof(uint32_t)) return XR_RBC_OUT_OF_MEMORY;
     g->indices = xr_malloc(f->code_count * sizeof(*g->indices));
     if (!g->indices) return XR_RBC_OUT_OF_MEMORY;
@@ -688,6 +707,7 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
                 rbc_spill_transfer(&g->work,v) : rbc_string_step(&g->work,v);
             if (!valid) return false;
             if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0 ||
+                xr_rbc_value_return_word(g->work.module, f, word) ||
                 xr_rbc_aggregate_return_word(f->aggregate_accesses, f->aggregate_access_count, f->code[pc])) {
                 for (uint32_t i=0; i<f->reference_spill_count; ++i)
                     if (g->work.spills[i].state!=RBC_EMPTY) return false;
@@ -699,7 +719,8 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
 }
 
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
-    bool managed = rbc_managed_kind(f->result_kind) || f->array_access_count != 0;
+    bool managed = rbc_value_code(module, f) != NULL ||
+        rbc_managed_kind(f->result_kind) || f->array_access_count != 0;
     bool range = rbc_function_scopes(module, f).count != 0;
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
@@ -730,7 +751,8 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
         .head = UINT32_MAX, .tail = UINT32_MAX,
-        .parameters_only = range || numeric_conversion || f->spill_count != 0 || f->aggregate_value_count != 0 ||
+        .parameters_only = rbc_value_code(module, f) != NULL || range || numeric_conversion ||
+            f->spill_count != 0 || f->aggregate_value_count != 0 ||
             f->environment_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
     if (status == XR_RBC_OK) {
