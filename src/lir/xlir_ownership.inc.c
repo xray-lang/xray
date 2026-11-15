@@ -149,9 +149,96 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     fact.array_element=f->values[fact.value - 1].array_element;
     return lir_plan_add(plan,fact);
 }
+static bool lir_plan_callable_row(const XrLirCallableFunctionFacts *facts, uint32_t value) {
+    return value && value <= facts->value_count && facts->values[value].type &&
+        facts->values[value].type != XR_LIR_FUNCTION_SCOPE;
+}
+static bool lir_plan_callable_owned(const XrLirCallableFunctionFacts *facts, uint32_t value) {
+    return lir_plan_callable_row(facts,value) && facts->values[value].transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
+}
+static XrLirStatus lir_plan_callable_events(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
+    uint32_t function, XrLirCallableFunctionFacts facts, const uint32_t *scope_heads, const uint32_t *next) {
+    for (uint32_t i = 0; i < f->value_count; ++i) {
+        uint32_t value = i + 1;
+        if (!lir_plan_callable_row(&facts,value)) continue;
+        XrLirCallableValueFact row = facts.values[value];
+        XrLirOwnershipFact fact = {.kind=XR_LIR_OWNERSHIP_CALLABLE_VALUE,.function=function,
+            .block=row.block,.instruction=row.instruction,.value=value,.argument=row.parameter ? row.parameter - 1 : 0,
+            .target_value=row.alias_source,.type=row.type,.callable_transport=row.transport,.callable_operation=row.operation,
+            .callable_function=row.operation == XR_LIR_FUNCTION_REF ? row.known_target : 0,
+            .callable_scope=row.owner_scope,.callable_materialize=row.materialize};
+        if (!lir_plan_add(plan,fact)) return XR_LIR_OUT_OF_MEMORY;
+        if (row.parameter && !lir_plan_value(plan,f,XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,value,row.parameter - 1))
+            return XR_LIR_OUT_OF_MEMORY;
+        if (row.transport == XR_LIR_CALLABLE_TRANSPORT_OWNED) {
+            fact.kind = row.instruction ? XR_LIR_OWNERSHIP_RESULT_OWNER : XR_LIR_OWNERSHIP_BLOCK_OWNER;
+            if (!lir_plan_add(plan,fact)) return XR_LIR_OUT_OF_MEMORY;
+        }
+        if (row.materialize) {
+            fact.kind = XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE;
+            if (!lir_plan_add(plan,fact)) return XR_LIR_OUT_OF_MEMORY;
+        }
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *block = &f->blocks[b];
+        for (uint32_t n = 0; n < block->instruction_count; ++n) {
+            const XrLirInstructionView *v = &block->instructions[n].view;
+            for (uint32_t p = 0; p < v->operand_count; ++p) {
+                if (!lir_plan_callable_row(&facts,v->operands[p])) continue;
+                XrLirOwnershipFactKind kind = v->op == XR_LIR_RET ?
+                    XR_LIR_OWNERSHIP_RETURN_TRANSFER : XR_LIR_OWNERSHIP_OPERAND_BORROW;
+                if (!lir_plan_value(plan,f,kind,function,b + 1,n + 1,v->operands[p],p)) return XR_LIR_OUT_OF_MEMORY;
+            }
+            if (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) {
+                uint32_t scope = v->operands[0];
+                if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT,
+                    .function=function,.block=b + 1,.instruction=n + 1,
+                    .value=v->operand_count == 2 ? v->operands[1] : 0,.target_value=v->result,
+                    .callable_scope=scope,.callable_operation=v->op})) return XR_LIR_OUT_OF_MEMORY;
+                for (uint32_t value = scope_heads[scope]; value; value = next[value])
+                    if (!lir_plan_value(plan,f,XR_LIR_OWNERSHIP_RELEASE,function,b + 1,n + 1,value,0)) return XR_LIR_OUT_OF_MEMORY;
+            }
+        }
+        const XrLirInstructionView *end = &block->instructions[block->instruction_count - 1].view;
+        for (uint32_t e = 0; e < end->edge_count; ++e) {
+            const XrLirEdgeView *edge = &end->edges[e];
+            for (uint32_t p = 0; p < edge->argument_count; ++p) {
+                uint32_t value = edge->arguments[p];
+                if (!lir_plan_callable_row(&facts,value)) continue;
+                if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
+                    .function=function,.block=b + 1,.instruction=block->instruction_count,.value=value,.argument=p,
+                    .edge=e + 1,.target_block=edge->target,.target_value=f->blocks[edge->target - 1].parameters[p],
+                    .type=f->values[value - 1].type,.callable_transport=facts.values[value].transport})) return XR_LIR_OUT_OF_MEMORY;
+            }
+        }
+    }
+    return XR_LIR_OK;
+}
+static XrLirStatus lir_plan_callables(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
+    uint32_t function, const XrLirCallableFacts *callables) {
+    XrLirCallableFunctionFacts facts = {0};
+    if (!callables || xr_lir_callable_facts_function(callables,function,&facts) != XR_LIR_OK || !facts.values) return XR_LIR_OK;
+    if (facts.value_count != f->value_count) return XR_LIR_VERIFY_ERROR;
+    size_t count = (size_t)f->value_count + 1;
+    if (!count || count > SIZE_MAX / (2 * sizeof(uint32_t))) return XR_LIR_OUT_OF_MEMORY;
+    uint32_t *heads = xr_calloc(count,2 * sizeof(*heads));
+    if (!heads) return XR_LIR_OUT_OF_MEMORY;
+    uint32_t *next = heads + count;
+    for (uint32_t i = 0; i < f->value_count; ++i) {
+        uint32_t value = i + 1;
+        if (!lir_plan_callable_owned(&facts,value)) continue;
+        uint32_t scope = facts.values[value].owner_scope;
+        if (scope > f->value_count) { xr_free(heads); return XR_LIR_VERIFY_ERROR; }
+        next[value] = heads[scope]; heads[scope] = value;
+    }
+    XrLirStatus status = lir_plan_callable_events(plan,f,function,facts,heads,next);
+    xr_free(heads);
+    return status;
+}
 /* The verifier establishes ownership once. This one deterministic producer
  * records already checked positions without rebuilding graphs or owner sets. */
-static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan, XrLirDiagnostic *d) {
+static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
+    const XrLirCallableFacts *callables, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
         const XrLirFunctionData *f = &m->functions[function - 1];
         if (!lir_plan_function(plan,m,f,function)) {
@@ -160,6 +247,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
             return XR_LIR_INVALID_ARGUMENT;
         }
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL) continue;
+        XrLirStatus callable_status = lir_plan_callables(plan,f,function,callables);
+        if (callable_status != XR_LIR_OK) return callable_status;
         for (uint32_t p = 0; p < f->parameter_count; ++p)
             if (lir_managed_value(m,f->parameter_types[p]) && !lir_plan_value(plan,f,
                 XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
@@ -230,8 +319,8 @@ XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     xr_free(plan);
 }
 
-XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipRequest *request,
-    XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
+static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
+    const XrLirCallableFacts *callables, XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
     if (d) memset(d, 0, sizeof(*d));
     const XrLirModule *m = request ? request->module : NULL;
     if (!request || !output || *output || !xr_lir_module_is_readable(m) ||
@@ -264,7 +353,7 @@ XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipReques
             return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "ownership plan allocation failed");
         }
     }
-    XrLirStatus status = lir_plan_collect(m, plan, d);
+    XrLirStatus status = lir_plan_collect(m, plan, callables, d);
     if (status != XR_LIR_OK) {
         xr_lir_ownership_plan_destroy(plan);
         if (d && d->status == XR_LIR_OK) lir_status_error(d,status,"ownership event collection failed");
@@ -273,13 +362,20 @@ XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipReques
     *output = plan;
     return XR_LIR_OK;
 }
+XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipRequest *request,
+    XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
+    return lir_plan_receive(request,request && request->module ? request->module->callable_facts : NULL,output,d);
+}
 XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *request,
     XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
     if (d) memset(d,0,sizeof(*d));
     if (!request || !output || *output || !xr_lir_module_is_readable(request->module))
         return lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"invalid ownership plan request");
-    XrLirStatus status = lir_verify(request->module,d,NULL);
-    return status == XR_LIR_OK ? xr_lir_internal_ownership_collect(request,output,d) : status;
+    XrLirCallableFacts *callables = NULL;
+    XrLirStatus status = lir_verify(request->module,d,&callables);
+    if (status == XR_LIR_OK) status = lir_plan_receive(request,callables,output,d);
+    xr_lir_callable_facts_destroy(callables);
+    return status;
 }
 
 XR_FUNC uint32_t xr_lir_ownership_function_count(const XrLirOwnershipPlan *plan) {

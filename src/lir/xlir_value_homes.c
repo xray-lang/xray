@@ -61,10 +61,10 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
         XrLirTypeView shape;
         if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return false;
         plain = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
-            shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
+            shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE || shape.kind == XR_LIR_TYPE_CALLABLE;
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
-    *key = (XrLirValueLayoutKey){type, 0};
+    *key = (XrLirValueLayoutKey){type, 0, 0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         XrLirStatus status = value ? xr_lir_array_shape_view(module,
@@ -115,7 +115,11 @@ static bool lir_home_temporary(LirHomeBuilder *b, XrLirValueHome *home) {
     if (xr_lir_value_layouts_at(b->layouts, home->type - 1, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
         xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned temporary lost its receiving layout");
-    return lir_home_reserve(b, &spec, &home->temporary_offset, &home->temporary_first_owner);
+    bool borrowed = home->transport == XR_LIR_CALLABLE_TRANSPORT_FRAME || home->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW;
+    if (borrowed) { spec.owned_count = 0; spec.owned_offsets = NULL; }
+    if (!lir_home_reserve(b, &spec, &home->temporary_offset, &home->temporary_first_owner)) return false;
+    if (borrowed) home->temporary_first_owner = SIZE_MAX;
+    return true;
 }
 static bool lir_home_binding_type(XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
@@ -153,12 +157,12 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         XrLirType type; xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,v},&type);
         if (!lir_home_binding_type(type)) continue;
-        XrLirValueLayoutKey key = {XR_LIR_MAP_STRING_I64,0};
+        XrLirValueLayoutKey key = {XR_LIR_MAP_STRING_I64,0,0};
         if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
             XrLirArrayShape shape;
             if (xr_lir_array_shape_view(c->input,(XrLirValue){c->input,c->function.id,v},&shape) != XR_LIR_OK)
                 return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Array element");
-            key = (XrLirValueLayoutKey){XR_LIR_ARRAY,shape.element};
+            key = (XrLirValueLayoutKey){XR_LIR_ARRAY,shape.element,0};
         }
         XrtValuePlanSpec spec; uint32_t ordinal;
         if (!lir_home_spec(b,key,&spec,&ordinal)) return false;
@@ -211,7 +215,37 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         !lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
     return lir_home_append(b,&b->workspaces,&workspace);
 }
-static bool lir_home_values(LirHomeBuilder *b) {
+static bool lir_home_callable_rows(LirHomeBuilder *b, const XrLirOwnershipPlan *ownership, XrLirValueHome *values) {
+    XrLirOwnershipFunction function;
+    if (xr_lir_ownership_function_at(ownership,b->compiler.function.id,&function) != XR_LIR_OK)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"callable transport lost its ownership snapshot");
+    for (uint32_t n = 0; n < function.fact_count; ++n) {
+        XrLirOwnershipFact fact;
+        if (xr_lir_ownership_fact_at(ownership,function.fact_offset + n,&fact) != XR_LIR_OK)
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"callable transport fact disappeared");
+        if (fact.kind != XR_LIR_OWNERSHIP_CALLABLE_VALUE) continue;
+        if (!fact.value || fact.value > b->compiler.view.value_count || fact.target_value > b->compiler.view.value_count)
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"callable transport names an invalid SSA value");
+        XrLirValueHome *home = &values[fact.value];
+        home->transport = fact.callable_transport;
+        home->borrow_source = home->transport == XR_LIR_CALLABLE_TRANSPORT_OWNED ? 0 : fact.target_value;
+        if (home->transport == XR_LIR_CALLABLE_TRANSPORT_MIXED || home->transport == XR_LIR_CALLABLE_TRANSPORT_NONE)
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"mixed callable transport requires explicit owning and borrowing edge handling");
+        if (home->transport == XR_LIR_CALLABLE_TRANSPORT_OWNED && fact.callable_operation == XR_LIR_FUNCTION_REF) {
+            if (!fact.callable_function || fact.callable_function > xr_lir_function_count(b->compiler.input))
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"owning constructor lost its exact environment target");
+            XrLirClosureTarget target;
+            if (xr_lir_closure_target_view(b->compiler.input,(XrLirFunction){b->compiler.input,fact.callable_function},&target) != XR_LIR_OK)
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"owning constructor has no exact target signature");
+            const XrtValuePlan *plan = NULL;
+            if (xr_lir_value_layouts_lookup(b->layouts,(XrLirValueLayoutKey){target.callable,0,fact.callable_function},
+                    &plan,&home->environment_type) != XR_LIR_VALUE_LAYOUT_OK)
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"owning constructor lost its common environment projection");
+        }
+    }
+    return true;
+}
+static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownership) {
     LirHomeCompiler *c = &b->compiler;
     size_t count = (size_t)c->view.value_count + 1;
     if (count > SIZE_MAX / sizeof(XrLirValueHome)) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OVERFLOW, "activation home directory overflows");
@@ -220,6 +254,7 @@ static bool lir_home_values(LirHomeBuilder *b) {
     b->homes->values = values;
     for (size_t v = 0; v < count; ++v) values[v] = (XrLirValueHome){.type=0,
         .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX};
+    if (!lir_home_callable_rows(b,ownership,values)) return false;
     for (size_t index = 1; index <= c->view.value_count; ++index) {
         uint32_t v = (uint32_t)index;
         XrLirType type; XrLirValueLayoutKey key;
@@ -232,9 +267,16 @@ static bool lir_home_values(LirHomeBuilder *b) {
             spec.kind != XRT_VALUE_FIXED_U8 && spec.kind != XRT_VALUE_TUPLE_I64) continue;
         XrLirValueHome *home = &values[v];
         home->type = ordinal + 1; home->size = spec.size; home->owner_count = spec.owned_count;
+        bool callable = spec.kind == XRT_VALUE_FUNCTION;
+        bool borrowed = callable && (home->transport == XR_LIR_CALLABLE_TRANSPORT_FRAME ||
+            home->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW);
+        if (callable && !home->transport)
+            return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"callable value has no verified transport fact");
+        if (borrowed) { home->owner_count = 0; spec.owned_count = 0; spec.owned_offsets = NULL; }
         for (uint32_t p = 0; p < c->view.parameter_count; ++p)
             if (c->view.parameters[p] == v) home->parameter = p + 1;
         if (!home->parameter && !lir_home_reserve(b, &spec, &home->offset, &home->first_owner)) return false;
+        if (borrowed) home->first_owner = SIZE_MAX;
         if (!lir_home_byte_spans(b, home, &spec)) return false;
     }
     for (uint32_t block = 0; block < c->view.block_count; ++block) {
@@ -301,7 +343,7 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
     b->homes->source_function = b->compiler.function.id;
     b->homes->value_count = b->compiler.view.value_count;
     b->homes->unmodeled = function.unmodeled;
-    if (!lir_home_values(b) || !lir_home_bindings(b)) return false;
+    if (!lir_home_values(b,ownership) || !lir_home_bindings(b)) return false;
     for (uint32_t i = 0; i < function.fact_count; ++i) {
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(ownership, function.fact_offset + i, &fact) != XR_LIR_OK)
@@ -315,9 +357,12 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
                 return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "borrowed parameter cannot become an implicit owner");
             if (home->owner_count && !lir_home_temporary(b, home)) return false;
         }
-        XrLirHomeEvent row = {(uint32_t)fact.kind, fact.block, fact.instruction, fact.value,
-            fact.argument, fact.edge, fact.target_block, fact.target_value,
-            fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation};
+        XrLirHomeEvent row = {.kind=(uint32_t)fact.kind,.block=fact.block,.instruction=fact.instruction,.source=fact.value,
+            .argument=fact.argument,.edge=fact.edge,.target_block=fact.target_block,.target=fact.target_value,
+            .operation=fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
+                fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,
+            .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,
+            .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize};
         if (!lir_home_append(b, &b->events, &row)) return false;
     }
     for (uint32_t v = 1; b->homes->bindings && v <= b->homes->value_count; ++v) {

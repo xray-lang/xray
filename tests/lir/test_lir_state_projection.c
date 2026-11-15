@@ -11,6 +11,7 @@
 #include "lir/xlir_internal.h"
 #include "runtime/native/xnative_module_state.h"
 #include "xray_native_values.h"
+#include "xray_native_function.h"
 #include "base/xmalloc.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -57,9 +58,9 @@ static Fixture fixture_new(bool unsupported) {
     LIR(xr_lir_nullable_type(f.module,XR_LIR_STRING,&string)); LIR(xr_lir_record_type(f.module,NULL,0,&empty));
     LIR(xr_lir_nullable_type(f.module,empty,&optional_empty));
     LIR(xr_lir_fixed_array_type(f.module,XR_LIR_U8,3,&fixed)); LIR(xr_lir_tuple_i64_type(f.module,2,&tuple));
-    XrLirValueLayoutKey roots[SLOTS] = {{record,0},{maybe,0},{XR_LIR_ARRAY,XR_LIR_I64},
-        {XR_LIR_ARRAY,XR_LIR_STRING},{XR_LIR_ARRAY,XR_LIR_U8},{XR_LIR_ARRAY,XR_LIR_U64},
-        {XR_LIR_MAP_STRING_I64,0},{string,0},{empty,0},{optional_empty,0},{fixed,0},{tuple,0}};
+    XrLirValueLayoutKey roots[SLOTS] = {{record,0,0},{maybe,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0},
+        {XR_LIR_ARRAY,XR_LIR_STRING,0},{XR_LIR_ARRAY,XR_LIR_U8,0},{XR_LIR_ARRAY,XR_LIR_U64,0},
+        {XR_LIR_MAP_STRING_I64,0,0},{string,0,0},{empty,0,0},{optional_empty,0,0},{fixed,0,0},{tuple,0,0}};
     memcpy(f.roots,roots,sizeof(roots));
     XrLirStateSlot slots[SLOTS]; size_t end = 0;
     for (uint32_t i = 0; i < SLOTS; ++i) {
@@ -132,8 +133,21 @@ static void unsupported_and_absent(void) {
     XrLirValueImage *image = NULL; LAYOUT(xr_lir_value_image_create(set,billing,&image));
     XrLirStateProjection *projection = NULL; XrtBillingStats before = xrt_billing_owner_stats(billing);
     CHECK(xr_lir_state_projection_create(f.module,set,xr_lir_value_image_view(image),billing,&projection) ==
-        XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !projection);
+        XR_LIR_VALUE_LAYOUT_ARGUMENT && !projection);
     XrtBillingStats after = xrt_billing_owner_stats(billing); CHECK(before.bytes == after.bytes && before.blocks == after.blocks);
+    xr_lir_value_image_destroy(image); xr_lir_value_layouts_destroy(set); image=NULL; set=NULL;
+    XrLirStateLayout logical; LIR(xr_lir_state_layout_view(f.module,&logical));
+    f.roots[0]=(XrLirValueLayoutKey){logical.slots[0].payload,0,0};
+    LAYOUT(xr_lir_value_layouts_create(f.module,f.roots,SLOTS,billing,&set));
+    LAYOUT(xr_lir_value_image_create(set,billing,&image));
+    LAYOUT(xr_lir_state_projection_create(f.module,set,xr_lir_value_image_view(image),billing,&projection));
+    const XrtModuleLayoutSpec *spec=xr_lir_state_projection_view(projection);
+    CHECK(spec->slots[0].size==sizeof(XrtFunction) && spec->slots[0].alignment==alignof(XrtFunction) &&
+        spec->values->types[spec->slots[0].type-1].kind==XRT_VALUE_FUNCTION);
+    XrtModuleLayout *unsupported=NULL; before=xrt_billing_owner_stats(billing);
+    CHECK(xrt_module_layout_new(billing,spec,(XrtManagedLease){0},&unsupported)==XRT_MANAGED_ARGUMENT && !unsupported);
+    after=xrt_billing_owner_stats(billing); CHECK(before.bytes==after.bytes && before.blocks==after.blocks);
+    xr_lir_state_projection_destroy(projection); projection=NULL;
     xr_lir_value_image_destroy(image); xr_lir_value_layouts_destroy(set); xr_lir_module_destroy(f.module);
     XrLirModule *empty = NULL; LIR(xr_lir_module_create(NULL,&empty)); LIR(xr_lir_module_finish(empty,NULL));
     xrt_billing_owner_close(billing);

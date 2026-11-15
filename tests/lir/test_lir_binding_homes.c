@@ -8,8 +8,12 @@
  */
 #include "lir/xlir_value_homes.h"
 #include "lir/xlir_state.h"
+#include "lir/xlir_cell.h"
+#include "lir/xlir_value_image.h"
+#include "xray_native_function.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_map_backing.h"
+#include "runtime/native/xnative_capture_backing.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +39,9 @@ static XrLirValue number(CArrayFixture *c,XrLirBlock block,XrLirType type,uint64
     OK(xr_lir_emit_value(c->module,block,&instruction,&result)); return result;
 }
 static XrLirValue ca_constant(CArrayFixture *c,XrLirBlock block,int64_t value) { return number(c,block,XR_LIR_I64,(uint64_t)value); }
+static XrLirValue ca_binary(CArrayFixture *c,XrLirBlock block,XrLirOp op,XrLirValue left,XrLirValue right) {
+    XrLirValue args[]={left,right}; return ca_value(c,block,op,XR_LIR_I64,args,2);
+}
 static void ca_effect(CArrayFixture *c,XrLirBlock block,XrLirOp op,XrLirValue value) {
     XrLirInstruction instruction={.op=op,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_effect(c->module,block,&instruction));
@@ -49,6 +56,8 @@ static XrLirValue ca_text(CArrayFixture *c,XrLirBlock block,const char *bytes,si
     OK(xr_lir_emit_value(c->module,block,&instruction,&result)); return result;
 }
 #include "lir_map_fixture.h"
+#include "lir_callable_fixture.h"
+#include "lir_callable_factory_fixture.h"
 static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
     XrLirType result,const XrLirValue *args,uint32_t count) {
     uint32_t id=0;
@@ -175,12 +184,12 @@ static void *home_resize(void *old,size_t bytes) {
 #include "lir/xlir_value_homes.c"
 
 static XrLirValueLayouts *layouts(XrLirModule *module,XrtBillingOwner *billing) {
-    XrLirValueLayoutKey roots[32]={{XR_LIR_UNIT,0},{XR_LIR_I1,0},{XR_LIR_I64,0},{XR_LIR_U8,0},{XR_LIR_U64,0},
-        {XR_LIR_STRING,0},{XR_LIR_MAP_STRING_I64,0},{XR_LIR_ARRAY,XR_LIR_I64},{XR_LIR_ARRAY,XR_LIR_STRING},
-        {XR_LIR_ARRAY,XR_LIR_U8},{XR_LIR_ARRAY,XR_LIR_U64}}; size_t count=11;
+    XrLirValueLayoutKey roots[32]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_U8,0,0},{XR_LIR_U64,0,0},
+        {XR_LIR_STRING,0,0},{XR_LIR_MAP_STRING_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0},{XR_LIR_ARRAY,XR_LIR_STRING,0},
+        {XR_LIR_ARRAY,XR_LIR_U8,0},{XR_LIR_ARRAY,XR_LIR_U64,0}}; size_t count=11;
     for (uint32_t i=0;i<xr_lir_constructed_type_count(module);++i) {
         XrLirType type=XR_LIR_TYPE_COUNT+i; XrLirTypeView shape; OK(xr_lir_type_view(module,type,&shape)); CHECK(count<32);
-        if (shape.kind==XR_LIR_TYPE_NULLABLE) roots[count++]=(XrLirValueLayoutKey){type,0};
+        if (shape.kind==XR_LIR_TYPE_NULLABLE) roots[count++]=(XrLirValueLayoutKey){type,0,0};
     }
     XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(module,roots,count,billing,&set)); return set;
 }
@@ -284,6 +293,96 @@ static void project(XrLirModule *module,bool faults) {
     for (size_t f=0;f<functions;++f) { CHECK(homes[f]); check_projection(homes[f],billing,&types,workspace_kinds[f]); xr_lir_value_homes_destroy(homes[f]); }
     xrt_backing_types_drop(&types); CHECK(!live); XrtBillingStats stats=xrt_billing_owner_stats(billing); CHECK(stats.blocks==1); xrt_billing_owner_drop(billing);
 }
+static void callable_projection(bool owned,bool scopes) {
+    XrLirModule *module=NULL; XrLirFunction root={0};
+    if (owned && scopes) callable_factory_fixture_mode(&module,&root,false,true);
+    else if (owned) callable_factory_fixture(&module,&root,false);
+    else callable_fixture(&module,&root);
+    XrLirClosureTarget closure; OK(xr_lir_closure_target_view(module,(XrLirFunction){module,1},&closure));
+    XrLirValueLayoutKey roots[]={{closure.callable,0,0},{closure.callable,0,1}};
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    size_t baseline=xrt_billing_owner_stats(billing).bytes;
+    XrLirValueLayouts *layouts=NULL; HOME(xr_lir_value_layouts_create(module,roots,2,billing,&layouts));
+    const XrtValuePlan *signature=NULL,*environment=NULL; uint32_t signature_id=0,environment_id=0;
+    HOME(xr_lir_value_layouts_lookup(layouts,roots[0],&signature,&signature_id));
+    HOME(xr_lir_value_layouts_lookup(layouts,roots[1],&environment,&environment_id));
+    XrtValuePlanSpec shape; MANAGED(xrt_value_plan_view(environment,&shape));
+    CHECK(shape.kind==XRT_VALUE_ENVIRONMENT && shape.entry.ordinal==1 && shape.entry.signature==signature &&
+        shape.capture_count==(owned ? 1u : 0u) && shape.size==(owned ? 8u : 0u));
+    XrLirValueImage *image=NULL; HOME(xr_lir_value_image_create(layouts,billing,&image));
+    const XrtValueImage *raw=xr_lir_value_image_view(image);
+    CHECK(raw->types[environment_id-1].kind==XRT_VALUE_ENVIRONMENT && raw->types[environment_id-1].entry_signature==signature_id);
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=module},&plan,NULL));
+    XrLirValueHomes *homes[3]={0}; size_t owners=0,borrows=0,exits=0,releases=0;
+    for (uint32_t f=0;f<3;++f) {
+        HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){module,{module,f+1},layouts,plan},&homes[f]));
+        if (!homes[f]) continue;
+        for (uint32_t i=0;i<homes[f]->value_count;++i) {
+            const XrLirValueHome *home=&homes[f]->values[i+1];
+            if (home->type!=signature_id) continue;
+            CHECK(home->size==sizeof(XrtFunction));
+            if (home->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED) {
+                ++owners; CHECK(home->owner_count==1 && home->first_owner!=SIZE_MAX && home->temporary_first_owner!=SIZE_MAX);
+                CHECK(homes[f]->frame.owned_offsets[home->first_owner]==home->offset+offsetof(XrtFunction,owner));
+                if (home->environment_type) CHECK(home->environment_type==environment_id);
+            } else {
+                ++borrows; CHECK(!home->owner_count && home->first_owner==SIZE_MAX && home->temporary_first_owner==SIZE_MAX);
+                CHECK(home->byte_count==1 && homes[f]->bytes[home->first_bytes].offset==0 &&
+                    homes[f]->bytes[home->first_bytes].size==sizeof(XrtFunction));
+                if (home->parameter) CHECK(home->offset==SIZE_MAX);
+            }
+        }
+        for (size_t e=0;e<homes[f]->event_count;++e) {
+            exits+=homes[f]->events[e].kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT;
+            releases+=homes[f]->events[e].kind==XR_LIR_OWNERSHIP_RELEASE;
+        }
+        CHECK(owned || (!homes[f]->owned_frame_needed && !homes[f]->frame.slot_count));
+    }
+    CHECK(owned ? owners>0 : owners==0); CHECK(owned || borrows>0);
+    CHECK(!scopes || (exits && releases));
+    if (!owned) {
+        XrtCaptureType *type=NULL; MANAGED(xrt_capture_type_new(billing,environment,&type));
+        XrtManagedRoot *root_owner=NULL; XrtManagedFrame *frame=NULL;
+        MANAGED(xrt_managed_root_new(billing,&root_owner)); MANAGED(xrt_managed_frame_enter(root_owner,1,&frame));
+        MANAGED(xrt_environment_create(frame,0,type,NULL));
+        XrtManagedHeader *owner=NULL; MANAGED(xrt_managed_slot_borrow(frame,0,&owner));
+        static const unsigned char entry=0;
+        XrtFunction input={&entry,(uintptr_t)(owner+1),owner}, output={0};
+        bool copied=false; size_t calls=xrt_billing_owner_stats(billing).allocations;
+        for (uint32_t i=0;i<homes[1]->value_count && !copied;++i) {
+            const XrLirValueHome *home=&homes[1]->values[i+1];
+            if (!home->parameter || home->type!=signature_id) continue;
+            for (size_t n=0;n<home->byte_count;++n) {
+                XrLirHomeBytes span=homes[1]->bytes[home->first_bytes+n];
+                memcpy((unsigned char *)&output+span.offset,(const unsigned char *)&input+span.offset,span.size);
+            }
+            copied=true;
+        }
+        CHECK(copied && output.entry==input.entry && output.environment==input.environment && output.owner==owner &&
+            atomic_load(&owner->references)==1 && xrt_billing_owner_stats(billing).allocations==calls);
+        MANAGED(xrt_managed_root_destroy(&root_owner)); xrt_capture_type_drop(&type);
+    }
+    if (homes[1]) {
+        XrtBillingStats held=xrt_billing_owner_stats(billing);
+        for (size_t allowed=0;;++allowed) {
+            XrLirValueLayouts *failed=NULL; xrt_billing_owner_fail_after(billing,allowed);
+            XrLirValueLayoutStatus status=xr_lir_value_layouts_create(module,roots,2,billing,&failed);
+            xrt_billing_owner_fail_after(billing,SIZE_MAX);
+            if (status==XR_LIR_VALUE_LAYOUT_OK) { xr_lir_value_layouts_destroy(failed); break; }
+            CHECK(status==XR_LIR_VALUE_LAYOUT_OOM && !failed);
+            CHECK(xrt_billing_owner_stats(billing).bytes==held.bytes && xrt_billing_owner_stats(billing).blocks==held.blocks);
+        }
+    }
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)environment));
+    xr_lir_module_destroy(module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
+    MANAGED(xrt_value_plan_view(environment,&shape)); CHECK(shape.entry.ordinal==1);
+    CHECK(xr_lir_value_image_view(image)->types[environment_id-1].entry_ordinal==1);
+    for (size_t f=0;f<3;++f) xr_lir_value_homes_destroy(homes[f]);
+    xr_lir_value_image_destroy(image); xrt_value_plan_drop((XrtValuePlan *)environment);
+    CHECK(xrt_billing_owner_stats(billing).bytes==baseline && xrt_billing_owner_stats(billing).blocks==1);
+    xrt_billing_owner_drop(billing);
+}
 int main(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};
     for (size_t i=0;i<4;++i) {
@@ -297,6 +396,7 @@ int main(void) {
     CHECK(kinds==((1u<<XR_LIR_HOME_BINDING_LOCAL)|(1u<<XR_LIR_HOME_BINDING_PARAMETER)|
         (1u<<XR_LIR_HOME_BINDING_CELL_BORROW)|(1u<<XR_LIR_HOME_BINDING_STATE_BORROW)));
     CHECK(array_roles==254 && map_roles==255); array_cell_cfg(); array_block_cells();
+    callable_projection(false,false); callable_projection(true,false); callable_projection(true,true);
     puts("binding homes: four Array families, Map roles, real pending slots, loop lifetime, input retirement and allocation rollback passed");
     return 0;
 }

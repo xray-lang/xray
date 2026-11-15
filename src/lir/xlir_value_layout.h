@@ -20,6 +20,9 @@ typedef struct XrLirValueLayouts XrLirValueLayouts;
 typedef struct XrLirValueLayoutKey {
     XrLirType type;
     XrLirType array_element;
+    /* Zero selects an ordinary value type. A nonzero exact closure target
+     * selects its environment projection in this same receiving set. */
+    uint32_t environment_function;
 } XrLirValueLayoutKey;
 typedef enum XrLirValueLayoutStatus {
     XR_LIR_VALUE_LAYOUT_OK, XR_LIR_VALUE_LAYOUT_ARGUMENT, XR_LIR_VALUE_LAYOUT_UNSUPPORTED,
@@ -29,7 +32,11 @@ typedef enum XrLirValueLayoutStatus {
 
 /* Consume a finished, already admitted LIR module without redoing language
  * admission. Array's exact element is an explicit existing shape fact; every
- * other key requires array_element=0. Only requested roots and their earlier
+ * other key requires array_element=0. Ordinary keys have environment_function
+ * zero. An environment key names this module's exact closure target and its
+ * original signature, even when a value weakens NoSuspend. Its raw entry is
+ * descriptive; receiving code must provide its own real CodeLease and binding.
+ * Only requested roots and their earlier
  * type dependencies are projected. Records and Nullable use natural inline C11
  * layout, not the old boxed transport. Empty Records have one private storage
  * byte and no language fields. Callable plans use the canonical fixed binding

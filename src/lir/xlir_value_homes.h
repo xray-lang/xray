@@ -25,6 +25,12 @@ typedef struct XrLirValueHome {
      * Borrowed formals never reserve it. POD block parameters only stage bytes. */
     size_t temporary_offset, temporary_first_owner;
     size_t first_bytes, byte_count;
+    /* Callable rows keep the same type id as their signature plan, while the
+     * actual slot inventory follows this verified transport. Frame/formal
+     * borrows have no registered owner leaves, including a borrowed non-NULL
+     * Env pointer. environment_type names a constructor's same-image Env. */
+    XrLirCallableTransport transport;
+    uint32_t borrow_source, environment_type;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
 typedef struct XrLirHomeTransfer { uint32_t source, target; } XrLirHomeTransfer;
@@ -57,6 +63,9 @@ typedef struct XrLirHomeWorkspace {
 typedef struct XrLirHomeEvent {
     uint32_t kind, block, instruction, source, argument, edge, target_block, target;
     uint32_t operation;
+    uint32_t callable_function, callable_scope;
+    XrLirCallableTransport callable_transport;
+    bool callable_materialize;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {

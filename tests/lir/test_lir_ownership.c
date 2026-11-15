@@ -50,7 +50,10 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
         CHECK(a.kind == b.kind && a.function == b.function && a.block == b.block && a.instruction == b.instruction &&
             a.value == b.value && a.argument == b.argument && a.edge == b.edge && a.target_block == b.target_block &&
             a.target_value == b.target_value && a.type == b.type && a.array_element == b.array_element &&
-            a.array_operation == b.array_operation && a.map_operation == b.map_operation);
+            a.array_operation == b.array_operation && a.map_operation == b.map_operation &&
+            a.callable_transport==b.callable_transport && a.callable_operation==b.callable_operation &&
+            a.callable_function==b.callable_function && a.callable_scope==b.callable_scope &&
+            a.callable_materialize==b.callable_materialize);
     }
     xr_lir_ownership_plan_destroy(internal);
 }
@@ -62,7 +65,8 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
         OK(xr_lir_ownership_fact_at(plan, i, &f));
         uint32_t fields[] = {(uint32_t)f.kind, f.function, f.block, f.instruction,
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
-            f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation};
+            f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation,
+            (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }
@@ -79,7 +83,7 @@ static XrLirOwnershipPlan *constructed_plan(const XrLirModule *m,
     CHECK(xr_lir_value_layouts_ownership(layouts,&types,&type_count)==XR_LIR_VALUE_LAYOUT_OK);
     for (uint32_t i=0;i<type_count;++i) {
         const XrtValuePlan *received=NULL; XrtValuePlanSpec view;
-        CHECK(xr_lir_value_layouts_get(layouts,(XrLirValueLayoutKey){types[i].type,0},&received)==XR_LIR_VALUE_LAYOUT_OK);
+        CHECK(xr_lir_value_layouts_get(layouts,(XrLirValueLayoutKey){types[i].type,0,0},&received)==XR_LIR_VALUE_LAYOUT_OK);
         CHECK(xrt_value_plan_view(received,&view)==XRT_MANAGED_OK && types[i].has_owned==(view.owned_count!=0));
     }
     XrLirOwnershipPlan *plan=NULL;
@@ -438,7 +442,7 @@ static void boxed_selected_edges(void) {
     XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,.edge_count=2,
         .edges={{blocks[1],owners,2},{blocks[2],reverse,2}}};
     OK(xr_lir_set_terminator(m,blocks[0],&branch)); OK(xr_lir_module_finish(m,NULL));
-    XrLirValueLayoutKey key={type,0};
+    XrLirValueLayoutKey key={type,0,0};
     XrLirOwnershipPlan *plan=constructed_plan(m,&key,1);
     CHECK(typed_count(plan,XR_LIR_OWNERSHIP_PARAMETER_BORROW,type)==1 &&
         typed_count(plan,XR_LIR_OWNERSHIP_RESULT_OWNER,type)==2 &&
@@ -470,7 +474,7 @@ static void boxed_selected_edges(void) {
 static void constructed_snapshots(void) {
     XrLirFunction root={0}; XrLirModule *m=record_fixture(&root);
     XrLirType record=m->functions[1].result, optional=m->types[record-XR_LIR_TYPE_COUNT].fields[0].type;
-    XrLirValueLayoutKey key={record,0};
+    XrLirValueLayoutKey key={record,0,0};
     XrLirOwnershipPlan *plan=constructed_plan(m,&key,1);
     CHECK(typed_count(plan,XR_LIR_OWNERSHIP_PARAMETER_BORROW,record)==1 &&
         typed_count(plan,XR_LIR_OWNERSHIP_RESULT_OWNER,record)==3 &&
@@ -488,7 +492,7 @@ static void constructed_snapshots(void) {
 
 static void constructed_requests(void) {
     XrLirFunction root={0}; XrLirModule *m=record_fixture(&root);
-    XrLirValueLayoutKey key={m->functions[1].result,0};
+    XrLirValueLayoutKey key={m->functions[1].result,0,0};
     XrtBillingOwner *billing=NULL; XrLirValueLayouts *layouts=NULL;
     CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
     CHECK(xr_lir_value_layouts_create(m,&key,1,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
@@ -532,7 +536,7 @@ static void pod_facts(void) {
     OK(xr_lir_nullable_type(m,XR_LIR_I64,&integer_optional));
     pod_function(m,record,"pod_record"); pod_function(m,optional,"pod_record_optional"); pod_function(m,integer_optional,"pod_i64_optional");
     OK(xr_lir_module_finish(m,NULL));
-    XrLirValueLayoutKey keys[]={{record,0},{optional,0},{integer_optional,0}};
+    XrLirValueLayoutKey keys[]={{record,0,0},{optional,0,0},{integer_optional,0,0}};
     XrLirOwnershipPlan *plan=constructed_plan(m,keys,3); CHECK(!xr_lir_ownership_fact_count(plan));
     for (uint32_t i=1;i<=3;++i) {
         XrLirOwnershipFunction view; OK(xr_lir_ownership_function_at(plan,i,&view)); CHECK(!view.unmodeled&&!view.fact_count);

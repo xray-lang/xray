@@ -131,7 +131,7 @@ int main(void) {
     XrLirFunction record_root={0}; XrLirModule *record=record_fixture(&record_root);
     XrtBillingOwner *billing=NULL; XrLirValueLayouts *layouts=NULL;
     CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
-    XrLirValueLayoutKey key={record->functions[1].result,0};
+    XrLirValueLayoutKey key={record->functions[1].result,0,0};
     CHECK(xr_lir_value_layouts_create(record,&key,1,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
     const XrLirOwnershipTypeFact *types=NULL; uint32_t type_count=0;
     CHECK(xr_lir_value_layouts_ownership(layouts,&types,&type_count)==XR_LIR_VALUE_LAYOUT_OK&&type_count==2);
