@@ -29,6 +29,7 @@ typedef struct LayoutRow {
 struct XrLirValueLayouts {
     XrtBillingOwner *billing;
     size_t bytes, rows, count, constructed;
+    LayoutRow **ordered;
     XrLirOwnershipTypeFact *types;
     uint32_t type_count;
     LayoutRow values[];
@@ -37,8 +38,9 @@ struct XrLirValueLayouts {
 #pragma warning(pop)
 #endif
 _Static_assert(sizeof(XrLirValueLayouts) % alignof(LayoutRow) == 0, "layout rows follow an aligned fixed prefix");
-_Static_assert(sizeof(LayoutRow) % alignof(XrLirOwnershipTypeFact) == 0,
-    "the ownership facts follow aligned layout rows in the same billed block");
+_Static_assert(sizeof(LayoutRow) % alignof(LayoutRow *) == 0 &&
+    sizeof(LayoutRow *) % alignof(XrLirOwnershipTypeFact) == 0,
+    "ordered rows and ownership facts remain aligned in the same billed block");
 
 static XrLirValueLayoutStatus memory_status(XrtManagedStatus status) {
     switch (status) {
@@ -224,7 +226,7 @@ static XrLirValueLayoutStatus build_row(const XrLirModule *module, XrLirValueLay
     else if (spec.owned_count) spec.owned_offsets = &zero;
     status = memory_status(xrt_value_plan_new(set->billing, &spec, &set->values[row].plan));
     if (scratch) xrt_managed_metadata_free(set->billing, scratch, scratch_bytes);
-    if (status == XR_LIR_VALUE_LAYOUT_OK) ++set->count;
+    if (status == XR_LIR_VALUE_LAYOUT_OK) set->ordered[set->count++] = &set->values[row];
     return status;
 }
 XR_FUNCDEF void xr_lir_value_layouts_destroy(XrLirValueLayouts *set) {
@@ -240,6 +242,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
         return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     size_t rows = XR_LIR_TYPE_COUNT + (size_t)module->type_count, bytes = sizeof(XrLirValueLayouts);
     if (!extent_add(&rows, VALUE_ARRAY_KINDS, 1) || !extent_add(&bytes, rows, sizeof(LayoutRow)) ||
+        !extent_add(&bytes, rows, sizeof(LayoutRow *)) ||
         !extent_add(&bytes, module->type_count, sizeof(XrLirOwnershipTypeFact)))
         return XR_LIR_VALUE_LAYOUT_OVERFLOW;
     if (!xrt_billing_owner_retain(billing)) return XR_LIR_VALUE_LAYOUT_REFCOUNT;
@@ -248,7 +251,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     if (status != XR_LIR_VALUE_LAYOUT_OK) { xrt_billing_owner_drop(billing); return status; }
     XrLirValueLayouts *set = memory;
     *set = (XrLirValueLayouts){.billing=billing, .bytes=bytes, .rows=rows, .constructed=module->type_count};
-    set->types = (XrLirOwnershipTypeFact *)(set->values + rows);
+    set->ordered = (LayoutRow **)(set->values + rows);
+    set->types = (XrLirOwnershipTypeFact *)(set->ordered + rows);
     for (size_t i = 0; i < rows; ++i) set->values[i] = (LayoutRow){.key={(XrLirType)i, 0}};
     for (size_t i = 0; i < VALUE_ARRAY_KINDS; ++i)
         set->values[rows - VALUE_ARRAY_KINDS + i].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, array_element(i)};
@@ -297,16 +301,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_get(const XrLirValueLayou
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_at(const XrLirValueLayouts *set, size_t ordinal,
     XrLirValueLayoutKey *key, const XrtValuePlan **output) {
     if (!set || !key || !output || ordinal >= set->count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-    // Match the producer's dependency-before-parent order, including Array roots.
-    for (size_t pass = 0; pass < 2; ++pass) {
-        size_t begin = pass ? 1 : set->rows - VALUE_ARRAY_KINDS;
-        size_t end = pass ? set->rows - VALUE_ARRAY_KINDS : set->rows;
-        for (size_t i = begin; i < end; ++i) {
-            if (!set->values[i].plan) continue;
-            if (!ordinal) { *key = set->values[i].key; *output = set->values[i].plan; return XR_LIR_VALUE_LAYOUT_OK; }
-            --ordinal;
-        }
-    }
-    XR_CHECK(false, "a sealed layout count matches its independent receiving plans");
-    return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    const LayoutRow *row = set->ordered[ordinal];
+    XR_CHECK(row && row->plan, "a sealed ordinal names its independently owned receiving plan");
+    *key = row->key; *output = row->plan;
+    return XR_LIR_VALUE_LAYOUT_OK;
 }

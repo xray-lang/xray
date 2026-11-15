@@ -45,7 +45,7 @@ XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule *,
 XR_FUNC void xr_lir_value_layouts_destroy(XrLirValueLayouts *);
 XR_FUNC size_t xr_lir_value_layouts_count(const XrLirValueLayouts *);
 /* These return borrowed plans. Retain one before retiring the set. Enumeration
- * follows dependency-before-parent generation order and preserves outputs on
+ * follows dependency-before-parent generation order in constant time and preserves outputs on
  * rejection; a numeric key does not authorize reuse with a rebuilt module. */
 XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_at(const XrLirValueLayouts *, size_t,
     XrLirValueLayoutKey *, const XrtValuePlan **);
