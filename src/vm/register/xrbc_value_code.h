@@ -28,7 +28,9 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_STRING_PRINT, XR_RBC_VALUE_STRING_LENGTH,
     XR_RBC_VALUE_STATE_READ, XR_RBC_VALUE_STATE_WRITE,
     XR_RBC_VALUE_STATE_CONSTRUCT, XR_RBC_VALUE_STATE_INITIALIZE,
-    XR_RBC_VALUE_CALL, XR_RBC_VALUE_RETURN, XR_RBC_VALUE_EDGE
+    XR_RBC_VALUE_CALL, XR_RBC_VALUE_RETURN, XR_RBC_VALUE_EDGE,
+    XR_RBC_VALUE_ARRAY, XR_RBC_VALUE_BINDING_NEW, XR_RBC_VALUE_BINDING_READ,
+    XR_RBC_VALUE_BINDING_WRITE, XR_RBC_VALUE_BINDING_DROP
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -43,6 +45,8 @@ typedef struct XrRbcValueAccess {
      * EDGE uses first/count source/target SSA pairs, count measuring pairs,
      * for type-zero transport absent from common typed homes. Its index is
      * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
+    /* ARRAY index is the verified Array catalog role, first/count its complete
+     * SSA operands. A mutator's window selects its common pending workspace. */
     uint32_t index, first, count, window;
 } XrRbcValueAccess;
 

@@ -23,21 +23,24 @@ static bool rbc_lir_value_call(const XrLirModule *module, const XrLirInstruction
     XrLirFunctionView callee;
     if (xr_lir_function_view(module,(XrLirFunction){module,instruction->callee},&callee) != XR_LIR_OK ||
         callee.kind != XR_LIR_FUNCTION_DEFINITION) return false;
-    if (callee.result == XR_LIR_STRING) return true;
+    if (callee.result == XR_LIR_STRING || callee.result == XR_LIR_ARRAY) return true;
     for (uint32_t p = 0; p < callee.parameter_count; ++p)
-        if (callee.parameter_types[p] == XR_LIR_STRING) return true;
+        if (callee.parameter_types[p] == XR_LIR_STRING || callee.parameter_types[p] == XR_LIR_ARRAY ||
+            callee.parameter_types[p] == XR_LIR_ARRAY_CELL || callee.parameter_types[p] == XR_LIR_ARRAY_REF) return true;
     return false;
 }
 static bool rbc_lir_value_string_slot(RbcLirCompiler *c, uint64_t slot) {
     const XrtModuleLayoutSpec *state = c->literals->program->module.state_spec;
     if (!state || slot >= state->slot_count) return false;
     uint32_t type = state->slots[slot].type;
-    return type && type <= state->values->type_count && state->values->types[type - 1].kind == XRT_VALUE_STRING;
+    return type && type <= state->values->type_count && (state->values->types[type - 1].kind == XRT_VALUE_STRING ||
+        (state->values->types[type - 1].kind >= XRT_VALUE_ARRAY_I64 && state->values->types[type - 1].kind <= XRT_VALUE_ARRAY_U64));
 }
 static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     for (uint32_t v = 1; v <= c->view.value_count; ++v)
-        if (rbc_lir_value_type(c,v) == XR_LIR_STRING) return true;
-    if (c->view.result == XR_LIR_STRING) return true;
+        if (rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
+            rbc_lir_value_type(c,v) == XR_LIR_ARRAY_CELL || rbc_lir_value_type(c,v) == XR_LIR_ARRAY_REF) return true;
+    if (c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY) return true;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block; XrLirBlockView view;
         xr_lir_block_at(c->input,c->function,b,&block); xr_lir_block_view(c->input,block,&view);
@@ -85,7 +88,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         memcpy(parameters,c->view.parameters,(size_t)code->parameter_count * sizeof(*parameters));
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
-        if (c->homes->values[v].owner_count) continue;
+        if (c->homes->values[v].owner_count || (c->homes->bindings && c->homes->bindings[v].type)) continue;
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX)
             locations[v] = (XrRbcValueLocation){XR_RBC_VALUE_AGGREGATE,c->aggregate_home[v]};
         else if (c->spill_home[v] != UINT32_MAX)
@@ -146,14 +149,45 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_I64: access.operation = XR_RBC_VALUE_STRING_I64; break;
     case XR_LIR_STRING_F64: access.operation = XR_RBC_VALUE_STRING_F64; break;
     case XR_LIR_STRING_CONCAT: access.operation = XR_RBC_VALUE_STRING_CONCAT; break;
+    case XR_LIR_ARRAY_RETAIN:
     case XR_LIR_STRING_RETAIN: access.operation = XR_RBC_VALUE_COPY; break;
+    case XR_LIR_ARRAY_DROP:
     case XR_LIR_STRING_DROP: access.operation = XR_RBC_VALUE_DROP; break;
     case XR_LIR_STRING_PRINT: access.operation = XR_RBC_VALUE_STRING_PRINT; break;
     case XR_LIR_STRING_LEN: access.operation = XR_RBC_VALUE_STRING_LENGTH; break;
+    case XR_LIR_ARRAY_BORROW: *handled=true; return true;
+    case XR_LIR_ARRAY_CELL_DROP: access.operation=XR_RBC_VALUE_BINDING_DROP; break;
+    case XR_LIR_ARRAY_REF_READ: access.operation=XR_RBC_VALUE_BINDING_READ; break;
+    case XR_LIR_ARRAY_REF_WRITE: access.operation=XR_RBC_VALUE_BINDING_WRITE; break;
+    case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE: {
+        uint32_t binding=i->op==XR_LIR_CELL_NEW ? i->result : access.source;
+        if (!c->homes->bindings || !c->homes->bindings[binding].type) return true;
+        access.operation=i->op==XR_LIR_CELL_NEW ? XR_RBC_VALUE_BINDING_NEW :
+            i->op==XR_LIR_CELL_READ ? XR_RBC_VALUE_BINDING_READ : XR_RBC_VALUE_BINDING_WRITE;
+        break;
+    }
+    case XR_LIR_CALL_INTRINSIC: {
+        XrLirArrayIntrinsic shape={0};
+        if (xr_lir_array_intrinsic_view(c->input,i->intrinsic,&shape)!=XR_LIR_OK || !shape.id) return true;
+        access.operation=XR_RBC_VALUE_ARRAY; access.index=(uint32_t)shape.operation;
+        access.source=access.other=0; access.count=i->operand_count; access.window=UINT32_MAX;
+        if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
+        if (shape.operation==XR_LIR_ARRAY_OP_SET || shape.operation==XR_LIR_ARRAY_OP_PUSH) {
+            for (size_t w=0;w<c->homes->workspace_count;++w) {
+                const XrLirHomeWorkspace *workspace=&c->homes->workspaces[w];
+                if (workspace->block==c->diagnostic->block && workspace->instruction==c->diagnostic->instruction) {
+                    if (w>UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"pending workspace index exceeds bytecode description");
+                    access.window=(uint32_t)w; break;
+                }
+            }
+            if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array mutator lost its common pending workspace");
+        }
+        break;
+    }
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: {
         XrLirStateReference shape = {0};
         xr_lir_state_reference_view(c->input,(XrLirValue){c->input,c->function.id,access.source},&shape);
-        if (shape.payload != XR_LIR_STRING) return true;
+        if (shape.payload != XR_LIR_STRING && shape.payload != XR_LIR_ARRAY) return true;
         access.operation = i->op == XR_LIR_STATE_READ ? XR_RBC_VALUE_STATE_READ : XR_RBC_VALUE_STATE_WRITE;
         break;
     }
