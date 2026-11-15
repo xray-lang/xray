@@ -345,7 +345,7 @@ typedef struct {
     const XrRbcLiteral *literals;
     size_t literal_count;
     // One immutable owned layout supplies this module's capability identity.
-    // It is borrowed with the code. Each execution owns a distinct state.
+    // Preparation retains it separately from code. Each execution owns a distinct state.
     XrtModuleLayout *state_layout;
     uint32_t state_entry;
     // Physical aggregate shapes have module-local ordinals. Programs own this
@@ -354,8 +354,8 @@ typedef struct {
     size_t aggregate_type_count;
     const XrRbcCallableType *callable_types;
     size_t callable_type_count;
-    // An authentic code owner can extend the entire immutable module lifetime.
-    // An empty lease preserves the synchronous borrowed-module API.
+    // An authentic code owner extends code bytes and immutable descriptors,
+    // excluding state_layout. An empty lease preserves borrowed code-buffer lifetimes.
     XrRbcCodeLease code_lease;
     // Owned closures use a canonical receiving pool and dense authenticated
     // target directory. Every target is an actual function in this module.

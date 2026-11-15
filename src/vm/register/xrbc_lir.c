@@ -30,6 +30,15 @@
 #include <string.h>
 #include <stdatomic.h>
 
+/* Code leases retain this leaf, never the Program shell or a runtime Layout.
+ * The module copy owns code assets and keeps state_layout permanently NULL. */
+typedef struct XrRbcCodeImage {
+    _Atomic(uint32_t) references;
+    XrRbcModule module;
+    XrtLocationOwner *locations;
+    XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
+} XrRbcCodeImage;
+
 struct XrRbcProgram {
     XrRbcModule module;
     XrtLocationOwner *locations;
@@ -38,23 +47,21 @@ struct XrRbcProgram {
     uint32_t parameter_count;
     uint32_t *physical_aggregates;
     uint32_t *physical_callables;
-    _Atomic(uint32_t) references;
+    XrRbcCodeImage *image;
     uint32_t *closure_mapping;
 };
 
-static bool rbc_program_retain(void *owner) {
-    XrRbcProgram *program = owner;
-    uint32_t count = atomic_load_explicit(&program->references, memory_order_relaxed);
+static bool rbc_code_retain(void *owner) {
+    XrRbcCodeImage *image = owner;
+    uint32_t count = atomic_load_explicit(&image->references, memory_order_relaxed);
     while (count && count != UINT32_MAX) {
-        if (atomic_compare_exchange_weak_explicit(&program->references, &count, count + 1,
+        if (atomic_compare_exchange_weak_explicit(&image->references, &count, count + 1,
                 memory_order_relaxed, memory_order_relaxed)) return true;
     }
     return false;
 }
 
-static void rbc_program_release(void *owner) {
-    xr_rbc_program_destroy(owner);
-}
+static void rbc_code_release(void *owner);
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
@@ -1637,62 +1644,91 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     return true;
 }
 
+static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
+    for (size_t f = 0; f < module.function_count; ++f) {
+        xr_free((void *) module.functions[f].code);
+        xr_free((void *) module.functions[f].constants);
+        xr_free((void *) module.functions[f].source_ids);
+        xr_free((void *) module.functions[f].register_kinds);
+        xr_free((void *) module.functions[f].register_callables);
+        xr_free((void *) module.functions[f].register_boxed_types);
+        xr_free((void *) module.functions[f].captures);
+        xr_free((void *) module.functions[f].environments);
+        xr_free((void *) module.functions[f].cell_kinds);
+        xr_free((void *) module.functions[f].state_accesses);
+        xr_free((void *) module.functions[f].view_accesses);
+        xr_free((void *) module.functions[f].array_accesses);
+        xr_free((void *) module.functions[f].array_operands);
+        xr_free((void *) module.functions[f].reference_spill_kinds);
+        xr_free((void *) module.functions[f].aggregate_values);
+        xr_free((void *) module.functions[f].aggregate_accesses);
+        xr_free((void *) module.functions[f].aggregate_operands);
+        xr_free((void *) module.functions[f].aggregate_parameters);
+        xr_free((void *) module.functions[f].aggregate_arguments);
+    }
+    xr_free((void *) module.functions);
+    for (size_t i = 0; i < module.literal_count; ++i)
+        xr_free((void *)module.literals[i].bytes);
+    xr_free((void *)module.literals);
+    for (size_t i = 0; i < module.map_literal_count; ++i) {
+        xr_free((void *)module.map_literals[i].path);
+        xr_free((void *)module.map_literals[i].items);
+    }
+    xr_free((void *)module.map_literals);
+    xr_free((void *)module.aggregate_types);
+    xr_free((void *)module.callable_results);
+    for (size_t f = 0; f < module.function_scope_count; ++f)
+        xr_free((void *)module.function_scopes[f].parents);
+    xr_free((void *)module.function_scopes);
+    for (size_t f = 0; f < module.function_callable_parameter_count; ++f)
+        xr_free((void *)module.function_callable_parameters[f].rows);
+    xr_free((void *)module.function_callable_parameters);
+    for (size_t e = 0; e < module.closure_entry_count; ++e)
+        xr_free((void *)module.closure_entries[e].captures);
+    xr_free((void *)module.closure_entries);
+    xr_free((void *)module.closure_targets);
+    xr_free((void *)module.closure_signatures);
+    xr_xir_compile_type_arena_drop(module.closure_types);
+    for (size_t n = 0; n < module.callable_type_count; ++n)
+        xr_free((void *)module.callable_types[n].parameters);
+    xr_free((void *)module.callable_types);
+    xrt_locations_release(locations);
+}
+
+static void rbc_code_release(void *owner) {
+    XrRbcCodeImage *image = owner;
+    uint32_t count = atomic_fetch_sub_explicit(&image->references, 1, memory_order_acq_rel);
+    XR_CHECK(count, "a code image retires only after its final actual lease");
+    if (count != 1) return;
+    XR_CHECK(!image->module.state_layout, "code assets never retain a runtime layout");
+    rbc_code_clear(image->module, image->locations);
+    xr_free(image);
+}
+static bool rbc_lir_seal(XrRbcProgram *program) {
+    XrRbcCodeImage *image = xr_calloc(1, sizeof(*image));
+    if (!image) return false;
+    atomic_init(&image->references, 1);
+    image->module = program->module;
+    image->module.state_layout = NULL;
+    image->locations = program->locations;
+    if (image->module.native_count) {
+        memcpy(image->natives, program->module.natives, image->module.native_count * sizeof(*image->natives));
+        image->module.natives = image->natives;
+        program->module.natives = image->natives;
+    }
+    image->module.code_lease = (XrRbcCodeLease){image, rbc_code_retain, rbc_code_release};
+    program->module.code_lease = image->module.code_lease;
+    program->image = image;
+    return true;
+}
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
-    if (program->module.code_lease.owner &&
-        atomic_fetch_sub_explicit(&program->references, 1, memory_order_acq_rel) != 1) return;
-    for (size_t f = 0; f < program->module.function_count; ++f) {
-        xr_free((void *) program->module.functions[f].code);
-        xr_free((void *) program->module.functions[f].constants);
-        xr_free((void *) program->module.functions[f].source_ids);
-        xr_free((void *) program->module.functions[f].register_kinds);
-        xr_free((void *) program->module.functions[f].register_callables);
-        xr_free((void *) program->module.functions[f].register_boxed_types);
-        xr_free((void *) program->module.functions[f].captures);
-        xr_free((void *) program->module.functions[f].environments);
-        xr_free((void *) program->module.functions[f].cell_kinds);
-        xr_free((void *) program->module.functions[f].state_accesses);
-        xr_free((void *) program->module.functions[f].view_accesses);
-        xr_free((void *) program->module.functions[f].array_accesses);
-        xr_free((void *) program->module.functions[f].array_operands);
-        xr_free((void *) program->module.functions[f].reference_spill_kinds);
-        xr_free((void *) program->module.functions[f].aggregate_values);
-        xr_free((void *) program->module.functions[f].aggregate_accesses);
-        xr_free((void *) program->module.functions[f].aggregate_operands);
-        xr_free((void *) program->module.functions[f].aggregate_parameters);
-        xr_free((void *) program->module.functions[f].aggregate_arguments);
-    }
-    xr_free((void *) program->module.functions);
-    for (size_t i = 0; i < program->module.literal_count; ++i)
-        xr_free((void *)program->module.literals[i].bytes);
-    xr_free((void *)program->module.literals);
-    for(size_t n=0;n<program->module.map_literal_count;++n) {
-        xr_free((void *)program->module.map_literals[n].path);
-        xr_free((void *)program->module.map_literals[n].items);
-    }
-    xr_free((void *)program->module.map_literals);
-    xr_free((void *)program->module.aggregate_types);
+    xrt_module_layout_drop(&program->module.state_layout);
+    if (program->image) rbc_code_release(program->image);
+    else rbc_code_clear(program->module, program->locations);
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
     xr_free(program->closure_mapping);
-    xr_free((void *)program->module.callable_results);
-    for (size_t f = 0; f < program->module.function_scope_count; ++f)
-        xr_free((void *)program->module.function_scopes[f].parents);
-    xr_free((void *)program->module.function_scopes);
-    for (size_t f = 0; f < program->module.function_callable_parameter_count; ++f)
-        xr_free((void *)program->module.function_callable_parameters[f].rows);
-    xr_free((void *)program->module.function_callable_parameters);
-    for (size_t e = 0; e < program->module.closure_entry_count; ++e)
-        xr_free((void *)program->module.closure_entries[e].captures);
-    xr_free((void *)program->module.closure_entries);
-    xr_free((void *)program->module.closure_targets);
-    xr_free((void *)program->module.closure_signatures);
-    xr_xir_compile_type_arena_drop(program->module.closure_types);
-    for (size_t n = 0; n < program->module.callable_type_count; ++n)
-        xr_free((void *)program->module.callable_types[n].parameters);
-    xr_free((void *)program->module.callable_types);
-    xrt_locations_release(program->locations);
-    xrt_module_layout_drop(&program->module.state_layout);
     xr_free(program);
 }
 
@@ -1925,10 +1961,6 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_callable_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
-    if (p->module.callable_type_count) {
-        atomic_init(&p->references, 1);
-        p->module.code_lease = (XrRbcCodeLease){p, rbc_program_retain, rbc_program_release};
-    }
     status = rbc_lir_state_layout(input, entry, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
@@ -1984,6 +2016,11 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     p->module.function_count = count;
     status = rbc_lir_build(input, ids, mapping, p, d);
     if (status == XR_RBC_COMPILE_OK) {
+        if (!rbc_lir_seal(p)) {
+            status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
+                "cannot own the immutable code image", (XrLirSource){0});
+            goto done;
+        }
         XrRbcStatus admitted = xr_rbc_module_admit(&p->module, p->locations);
         if (admitted != XR_RBC_OK) {
             status = admitted == XR_RBC_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY :
