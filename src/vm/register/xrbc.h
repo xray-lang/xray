@@ -20,7 +20,7 @@
 #include "base/xdefs.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
-#include "runtime/native/xnative_callable.h"
+#include "xray_native_values.h"
 typedef struct XrtArray XrtArray;
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
@@ -103,6 +103,7 @@ typedef struct XrtArray XrtArray;
     X(STATE_WRITE, ABK8)                                                                            \
     X(ARRAY_ACCESS, ABX)                                                                            \
     X(AGGREGATE_ACCESS, ABX)                                                                        \
+    X(VALUE_ACCESS, ABX)                                                                            \
     X(VIEW_ACCESS, ABX)
 
 typedef enum {
@@ -256,8 +257,6 @@ typedef struct {
     uint32_t aggregate_result_type;
     const uint32_t *aggregate_arguments;
     size_t aggregate_argument_count;
-    const XrRbcViewAccess *view_accesses;
-    size_t view_access_count;
     /* Signature ordinals plus one, zero for every non-function register.
      * These rows authenticate transports independently of untagged bits. */
     const uint32_t *register_callables;
@@ -271,11 +270,6 @@ typedef struct {
     bool state_capture;
     const XrRbcEnvironment *environments;
     uint32_t environment_count, environment_size;
-    /* Exact canonical identities for boxed registers and the ordinary result.
-     * Zero denotes every register outside this managed physical family. */
-    const uint32_t *register_boxed_types;
-    size_t register_boxed_type_count;
-    uint32_t result_boxed_type;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -352,14 +346,6 @@ typedef struct {
     // An authentic code owner extends code bytes and immutable descriptors,
     // including raw state_spec. An empty lease preserves borrowed code-buffer lifetimes.
     XrRbcCodeLease code_lease;
-    // Owned closures use a canonical receiving pool and dense authenticated
-    // target directory. Every target is an actual function in this module.
-    XrXirTypeArena *closure_types;
-    const XrtCallableEntry *closure_entries;
-    const uint32_t *closure_targets;
-    size_t closure_entry_count;
-    const XrXirType *closure_signatures;
-    size_t closure_signature_count;
     const uint32_t *callable_results;
     size_t callable_result_count;
     // A scope cap projects into this owned directory, outside scalar registers.

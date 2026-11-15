@@ -99,7 +99,9 @@ static bool rbc_state_spec_shape(const XrtModuleLayoutSpec *spec) {
         if (slot->module >= spec->module_count || !slot->type || slot->type > spec->values->type_count ||
             (slot->flags & ~XRT_MODULE_SLOT_MUTABLE)) return false;
         const XrtValueImageType *type = &spec->values->types[slot->type - 1];
-        if (!xr_rbc_state_payload_kind(type->kind) || slot->size != type->size || slot->alignment != type->alignment ||
+        bool pod = !type->owned_count && (type->kind == XRT_VALUE_FIXED_U8 ||
+            type->kind == XRT_VALUE_TUPLE_I64 || type->kind == XRT_VALUE_NULLABLE);
+        if ((!xr_rbc_state_payload_kind(type->kind) && !pod) || slot->size != type->size || slot->alignment != type->alignment ||
             slot->alignment > spec->payload_alignment || slot->offset % slot->alignment || slot->offset < end ||
             slot->offset > spec->payload_size || slot->size > spec->payload_size - slot->offset) return false;
         end = slot->offset + slot->size;

@@ -28,7 +28,7 @@ static bool rbc_aggregate_state_transfer(RbcStringAdmission *s, XrRbcAggregateAc
         return true;
     }
     if (state != RBC_STATE_REFERENCE || !origin ||
-        !rbc_aggregate_state_type(s->module, value.type, (origin >> 1) - 1u)) return false;
+        !rbc_aggregate_state_type(s->module, value.type, origin >> 1)) return false;
     if (!read) return (origin & 1u) && s->aggregates[home];
     s->aggregates[home] = 1;
     return true;
