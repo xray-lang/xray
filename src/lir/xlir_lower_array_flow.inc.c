@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_lower_array_flow.inc.c - Array binding liveness in the existing SSA state graph
+ * xlir_lower_array_flow.inc.c - Managed binding liveness in the existing SSA state graph
  *
  * KEY CONCEPT:
- *   Address-observed Cells retain physical storage. Value-only Array bindings
+ *   Address-observed Cells retain physical storage. Value-only managed bindings
  *   and snapshots follow the same live-in equations as scalar local state.
  */
 static bool lower_grouped_operands(XrXirOp op) {
@@ -39,11 +39,12 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
     const XrXirFunction *source = f->source;
     bool needed = c->arrays || c->string_appends || c->maps;
     for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
-        needed = source->parameters[p] == XR_XIR_STRING;
+        needed = lower_managed_type(c, lower_type(c, source->parameters[p]));
     for (uint32_t i = 0; !needed && i < source->instruction_count; ++i) {
         XrXirType type = source->instructions[i].type;
         XrXirType element = xr_xir_cell_element(c->source->types, type);
-        needed = (source->block_count > 1 && (type == XR_XIR_STRING || element == XR_XIR_STRING)) ||
+        needed = (source->block_count > 1 && (lower_managed_type(c, lower_type(c, type)) ||
+            lower_managed_type(c, lower_type(c, element)))) ||
             xr_xir_type_is_callable(c->source->types, element);
     }
     if (!needed) return true;
