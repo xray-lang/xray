@@ -71,12 +71,20 @@ static void typed_edge_spill_cycles(void) {
     attempts = 0; fail_at = SIZE_MAX;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
     size_t total = attempts;
-    const XrRbcFunction *function = &program->module.functions[0];
-    CHECK(function->reference_spill_count && function->spill_count > function->reference_spill_count);
-    bool string = false, array = false;
-    for (uint32_t n = 0; n < function->reference_spill_count; ++n) {
-        string |= function->reference_spill_kinds[n] == XR_RBC_STRING;
-        array |= function->reference_spill_kinds[n] == XR_RBC_ARRAY_I64;
+    const XrRbcModule *physical=xr_rbc_program_view(program);
+    const XrLirValueHomes *homes=xr_rbc_module_value_homes(physical,0);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(physical,0);
+    const XrtValueImage *image=xr_rbc_module_value_image(physical);
+    CHECK(homes && code && image && homes->edge_count && homes->owned_frame_needed);
+    bool string=false,array=false;
+    for(uint32_t value=1;value<=homes->value_count;++value) {
+        const XrLirValueHome *home=&homes->values[value];
+        if(!home->owner_count)continue;
+        CHECK(home->type && home->type<=image->type_count && home->owner_count==1);
+        CHECK(code->locations[value].kind==XR_RBC_VALUE_NOWHERE);
+        CHECK(home->first_owner<homes->frame.slot_count);
+        string|=image->types[home->type-1].kind==XRT_VALUE_STRING;
+        array|=image->types[home->type-1].kind==XRT_VALUE_ARRAY_I64;
     }
     CHECK(string && array);
     for (uint64_t n = 0; n < 4; ++n) {

@@ -9,6 +9,7 @@
 #include "../lir/lir_test_programs.h"
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_value_code.h"
 
 
 // The sole guest result is owned; this test helper consumes it after inspection.
@@ -142,88 +143,13 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_record_fixture.h"
 #include "lir_bytecode_owned_prepare_cases.h"
 
-static void callable_factory_failures(bool scopes) {
-    XrLirModule *module = NULL;
-    XrLirFunction root;
-    callable_factory_fixture_mode(&module, &root, false, scopes);
-    XrRbcProgram *program = NULL;
-    attempts = 0; fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    size_t total = attempts;
-    xr_rbc_program_destroy(program); program = NULL;
-    CHECK(!live_allocations);
-    for (size_t point = 1; point <= total; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
-        CHECK(!program && !live_allocations && attempts >= point);
-    }
-    fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
+static void callable_factory_rejection(bool scopes) {
+    XrLirModule *module=NULL; XrLirFunction root={0};
+    callable_factory_fixture_mode(&module,&root,false,scopes);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program && !live_allocations);
     xr_lir_module_destroy(module);
-    size_t retained = live_allocations;
-    uint64_t result = 0;
-    attempts = 0;
-    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 137);
-    size_t runtime = attempts;
-    CHECK(live_allocations == retained);
-    for (size_t point = 1; point <= runtime; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(execute(program, NULL, 0, &result) == XR_RBC_OUT_OF_MEMORY);
-        CHECK(live_allocations == retained);
-    }
-    fail_at = SIZE_MAX;
-    xr_rbc_program_destroy(program);
-    CHECK(!live_allocations);
-    printf("Owned %sfactory compiler/runtime failure points: %zu/%zu\n", scopes ? "scoped " : "", total, runtime);
-}
-
-static void callable_scope_handle_reuse(void) {
-    XrLirModule *module = NULL;
-    XrLirFunction root = {0};
-    callable_factory_fixture(&module, &root, false);
-    XrRbcProgram *program = NULL;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    xr_lir_module_destroy(module);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
-    CHECK(execution->module->closure_entry_count == 1);
-    XrRbcStack *stack = &execution->stack;
-    CHECK(xr_xir_domain_new(UINT64_MAX, &stack->closure_domain) == XR_XIR_VALUE_OK);
-    CHECK(xr_rbc_closure_scope_enter(stack));
-    uint64_t baseline = xr_xir_domain_stats(stack->closure_domain).live_bytes;
-    XrXirValue capture = {.type=XR_XIR_I64, .payload=40};
-    uint64_t previous = 0;
-    size_t index = SIZE_MAX;
-    for (unsigned iteration = 0; iteration < 128; ++iteration) {
-        CHECK(xr_rbc_closure_owner_reserve(stack));
-        CHECK(xrt_callable_new(stack->closure_code, stack->closure_domain, 0,
-            &capture, 1, &stack->closure_pending) == XR_XIR_VALUE_OK);
-        uint64_t token = xr_rbc_closure_owner_commit(stack, 0, UINT32_MAX);
-        CHECK(token != previous && stack->closure_count == 1);
-        CHECK(xr_rbc_closure_slot(stack, token, &index) && index == 0);
-        if (previous) CHECK(!xr_rbc_closure_slot(stack, previous, &index));
-        xr_rbc_closure_scope_drop(stack, 0);
-        CHECK(!xr_rbc_closure_slot(stack, token, &index));
-        CHECK(xr_xir_domain_stats(stack->closure_domain).live_bytes == baseline);
-        previous = token;
-    }
-    stack->closure_owners[0].generation = UINT32_C(0x3fffffff);
-    CHECK(xrt_callable_new(stack->closure_code, stack->closure_domain, 0,
-        &capture, 1, &stack->closure_pending) == XR_XIR_VALUE_OK);
-    uint64_t retired = xr_rbc_closure_owner_commit(stack, 0, UINT32_MAX);
-    xr_rbc_closure_scope_drop(stack, 0);
-    CHECK(!stack->closure_free && !xr_rbc_closure_slot(stack, retired, &index));
-    CHECK(xr_rbc_closure_owner_reserve(stack));
-    CHECK(xrt_callable_new(stack->closure_code, stack->closure_domain, 0,
-        &capture, 1, &stack->closure_pending) == XR_XIR_VALUE_OK);
-    uint64_t token = xr_rbc_closure_owner_commit(stack, 0, UINT32_MAX);
-    CHECK(stack->closure_count == 2 && xr_rbc_closure_slot(stack, token, &index) && index == 1);
-    CHECK(!xr_rbc_closure_slot(stack, retired, &index));
-    xr_rbc_closure_scope_drop(stack, 0);
-    xr_rbc_execution_free(&execution);
-    xr_rbc_program_destroy(program);
-    CHECK(!live_allocations);
-    puts("Owned scope handles reuse cleared slots with generations and retire exhausted counters");
 }
 
 static void callable_compiler_failures(void) {
@@ -233,6 +159,10 @@ static void callable_compiler_failures(void) {
         callable_fixture_capture(&module, &root, capture);
         XrRbcProgram *program = NULL;
         attempts = 0; fail_at = SIZE_MAX;
+        if(capture>=3) {
+            CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
+            CHECK(!program && !live_allocations);xr_lir_module_destroy(module);continue;
+        }
         CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
         size_t total = attempts;
         xr_rbc_program_destroy(program); program = NULL;
@@ -246,34 +176,17 @@ static void callable_compiler_failures(void) {
         CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
         xr_lir_module_destroy(module);
         uint64_t result = 0;
-        if (capture) {
-            XrRbcFunction *functions = (XrRbcFunction *)xr_rbc_program_view(program)->functions;
-            uint32_t callee = capture >= 3 ? xr_rbc_program_view(program)->closure_targets[0] :
-                functions[0].environments[0].callee;
-            XrRbcFunction saved = functions[callee];
-            XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX] = {0};
-            for (uint32_t r = 0; r < saved.register_count; ++r) kinds[r] = saved.register_kinds[r];
-            XrRbcRegisterKind cell_kinds[200] = {0};
-            functions[callee].register_count = XR_RBC_REGISTER_COUNT_MAX;
-            functions[callee].register_kinds = kinds;
-            functions[callee].register_kind_count = XR_RBC_REGISTER_COUNT_MAX;
-            functions[callee].cell_count = 200;
-            functions[callee].cell_kinds = cell_kinds;
-            functions[callee].cell_kind_count = 200;
-            functions[callee].spill_count = 200;
-            size_t retained = live_allocations;
-            attempts = 0;
-            CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
-            size_t runtime = attempts;
-            CHECK(live_allocations == retained);
-            for (size_t point = 1; point <= runtime; ++point) {
-                attempts = 0; fail_at = point;
-                CHECK(execute(program, NULL, 0, &result) == XR_RBC_OUT_OF_MEMORY);
-                CHECK(live_allocations == retained);
+        if(capture) {
+            size_t retained=live_allocations; attempts=0;
+            CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==42);
+            size_t runtime=attempts; CHECK(runtime && live_allocations==retained);
+            for(size_t point=1;point<=runtime;++point) {
+                attempts=0;fail_at=point;
+                CHECK(execute(program,NULL,0,&result)==XR_RBC_OUT_OF_MEMORY);
+                CHECK(live_allocations==retained);
             }
-            fail_at = SIZE_MAX;
-            functions[callee] = saved;
-            printf("Frame callable relocating runtime failure points: %zu\n", runtime);
+            fail_at=SIZE_MAX;
+            printf("Borrowed callable runtime failure points: %zu\n",runtime);
         }
         CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
         xr_rbc_program_destroy(program);
@@ -290,7 +203,8 @@ static void callable_mutable_frame_storage(void) {
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(module);
     const XrRbcModule *view = xr_rbc_program_view(program);
-    CHECK(!view->closure_entry_count && !view->closure_types);
+    const XrLirValueHomes *homes=xr_rbc_module_value_homes(view,0);
+    CHECK(!homes || !homes->owned_frame_needed);
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
     size_t slots = 0, cells = 0, spills = 0, environments = 0;
@@ -315,8 +229,7 @@ static void callable_mutable_frame_storage(void) {
         &result, execution->entries) == XR_RBC_OK && result.bits == 42);
     CHECK(attempts == before && live_allocations == retained);
     CHECK(!execution->stack.depth && !execution->stack.cell_count);
-    CHECK(!execution->stack.closure_code && !execution->stack.closure_domain &&
-        !execution->stack.closures && !execution->stack.closure_scopes);
+    CHECK(!execution->stack.values && !execution->stack.closure_scope_count);
     fail_at = SIZE_MAX;
     xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);
@@ -324,23 +237,10 @@ static void callable_mutable_frame_storage(void) {
     puts("mutable Frame capture uses one indexed 8-byte place and no construction allocation");
 }
 
-static void view_compiler_failures(void) {
-    XrLirModule *module = NULL;
-    OK(view_fixture_create(&module));
-    XrRbcProgram *program = NULL;
-    attempts = 0; fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, (XrLirFunction){module, 1}, &program, NULL) == XR_RBC_COMPILE_OK);
-    size_t total = attempts;
-    xr_rbc_program_destroy(program); program = NULL;
-    CHECK(!live_allocations);
-    for (size_t point = 1; point <= total; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(xr_rbc_compile(module, (XrLirFunction){module, 1}, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
-        CHECK(!program && !live_allocations && attempts >= point);
-    }
-    fail_at = SIZE_MAX;
-    xr_lir_module_destroy(module);
-    printf("View bytecode compiler failure points: %zu\n", total);
+static void view_compiler_rejection(void) {
+    XrLirModule *module=NULL;OK(view_fixture_create(&module));XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(module,(XrLirFunction){module,1},&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program && !live_allocations);xr_lir_module_destroy(module);
 }
 
 static void array_compiler_failures(const char *name,uint64_t expected) {
@@ -600,26 +500,24 @@ static void compiled_spills(void) {
 static void frame_cfg_compiler_failures(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
     XrLirFunction root=test_function(m,"frame_allocation",NULL,0,XR_LIR_I64);
-    XrLirBlock entry=test_block(m,root,NULL,0),done=test_block(m,root,NULL,0);
+    XrLirType string_type=XR_LIR_STRING;
+    XrLirBlock entry=test_block(m,root,NULL,0),done=test_block(m,root,&string_type,1);
     OK(xr_lir_set_entry(m,root,entry));XrLirLiteral literal={0};
-    OK(xr_lir_add_literal(m,"frame\0x",7,&literal));XrLirValue text,cell,length;
+    OK(xr_lir_add_literal(m,"frame\0x",7,&literal));XrLirValue text,retained,incoming,length;
     XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
     OK(xr_lir_emit_value(m,entry,&op,&text));
-    op=(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
-    OK(xr_lir_emit_value(m,entry,&op,&cell));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_RETAIN,.type=XR_LIR_STRING,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,entry,&op,&retained));
     op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
-    OK(xr_lir_emit_effect(m,entry,&op));test_branch(m,entry,done,NULL,0);
-    op=(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&cell,.operand_count=1};
-    OK(xr_lir_emit_value(m,done,&op,&text));
-    op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,entry,&op));test_branch(m,entry,done,&retained,1);
+    OK(xr_lir_block_parameter(m,done,0,&incoming));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&incoming,.operand_count=1};
     OK(xr_lir_emit_value(m,done,&op,&length));
-    op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
-    OK(xr_lir_emit_effect(m,done,&op));
-    op=(XrLirInstruction){.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+    op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&incoming,.operand_count=1};
     OK(xr_lir_emit_effect(m,done,&op));test_return(m,done,length);OK(xr_lir_module_finish(m,NULL));
-    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic;
-    attempts=0;fail_at=SIZE_MAX;CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
-    size_t total=attempts;CHECK(total>10);xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};attempts=0;
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    size_t total=attempts;CHECK(total);xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
     for(size_t point=1;point<=total;++point) {
         attempts=0;fail_at=point;
         CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
@@ -631,7 +529,7 @@ static void frame_cfg_compiler_failures(void) {
     xr_rbc_program_destroy(program);CHECK(!live_allocations);
 }
 
-static void physical_string_copy_cycle(void) {
+static void compiled_string_edge_owners(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
     XrLirFunction f=test_function(m,"forward_owned_copy",NULL,0,XR_LIR_I64);
     XrLirType texts[]={XR_LIR_STRING,XR_LIR_STRING};
@@ -652,42 +550,20 @@ static void physical_string_copy_cycle(void) {
     }
     test_return(m,join,length);OK(xr_lir_module_finish(m,NULL));XrLirFunctionView view;
     OK(xr_lir_function_view(m,f,&view));XrRbcCompileDiagnostic diagnostic={0};
-    RbcLirCompiler c={.input=m,.function=f,.diagnostic=&diagnostic,.typed_spills=true,
-        .slot_count=2,.temporary_strings=1,.temporary_bits=1,.scratch_count=2};
-    c.slots=xr_calloc((size_t)view.value_count+1,sizeof(*c.slots));CHECK(c.slots);
-    // White-box emitter fixture: force a physical swap for verified forward
-    // LIR. This does not claim a loop-carried String producer is admitted.
-    c.slots[values[0].id]=1;c.slots[values[1].id]=0;
-    c.slots[parameters[0].id]=0;c.slots[parameters[1].id]=1;
-    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LITERAL,1,0,0,0));
-    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LITERAL,0,0,0,1));
-    uint32_t actuals[]={values[0].id,values[1].id};bool scratch=false;
-    CHECK(rbc_lir_copies(&c,(XrLirEdgeView){join.id,actuals,2},true,&scratch));
-    CHECK(scratch && c.string_scratch && c.code_count==5);
-    CHECK((c.code[2]&255)==XR_RBC_STRING_TAKE && ((c.code[2]>>8)&255)==2);
-    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LEN,3,0,0,0));
-    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_DROP,0,0,0,0));
-    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_DROP,1,0,0,0));
-    CHECK(rbc_lir_emit(&c,XR_RBC_RET,3,0,0,0));
-    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_STRING,XR_RBC_STRING,XR_RBC_BITS};
-    XrRbcFunction function={.code=c.code,.code_count=c.code_count,.register_count=4,
-        .register_kinds=kinds,.register_kind_count=4,.spill_count=1};
-    XrRbcLiteral literals[]={{bytes[0],lengths[0]},{bytes[1],lengths[1]}};
-    XrRbcModule module={.functions=&function,.function_count=1,.literals=literals,.literal_count=2};
-    XrtLocationOwner *locations=NULL;CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
-    for(unsigned entry_count=0;entry_count<2;++entry_count) {
-        XrRbcExecution *execution=NULL;
-        CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK);
-        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t result=0;
-        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
-        CHECK(xr_rbc_outcome_bits(outcome,&result) && result==5);
-        xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(m,f,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(m);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrLirValueHomes *homes=xr_rbc_module_value_homes(module,0);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(homes && code && code->homes==homes && homes->frame.slot_count>=4);
+    CHECK(homes->edge_count==1 && homes->edges[0].count==2);
+    for(unsigned repeat=0;repeat<2;++repeat) {
+        uint64_t result=0;
+        CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==5);
     }
-    xrt_locations_release(locations);
-    c.temporary_strings=0;CHECK(rbc_lir_copy_temporary(&c,true)==UINT32_MAX);
-    CHECK(c.status==XR_RBC_COMPILE_LIMIT);
-    xr_free(c.slots);xr_free(c.code);xr_free(c.source_ids);xr_lir_module_destroy(m);
-    CHECK(!live_allocations);
+    xr_rbc_program_destroy(program);CHECK(!live_allocations);
+
 }
 
 static void jump_threading(void) {
@@ -930,40 +806,11 @@ static void aggregate_value_compiler_failures(uint32_t count, bool dynamic, bool
     attempts = 0;
 }
 
-static void composition_compiler_failures(void) {
-    XrLirModule *module = NULL;
-    XrLirFunction root = {0};
-    callable_composition_fixture(&module, &root);
-    XrRbcProgram *program = NULL;
-    attempts = 0; fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    size_t total = attempts;
-    xr_rbc_program_destroy(program); program = NULL;
-    CHECK(total > 30 && !live_allocations);
-    for (size_t point = 1; point <= total; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
-        CHECK(!program && !live_allocations);
-    }
-    fail_at = SIZE_MAX;
-    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-    xr_lir_module_destroy(module);
-    size_t retained = live_allocations;
-    attempts = 0;
-    uint64_t bits = 0;
-    CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OK && bits == 42);
-    size_t runtime = attempts;
-    CHECK(live_allocations == retained);
-    for (size_t point = 1; point <= runtime; ++point) {
-        attempts = 0; fail_at = point;
-        CHECK(execute(program, NULL, 0, &bits) == XR_RBC_OUT_OF_MEMORY);
-        CHECK(live_allocations == retained);
-    }
-    fail_at = SIZE_MAX;
-    xr_rbc_program_destroy(program);
-    CHECK(!live_allocations);
-    printf("Owned Fn capture compiler/runtime allocation failures: %zu/%zu PASS\n", total, runtime);
-    attempts = 0;
+static void composition_compiler_rejection(void) {
+    XrLirModule *module=NULL;XrLirFunction root={0};callable_composition_fixture(&module,&root);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program && !live_allocations);xr_lir_module_destroy(module);
 }
 
 static void tuple_compiler_failures(void) {
@@ -1098,10 +945,10 @@ int main(void) {
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
-    composition_compiler_failures();
+    composition_compiler_rejection();
     tuple_compiler_failures();
     typed_edge_spill_cycles();
-    string_reference_compiler_failures();
+    string_reference_rejection();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();
@@ -1110,14 +957,14 @@ int main(void) {
     aggregate_value_compiler_failures(17, false, true);
     aggregate_type_projection_failures();
     array_reference_compiler_failures();
-    physical_array_copy_cycle();
+    compiled_array_edge_owners();
     array_compiler_failures("string",511);
     array_compiler_failures("large",1500);
     array_compiler_failures("array-spills-string",1500);
     compiled_float_constants();
     jump_threading();
     jump_compaction();
-    physical_string_copy_cycle();
+    compiled_string_edge_owners();
     compiled_spills();
     literal_allocation_failures();
     register_workspace_failure();
@@ -1155,12 +1002,11 @@ int main(void) {
     CHECK(xr_rbc_program_locations(program));
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
-    view_compiler_failures();
+    view_compiler_rejection();
     callable_compiler_failures();
     callable_mutable_frame_storage();
-    callable_factory_failures(false);
-    callable_factory_failures(true);
-    callable_scope_handle_reuse();
+    callable_factory_rejection(false);
+    callable_factory_rejection(true);
     display_compiler_failures();
     compiled_source_maps();
     frame_cfg_compiler_failures();
