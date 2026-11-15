@@ -339,8 +339,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (v->op == XR_LIR_STRING_F64 ||
-        xr_lir_string_role(c->request->module, v) || c_display_point(c, v)) {
+    if (v->op == XR_LIR_STRING_F64 || xr_lir_string_role(c->request->module, v)) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "String operation has no target execution binding");
         return;
     }
@@ -1029,7 +1028,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
     c_constructed_types(c);
     c_values_helpers(c);
-    c_display_catalog(c);
     c_locations(c);
     c_literals(c);
     if (c->state) c_state_layout(c);
