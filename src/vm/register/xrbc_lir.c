@@ -25,6 +25,7 @@
 #include "lir/xlir_value_layout.h"
 #include "xrbc_value_homes.h"
 #include "xrbc_value_code.h"
+#include "xrbc_code_owner.h"
 #include "lir/xlir_state_projection.h"
 #include "lir/xlir_value_image.h"
 #include "lir/xlir_internal.h"
@@ -37,7 +38,7 @@
 /* Code leases retain only executable assets and raw descriptions. No runtime
  * plan, Ops, Layout or State points back through this code owner. */
 typedef struct XrRbcCodeImage {
-    _Atomic(uint32_t) references;
+    XrRbcCodeOwner code;
     XrRbcModule module;
     XrtLocationOwner *locations;
     XrLirValueHomes **value_homes;
@@ -46,6 +47,7 @@ typedef struct XrRbcCodeImage {
     XrLirStateProjection *state_projection;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
 } XrRbcCodeImage;
+XR_STATIC_ASSERT(offsetof(XrRbcCodeImage, code) == 0, "the real code owner is the enclosing allocation prefix");
 
 struct XrRbcProgram {
     XrRbcModule module;
@@ -61,45 +63,6 @@ struct XrRbcProgram {
     XrLirValueImage *value_image;
     XrLirStateProjection *state_projection;
 };
-
-static bool rbc_code_retain(void *owner) {
-    XrRbcCodeImage *image = owner;
-    uint32_t count = atomic_load_explicit(&image->references, memory_order_relaxed);
-    while (count && count != UINT32_MAX) {
-        if (atomic_compare_exchange_weak_explicit(&image->references, &count, count + 1,
-                memory_order_relaxed, memory_order_relaxed)) return true;
-    }
-    return false;
-}
-
-static void rbc_code_release(void *owner);
-
-XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *module, uint32_t function) {
-    if (!module || function >= module->function_count || !module->code_lease.owner ||
-        module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release)
-        return NULL;
-    const XrRbcCodeImage *image = module->code_lease.owner;
-    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
-        return NULL;
-    return image->value_homes ? image->value_homes[function] : NULL;
-}
-XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module) {
-    if (!module || module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release ||
-        !module->code_lease.owner) return NULL;
-    const XrRbcCodeImage *image = module->code_lease.owner;
-    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
-        return NULL;
-    return image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
-}
-XR_FUNC const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *module, uint32_t function) {
-    if (!module || function >= module->function_count || !module->code_lease.owner ||
-        module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release)
-        return NULL;
-    const XrRbcCodeImage *image = module->code_lease.owner;
-    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
-        return NULL;
-    return image->value_codes ? image->value_codes[function] : NULL;
-}
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
@@ -1613,11 +1576,8 @@ static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
     xrt_locations_release(locations);
 }
 
-static void rbc_code_release(void *owner) {
-    XrRbcCodeImage *image = owner;
-    uint32_t count = atomic_fetch_sub_explicit(&image->references, 1, memory_order_acq_rel);
-    XR_CHECK(count, "a code image retires only after its final actual lease");
-    if (count != 1) return;
+static void rbc_code_retire(XrRbcCodeOwner *owner) {
+    XrRbcCodeImage *image = (XrRbcCodeImage *)owner;
     rbc_lir_value_codes_free(image->value_codes,image->module.function_count);
     xr_lir_state_projection_destroy(image->state_projection);
     xr_lir_value_image_destroy(image->value_image);
@@ -1628,7 +1588,7 @@ static void rbc_code_release(void *owner) {
 static bool rbc_lir_seal(XrRbcProgram *program) {
     XrRbcCodeImage *image = xr_calloc(1, sizeof(*image));
     if (!image) return false;
-    atomic_init(&image->references, 1);
+    atomic_init(&image->code.references, 1);
     image->module = program->module;
     image->locations = program->locations;
     image->value_homes = program->value_homes;
@@ -1644,14 +1604,20 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
         image->module.natives = image->natives;
         program->module.natives = image->natives;
     }
-    image->module.code_lease = (XrRbcCodeLease){image, rbc_code_retain, rbc_code_release};
+    image->code.functions = image->module.functions;
+    image->code.function_count = image->module.function_count;
+    image->code.value_homes = image->value_homes;
+    image->code.value_codes = image->value_codes;
+    image->code.values = image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
+    image->code.retire = rbc_code_retire;
+    image->module.code_lease = (XrRbcCodeLease){&image->code, xr_rbc_code_owner_retain, xr_rbc_code_owner_release};
     program->module.code_lease = image->module.code_lease;
     program->image = image;
     return true;
 }
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
-    if (program->image) rbc_code_release(program->image);
+    if (program->image) xr_rbc_code_owner_release(&program->image->code);
     else {
         rbc_lir_value_codes_free(program->value_codes,program->module.function_count);
         xr_lir_state_projection_destroy(program->state_projection);
