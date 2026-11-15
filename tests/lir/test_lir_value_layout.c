@@ -95,7 +95,7 @@ typedef struct Empty { uint8_t storage; } Empty;
 typedef struct OptionalEmpty { uint8_t tag; Empty payload; } OptionalEmpty;
 static const XrtValuePlan *get(const XrLirValueLayouts *set, XrLirType type) {
     const XrtValuePlan *plan = NULL;
-    LAYOUT(xr_lir_value_layouts_get(set, (XrLirValueLayoutKey){type, 0}, &plan));
+    LAYOUT(xr_lir_value_layouts_get(set, (XrLirValueLayoutKey){type, 0,0}, &plan));
     return plan;
 }
 static XrtValuePlanSpec view(const XrtValuePlan *plan) {
@@ -105,11 +105,11 @@ static XrtValuePlanSpec view(const XrtValuePlan *plan) {
 }
 static void natural_layouts(void) {
     Types t = types_new(); Owner owner; owner_new(&owner, SIZE_MAX);
-    XrLirValueLayoutKey roots[] = {{t.optional_outer, 0}, {t.optional_string, 0}, {t.nested_string, 0},
-        {t.optional_fixed, 0}, {t.optional_tuple, 0}, {t.optional_i64, 0}, {t.optional_unit, 0}, {t.optional_pod, 0}, {t.optional_empty, 0},
-        {XR_LIR_ARRAY, XR_LIR_I64}, {XR_LIR_ARRAY, XR_LIR_STRING}, {XR_LIR_ARRAY, XR_LIR_U8}, {XR_LIR_ARRAY, XR_LIR_U64},
-        {XR_LIR_MAP_STRING_I64, 0}, {XR_LIR_I8, 0}, {XR_LIR_I16, 0}, {XR_LIR_I32, 0},
-        {XR_LIR_U8, 0}, {XR_LIR_U16, 0}, {XR_LIR_U32, 0}, {XR_LIR_U64, 0}, {XR_LIR_F32, 0}, {XR_LIR_F64, 0}};
+    XrLirValueLayoutKey roots[] = {{t.optional_outer, 0,0}, {t.optional_string, 0,0}, {t.nested_string, 0,0},
+        {t.optional_fixed, 0,0}, {t.optional_tuple, 0,0}, {t.optional_i64, 0,0}, {t.optional_unit, 0,0}, {t.optional_pod, 0,0}, {t.optional_empty, 0,0},
+        {XR_LIR_ARRAY, XR_LIR_I64,0}, {XR_LIR_ARRAY, XR_LIR_STRING,0}, {XR_LIR_ARRAY, XR_LIR_U8,0}, {XR_LIR_ARRAY, XR_LIR_U64,0},
+        {XR_LIR_MAP_STRING_I64, 0,0}, {XR_LIR_I8, 0,0}, {XR_LIR_I16, 0,0}, {XR_LIR_I32, 0,0},
+        {XR_LIR_U8, 0,0}, {XR_LIR_U16, 0,0}, {XR_LIR_U32, 0,0}, {XR_LIR_U64, 0,0}, {XR_LIR_F32, 0,0}, {XR_LIR_F64, 0,0}};
     XrLirValueLayouts *set = NULL;
     LAYOUT(xr_lir_value_layouts_create(t.module, roots, sizeof(roots) / sizeof(*roots), owner.billing, &set));
     XrtValuePlanSpec inner = view(get(set, t.inner)), outer = view(get(set, t.outer));
@@ -174,7 +174,7 @@ static void natural_layouts(void) {
 }
 static void creator_retirement(void) {
     Types t = types_new(); Owner owner; owner_new(&owner, SIZE_MAX);
-    XrLirValueLayoutKey key = {t.outer, 0}; XrLirValueLayouts *set = NULL;
+    XrLirValueLayoutKey key = {t.outer, 0,0}; XrLirValueLayouts *set = NULL;
     LAYOUT(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set));
     XrtValuePlan *plan = (XrtValuePlan *)get(set, t.outer); CHECK(xrt_value_plan_retain(plan));
     XrtBackingTypes types = {0}; XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
@@ -200,7 +200,7 @@ static void creator_retirement(void) {
 static void failures_and_boundaries(void) {
     Types t = types_new(); Owner owner; owner_new(&owner, SIZE_MAX);
     XrtBillingStats baseline = xrt_billing_owner_stats(owner.billing);
-    XrLirValueLayoutKey key = {t.optional_outer, 0}; XrLirValueLayouts *set = NULL;
+    XrLirValueLayoutKey key = {t.optional_outer, 0,0}; XrLirValueLayouts *set = NULL;
     LAYOUT(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set));
     size_t allocations = xrt_billing_owner_stats(owner.billing).allocations - baseline.allocations;
     xr_lir_value_layouts_destroy(set); set = NULL;
@@ -216,16 +216,16 @@ static void failures_and_boundaries(void) {
         key.type = unsupported[i];
         CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
     }
-    key = (XrLirValueLayoutKey){XR_LIR_ARRAY, XR_LIR_I32};
+    key = (XrLirValueLayoutKey){XR_LIR_ARRAY, XR_LIR_I32,0};
     CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
-    key = (XrLirValueLayoutKey){XR_LIR_I64, XR_LIR_I64};
+    key = (XrLirValueLayoutKey){XR_LIR_I64, XR_LIR_I64,0};
     CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_ARGUMENT && !set);
-    key = (XrLirValueLayoutKey){t.optional_inner, 0};
+    key = (XrLirValueLayoutKey){t.optional_inner, 0,0};
     XrLirTypeData *row = &t.module->types[t.optional_inner - XR_LIR_TYPE_COUNT];
     XrLirType saved = row->shape.element; row->shape.element = t.optional_inner;
     CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_ARGUMENT && !set);
     row->shape.element = saved;
-    key = (XrLirValueLayoutKey){XR_LIR_I64, 0};
+    key = (XrLirValueLayoutKey){XR_LIR_I64, 0,0};
     LAYOUT(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set));
     const XrtValuePlan *unchanged = get(set, XR_LIR_I64); XrLirValueLayoutKey unchanged_key = key;
     const XrLirOwnershipTypeFact *facts = NULL; uint32_t fact_count = UINT32_MAX;
@@ -251,7 +251,7 @@ static void inline_overflow(void) {
     }
     LIR(xr_lir_module_finish(module, NULL));
     Owner owner; owner_new(&owner, SIZE_MAX);
-    XrLirValueLayoutKey key = {type, 0}; XrLirValueLayouts *set = NULL;
+    XrLirValueLayoutKey key = {type, 0,0}; XrLirValueLayouts *set = NULL;
     CHECK(xr_lir_value_layouts_create(module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_OVERFLOW && !set);
     owner_drop(&owner); CHECK(atomic_load(&owner.audit.final) == 1); xr_lir_module_destroy(module);
 }
@@ -283,7 +283,7 @@ static void callable_layouts(void) {
     memset(parameters, 0xa5, sizeof(parameters)); memset(&input, 0xa5, sizeof(input));
     LIR(xr_lir_module_finish(module, NULL));
     Owner owner; owner_new(&owner, SIZE_MAX);
-    XrLirValueLayoutKey roots[] = {{outer,0},{array_result,0},{unit,0}};
+    XrLirValueLayoutKey roots[] = {{outer,0,0},{array_result,0,0},{unit,0,0}};
     XrLirValueLayouts *set = NULL;
     XrtBillingStats baseline = xrt_billing_owner_stats(owner.billing);
     LAYOUT(xr_lir_value_layouts_create(module, roots, 3, owner.billing, &set));
@@ -329,7 +329,7 @@ static void callable_layouts(void) {
         CHECK(after.bytes == held.bytes && after.blocks == held.blocks);
     }
     xrt_billing_owner_fail_after(owner.billing, SIZE_MAX);
-    XrLirValueLayoutKey rejected = {cell_ref,0};
+    XrLirValueLayoutKey rejected = {cell_ref,0,0};
     CHECK(xr_lir_value_layouts_create(module, &rejected, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
     xr_lir_module_destroy(module);
     spec = view(plan);

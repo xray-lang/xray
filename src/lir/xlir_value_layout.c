@@ -30,7 +30,7 @@ typedef struct LayoutRow {
 #endif
 struct XrLirValueLayouts {
     XrtBillingOwner *billing;
-    size_t bytes, rows, count, constructed;
+    size_t bytes, rows, count, constructed, functions;
     LayoutRow **ordered;
     XrLirOwnershipTypeFact *types;
     uint32_t type_count;
@@ -70,6 +70,11 @@ static XrLirType array_element(size_t family) {
     return elements[family];
 }
 static XrLirValueLayoutStatus key_index(const XrLirValueLayouts *set, XrLirValueLayoutKey key, size_t *index) {
+    if (key.environment_function) {
+        if (key.array_element || key.environment_function > set->functions) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        *index = XR_LIR_TYPE_COUNT + set->constructed + VALUE_ARRAY_KINDS + key.environment_function - 1;
+        return key.type && set->values[*index].key.type == key.type ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    }
     if (key.type == XR_LIR_ARRAY) {
         for (size_t i = 0; i < VALUE_ARRAY_KINDS; ++i)
             if (key.array_element == array_element(i)) { *index = XR_LIR_TYPE_COUNT + set->constructed + i; return XR_LIR_VALUE_LAYOUT_OK; }
@@ -83,7 +88,7 @@ static XrLirValueLayoutStatus key_index(const XrLirValueLayouts *set, XrLirValue
 static XrLirValueLayoutStatus need_type(XrLirValueLayouts *set, XrLirType type, XrLirType parent) {
     if (type >= parent) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     size_t index = 0;
-    XrLirValueLayoutStatus status = key_index(set, (XrLirValueLayoutKey){type, 0}, &index);
+    XrLirValueLayoutStatus status = key_index(set, (XrLirValueLayoutKey){type, 0, 0}, &index);
     if (status == XR_LIR_VALUE_LAYOUT_OK) set->values[index].needed = true;
     return status;
 }
@@ -92,11 +97,23 @@ static XrLirValueLayoutStatus need_callable_type(XrLirValueLayouts *set,
     if (type >= parent) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     if (type != XR_LIR_ARRAY) return element ? XR_LIR_VALUE_LAYOUT_UNSUPPORTED : need_type(set, type, parent);
     size_t index = 0;
-    XrLirValueLayoutStatus status = key_index(set, (XrLirValueLayoutKey){type, element}, &index);
+    XrLirValueLayoutStatus status = key_index(set, (XrLirValueLayoutKey){type, element, 0}, &index);
     if (status == XR_LIR_VALUE_LAYOUT_OK) set->values[index].needed = true;
     return status;
 }
 static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLirValueLayouts *set) {
+    size_t environments = XR_LIR_TYPE_COUNT + set->constructed + VALUE_ARRAY_KINDS;
+    for (size_t row = environments; row < set->rows; ++row) {
+        if (!set->values[row].needed) continue;
+        const XrLirFunctionData *target = &module->functions[row - environments];
+        if (!target->closure.callable || target->kind != XR_LIR_FUNCTION_DEFINITION || target->closure.state_capture)
+            return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+        XrLirType limit = (XrLirType)(XR_LIR_TYPE_COUNT + set->constructed);
+        XrLirValueLayoutStatus status = need_type(set,target->closure.callable,limit);
+        for (uint32_t p = 0; p < target->closure.capture_count && status == XR_LIR_VALUE_LAYOUT_OK; ++p)
+            status = need_type(set,target->parameter_types[p],limit);
+        if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
+    }
     for (size_t row = XR_LIR_TYPE_COUNT + set->constructed; row-- > XR_LIR_TYPE_COUNT;) {
         if (!set->values[row].needed) continue;
         XrLirType type = (XrLirType)row;
@@ -160,9 +177,47 @@ static const XrtValuePlan *dependency(const XrLirValueLayouts *set, XrLirType ty
 }
 static const XrtValuePlan *callable_dependency(const XrLirValueLayouts *set, XrLirType type, XrLirType element) {
     size_t index = 0;
-    XR_CHECK(key_index(set, (XrLirValueLayoutKey){type, element}, &index) == XR_LIR_VALUE_LAYOUT_OK && set->values[index].plan,
+    XR_CHECK(key_index(set, (XrLirValueLayoutKey){type, element, 0}, &index) == XR_LIR_VALUE_LAYOUT_OK && set->values[index].plan,
         "signature dependencies precede their receiving callable plan");
     return set->values[index].plan;
+}
+static XrLirValueLayoutStatus environment_spec(const XrLirModule *module, const XrLirValueLayouts *set,
+    uint32_t function, XrtValuePlanSpec *spec, size_t *scratch_bytes) {
+    const XrLirFunctionData *target = &module->functions[function - 1];
+    *spec = (XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.alignment=1,.capture_count=target->closure.capture_count,
+        .entry={function,dependency(set,target->closure.callable)}};
+    for (uint32_t p = 0; p < target->closure.capture_count; ++p) {
+        XrtValuePlanSpec child;
+        if (xrt_value_plan_view(dependency(set,target->parameter_types[p]),&child) != XRT_MANAGED_OK)
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        if (child.kind != XRT_VALUE_BOOL && child.kind != XRT_VALUE_I64 && child.kind != XRT_VALUE_U8 &&
+            child.kind != XRT_VALUE_U64 && child.kind != XRT_VALUE_F64 && child.kind != XRT_VALUE_FUNCTION &&
+            child.kind != XRT_VALUE_MAP_STRING_I64) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+        if (child.alignment > spec->alignment) spec->alignment = child.alignment;
+        if (!align_size(&spec->size,child.alignment) || !extent_add(&spec->size,child.size,1) ||
+            !extent_add(&spec->owned_count,child.owned_count,1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    }
+    if (!align_size(&spec->size,spec->alignment) ||
+        !extent_add(scratch_bytes,spec->capture_count,sizeof(XrtValueSlotSpec)) ||
+        !extent_add(scratch_bytes,spec->owned_count,sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    return XR_LIR_VALUE_LAYOUT_OK;
+}
+static void fill_environment(const XrLirModule *module, const XrLirValueLayouts *set,
+    uint32_t function, XrtValuePlanSpec *spec, void *scratch) {
+    if (!spec->capture_count) return;
+    const XrLirFunctionData *target = &module->functions[function - 1];
+    XrtValueSlotSpec *captures = scratch; size_t *owned = (size_t *)(captures + spec->capture_count);
+    spec->captures = captures; spec->owned_offsets = spec->owned_count ? owned : NULL;
+    size_t offset = 0, leaves = 0;
+    for (uint32_t p = 0; p < target->closure.capture_count; ++p) {
+        const XrtValuePlan *plan = dependency(set,target->parameter_types[p]); XrtValuePlanSpec child;
+        XR_CHECK(xrt_value_plan_view(plan,&child) == XRT_MANAGED_OK && align_size(&offset,child.alignment),
+            "environment offsets were checked before receiving scratch allocation");
+        captures[p] = (XrtValueSlotSpec){plan,offset,NULL,0};
+        for (size_t n = 0; n < child.owned_count; ++n) owned[leaves++] = offset + child.owned_offsets[n];
+        offset += child.size;
+    }
+    XR_CHECK(leaves == spec->owned_count,"every environment owning leaf has one physical offset");
 }
 static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirValueLayouts *set,
     XrLirType type, XrtValuePlanSpec *spec, size_t *scratch_bytes) {
@@ -267,7 +322,9 @@ static XrLirValueLayoutStatus build_row(const XrLirModule *module, XrLirValueLay
     if (set->count >= UINT32_MAX) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
     XrtValuePlanSpec spec = {0};
     size_t scratch_bytes = 0, zero = 0;
-    XrLirValueLayoutStatus status = row < XR_LIR_TYPE_COUNT || row >= XR_LIR_TYPE_COUNT + set->constructed ?
+    uint32_t environment = set->values[row].key.environment_function;
+    XrLirValueLayoutStatus status = environment ? environment_spec(module,set,environment,&spec,&scratch_bytes) :
+        row < XR_LIR_TYPE_COUNT || row >= XR_LIR_TYPE_COUNT + set->constructed ?
         scalar_spec(set->values[row].key, &spec) : composite_spec(module, set, (XrLirType)row, &spec, &scratch_bytes);
     if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
     void *scratch = NULL;
@@ -275,7 +332,8 @@ static XrLirValueLayoutStatus build_row(const XrLirModule *module, XrLirValueLay
         status = memory_status(xrt_managed_metadata_allocate(set->billing, scratch_bytes, &scratch));
         if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
     }
-    if (row >= XR_LIR_TYPE_COUNT && row < XR_LIR_TYPE_COUNT + set->constructed)
+    if (environment) fill_environment(module,set,environment,&spec,scratch);
+    else if (row >= XR_LIR_TYPE_COUNT && row < XR_LIR_TYPE_COUNT + set->constructed)
         fill_composite(module, set, (XrLirType)row, &spec, scratch);
     else if (spec.owned_count) spec.owned_offsets = &zero;
     status = memory_status(xrt_value_plan_new(set->billing, &spec, &set->values[row].plan));
@@ -298,7 +356,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     if (!module || !module->finished || module->failure != XR_LIR_OK || !billing || !output || *output || (count && !roots))
         return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     size_t rows = XR_LIR_TYPE_COUNT + (size_t)module->type_count, bytes = sizeof(XrLirValueLayouts);
-    if (!extent_add(&rows, VALUE_ARRAY_KINDS, 1) || !extent_add(&bytes, rows, sizeof(LayoutRow)) ||
+    if (!extent_add(&rows, VALUE_ARRAY_KINDS, 1) || !extent_add(&rows,module->function_count,1) ||
+        !extent_add(&bytes, rows, sizeof(LayoutRow)) ||
         !extent_add(&bytes, rows, sizeof(LayoutRow *)) ||
         !extent_add(&bytes, module->type_count, sizeof(XrLirOwnershipTypeFact)))
         return XR_LIR_VALUE_LAYOUT_OVERFLOW;
@@ -307,12 +366,16 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     XrLirValueLayoutStatus status = memory_status(xrt_managed_metadata_allocate(billing, bytes, &memory));
     if (status != XR_LIR_VALUE_LAYOUT_OK) { xrt_billing_owner_drop(billing); return status; }
     XrLirValueLayouts *set = memory;
-    *set = (XrLirValueLayouts){.billing=billing, .bytes=bytes, .rows=rows, .constructed=module->type_count};
+    *set = (XrLirValueLayouts){.billing=billing, .bytes=bytes, .rows=rows,
+        .constructed=module->type_count,.functions=module->function_count};
     set->ordered = (LayoutRow **)(set->values + rows);
     set->types = (XrLirOwnershipTypeFact *)(set->ordered + rows);
-    for (size_t i = 0; i < rows; ++i) set->values[i] = (LayoutRow){.key={(XrLirType)i, 0}};
+    for (size_t i = 0; i < rows; ++i) set->values[i] = (LayoutRow){.key={(XrLirType)i, 0, 0}};
+    size_t arrays = XR_LIR_TYPE_COUNT + set->constructed, environments = arrays + VALUE_ARRAY_KINDS;
     for (size_t i = 0; i < VALUE_ARRAY_KINDS; ++i)
-        set->values[rows - VALUE_ARRAY_KINDS + i].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, array_element(i)};
+        set->values[arrays + i].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, array_element(i),0};
+    for (uint32_t f = 0; f < module->function_count; ++f)
+        set->values[environments + f].key = (XrLirValueLayoutKey){module->functions[f].closure.callable,0,f + 1};
     for (size_t i = 0; i < count && status == XR_LIR_VALUE_LAYOUT_OK; ++i) {
         size_t index = 0;
         status = key_index(set, roots[i], &index);
@@ -320,11 +383,13 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     }
     if (status == XR_LIR_VALUE_LAYOUT_OK) status = mark_dependencies(module, set);
     // Array descriptors have no inline type dependencies and precede aggregates.
-    for (size_t i = rows - VALUE_ARRAY_KINDS; i < rows && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
+    for (size_t i = arrays; i < environments && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
         if (set->values[i].needed) status = build_row(module, set, i);
-    for (size_t i = 1; i < rows - VALUE_ARRAY_KINDS && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
+    for (size_t i = 1; i < arrays && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
         if (set->values[i].needed) status = build_row(module, set, i);
-    for (size_t i = XR_LIR_TYPE_COUNT; i < rows - VALUE_ARRAY_KINDS && status == XR_LIR_VALUE_LAYOUT_OK; ++i) {
+    for (size_t i = environments; i < rows && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
+        if (set->values[i].needed) status = build_row(module,set,i);
+    for (size_t i = XR_LIR_TYPE_COUNT; i < arrays && status == XR_LIR_VALUE_LAYOUT_OK; ++i) {
         if (!set->values[i].plan) continue;
         XrtValuePlanSpec spec;
         status = memory_status(xrt_value_plan_view(set->values[i].plan, &spec));

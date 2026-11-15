@@ -97,6 +97,110 @@ static bool lir_callable_facts_resolve(XrLirCallableValueFact *rows, uint32_t co
     return true;
 }
 
+static void lir_callable_need_owner(XrLirCallableValueFact *rows, uint32_t value) {
+    uint32_t origin = rows[value].origin;
+    if (!origin) return;
+    XrLirCallableValueFact *source = &rows[origin];
+    if (source->operation == XR_LIR_FUNCTION_REF && source->constructor_storage == XR_LIR_CLOSURE_FRAME &&
+        !source->capture_count && !source->state_capture) source->materialize = true;
+}
+/* These are checked consuming contracts, not the conservative persistence
+ * predicate. Materializing at the exact constructor keeps every later borrow
+ * unchanged and gives a code-only escape a real pending result owner. */
+static void lir_callable_materializations(const XrLirModule *m, const XrLirFunctionData *f,
+    XrLirCallableValueFact *rows) {
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *block = &f->blocks[b];
+        for (uint32_t n = 0; n < block->instruction_count; ++n) {
+            const XrLirInstructionView *v = &block->instructions[n].view;
+            if (v->op == XR_LIR_RET && v->operand_count) lir_callable_need_owner(rows,v->operands[0]);
+            else if ((v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_INITIALIZE || v->op == XR_LIR_STATE_WRITE) &&
+                v->operand_count == 2) lir_callable_need_owner(rows,v->operands[1]);
+            else if (v->op == XR_LIR_FUNCTION_REF && v->bits == XR_LIR_CLOSURE_OWNED) {
+                for (uint32_t p = 0; p < v->operand_count; ++p) lir_callable_need_owner(rows,v->operands[p]);
+            } else if (v->op == XR_LIR_CALL) {
+                const XrLirFunctionData *target = &m->functions[v->callee - 1];
+                for (uint32_t p = 0; p < target->closure.capture_count; ++p) lir_callable_need_owner(rows,v->operands[p]);
+                for (uint32_t p = 0; p < target->callable_parameter_count; ++p)
+                    if (target->callable_parameters[p].contract.escaping)
+                        lir_callable_need_owner(rows,v->operands[target->callable_parameters[p].parameter]);
+            } else if (v->op == XR_LIR_CALL_INDIRECT) {
+                XrLirCallableType signature;
+                XR_CHECK(xr_lir_callable_type_view(m,f->values[v->operands[0] - 1].type,&signature) == XR_LIR_OK,
+                    "verified indirect calls retain their exact parameter contracts");
+                for (uint32_t p = 0; p < signature.parameter_count; ++p)
+                    if (signature.parameters[p].escaping) lir_callable_need_owner(rows,v->operands[p + 1]);
+            }
+        }
+    }
+}
+typedef struct LirCallableFlowEdge { size_t next; uint32_t target; } LirCallableFlowEdge;
+static void lir_callable_flow_edge(LirCallableFlowEdge *edges, size_t *used, size_t *heads,
+    uint32_t source, uint32_t target) {
+    edges[*used] = (LirCallableFlowEdge){heads[source],target}; heads[source] = (*used)++;
+}
+static XrLirStatus lir_callable_transports(const XrLirFunctionData *f, XrLirCallableValueFact *rows) {
+    size_t count = (size_t)f->value_count + 1, edges = 0, bytes = 0;
+    if (!count) return XR_LIR_OUT_OF_MEMORY;
+    for (uint32_t i = 0; i < f->value_count; ++i) edges += rows[i + 1].alias_source != 0;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirInstructionView *end = &f->blocks[b].instructions[f->blocks[b].instruction_count - 1].view;
+        for (uint32_t e = 0; e < end->edge_count; ++e) {
+            if (end->edges[e].argument_count > SIZE_MAX - edges) return XR_LIR_OUT_OF_MEMORY;
+            edges += end->edges[e].argument_count;
+        }
+    }
+    if (!lir_callable_extent(&bytes,edges,sizeof(LirCallableFlowEdge)) ||
+        !lir_callable_extent(&bytes,count,sizeof(size_t) + sizeof(uint32_t) + 2)) return XR_LIR_OUT_OF_MEMORY;
+    void *memory = xr_malloc(bytes);
+    if (!memory) return XR_LIR_OUT_OF_MEMORY;
+    LirCallableFlowEdge *flow = memory; size_t *heads = (size_t *)(flow + edges);
+    uint32_t *work = (uint32_t *)(heads + count);
+    uint8_t *masks = (uint8_t *)(work + count), *queued = masks + count;
+    memset(masks,0,count * 2);
+    size_t used = 0, waiting = 0;
+    for (size_t v = 0; v < count; ++v) heads[v] = SIZE_MAX;
+    for (uint32_t i = 0; i < f->value_count; ++i) {
+        uint32_t v = i + 1;
+        if (!rows[v].type || rows[v].type == XR_LIR_FUNCTION_SCOPE) continue;
+        if (rows[v].parameter) masks[v] = 2;
+        else if (rows[v].operation == XR_LIR_FUNCTION_REF)
+            masks[v] = rows[v].materialize || rows[v].constructor_storage == XR_LIR_CLOSURE_OWNED ? 4 : 1;
+        else if (rows[v].operation == XR_LIR_CALL || rows[v].operation == XR_LIR_CALL_INDIRECT ||
+            rows[v].operation == XR_LIR_STATE_READ) masks[v] = 4;
+        if (masks[v]) { work[waiting++] = v; queued[v] = 1; }
+        if (rows[v].alias_source) lir_callable_flow_edge(flow,&used,heads,rows[v].alias_source,v);
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirInstructionView *end = &f->blocks[b].instructions[f->blocks[b].instruction_count - 1].view;
+        for (uint32_t e = 0; e < end->edge_count; ++e) {
+            const XrLirEdgeView *edge = &end->edges[e];
+            const XrLirBlockData *target = &f->blocks[edge->target - 1];
+            for (uint32_t p = 0; p < edge->argument_count; ++p)
+                if (rows[target->parameters[p]].type && rows[target->parameters[p]].type != XR_LIR_FUNCTION_SCOPE)
+                    lir_callable_flow_edge(flow,&used,heads,edge->arguments[p],target->parameters[p]);
+        }
+    }
+    while (waiting) {
+        uint32_t source = work[--waiting]; queued[source] = 0;
+        for (size_t e = heads[source]; e != SIZE_MAX; e = flow[e].next) {
+            uint32_t target = flow[e].target; uint8_t mask = masks[target] | masks[source];
+            if (mask == masks[target]) continue;
+            masks[target] = mask;
+            if (!queued[target]) { work[waiting++] = target; queued[target] = 1; }
+        }
+    }
+    for (uint32_t i = 0; i < f->value_count; ++i) {
+        uint32_t v = i + 1; uint8_t mask = masks[v];
+        if (!rows[v].type || rows[v].type == XR_LIR_FUNCTION_SCOPE) continue;
+        rows[v].transport = mask == 4 ? XR_LIR_CALLABLE_TRANSPORT_OWNED :
+            mask == 1 ? XR_LIR_CALLABLE_TRANSPORT_FRAME :
+            mask == 2 || mask == 3 ? XR_LIR_CALLABLE_TRANSPORT_BORROW : XR_LIR_CALLABLE_TRANSPORT_MIXED;
+    }
+    xr_free(memory);
+    return XR_LIR_OK;
+}
+
 static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirFunctionData *f,
     uint32_t function, LirCallableGeometry geometry, XrLirCallableFacts **output) {
     if (!output || !lir_function_has_callables(m, f)) return XR_LIR_OK;
@@ -162,6 +266,9 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path, colors);
     xr_free(scratch);
     if (!resolved) { xr_free(received); return XR_LIR_VERIFY_ERROR; }
+    lir_callable_materializations(m,f,rows);
+    XrLirStatus transport_status = lir_callable_transports(f,rows);
+    if (transport_status != XR_LIR_OK) { xr_free(received); return transport_status; }
     XR_DCHECK(!(*output)->functions[function - 1], "each final function publishes one callable snapshot");
     (*output)->functions[function - 1] = received;
     return XR_LIR_OK;

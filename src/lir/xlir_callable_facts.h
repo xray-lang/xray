@@ -16,6 +16,12 @@
 
 typedef struct XrLirCallableFacts XrLirCallableFacts;
 
+typedef enum XrLirCallableTransport {
+    XR_LIR_CALLABLE_TRANSPORT_NONE, XR_LIR_CALLABLE_TRANSPORT_FRAME,
+    XR_LIR_CALLABLE_TRANSPORT_BORROW, XR_LIR_CALLABLE_TRANSPORT_OWNED,
+    XR_LIR_CALLABLE_TRANSPORT_MIXED
+} XrLirCallableTransport;
+
 typedef struct XrLirCallableValueFact {
     XrLirType type;
     XrLirOp operation;
@@ -28,6 +34,12 @@ typedef struct XrLirCallableValueFact {
     uint32_t constructor_storage;
     uint64_t binding_identity;
     bool persistent, state_capture;
+    /* Transport describes a verified value flow, not escaping permission.
+     * A code-only FRAME constructor materializes an Env only when a checked
+     * escaping use requires an independent owner. Its original storage fact
+     * remains unchanged. Mixed owning/borrowed joins need explicit handling. */
+    XrLirCallableTransport transport;
+    bool materialize;
 } XrLirCallableValueFact;
 
 typedef struct XrLirCallableFunctionFacts {

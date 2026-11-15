@@ -77,10 +77,10 @@ static Fixture fixture_new(void) {
     LIR(xr_lir_fixed_array_type(module, XR_LIR_U8, 13, &fixed)); LIR(xr_lir_tuple_i64_type(module, 3, &tuple));
     LIR(xr_lir_nullable_type(module, fixed, &optional_fixed)); LIR(xr_lir_nullable_type(module, tuple, &optional_tuple));
     LIR(xr_lir_nullable_type(module, XR_LIR_UNIT, &optional_unit)); LIR(xr_lir_module_finish(module, NULL));
-    XrLirValueLayoutKey roots[] = {{f.optional_record,0},{optional_empty,0},{optional_pod,0},{optional_fixed,0},{optional_tuple,0},
-        {optional_unit,0},{XR_LIR_ARRAY,XR_LIR_I64},{XR_LIR_ARRAY,XR_LIR_STRING},{XR_LIR_ARRAY,XR_LIR_U8},{XR_LIR_ARRAY,XR_LIR_U64},
-        {XR_LIR_MAP_STRING_I64,0},{XR_LIR_I8,0},{XR_LIR_I16,0},{XR_LIR_I32,0},{XR_LIR_U8,0},{XR_LIR_U16,0},{XR_LIR_U32,0},{XR_LIR_U64,0},
-        {XR_LIR_F32,0},{XR_LIR_F64,0}};
+    XrLirValueLayoutKey roots[] = {{f.optional_record,0,0},{optional_empty,0,0},{optional_pod,0,0},{optional_fixed,0,0},{optional_tuple,0,0},
+        {optional_unit,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0},{XR_LIR_ARRAY,XR_LIR_STRING,0},{XR_LIR_ARRAY,XR_LIR_U8,0},{XR_LIR_ARRAY,XR_LIR_U64,0},
+        {XR_LIR_MAP_STRING_I64,0,0},{XR_LIR_I8,0,0},{XR_LIR_I16,0,0},{XR_LIR_I32,0,0},{XR_LIR_U8,0,0},{XR_LIR_U16,0,0},{XR_LIR_U32,0,0},{XR_LIR_U64,0,0},
+        {XR_LIR_F32,0,0},{XR_LIR_F64,0,0}};
     LAYOUT(xr_lir_value_layouts_create(module, roots, sizeof(roots)/sizeof(*roots), f.billing, &f.layouts));
     xr_lir_module_destroy(module); xrt_billing_owner_close(f.billing);
     return f;
@@ -184,7 +184,7 @@ static void deep_single_inventory(void) {
     LIR(xr_lir_module_create(NULL, &module)); XrLirType type = XR_LIR_STRING;
     for (unsigned i = 0; i < 512; ++i) LIR(xr_lir_nullable_type(module, type, &type));
     LIR(xr_lir_module_finish(module, NULL)); MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
-    XrLirValueLayoutKey key = {type, 0}; LAYOUT(xr_lir_value_layouts_create(module, &key, 1, billing, &layouts));
+    XrLirValueLayoutKey key = {type, 0,0}; LAYOUT(xr_lir_value_layouts_create(module, &key, 1, billing, &layouts));
     XrLirValueImage *image = NULL; enumerated = 0; LAYOUT(xr_lir_value_image_create(layouts, billing, &image));
     const XrtValueImage *view = xr_lir_value_image_view(image); CHECK(enumerated == 513 && view->type_count == 513);
     for (uint32_t i = 1; i < view->type_count; ++i)

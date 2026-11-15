@@ -10,6 +10,7 @@
 #define XLIR_OWNERSHIP_H
 #include "xlir_array.h"
 #include "xlir_map.h"
+#include "xlir_callable_facts.h"
 
 typedef struct XrLirOwnershipPlan XrLirOwnershipPlan;
 
@@ -28,7 +29,10 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_BINDING_BORROW,
     XR_LIR_OWNERSHIP_BINDING_READ,
     XR_LIR_OWNERSHIP_BINDING_WRITE,
-    XR_LIR_OWNERSHIP_MAP_OPERATION
+    XR_LIR_OWNERSHIP_MAP_OPERATION,
+    XR_LIR_OWNERSHIP_CALLABLE_VALUE,
+    XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE,
+    XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT
 } XrLirOwnershipFactKind;
 
 /* Positions and SSA IDs belong to the exact input module: function, block,
@@ -41,7 +45,13 @@ typedef enum XrLirOwnershipFactKind {
  * MAP_OPERATION uses map_operation instead of array_operation. BINDING facts
  * name the actual Cell/Ref in value. target_value is the initializer, snapshot,
  * replacement, or BORROW source; RELEASE has no target. These are positions
- * already checked by the independent Cell/Ref CFG verifier, not permissions. */
+ * already checked by the independent Cell/Ref CFG verifier, not permissions.
+ * CALLABLE_VALUE copies one constructor transport row; target_value is its
+ * alias source and callable_function is only an exact FUNCTION_REF target.
+ * MATERIALIZE requests a real zero-capture environment at that constructor.
+ * SCOPE_EXIT names the kept source/result in value/target_value and the scope
+ * in callable_scope. Publish that keep before the following same-position
+ * RELEASE facts. These events do not replace scope or escaping validation. */
 typedef struct XrLirOwnershipFact {
     XrLirOwnershipFactKind kind;
     uint32_t function, block, instruction, value, argument, edge;
@@ -49,6 +59,10 @@ typedef struct XrLirOwnershipFact {
     XrLirType type, array_element;
     XrLirArrayOperation array_operation;
     XrLirMapOperation map_operation;
+    XrLirCallableTransport callable_transport;
+    XrLirOp callable_operation;
+    uint32_t callable_function, callable_scope;
+    bool callable_materialize;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

@@ -365,12 +365,15 @@ static void facts_seed_origins(void) {
     CHECK(seed->operation==XR_LIR_FUNCTION_REF && seed->block==entry.id && seed->instruction &&
         seed->persistent && seed->known_target==leaf.id && !seed->capture_count &&
         seed->constructor_storage==XR_LIR_CLOSURE_FRAME && !seed->state_capture);
+    CHECK(seed->materialize && seed->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED &&
+        selected->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED && !selected->materialize);
     const XrLirCallableValueFact *returned=&facts.values[indirect.id], *read=&facts.values[state_read.id];
     CHECK(returned->type==callable && returned->operation==XR_LIR_CALL_INDIRECT &&
         returned->block==join.id && returned->instruction && !returned->parameter &&
         returned->persistent && !returned->known_target && returned->origin==indirect.id);
     CHECK(read->type==callable && read->operation==XR_LIR_STATE_READ && read->block==entry.id &&
         read->instruction && !read->parameter && read->persistent && !read->known_target && read->origin==state_read.id);
+    CHECK(read->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED && returned->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED);
     CHECK(live && live_bytes); xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
     puts("callable block arguments, code-only seeds, indirect results and State reads retain exact facts");
 }
