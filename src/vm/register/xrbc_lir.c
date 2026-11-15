@@ -166,10 +166,7 @@ typedef struct {
     uint32_t environment_size;
     XrRbcStateAccess *state_accesses;
     size_t state_access_count, state_access_capacity;
-    XrRbcArrayAccess *array_accesses;
-    XrRbcArrayLocation *array_operands;
     XrRbcRegisterKind *reference_spill_kinds;
-    size_t array_access_count, array_access_capacity, array_operand_count, array_operand_capacity;
     size_t code_count, code_capacity, source_id_capacity, constant_count, constant_capacity;
     size_t *blocks;
     RbcLirPatch *patches;
@@ -616,17 +613,14 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        return rbc_lir_map_role(input, i) || xr_lir_range_point(input, i) || xr_lir_string_role(input, i) || xr_lir_display_point(input, i) ||
-            (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
+        if (rbc_lir_map_role(input,i) ||
+            (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id)) return false;
+        return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);
     }
-    case XR_LIR_MAP_LITERAL_NEW: case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
-    case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
-    case XR_LIR_SET_NEW: case XR_LIR_SET_LEN: case XR_LIR_SET_CONTAINS:
-    case XR_LIR_SET_ADD: case XR_LIR_SET_REMOVE: case XR_LIR_SET_CLEAR:
-    case XR_LIR_SET_RETAIN: case XR_LIR_SET_DROP: case XR_LIR_SET_CELL_DROP:
-    case XR_LIR_SET_BORROW: case XR_LIR_SET_REF_READ: case XR_LIR_SET_REF_WRITE: return true;
+    case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
+    case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return false;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
-    case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
+    case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return false;
     case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return false;
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
@@ -1280,8 +1274,8 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
-    if(rbc_lir_map_point(c,i))return rbc_lir_map_emit(c,i);
-    if(rbc_lir_array_point(c,i))return rbc_lir_array_emit(c,i);
+    if (rbc_lir_map_point(c,i) || rbc_lir_array_point(c,i))
+        return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"selected container operation has no fixed execution plan");
     if (i->op == XR_LIR_CONST &&
         (c->immediates[i->result].known || c->immediates[i->result].pooled) &&
         !c->immediates[i->result].materialize) return true;
@@ -1547,8 +1541,6 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .register_kinds=c->register_kinds, .register_kind_count=c->register_count,
         .cell_kinds=c->cell_kinds, .cell_kind_count=c->cell_count,
         .state_accesses=c->state_accesses, .state_access_count=c->state_access_count,
-        .array_accesses=c->array_accesses,.array_access_count=c->array_access_count,
-        .array_operands=c->array_operands,.array_operand_count=c->array_operand_count,
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
         .result_kind=c->view.result == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 : c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
@@ -1591,8 +1583,6 @@ static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
         xr_free((void *) module.functions[f].environments);
         xr_free((void *) module.functions[f].cell_kinds);
         xr_free((void *) module.functions[f].state_accesses);
-        xr_free((void *) module.functions[f].array_accesses);
-        xr_free((void *) module.functions[f].array_operands);
         xr_free((void *) module.functions[f].reference_spill_kinds);
         xr_free((void *) module.functions[f].aggregate_values);
         xr_free((void *) module.functions[f].aggregate_accesses);
@@ -1779,7 +1769,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.environments);
             xr_free(c.cell_kinds);
             xr_free(c.state_accesses);
-            xr_free(c.array_accesses);xr_free(c.array_operands);xr_free(c.reference_spill_kinds);
+            xr_free(c.reference_spill_kinds);
             xr_free(c.aggregate_values);xr_free(c.aggregate_accesses);xr_free(c.aggregate_operands);
             xr_free(c.aggregate_parameters);xr_free(c.aggregate_arguments);
             xr_free(pool.mapping);
