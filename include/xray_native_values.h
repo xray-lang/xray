@@ -42,6 +42,10 @@ XRAY_API void xrt_native_string_create(XrtManagedFrame *, size_t slot,
  * one complete String in the true-empty stable destination slot. */
 XRAY_API void xrt_native_string_i64_create(XrtManagedFrame *, size_t slot,
     int64_t value, uint32_t source_id);
+/* Format the exact binary64 payload with the shared integer-only decimal
+ * kernel. No floating-point arithmetic or host formatting is performed. */
+XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
+    uint64_t bits, uint32_t source_id);
 /* Inputs are live admitted String borrows, including aliases. The destination
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
