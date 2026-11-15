@@ -10,11 +10,15 @@
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_string_value.h"
+#include "runtime/native/xnative_array_backing.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); abort(); } } while (0)
+
+#define OK(c) CHECK((c)==XR_LIR_OK)
+#include "../lir/lir_array_ref_fixture.h"
 
 static size_t attempts, failure = SIZE_MAX, compiler_live_allocations;
 static struct { void *pointer; size_t bytes; } allocations[4096];
@@ -269,13 +273,78 @@ static void string_outcome_lifetime(void) {
     xr_rbc_outcome_free(&outcome); CHECK(!outcome && !compiler_live_allocations);
     puts("String outcome: fixed UTF-8 backing survives compiler, program and execution retirement passed");
 }
+static void array_binding_calls(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};
+    for (size_t e=0;e<4;++e) {
+        XrLirModule *module=NULL; OK(array_ref_fixture(elements[e],&module));
+        XrLirFunction root={0}; OK(xr_lir_function_at(module,0,&root));
+        attempts=0; XrRbcProgram *program=compile(module,root); size_t sites=attempts;
+        if (!e) {
+            xr_rbc_program_destroy(program); program=NULL; CHECK(!compiler_live_allocations);
+            for (size_t n=1;n<=sites;++n) {
+                attempts=0; failure=n;
+                CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_OUT_OF_MEMORY && !program && !compiler_live_allocations);
+            }
+            failure=SIZE_MAX; program=compile(module,root);
+            printf("Array typed code allocation rollback sites: %zu\n",sites);
+        }
+        check_receiving(program);
+        const XrRbcModule *image=xr_rbc_program_view(program);
+        for (uint32_t f=0;f<image->function_count;++f) {
+            const XrRbcValueCode *code=xr_rbc_module_value_code(image,f);
+            CHECK(code && !image->functions[f].cell_count);
+            for (uint32_t v=1;v<=code->value_count;++v)
+                if (code->homes->bindings && code->homes->bindings[v].type)
+                    CHECK(code->locations[v].kind==XR_RBC_VALUE_NOWHERE);
+        }
+        xr_lir_module_destroy(module); run_after_input_retirement(program,0);
+    }
+    puts("Array binding calls: four families use stable local and State owners after compiler input retirement passed");
+}
+static void array_outcome_lifetime(void) {
+    static const uint8_t bytes[]={'A',0xc3,0xa9,0,0xe4,0xb8,0xad};
+    XrLirModule *module=NULL; OK(xr_lir_array_module_create(NULL,&module));
+    XrLirFunction root={0}; XrLirFunctionSpec spec={.name="array_result",.name_length=12,.result=XR_LIR_ARRAY};
+    OK(xr_lir_declare_function(module,&spec,&root));
+    OK(xr_lir_set_array_result(module,root,&(XrLirArrayShape){XR_LIR_STRING}));
+    OK(xr_lir_define_function(module,root)); XrLirBlock block={0};
+    OK(xr_lir_add_block(module,root,NULL,0,&block)); OK(xr_lir_set_entry(module,root,block));
+    XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,bytes,sizeof(bytes),&literal));
+    XrLirValue text=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id),args[]={text,text},array={0};
+    uint32_t constructor=0; OK(xr_lir_array_operation(module,XR_LIR_STRING,XR_LIR_ARRAY_OP_NEW,&constructor));
+    OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_ARRAY,
+        .intrinsic=constructor,.operands=args,.operand_count=2},&array));
+    managed_state_effect(module,block,XR_LIR_STRING_DROP,&text,1,0);
+    OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&array,.operand_count=1}));
+    OK(xr_lir_module_finish(module,NULL)); XrRbcProgram *program=compile(module,root); check_receiving(program);
+    const XrRbcModule *view=xr_rbc_program_view(program); XrRbcModule raw=*view; raw.code_lease=(XrRbcCodeLease){0};
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
+    uint32_t word=XR_RBC_RET; XrRbcRegisterKind kind=XR_RBC_ARRAY_STRING;
+    XrRbcFunction function={.code=&word,.code_count=1,.register_count=1,.register_kinds=&kind,.register_kind_count=1,.result_kind=kind};
+    raw=(XrRbcModule){.functions=&function,.function_count=1};
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
+    xr_lir_module_destroy(module); CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program); XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK); xr_rbc_execution_free(&execution);
+    const XrtManagedHeader *header=NULL; CHECK(xr_rbc_outcome_array(outcome,&header) && header);
+    const XrtArrayBacking *result=(const XrtArrayBacking *)header; CHECK(result->length==2 && result->capacity>=2);
+    const XrtStringBacking *first=NULL,*second=NULL;
+    CHECK(xrt_array_backing_string_at(result,0,&first)==XRT_MANAGED_OK && xrt_array_backing_string_at(result,1,&second)==XRT_MANAGED_OK);
+    CHECK(first==second && first->length==sizeof(bytes) && first->runes==4 && !memcmp(first->bytes,bytes,sizeof(bytes)));
+    XrtManagedHeader *owned=NULL; CHECK(xr_rbc_outcome_take_array(outcome,&owned) && owned==header);
+    xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
+    CHECK(first->length==sizeof(bytes) && !memcmp(first->bytes,bytes,sizeof(bytes))); xrt_managed_drop(owned);
+    puts("Array outcome: real aliased String tail survives code and outcome retirement; raw Array returns reject passed");
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
     const XrRbcValueCode *callee = xr_rbc_module_value_code(xr_rbc_program_view(program),1);
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
-    allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime(); CHECK(!compiler_live_allocations);
+    allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
+    array_binding_calls(); array_outcome_lifetime(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
