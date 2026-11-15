@@ -58,7 +58,7 @@ static void default_deallocate(void *context, void *memory, size_t bytes) {
     (void)context; (void)bytes; xr_free(memory);
 }
 
-XR_FUNCDEF XrtManagedStatus xrt_billing_owner_new(const XrtManagedAllocator *input,
+XRAY_API XrtManagedStatus xrt_billing_owner_new(const XrtManagedAllocator *input,
     size_t limit, XrtBillingOwner **output) {
     if (!output || *output || (input && (!input->allocate || !input->deallocate ||
         !input->lease.retain || !input->lease.drop))) return XRT_MANAGED_ARGUMENT;
@@ -80,10 +80,10 @@ XR_FUNCDEF XrtManagedStatus xrt_billing_owner_new(const XrtManagedAllocator *inp
     *output = owner;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF bool xrt_billing_owner_retain(XrtBillingOwner *owner) {
+XRAY_API bool xrt_billing_owner_retain(XrtBillingOwner *owner) {
     return owner && xr_signed_rc_retain(&owner->references);
 }
-XR_FUNCDEF void xrt_billing_owner_drop(XrtBillingOwner *owner) {
+XRAY_API void xrt_billing_owner_drop(XrtBillingOwner *owner) {
     if (!owner || !metadata_last(&owner->references)) return;
     XR_CHECK(!owner->weak_ops && atomic_load(&owner->bytes) == sizeof(*owner) &&
         atomic_load(&owner->blocks) == 1, "the last billing lease follows every physical free");
@@ -91,17 +91,17 @@ XR_FUNCDEF void xrt_billing_owner_drop(XrtBillingOwner *owner) {
     allocator.deallocate(allocator.context, owner, sizeof(*owner));
     lease_drop(allocator.lease);
 }
-XR_FUNCDEF void xrt_billing_owner_close(XrtBillingOwner *owner) {
+XRAY_API void xrt_billing_owner_close(XrtBillingOwner *owner) {
     billing_lock(owner);
     atomic_store_explicit(&owner->closed, true, memory_order_release);
     billing_unlock(owner);
 }
-XR_FUNCDEF void xrt_billing_owner_fail_after(XrtBillingOwner *owner, size_t count) {
+XRAY_API void xrt_billing_owner_fail_after(XrtBillingOwner *owner, size_t count) {
     billing_lock(owner);
     atomic_store_explicit(&owner->fail_after, count, memory_order_relaxed);
     billing_unlock(owner);
 }
-XR_FUNCDEF XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *owner) {
+XRAY_API XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *owner) {
     return (XrtBillingStats){atomic_load(&owner->bytes), atomic_load(&owner->blocks),
         atomic_load(&owner->allocations), atomic_load(&owner->fail_after), atomic_load(&owner->closed)};
 }
@@ -140,11 +140,11 @@ static void billing_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
     XR_CHECK(blocks > 1 && held >= bytes + sizeof(*owner), "every allocation refunds its original billing owner");
 }
 
-XR_FUNCDEF XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *owner, size_t bytes, void **empty) {
+XRAY_API XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *owner, size_t bytes, void **empty) {
     if (!owner || !bytes || !empty || *empty) return XRT_MANAGED_ARGUMENT;
     return billing_allocate(owner, bytes, empty);
 }
-XR_FUNCDEF void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
+XRAY_API void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
     XR_CHECK(owner && memory && bytes, "metadata free consumes its exact allocation under a live billing reference");
     billing_free(owner, memory, bytes);
 }
@@ -180,7 +180,7 @@ static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     }
     return true;
 }
-XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
+XRAY_API XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     const XrtRuntimeTypeSpec *spec, XrtRuntimeTypePlan **output) {
     if (!owner || !output || *output || !type_spec_valid(spec)) return XRT_MANAGED_ARGUMENT;
     if (!xrt_billing_owner_retain(owner)) return XRT_MANAGED_REFCOUNT;
@@ -201,10 +201,10 @@ XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     *output = plan;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF bool xrt_runtime_type_plan_retain(XrtRuntimeTypePlan *plan) {
+XRAY_API bool xrt_runtime_type_plan_retain(XrtRuntimeTypePlan *plan) {
     return plan && xr_signed_rc_retain(&plan->references);
 }
-XR_FUNCDEF void xrt_runtime_type_plan_drop(XrtRuntimeTypePlan *plan) {
+XRAY_API void xrt_runtime_type_plan_drop(XrtRuntimeTypePlan *plan) {
     if (!plan || !metadata_last(&plan->references)) return;
     XrtBillingOwner *owner = plan->billing;
     XrtManagedLease code = plan->spec.code;
@@ -226,7 +226,7 @@ static void ops_dispose(XrtManagedOps *ops) {
     xrt_runtime_type_plan_drop(plan);
     xrt_billing_owner_drop(owner);
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_ops_bind(XrtBillingOwner *owner,
+XRAY_API XrtManagedStatus xrt_managed_ops_bind(XrtBillingOwner *owner,
     XrtRuntimeTypePlan *plan, XrtManagedOps **output) {
     if (!owner || !plan || !output || *output) return XRT_MANAGED_ARGUMENT;
     billing_lock(owner);
@@ -260,10 +260,10 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_ops_bind(XrtBillingOwner *owner,
     if (status == XRT_MANAGED_OK) *output = existing ? existing : candidate;
     return status;
 }
-XR_FUNCDEF bool xrt_managed_ops_retain(XrtManagedOps *ops) {
+XRAY_API bool xrt_managed_ops_retain(XrtManagedOps *ops) {
     return ops && xr_signed_rc_retain(&ops->references);
 }
-XR_FUNCDEF void xrt_managed_ops_drop(XrtManagedOps *ops) {
+XRAY_API void xrt_managed_ops_drop(XrtManagedOps *ops) {
     if (!ops) return;
     XrtBillingOwner *owner = ops->billing;
     billing_lock(owner);
@@ -398,7 +398,7 @@ static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
         }
     }
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
+XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
     if (!ops || !pending || pending->value || pending->allocation_bytes) return XRT_MANAGED_ARGUMENT;
     const XrtRuntimeTypeSpec *spec = &ops->plan->spec;
     size_t children;
@@ -422,7 +422,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes
     *pending = (XrtManagedPending){value, bytes};
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_commit(XrtManagedPending *pending, XrtManagedHeader **output) {
+XRAY_API XrtManagedStatus xrt_managed_commit(XrtManagedPending *pending, XrtManagedHeader **output) {
     if (!pending || !pending->value || !output || output == &pending->value || *output)
         return XRT_MANAGED_ARGUMENT;
     size_t bytes;
@@ -432,17 +432,17 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_commit(XrtManagedPending *pending, XrtMa
     *pending = (XrtManagedPending){0};
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF void xrt_managed_abort(XrtManagedPending *pending) {
+XRAY_API void xrt_managed_abort(XrtManagedPending *pending) {
     if (!pending || !pending->value) return;
     XrtManagedPending owned = *pending;
     *pending = (XrtManagedPending){0};
     XR_CHECK(value_release_last(owned.value), "a pending token owns the last unpublished reference");
     allocation_dispose(owned.value, owned.allocation_bytes);
 }
-XR_FUNCDEF bool xrt_managed_retain(XrtManagedHeader *value) {
+XRAY_API bool xrt_managed_retain(XrtManagedHeader *value) {
     return value && xr_signed_rc_retain(&value->references);
 }
-XR_FUNCDEF void xrt_managed_drop(XrtManagedHeader *value) {
+XRAY_API void xrt_managed_drop(XrtManagedHeader *value) {
     if (!value_release_last(value)) return;
     size_t bytes;
     XR_CHECK(allocation_extent(value->ops->plan, value, &bytes), "published physical extent remains representable");

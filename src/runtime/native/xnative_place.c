@@ -55,7 +55,7 @@ static void place_unlock_pair(PlaceLocation destination, PlaceLocation source) {
     *source.slot.busy = false;
     *destination.slot.busy = false;
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_borrow(XrtPlace place, const XrtManagedHeader **output) {
+XRAY_API XrtManagedStatus xrt_place_borrow(XrtPlace place, const XrtManagedHeader **output) {
     if (!output) return XRT_MANAGED_ARGUMENT;
     PlaceLocation location;
     XrtManagedStatus status = place_location(place, &location);
@@ -97,11 +97,11 @@ static XrtManagedStatus place_replace(XrtPlace destination, XrtPlace source, boo
     place_unlock_pair(to, from);
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source,
+XRAY_API XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source,
     const XrtPlacePublication *publication) {
     return place_replace(destination, source, true, publication);
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
+XRAY_API XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
     const XrtPlacePublication *publication) {
     return place_replace(destination, source, false, publication);
 }
@@ -148,7 +148,7 @@ static XrtManagedStatus edge_preflight(const XrtPlaceEdge *edges, size_t count) 
     }
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t count,
+XRAY_API XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t count,
     const XrtPlacePublication *publication) {
     if ((count && !edges) || (publication && !publication->publish)) return XRT_MANAGED_ARGUMENT;
     if (count > SIZE_MAX / 3) return XRT_MANAGED_OVERFLOW;

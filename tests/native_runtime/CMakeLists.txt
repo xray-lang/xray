@@ -1,3 +1,25 @@
+add_executable(test_native_managed_public managed_public_client.c)
+target_link_libraries(test_native_managed_public PRIVATE xray_native_runtime)
+set_target_properties(test_native_managed_public PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_managed_public PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_managed_public PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_native_managed_public PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_managed_public COMMAND test_native_managed_public)
+set_tests_properties(native_managed_public PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+set(managed_public_provider gnu)
+if(MSVC)
+    set(managed_public_provider msvc)
+endif()
+add_test(NAME native_managed_public_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_managed_public_native.py"
+    --compiler "${CMAKE_C_COMPILER}" --kind "${managed_public_provider}"
+    --source "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/managed-public")
+set_tests_properties(native_managed_public_native PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+
 add_executable(test_native_capture_backing test_capture_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
@@ -49,7 +71,7 @@ add_executable(test_native_managed_status test_managed_status.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_status.c")
-target_include_directories(test_native_managed_status PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_managed_status PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_managed_status PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_managed_status PRIVATE /W4 /WX /utf-8)
@@ -67,7 +89,7 @@ add_executable(test_native_place test_place.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c")
-target_include_directories(test_native_place PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_place PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_place PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_place PRIVATE /W4 /WX /utf-8)
@@ -88,7 +110,7 @@ add_executable(test_native_string_backing_ops test_string_backing_ops.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing_ops.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c")
-target_include_directories(test_native_string_backing_ops PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_string_backing_ops PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_string_backing_ops PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_string_backing_ops PRIVATE /W4 /WX /utf-8)
@@ -110,7 +132,7 @@ add_executable(test_native_backing test_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_map_backing.c")
-target_include_directories(test_native_backing PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_backing PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_backing PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_backing PRIVATE /W4 /WX /utf-8)
@@ -126,7 +148,7 @@ set_tests_properties(native_backing PROPERTIES LABELS "unit;native-runtime;owner
 
 add_executable(test_native_managed_kernel test_managed_kernel.c)
 target_link_libraries(test_native_managed_kernel PRIVATE xray_native_runtime)
-target_include_directories(test_native_managed_kernel PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_managed_kernel PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_managed_kernel PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_managed_kernel PRIVATE /W4 /WX /utf-8)
@@ -141,7 +163,7 @@ set_tests_properties(native_managed_kernel PROPERTIES LABELS "unit;native-runtim
 
 add_executable(test_native_managed_root test_managed_root.c)
 target_link_libraries(test_native_managed_root PRIVATE xray_native_runtime)
-target_include_directories(test_native_managed_root PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_managed_root PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_managed_root PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_managed_root PRIVATE /W4 /WX /utf-8)
