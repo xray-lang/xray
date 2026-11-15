@@ -9,8 +9,12 @@ import re
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.artifacts import complete_native_artifacts
 
 
 def main() -> None:
@@ -337,6 +341,7 @@ def main() -> None:
     run("relocated-build", [relocated, "build", fixtures / "hello.xr", "-o", executable], 0)
     native = run("relocated-run", [executable], 0)
     assert native.stdout == b"42\n" and not native.stderr
+    complete_native_artifacts(work)
     print(f"{len(records)} public LIR command checks passed")
 
 
