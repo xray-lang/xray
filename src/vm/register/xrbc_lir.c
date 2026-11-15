@@ -20,9 +20,11 @@
 #include "lir/xlir_map.h"
 #include "lir/xlir_view.h"
 #include "lir/xlir_display.h"
+#include "lir/xlir_pod.h"
 #include "lir/xlir_builtin_admission.h"
 #include "lir/xlir_value_layout.h"
 #include "xrbc_value_homes.h"
+#include "xrbc_value_code.h"
 #include "lir/xlir_state_projection.h"
 #include "lir/xlir_value_image.h"
 #include "lir/xlir_internal.h"
@@ -39,6 +41,7 @@ typedef struct XrRbcCodeImage {
     XrRbcModule module;
     XrtLocationOwner *locations;
     XrLirValueHomes **value_homes;
+    XrRbcValueCode **value_codes;
     XrLirValueImage *value_image;
     XrLirStateProjection *state_projection;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
@@ -54,6 +57,7 @@ struct XrRbcProgram {
     uint32_t *physical_callables;
     XrRbcCodeImage *image;
     XrLirValueHomes **value_homes;
+    XrRbcValueCode **value_codes;
     XrLirValueImage *value_image;
     XrLirStateProjection *state_projection;
 };
@@ -86,6 +90,15 @@ XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module
     if (module->functions != image->module.functions || module->function_count != image->module.function_count)
         return NULL;
     return image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
+}
+XR_FUNC const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *module, uint32_t function) {
+    if (!module || function >= module->function_count || !module->code_lease.owner ||
+        module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release)
+        return NULL;
+    const XrRbcCodeImage *image = module->code_lease.owner;
+    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
+        return NULL;
+    return image->value_codes ? image->value_codes[function] : NULL;
 }
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
@@ -121,6 +134,11 @@ typedef struct {
     const uint32_t *functions;
     RbcLirOutputValues output;
     RbcLirLiteralPool *literals;
+    const XrLirValueHomes *homes;
+    XrRbcValueCode *value_code;
+    uint32_t *value_edges;
+    size_t value_access_capacity, value_argument_capacity;
+    bool typed_values;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
     uint32_t *scope_home;
@@ -528,17 +546,18 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
                 rbc_lir_value_source(input, f, v, value, d));
             return false;
         }
-        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
-            XrLirArrayShape shape = {0};
-            if (xr_lir_array_shape_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
-                rbc_lir_array_family(shape.element) == XR_RBC_ARRAY_FAMILY_COUNT) {
-                rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "Array value has no bytecode element implementation", (XrLirSource){0});
-                return false;
-            }
-        } else if (type == XR_LIR_STATE_REF) {
+        if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
+            type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
+            type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF) {
+            rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"selected value family has no fixed execution plan",
+                rbc_lir_value_source(input,f,v,value,d));
+            return false;
+        }
+        if (type == XR_LIR_STATE_REF) {
             XrLirStateReference shape = {0};
             if (xr_lir_state_reference_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
-                (shape.payload == XR_LIR_ARRAY && rbc_lir_array_family(shape.array_element) == XR_RBC_ARRAY_FAMILY_COUNT)) {
+                (shape.payload != XR_LIR_STRING && !rbc_lir_scalar(shape.payload) && shape.payload != XR_LIR_UNIT &&
+                 !rbc_lir_aggregate_type(input,shape.payload))) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "module reference has no bytecode element implementation", (XrLirSource){0});
                 return false;
             }
@@ -549,6 +568,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
+    if (xr_lir_string_role(input,i) || (xr_lir_display_point(input,i) && i->type == XR_LIR_STRING)) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return false;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
@@ -1006,9 +1026,11 @@ static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i)
         rbc_lir_emit(c, XR_RBC_LOADI, result, 0, 0, inverse ? 0 : 1);
 }
 
-static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge) {
+static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t);
+static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     bool scratch = false;
-    return rbc_lir_copies(c, edge, true, &scratch) && rbc_lir_jump(c, edge.target);
+    return (c->typed_values ? rbc_lir_value_edge(c,edge,ordinal) : rbc_lir_copies(c,edge,true,&scratch)) &&
+        rbc_lir_jump(c, edge.target);
 }
 
 static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i) {
@@ -1023,9 +1045,9 @@ static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i
     uint32_t taken = comparison && i->predicate != XR_LIR_NE ? 0u : 1u;
     size_t taken_jump = c->code_count;
     if (!rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 0) ||
-        !rbc_lir_edge(c, i->edges[1u - taken])) return false;
+        !rbc_lir_edge(c, i->edges[1u - taken],2u - taken)) return false;
     size_t taken_start = c->code_count;
-    if (!rbc_lir_edge(c, i->edges[taken])) return false;
+    if (!rbc_lir_edge(c, i->edges[taken],taken + 1)) return false;
     if (!xr_rbc_jump(&c->code[taken_jump], taken_jump, taken_start, c->code_count))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "conditional edge exceeds jump encoding");
     return true;
@@ -1062,6 +1084,7 @@ static bool rbc_lir_literal(RbcLirCompiler *c, uint32_t origin, uint32_t *ordina
     return true;
 }
 
+#include "xrbc_lir_value_code.inc.c"
 #include "xrbc_lir_state.inc.c"
 #include "xrbc_lir_aggregate_call.inc.c"
 #include "xrbc_lir_callable_emit.inc.c"
@@ -1095,27 +1118,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_ITOF: case XR_LIR_FTOI:
         return rbc_lir_emit(c, i->op == XR_LIR_ITOF ? XR_RBC_ITOF : XR_RBC_FTOI,
             result, c->slots[i->operands[0]], 0, 0);
-    case XR_LIR_STRING_LITERAL: {
-        uint32_t ordinal;
-        return rbc_lir_literal(c, (uint32_t)i->bits, &ordinal) &&
-            rbc_lir_emit(c, XR_RBC_STRING_LITERAL, result, 0, 0, ordinal);
-    }
-    case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_CONCAT:
-        return rbc_lir_emit(c, i->op == XR_LIR_STRING_I64 ? XR_RBC_STRING_I64 :
-            i->op == XR_LIR_STRING_F64 ? XR_RBC_STRING_F64 :
-            i->op == XR_LIR_STRING_RETAIN ? XR_RBC_STRING_RETAIN : XR_RBC_STRING_CONCAT,
-            result, c->slots[i->operands[0]], i->operand_count == 2 ? c->slots[i->operands[1]] : 0, 0);
-    case XR_LIR_STRING_LEN:
-        return rbc_lir_emit(c, XR_RBC_STRING_LEN, result, c->slots[i->operands[0]], 0, 0);
-    case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
-        return rbc_lir_emit(c, i->op == XR_LIR_STRING_DROP ? XR_RBC_STRING_DROP :
-            i->op == XR_LIR_STRING_CELL_DROP ? XR_RBC_STRING_CELL_DROP : XR_RBC_STRING_PRINT,
-            c->slots[i->operands[0]], 0, 0, 0);
     case XR_LIR_CELL_NEW:
-        if (i->type == XR_LIR_STRING_CELL) {
-            c->cell_kinds[c->cell_count] = XR_RBC_STRING;
-            return rbc_lir_emit(c, XR_RBC_STRING_CELL_NEW, result, c->slots[i->operands[0]], c->cell_count++, 0);
-        }
         c->cell_kinds[c->cell_count] = XR_RBC_BITS;
         return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0) &&
             rbc_lir_emit(c, XR_RBC_CELL_NEW, result, 0, 0, c->cell_count++);
@@ -1144,7 +1147,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND:
         return rbc_lir_callable_scope_emit(c, i);
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
-    case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
+    case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0],1);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
     case XR_LIR_RET:
         {
@@ -1248,8 +1251,11 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
 }
 
 static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    bool handled = false;
+    if (!rbc_lir_value_instruction(c,i,&handled)) return false;
+    if (handled) return true;
     if (rbc_lir_callable_scope_point(i)) return rbc_lir_callable_scope_emit(c, i);
-    if (xr_lir_range_point(c->input, i) || xr_lir_string_role(c->input, i)) return rbc_lir_string_library(c, i);
+    if (xr_lir_range_point(c->input, i)) return rbc_lir_range_emit(c, i);
     if (xr_lir_display_point(c->input, i)) return rbc_lir_display_emit(c, i);
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
@@ -1377,6 +1383,8 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         if (op == XR_RBC_JMP) {
             successors[successors_count++] = rbc_lir_jump_target(c, pc);
         } else if (op != XR_RBC_RET && op != XR_RBC_RET0 &&
+            !(op == XR_RBC_VALUE_ACCESS && c->value_code && (c->code[pc] >> 16) < c->value_code->access_count &&
+                c->value_code->accesses[c->code[pc] >> 16].operation == XR_RBC_VALUE_RETURN) &&
             !xr_rbc_aggregate_return_word(c->aggregate_accesses, c->aggregate_access_count, c->code[pc])) {
             XR_DCHECK(pc + 1 < count, "emitted fallthrough stays inside its function");
             successors[successors_count++] = pc + 1;
@@ -1444,6 +1452,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot allocate SSA home tables");
     for(uint32_t v=0;v<=c->view.value_count;++v)c->spill_home[v]=UINT32_MAX;
     c->scalar_parameter_count = c->view.parameter_count;
+    c->typed_values = rbc_lir_value_needed(c);
     XrLirClosureTarget target = {0};
     xr_lir_closure_target_view(c->input, c->function, &target);
     if (target.capture_count) {
@@ -1462,7 +1471,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||
-        !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c)) return false;
+        !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c) || !rbc_lir_value_code_prepare(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "block table exceeds address space");
@@ -1593,6 +1602,7 @@ static void rbc_code_release(void *owner) {
     uint32_t count = atomic_fetch_sub_explicit(&image->references, 1, memory_order_acq_rel);
     XR_CHECK(count, "a code image retires only after its final actual lease");
     if (count != 1) return;
+    rbc_lir_value_codes_free(image->value_codes,image->module.function_count);
     xr_lir_state_projection_destroy(image->state_projection);
     xr_lir_value_image_destroy(image->value_image);
     rbc_value_homes_clear(image->value_homes, image->module.function_count);
@@ -1607,6 +1617,8 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
     image->locations = program->locations;
     image->value_homes = program->value_homes;
     program->value_homes = NULL;
+    image->value_codes = program->value_codes;
+    program->value_codes = NULL;
     image->value_image = program->value_image;
     program->value_image = NULL;
     image->state_projection = program->state_projection;
@@ -1625,6 +1637,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
     if (program->image) rbc_code_release(program->image);
     else {
+        rbc_lir_value_codes_free(program->value_codes,program->module.function_count);
         xr_lir_state_projection_destroy(program->state_projection);
         xr_lir_value_image_destroy(program->value_image);
         rbc_value_homes_clear(program->value_homes, program->module.function_count);
@@ -1698,6 +1711,11 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
     uint32_t source_id = 0;
     size_t literals = xr_lir_literal_count(input);
     RbcLirLiteralPool pool = {.program = p, .layouts=layouts};
+    if (p->value_homes) {
+        p->value_codes = xr_calloc(p->module.function_count,sizeof(*p->value_codes));
+        if (!p->value_codes) return rbc_lir_error(d,XR_RBC_COMPILE_OUT_OF_MEMORY,
+            "cannot own typed function directory",(XrLirSource){0});
+    }
     if (literals > SIZE_MAX / sizeof(*pool.mapping))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "literal mapping exceeds address space",
             (XrLirSource) {0});
@@ -1709,7 +1727,8 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
     }
     for (size_t f = 0; f < p->module.function_count; ++f) {
         RbcLirCompiler c = {.input = input, .function = {input, ids[f]},
-            .functions = mapping, .diagnostic = d, .source_id = source_id, .literals = &pool};
+            .functions = mapping, .diagnostic = d, .source_id = source_id, .literals = &pool,
+            .homes=p->value_homes ? p->value_homes[f] : NULL};
         xr_lir_function_view(input, c.function, &c.view);
         d->function = ids[f];
         bool success = rbc_lir_function(&c, &((XrRbcFunction *) p->module.functions)[f]);
@@ -1722,7 +1741,9 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.scope_home);
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
+        xr_free(c.value_edges);
         if (!success) {
+            rbc_lir_value_code_free(c.value_code);
             xr_free(c.code);
             xr_free(c.constants);
             xr_free(c.source_ids);
@@ -1738,6 +1759,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(pool.mapping);
             return c.status;
         }
+        if (c.value_code) p->value_codes[f] = c.value_code;
         if (!f) {
             p->parameter_count = c.view.parameter_count - (p->module.state_spec ? 1u : 0u);
             if (p->parameter_count)
@@ -1926,8 +1948,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     }
     p->module.functions = functions;
     p->module.function_count = count;
-    status = rbc_lir_build(input, ids, mapping, p, preparation.layouts, d);
-    if (status == XR_RBC_COMPILE_OK) status = rbc_lir_value_homes(input, ids, p, &preparation, d);
+    status = rbc_lir_value_homes(input, ids, p, &preparation, d);
+    if (status == XR_RBC_COMPILE_OK) status = rbc_lir_build(input, ids, mapping, p, preparation.layouts, d);
     if (status == XR_RBC_COMPILE_OK) {
         if (!rbc_lir_seal(p)) {
             status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,

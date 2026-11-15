@@ -287,6 +287,7 @@ static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
 
 static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
     bool *scratch) {
+    if (c->typed_values) return true;
     if (emit && !rbc_lir_aggregate_edge(c, edge)) return false;
     XrLirBlockView target;
     xr_lir_block_view(c->input,

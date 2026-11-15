@@ -63,7 +63,9 @@ static bool rbc_lir_array_move(RbcLirCompiler *c, XrRbcRegisterKind kind, uint32
             .result={destination, false}, .count=1};
         return rbc_lir_array_append(c, row, &operand);
     }
-    return rbc_lir_emit(c, kind == XR_RBC_STRING ? XR_RBC_STRING_TAKE : XR_RBC_MOV, destination, source, 0, 0);
+    if (kind == XR_RBC_STRING)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"String transfer requires common stable homes");
+    return rbc_lir_emit(c, XR_RBC_MOV, destination, source, 0, 0);
 }
 static bool rbc_lir_array_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
     XrLirArrayShape shape = {0};
