@@ -19,7 +19,9 @@ static void scalar_indexed_cell_hole(XrtLocationOwner *locations) {
     CHECK(xr_rbc_encode(&code[2], (XrRbcOperands){.op=XR_RBC_CELL_READ, .a=2, .b=0}));
     CHECK(xr_rbc_encode(&code[3], (XrRbcOperands){.op=XR_RBC_MOV, .a=1, .b=2}));
     CHECK(xr_rbc_encode(&code[4], (XrRbcOperands){.op=XR_RBC_RET, .a=2}));
-    XrRbcFunction function = {.code=code, .code_count=5, .register_count=3, .cell_count=2};
+    XrRbcRegisterKind cells[] = {XR_RBC_MAP_STRING_I64, XR_RBC_BITS};
+    XrRbcFunction function = {.code=code, .code_count=5, .register_count=3, .cell_count=2,
+        .cell_kinds=cells, .cell_kind_count=2};
     XrRbcModule module = {.functions=&function, .function_count=1};
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
