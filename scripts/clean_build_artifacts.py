@@ -221,11 +221,17 @@ def windows_processes() -> list[dict]:
     if os.name != "nt":
         raise RuntimeError("actual process inspection is supported on Windows only")
     command = ("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); "
-               "@(Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine) | ConvertTo-Json -Compress")
+               "@(Get-CimInstance Win32_Process | Select-Object ProcessId,Name,ExecutablePath,CommandLine) | ConvertTo-Json -Compress")
     result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
                             check=True, capture_output=True, timeout=20)
     data = json.loads(result.stdout.decode("utf-8-sig"))
     return data if isinstance(data, list) else [data]
+
+
+def process_path_match(value: str, paths: list[str]) -> bool:
+    normalized = value.replace("\\", "/").lower()
+    return any(re.search(re.escape(path.replace("\\", "/").rstrip("/").lower()) + r"(?=$|[/\s\"'])", normalized)
+               for path in paths)
 
 
 def relevant_process(process: dict, paths: list[str]) -> bool:
@@ -234,11 +240,13 @@ def relevant_process(process: dict, paths: list[str]) -> bool:
     name = str(process.get("Name", "")).lower()
     tools = {"cmake.exe", "ctest.exe", "ninja.exe", "cl.exe", "clang.exe", "clang-cl.exe",
              "gcc.exe", "g++.exe", "link.exe", "lld-link.exe", "xray.exe", "python.exe", "pythonw.exe"}
-    if name not in tools and not (name.startswith("test") and name.endswith(".exe")):
-        return False
-    command = str(process.get("CommandLine") or "").replace("\\", "/").lower()
-    return any(re.search(re.escape(path.replace("\\", "/").rstrip("/").lower()) + r"(?=$|[/\s\"'])", command)
-               for path in paths)
+    image = str(process.get("ExecutablePath") or "")
+    if image and process_path_match(image, paths):
+        return True
+    known_tool = name in tools or (name.startswith("test") and name.endswith(".exe"))
+    # An unrelated host wrapper can mention a managed path without running a
+    # product there. Missing image identity cannot establish that distinction.
+    return (known_tool or not image) and process_path_match(str(process.get("CommandLine") or ""), paths)
 
 
 def busy_reasons(policy: dict, processes=None) -> list[str]:
@@ -255,8 +263,9 @@ def busy_reasons(policy: dict, processes=None) -> list[str]:
             except (OSError, ValueError, UnsafeAttempt) as error:
                 reasons.append(f"unreadable resource request {request}: {error}")
     try:
+        paths = policy["process_paths"] + [rule["path"] for rule in policy["roots"]]
         for process in (windows_processes() if processes is None else processes):
-            if relevant_process(process, policy["process_paths"]):
+            if relevant_process(process, paths):
                 reasons.append(f"relevant process {process.get('ProcessId')}: {process.get('Name')}")
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         reasons.append(f"process inspection unavailable: {error}")
