@@ -83,7 +83,8 @@ static void *module_payload(const XrtModuleState *state, uint32_t slot) {
     return state->payload + state->layout->view.slots[slot].offset;
 }
 static bool module_reference_valid(const XrtModuleRef *reference) {
-    if (!reference || !reference->state || reference->slot >= reference->state->layout->view.slot_count) return false;
+    if (!reference || !reference->state || !reference->state->layout ||
+        reference->slot >= reference->state->layout->view.slot_count) return false;
     XrtModuleState *state = reference->state;
     return (reference == &state->initializers[reference->slot] && reference->required_flags == SLOT_CONSTRUCTED) ||
         (reference == &state->published[reference->slot] && reference->required_flags == SLOT_PUBLISHED);
@@ -316,6 +317,7 @@ XRAY_API void xrt_module_state_drop(XrtModuleState **owner) {
     XrtModuleState *state = *owner;
     *owner = NULL;
     xrt_module_state_clear(state);
+    state->busy = true;
     XrtBillingOwner *billing = state->billing;
     size_t bytes = state->bytes;
     xrt_managed_root_destroy(&state->temporary_root);
@@ -468,7 +470,7 @@ XRAY_API XrtModuleStatus xrt_module_reference_cache(const XrtModuleRef *referenc
     return XRT_MANAGED_OK;
 }
 XRAY_API XrtModuleStatus xrt_module_cache(const XrtModuleState *state, uint32_t slot, XrtModuleAccess *out) {
-    if (!state || slot >= state->layout->view.slot_count) return XRT_MANAGED_ARGUMENT;
+    if (!state || !state->layout || slot >= state->layout->view.slot_count) return XRT_MANAGED_ARGUMENT;
     return xrt_module_reference_cache(&state->published[slot], out);
 }
 XRAY_API void xrt_module_require(XrtModuleStatus status, uint32_t source_id) {

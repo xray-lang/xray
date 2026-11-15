@@ -57,6 +57,9 @@ typedef struct Audit {
     Pair expected;
     XrtModuleRef *reference;
     XrtModuleState **state;
+    XrtModuleRef *retiring_reference;
+    XrtModuleState *retiring_state;
+    size_t retirement_checks;
 } Audit;
 static bool provider_retain(void *context) { ++((Audit *)context)->leases; return true; }
 static void provider_drop(void *context) { CHECK(((Audit *)context)->leases); --((Audit *)context)->leases; }
@@ -68,6 +71,17 @@ static void *provider_allocate(void *context, size_t bytes) {
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *a = context;
+    if (a->retiring_reference) {
+        const void *unchanged = a;
+        BAD(xrt_module_borrow(a->retiring_reference,&unchanged)); CHECK(unchanged == a);
+        XrtModuleState *state_owner = a->retiring_state;
+        xrt_module_state_drop(&state_owner); CHECK(state_owner == a->retiring_state);
+        XrtModuleAccess access;
+        XrtManagedStatus cached = xrt_module_cache(a->retiring_state,0,&access);
+        CHECK(cached == XRT_MANAGED_OK || cached == XRT_MANAGED_ARGUMENT);
+        ++a->retirement_checks;
+        if (memory == a->retiring_state) a->retiring_reference = NULL;
+    }
     if (memory == a->watched[0] || memory == a->watched[1]) {
         CHECK(a->payload->left == a->expected.left && a->payload->right.value == a->expected.right.value &&
             a->payload->right.tag == a->expected.right.tag && a->payload->score == a->expected.score);
@@ -159,7 +173,11 @@ static void atomic_record(void) {
     OK(xrt_module_replace(reference,payload));
     OK(xrt_module_copy(reference,&snapshot)); CHECK(snapshot.score == 42); xrt_value_drop(plan,&snapshot);
     xrt_module_state_clear(state); BAD(xrt_module_borrow(reference,&payload));
+    meta.retiring_reference = values.retiring_reference = reference;
+    meta.retiring_state = values.retiring_state = state;
     xrt_module_state_drop(&state); CHECK(!meta.blocks && !meta.bytes && !meta.leases);
+    CHECK(meta.retirement_checks && values.retirement_checks && !values.retiring_reference);
+    meta.retiring_reference = NULL;
     OK(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&setup);
     CHECK(values.blocks == 1); xrt_billing_owner_drop(vb);
     CHECK(!values.leases && !values.blocks && !values.bytes);
