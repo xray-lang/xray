@@ -85,6 +85,9 @@ typedef struct {
     size_t closure_scope_count, closure_scope_capacity;
     XrRbcValueRuntime *values;
     XrtManagedHeader **value_result;
+    /* Borrowed only during execution; the pending outcome retains this owner.
+     * Keeping it in cold state avoids a live dispatch register on scalar paths. */
+    const XrtLocationOwner *call_locations;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -433,6 +436,7 @@ XR_ALIGN(64)
 #endif
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     const XrtLocationOwner *locations, XrRbcRegister *result, const XrRbcEntry *entries) {
+    (void)locations;
     const XrRbcFunction *function;
     const uint32_t *code;
     const uint64_t *constants;
@@ -564,6 +568,7 @@ static void xr_rbc_root(void *context) {
     execution->pending->status = xr_rbc_values_begin(execution->module, &execution->stack,
         (uint32_t)execution->stack.frames[0].function, 0);
     if (execution->pending->status != XR_RBC_OK) return;
+    execution->stack.call_locations=execution->pending->locations;
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
         execution->pending->locations, &execution->pending->value, execution->entries);
 }
