@@ -1,0 +1,164 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_capture_backing.c - Fixed captures under independent plan/code leases
+ *
+ * KEY CONCEPT:
+ *   Instances retain Ops, never their creator setup. Declared child slots use
+ *   the kernel's iterative retirement without a recursive payload destructor.
+ */
+#include "xnative_capture_backing.h"
+#include "base/xchecks.h"
+#include <stdalign.h>
+#include <string.h>
+
+struct XrtCaptureType {
+    XrtBillingOwner *billing;
+    XrtManagedOps *ops;
+    const XrtValuePlan *plan;
+    size_t allocation_bytes, object_bytes;
+    XrtValuePlanSpec shape, payload;
+};
+_Static_assert(sizeof(XrtCaptureType) % alignof(size_t) == 0,
+    "cold shifted-offset storage follows the setup with native alignment");
+
+XR_FUNCDEF void xrt_capture_type_drop(XrtCaptureType **owned) {
+    if (!owned || !*owned) return;
+    XrtCaptureType *type = *owned;
+    *owned = NULL;
+    XrtBillingOwner *billing = type->billing;
+    XrtManagedOps *ops = type->ops;
+    size_t bytes = type->allocation_bytes;
+    xrt_managed_metadata_free(billing, type, bytes);
+    xrt_managed_ops_drop(ops);
+    xrt_billing_owner_drop(billing);
+}
+XR_FUNCDEF XrtManagedStatus xrt_capture_type_new(XrtBillingOwner *billing,
+    const XrtValuePlan *plan, XrtCaptureType **empty) {
+    if (!billing || !plan || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    XrtValuePlanSpec shape, payload;
+    XrtManagedStatus status = xrt_value_plan_view(plan, &shape);
+    if (status != XRT_MANAGED_OK) return status;
+    payload = shape;
+    if (shape.kind == XRT_VALUE_CELL) {
+        status = xrt_value_plan_view(shape.element, &payload);
+        if (status != XRT_MANAGED_OK || (payload.kind != XRT_VALUE_I64 && payload.kind != XRT_VALUE_MAP_STRING_I64))
+            return XRT_MANAGED_ARGUMENT;
+    } else if (shape.kind != XRT_VALUE_ENVIRONMENT) return XRT_MANAGED_ARGUMENT;
+    if (payload.size > SIZE_MAX - sizeof(XrtManagedHeader) ||
+        payload.owned_count > (SIZE_MAX - sizeof(XrtCaptureType)) / sizeof(size_t)) return XRT_MANAGED_OVERFLOW;
+    if (!xrt_billing_owner_retain(billing)) return XRT_MANAGED_REFCOUNT;
+    size_t bytes = sizeof(XrtCaptureType) + payload.owned_count * sizeof(size_t);
+    void *memory = NULL;
+    status = xrt_managed_metadata_allocate(billing, bytes, &memory);
+    if (status != XRT_MANAGED_OK) { xrt_billing_owner_drop(billing); return status; }
+    XrtCaptureType *type = memory;
+    *type = (XrtCaptureType){.billing=billing, .plan=plan, .allocation_bytes=bytes,
+        .object_bytes=sizeof(XrtManagedHeader) + payload.size, .shape=shape, .payload=payload};
+    size_t *offsets = (size_t *)(type + 1);
+    for (size_t i = 0; i < payload.owned_count; ++i) offsets[i] = sizeof(XrtManagedHeader) + payload.owned_offsets[i];
+    size_t alignment = payload.alignment > alignof(XrtManagedHeader) ? payload.alignment : alignof(XrtManagedHeader);
+    XrtRuntimeTypeSpec physical = {.fixed_size=type->object_bytes, .alignment=alignment,
+        .capacity_offset=SIZE_MAX, .child_offsets=payload.owned_count ? offsets : NULL,
+        .child_count=payload.owned_count, .code=xrt_value_plan_lease((XrtValuePlan *)plan)};
+    XrtRuntimeTypePlan *received = NULL;
+    status = xrt_runtime_type_plan_new(billing, &physical, &received);
+    if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, received, &type->ops);
+    xrt_runtime_type_plan_drop(received);
+    if (status != XRT_MANAGED_OK) { xrt_capture_type_drop(&type); return status; }
+    *empty = type;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus capture_finish(XrtManagedFrame *frame, size_t slot, XrtManagedStatus status) {
+    if (status == XRT_MANAGED_OK) status = xrt_managed_slot_commit(frame, slot);
+    if (status != XRT_MANAGED_OK)
+        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "a capture factory aborts only its own prepared token");
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_environment_create(XrtManagedFrame *frame, size_t slot,
+    const XrtCaptureType *type, const void *captures) {
+    if (!type || type->shape.kind != XRT_VALUE_ENVIRONMENT ||
+        (type->payload.size && (!captures || (uintptr_t)captures % type->payload.alignment))) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *payload = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, type->ops, type->object_bytes, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_value_copy_empty(type->plan, captures, payload + 1);
+    return capture_finish(frame, slot, status);
+}
+XR_FUNCDEF XrtManagedStatus xrt_environment_borrow(const XrtCaptureType *type,
+    const XrtManagedHeader *owner, XrtEnvironmentBorrow *empty) {
+    if (!type || type->shape.kind != XRT_VALUE_ENVIRONMENT || !owner || owner->ops != type->ops ||
+        !empty || empty->owner || empty->plan || empty->payload) return XRT_MANAGED_ARGUMENT;
+    *empty = (XrtEnvironmentBorrow){owner, type->plan, owner + 1};
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_environment_capture_borrow(const XrtEnvironmentBorrow *environment,
+    size_t index, const XrtValuePlan **empty_type, const void **empty_payload) {
+    if (!environment || !environment->owner || !environment->plan || !environment->payload ||
+        !empty_type || *empty_type || !empty_payload || *empty_payload) return XRT_MANAGED_ARGUMENT;
+    XrtValuePlanSpec shape;
+    XrtManagedStatus status = xrt_value_plan_view(environment->plan, &shape);
+    if (status != XRT_MANAGED_OK || shape.kind != XRT_VALUE_ENVIRONMENT) return XRT_MANAGED_ARGUMENT;
+    if (index >= shape.capture_count) return XRT_MANAGED_BOUNDS;
+    *empty_type = shape.captures[index].type;
+    *empty_payload = (const unsigned char *)environment->payload + shape.captures[index].offset;
+    return XRT_MANAGED_OK;
+}
+static bool cell_type(const XrtCaptureType *type, XrtValueKind kind) {
+    return type && type->shape.kind == XRT_VALUE_CELL && type->payload.kind == kind;
+}
+XR_FUNCDEF XrtManagedStatus xrt_i64_cell_create(XrtManagedFrame *frame, size_t slot,
+    const XrtCaptureType *type, int64_t initial) {
+    if (!cell_type(type, XRT_VALUE_I64)) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *payload = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, type->ops, type->object_bytes, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    ((XrtI64Cell *)payload)->value = initial;
+    return capture_finish(frame, slot, XRT_MANAGED_OK);
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_create(XrtManagedFrame *frame, size_t slot,
+    const XrtCaptureType *type, const XrtMapBacking *initial) {
+    if (!cell_type(type, XRT_VALUE_MAP_STRING_I64) || !initial) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *payload = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, type->ops, type->object_bytes, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *owned = (XrtManagedHeader *)&initial->managed;
+    if (!xrt_managed_retain(owned)) return capture_finish(frame, slot, XRT_MANAGED_REFCOUNT);
+    ((XrtMapCell *)payload)->value = (XrtMapBacking *)owned;
+    return capture_finish(frame, slot, XRT_MANAGED_OK);
+}
+XR_FUNCDEF XrtManagedStatus xrt_i64_cell_read(const XrtI64Cell *cell, int64_t *output) {
+    if (!cell || !output) return XRT_MANAGED_ARGUMENT;
+    *output = cell->value;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_borrow(const XrtMapCell *cell, const XrtMapBacking **empty) {
+    if (!cell || !empty || *empty || !cell->value) return XRT_MANAGED_ARGUMENT;
+    *empty = cell->value;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_read_copy(XrtManagedFrame *frame, size_t slot, const XrtMapCell *cell) {
+    if (!cell || !cell->value) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *owned = &cell->value->managed;
+    if (!xrt_managed_retain(owned)) return XRT_MANAGED_REFCOUNT;
+    XrtManagedStatus status = xrt_managed_slot_replace(frame, slot, &owned);
+    xrt_managed_drop(owned);
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_i64_cell_write_exclusive(XrtI64Cell *cell, int64_t value) {
+    if (!cell || xr_signed_rc_read(&cell->managed.references) <= 0) return XRT_MANAGED_ARGUMENT;
+    cell->value = value;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_write_exclusive(XrtMapCell *cell, const XrtMapBacking *value) {
+    if (!cell || !cell->value || !value || xr_signed_rc_read(&cell->managed.references) <= 0) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *owned = (XrtManagedHeader *)&value->managed;
+    if (!xrt_managed_retain(owned)) return XRT_MANAGED_REFCOUNT;
+    XrtMapBacking *old = cell->value;
+    cell->value = (XrtMapBacking *)owned;
+    xrt_managed_drop(&old->managed);
+    return XRT_MANAGED_OK;
+}
