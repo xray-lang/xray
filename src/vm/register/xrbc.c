@@ -438,8 +438,12 @@ static bool xr_rbc_captured_cell_value(const XrRbcModule *, const XrRbcStack *,
 #include "xrbc_set_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
-/* Keep computed-goto handlers on a stable cache-line boundary as cold code grows. */
-#if defined(__clang__) || defined(__GNUC__)
+/* Keep dispatch handlers independent of unrelated cold code placement. MSVC
+ * uses a dedicated executable section because its function alignment attribute
+ * applies only to data. Other providers retain their cache-line alignment. */
+#if defined(_MSC_VER) && !defined(__clang__)
+__declspec(code_seg(".xrayvm"))
+#elif defined(__clang__) || defined(__GNUC__)
 XR_ALIGN(64)
 #endif
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
