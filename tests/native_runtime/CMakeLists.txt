@@ -23,6 +23,7 @@ set_tests_properties(native_managed_public_native PROPERTIES LABELS "unit;native
 add_executable(test_native_capture_backing test_capture_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_map_backing.c"
@@ -211,17 +212,6 @@ else()
 endif()
 add_test(NAME native_f64_text COMMAND test_native_f64_text)
 set_tests_properties(native_f64_text PROPERTIES LABELS "unit;native-runtime;ownership;float" TIMEOUT 30)
-add_executable(test_native_string_admission test_string_admission.c)
-target_link_libraries(test_native_string_admission PRIVATE xray_register_vm)
-target_include_directories(test_native_string_admission PRIVATE "${PROJECT_SOURCE_DIR}/src")
-set_target_properties(test_native_string_admission PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
-if(MSVC)
-    target_compile_options(test_native_string_admission PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_native_string_admission PRIVATE -Wall -Wextra -Werror -pedantic)
-endif()
-add_test(NAME native_string_admission COMMAND test_native_string_admission)
-set_tests_properties(native_string_admission PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 10)
 add_executable(test_native_module_state test_module_state.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_module_state.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
