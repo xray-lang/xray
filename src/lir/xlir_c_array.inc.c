@@ -58,7 +58,7 @@ static const char *c_array_member(XrLirType element) {
 static void c_array_require(LirC *c, uint32_t source) {
     c_format(c, "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
 }
-static void c_array_finish(LirC *c, uint32_t value, uint32_t source) {
+static void c_values_publish_leaf(LirC *c, uint32_t value, uint32_t source) {
     const XrLirValueHome *home=&c->homes->values[value];
     c_format(c, "    { XrtManagedStatus status = xrt_place_move_replace((XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE},\n", home->first_owner);
     c_format(c, "        (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}, NULL);\n", home->temporary_first_owner);
@@ -72,7 +72,7 @@ static void c_array_copy_end(LirC *c, uint32_t value, uint32_t source) {
     c_format(c, "    if (!xrt_managed_retain(owner)) xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, UINT32_C(%" PRIu32 "));\n",source);
     c_format(c, "    XrtManagedStatus status=xrt_managed_slot_replace(xrl_frame, %zu, &owner);\n",home->temporary_first_owner);
     c_text(c, "    if (status != XRT_MANAGED_OK) { xrt_managed_drop(owner);\n"); c_array_require(c,source);
-    c_text(c, "    } }\n"); c_array_finish(c,value,source);
+    c_text(c, "    } }\n"); c_values_publish_leaf(c,value,source);
 }
 static const XrLirHomeWorkspace *c_array_workspace(LirC *c) {
     for (size_t i=0;i<c->homes->workspace_count;++i) {
@@ -106,7 +106,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
             c_text(c,"}");
         }
         c_format(c,", %" PRIu32 "}, UINT32_C(%" PRIu32 "));\n",v->operand_count,source);
-        c_array_finish(c,v->result,source); return;
+        c_values_publish_leaf(c,v->result,source); return;
     case XR_LIR_ARRAY_OP_LEN:
         c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
         c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
@@ -133,10 +133,10 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     case XR_LIR_ARRAY_OP_REPEAT:
         c_format(c,"    xrt_native_array_repeat(xrl_frame, %zu, &(XrtArrayItem)",home->temporary_first_owner);
         c_array_item(c,element,v->operands[1]); c_text(c,", "); c_value(c,v->operands[0]);
-        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_array_finish(c,v->result,source); return;
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); return;
     case XR_LIR_ARRAY_OP_DISPLAY:
         c_format(c,"    xrt_native_array_display(xrl_frame, %zu, ",home->temporary_first_owner); c_value(c,v->operands[0]);
-        c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_array_finish(c,v->result,source); return;
+        c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_values_publish_leaf(c,v->result,source); return;
     default: c_error(c,XR_LIR_C_UNSUPPORTED,"Array operation has no target receiver"); return;
     }
 }

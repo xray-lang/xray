@@ -13,6 +13,7 @@
 #include "xnative_values.h"
 #include "xray_native_values.h"
 #include "xnative_string_backing.h"
+#include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
 #include "xnative_status.h"
 #include "base/xchecks.h"
@@ -114,6 +115,14 @@ XRAY_API void xrt_native_string_create(XrtManagedFrame *frame, size_t slot,
     if (status == XRT_MANAGED_OK)
         status = xrt_string_backing_create(frame, slot, types, bytes, length, 0);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+
+XRAY_API void xrt_native_string_i64_create(XrtManagedFrame *frame, size_t slot,
+    int64_t value, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status==XRT_MANAGED_OK) status=xrt_string_backing_i64_create(frame,slot,types,value);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
 
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *frame, size_t slot,

@@ -370,6 +370,13 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_text(c, "    if (xrl_frame) { XrtManagedStatus status = xrt_managed_frame_leave(xrl_root, xrl_frame);\n");
         c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
     }
+    if (v->op == XR_LIR_STRING_I64) {
+        c_values_ensure(c, source);
+        c_format(c, "    xrt_native_string_i64_create(xrl_frame, %zu, ",c->homes->values[v->result].temporary_first_owner);
+        c_value(c,v->operands[0]); c_format(c, ", UINT32_C(%" PRIu32 "));\n",source);
+        c_values_publish_leaf(c,v->result,source);
+        return true;
+    }
     if (v->op == XR_LIR_STRING_LITERAL) {
         XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
         const uint8_t *bytes = NULL; size_t length = 0;
