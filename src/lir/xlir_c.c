@@ -157,6 +157,8 @@ static void c_format(LirC *c, const char *format, ...) {
     c_bytes(c, buffer, (size_t) length);
 }
 static const char *c_builtin_type(XrLirType type) {
+    if (type == XR_LIR_ARRAY) return "XrtManagedHeader *";
+    if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) return "XrtPlace";
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
         NULL, "double", "void *", NULL, "XrtManagedHeader *", NULL,
@@ -208,8 +210,7 @@ static bool c_scalar(LirC *, XrLirType);
 static bool c_scalar(LirC *c, XrLirType type) {
     XrLirTypeView shape = {0};
     if (type == XR_LIR_I64_CELL || type == XR_LIR_STRING_CELL ||
-        type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL ||
-        type == XR_LIR_ARRAY_REF || type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL ||
+        type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL ||
         type == XR_LIR_SLICE_I64 || type == XR_LIR_STRING_REF || type == XR_LIR_FUNCTION_SCOPE ||
         type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(c->request->module, type, &shape) == XR_LIR_OK &&
@@ -335,7 +336,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN ||
         v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE || v->op == XR_LIR_FUNCTION_BIND ||
-        v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE ||
+        ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) && !c_array_point(c, v)) ||
         v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD || v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "value operation has no bound target C execution interface"); return;
     }
@@ -718,8 +719,8 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
     for (uint32_t a = 0; a < edge->argument_count; ++a)
-        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING) {
-            c_error(c, XR_LIR_C_INVALID_LIR, "String edge lost its common owned transfer");
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING || c_value_type(c, edge->arguments[a]) == XR_LIR_ARRAY) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "owned edge lost its common transfer");
             return;
         }
     if (c->string_cursor) {
@@ -940,7 +941,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     }
 }
 static void c_standalone_root(LirC *c, XrLirType result) {
-    if (result == XR_LIR_STRING) { c_values_root(c); return; }
+    if (result == XR_LIR_STRING || result == XR_LIR_ARRAY) { c_values_root(c); return; }
     const char *type = c_type(c, result);
     XR_DCHECK(type != NULL && c->runtime, "a bound root keeps its admitted result type");
     c->function = c->request->entry;
@@ -1014,15 +1015,13 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->string_values) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
+    if (c->string_values || c->arrays) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
     if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
-    if (root_result == XR_LIR_ARRAY)
-        c_text(c, "extern XrtArray *xrt_array_root_take(XrtArray *array);\n\n");
     if (root_result == XR_LIR_MAP_STRING_I64)
         c_text(c, "extern XrtMap *xrt_map_root_take(XrtMap *map);\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
@@ -1069,11 +1068,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 c->instruction = i + 1;
                 c->source = v.source;
-                if (i + 1 < view.instruction_count) {
-                    XrLirInstructionView next;
-                    xr_lir_instruction_view(c->request->module, block, i + 1, &next);
-                    if (c_array_move_pair(c, &v, &next)) { ++i; continue; }
-                }
                 c_instruction(c, &v);
             }
         }
@@ -1179,12 +1173,9 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
     if (c.status == XR_LIR_C_OK && standalone) {
-        if (entry.result == XR_LIR_STRING)
+        if (entry.result == XR_LIR_STRING || entry.result == XR_LIR_ARRAY)
             c_text(&c, "\nint main(void) {\n    XrtManagedHeader *result = xray_lir_entry();\n"
                 "    xrt_managed_drop(result);\n    return 0;\n}\n");
-        else if (entry.result == XR_LIR_ARRAY)
-            c_text(&c, "\nint main(void) {\n    XrtArray *result = xray_lir_entry();\n"
-                "    xrt_array_owned_drop(&result);\n    return 0;\n}\n");
         else if (entry.result == XR_LIR_MAP_STRING_I64)
             c_text(&c, "\nint main(void) {\n    XrtMap *result = xray_lir_entry();\n"
                 "    xrt_map_owned_drop(&result);\n    return 0;\n}\n");
