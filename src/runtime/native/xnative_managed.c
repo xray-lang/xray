@@ -144,7 +144,10 @@ static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     if (!spec || spec->fixed_size < sizeof(XrtManagedHeader) || spec->alignment < alignof(XrtManagedHeader) ||
         spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
         !lease_valid(spec->code) || (spec->child_count && !spec->child_offsets) ||
-        spec->child_count > (SIZE_MAX - sizeof(XrtRuntimeTypePlan)) / sizeof(size_t)) return false;
+        (spec->tail_child_count && !spec->tail_child_offsets) ||
+        spec->child_count > (SIZE_MAX - sizeof(XrtRuntimeTypePlan)) / sizeof(size_t) ||
+        spec->tail_child_count > (SIZE_MAX - sizeof(XrtRuntimeTypePlan)) / sizeof(size_t) -
+            spec->child_count) return false;
     if (spec->stride ? spec->capacity_offset < sizeof(XrtManagedHeader) ||
         spec->fixed_size < sizeof(size_t) || spec->capacity_offset > spec->fixed_size - sizeof(size_t) ||
         spec->capacity_offset % alignof(size_t) : spec->capacity_offset != SIZE_MAX) return false;
@@ -157,6 +160,15 @@ static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
             (spec->stride && offset < spec->capacity_offset + sizeof(size_t) &&
                 spec->capacity_offset < offset + sizeof(void *))) return false;
     }
+    if (spec->tail_child_count && (spec->stride < sizeof(XrtManagedHeader *) ||
+        spec->fixed_size % alignof(XrtManagedHeader *) ||
+        spec->stride % alignof(XrtManagedHeader *))) return false;
+    for (size_t i = 0; i < spec->tail_child_count; ++i) {
+        size_t offset = spec->tail_child_offsets[i];
+        if (offset % alignof(XrtManagedHeader *) || offset > spec->stride - sizeof(XrtManagedHeader *) ||
+            (i && offset < spec->tail_child_offsets[i - 1]) ||
+            (i && offset - spec->tail_child_offsets[i - 1] < sizeof(XrtManagedHeader *))) return false;
+    }
     return true;
 }
 XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
@@ -164,7 +176,7 @@ XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     if (!owner || !output || *output || !type_spec_valid(spec)) return XRT_MANAGED_ARGUMENT;
     if (!xrt_billing_owner_retain(owner)) return XRT_MANAGED_REFCOUNT;
     if (!lease_take(spec->code)) { xrt_billing_owner_drop(owner); return XRT_MANAGED_REFCOUNT; }
-    size_t bytes = sizeof(XrtRuntimeTypePlan) + spec->child_count * sizeof(size_t);
+    size_t bytes = sizeof(XrtRuntimeTypePlan) + (spec->child_count + spec->tail_child_count) * sizeof(size_t);
     void *memory = NULL;
     XrtManagedStatus status = billing_allocate(owner, bytes, &memory);
     if (status != XRT_MANAGED_OK) { lease_drop(spec->code); xrt_billing_owner_drop(owner); return status; }
@@ -174,6 +186,9 @@ XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     size_t *fields = (size_t *)(plan + 1);
     if (spec->child_count) memcpy(fields, spec->child_offsets, spec->child_count * sizeof(size_t));
     plan->spec.child_offsets = fields;
+    fields += spec->child_count;
+    if (spec->tail_child_count) memcpy(fields, spec->tail_child_offsets, spec->tail_child_count * sizeof(size_t));
+    plan->spec.tail_child_offsets = fields;
     *output = plan;
     return XRT_MANAGED_OK;
 }
@@ -184,7 +199,7 @@ XR_FUNCDEF void xrt_runtime_type_plan_drop(XrtRuntimeTypePlan *plan) {
     if (!plan || !metadata_last(&plan->references)) return;
     XrtBillingOwner *owner = plan->billing;
     XrtManagedLease code = plan->spec.code;
-    size_t bytes = sizeof(*plan) + plan->spec.child_count * sizeof(size_t);
+    size_t bytes = sizeof(*plan) + (plan->spec.child_count + plan->spec.tail_child_count) * sizeof(size_t);
     billing_free(owner, plan, bytes);
     lease_drop(code);
     xrt_billing_owner_drop(owner);
@@ -264,23 +279,42 @@ static bool allocation_extent(const XrtRuntimeTypePlan *plan, const XrtManagedHe
     *bytes += capacity * plan->spec.stride;
     return true;
 }
+static bool allocation_children(const XrtRuntimeTypeSpec *spec, size_t bytes, size_t *count) {
+    if (bytes < spec->fixed_size || (spec->stride ? (bytes - spec->fixed_size) % spec->stride :
+        bytes != spec->fixed_size)) return false;
+    size_t capacity = spec->stride ? (bytes - spec->fixed_size) / spec->stride : 0;
+    if (spec->tail_child_count && capacity > (SIZE_MAX - spec->child_count) / spec->tail_child_count)
+        return false;
+    *count = spec->child_count + capacity * spec->tail_child_count;
+    return true;
+}
 static const uint32_t retirement_cursor = UINT32_C(0x80000000);
 _Static_assert(sizeof(size_t) <= sizeof(XrtManagedHeader *), "a dead child slot holds its cursor bytes");
 
+/* The logical inventory concatenates the prefix with every physical row. Its
+ * first two slots provide the same continuation regardless of their region. */
+static void *child_field(XrtManagedHeader *value, size_t index) {
+    const XrtRuntimeTypeSpec *spec = &value->ops->plan->spec;
+    size_t offset;
+    if (index < spec->child_count) offset = spec->child_offsets[index];
+    else {
+        index -= spec->child_count;
+        offset = spec->fixed_size + index / spec->tail_child_count * spec->stride +
+            spec->tail_child_offsets[index % spec->tail_child_count];
+    }
+    return (unsigned char *)value + offset;
+}
 static void child_store(XrtManagedHeader *value, size_t index, XrtManagedHeader *child) {
-    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[index];
-    memcpy(field, &child, sizeof(child));
+    memcpy(child_field(value, index), &child, sizeof(child));
 }
 static XrtManagedHeader *child_take(XrtManagedHeader *value, size_t index) {
-    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[index];
     XrtManagedHeader *child;
-    memcpy(&child, field, sizeof(child));
+    memcpy(&child, child_field(value, index), sizeof(child));
     child_store(value, index, NULL);
     return child;
 }
 static void cursor_store(XrtManagedHeader *value, size_t index) {
-    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[1];
-    memcpy(field, &index, sizeof(index));
+    memcpy(child_field(value, 1), &index, sizeof(index));
 }
 static bool value_release_last(XrtManagedHeader *value) {
     if (!value) return false;
@@ -292,17 +326,16 @@ static bool value_release_last(XrtManagedHeader *value) {
 /* No continuation is stored before LAST. Slot zero then holds the parent. Slot
  * one remains a real owner until taken; only the phase bit permits cursor reads. */
 static bool retirement_next(XrtManagedHeader *value, XrtManagedHeader *parent,
-    bool entering, XrtManagedHeader **child) {
-    const XrtRuntimeTypeSpec *spec = &value->ops->plan->spec;
+    bool entering, size_t children, XrtManagedHeader **child) {
     if (entering) {
         XR_CHECK(xr_signed_rc_read(&value->references) == 0, "only a last release owns retirement storage");
         XR_CHECK(!(value->flags & retirement_cursor), "live flags exclude the dead cursor phase");
-        if (!spec->child_count) return false;
+        if (!children) return false;
         *child = child_take(value, 0);
         child_store(value, 0, parent);
         return true;
     }
-    if (spec->child_count < 2) return false;
+    if (children < 2) return false;
     if (!(value->flags & retirement_cursor)) {
         *child = child_take(value, 1);
         cursor_store(value, 2);
@@ -310,26 +343,26 @@ static bool retirement_next(XrtManagedHeader *value, XrtManagedHeader *parent,
         return true;
     }
     size_t index;
-    const void *field = (const unsigned char *)value + spec->child_offsets[1];
-    memcpy(&index, field, sizeof(index));
-    XR_CHECK(index >= 2 && index <= spec->child_count, "a dead cursor stays within the owned schema");
-    if (index == spec->child_count) return false;
+    memcpy(&index, child_field(value, 1), sizeof(index));
+    XR_CHECK(index >= 2 && index <= children, "a dead cursor stays within the owned schema");
+    if (index == children) return false;
     *child = child_take(value, index);
     cursor_store(value, index + 1);
     return true;
 }
 
 static XrtManagedHeader *retirement_finish(XrtManagedHeader *value, XrtManagedHeader *parent,
-    XrtManagedHeader *root, size_t root_bytes) {
+    size_t children, size_t bytes) {
     XrtManagedOps *ops = (XrtManagedOps *)value->ops;
     XrtBillingOwner *owner = ops->billing;
     const XrtRuntimeTypePlan *plan = ops->plan;
-    size_t bytes = root_bytes;
-    if (value != root)
-        XR_CHECK(allocation_extent(plan, value, &bytes), "published physical extent remains representable");
-    if (plan->spec.child_count) parent = child_take(value, 0);
-    if (plan->spec.child_count > 1) child_store(value, 1, NULL);
+    if (children) parent = child_take(value, 0);
+    if (children > 1) child_store(value, 1, NULL);
     value->flags &= ~retirement_cursor;
+    if (plan->spec.stride) {
+        size_t capacity = (bytes - plan->spec.fixed_size) / plan->spec.stride;
+        memcpy((unsigned char *)value + plan->spec.capacity_offset, &capacity, sizeof(capacity));
+    }
     if (plan->spec.drop_payload) plan->spec.drop_payload(value, plan->spec.code.context);
     billing_free(owner, value, bytes);
     xrt_managed_ops_drop(ops);
@@ -340,13 +373,18 @@ static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
     XrtManagedHeader *value = root, *parent = NULL;
     bool entering = true;
     while (value) {
+        size_t bytes = root_bytes, children;
+        if (value != root)
+            XR_CHECK(allocation_extent(value->ops->plan, value, &bytes), "published physical extent remains representable");
+        XR_CHECK(allocation_children(&value->ops->plan->spec, bytes, &children),
+            "physical extent bounds every fixed and repeated owned slot");
         XrtManagedHeader *child = NULL;
-        if (retirement_next(value, parent, entering, &child)) {
+        if (retirement_next(value, parent, entering, children, &child)) {
             if (value_release_last(child)) {
                 parent = value; value = child; entering = true;
             } else entering = false;
         } else {
-            value = retirement_finish(value, parent, root, root_bytes);
+            value = retirement_finish(value, parent, children, bytes);
             parent = NULL; entering = false;
         }
     }
@@ -354,8 +392,8 @@ static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
 XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
     if (!ops || !pending || pending->value || pending->allocation_bytes) return XRT_MANAGED_ARGUMENT;
     const XrtRuntimeTypeSpec *spec = &ops->plan->spec;
-    if (bytes < spec->fixed_size || (spec->stride ? (bytes - spec->fixed_size) % spec->stride :
-        bytes != spec->fixed_size)) return XRT_MANAGED_ARGUMENT;
+    size_t children;
+    if (!allocation_children(spec, bytes, &children)) return XRT_MANAGED_ARGUMENT;
     if (!xrt_managed_ops_retain(ops)) return XRT_MANAGED_REFCOUNT;
     if (!xrt_billing_owner_retain(ops->billing)) { xrt_managed_ops_drop(ops); return XRT_MANAGED_REFCOUNT; }
     void *memory = NULL;
@@ -365,12 +403,9 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes
     }
     memset(memory, 0, bytes);
     XrtManagedHeader *value = memory;
-    for (size_t i = 0; i < spec->child_count; ++i) {
-        XrtManagedHeader *empty = NULL;
-        memcpy((unsigned char *)memory + spec->child_offsets[i], &empty, sizeof(empty));
-    }
     xr_signed_rc_initialize(&value->references);
     value->ops = ops;
+    for (size_t i = 0; i < children; ++i) child_store(value, i, NULL);
     if (spec->stride) {
         size_t capacity = (bytes - spec->fixed_size) / spec->stride;
         memcpy((unsigned char *)memory + spec->capacity_offset, &capacity, sizeof(capacity));

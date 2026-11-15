@@ -86,9 +86,10 @@ static void payload_callback(XrtManagedHeader *value, void *context) {
     atomic_fetch_add(&provider->audit->callbacks, 1);
 }
 static XrtRuntimeTypeSpec payload_spec(Provider *provider, const size_t *fields, size_t count) {
-    return (XrtRuntimeTypeSpec){sizeof(Payload), alignof(Payload), offsetof(Payload, capacity), 1,
-        fields, count, provider ? payload_callback : NULL,
-        provider ? (XrtManagedLease){provider, provider_retain, provider_drop} : (XrtManagedLease){0}};
+    return (XrtRuntimeTypeSpec){.fixed_size=sizeof(Payload), .alignment=alignof(Payload),
+        .capacity_offset=offsetof(Payload, capacity), .stride=1, .child_offsets=fields, .child_count=count,
+        .drop_payload=provider ? payload_callback : NULL,
+        .code=provider ? (XrtManagedLease){provider, provider_retain, provider_drop} : (XrtManagedLease){0}};
 }
 static void balanced(Audit *audit) {
     CHECK(!atomic_load(&audit->bytes) && !atomic_load(&audit->blocks) && atomic_load(&audit->finalized) == 1);
@@ -380,9 +381,9 @@ static XrtRuntimeTypeSpec retirement_spec(Provider *provider, size_t count) {
     static const size_t fields[] = {offsetof(RetireNode, first),
         offsetof(RetireNode, second), offsetof(RetireNode, third)};
     CHECK(count <= 3);
-    return (XrtRuntimeTypeSpec){sizeof(RetireNode), alignof(RetireNode),
-        offsetof(RetireNode, capacity), 3, fields, count, retirement_callback,
-        {provider, provider_retain, provider_drop}};
+    return (XrtRuntimeTypeSpec){.fixed_size=sizeof(RetireNode), .alignment=alignof(RetireNode),
+        .capacity_offset=offsetof(RetireNode, capacity), .stride=3, .child_offsets=fields,
+        .child_count=count, .drop_payload=retirement_callback, .code={provider, provider_retain, provider_drop}};
 }
 static void retirement_prepare(XrtManagedOps *ops, size_t serial, XrtManagedPending *pending) {
     size_t bytes = sizeof(RetireNode) + (7 + serial % 11) * 3;
@@ -509,6 +510,277 @@ static void deep_branch_retirement(bool abort_pending) {
         "100000 two-child nodes with NULL second edges passed");
 }
 
+typedef struct TailRow {
+    uint64_t marker;
+    XrtManagedHeader *first;
+    uint64_t gap;
+    XrtManagedHeader *second;
+} TailRow;
+typedef struct TailPayload {
+    XrtManagedHeader header;
+    XrtManagedHeader *fixed;
+    size_t capacity, serial, rows, charge, owner, fixed_count, tail_count;
+} TailPayload;
+typedef struct TailInit { size_t serial, rows, owner, fixed_count, tail_count; } TailInit;
+typedef struct TailAudit {
+    Audit provider;
+    XrtBillingOwner *owners[2];
+    XrtBillingStats metadata[2];
+    size_t bytes[2], blocks[2], allocations[2], callbacks, provider_allocations;
+    XrtManagedHeader *shared;
+} TailAudit;
+static TailRow *tail_rows(TailPayload *value) { return (TailRow *)(value + 1); }
+static void tail_callback(XrtManagedHeader *header, void *context) {
+    Provider *provider = context;
+    TailAudit *audit = (TailAudit *)provider->audit;
+    TailPayload *value = (TailPayload *)header;
+    CHECK(xr_signed_rc_read(&header->references) == 0 && header->flags == payload_flags);
+    CHECK(value->serial == audit->callbacks && value->owner < 2 && value->capacity == value->rows);
+    if (value->fixed_count) CHECK(!value->fixed);
+    for (size_t i = 0; i < value->rows; ++i) {
+        TailRow *row = &tail_rows(value)[i];
+        CHECK(row->marker == UINT64_C(0x13579bdf2468ace0) && row->gap == i);
+        if (value->tail_count) CHECK(!row->first);
+        if (value->tail_count > 1) CHECK(!row->second);
+    }
+    if (audit->shared && !value->serial)
+        CHECK(xr_signed_rc_read(&audit->shared->references) == 1 && audit->shared->flags == payload_flags);
+    if (header == audit->shared) audit->shared = NULL;
+    size_t bytes = sizeof(*provider), blocks = 1;
+    for (size_t i = 0; i < 2; ++i) if (audit->owners[i]) {
+        XrtBillingStats stats = xrt_billing_owner_stats(audit->owners[i]);
+        CHECK(stats.closed && !stats.fail_after && stats.allocations == audit->allocations[i]);
+        CHECK(stats.bytes == audit->metadata[i].bytes + audit->bytes[i] &&
+            stats.blocks == audit->metadata[i].blocks + audit->blocks[i]);
+        bytes += stats.bytes; blocks += stats.blocks;
+    }
+    CHECK(atomic_load(&audit->provider.bytes) == bytes && atomic_load(&audit->provider.blocks) == blocks &&
+        atomic_load(&audit->provider.allocation_calls) == audit->provider_allocations);
+    CHECK(audit->bytes[value->owner] >= value->charge && audit->blocks[value->owner] > 0);
+    audit->bytes[value->owner] -= value->charge; --audit->blocks[value->owner];
+    ++audit->callbacks;
+}
+static XrtRuntimeTypeSpec tail_spec(Provider *provider, size_t fixed_count, size_t tail_count) {
+    static const size_t fixed = offsetof(TailPayload, fixed);
+    static const size_t fields[] = {offsetof(TailRow, first), offsetof(TailRow, second)};
+    CHECK(fixed_count <= 1 && tail_count <= 2);
+    return (XrtRuntimeTypeSpec){.fixed_size=sizeof(TailPayload), .alignment=alignof(TailPayload),
+        .capacity_offset=offsetof(TailPayload, capacity), .stride=sizeof(TailRow),
+        .child_offsets=&fixed, .child_count=fixed_count, .drop_payload=tail_callback,
+        .code={provider, provider_retain, provider_drop}, .tail_child_offsets=fields, .tail_child_count=tail_count};
+}
+static void tail_prepare(XrtManagedOps *ops, TailInit init, XrtManagedPending *pending) {
+    size_t bytes = sizeof(TailPayload) + init.rows * sizeof(TailRow);
+    OK(xrt_managed_prepare(ops, bytes, pending));
+    TailPayload *value = (TailPayload *)pending->value;
+    CHECK(value->capacity == init.rows);
+    if (init.fixed_count) CHECK(!value->fixed);
+    value->header.flags = payload_flags;
+    value->serial = init.serial; value->rows = init.rows; value->charge = bytes;
+    value->owner = init.owner; value->fixed_count = init.fixed_count; value->tail_count = init.tail_count;
+    for (size_t i = 0; i < init.rows; ++i) {
+        TailRow *row = &tail_rows(value)[i];
+        if (init.tail_count) CHECK(!row->first);
+        if (init.tail_count > 1) CHECK(!row->second);
+        row->marker = UINT64_C(0x13579bdf2468ace0); row->gap = i;
+    }
+}
+static XrtManagedHeader *tail_new(XrtManagedOps *ops, TailInit init) {
+    XrtManagedPending pending = {0};
+    tail_prepare(ops, init, &pending);
+    XrtManagedHeader *value = NULL;
+    OK(xrt_managed_commit(&pending, &value));
+    return value;
+}
+static void tail_begin(TailAudit *audit, size_t count) {
+    size_t blocks = 0;
+    for (size_t i = 0; i < 2; ++i) if (audit->owners[i]) {
+        XrtBillingStats stats = xrt_billing_owner_stats(audit->owners[i]);
+        audit->bytes[i] = stats.bytes - audit->metadata[i].bytes;
+        audit->blocks[i] = stats.blocks - audit->metadata[i].blocks;
+        audit->allocations[i] = stats.allocations;
+        CHECK(stats.allocations == audit->metadata[i].allocations + audit->blocks[i]);
+        blocks += audit->blocks[i];
+        xrt_billing_owner_fail_after(audit->owners[i], 0);
+        xrt_billing_owner_close(audit->owners[i]);
+    }
+    CHECK(blocks == count);
+    audit->provider_allocations = atomic_load(&audit->provider.allocation_calls);
+    atomic_store(&audit->provider.fail_after, 0);
+}
+static void tail_finished(TailAudit *audit, size_t count) {
+    CHECK(audit->callbacks == count && !audit->shared && !audit->bytes[0] && !audit->bytes[1] &&
+        !audit->blocks[0] && !audit->blocks[1]);
+    CHECK(atomic_load(&audit->provider.allocation_calls) == audit->provider_allocations);
+}
+
+static void repeated_tail_dag(void) {
+    TailAudit audit = {0};
+    Provider *provider = provider_new(&audit.provider);
+    XrtManagedAllocator allocator = allocator_for(provider);
+    for (size_t i = 0; i < 2; ++i) OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &audit.owners[i]));
+    XrtRuntimeTypePlan *plain = NULL, *mixed = NULL;
+    XrtManagedOps *ops[2][2] = {{0}};
+    XrtRuntimeTypeSpec spec = tail_spec(provider, 0, 1);
+    OK(xrt_runtime_type_plan_new(audit.owners[0], &spec, &plain));
+    size_t fixed = offsetof(TailPayload, fixed);
+    size_t fields[] = {offsetof(TailRow, first), offsetof(TailRow, second)};
+    spec = tail_spec(provider, 1, 2);
+    spec.child_offsets = &fixed; spec.tail_child_offsets = fields;
+    XrtBillingStats before = xrt_billing_owner_stats(audit.owners[1]);
+    OK(xrt_runtime_type_plan_new(audit.owners[1], &spec, &mixed));
+    XrtBillingStats with_fields = xrt_billing_owner_stats(audit.owners[1]);
+    XrtRuntimeTypeSpec empty_spec = tail_spec(provider, 0, 0);
+    XrtRuntimeTypePlan *empty = NULL;
+    OK(xrt_runtime_type_plan_new(audit.owners[1], &empty_spec, &empty));
+    XrtBillingStats with_empty = xrt_billing_owner_stats(audit.owners[1]);
+    CHECK(with_fields.bytes - before.bytes == with_empty.bytes - with_fields.bytes + 3 * sizeof(size_t));
+    xrt_runtime_type_plan_drop(empty);
+    CHECK(xrt_billing_owner_stats(audit.owners[1]).bytes == with_fields.bytes);
+    fixed = SIZE_MAX; fields[0] = SIZE_MAX; fields[1] = SIZE_MAX;
+    for (size_t i = 0; i < 2; ++i) {
+        OK(xrt_managed_ops_bind(audit.owners[i], plain, &ops[i][0]));
+        OK(xrt_managed_ops_bind(audit.owners[i], mixed, &ops[i][1]));
+        audit.metadata[i] = xrt_billing_owner_stats(audit.owners[i]);
+    }
+    XrtManagedHeader *shared = tail_new(ops[1][0], (TailInit){2, 2, 1, 0, 1});
+    CHECK(xrt_managed_retain(shared) && xr_signed_rc_read(&shared->references) == 2);
+    audit.shared = shared;
+    XrtManagedHeader *left = tail_new(ops[0][0], (TailInit){0, 1, 0, 0, 1});
+    tail_rows((TailPayload *)left)[0].first = shared;
+    XrtManagedHeader *leaf = tail_new(ops[0][0], (TailInit){1, 0, 0, 0, 1});
+    XrtManagedHeader *right = tail_new(ops[1][1], (TailInit){3, 3, 1, 1, 2});
+    ((TailPayload *)right)->fixed = leaf;
+    tail_rows((TailPayload *)right)[0].second = shared;
+    leaf = NULL; shared = NULL;
+    XrtManagedHeader *root = tail_new(ops[0][1], (TailInit){4, 2, 0, 1, 2});
+    ((TailPayload *)root)->fixed = left;
+    tail_rows((TailPayload *)root)[1].second = right;
+    left = NULL; right = NULL;
+    tail_begin(&audit, 5);
+    xrt_managed_drop(root);
+    tail_finished(&audit, 5);
+    for (size_t i = 0; i < 2; ++i) {
+        CHECK(xrt_billing_owner_stats(audit.owners[i]).bytes == audit.metadata[i].bytes);
+        xrt_managed_ops_drop(ops[i][0]); xrt_managed_ops_drop(ops[i][1]);
+    }
+    xrt_runtime_type_plan_drop(plain); xrt_runtime_type_plan_drop(mixed);
+    for (size_t i = 0; i < 2; ++i) xrt_billing_owner_drop(audit.owners[i]);
+    provider_drop(provider); balanced(&audit.provider);
+    puts("repeated tail rows, mixed slots and cross-owner DAG passed");
+}
+
+static void deep_tail_retirement(bool abort_pending) {
+    const size_t count = 100000;
+    TailAudit audit = {0};
+    Provider *provider = provider_new(&audit.provider);
+    XrtManagedAllocator allocator = allocator_for(provider);
+    OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &audit.owners[0]));
+    XrtRuntimeTypePlan *plan = NULL;
+    XrtManagedOps *ops = NULL;
+    XrtRuntimeTypeSpec spec = tail_spec(provider, 0, 1);
+    OK(xrt_runtime_type_plan_new(audit.owners[0], &spec, &plan));
+    OK(xrt_managed_ops_bind(audit.owners[0], plan, &ops));
+    audit.metadata[0] = xrt_billing_owner_stats(audit.owners[0]);
+    XrtManagedHeader *head = NULL;
+    size_t bytes = 0;
+    for (size_t i = 0; i < count; ++i) {
+        XrtManagedPending pending = {0};
+        tail_prepare(ops, (TailInit){i, 1 + i % 2, 0, 0, 1}, &pending);
+        bytes += pending.allocation_bytes;
+        tail_rows((TailPayload *)pending.value)[0].first = head;
+        head = NULL;
+        OK(xrt_managed_commit(&pending, &head));
+    }
+    size_t actual = 0;
+    for (TailPayload *node = (TailPayload *)head; node; node = (TailPayload *)tail_rows(node)[0].first) {
+        CHECK(++actual <= count && node->serial == count - actual &&
+            xr_signed_rc_read(&node->header.references) == 1);
+        if (node->rows > 1) CHECK(!tail_rows(node)[1].first);
+    }
+    CHECK(actual == count && xrt_billing_owner_stats(audit.owners[0]).bytes == audit.metadata[0].bytes + bytes);
+    XrtManagedPending pending = {0};
+    if (abort_pending) {
+        tail_prepare(ops, (TailInit){count, 4, 0, 0, 1}, &pending);
+        tail_rows((TailPayload *)pending.value)[3].first = head;
+        head = NULL;
+        ((TailPayload *)pending.value)->capacity = 0;
+        CHECK(xrt_managed_commit(&pending, &head) == XRT_MANAGED_ARGUMENT && !head && pending.value);
+        ((TailPayload *)pending.value)->capacity = SIZE_MAX;
+        CHECK(xrt_managed_commit(&pending, &head) == XRT_MANAGED_ARGUMENT && !head && pending.value);
+    }
+    tail_begin(&audit, count + (abort_pending ? 1 : 0));
+    xrt_managed_ops_drop(ops); xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_drop(audit.owners[0]); provider_drop(provider);
+    CHECK(!atomic_load(&audit.provider.finalized));
+    if (abort_pending) {
+        xrt_managed_abort(&pending);
+        CHECK(!pending.value && !pending.allocation_bytes);
+    } else xrt_managed_drop(head);
+    tail_finished(&audit, count + (abort_pending ? 1 : 0));
+    balanced(&audit.provider);
+    puts(abort_pending ? "corrupt-capacity pending abort with deep owned tail passed" :
+        "100000 repeated-tail nodes retired on the default stack");
+}
+
+static void tail_admission_and_oom(void) {
+    TailAudit audit = {0};
+    Provider *provider = provider_new(&audit.provider);
+    XrtManagedAllocator allocator = allocator_for(provider);
+    OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &audit.owners[0]));
+    XrtRuntimeTypeSpec good = tail_spec(provider, 1, 2), bad;
+    XrtRuntimeTypePlan *plan = NULL;
+    size_t invalid[][2] = {{1, offsetof(TailRow, second)}, {sizeof(TailRow), 0},
+        {offsetof(TailRow, second), offsetof(TailRow, first)}, {offsetof(TailRow, first), offsetof(TailRow, first)}};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        bad = good; bad.tail_child_offsets = invalid[i];
+        CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    }
+    bad = good; bad.tail_child_offsets = NULL;
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    bad = good; bad.stride = 0;
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    bad = good; bad.stride -= 1;
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    bad = good; bad.fixed_size += 1;
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    bad = good; bad.tail_child_count = SIZE_MAX;
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &bad, &plan) == XRT_MANAGED_ARGUMENT && !plan);
+    XrtBillingStats baseline = xrt_billing_owner_stats(audit.owners[0]);
+    atomic_store(&audit.provider.fail_after, 0);
+    CHECK(xrt_runtime_type_plan_new(audit.owners[0], &good, &plan) == XRT_MANAGED_OOM && !plan);
+    CHECK(xrt_billing_owner_stats(audit.owners[0]).bytes == baseline.bytes &&
+        xrt_billing_owner_stats(audit.owners[0]).allocations == baseline.allocations);
+    atomic_store(&audit.provider.fail_after, SIZE_MAX);
+    OK(xrt_runtime_type_plan_new(audit.owners[0], &good, &plan));
+    XrtManagedOps *ops = NULL;
+    OK(xrt_managed_ops_bind(audit.owners[0], plan, &ops));
+    baseline = xrt_billing_owner_stats(audit.owners[0]);
+    XrtManagedPending pending = {0};
+    CHECK(xrt_managed_prepare(ops, sizeof(TailPayload) + 1, &pending) == XRT_MANAGED_ARGUMENT && !pending.value);
+    atomic_store(&audit.provider.fail_after, 0);
+    CHECK(xrt_managed_prepare(ops, sizeof(TailPayload) + 4 * sizeof(TailRow), &pending) == XRT_MANAGED_OOM && !pending.value);
+    CHECK(xrt_billing_owner_stats(audit.owners[0]).bytes == baseline.bytes &&
+        xrt_billing_owner_stats(audit.owners[0]).blocks == baseline.blocks &&
+        xrt_billing_owner_stats(audit.owners[0]).allocations == baseline.allocations);
+    atomic_store(&audit.provider.fail_after, SIZE_MAX);
+    audit.metadata[0] = baseline;
+    XrtManagedHeader *child = tail_new(ops, (TailInit){0, 0, 0, 1, 2});
+    tail_prepare(ops, (TailInit){1, 4, 0, 1, 2}, &pending);
+    tail_rows((TailPayload *)pending.value)[3].second = child;
+    child = NULL;
+    ((TailPayload *)pending.value)->capacity = 0;
+    CHECK(xrt_managed_commit(&pending, &child) == XRT_MANAGED_ARGUMENT && !child && pending.value);
+    tail_begin(&audit, 2);
+    xrt_managed_abort(&pending);
+    tail_finished(&audit, 2);
+    CHECK(xrt_billing_owner_stats(audit.owners[0]).bytes == baseline.bytes);
+    xrt_managed_ops_drop(ops); xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_drop(audit.owners[0]); provider_drop(provider);
+    balanced(&audit.provider);
+    puts("owned-tail admission, provider OOM and partial abort passed");
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "deep-chain")) {
         deep_chain_retirement();
@@ -524,6 +796,10 @@ int main(int argc, char **argv) {
     sparse_dag_retirement();
     deep_branch_retirement(false);
     deep_branch_retirement(true);
+    repeated_tail_dag();
+    tail_admission_and_oom();
+    deep_tail_retirement(false);
+    deep_tail_retirement(true);
     puts("managed kernel passed");
     return 0;
 }
