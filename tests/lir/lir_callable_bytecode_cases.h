@@ -6,6 +6,7 @@
  *
  * lir_callable_bytecode_cases.h - Authenticate raw function values and signatures
  */
+#include "xray_native_function.h"
 static void callable_raw_receiving(const XrRbcProgram *program) {
     const XrRbcModule *original = xr_rbc_program_view(program);
     CHECK(original->function_count == 3 && original->callable_type_count == 1);
