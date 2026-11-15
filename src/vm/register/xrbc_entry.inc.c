@@ -51,15 +51,13 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         xr_rbc_entry_read(state, a);
         if (c != XRT_VALUE_UNIT) xr_rbc_entry_read(state, b);
         break;
-    case XR_RBC_LOADK: case XR_RBC_LOADI: case XR_RBC_STRING_LITERAL: case XR_RBC_RELOAD:
+    case XR_RBC_LOADK: case XR_RBC_LOADI: case XR_RBC_RELOAD:
         writes = true;
         break;
     case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_FNEG: case XR_RBC_ITOF: case XR_RBC_FTOI:
     case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI: case XR_RBC_REMI:
     case XR_RBC_FLEK:
-    case XR_RBC_CELL_READ: case XR_RBC_STRING_I64:
-    case XR_RBC_STRING_F64: case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_TAKE:
-    case XR_RBC_STRING_LEN: case XR_RBC_STRING_CELL_NEW:
+    case XR_RBC_CELL_READ:
         xr_rbc_entry_read(state, b);
         writes = true;
         break;
@@ -67,7 +65,7 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
     case XR_RBC_AND: case XR_RBC_OR: case XR_RBC_XOR: case XR_RBC_SHL: case XR_RBC_SHR:
     case XR_RBC_USHR: case XR_RBC_FADD: case XR_RBC_FSUB: case XR_RBC_FMUL: case XR_RBC_FDIV:
     case XR_RBC_FEQ: case XR_RBC_FNE: case XR_RBC_FLT: case XR_RBC_FLE: case XR_RBC_FGT:
-    case XR_RBC_FGE: case XR_RBC_STRING_CONCAT:
+    case XR_RBC_FGE:
         xr_rbc_entry_read(state, b);
         xr_rbc_entry_read(state, c);
         writes = true;
@@ -80,8 +78,7 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         writes = true;
         xr_rbc_entry_read(state, a);
         break;
-    case XR_RBC_RET: case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_CELL_DROP:
-    case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
+    case XR_RBC_RET: case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
         xr_rbc_entry_read(state, a);
         break;
     case XR_RBC_CALL: case XR_RBC_CALLN: {

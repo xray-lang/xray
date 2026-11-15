@@ -44,6 +44,21 @@
     } \
 } while (0)
 
+#define XR_RBC_VALUE_EXECUTE() do { \
+    XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE()); \
+    if (status != XR_RBC_OK) return status; \
+    if (!stack->depth) { \
+        if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0]; \
+        return XR_RBC_OK; \
+    } \
+    frame = &stack->frames[stack->depth - 1]; \
+    function = &module->functions[frame->function]; \
+    registers = stack->slots + frame->base; \
+    code = function->code; \
+    constants = function->constants; \
+    pc = frame->pc; \
+} while (0)
+
 #if defined(__clang__) || defined(__GNUC__)
 static const void *const dispatch[] = {
 #define XR_RBC_LABEL(name, format) &&xr_rbc_##name,
@@ -79,12 +94,10 @@ XR_RBC_CASE(MOV) {
     XR_RBC_NEXT();
 }
 #if defined(__clang__) || defined(__GNUC__)
-XR_RBC_CASE(VIEW_ACCESS) { return XR_RBC_INVALID; }
 XR_RBC_CASE(AGGREGATE_ACCESS) {
     XR_RBC_AGGREGATE_EXECUTE();
     XR_RBC_NEXT();
 }
-XR_RBC_CASE(ARRAY_ACCESS) { return XR_RBC_INVALID; }
 #endif
 XR_RBC_CASE(LOADK) {
     uint32_t index = instruction >> 16;
@@ -133,17 +146,6 @@ XR_RBC_CASE(CELL_WRITE) {
     cell->bits = XR_RBC_REG(b);
     XR_RBC_NEXT();
 }
-XR_RBC_CASE(STRING_LITERAL) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_I64) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_F64) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_RETAIN) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_CONCAT) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_LEN) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_DROP) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_PRINT) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_TAKE) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_CELL_NEW) { return XR_RBC_INVALID; }
-XR_RBC_CASE(STRING_CELL_DROP) { return XR_RBC_INVALID; }
 XR_RBC_CASE(ADD) {
     XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
     XR_RBC_NEXT();
@@ -404,29 +406,22 @@ XR_RBC_CASE(RET0) {
     pc = frame->pc;
     XR_RBC_NEXT();
 }
+#if defined(__clang__) || defined(__GNUC__)
 XR_RBC_CASE(VALUE_ACCESS) {
-    XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE());
-    if (status != XR_RBC_OK) return status;
-    if (!stack->depth) {
-        if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0];
-        return XR_RBC_OK;
-    }
-    frame = &stack->frames[stack->depth - 1];
-    function = &module->functions[frame->function];
-    registers = stack->slots + frame->base;
-    code = function->code;
-    constants = function->constants;
-    pc = frame->pc;
+    XR_RBC_VALUE_EXECUTE();
     XR_RBC_NEXT();
 }
+#endif
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
-    if (op == XR_RBC_VIEW_ACCESS) return XR_RBC_INVALID;
+    if (op == XR_RBC_VALUE_ACCESS) {
+        XR_RBC_VALUE_EXECUTE();
+        XR_RBC_NEXT();
+    }
     if (op == XR_RBC_AGGREGATE_ACCESS) {
         XR_RBC_AGGREGATE_EXECUTE();
         XR_RBC_NEXT();
     }
-    if (op == XR_RBC_ARRAY_ACCESS) return XR_RBC_INVALID;
     if (op >= XR_RBC_MODULE_BEGIN && op <= XR_RBC_STATE_WRITE) {
         XrRbcStatus status;
         if (op >= XR_RBC_STATE_REFERENCE) {
@@ -451,6 +446,7 @@ return XR_RBC_INVALID;
 #undef XR_RBC_STRING
 #undef XR_RBC_SOURCE
 #undef XR_RBC_BINARY
+#undef XR_RBC_VALUE_EXECUTE
 #undef XR_RBC_AGGREGATE_EXECUTE
 #undef XR_RBC_CASE
 #undef XR_RBC_NEXT

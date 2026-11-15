@@ -207,10 +207,6 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     uint32_t a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     uint32_t index = word >> 16, registers = function->register_count;
     size_t remaining = function->code_count - pc;
-    if (op == XR_RBC_STRING_LITERAL || op == XR_RBC_STRING_I64 || op == XR_RBC_STRING_F64 ||
-        op == XR_RBC_STRING_RETAIN || op == XR_RBC_STRING_CONCAT || op == XR_RBC_STRING_LEN ||
-        op == XR_RBC_STRING_DROP || op == XR_RBC_STRING_PRINT || op == XR_RBC_STRING_TAKE ||
-        op == XR_RBC_STRING_CELL_NEW || op == XR_RBC_STRING_CELL_DROP) return false;
     bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
@@ -221,7 +217,6 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         if (a || index >= function->aggregate_access_count) return false;
         if (xr_rbc_aggregate_return_word(function->aggregate_accesses, function->aggregate_access_count, word)) return true;
         break;
-    case XR_RBC_VIEW_ACCESS: case XR_RBC_ARRAY_ACCESS: return false;
     case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
     case XR_RBC_STATE_CONSTRUCT: case XR_RBC_STATE_PUBLISH:
     case XR_RBC_STATE_INITIALIZE: case XR_RBC_STATE_REFERENCE:
@@ -240,14 +235,11 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_FNEG: case XR_RBC_ITOF: case XR_RBC_FTOI:
     case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
-    case XR_RBC_STRING_I64: case XR_RBC_STRING_F64: case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_TAKE:
-    case XR_RBC_STRING_LEN:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
         if (a >= registers || b >= registers || c) return false;
         if (comparison && (remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP))
             return false;
         break;
-    case XR_RBC_STRING_CONCAT:
     case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL:
     case XR_RBC_FADD: case XR_RBC_FSUB: case XR_RBC_FMUL: case XR_RBC_FDIV:
     case XR_RBC_FEQ: case XR_RBC_FNE: case XR_RBC_FLT: case XR_RBC_FLE: case XR_RBC_FGT: case XR_RBC_FGE:
@@ -266,15 +258,6 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_PRINT_LITERAL:
         if (a || index >= module->literal_count) return false;
-        break;
-    case XR_RBC_STRING_LITERAL:
-        if (a >= registers || index >= module->literal_count) return false;
-        break;
-    case XR_RBC_STRING_CELL_NEW:
-        if (a >= registers || b >= registers || c >= function->cell_count) return false;
-        break;
-    case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_CELL_DROP:
-        if (a >= registers || (word >> 16)) return false;
         break;
     case XR_RBC_CELL_NEW:
         if (a >= registers || index >= function->cell_count) return false;
