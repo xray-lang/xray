@@ -14,6 +14,7 @@
 #define XRAY_NATIVE_VALUE_IMAGE_H
 #include <stddef.h>
 #include <stdint.h>
+#include "xray_native_managed_root.h"
 
 typedef enum XrtValueKind {
     XRT_VALUE_UNIT, XRT_VALUE_BOOL, XRT_VALUE_RUNE,
@@ -62,4 +63,40 @@ typedef struct XrtValueImage {
     const char *names;
     size_t name_bytes;
 } XrtValueImage;
+
+/* A direct borrow of one sealed physical description, without an image lookup
+ * or another set of payload owners. Offsets are relative to the value bytes
+ * and describe every Header leaf, including inactive Nullable payloads. */
+typedef struct XrtInlineValueSpec {
+    size_t size, alignment;
+    const size_t *owned_offsets;
+    size_t owned_count;
+} XrtInlineValueSpec;
+
+/* Both byte spans and their owner slots are real homes in the same stable
+ * Frame. The distinct temporary has true NULL leaves on entry and return.
+ * Metadata and source bytes stay borrowed and immutable throughout the call.
+ * These addresses supply storage, never mutation authority. */
+typedef struct XrtInlineValueHome {
+    XrtManagedFrame *frame;
+    void *value, *temporary;
+    size_t first_owner, temporary_first_owner;
+} XrtInlineValueHome;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+/* Copy a caller-admitted complete natural value, including self-assignment.
+ * NULL selects only a producer-confirmed cleanup or Nullable NONE, not a new
+ * readable empty value of an otherwise nonnullable type. Every incoming leaf
+ * is retained into real staging storage
+ * before any destination changes. All leaves and scalar/tag bytes publish
+ * before old owners retire, while the actual Root rejects reentry. Failure
+ * preserves the destination and empties staging before returning normally.
+ * No allocation occurs. Owner-free POD spans need no Frame or temporary. */
+XRAY_API XrtManagedStatus xrt_inline_value_replace(const XrtInlineValueHome *,
+    const XrtInlineValueSpec *, const void *source);
+#ifdef __cplusplus
+}
+#endif
 #endif // XRAY_NATIVE_VALUE_IMAGE_H

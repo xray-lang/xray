@@ -31,6 +31,8 @@ typedef struct Audit {
     bool retired[2];
     void (*deferred_drop)(void *);
     void *deferred_context;
+    void (*observe)(void *, void *);
+    void *observer;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -70,6 +72,7 @@ static void *provider_allocate(void *context, size_t bytes) {
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *audit = context;
+    if (audit->observe) audit->observe(audit->observer, memory);
     if (audit->observed) {
         for (size_t i = 0; i < 2; ++i) {
             XrtManagedHeader *installed = NULL;
@@ -500,9 +503,88 @@ static void empty_record_storage(void) {
     same_bill(&f,baseline); fixture_done(&f);
     puts("empty records keep a shared one-byte C11 home without logical fields or owners");
 }
+typedef struct InlineWatch {
+    XrtInlineValueHome home;
+    XrtInlineValueSpec spec;
+    Record expected;
+    XrtManagedHeader *old[2];
+    size_t retired;
+} InlineWatch;
+static void inline_observe(void *context, void *memory) {
+    InlineWatch *watch = context;
+    if (memory != watch->old[0] && memory != watch->old[1]) return;
+    const Record *value = watch->home.value, *temporary = watch->home.temporary;
+    CHECK(value->left == watch->expected.left && value->right == watch->expected.right && value->number == watch->expected.number);
+    CHECK(!temporary->number);
+    STATUS(xrt_inline_value_replace(&watch->home, &watch->spec, NULL), XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_managed_slot_drop(watch->home.frame, watch->home.first_owner), XRT_MANAGED_ARGUMENT);
+    ++watch->retired;
+}
+static void inline_frame_replacement(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX, true);
+    size_t leaves[] = {offsetof(Record, left), offsetof(Record, right)};
+    size_t frame_leaves[] = {offsetof(Record, left), offsetof(Record, right),
+        sizeof(Record) + offsetof(Record, left), sizeof(Record) + offsetof(Record, right)};
+    XrtManagedFrameSpec frame_spec = {4, sizeof(Record) * 2, alignof(Record), frame_leaves};
+    XrtManagedFrame *frame = NULL; OK(xrt_managed_frame_enter_layout(f.root, &frame_spec, &frame));
+    void *bytes = NULL; size_t extent = 0; OK(xrt_managed_frame_payload(frame, &bytes, &extent));
+    CHECK(extent == sizeof(Record) * 2);
+    XrtInlineValueHome home = {frame, bytes, (unsigned char *)bytes + sizeof(Record), 0, 2};
+    XrtInlineValueSpec spec = {sizeof(Record), alignof(Record), leaves, 2};
+    Record initial = {owned_string(&f, "old-left"), owned_string(&f, "old-right"), 7};
+    OK(xrt_inline_value_replace(&home, &spec, &initial));
+    xrt_managed_drop(initial.left); xrt_managed_drop(initial.right);
+    initial = *(Record *)home.value;
+    Record next = {owned_string(&f, "next-left"), owned_string(&f, "next-right"), 42};
+    XrtBillingStats baseline = xrt_billing_owner_stats(f.billing);
+    int32_t references = xr_signed_rc_read(&next.right->references);
+    atomic_store(&next.right->references, INT32_MIN);
+    STATUS(xrt_inline_value_replace(&home, &spec, &next), XRT_MANAGED_REFCOUNT);
+    atomic_store(&next.right->references, references);
+    CHECK(!memcmp(home.value, &initial, sizeof(initial)) && !((Record *)home.temporary)->left &&
+        !((Record *)home.temporary)->right && !((Record *)home.temporary)->number);
+    CHECK(xr_signed_rc_read(&next.left->references) == 1); same_bill(&f, baseline);
+    InlineWatch watch = {home, spec, next, {initial.left, initial.right}, 0};
+    f.audit.observe = inline_observe; f.audit.observer = &watch;
+    atomic_store(&f.audit.remaining, 0);
+    size_t allocations = atomic_load(&f.audit.calls);
+    OK(xrt_inline_value_replace(&home, &spec, &next));
+    f.audit.observe = NULL;
+    CHECK(watch.retired == 2 && atomic_load(&f.audit.calls) == allocations);
+    xrt_managed_drop(next.left); xrt_managed_drop(next.right);
+    next = *(Record *)home.value;
+    OK(xrt_inline_value_replace(&home, &spec, home.value));
+    CHECK(!memcmp(home.value, &next, sizeof(next)) && xr_signed_rc_read(&next.left->references) == 1 &&
+        xr_signed_rc_read(&next.right->references) == 1);
+    XrtInlineValueHome invalid = home; invalid.temporary = home.value;
+    STATUS(xrt_inline_value_replace(&invalid, &spec, &next), XRT_MANAGED_ARGUMENT);
+    invalid = home; ++invalid.temporary_first_owner;
+    STATUS(xrt_inline_value_replace(&invalid, &spec, &next), XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_inline_value_replace(&home, &spec, home.temporary), XRT_MANAGED_ARGUMENT);
+    atomic_store(&f.audit.remaining, SIZE_MAX);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(frame, 2, f.types.string, 42, &pending));
+    XrtManagedSlotLocation location; OK(xrt_managed_slot_location(frame, 2, &location));
+    STATUS(xrt_inline_value_replace(&home, &spec, &next), XRT_MANAGED_ARGUMENT);
+    CHECK(location.pending->value == pending && !memcmp(home.value, &next, sizeof(next)));
+    OK(xrt_managed_slot_abort(frame, 2));
+    watch = (InlineWatch){home, spec, {0}, {next.left, next.right}, 0};
+    f.audit.observe = inline_observe; f.audit.observer = &watch;
+    OK(xrt_inline_value_replace(&home, &spec, NULL));
+    f.audit.observe = NULL; CHECK(watch.retired == 2);
+    CHECK(!((Record *)home.value)->left && !((Record *)home.value)->right && !((Record *)home.value)->number);
+    int64_t pod[2] = {7, 42};
+    XrtInlineValueHome pod_home = {.value=pod};
+    XrtInlineValueSpec pod_spec = {sizeof(pod), alignof(int64_t), NULL, 0};
+    OK(xrt_inline_value_replace(&pod_home, &pod_spec, pod)); CHECK(pod[0] == 7 && pod[1] == 42);
+    OK(xrt_inline_value_replace(&pod_home, &pod_spec, NULL)); CHECK(!pod[0] && !pod[1]);
+    OK(xrt_managed_frame_leave(f.root, frame)); fixture_done(&f);
+    puts("inline Frame replacement publishes all leaves and bytes before guarded retirement");
+}
 int main(void) {
     raw_image_retirement(); raw_image_failures();
     empty_record_storage();
+    inline_frame_replacement();
     inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code();
     failures_and_admission(); deep_metadata();
     puts("immutable ValuePlan and inline ownership kernel passed");
