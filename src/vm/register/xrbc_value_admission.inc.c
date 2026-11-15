@@ -74,6 +74,19 @@ static bool rbc_value_container(const XrRbcModule *module,const XrRbcValueCode *
 static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination);
 }
+static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcFunction *function,uint32_t value,uint32_t result) {
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!home || !home->type || home->owner_count || !image || !image->types || home->type>image->type_count ||
+        !result || result>module->aggregate_type_count || !module->aggregate_types ||
+        !rbc_value_location_valid(function,code->locations[value]) ||
+        code->locations[value].kind!=XR_RBC_VALUE_AGGREGATE) return false;
+    XrtValueKind kind=image->types[home->type-1].kind;
+    XrRbcAggregateValue aggregate=function->aggregate_values[code->locations[value].index];
+    return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8 || kind==XRT_VALUE_TUPLE_I64) &&
+        home->size==module->aggregate_types[result-1].physical.size;
+}
 static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess access) {
     if (access.first > code->argument_count || access.count > (code->argument_count - access.first) / 2 ||
         (access.count && !code->arguments)) return false;
@@ -101,6 +114,47 @@ static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess ac
 }
 #include "xrbc_value_array_admission.inc.c"
 #include "xrbc_value_map_admission.inc.c"
+static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcFunction *function,XrRbcValueAccess access) {
+    if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true) ||
+        access.index>=code->display_count || !code->displays) return false;
+    const XrtPodDisplay *display=&code->displays[access.index];
+    const XrLirValueHome *home=rbc_value_home(code,access.source);
+    XrPodLayout expected={0};
+    if (!xr_pod_scalar_layout(display->scalar,&expected)) return false;
+    if (!display->nullable_depth)
+        return (display->scalar==XR_POD_BOOL || display->scalar==XR_POD_U8 || display->scalar==XR_POD_U64) &&
+            rbc_value_scalar(code,function,access.source,XR_RBC_BITS) &&
+            display->physical.size==expected.size && display->physical.alignment==expected.alignment &&
+            display->physical.scalar_count==expected.scalar_count;
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!home || !home->type || home->owner_count || !image || !image->types || home->type>image->type_count ||
+        display->nullable_depth>image->type_count || !rbc_value_location_valid(function,code->locations[access.source]) ||
+        code->locations[access.source].kind!=XR_RBC_VALUE_AGGREGATE) return false;
+    uint32_t type=home->type;
+    for (uint32_t n=0;n<display->nullable_depth;++n) {
+        const XrtValueImageType *row=&image->types[type-1];
+        if (row->kind!=XRT_VALUE_NULLABLE || row->owned_count || !row->nullable_element || row->nullable_element>=type ||
+            row->nullable_tag || row->nullable_payload!=image->types[row->nullable_element-1].alignment ||
+            !xr_pod_nullable_layout(expected,&expected)) return false;
+        type=row->nullable_element;
+    }
+    XrtValueKind leaf;
+    if (!xr_pod_value_kind(display->scalar,&leaf) || image->types[type-1].kind!=leaf ||
+        home->size!=expected.size || display->physical.size!=expected.size ||
+        display->physical.alignment!=expected.alignment || display->physical.scalar_count!=expected.scalar_count) return false;
+    XrRbcAggregateValue aggregate=function->aggregate_values[code->locations[access.source].index];
+    uint32_t ordinal=aggregate.type;
+    for (uint32_t n=0;n<display->nullable_depth;++n) {
+        if (ordinal>=module->aggregate_type_count || !module->aggregate_types) return false;
+        XrPodType packed=module->aggregate_types[ordinal];
+        if (packed.kind!=XR_POD_NULLABLE) return false;
+        if (n+1==display->nullable_depth) return packed.element==(uint32_t)display->scalar;
+        if (packed.element<XR_POD_SCALAR_COUNT || packed.element-XR_POD_SCALAR_COUNT>=ordinal) return false;
+        ordinal=packed.element-XR_POD_SCALAR_COUNT;
+    }
+    return false;
+}
 static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, uint32_t word) {
     if ((word & 255) != XR_RBC_VALUE_ACCESS || ((word >> 8) & 255)) return false;
@@ -113,7 +167,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_MAP && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
-        a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP && a.index) return false;
+        a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
+        a.operation!=XR_RBC_VALUE_DISPLAY && a.index) return false;
     switch (a.operation) {
     case XR_RBC_VALUE_STRING_LITERAL:
         return !a.source && !a.other && a.index < module->literal_count && rbc_value_string(module,code,a.result,true);
@@ -181,15 +236,22 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!rbc_value_scalar(code,function,source,kind)) return false;
             }
         }
+        if (target->aggregate_result_type)
+            return callee && rbc_value_pod(module,code,function,a.result,target->aggregate_result_type) &&
+                callee->homes->result_type==rbc_value_home(code,a.result)->type;
         return rbc_managed_kind(target->result_kind) ? callee && rbc_value_owner(module,code,a.result,true) &&
             callee->homes->result_type==rbc_value_home(code,a.result)->type :
             target->result_kind==XR_RBC_BITS && (!a.result || rbc_value_scalar(code,function,a.result,XR_RBC_BITS));
     }
     case XR_RBC_VALUE_RETURN:
-        return !a.result && !a.other && (!a.source || rbc_value_owner(module,code,a.source,false) ||
-            rbc_value_scalar(code,function,a.source,XR_RBC_BITS));
+        if (a.result || a.other) return false;
+        if (function->aggregate_result_type)
+            return rbc_value_pod(module,code,function,a.source,function->aggregate_result_type) &&
+                code->homes->result_type==rbc_value_home(code,a.source)->type;
+        return !a.source || rbc_value_owner(module,code,a.source,false) || rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_access_valid(module,code,function,a);
     case XR_RBC_VALUE_MAP: return rbc_value_map_access_valid(module,code,function,a);
+    case XR_RBC_VALUE_DISPLAY: return rbc_value_display_valid(module,code,function,a);
     case XR_RBC_VALUE_BINDING_NEW: case XR_RBC_VALUE_BINDING_READ:
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a);
