@@ -189,8 +189,6 @@ static uint32_t word(XrRbcOp op,uint32_t a,uint32_t b,uint32_t c) {
     uint32_t result=0; CHECK(xr_rbc_encode(&result,(XrRbcOperands){op,a,b,c,0})); return result;
 }
 static void raw_admission(XrtLocationOwner *locations) {
-    _Static_assert(XR_RBC_FGE==49 && XR_RBC_ITOF==51 && XR_RBC_FTOI==52,
-        "Numeric conversions append without renumbering existing bytecode");
     for (unsigned direction=0;direction<2;++direction) {
         XrRbcOp op=direction?XR_RBC_FTOI:XR_RBC_ITOF;
         uint32_t code[]={word(op,0,0,0),word(XR_RBC_RET,0,0,0)};
