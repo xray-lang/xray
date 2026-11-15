@@ -92,7 +92,7 @@ static bool slot_empty(XrtManagedFrame *frame, XrtManagedSlot *slot) {
     return !*frame_owner(frame, slot) && !slot->pending.value && !slot->pending.allocation_bytes;
 }
 
-XR_FUNCDEF XrtManagedStatus xrt_managed_root_new(XrtBillingOwner *billing,
+XRAY_API XrtManagedStatus xrt_managed_root_new(XrtBillingOwner *billing,
     XrtManagedRoot **output) {
     if (!billing || !output || *output) return XRT_MANAGED_ARGUMENT;
     const XrtRuntimeTypeSpec root_spec = {.fixed_size=sizeof(XrtManagedRoot),
@@ -125,13 +125,13 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_root_new(XrtBillingOwner *billing,
     xrt_runtime_type_plan_drop(root_plan);
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_root_drain(XrtManagedRoot *root) {
+XRAY_API XrtManagedStatus xrt_managed_root_drain(XrtManagedRoot *root) {
     if (!root_begin(root)) return XRT_MANAGED_ARGUMENT;
     root_clear(root);
     root->busy = false;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_root_destroy(XrtManagedRoot **owned) {
+XRAY_API XrtManagedStatus xrt_managed_root_destroy(XrtManagedRoot **owned) {
     if (!owned) return XRT_MANAGED_ARGUMENT;
     if (!*owned) return XRT_MANAGED_OK;
     XrtManagedRoot *root = *owned;
@@ -166,7 +166,7 @@ static XrtManagedStatus frame_extent(const XrtManagedFrameSpec *spec,
     *bytes = *payload_offset + spec->payload_size;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *root,
+XRAY_API XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *root,
     const XrtManagedFrameSpec *spec, XrtManagedFrame **output) {
     if (!output || *output) return XRT_MANAGED_ARGUMENT;
     size_t payload_offset = 0, bytes = 0;
@@ -195,7 +195,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *root,
     root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_frame_enter(XrtManagedRoot *root, size_t count,
+XRAY_API XrtManagedStatus xrt_managed_frame_enter(XrtManagedRoot *root, size_t count,
     XrtManagedFrame **output) {
     /* Keep the slots-only rejection boundary while sharing the physical owner. */
     if (!count || count > (SIZE_MAX - sizeof(XrtManagedFrame)) / sizeof(XrtManagedSlot))
@@ -203,14 +203,14 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_frame_enter(XrtManagedRoot *root, size_t
     XrtManagedFrameSpec spec = {count, 0, 1, NULL};
     return xrt_managed_frame_enter_layout(root, &spec, output);
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_frame_payload(XrtManagedFrame *frame,
+XRAY_API XrtManagedStatus xrt_managed_frame_payload(XrtManagedFrame *frame,
     void **output, size_t *bytes) {
     if (!frame || !frame->root || !output || *output || !bytes) return XRT_MANAGED_ARGUMENT;
     if (frame->payload_size) *output = (unsigned char *)frame + frame->payload_offset;
     *bytes = frame->payload_size;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {
+XRAY_API XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {
     if (!frame || frame->root != root || !root || root->top != frame || !root_begin(root))
         return XRT_MANAGED_ARGUMENT;
     root->top = frame->previous;
@@ -220,7 +220,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *root, XrtMan
     root->busy = false;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_adopt(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_adopt(XrtManagedFrame *frame, size_t index,
     XrtManagedHeader **owned) {
     if (!owned || !*owned) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = slot_begin(frame, index);
@@ -230,14 +230,14 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_adopt(XrtManagedFrame *frame, size_
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *frame, size_t index,
     XrtManagedHeader **output) {
     if (!output || *output) return XRT_MANAGED_ARGUMENT;
     if (!frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
     *output = *frame_owner(frame, &frame_slots(frame)[index]);
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_replace(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_replace(XrtManagedFrame *frame, size_t index,
     XrtManagedHeader **owned) {
     if (!owned || !*owned) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = slot_begin(frame, index);
@@ -253,7 +253,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_replace(XrtManagedFrame *frame, siz
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *frame, size_t index,
     XrtManagedHeader **output) {
     if (!output || *output) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = slot_begin(frame, index);
@@ -267,7 +267,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *frame, size_t
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
+XRAY_API XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
     XrtManagedFrame *source, size_t from) {
     if (!source || !destination || !source->root || source->root != destination->root ||
         from >= source->slot_count || to >= destination->slot_count) return XRT_MANAGED_ARGUMENT;
@@ -280,7 +280,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, 
     destination->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t index) {
+XRAY_API XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t index) {
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
     XrtManagedStatus status = slot->pending.value || slot->pending.allocation_bytes ?
@@ -293,7 +293,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, size_t index,
     XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
     if (!ops || !output || *output) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = slot_begin(frame, index);
@@ -303,7 +303,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, siz
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size_t index) {
+XRAY_API XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size_t index) {
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
     XrtManagedHeader *replacement = NULL;
@@ -316,14 +316,14 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *frame, size
     frame->root->busy = false;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *frame, size_t index) {
+XRAY_API XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *frame, size_t index) {
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
     xrt_managed_abort(&slot->pending);
     frame->root->busy = false;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size_t index,
+XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size_t index,
     XrtManagedSlotLocation *output) {
     if (!output || !frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = &frame_slots(frame)[index];
