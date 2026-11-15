@@ -24,6 +24,7 @@ typedef struct Audit {
     size_t bytes, blocks, finalized, count, events[64];
     XrtManagedFrame *watch;
     XrtManagedHeader *replacement;
+    XrtManagedHeader **input_owner;
     size_t watch_id;
     bool published;
 } Audit;
@@ -76,10 +77,16 @@ static void payload_drop(XrtManagedHeader *value, void *context) {
         XrtManagedHeader *current = NULL;
         OK(xrt_managed_slot_borrow(audit->watch, 0, &current));
         CHECK(current == audit->replacement);
+        if (audit->input_owner) CHECK(!*audit->input_owner);
         BAD(xrt_managed_slot_drop(audit->watch, 0));
         XrtManagedHeader *taken = NULL;
         BAD(xrt_managed_slot_take(audit->watch, 0, &taken));
         CHECK(!taken);
+        XrtManagedHeader *candidate = current;
+        CHECK(xrt_managed_retain(candidate));
+        BAD(xrt_managed_slot_replace(audit->watch, 0, &candidate));
+        CHECK(candidate == current);
+        xrt_managed_drop(candidate);
         audit->published = true;
     }
 }
@@ -278,6 +285,51 @@ static void replacement_and_extent(void) {
     OK(xrt_managed_root_destroy(&root));
     fixture_finish(&fixture);
 }
+static void committed_owner_replacement(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    OK(xrt_managed_frame_enter(root, 2, &frame));
+    XrtManagedHeader *old = make_value(&fixture, 51), *owned = make_value(&fixture, 52);
+    OK(xrt_managed_slot_adopt(frame, 0, &old));
+    BAD(xrt_managed_slot_replace(frame, 2, &owned));
+    BAD(xrt_managed_slot_replace(frame, 0, NULL));
+    BAD(xrt_managed_slot_replace(frame, 0, &old));
+    prepare_value(&fixture, frame, 0, 53);
+    BAD(xrt_managed_slot_replace(frame, 0, &owned));
+    CHECK(owned && ((Payload *)owned)->id == 52 && !fixture.audit.count);
+    OK(xrt_managed_slot_abort(frame, 0));
+    CHECK(fixture.audit.count == 1 && fixture.audit.events[0] == 53);
+    fixture.audit.watch = frame;
+    fixture.audit.watch_id = 51;
+    fixture.audit.replacement = owned;
+    fixture.audit.input_owner = &owned;
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_close(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_managed_slot_replace(frame, 0, &owned));
+    CHECK(!owned && fixture.audit.published && fixture.audit.count == 2 && fixture.audit.events[1] == 51);
+    XrtBillingStats after = xrt_billing_owner_stats(fixture.billing);
+    CHECK(after.allocations == before.allocations && after.blocks + 1 == before.blocks &&
+        after.bytes + sizeof(Payload) + 7 == before.bytes);
+    fixture.audit.watch = NULL;
+    fixture.audit.input_owner = NULL;
+    OK(xrt_managed_slot_borrow(frame, 0, &owned));
+    CHECK(xrt_managed_retain(owned) && xr_signed_rc_read(&owned->references) == 2);
+    OK(xrt_managed_slot_replace(frame, 0, &owned));
+    CHECK(!owned && fixture.audit.count == 2);
+    same_storage(after, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_slot_take(frame, 0, &owned));
+    CHECK(((Payload *)owned)->id == 52 && xr_signed_rc_read(&owned->references) == 1);
+    OK(xrt_managed_slot_replace(frame, 1, &owned));
+    CHECK(!owned && after.allocations == xrt_billing_owner_stats(fixture.billing).allocations);
+    OK(xrt_managed_root_destroy(&root));
+    CHECK(fixture.audit.count == 3 && fixture.audit.events[2] == 52);
+    fixture_finish(&fixture);
+    puts("Committed owner replacement publishes before retirement without allocation PASS");
+}
 static void partial_children(void) {
     Fixture fixture;
     fixture_init(&fixture);
@@ -421,6 +473,7 @@ int main(void) {
     aliases_and_return();
     independent_taken_owner();
     replacement_and_extent();
+    committed_owner_replacement();
     partial_children();
     nonlocal_cleanup();
     metadata_failures();
