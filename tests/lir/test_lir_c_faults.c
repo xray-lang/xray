@@ -341,10 +341,48 @@ static void managed_string_boundaries(const char *path) {
     CHECK(!runtime_live && !runtime_bytes);
     puts("managed String receiving metadata, actual allocation faults and producer retirement PASS");
 }
+typedef struct EdgeControl {
+    unsigned polls, trigger, mode;
+} EdgeControl;
+static bool edge_interrupt(const void *context) {
+    EdgeControl *control = (EdgeControl *)context;
+    if (++control->polls != control->trigger) return false;
+    if (control->mode) clock_now = control->mode == 1 ? 1005 : 0;
+    return !control->mode;
+}
+static void edge_control_boundaries(void) {
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XrLirHomeEvent events[6] = {{0}};
+    for (size_t i = 0; i < 6; ++i) events[i].kind = XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER;
+    XrLirValueHomes homes = {.events=events, .event_count=6};
+    const XrLirCStatus failures[] = {XR_LIR_C_CANCELLED, XR_LIR_C_DEADLINE, XR_LIR_C_CLOCK_FAILURE};
+    for (unsigned mode = 0; mode < 3; ++mode) for (unsigned statistic = 2; statistic <= 3; ++statistic) {
+        EdgeControl interrupted = {.trigger=statistic + (mode == 0), .mode=mode};
+        clock_override = true; clock_now = 1000;
+        XrCompileRequestOptions options = {edge_interrupt, &interrupted,
+            mode ? XR_COMPILE_DEADLINE_AFTER : XR_COMPILE_DEADLINE_NONE, mode ? 5 : 0};
+        XrCompileRequestControl control = {0};
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        XrLirCRequest request = {.resources=resources, .translation_unit="edge-control", .control=&control};
+        LirC c = {.request=&request}; LirCEdgeEvents index = {0};
+        size_t attempts = runtime_attempts; uint64_t held = sdk_stats(resources).held_bytes;
+        c_edge_events_prepare(&c, &homes, &index);
+        CHECK(c.status == failures[mode] && !index.index && !index.capacity);
+        CHECK(runtime_attempts == attempts && sdk_stats(resources).held_bytes == held);
+        clock_override = false;
+    }
+    xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
+    puts("edge statistics mid-loop cancellation, deadline and clock failure allocate nothing and refund exactly PASS");
+}
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
+        edge_control_boundaries(); return 0;
+    }
     if (argc == 3 && !strcmp(argv[1], "--managed-string")) {
+        edge_control_boundaries();
         managed_string_boundaries(argv[2]); return 0;
     }
+    if (argc == 1) edge_control_boundaries();
     if (argc == 1) record_memory_boundaries();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
