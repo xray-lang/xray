@@ -11,6 +11,7 @@
 #include "base/xcompile_state.h"
 #include "base/xcompile_request.h"
 #include "base/xmalloc.h"
+#include "base/xmax_align.h"
 #include <stdio.h>
 #ifdef XR_OS_WINDOWS
 #include <windows.h>
@@ -224,7 +225,7 @@ static void range_set_check(XrCompileResources *owner,const LiveRange *live,size
     size_t expected=0,seen=0;
     for(size_t i=0;i<count;++i)if(live[i].memory) {
         ++expected;uintptr_t begin=(uintptr_t)live[i].memory;size_t bytes=live[i].bytes;
-        CHECK(begin%_Alignof(CompileMaxAlignment)==0);
+        CHECK(begin%_Alignof(XrMaxAlignment)==0);
         for(size_t b=0;b<bytes;++b)CHECK(((unsigned char *)live[i].memory)[b]==live[i].value);
         range_compare(owner,live,count,begin,1,true);range_compare(owner,live,count,begin,bytes,true);
         range_compare(owner,live,count,begin+bytes-1,1,false);
