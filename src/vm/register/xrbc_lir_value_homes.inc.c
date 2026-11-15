@@ -32,10 +32,10 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     }
     return true;
 }
-static bool rbc_home_needed(const XrLirModule *input) {
-    for (uint32_t f = 0; f < xr_lir_function_count(input); ++f) {
-        XrLirFunction function; XrLirFunctionView view;
-        xr_lir_function_at(input,f,&function); xr_lir_function_view(input,function,&view);
+static bool rbc_home_needed(const XrLirModule *input, const uint32_t *ids, uint32_t count) {
+    for (uint32_t f = 0; f < count; ++f) {
+        XrLirFunction function = {input,ids[f]}; XrLirFunctionView view;
+        xr_lir_function_view(input,function,&view);
         for (size_t index = 0; index <= view.value_count; ++index) {
             XrLirType type = view.result; XrLirValueLayoutKey key;
             if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
@@ -105,11 +105,12 @@ static void rbc_value_preparation_clear(RbcValuePreparation *preparation) {
     *preparation = (RbcValuePreparation){0};
 }
 static XrRbcCompileStatus rbc_lir_prepare_values(const XrLirModule *input, XrLirFunction entry,
-    XrRbcProgram *program, RbcValuePreparation *preparation, XrRbcCompileDiagnostic *diagnostic) {
+    const uint32_t *ids, uint32_t count, XrRbcProgram *program,
+    RbcValuePreparation *preparation, XrRbcCompileDiagnostic *diagnostic) {
     XrLirFunction state_entry = {0}; XrLirStateLayout state = {0};
     xr_lir_state_entry(input,&state_entry); xr_lir_state_layout_view(input,&state);
     bool receive_state = state_entry.id == entry.id && state.module_count;
-    if (!receive_state && !rbc_home_needed(input)) return XR_RBC_COMPILE_OK;
+    if (!receive_state && !rbc_home_needed(input,ids,count)) return XR_RBC_COMPILE_OK;
     RbcLirCompiler c = {.input=input,.diagnostic=diagnostic}; RbcHomeVector roots = {0};
     if (!rbc_home_roots(&c,receive_state ? &state : NULL,&roots)) { xr_free(roots.data); return c.status; }
     XrtManagedStatus memory = xrt_billing_owner_new(NULL,SIZE_MAX,&preparation->billing);
@@ -120,12 +121,12 @@ static XrRbcCompileStatus rbc_lir_prepare_values(const XrLirModule *input, XrLir
             preparation->billing,&preparation->layouts));
     xr_free(roots.data);
     if (status == XR_RBC_COMPILE_OK) {
-        const XrLirOwnershipTypeFact *types = NULL; uint32_t count = 0;
-        xr_lir_value_layouts_ownership(preparation->layouts,&types,&count);
+        const XrLirOwnershipTypeFact *types = NULL; uint32_t fact_count = 0;
+        xr_lir_value_layouts_ownership(preparation->layouts,&types,&fact_count);
         XrLirDiagnostic invalid = {0};
         /* Public finish fully verified this exact immutable module. The original
          * paranoid entry check has also finished before any preparation starts. */
-        XrLirStatus collected = xr_lir_internal_ownership_collect(&(XrLirOwnershipRequest){input,types,count},
+        XrLirStatus collected = xr_lir_internal_ownership_collect(&(XrLirOwnershipRequest){input,types,fact_count},
             &preparation->ownership,&invalid);
         if (collected != XR_LIR_OK) {
             status = collected == XR_LIR_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID;

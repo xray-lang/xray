@@ -1971,18 +1971,6 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     uint32_t count = 1;
     ids[0] = entry.id;
     mapping[entry.id - 1] = 1;
-    status = rbc_lir_prepare_values(input, entry, p, &preparation, d);
-    if (status != XR_RBC_COMPILE_OK) goto done;
-    status = rbc_lir_aggregate_types(input, p, d);
-    if (status != XR_RBC_COMPILE_OK) goto done;
-    status = rbc_lir_callable_types(input, p, d);
-    if (status != XR_RBC_COMPILE_OK) goto done;
-    if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
-        !p->module.state_spec) {
-        status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-            "only the designated entry receives module state", (XrLirSource){0});
-        goto done;
-    }
     bool owned_closures = false;
     if (!rbc_lir_closure(input, ids, mapping, &count, &owned_closures, d)) {
         status = d->status;
@@ -1996,14 +1984,26 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         for (uint32_t parameter = 0; parameter < view.parameter_count; ++parameter)
             boxed |= xr_lir_boxed_type(input,view.parameter_types[parameter]) ||
                 rbc_lir_callable_type(input,view.parameter_types[parameter]);
-        for (uint32_t v = 1; v <= view.value_count; ++v) {
-            XrLirType type; xr_lir_value_type(input,(XrLirValue){input,function.id,v},&type);
+        for (size_t index = 1; index <= view.value_count; ++index) {
+            XrLirType type; xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
             boxed |= xr_lir_boxed_type(input,type) || rbc_lir_callable_type(input,type);
         }
     }
     if (owned_closures || boxed) {
         status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "fixed callable and boxed execution plans are not available", (XrLirSource){0});
+        goto done;
+    }
+    status = rbc_lir_prepare_values(input, entry, ids, count, p, &preparation, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    status = rbc_lir_aggregate_types(input, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    status = rbc_lir_callable_types(input, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
+        !p->module.state_spec) {
+        status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "only the designated entry receives module state", (XrLirSource){0});
         goto done;
     }
     status = rbc_lir_callable_parameters(input, ids, count, p);

@@ -91,7 +91,14 @@ static void scalar_and_mapping(void) {
     XrLirBlock block = test_block(module,root,NULL,0); OK(xr_lir_set_entry(module,root,block));
     XrLirValue value = test_constant(module,block,XR_LIR_I64,42);
     OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
-        .operands=&value,.operand_count=1})); OK(xr_lir_module_finish(module,NULL));
+        .operands=&value,.operand_count=1}));
+    XrLirFunction unused = test_function(module,"unused_string",NULL,0,XR_LIR_STRING);
+    XrLirBlock unused_block = test_block(module,unused,NULL,0); OK(xr_lir_set_entry(module,unused,unused_block));
+    XrLirLiteral literal; OK(xr_lir_add_literal(module,"unused",6,&literal));
+    XrLirValue text = record_fixture_value(module,unused_block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,
+        NULL,0,literal.id,(XrLirFunction){0});
+    OK(xr_lir_set_terminator(module,unused_block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&text,.operand_count=1})); OK(xr_lir_module_finish(module,NULL));
     XrRbcProgram *program = NULL; CHECK(xr_rbc_compile(module,root,&program,NULL) == XR_RBC_COMPILE_OK);
     CHECK(!xr_rbc_module_value_image(xr_rbc_program_view(program)) &&
         !xr_rbc_module_value_homes(xr_rbc_program_view(program),0));
