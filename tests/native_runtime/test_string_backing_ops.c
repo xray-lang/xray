@@ -275,6 +275,66 @@ static void formatted_values(void) {
     fixture_done(&f);
     puts("String canonical integer, rune and shortest binary64 formatting passed");
 }
+static void pod_display_case(Fixture *fixture, XrPodScalar scalar, const void *value, const char *expected) {
+    XrPodLayout primitive = {0}; CHECK(xr_pod_scalar_layout(scalar, &primitive));
+    for (uint32_t depth = 0; depth < 4; ++depth) {
+        XrtPodDisplay description = {.scalar=scalar, .nullable_depth=depth, .physical=primitive};
+        for (uint32_t n = 0; n < depth; ++n) CHECK(xr_pod_nullable_layout(description.physical, &description.physical));
+        unsigned char bytes[32] = {0};
+        for (uint32_t n = 0; n < depth; ++n) bytes[n * primitive.alignment] = 1;
+        if (primitive.size) memcpy(bytes + depth * primitive.alignment, value, primitive.size);
+        OK(xrt_string_backing_pod_display_create(fixture->frame, 0, &fixture->types, &description,
+            description.physical.size ? bytes : NULL));
+        slot_is(fixture, 0, expected);
+        for (uint32_t n = 0; n < depth; ++n) {
+            bytes[n * primitive.alignment] = 0;
+            OK(xrt_string_backing_pod_display_create(fixture->frame, 0, &fixture->types, &description, bytes));
+            slot_is(fixture, 0, "null"); bytes[n * primitive.alignment] = 1;
+        }
+        XrtManagedHeader *old = borrow(fixture, 0);
+        XrtBillingStats baseline = xrt_billing_owner_stats(fixture->billing);
+        ++description.physical.size;
+        STATUS(xrt_string_backing_pod_display_create(fixture->frame, 0, &fixture->types, &description, bytes), XRT_MANAGED_ARGUMENT);
+        --description.physical.size;
+        if (depth) {
+            bytes[0] = 2;
+            STATUS(xrt_string_backing_pod_display_create(fixture->frame, 0, &fixture->types, &description, bytes), XRT_MANAGED_ARGUMENT);
+        }
+        CHECK(borrow(fixture, 0) == old); same_bill(fixture, baseline);
+    }
+}
+static void pod_display_values(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    pod_display_case(&f, XR_POD_UNIT, NULL, "()");
+#define POD_CASE(kind, type, bits, text) do { type value = bits; pod_display_case(&f, kind, &value, text); } while (0)
+    POD_CASE(XR_POD_BOOL, uint8_t, 0, "false"); POD_CASE(XR_POD_BOOL, uint8_t, 1, "true");
+    POD_CASE(XR_POD_I8, int8_t, INT8_MIN, "-128"); POD_CASE(XR_POD_I16, int16_t, INT16_MIN, "-32768");
+    POD_CASE(XR_POD_I32, int32_t, INT32_MIN, "-2147483648");
+    POD_CASE(XR_POD_I64, int64_t, INT64_MIN, "-9223372036854775808");
+    POD_CASE(XR_POD_U8, uint8_t, UINT8_MAX, "255"); POD_CASE(XR_POD_U16, uint16_t, UINT16_MAX, "65535");
+    POD_CASE(XR_POD_U32, uint32_t, UINT32_MAX, "4294967295");
+    POD_CASE(XR_POD_U64, uint64_t, UINT64_MAX, "18446744073709551615");
+    POD_CASE(XR_POD_F32, uint32_t, UINT32_C(0x3fa00000), "1.25");
+    POD_CASE(XR_POD_F32, uint32_t, UINT32_C(0x7f800001), "nan");
+    POD_CASE(XR_POD_F64, uint64_t, UINT64_C(0x8000000000000000), "-0.0");
+    POD_CASE(XR_POD_F64, uint64_t, UINT64_C(0x7ff0000000000001), "nan");
+#undef POD_CASE
+    XrtPodDisplay description = {.scalar=XR_POD_BOOL, .physical={1, 1, 1}};
+    uint8_t value = 2;
+    XrtManagedHeader *old = borrow(&f, 0); XrtBillingStats baseline = xrt_billing_owner_stats(f.billing);
+    STATUS(xrt_string_backing_pod_display_create(f.frame, 0, &f.types, &description, &value), XRT_MANAGED_ARGUMENT);
+    value = 1; atomic_store(&f.audit.remaining, 0);
+    STATUS(xrt_string_backing_pod_display_create(f.frame, 0, &f.types, &description, &value), XRT_MANAGED_OOM);
+    CHECK(borrow(&f, 0) == old); same_bill(&f, baseline); atomic_store(&f.audit.remaining, SIZE_MAX);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(f.frame, 0, f.types.string, 42, &pending));
+    XrtManagedSlotLocation location; OK(xrt_managed_slot_location(f.frame, 0, &location));
+    baseline = xrt_billing_owner_stats(f.billing);
+    STATUS(xrt_string_backing_pod_display_create(f.frame, 0, &f.types, &description, &value), XRT_MANAGED_ARGUMENT);
+    CHECK(location.pending->value == pending && borrow(&f, 0) == old); same_bill(&f, baseline);
+    OK(xrt_managed_slot_abort(f.frame, 0)); fixture_done(&f);
+    puts("POD primitive and nested Nullable display preserves exact bytes and owner rollback");
+}
 static void split_values(void) {
     Fixture f; fixture_init(&f, SIZE_MAX);
     XrtStringBacking *text = make(&f, 0, ":\xc3\xa9::\xf0\x9f\x98\x80:"), *separator = make(&f, 1, ":");
@@ -389,6 +449,7 @@ int main(void) {
     derived_alias_chain();
     exclusive_append();
     formatted_values();
+    pod_display_values();
     split_values();
     failures_and_refunds();
     independent_owners();

@@ -280,3 +280,57 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_rune_create(XrtManagedFrame *fram
     if (!length) return XRT_MANAGED_ARGUMENT;
     return string_bytes_create(frame, slot, types, (const char *)bytes, length, 1);
 }
+static XrtManagedStatus pod_scalar_display(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, XrPodScalar scalar, const void *value) {
+    int64_t signed_value = 0;
+    uint64_t unsigned_value = 0;
+    uint32_t float_width = 0;
+    switch (scalar) {
+    case XR_POD_UNIT: return string_bytes_create(frame, slot, types, "()", 2, 2);
+    case XR_POD_BOOL: {
+        uint8_t byte = 0; memcpy(&byte, value, sizeof(byte));
+        if (byte > 1) return XRT_MANAGED_ARGUMENT;
+        return xrt_string_backing_bool_create(frame, slot, types, byte != 0);
+    }
+#define POD_SIGNED(kind, type) case kind: { type bits; memcpy(&bits, value, sizeof(bits)); signed_value = bits; break; }
+    POD_SIGNED(XR_POD_I8, int8_t)
+    POD_SIGNED(XR_POD_I16, int16_t)
+    POD_SIGNED(XR_POD_I32, int32_t)
+    POD_SIGNED(XR_POD_I64, int64_t)
+#undef POD_SIGNED
+#define POD_UNSIGNED(kind, type) case kind: { type bits; memcpy(&bits, value, sizeof(bits)); unsigned_value = bits; break; }
+    POD_UNSIGNED(XR_POD_U8, uint8_t)
+    POD_UNSIGNED(XR_POD_U16, uint16_t)
+    POD_UNSIGNED(XR_POD_U32, uint32_t)
+    POD_UNSIGNED(XR_POD_U64, uint64_t)
+#undef POD_UNSIGNED
+    case XR_POD_F32: { uint32_t bits; memcpy(&bits, value, sizeof(bits)); unsigned_value = bits; float_width = 32; break; }
+    case XR_POD_F64: memcpy(&unsigned_value, value, sizeof(unsigned_value)); float_width = 64; break;
+    default: return XRT_MANAGED_ARGUMENT;
+    }
+    if (float_width) {
+        char bytes[32]; size_t length = 0;
+        XR_CHECK(xr_float_to_decimal(float_width, unsigned_value, bytes, sizeof(bytes), &length),
+            "every admitted POD float bit pattern has canonical text");
+        return string_bytes_create(frame, slot, types, bytes, length, length);
+    }
+    if (scalar >= XR_POD_I8 && scalar <= XR_POD_I64)
+        return xrt_string_backing_i64_create(frame, slot, types, signed_value);
+    return xrt_string_backing_u64_create(frame, slot, types, unsigned_value);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_pod_display_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtPodDisplay *description, const void *value) {
+    XrPodLayout scalar = {0};
+    if (!description || !xr_pod_scalar_layout(description->scalar, &scalar)) return XRT_MANAGED_ARGUMENT;
+    uint64_t size = scalar.size + (uint64_t)description->nullable_depth * scalar.alignment;
+    uint64_t fields = (uint64_t)scalar.scalar_count + description->nullable_depth;
+    if (size != description->physical.size || scalar.alignment != description->physical.alignment ||
+        fields != description->physical.scalar_count || (size && !value)) return XRT_MANAGED_ARGUMENT;
+    const unsigned char *bytes = value;
+    for (uint32_t depth = 0; depth < description->nullable_depth; ++depth) {
+        if (*bytes > 1) return XRT_MANAGED_ARGUMENT;
+        if (!*bytes) return string_bytes_create(frame, slot, types, "null", 4, 4);
+        bytes += scalar.alignment;
+    }
+    return pod_scalar_display(frame, slot, types, description->scalar, bytes);
+}
