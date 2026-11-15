@@ -288,6 +288,93 @@ static void facts_rejected_pending(void) {
     }
 }
 
+static void facts_seed_origins(void) {
+    XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
+    XrLirType callable=0, factory_type=0;
+    XrLirCallableType signature={.result=XR_LIR_I64};
+    OK(xr_lir_callable_type(module,&signature,&callable));
+    signature.result=callable;
+    OK(xr_lir_callable_type(module,&signature,&factory_type));
+    XrLirFunction leaf=facts_function(module,&(XrLirFunctionSpec){
+        .name="code_only",.name_length=9,.result=XR_LIR_I64});
+    OK(xr_lir_set_closure_target(module,leaf,(XrLirClosureTarget){.callable=callable}));
+    XrLirBlock block=facts_block(module,leaf);
+    facts_return(module,block,facts_emit(module,block,(XrLirInstruction){
+        .op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=42}));
+    XrLirFunction factory=facts_function(module,&(XrLirFunctionSpec){
+        .name="indirect_factory",.name_length=16,.result=callable});
+    OK(xr_lir_set_closure_target(module,factory,(XrLirClosureTarget){.callable=factory_type}));
+    block=facts_block(module,factory);
+    facts_return(module,block,facts_emit(module,block,(XrLirInstruction){
+        .op=XR_LIR_FUNCTION_REF,.type=callable,.callee=leaf,.bits=XR_LIR_CLOSURE_FRAME}));
+    uint32_t bytes=0,alignment=0;
+    CHECK(xr_lir_internal_state_payload(module,callable,&bytes,&alignment));
+    XrLirStateModule owner={0};
+    XrLirStateSlot slot={.payload=callable,.mutable=true,.size=bytes,.alignment=alignment};
+    XrLirStateLayout layout={.modules=&owner,.module_count=1,.slots=&slot,.slot_count=1,
+        .payload_size=bytes,.payload_alignment=alignment};
+    OK(xr_lir_set_state_layout(module,&layout));
+    XrLirType state_type=XR_LIR_STATE;
+    XrLirFunction root=facts_function(module,&(XrLirFunctionSpec){.name="seed_origins",.name_length=12,
+        .parameters=&state_type,.parameter_count=1,.result=XR_LIR_I64});
+    OK(xr_lir_set_state_entry(module,root));
+    XrLirBlock entry=facts_block(module,root),join={0};
+    OK(xr_lir_add_block(module,root,&callable,1,&join));
+    XrLirValue state=facts_parameter(module,root,0);
+    XrLirInstruction effect={.op=XR_LIR_MODULE_BEGIN,.type=XR_LIR_UNIT,.operands=&state,.operand_count=1};
+    OK(xr_lir_emit_effect(module,entry,&effect));
+    XrLirValue code_only=facts_emit(module,entry,(XrLirInstruction){
+        .op=XR_LIR_FUNCTION_REF,.type=callable,.callee=leaf,.bits=XR_LIR_CLOSURE_FRAME});
+    XrLirValue initial[]={state,code_only};
+    XrLirValue reference=facts_emit(module,entry,(XrLirInstruction){
+        .op=XR_LIR_STATE_CONSTRUCT,.type=XR_LIR_STATE_REF,.operands=initial,.operand_count=2});
+    effect=(XrLirInstruction){.op=XR_LIR_STATE_PUBLISH,.type=XR_LIR_UNIT,.operands=&reference,.operand_count=1};
+    OK(xr_lir_emit_effect(module,entry,&effect));
+    effect=(XrLirInstruction){.op=XR_LIR_MODULE_READY,.type=XR_LIR_UNIT,.operands=&state,.operand_count=1};
+    OK(xr_lir_emit_effect(module,entry,&effect));
+    XrLirValue state_read=facts_emit(module,entry,(XrLirInstruction){
+        .op=XR_LIR_STATE_READ,.type=callable,.operands=&reference,.operand_count=1});
+    XrLirValue state_result=facts_emit(module,entry,(XrLirInstruction){
+        .op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=&state_read,.operand_count=1});
+    XrLirInstruction branch={.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,
+        .edges={{.target=join,.arguments=&code_only,.argument_count=1}}};
+    OK(xr_lir_set_terminator(module,entry,&branch));
+    XrLirValue phi={0}; OK(xr_lir_block_parameter(module,join,0,&phi));
+    XrLirValue phi_result=facts_emit(module,join,(XrLirInstruction){
+        .op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=&phi,.operand_count=1});
+    XrLirValue factory_ref=facts_emit(module,join,(XrLirInstruction){
+        .op=XR_LIR_FUNCTION_REF,.type=factory_type,.callee=factory,.bits=XR_LIR_CLOSURE_FRAME});
+    XrLirValue indirect=facts_emit(module,join,(XrLirInstruction){
+        .op=XR_LIR_CALL_INDIRECT,.type=callable,.operands=&factory_ref,.operand_count=1});
+    XrLirValue final_result=facts_emit(module,join,(XrLirInstruction){
+        .op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=&indirect,.operand_count=1});
+    XrLirValue pieces[]={state_result,phi_result};
+    pieces[0]=facts_emit(module,join,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,
+        .operands=pieces,.operand_count=2});
+    pieces[1]=final_result;
+    facts_return(module,join,facts_emit(module,join,(XrLirInstruction){.op=XR_LIR_ADD,
+        .type=XR_LIR_I64,.operands=pieces,.operand_count=2}));
+    OK(xr_lir_module_finish(module,NULL));
+    XrLirCallableFacts *copy=NULL; OK(xr_lir_callable_facts_create(module,&copy));
+    xr_lir_module_destroy(module);
+    XrLirCallableFunctionFacts facts={0}; OK(xr_lir_callable_facts_function(copy,root.id,&facts));
+    const XrLirCallableValueFact *selected=&facts.values[phi.id], *seed=&facts.values[code_only.id];
+    CHECK(selected->type==callable && selected->block==join.id && selected->block &&
+        !selected->instruction && !selected->parameter && selected->operation==XR_LIR_OP_INVALID &&
+        !selected->persistent && !selected->known_target && selected->origin==phi.id);
+    CHECK(seed->operation==XR_LIR_FUNCTION_REF && seed->block==entry.id && seed->instruction &&
+        seed->persistent && seed->known_target==leaf.id && !seed->capture_count &&
+        seed->constructor_storage==XR_LIR_CLOSURE_FRAME && !seed->state_capture);
+    const XrLirCallableValueFact *returned=&facts.values[indirect.id], *read=&facts.values[state_read.id];
+    CHECK(returned->type==callable && returned->operation==XR_LIR_CALL_INDIRECT &&
+        returned->block==join.id && returned->instruction && !returned->parameter &&
+        returned->persistent && !returned->known_target && returned->origin==indirect.id);
+    CHECK(read->type==callable && read->operation==XR_LIR_STATE_READ && read->block==entry.id &&
+        read->instruction && !read->parameter && read->persistent && !read->known_target && read->origin==state_read.id);
+    CHECK(live && live_bytes); xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
+    puts("callable block arguments, code-only seeds, indirect results and State reads retain exact facts");
+}
+
 static void facts_scalar_empty(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
     XrLirFunction function = facts_function(module, &(XrLirFunctionSpec){.name="scalar", .name_length=6, .result=XR_LIR_UNIT});
@@ -299,7 +386,7 @@ static void facts_scalar_empty(void) {
 }
 
 int main(void) {
-    facts_scalar_empty(); facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();
+    facts_scalar_empty(); facts_seed_origins(); facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();
     puts("constructor callable facts, owned copies and failure cleanup passed");
     return 0;
 }
