@@ -12,7 +12,7 @@
  *   Scalar Cells keep their independent indexed transport.
  */
 #include "lir_map_fixture.h"
-static void scalar_indexed_cell_hole(XrtLocationOwner *locations) {
+static void map_cell_declaration_and_scalar_cells(XrtLocationOwner *locations) {
     uint32_t code[5] = {0};
     CHECK(xr_rbc_encode(&code[0], (XrRbcOperands){.op=XR_RBC_LOADI, .a=0, .immediate=42}));
     CHECK(xr_rbc_encode(&code[1], (XrRbcOperands){.op=XR_RBC_CELL_NEW, .a=0, .immediate=1}));
@@ -24,6 +24,16 @@ static void scalar_indexed_cell_hole(XrtLocationOwner *locations) {
         .cell_kinds=cells, .cell_kind_count=2};
     XrRbcModule module = {.functions=&function, .function_count=1};
     XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_INVALID && !execution);
+    /* Scalar Cell ordinals require their own initialized prefix. The retired
+     * indexed Map declaration above cannot stand in for its first element. */
+    uint32_t scalar[7] = {0};
+    CHECK(xr_rbc_encode(&scalar[0], (XrRbcOperands){.op=XR_RBC_LOADI, .a=0, .immediate=17}));
+    CHECK(xr_rbc_encode(&scalar[1], (XrRbcOperands){.op=XR_RBC_CELL_NEW, .a=0, .immediate=0}));
+    CHECK(xr_rbc_encode(&scalar[2], (XrRbcOperands){.op=XR_RBC_LOADI, .a=0, .immediate=42}));
+    memcpy(scalar + 3, code + 1, 4 * sizeof(*scalar));
+    cells[0] = XR_RBC_BITS;
+    function.code = scalar; function.code_count = 7;
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, locations, &execution) == XR_RBC_OK);
     XrRbcOutcome *outcome = xr_rbc_execution_run(execution); uint64_t bits = 0;
     CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
@@ -43,7 +53,7 @@ static void map_receiving_owners(void) {
         if (compiled) fprintf(stderr, "Map compile f%u b%u i%u: %s\n", diagnostic.function,
             diagnostic.block, diagnostic.instruction, diagnostic.message);
         CHECK(compiled == XR_RBC_COMPILE_OK);
-        if (!n) scalar_indexed_cell_hole(xr_rbc_program_locations(program));
+        if (!n) map_cell_declaration_and_scalar_cells(xr_rbc_program_locations(program));
         xr_lir_module_destroy(module);
         const XrRbcModule *owned = xr_rbc_program_view(program);
         const XrRbcValueCode *code = xr_rbc_module_value_code(owned, 0);
