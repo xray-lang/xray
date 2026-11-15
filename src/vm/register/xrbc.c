@@ -114,6 +114,8 @@ struct XrRbcOutcome {
 };
 
 struct XrRbcExecution {
+    // Code buffers retain their leased or borrowed lifetime; Layout owns a separate pin.
+    XrRbcModule module_snapshot;
     const XrRbcModule *module;
     XrRbcEntry *entries;
     XrRbcStack stack;
@@ -478,7 +480,17 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         }
         execution->code_lease = module->code_lease;
     }
-    execution->module = module;
+    execution->module_snapshot = *module;
+    execution->module_snapshot.state_layout = NULL;
+    execution->module = &execution->module_snapshot;
+    if (module->state_layout) {
+        if (!xrt_module_layout_retain(module->state_layout)) {
+            xr_rbc_execution_free(&execution);
+            return XR_RBC_VALUE_FAILURE;
+        }
+        execution->module_snapshot.state_layout = module->state_layout;
+    }
+    module = execution->module;
     if (module->closure_entry_count) {
         XrRbcCodeLease lease = module->code_lease;
         XrXirValueStatus status = xrt_callable_code_new(module->closure_types, module->closure_entries,
@@ -632,6 +644,7 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     xrt_module_state_drop(&owned->state);
     xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
+    xrt_module_layout_drop(&owned->module_snapshot.state_layout);
     if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
 }

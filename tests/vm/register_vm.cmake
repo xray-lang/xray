@@ -24,6 +24,11 @@ add_test(NAME lir_bytecode COMMAND test_lir_bytecode)
 add_test(NAME lir_bytecode_alloc COMMAND test_lir_bytecode_alloc)
 set_tests_properties(lir_bytecode lir_bytecode_alloc PROPERTIES LABELS "unit;vm;lir;fast" TIMEOUT 30)
 
+add_executable(test_rbc_code_owner ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_rbc_code_owner.c)
+target_link_libraries(test_rbc_code_owner PRIVATE xray_register_vm xray_lir xray_native_runtime)
+add_test(NAME rbc_code_owner COMMAND test_rbc_code_owner)
+set_tests_properties(rbc_code_owner PROPERTIES LABELS "unit;vm;lir;ownership" TIMEOUT 30)
+
 add_executable(lir_vm_run ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/lir_vm_run.c)
 add_executable(test_lir_bytecode_source
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_bytecode_source.c)
