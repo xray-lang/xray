@@ -56,6 +56,13 @@ typedef struct XrtEnvironmentBorrow {
  * a bare Header; this view is not an additional reference or mutation grant. */
 XR_FUNC XrtManagedStatus xrt_environment_borrow(const XrtCaptureType *,
     const XrtManagedHeader *, XrtEnvironmentBorrow *empty);
+/* Recover a paired view after setup retirement from a real owner produced by
+ * this environment factory. Its private lease and complete fixed geometry must
+ * match the immutable ENVIRONMENT plan kept alive by that owner. The caller
+ * holds the owner throughout the borrow; no allocation or retain occurs. This
+ * proves storage provenance only: the invocation boundary still checks its
+ * admitted code identity, entry ordinal and signature independently. */
+XR_FUNC XrtManagedStatus xrt_environment_borrow_owned(const XrtManagedHeader *, XrtEnvironmentBorrow *empty);
 XR_FUNC XrtManagedStatus xrt_environment_capture_borrow(const XrtEnvironmentBorrow *, size_t,
     const XrtValuePlan **empty_type, const void **empty_payload);
 

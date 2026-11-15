@@ -25,6 +25,15 @@ struct XrtCaptureType {
 _Static_assert(sizeof(XrtCaptureType) % alignof(size_t) == 0,
     "cold shifted-offset storage follows the setup with native alignment");
 
+/* Only the environment factory installs this producer pair. The context stays
+ * the independent immutable plan, never a creator setup or bound code image. */
+static bool environment_plan_retain(void *context) {
+    XrtValuePlanSpec shape;
+    return xrt_value_plan_view(context, &shape) == XRT_MANAGED_OK &&
+        shape.kind == XRT_VALUE_ENVIRONMENT && xrt_value_plan_retain(context);
+}
+static void environment_plan_drop(void *context) { xrt_value_plan_drop(context); }
+
 XR_FUNCDEF void xrt_capture_type_drop(XrtCaptureType **owned) {
     if (!owned || !*owned) return;
     XrtCaptureType *type = *owned;
@@ -63,7 +72,9 @@ XR_FUNCDEF XrtManagedStatus xrt_capture_type_new(XrtBillingOwner *billing,
     size_t alignment = payload.alignment > alignof(XrtManagedHeader) ? payload.alignment : alignof(XrtManagedHeader);
     XrtRuntimeTypeSpec physical = {.fixed_size=type->object_bytes, .alignment=alignment,
         .capacity_offset=SIZE_MAX, .child_offsets=payload.owned_count ? offsets : NULL,
-        .child_count=payload.owned_count, .code=xrt_value_plan_lease((XrtValuePlan *)plan)};
+        .child_count=payload.owned_count, .code=shape.kind == XRT_VALUE_ENVIRONMENT ?
+            (XrtManagedLease){(void *)plan, environment_plan_retain, environment_plan_drop} :
+            xrt_value_plan_lease((XrtValuePlan *)plan)};
     XrtRuntimeTypePlan *received = NULL;
     status = xrt_runtime_type_plan_new(billing, &physical, &received);
     if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, received, &type->ops);
@@ -93,6 +104,29 @@ XR_FUNCDEF XrtManagedStatus xrt_environment_borrow(const XrtCaptureType *type,
     if (!type || type->shape.kind != XRT_VALUE_ENVIRONMENT || !owner || owner->ops != type->ops ||
         !empty || empty->owner || empty->plan || empty->payload) return XRT_MANAGED_ARGUMENT;
     *empty = (XrtEnvironmentBorrow){owner, type->plan, owner + 1};
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_environment_borrow_owned(const XrtManagedHeader *owner,
+    XrtEnvironmentBorrow *empty) {
+    if (!empty || empty->owner || empty->plan || empty->payload) return XRT_MANAGED_ARGUMENT;
+    const XrtRuntimeTypeSpec *physical = NULL;
+    XrtManagedStatus status = xrt_managed_producer_borrow(owner,
+        environment_plan_retain, environment_plan_drop, &physical);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrtValuePlan *plan = physical->code.context;
+    XrtValuePlanSpec shape;
+    status = xrt_value_plan_view(plan, &shape);
+    if (status != XRT_MANAGED_OK || shape.kind != XRT_VALUE_ENVIRONMENT ||
+        shape.size > SIZE_MAX - sizeof(XrtManagedHeader)) return XRT_MANAGED_ARGUMENT;
+    size_t alignment = shape.alignment > alignof(XrtManagedHeader) ? shape.alignment : alignof(XrtManagedHeader);
+    if (physical->fixed_size != sizeof(XrtManagedHeader) + shape.size || physical->alignment != alignment ||
+        physical->capacity_offset != SIZE_MAX || physical->stride || physical->drop_payload ||
+        physical->tail_child_count || physical->child_count != shape.owned_count ||
+        (physical->child_count && !physical->child_offsets)) return XRT_MANAGED_ARGUMENT;
+    for (size_t i = 0; i < shape.owned_count; ++i)
+        if (physical->child_offsets[i] != sizeof(XrtManagedHeader) + shape.owned_offsets[i])
+            return XRT_MANAGED_ARGUMENT;
+    *empty = (XrtEnvironmentBorrow){owner, plan, owner + 1};
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_environment_capture_borrow(const XrtEnvironmentBorrow *environment,
