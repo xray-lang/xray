@@ -16,7 +16,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); abort(); } } while (0)
 
-static size_t attempts, failure = SIZE_MAX, live;
+static size_t attempts, failure = SIZE_MAX, compiler_live_allocations;
 static struct { void *pointer; size_t bytes; } allocations[4096];
 static size_t allocation_index(void *pointer) {
     for (size_t n = 0; n < 4096; ++n) if (allocations[n].pointer == pointer) return n;
@@ -26,7 +26,7 @@ static void *allocate(size_t bytes) {
     if (++attempts == failure) return NULL;
     void *memory = xr_malloc(bytes);
     if (memory) {
-        size_t n = allocation_index(NULL); allocations[n].pointer = memory; allocations[n].bytes = bytes; ++live;
+        size_t n = allocation_index(NULL); allocations[n].pointer = memory; allocations[n].bytes = bytes; ++compiler_live_allocations;
     }
     return memory;
 }
@@ -36,14 +36,14 @@ static void *allocate_zero(size_t count, size_t bytes) {
 }
 static void release(void *memory) {
     if (!memory) return;
-    size_t n = allocation_index(memory); allocations[n].pointer = NULL; CHECK(live); --live; xr_free(memory);
+    size_t n = allocation_index(memory); allocations[n].pointer = NULL; CHECK(compiler_live_allocations); --compiler_live_allocations; xr_free(memory);
 }
 static void *resize(void *old, size_t bytes) {
     if (++attempts == failure) return NULL;
     void *memory = xr_malloc(bytes); if (!memory) return NULL;
     size_t n = allocation_index(old);
     if (old) { memcpy(memory,old,bytes < allocations[n].bytes ? bytes : allocations[n].bytes); xr_free(old); }
-    else ++live;
+    else ++compiler_live_allocations;
     allocations[n].pointer = memory; allocations[n].bytes = bytes; return memory;
 }
 #undef xr_malloc
@@ -76,7 +76,7 @@ static void run_after_input_retirement(XrRbcProgram *program, uint64_t expected)
     CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits == expected);
     xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
     CHECK(xr_rbc_module_value_code(&snapshot,0) == description);
-    snapshot.code_lease.release(snapshot.code_lease.owner); CHECK(!live);
+    snapshot.code_lease.release(snapshot.code_lease.owner); CHECK(!compiler_live_allocations);
 }
 static XrLirModule *string_call(XrLirFunction *root) {
     XrLirModule *module = NULL; CHECK(xr_lir_module_create(NULL,&module) == XR_LIR_OK);
@@ -129,11 +129,11 @@ static void check_receiving(const XrRbcProgram *program) {
 static void allocation_failures(void) {
     XrLirFunction root = {0}; XrLirModule *module = managed_state_fixture(&root);
     attempts = 0; XrRbcProgram *program = compile(module,root); size_t count = attempts;
-    xr_rbc_program_destroy(program); CHECK(!live && count);
+    xr_rbc_program_destroy(program); CHECK(!compiler_live_allocations && count);
     for (size_t n = 1; n <= count; ++n) {
         attempts = 0; failure = n; program = NULL;
         CHECK(xr_rbc_compile(module,root,&program,NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY && !program);
-        CHECK(!live);
+        CHECK(!compiler_live_allocations);
     }
     failure = SIZE_MAX;
     program = compile(module,root); check_receiving(program);
@@ -266,7 +266,7 @@ static void string_outcome_lifetime(void) {
     CHECK(!memcmp(text->bytes,bytes,sizeof(bytes)) && !text->bytes[text->length]);
     const XrtManagedHeader *again = NULL;
     CHECK(xr_rbc_outcome_string(outcome,&again) && again == borrowed);
-    xr_rbc_outcome_free(&outcome); CHECK(!outcome && !live);
+    xr_rbc_outcome_free(&outcome); CHECK(!outcome && !compiler_live_allocations);
     puts("String outcome: fixed UTF-8 backing survives compiler, program and execution retirement passed");
 }
 int main(void) {
@@ -275,7 +275,7 @@ int main(void) {
     const XrRbcValueCode *callee = xr_rbc_module_value_code(xr_rbc_program_view(program),1);
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
-    allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime(); CHECK(!live);
+    allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
