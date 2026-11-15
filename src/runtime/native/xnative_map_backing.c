@@ -28,6 +28,12 @@ typedef struct MapEdit {
 typedef struct MapDelete {
     size_t end, last_bucket;
 } MapDelete;
+typedef struct MapDestination {
+    XrtManagedFrame *frame;
+    size_t slot;
+    const XrtBackingTypes *types;
+    const XrtManagedSlotReservation *reservation;
+} MapDestination;
 
 static bool map_shape(const XrtMapBacking *map) {
     return map && ((!map->capacity && !map->length && !map->order_count) ||
@@ -129,19 +135,26 @@ static XrtManagedStatus map_append(XrtMapBacking *map, const XrtStringBacking *k
     }
     return XRT_MANAGED_ARGUMENT;
 }
-static XrtManagedStatus map_prepare(XrtManagedFrame *frame, size_t slot,
-    const XrtBackingTypes *types, size_t capacity, XrtMapBacking **output) {
+static XrtManagedStatus map_prepare(const MapDestination *destination, size_t capacity, XrtMapBacking **output) {
+    const XrtBackingTypes *types = destination->types;
     if (!types || !types->map) return XRT_MANAGED_ARGUMENT;
     XrtManagedHeader *payload = NULL;
-    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->map,
-        sizeof(XrtMapBacking) + capacity * sizeof(XrtMapBackingRow), &payload);
+    size_t bytes = sizeof(XrtMapBacking) + capacity * sizeof(XrtMapBackingRow);
+    XrtManagedStatus status = destination->reservation ?
+        xrt_managed_slot_reserved_prepare(destination->reservation, types->map, bytes, &payload) :
+        xrt_managed_slot_prepare(destination->frame, destination->slot, types->map, bytes, &payload);
     if (status == XRT_MANAGED_OK) *output = (XrtMapBacking *)payload;
     return status;
 }
-static XrtManagedStatus map_finish(XrtManagedFrame *frame, size_t slot, XrtManagedStatus status) {
-    if (status == XRT_MANAGED_OK) status = xrt_managed_slot_commit(frame, slot);
-    if (status != XRT_MANAGED_OK)
-        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "only this call's prepared Map is aborted");
+static XrtManagedStatus map_finish(const MapDestination *destination, XrtManagedStatus status) {
+    const XrtManagedSlotReservation *reservation = destination->reservation;
+    if (status == XRT_MANAGED_OK) status = reservation ? xrt_managed_slot_reserved_commit(reservation) :
+        xrt_managed_slot_commit(destination->frame, destination->slot);
+    if (status != XRT_MANAGED_OK) {
+        XrtManagedStatus cleanup = reservation ? xrt_managed_slot_reserved_abort(reservation) :
+            xrt_managed_slot_abort(destination->frame, destination->slot);
+        XR_CHECK(cleanup == XRT_MANAGED_OK, "only this call's prepared Map is aborted");
+    }
     return status;
 }
 static XrtManagedStatus map_edit(const XrtMapBacking *map, const XrtMapUpdate *update, MapEdit *output) {
@@ -238,7 +251,8 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *frame, size_
     if (status != XRT_MANAGED_OK) return status;
     for (size_t i = 0; i < count; ++i) if (!keys[i]) return XRT_MANAGED_ARGUMENT;
     XrtMapBacking *map = NULL;
-    status = map_prepare(frame, slot, types, capacity, &map);
+    MapDestination destination = {frame, slot, types, NULL};
+    status = map_prepare(&destination, capacity, &map);
     if (status != XRT_MANAGED_OK) return status;
     for (size_t i = 0; i < count; ++i) {
         MapProbe probe = {0};
@@ -248,7 +262,7 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *frame, size_
         else status = map_append(map, keys[i], values[i], probe.hash);
         if (status != XRT_MANAGED_OK) break;
     }
-    return map_finish(frame, slot, status);
+    return map_finish(&destination, status);
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *map,
     const XrtStringBacking *key, int64_t *value, bool *found) {
@@ -293,14 +307,14 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     if (owned && update->operation == XRT_MAP_UPDATE_REMOVE) xrt_managed_drop(&owned->managed);
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *frame, size_t slot,
-    const XrtBackingTypes *types, const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
+static XrtManagedStatus map_update_create(const MapDestination *destination,
+    const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
     if (!removed) return XRT_MANAGED_ARGUMENT;
     MapEdit edit = {0};
     XrtManagedStatus status = map_edit(source, update, &edit);
     if (status != XRT_MANAGED_OK) return status;
     XrtMapBacking *map = NULL;
-    status = map_prepare(frame, slot, types, edit.capacity, &map);
+    status = map_prepare(destination, edit.capacity, &map);
     if (status != XRT_MANAGED_OK) return status;
     if (update->operation != XRT_MAP_UPDATE_CLEAR) {
         for (size_t ordinal = 0; ordinal < source->length; ++ordinal) {
@@ -316,7 +330,40 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *frame
             status = map_append(map, update->key, update->value, edit.probe.hash);
     }
     bool did_remove = update->operation == XRT_MAP_UPDATE_REMOVE && edit.probe.found;
-    status = map_finish(frame, slot, status);
+    status = map_finish(destination, status);
     if (status == XRT_MANAGED_OK) *removed = did_remove;
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
+    MapDestination destination = {frame, slot, types, NULL};
+    return map_update_create(&destination, source, update, removed);
+}
+typedef struct MapBindingUpdate {
+    const XrtMapUpdate *update;
+    XrtMapBacking *source;
+    bool applied, removed;
+} MapBindingUpdate;
+static XrtManagedStatus map_binding_try(XrtManagedHeader *value, void *context) {
+    MapBindingUpdate *binding = context;
+    binding->source = (XrtMapBacking *)value;
+    return xrt_map_backing_try_update(binding->source, binding->update, &binding->applied, &binding->removed);
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_update_place(XrtPlace binding, XrtManagedFrame *frame, size_t workspace,
+    const XrtBackingTypes *types, const XrtMapUpdate *update, bool *removed) {
+    if (!types || !types->map || !update || !removed) return XRT_MANAGED_ARGUMENT;
+    XrtPlaceReplacement replacement = {0};
+    XrtManagedStatus status = xrt_place_replacement_begin(binding, frame, workspace, &replacement);
+    if (status != XRT_MANAGED_OK) return status;
+    MapBindingUpdate edit = {.update=update};
+    status = xrt_managed_slot_reserved_apply(&replacement, map_binding_try, &edit);
+    if (status == XRT_MANAGED_OK && !edit.applied) {
+        MapDestination destination = {frame, workspace, types, &replacement};
+        status = map_update_create(&destination, edit.source, update, &edit.removed);
+        if (status == XRT_MANAGED_OK) status = xrt_place_replacement_publish(&replacement);
+    }
+    XR_CHECK(xrt_place_replacement_end(&replacement) == XRT_MANAGED_OK,
+        "every registered Map update releases its actual domains after cleanup");
+    if (status == XRT_MANAGED_OK) *removed = edit.removed;
     return status;
 }

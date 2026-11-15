@@ -883,6 +883,8 @@ int main(void) {
     array_place_updates();
     array_place_guards();
     array_place_tokens();
+    map_place_updates();
+    map_place_guards();
     map_construction_and_updates();
     map_cow_and_failures();
     map_collisions_and_growth();

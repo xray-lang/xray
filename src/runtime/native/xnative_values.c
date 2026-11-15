@@ -12,9 +12,11 @@
  */
 #include "xnative_values.h"
 #include "xray_native_values.h"
+#include "xray_native_runtime.h"
 #include "xnative_string_backing.h"
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
+#include "xnative_map_backing.h"
 #include "xnative_status.h"
 #include "base/xchecks.h"
 #include <string.h>
@@ -175,6 +177,34 @@ XRAY_API void xrt_native_array_update_place(XrtPlace binding, XrtBackingArrayKin
     XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
     if (status==XRT_MANAGED_OK) status=xrt_array_update_place(binding,kind,frame,workspace,types,update);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+
+XRAY_API void xrt_native_map_create(XrtManagedFrame *frame, size_t slot,
+    const XrtMapInput *input, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = input ? xrt_native_values_backings(xrt_value_root_current(source_id), &types) : XRT_MANAGED_ARGUMENT;
+    if (status == XRT_MANAGED_OK)
+        status = xrt_map_backing_create(frame, slot, types, input->keys, input->values, input->count);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+XRAY_API bool xrt_native_map_get(const XrtManagedHeader *map, const XrtStringBacking *key,
+    int64_t *value, uint32_t source_id) {
+    bool found = false;
+    XrtManagedStatus status = xrt_map_backing_get((const XrtMapBacking *)map, key, value, &found);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+    return found;
+}
+XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *map, const XrtStringBacking *key, uint32_t source_id) {
+    int64_t value = 0;
+    if (!xrt_native_map_get(map, key, &value, source_id)) xrt_typed_panic(431, source_id);
+    return value;
+}
+XRAY_API void xrt_native_map_update_place(XrtPlace binding, XrtManagedFrame *frame, size_t workspace,
+    const XrtMapUpdate *update, bool *removed, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK) status = xrt_map_update_place(binding, frame, workspace, types, update, removed);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 
 XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
