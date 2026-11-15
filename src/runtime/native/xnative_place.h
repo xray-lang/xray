@@ -48,8 +48,20 @@ typedef struct XrtPlace {
  * External guards also distinguish an initialized NULL from an unreadable field.
  * No Root infrastructure object may itself be stored as a payload owner here. */
 XR_FUNC XrtManagedStatus xrt_place_borrow(XrtPlace, const XrtManagedHeader **);
-XR_FUNC XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source);
-XR_FUNC XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source);
+/* The callback publishes only non-owning payload bytes after all incoming owner
+ * fields are installed and before any replaced owner is retired. It must return
+ * normally, allocate nothing, perform no Root/Place operation and never write
+ * owner fields, descriptors or busy domains. Its borrowed context and prepared
+ * byte snapshots stay live throughout this synchronous call. NULL omits it;
+ * a supplied descriptor requires a callback. Rejection never invokes it. */
+typedef struct XrtPlacePublication {
+    void (*publish)(void *);
+    void *context;
+} XrtPlacePublication;
+XR_FUNC XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace source,
+    const XrtPlacePublication *);
+XR_FUNC XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
+    const XrtPlacePublication *);
 
 /* One selected edge, not a sequence of pairwise swaps. All sources/destinations
  * are unique within their own list; overlap between these lists is allowed.
@@ -60,5 +72,6 @@ XR_FUNC XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace s
 typedef struct XrtPlaceEdge {
     XrtPlace destination, source, temporary;
 } XrtPlaceEdge;
-XR_FUNC XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *, size_t count);
+XR_FUNC XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *, size_t count,
+    const XrtPlacePublication *);
 #endif // XNATIVE_PLACE_H
