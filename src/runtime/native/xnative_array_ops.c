@@ -92,8 +92,9 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_try_update(XrtArrayBacking *array,
     xrt_managed_drop(old);
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *frame, size_t slot,
-    const XrtBackingTypes *types, const XrtArrayBacking *source, const XrtArrayUpdate *update) {
+static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtArrayBacking *source, const XrtArrayUpdate *update,
+    const XrtManagedSlotReservation *reservation) {
     size_t length = 0, capacity = 0;
     XrtManagedStatus status = array_update_check(source, update, &length);
     if (status != XRT_MANAGED_OK) return status;
@@ -102,8 +103,9 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *fra
     status = array_capacity(source->capacity, length, stride, &capacity);
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *payload = NULL;
-    status = xrt_managed_slot_prepare(frame, slot, types->arrays[update->item.kind],
-        sizeof(XrtArrayBacking) + capacity * stride, &payload);
+    size_t bytes=sizeof(XrtArrayBacking)+capacity*stride;
+    status=reservation ? xrt_managed_slot_reserved_prepare(reservation,types->arrays[update->item.kind],bytes,&payload) :
+        xrt_managed_slot_prepare(frame,slot,types->arrays[update->item.kind],bytes,&payload);
     if (status != XRT_MANAGED_OK) return status;
     XrtArrayBacking *array = (XrtArrayBacking *)payload;
     size_t changed = update->operation == XRT_ARRAY_UPDATE_PUSH ? source->length : (size_t)update->index;
@@ -116,7 +118,43 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *fra
         else memcpy(array->elements + i * stride, source->elements + i * stride, stride);
     }
     if (status == XRT_MANAGED_OK) array->length = length;
-    return array_finish(frame, slot, status);
+    if (!reservation) return array_finish(frame,slot,status);
+    if (status==XRT_MANAGED_OK) status=xrt_managed_slot_reserved_commit(reservation);
+    if (status!=XRT_MANAGED_OK)
+        XR_CHECK(xrt_managed_slot_reserved_abort(reservation)==XRT_MANAGED_OK,
+            "the registered factory aborts only its own prepared candidate");
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtArrayBacking *source, const XrtArrayUpdate *update) {
+    return array_update_create(frame,slot,types,source,update,NULL);
+}
+typedef struct ArrayBindingUpdate {
+    const XrtArrayUpdate *update;
+    XrtArrayBacking *source;
+    bool applied;
+} ArrayBindingUpdate;
+static XrtManagedStatus array_binding_try(XrtManagedHeader *value, void *context) {
+    ArrayBindingUpdate *binding=context;
+    binding->source=(XrtArrayBacking *)value;
+    return xrt_array_backing_try_update(binding->source,binding->update,&binding->applied);
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
+    XrtManagedFrame *frame, size_t temporary, const XrtBackingTypes *types, const XrtArrayUpdate *update) {
+    if (!xrt_backing_array_stride(kind) || !update || kind!=update->item.kind ||
+        !types || !types->arrays[kind]) return XRT_MANAGED_ARGUMENT;
+    XrtPlaceReplacement replacement={0};
+    XrtManagedStatus status=xrt_place_replacement_begin(binding,frame,temporary,&replacement);
+    if (status!=XRT_MANAGED_OK) return status;
+    ArrayBindingUpdate edit={.update=update};
+    status=xrt_managed_slot_reserved_apply(&replacement,array_binding_try,&edit);
+    if (status==XRT_MANAGED_OK && !edit.applied) {
+        status=array_update_create(frame,temporary,types,edit.source,update,&replacement);
+        if (status==XRT_MANAGED_OK) status=xrt_place_replacement_publish(&replacement);
+    }
+    XR_CHECK(xrt_place_replacement_end(&replacement)==XRT_MANAGED_OK,
+        "every registered update releases its actual domains after cleanup");
+    return status;
 }
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_get(const XrtArrayBacking *array,
     XrtBackingArrayKind kind, int64_t index, XrtArrayItem *output) {

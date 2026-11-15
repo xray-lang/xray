@@ -29,6 +29,8 @@ typedef struct Audit {
     const XrtStringBacking *watched_key;
     bool watched_empty;
     size_t watched_frees;
+    void (*observe)(void *, void *, bool);
+    void *observer;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -53,12 +55,14 @@ static void provider_drop(void *context) {
 }
 static void *provider_allocate(void *context, size_t bytes) {
     Audit *audit = context;
+    if (audit->observe) audit->observe(audit->observer,NULL,true);
     void *memory = xr_malloc(bytes);
     if (memory) { atomic_fetch_add(&audit->bytes, bytes); atomic_fetch_add(&audit->blocks, 1); }
     return memory;
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *audit = context;
+    if (audit->observe) audit->observe(audit->observer,memory,false);
     if (memory == audit->watched_key) {
         const XrtMapBacking *map = audit->watched_map;
         int64_t value = 99; bool found = true;
@@ -861,6 +865,7 @@ static void map_retirement_and_lifetimes(void) {
     CHECK(atomic_load(&strings.audit.finalized) == 1 && atomic_load(&maps.audit.finalized) == 1);
     CHECK(!atomic_load(&strings.audit.bytes) && !atomic_load(&maps.audit.bytes));
 }
+#include "backing_place_cases.h"
 int main(void) {
     setup_failures();
     string_values();
@@ -875,6 +880,9 @@ int main(void) {
     sole_child_updates();
     repeat_and_get();
     array_displays();
+    array_place_updates();
+    array_place_guards();
+    array_place_tokens();
     map_construction_and_updates();
     map_cow_and_failures();
     map_collisions_and_growth();
