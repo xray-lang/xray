@@ -31,7 +31,7 @@ def main():
         assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
         args.runtime_archives = args.library[:-2]
         args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
-    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
+    assert len(args.runtime_archives) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='skeleton-', dir=args.work)).resolve()
     identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
@@ -133,6 +133,8 @@ def main():
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt,
                        '/I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
+            if args.compiler.name.lower() in ('cl', 'cl.exe'):
+                command.insert(1, '/experimental:c11atomics')
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():

@@ -101,7 +101,7 @@ def main():
         assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
         args.runtime_archives = args.library[:-2]
         args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
-    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
+    assert len(args.runtime_archives) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='owned-string-', dir=args.work)).resolve()
     records = []
@@ -109,7 +109,7 @@ def main():
 
     def run(label, command, directory=root, stdout=subprocess.PIPE):
         command = list(map(str, command))
-        result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=subprocess.PIPE, timeout=60)
+        result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=subprocess.PIPE, timeout=30)
         (directory / (label + '.command.json')).write_text(json.dumps(command, indent=2) + '\n')
         (directory / (label + '.stdout')).write_bytes(result.stdout or b'')
         (directory / (label + '.stderr')).write_bytes(result.stderr)

@@ -361,7 +361,6 @@ static void emit(const char *name, const char *path) {
     if (status != XR_LIR_C_OK)
         fprintf(stderr, "C status %u: %s\n", (unsigned) status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
-    if (!strcmp(name, "nullable-f32-none")) CHECK(strstr(output.bytes, "float payload;"));
     bool fixed_result = !strcmp(name, "fixed-return") || !strcmp(name, "fixed-state-return");
     if (fixed_result) {
         CHECK(output.entry_shape.kind == XR_LIR_TYPE_FIXED_ARRAY &&

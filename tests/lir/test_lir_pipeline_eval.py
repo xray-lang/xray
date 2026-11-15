@@ -225,7 +225,7 @@ def main():
         assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
         args.runtime_archives = args.library[:-2]
         args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
-    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
+    assert len(args.runtime_archives) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-pipeline-', dir=args.work)).resolve()
     inputs = root / 'inputs'
