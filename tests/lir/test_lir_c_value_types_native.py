@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--kind', choices=['msvc', 'gnu'], required=True)
     parser.add_argument('--work', type=Path, required=True)
     args = parser.parse_args()
+    headers = Path(__file__).resolve().parents[2] / 'include'
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='value-types-', dir=args.work)).resolve()
     source = work / 'values.c'
@@ -33,10 +34,10 @@ def main():
     assert 'XrtManagedHeader *' in text and 'field offset' in text and 'nullable payload' in text
     assert all(word not in text for word in ('Xir', 'XrtBoxed', '../src', '({'))
     if args.kind == 'msvc':
-        command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/utf-8', source,
+        command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/utf-8', '/I' + str(headers), source,
                    '/Fe' + str(product), '/Fo' + str(work / 'values.obj')]
     else:
-        command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
+        command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-I' + str(headers),
                    source, '-o', product]
     run(command, work)
     run([product], work)

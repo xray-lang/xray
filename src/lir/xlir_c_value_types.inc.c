@@ -82,6 +82,7 @@ static const char *c_value_scalar_type(XrtValueKind kind) {
     case XRT_VALUE_U64: return "uint64_t";
     case XRT_VALUE_F32: return "float";
     case XRT_VALUE_F64: return "double";
+    case XRT_VALUE_FUNCTION: return "XrtFunction";
     case XRT_VALUE_STRING: case XRT_VALUE_ARRAY_I64: case XRT_VALUE_ARRAY_STRING:
     case XRT_VALUE_ARRAY_U8: case XRT_VALUE_ARRAY_U64: case XRT_VALUE_MAP_STRING_I64:
         return "XrtManagedHeader *";
@@ -139,6 +140,9 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
             c_format(c, "_Static_assert(offsetof(XrlValue_%zu, payload) == UINT64_C(%" PRIu64 "), \"nullable payload\");\n",
                 type_id, (uint64_t)spec->nullable.payload_offset);
     }
+    if (spec->kind == XRT_VALUE_FUNCTION)
+        c_format(c, "_Static_assert(offsetof(XrlValue_%zu, owner) == UINT64_C(%" PRIu64 "), \"function owner\");\n",
+            type_id, (uint64_t)spec->owned_offsets[0]);
 }
 
 XR_FUNC XrLirCStatus xr_lir_emit_c_value_types(const XrLirCValueTypesRequest *request,
@@ -159,6 +163,11 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_value_types(const XrLirCValueTypesRequest *re
     if (c_request_poll(&c)) c_value_types_prepare(&c, request->layouts, &types);
     c_text(&c, "#include <stddef.h>\n#include <stdint.h>\n"
         "typedef struct XrtManagedHeader XrtManagedHeader;\n");
+    for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
+        if (types.rows[i].spec.kind == XRT_VALUE_FUNCTION) {
+            c_text(&c, "#include \"xray_native_function.h\"\n");
+            break;
+        }
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
         c_value_type_declaration(&c, &types, i);
     c_verify_text(&c);
