@@ -10,7 +10,7 @@ import tempfile
 
 def run(arguments, **kwargs):
     print('$ ' + json.dumps([str(value) for value in arguments]), flush=True)
-    completed = subprocess.run([str(value) for value in arguments], capture_output=True, **kwargs)
+    completed = subprocess.run([str(value) for value in arguments], capture_output=True, timeout=30, **kwargs)
     if completed.stdout:
         print(completed.stdout.decode('utf-8', errors='replace'), end='', flush=True)
     if completed.stderr:
@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--work', required=True, type=Path)
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
+    include = Path(__file__).resolve().parents[2] / 'include'
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-c-', dir=args.work))
     results = {}
@@ -93,7 +94,9 @@ def main():
         adapter.write_text(adapter_text, encoding='ascii')
         if args.kind == 'msvc':
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2',
-                       source, adapter, '/Fe:' + str(executable)]
+                       '/I' + str(include), source, adapter, '/Fe:' + str(executable)]
+            if args.compiler.name.lower() in ('cl', 'cl.exe'):
+                command.insert(1, '/experimental:c11atomics')
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -101,7 +104,7 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
-                       '-O2', source, adapter, '-o', executable]
+                       '-O2', '-I' + str(include), source, adapter, '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         if name == 'divrem':

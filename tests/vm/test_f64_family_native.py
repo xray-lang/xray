@@ -142,13 +142,13 @@ def main():
         assert tuple(str(p) for p in args.library[-2:]) == ('advapi32.lib', 'userenv.lib'), args.library
         args.runtime_archives = args.library[:-2]
         args.runtime_system_libraries = [str(p) for p in args.library[-2:]]
-    assert len(args.runtime_archives) == 5 and all(p.is_absolute() and p.is_file() for p in args.runtime_archives), args.library
+    assert len(args.runtime_archives) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in args.runtime_archives), args.library
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='family-', dir=args.work)).resolve()
     commands = []
 
     def run(name, command, folder=work):
-        result = subprocess.run(list(map(str, command)), cwd=folder, capture_output=True, timeout=60)
+        result = subprocess.run(list(map(str, command)), cwd=folder, capture_output=True, timeout=30)
         (folder / (name + '.stdout')).write_bytes(result.stdout)
         (folder / (name + '.stderr')).write_bytes(result.stderr)
         commands.append({'name': name, 'directory': str(folder), 'command': list(map(str, command)),
@@ -242,7 +242,7 @@ def main():
         target = closure / ('include' if path.suffix == '.h' else 'lib') / path.name
         shutil.copy2(path, target);assert path.read_bytes() == target.read_bytes()
         copied.append({'source': str(path), 'path': str(target), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest()})
-    assert len(args.runtime_archives) == 5
+    assert len(args.runtime_archives) == 1
     libraries = [closure / 'lib' / p.name for p in args.runtime_archives] + args.runtime_system_libraries
     for cpp in (False, True):
         folder = closure / ('public-cpp17' if cpp else 'public-c11');folder.mkdir()

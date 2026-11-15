@@ -209,7 +209,7 @@ static void record_memory_boundaries(void) {
     uint64_t held = sdk_stats(resources).held_bytes;
     XrLirCOutput output = memory_boundaries(&request);
     xr_lir_module_destroy(module);
-    CHECK(strstr(output.bytes, "xrt_boxed_new") && strstr(output.bytes, "xrt_boxed_field"));
+    CHECK(!strstr(output.bytes, "xrt_boxed_new") && !strstr(output.bytes, "xrt_boxed_field"));
     xr_lir_c_output_free(&output);
     CHECK(sdk_stats(resources).held_bytes == held);
     xr_compile_resources_release(resources);

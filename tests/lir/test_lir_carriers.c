@@ -458,11 +458,11 @@ static void boxed_entry_frontier(void) {
     XrLirCRequest request = {.module=m, .entry=root, .resources=resources, .translation_unit="boxed-entry.c"};
     CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED && !out.bytes);
     XrRbcProgram *program = NULL;
-    CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
+    XrRbcCompileDiagnostic unsupported = {0};
+    CHECK(xr_rbc_compile(m, root, &program, &unsupported) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    CHECK(!strcmp(unsupported.message,"inline value results require an internal typed caller"));
     xr_lir_module_destroy(m);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_INVALID && !execution);
-    xr_rbc_program_destroy(program); xr_compile_resources_release(resources);
+    xr_compile_resources_release(resources);
 }
 static void record_field_frontier(void) {
     const XrLirType rejected[] = {XR_LIR_ARRAY, XR_LIR_MAP_STRING_I64, XR_LIR_PTR,

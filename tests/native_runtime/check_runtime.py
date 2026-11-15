@@ -29,7 +29,7 @@ def header_clients(build, logs, libraries):
         assert tuple(str(p) for p in libraries[-2:]) == ('advapi32.lib', 'userenv.lib'), libraries
         system_libraries = [str(p) for p in libraries[-2:]]
         libraries = libraries[:-2]
-    assert len(libraries) == 5 and all(p.is_absolute() and p.is_file() for p in libraries), libraries
+    assert len(libraries) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in libraries), libraries
     prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
@@ -278,7 +278,7 @@ def main():
                                  ('duplicate', rb'LNK2005|multiple definition|duplicate symbol')]:
             result = subprocess.run(['cmake', '--build', args.build, '--target',
                                      'test_native_runtime_' + name, '-j1'],
-                                    capture_output=True, timeout=60)
+                                    capture_output=True, timeout=30)
             combined = result.stdout + result.stderr
             (args.logs / (name + '.log')).write_bytes(combined)
             assert result.returncode and b'xrt_standalone_source_map' in combined, combined
