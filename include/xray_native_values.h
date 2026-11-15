@@ -13,6 +13,7 @@
 #ifndef XRAY_NATIVE_VALUES_H
 #define XRAY_NATIVE_VALUES_H
 #include "xray_native_managed_root.h"
+#include "xray_native_string_value.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +38,10 @@ _Noreturn XRAY_API void xrt_native_managed_failure(XrtManagedStatus, uint32_t so
  * the original status and source id. Bytes are borrowed until return only. */
 XRAY_API void xrt_native_string_create(XrtManagedFrame *, size_t slot,
     const char *bytes, size_t length, uint32_t source_id);
+/* Inputs are live admitted String borrows, including aliases. The destination
+ * slot is empty. Publication preserves both input objects and their owners. */
+XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
+    const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id);
 
 #ifdef __cplusplus
 }

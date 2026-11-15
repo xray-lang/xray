@@ -75,6 +75,17 @@ XRAY_API void xrt_native_string_create(XrtManagedFrame *frame, size_t slot,
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 
+XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id) {
+    struct XrtNativeValues *values = native_values(source_id);
+    XrtManagedStatus status = XRT_MANAGED_OK;
+    if (!values->backings.string) status = xrt_backing_types_init(values->billing, &values->backings);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_string_backing_concat_create(frame, slot, &values->backings,
+            (const XrtStringBacking *)left, (const XrtStringBacking *)right, 0);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+
 XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
     struct XrtNativeValues *values = owner->managed;
     if (!values) return;
