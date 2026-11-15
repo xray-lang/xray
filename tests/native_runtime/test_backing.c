@@ -10,7 +10,7 @@
  *   Tests exercise real byte extents and real child references without an XIR
  *   value, guest registry or a linked product-family implementation.
  */
-#include "runtime/native/xnative_array_backing.h"
+#include "runtime/native/xnative_array_ops.h"
 #include "base/xmalloc.h"
 #include <limits.h>
 #include <setjmp.h>
@@ -326,6 +326,284 @@ static void independent_lifetimes(void) {
     CHECK(atomic_load(&strings.audit.finalized) == 1 && atomic_load(&arrays.audit.finalized) == 1);
     CHECK(!atomic_load(&strings.audit.bytes) && !atomic_load(&arrays.audit.bytes));
 }
+static XrtArrayItem scalar_item(XrtBackingArrayKind kind, uint64_t bits) {
+    XrtArrayItem item = {.kind=kind};
+    if (kind == XRT_BACKING_ARRAY_I64) memcpy(&item.value.i64, &bits, sizeof(bits));
+    else if (kind == XRT_BACKING_ARRAY_U8) item.value.u8 = (uint8_t)bits;
+    else item.value.u64 = bits;
+    return item;
+}
+static uint64_t scalar_at(const XrtArrayBacking *array, XrtBackingArrayKind kind, size_t index) {
+    uint64_t value = 0;
+    OK(xrt_array_backing_read_bits(array, kind, index, &value));
+    return value;
+}
+static void scalar_updates(void) {
+    const XrtBackingArrayKind kinds[] = {XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64};
+    for (size_t family = 0; family < 3; ++family) {
+        Fixture fixture;
+        fixture_init(&fixture, SIZE_MAX);
+        XrtBackingArrayKind kind = kinds[family];
+        if (kind == XRT_BACKING_ARRAY_I64) OK(xrt_array_backing_i64_create(fixture.frame, 0, &fixture.types, NULL, 0, 2));
+        else if (kind == XRT_BACKING_ARRAY_U8) OK(xrt_array_backing_u8_create(fixture.frame, 0, &fixture.types, NULL, 0, 2));
+        else OK(xrt_array_backing_u64_create(fixture.frame, 0, &fixture.types, NULL, 0, 2));
+        XrtManagedHeader *owned = NULL;
+        OK(xrt_managed_slot_take(fixture.frame, 0, &owned));
+        XrtArrayBacking *binding = (XrtArrayBacking *)owned;
+        XrtArrayUpdate edit = {XRT_ARRAY_UPDATE_PUSH, 0, scalar_item(kind, 17)};
+        bool applied = false;
+        XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+        xrt_billing_owner_fail_after(fixture.billing, 0);
+        OK(xrt_array_backing_try_update(binding, &edit, &applied));
+        CHECK(applied && binding->length == 1 && scalar_at(binding, kind, 0) == 17);
+        edit.item = scalar_item(kind, 23);
+        OK(xrt_array_backing_try_update(binding, &edit, &applied));
+        CHECK(applied && binding->length == 2);
+        edit.item = scalar_item(kind, 29);
+        OK(xrt_array_backing_try_update(binding, &edit, &applied));
+        CHECK(!applied && binding->length == 2);
+        same_bill(fixture.billing, baseline);
+        xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+        OK(xrt_managed_slot_adopt(fixture.frame, 0, &owned));
+        OK(xrt_backing_slot_copy(fixture.frame, 1, &binding->managed));
+        edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = 0;
+        OK(xrt_array_backing_try_update(binding, &edit, &applied));
+        CHECK(!applied && scalar_at(binding, kind, 0) == 17);
+        OK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, binding, &edit));
+        XrtArrayBacking *next = (XrtArrayBacking *)borrow(&fixture, 0);
+        CHECK(next != binding && next->length == 2 && scalar_at(next, kind, 0) == 29);
+        CHECK(scalar_at(binding, kind, 0) == 17 && scalar_at(binding, kind, 1) == 23);
+        edit.operation = XRT_ARRAY_UPDATE_PUSH; edit.item = scalar_item(kind, UINT64_MAX);
+        OK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, next, &edit));
+        next = (XrtArrayBacking *)borrow(&fixture, 0);
+        CHECK(next->length == 3 && next->capacity == 4);
+        CHECK(scalar_at(next, kind, 2) == (kind == XRT_BACKING_ARRAY_U8 ? 255 : UINT64_MAX));
+        baseline = xrt_billing_owner_stats(fixture.billing);
+        edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = -1;
+        CHECK(xrt_array_backing_try_update(next, &edit, &applied) == XRT_MANAGED_BOUNDS && !applied);
+        CHECK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, next, &edit) == XRT_MANAGED_BOUNDS);
+        edit.index = 3;
+        CHECK(xrt_array_backing_try_update(next, &edit, &applied) == XRT_MANAGED_BOUNDS && !applied);
+        CHECK(borrow(&fixture, 0) == &next->managed && next->length == 3);
+        same_bill(fixture.billing, baseline);
+        atomic_store(&next->managed.references, -1);
+        edit.index = 1;
+        OK(xrt_array_backing_try_update(next, &edit, &applied));
+        CHECK(applied && xr_signed_rc_read(&next->managed.references) == 1);
+        size_t saved_capacity = next->capacity;
+        next->length = next->capacity = INT64_MAX;
+        edit.operation = XRT_ARRAY_UPDATE_PUSH;
+        CHECK(xrt_array_backing_try_update(next, &edit, &applied) == XRT_MANAGED_OVERFLOW && !applied);
+        CHECK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, next, &edit) == XRT_MANAGED_OVERFLOW);
+        next->length = 3; next->capacity = saved_capacity;
+        fixture_done(&fixture);
+    }
+}
+static void string_updates(void) {
+    Fixture fixture;
+    fixture_init(&fixture, 16384);
+    OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "old", 3, 0));
+    OK(xrt_string_backing_create(fixture.frame, 1, &fixture.types, "new", 3, 0));
+    XrtStringBacking *old = (XrtStringBacking *)borrow(&fixture, 0);
+    XrtStringBacking *fresh = (XrtStringBacking *)borrow(&fixture, 1);
+    XrtStringBacking *values[] = {old, old};
+    OK(xrt_array_backing_string_create(fixture.frame, 2, &fixture.types, values, 2, 4));
+    XrtArrayBacking *array = (XrtArrayBacking *)borrow(&fixture, 2);
+    XrtArrayUpdate edit = {.operation=XRT_ARRAY_UPDATE_SET, .index=0,
+        .item={.kind=XRT_BACKING_ARRAY_STRING, .value.string=old}};
+    bool applied = false;
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(applied && tail(array, 0) == &old->managed && xr_signed_rc_read(&old->managed.references) == 3);
+    edit.item.value.string = fresh;
+    atomic_store(&fresh->managed.references, INT32_MAX);
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    CHECK(xrt_array_backing_try_update(array, &edit, &applied) == XRT_MANAGED_REFCOUNT && !applied);
+    CHECK(tail(array, 0) == &old->managed && array->length == 2);
+    atomic_store(&fresh->managed.references, 1);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(applied && tail(array, 0) == &fresh->managed && xr_signed_rc_read(&old->managed.references) == 2);
+    CHECK(xr_signed_rc_read(&fresh->managed.references) == 2);
+    same_bill(fixture.billing, baseline);
+    OK(xrt_backing_slot_copy(fixture.frame, 3, &array->managed));
+    edit.operation = XRT_ARRAY_UPDATE_PUSH; edit.item.value.string = old;
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(!applied && array->length == 2);
+    CHECK(xrt_array_backing_update_create(fixture.frame, 2, &fixture.types, array, &edit) == XRT_MANAGED_OOM);
+    CHECK(borrow(&fixture, 2) == &array->managed && tail(array, 0) == &fresh->managed);
+    same_bill(fixture.billing, baseline);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    atomic_store(&old->managed.references, INT32_MAX);
+    CHECK(xrt_array_backing_update_create(fixture.frame, 2, &fixture.types, array, &edit) == XRT_MANAGED_REFCOUNT);
+    CHECK(xr_signed_rc_read(&fresh->managed.references) == 2 && borrow(&fixture, 2) == &array->managed);
+    same_bill(fixture.billing, baseline);
+    atomic_store(&old->managed.references, 2);
+    OK(xrt_array_backing_update_create(fixture.frame, 2, &fixture.types, array, &edit));
+    XrtArrayBacking *next = (XrtArrayBacking *)borrow(&fixture, 2);
+    CHECK(next != array && next->length == 3 && array->length == 2);
+    CHECK(tail(next, 0) == &fresh->managed && tail(next, 1) == &old->managed && tail(next, 2) == &old->managed);
+    CHECK(!tail(next, 3) && !tail(array, 2) && !tail(array, 3));
+    // Replacing the sole old element does not retain a child that is discarded.
+    edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = 0; edit.item.value.string = old;
+    atomic_store(&fresh->managed.references, INT32_MAX);
+    OK(xrt_array_backing_update_create(fixture.frame, 2, &fixture.types, next, &edit));
+    atomic_store(&fresh->managed.references, 2);
+    CHECK(tail((XrtArrayBacking *)borrow(&fixture, 2), 0) == &old->managed);
+    fixture_done(&fixture);
+}
+static void sole_child_updates(void) {
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "sole", 4, 0));
+    XrtStringBacking *child = (XrtStringBacking *)borrow(&fixture, 0);
+    XrtStringBacking *values[] = {child};
+    OK(xrt_array_backing_string_create(fixture.frame, 1, &fixture.types, values, 1, 1));
+    OK(xrt_managed_slot_drop(fixture.frame, 0));
+    CHECK(xr_signed_rc_read(&child->managed.references) == 1);
+    XrtArrayBacking *array = (XrtArrayBacking *)borrow(&fixture, 1);
+    XrtArrayItem rhs = {0};
+    OK(xrt_array_backing_get(array, XRT_BACKING_ARRAY_STRING, 0, &rhs));
+    XrtArrayUpdate edit = {XRT_ARRAY_UPDATE_PUSH, 0, rhs};
+    bool applied = false;
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(!applied && xr_signed_rc_read(&child->managed.references) == 1);
+    OK(xrt_array_backing_update_create(fixture.frame, 1, &fixture.types, array, &edit));
+    array = (XrtArrayBacking *)borrow(&fixture, 1);
+    CHECK(array->length == 2 && array->capacity == 4 && xr_signed_rc_read(&child->managed.references) == 2);
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(applied && array->length == 3 && xr_signed_rc_read(&child->managed.references) == 3);
+    edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = 0;
+    OK(xrt_array_backing_try_update(array, &edit, &applied));
+    CHECK(applied && xr_signed_rc_read(&child->managed.references) == 3);
+    same_bill(fixture.billing, baseline);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.string, 42, &pending));
+    ((XrtStringBacking *)pending)->bytes[0] = 0;
+    BAD(xrt_array_backing_update_create(fixture.frame, 1, &fixture.types, array, &edit));
+    CHECK(borrow(&fixture, 1) == &array->managed);
+    OK(xrt_managed_slot_abort(fixture.frame, 1));
+    fixture_done(&fixture);
+}
+static void repeat_and_get(void) {
+    Fixture fixture;
+    fixture_init(&fixture, 16384);
+    for (unsigned family = 0; family < XRT_BACKING_ARRAY_COUNT; ++family) {
+        XrtBackingArrayKind kind = (XrtBackingArrayKind)family;
+        XrtArrayItem fill = scalar_item(kind, UINT64_MAX);
+        if (kind == XRT_BACKING_ARRAY_STRING) {
+            OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "\303\251", 2, 0));
+            fill.value.string = (XrtStringBacking *)borrow(&fixture, 0);
+        }
+        OK(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, 5));
+        XrtArrayBacking *array = (XrtArrayBacking *)borrow(&fixture, 1);
+        CHECK(array->length == 5 && array->capacity == 8);
+        for (int64_t i = 0; i < 5; ++i) {
+            XrtArrayItem item = {.kind=XRT_BACKING_ARRAY_COUNT};
+            OK(xrt_array_backing_get(array, kind, i, &item));
+            CHECK(item.kind == kind);
+            if (kind == XRT_BACKING_ARRAY_STRING) {
+                CHECK(item.value.string == fill.value.string && xr_signed_rc_read(&item.value.string->managed.references) == 6);
+            } else if (kind == XRT_BACKING_ARRAY_I64) CHECK(item.value.i64 == -1);
+            else if (kind == XRT_BACKING_ARRAY_U8) CHECK(item.value.u8 == UINT8_MAX);
+            else CHECK(item.value.u64 == UINT64_MAX);
+        }
+        if (kind == XRT_BACKING_ARRAY_STRING)
+            for (size_t i = 5; i < array->capacity; ++i) CHECK(!tail(array, i));
+        XrtArrayItem unchanged = scalar_item(XRT_BACKING_ARRAY_U64, 37);
+        CHECK(xrt_array_backing_get(array, kind, -1, &unchanged) == XRT_MANAGED_BOUNDS);
+        CHECK(xrt_array_backing_get(array, kind, 5, &unchanged) == XRT_MANAGED_BOUNDS);
+        CHECK(unchanged.kind == XRT_BACKING_ARRAY_U64 && unchanged.value.u64 == 37);
+        BAD(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, -1));
+        CHECK(borrow(&fixture, 1) == &array->managed && array->length == 5);
+        if (kind == XRT_BACKING_ARRAY_STRING) {
+            XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+            atomic_store(&fill.value.string->managed.references, INT32_MAX - 2);
+            CHECK(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, 3) == XRT_MANAGED_REFCOUNT);
+            CHECK(xr_signed_rc_read(&fill.value.string->managed.references) == INT32_MAX - 2);
+            atomic_store(&fill.value.string->managed.references, 6);
+            CHECK(borrow(&fixture, 1) == &array->managed);
+            same_bill(fixture.billing, baseline);
+            XrtArrayItem borrowed = {0};
+            OK(xrt_array_backing_get(array, kind, 4, &borrowed));
+            OK(xrt_backing_slot_copy(fixture.frame, 2, &borrowed.value.string->managed));
+        }
+        OK(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, 0));
+        array = (XrtArrayBacking *)borrow(&fixture, 1);
+        CHECK(!array->length && !array->capacity);
+        if (kind == XRT_BACKING_ARRAY_STRING) OK(xrt_managed_slot_drop(fixture.frame, 0));
+    }
+    XrtArrayItem fill = scalar_item(XRT_BACKING_ARRAY_I64, 7);
+    CHECK(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, INT64_MAX) == XRT_MANAGED_OVERFLOW);
+    fill.kind = XRT_BACKING_ARRAY_U8; fill.value.u8 = 7;
+    CHECK(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, INT64_MAX) == XRT_MANAGED_LIMIT);
+    CHECK(((const XrtStringBacking *)borrow(&fixture, 2))->length == 2);
+    fixture_done(&fixture);
+}
+static void array_displays(void) {
+    static const char *const expected[] = {
+        "[-9223372036854775808, 9223372036854775807]",
+        "[\"a\"b\\c\n\", \"\344\275\240\345\245\275\360\237\214\215\"]",
+        "[0, 255]", "[9223372036854775808, 18446744073709551615]"
+    };
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    for (unsigned family = 0; family < XRT_BACKING_ARRAY_COUNT; ++family) {
+        XrtBackingArrayKind kind = (XrtBackingArrayKind)family;
+        if (kind == XRT_BACKING_ARRAY_I64) {
+            const int64_t values[] = {INT64_MIN, INT64_MAX};
+            OK(xrt_array_backing_i64_create(fixture.frame, 0, &fixture.types, values, 2, 2));
+        } else if (kind == XRT_BACKING_ARRAY_STRING) {
+            OK(xrt_string_backing_create(fixture.frame, 2, &fixture.types, "a\"b\\c\n", 6, 0));
+            OK(xrt_string_backing_create(fixture.frame, 3, &fixture.types, "\344\275\240\345\245\275\360\237\214\215", 10, 0));
+            XrtStringBacking *values[] = {(XrtStringBacking *)borrow(&fixture, 2), (XrtStringBacking *)borrow(&fixture, 3)};
+            OK(xrt_array_backing_string_create(fixture.frame, 0, &fixture.types, values, 2, 2));
+        } else if (kind == XRT_BACKING_ARRAY_U8) {
+            const uint8_t values[] = {0, UINT8_MAX};
+            OK(xrt_array_backing_u8_create(fixture.frame, 0, &fixture.types, values, 2, 2));
+        } else {
+            const uint64_t values[] = {UINT64_C(1) << 63, UINT64_MAX};
+            OK(xrt_array_backing_u64_create(fixture.frame, 0, &fixture.types, values, 2, 2));
+        }
+        const XrtArrayBacking *array = (const XrtArrayBacking *)borrow(&fixture, 0);
+        OK(xrt_array_backing_display_create(fixture.frame, 1, &fixture.types, array, kind));
+        const XrtStringBacking *text = (const XrtStringBacking *)borrow(&fixture, 1);
+        size_t length = strlen(expected[family]);
+        CHECK(text->length == length && text->capacity == length + 1 && !memcmp(text->bytes, expected[family], length + 1));
+        CHECK(text->runes == length - (kind == XRT_BACKING_ARRAY_STRING ? 7 : 0));
+        XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+        xrt_billing_owner_fail_after(fixture.billing, 0);
+        CHECK(xrt_array_backing_display_create(fixture.frame, 1, &fixture.types, array, kind) == XRT_MANAGED_OOM);
+        CHECK(borrow(&fixture, 1) == &text->managed && borrow(&fixture, 0) == &array->managed);
+        same_bill(fixture.billing, baseline);
+        xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+        // The source stays alive while its very slot is replaced by display text.
+        OK(xrt_array_backing_display_create(fixture.frame, 0, &fixture.types, array, kind));
+        text = (const XrtStringBacking *)borrow(&fixture, 0);
+        CHECK(text->length == length && !memcmp(text->bytes, expected[family], length + 1));
+    }
+    XrtArrayItem fill = scalar_item(XRT_BACKING_ARRAY_I64, 7);
+    OK(xrt_array_backing_repeat_create(fixture.frame, 0, &fixture.types, &fill, 35));
+    OK(xrt_array_backing_display_create(fixture.frame, 1, &fixture.types,
+        (const XrtArrayBacking *)borrow(&fixture, 0), fill.kind));
+    const XrtStringBacking *text = (const XrtStringBacking *)borrow(&fixture, 1);
+    CHECK(text->length == 109 && !memcmp(text->bytes + 95, ", ...(3 more)]", 14));
+    OK(xrt_array_backing_repeat_create(fixture.frame, 0, &fixture.types, &fill, 0));
+    OK(xrt_array_backing_display_create(fixture.frame, 1, &fixture.types,
+        (const XrtArrayBacking *)borrow(&fixture, 0), fill.kind));
+    text = (const XrtStringBacking *)borrow(&fixture, 1);
+    CHECK(text->length == 2 && text->runes == 2 && !memcmp(text->bytes, "[]", 3));
+    OK(xrt_string_backing_create(fixture.frame, 2, &fixture.types, "a\0b", 3, 0));
+    fill = (XrtArrayItem){.kind=XRT_BACKING_ARRAY_STRING, .value.string=(XrtStringBacking *)borrow(&fixture, 2)};
+    OK(xrt_array_backing_repeat_create(fixture.frame, 0, &fixture.types, &fill, 1));
+    OK(xrt_array_backing_display_create(fixture.frame, 1, &fixture.types,
+        (const XrtArrayBacking *)borrow(&fixture, 0), fill.kind));
+    text = (const XrtStringBacking *)borrow(&fixture, 1);
+    CHECK(text->length == 7 && text->runes == 7 && !memcmp(text->bytes, "[\"a\0b\"]", 8));
+    fixture_done(&fixture);
+}
 int main(void) {
     setup_failures();
     string_values();
@@ -335,6 +613,11 @@ int main(void) {
     pending_capacity();
     nonlocal_retirement();
     independent_lifetimes();
-    puts("fixed String and four Array backings: construction, rollback, aliases and retirement passed");
+    scalar_updates();
+    string_updates();
+    sole_child_updates();
+    repeat_and_get();
+    array_displays();
+    puts("fixed String and four Array backings: construction, updates, reads, repeat, display and retirement passed");
     return 0;
 }
