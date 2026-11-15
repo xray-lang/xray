@@ -1,5 +1,6 @@
 """Temporary-directory safety tests; never clean a real build tree."""
 import hashlib
+from contextlib import contextmanager
 import importlib.util
 import json
 import os
@@ -102,6 +103,40 @@ class CleanupTests(unittest.TestCase):
         for path in (failed, unknown, missing):
             self.assertTrue((path / "products/test.exe").exists())
 
+    def test_missing_or_rejected_marker_never_scans_attempt_tree(self):
+        path = self.attempt(0, "FAIL")
+        rule = self.policy()["roots"][0]
+        with patch.object(cleanup, "tree_snapshot") as scanner:
+            with self.assertRaises(cleanup.UnsafeAttempt):
+                cleanup.collect_attempt(self.root, path, rule)
+            scanner.assert_not_called()
+            (path / "result.json").unlink()
+            with self.assertRaises(cleanup.UnsafeAttempt):
+                cleanup.collect_attempt(self.root, path, rule)
+            scanner.assert_not_called()
+
+    def test_file_count_does_not_multiply_full_ancestor_checks(self):
+        path = self.attempt(0)
+        for index in range(300):
+            (path / "products" / f"file-{index}.obj").write_bytes(b"product")
+        with patch.object(cleanup, "contained", wraps=cleanup.contained) as checker:
+            snapshot = cleanup.tree_snapshot(self.root, path)
+        self.assertGreater(len(snapshot), 300)
+        self.assertLess(checker.call_count, 20)
+
+    def test_directory_changed_during_enumeration_is_rejected(self):
+        path = self.attempt(0)
+        original = cleanup.os.scandir
+        @contextmanager
+        def changing(directory):
+            with original(directory) as entries:
+                yield entries
+            if Path(directory) == path:
+                (path / "late.stdout").write_bytes(b"writer still active")
+        with patch.object(cleanup.os, "scandir", side_effect=changing):
+            with self.assertRaisesRegex(cleanup.UnsafeAttempt, "directory changed"):
+                cleanup.tree_snapshot(self.root, path)
+
     def test_recent_evidence_protects_whole_attempt(self):
         paths = self.three()
         os.utime(paths[0] / "run.stderr", None)
@@ -133,6 +168,21 @@ class CleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(cleanup.UnsafeAttempt, "metadata changed"):
             cleanup.delete_attempt(attempt, lambda event: None)
         self.assertTrue((path / "products/test.exe").exists())
+
+    def test_candidate_replacement_with_same_size_and_time_keeps_full_identity_check(self):
+        path = self.attempt(0)
+        attempt = cleanup.collect_attempt(self.root, path, self.policy()["roots"][0])
+        candidate = path / "products/test.exe"
+        original = candidate.stat()
+        replacement = self.home / "replacement.exe"
+        replacement.write_bytes(candidate.read_bytes())
+        os.utime(replacement, ns=(original.st_atime_ns, original.st_mtime_ns))
+        os.replace(replacement, candidate)
+        directory = attempt.snapshot["products"]
+        os.utime(candidate.parent, ns=(directory[2], directory[2]))
+        with self.assertRaisesRegex(cleanup.UnsafeAttempt, "identity changed"):
+            cleanup.delete_attempt(attempt, lambda event: None)
+        self.assertTrue(candidate.exists())
 
     def test_receipt_change_even_with_restored_size_and_mtime(self):
         path = self.attempt(0)
@@ -234,6 +284,7 @@ class CleanupTests(unittest.TestCase):
         report, _ = self.run_cleanup(True)
         self.assertEqual(report["deletedFiles"], 0)
         self.assertTrue((outside / "foreign.exe").exists())
+        self.assertIn("reparse", report["attempts"][0]["reason"])
         alias = self.home / "alias"
         self.make_directory_link(alias, self.root)
         self.data["roots"][0]["path"] = str(alias)
