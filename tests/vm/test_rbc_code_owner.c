@@ -71,7 +71,6 @@ static void *resize(void *memory, size_t bytes) {
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "../lir/lir_array_c_fixture.h"
 #include "../lir/lir_callable_fixture.h"
-#include "../lir/lir_callable_factory_fixture.h"
 
 static XrLirModule *fixture(unsigned kind, XrLirFunction *root) {
     if (!kind) {
@@ -91,7 +90,9 @@ static XrLirModule *fixture(unsigned kind, XrLirFunction *root) {
     }
     if (kind == 1) {
         XrLirModule *module = NULL;
-        callable_factory_fixture_mode(&module, root, true, true);
+        /* Borrowed stack captures exercise code lifetime without a retired
+         * heap-environment representation. */
+        callable_fixture_capture(&module, root, 1);
         return module;
     }
     if (kind == 2) return fixed_bytecode_state_fixture(17, 0, root);
@@ -129,7 +130,7 @@ static void check_result(XrRbcExecution **execution, unsigned kind) {
     } else {
         uint64_t value = UINT64_MAX;
         CHECK(xr_rbc_outcome_bits(outcome, &value));
-        CHECK(value == (kind == 1 ? 137u : kind == 2 ? 128u : 7u));
+        CHECK(value == (kind == 1 ? 42u : kind == 2 ? 128u : 7u));
     }
     xr_rbc_outcome_free(&outcome);
 }
