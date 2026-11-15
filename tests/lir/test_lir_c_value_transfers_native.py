@@ -193,6 +193,10 @@ def main():
     parser.add_argument('--library', required=True, nargs='+')
     parser.add_argument('--msvc-runtime', default='MultiThreadedDLL')
     parser.add_argument('--work', required=True, type=Path)
+    parser.add_argument('--asan', action='store_true')
+    parser.add_argument('--ubsan', action='store_true')
+    parser.add_argument('--ubsan-runtime', type=Path)
+    parser.add_argument('--lld-no-tail-merge', action='store_true')
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='value-transfers-', dir=args.work)).resolve()
@@ -200,6 +204,26 @@ def main():
     flags = ['/nologo', '/std:c11', '/W4', '/WX', '/utf-8', runtime]
     if args.compiler.stem.lower() != 'clang-cl':
         flags.append('/experimental:c11atomics')
+    gnu_flags = []
+    link_flags = []
+    if args.kind == 'msvc':
+        if args.asan:
+            flags += ['/fsanitize=address', '/Zi']
+            link_flags.append('/INCREMENTAL:NO')
+        if args.ubsan:
+            if args.compiler.stem.lower() != 'clang-cl':
+                raise RuntimeError('UndefinedBehaviorSanitizer requires the Clang provider')
+            flags += ['/clang:-fsanitize=undefined', '/clang:-fno-sanitize=function']
+        if args.lld_no_tail_merge:
+            link_flags.append('/OPT:NOLLDTAILMERGE')
+        if args.ubsan_runtime:
+            link_flags.append(str(args.ubsan_runtime))
+    else:
+        enabled = [name for name, on in [('address', args.asan), ('undefined', args.ubsan)] if on]
+        if enabled:
+            gnu_flags += ['-fsanitize=' + ','.join(enabled), '-fno-omit-frame-pointer', '-g']
+        if args.ubsan:
+            gnu_flags.append('-fno-sanitize=function')
     fixture = args.include.resolve().parent / 'tests/lir/lir_c_transfer_strings.c'
     adapter = root / ('typed_strings_fixture.obj' if args.kind == 'msvc' else 'typed_strings_fixture.o')
     if args.kind == 'msvc':
@@ -208,7 +232,7 @@ def main():
     else:
         command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
                    '-D_POSIX_C_SOURCE=200809L', '-I' + str(args.include), '-I' + str(args.include.parent / 'src'),
-                   '-c', fixture, '-o', adapter]
+                   *gnu_flags, '-c', fixture, '-o', adapter]
     run(command, root)
     for name, template in [('managed', MANAGED), ('strings', MANAGED), ('pod', POD)]:
         generated = root / (name + '-generated.c')
@@ -230,10 +254,10 @@ def main():
                               'XrlValue_PODTYPE', 'XrlValue_' + str(facts['pod_type'])), encoding='ascii')
         if args.kind == 'msvc':
             command = [args.compiler, *flags, '/I' + str(args.include), source,
-                       '/Fe' + str(product), '/Fo' + str(root / (name + '.obj')), '/link', adapter, *args.library]
+                       '/Fe' + str(product), '/Fo' + str(root / (name + '.obj')), '/link', adapter, *args.library, *link_flags]
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
-                       '-I' + str(args.include), source, adapter, *args.library, '-o', product]
+                       *gnu_flags, '-I' + str(args.include), source, adapter, *args.library, '-o', product]
         run(command, root)
         run([product], root)
     print('generated typed transfers execute after final IR, ownership, homes and plans retire', flush=True)

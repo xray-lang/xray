@@ -109,21 +109,31 @@ else()
     set(lir_c_provider_kind gnu)
 endif()
 set(lir_c_native_options)
+if(ENABLE_ASAN)
+    list(APPEND lir_c_native_options --asan)
+endif()
+set(lir_c_transfer_options ${lir_c_native_options})
+if(ENABLE_UBSAN)
+    list(APPEND lir_c_transfer_options --ubsan)
+endif()
+if(ENABLE_ASAN AND CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_LINKER MATCHES "lld-link")
+    list(APPEND lir_c_transfer_options --lld-no-tail-merge)
+endif()
+if(DEFINED _XRAY_WINDOWS_UBSAN_RUNTIME AND NOT ENABLE_ASAN)
+    list(APPEND lir_c_transfer_options --ubsan-runtime "${_XRAY_WINDOWS_UBSAN_RUNTIME}")
+endif()
 add_test(NAME lir_c_value_transfers_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_value_transfers_native.py"
     --driver $<TARGET_FILE:test_lir_c_value_transfers>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
-    --work "${CMAKE_CURRENT_BINARY_DIR}/value-transfers")
+    --work "${CMAKE_CURRENT_BINARY_DIR}/value-transfers" ${lir_c_transfer_options})
 set_tests_properties(lir_c_value_transfers_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 30)
 add_test(NAME lir_c_value_types_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_value_types_native.py"
     --driver $<TARGET_FILE:test_lir_c_value_types>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --work "${CMAKE_CURRENT_BINARY_DIR}/value-types")
 set_tests_properties(lir_c_value_types_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 30)
-if(ENABLE_ASAN)
-    list(APPEND lir_c_native_options --asan)
-endif()
 add_test(NAME test_lir_c_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_native.py"
     --driver $<TARGET_FILE:test_lir_c> --faults $<TARGET_FILE:test_lir_c_faults>
     --source-driver $<TARGET_FILE:lir_c_run>
