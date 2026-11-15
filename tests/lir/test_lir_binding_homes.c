@@ -314,7 +314,7 @@ static void callable_projection(bool owned,bool scopes) {
     CHECK(raw->types[environment_id-1].kind==XRT_VALUE_ENVIRONMENT && raw->types[environment_id-1].entry_signature==signature_id);
     XrLirOwnershipPlan *plan=NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=module},&plan,NULL));
-    XrLirValueHomes *homes[3]={0}; size_t owners=0,borrows=0,exits=0,releases=0;
+    XrLirValueHomes *homes[3]={0}; size_t owners=0,borrows=0,exits=0,releases=0,keeps=0,copies=0,returns=0;
     for (uint32_t f=0;f<3;++f) {
         HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){module,{module,f+1},layouts,plan},&homes[f]));
         if (!homes[f]) continue;
@@ -334,13 +334,24 @@ static void callable_projection(bool owned,bool scopes) {
             }
         }
         for (size_t e=0;e<homes[f]->event_count;++e) {
-            exits+=homes[f]->events[e].kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT;
-            releases+=homes[f]->events[e].kind==XR_LIR_OWNERSHIP_RELEASE;
+            const XrLirHomeEvent *event=&homes[f]->events[e];
+            exits+=event->kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT;
+            releases+=event->kind==XR_LIR_OWNERSHIP_RELEASE;
+            if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT) {
+                CHECK(event->transfer_mode==(event->source ? XR_LIR_OWNERSHIP_TRANSFER_MOVE : XR_LIR_OWNERSHIP_TRANSFER_NONE));
+                keeps+=event->source!=0;
+            }
+            if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_VALUE && event->operation==XR_LIR_FUNCTION_BIND) {
+                CHECK(event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY); ++copies;
+            }
+            if (event->kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER) {
+                CHECK(event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE); ++returns;
+            }
         }
         CHECK(owned || (!homes[f]->owned_frame_needed && !homes[f]->frame.slot_count));
     }
     CHECK(owned ? owners>0 : owners==0); CHECK(owned || borrows>0);
-    CHECK(!scopes || (exits && releases));
+    CHECK(!scopes || (exits && releases && keeps && copies)); CHECK(!owned || returns);
     if (!owned) {
         XrtCaptureType *type=NULL; MANAGED(xrt_capture_type_new(billing,environment,&type));
         XrtManagedRoot *root_owner=NULL; XrtManagedFrame *frame=NULL;
@@ -383,6 +394,169 @@ static void callable_projection(bool owned,bool scopes) {
     CHECK(xrt_billing_owner_stats(billing).bytes==baseline && xrt_billing_owner_stats(billing).blocks==1);
     xrt_billing_owner_drop(billing);
 }
+static void callable_targets_and_join(unsigned shape) {
+    bool mixed=shape==1,branching=shape!=0;
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter argument={.type=XR_LIR_I64}; XrLirType callable=0,integer=XR_LIR_I64;
+    OK(xr_lir_callable_type(c.module,&(XrLirCallableType){.parameters=&argument,.parameter_count=1,.result=XR_LIR_I64},&callable));
+    XrLirFunction targets[2]={{0}};
+    for (uint32_t n=0;n<2;++n) {
+        XrLirFunctionSpec spec={.name=n ? "second" : "first",.name_length=n ? 6u : 5u,
+            .parameters=&integer,.parameter_count=1,.result=XR_LIR_I64};
+        OK(xr_lir_declare_function(c.module,&spec,&targets[n]));
+        OK(xr_lir_set_closure_target(c.module,targets[n],(XrLirClosureTarget){.callable=callable}));
+        OK(xr_lir_define_function(c.module,targets[n])); XrLirBlock block={0};
+        OK(xr_lir_add_block(c.module,targets[n],NULL,0,&block)); OK(xr_lir_set_entry(c.module,targets[n],block));
+        XrLirValue input={0}; OK(xr_lir_function_parameter(c.module,targets[n],0,&input)); ca_return(&c,block,input);
+    }
+    XrLirFunction identity={0}; XrLirFunctionCallableParameter contract={.contract={.type=callable,.escaping=true}};
+    XrLirFunctionSpec identity_spec={.name="identity",.name_length=8,.parameters=&callable,.parameter_count=1,
+        .result=callable,.callable_parameters=&contract,.callable_parameter_count=1};
+    OK(xr_lir_declare_function(c.module,&identity_spec,&identity)); OK(xr_lir_define_function(c.module,identity));
+    XrLirBlock identity_body={0}; XrLirValue borrowed={0};
+    OK(xr_lir_add_block(c.module,identity,NULL,0,&identity_body)); OK(xr_lir_set_entry(c.module,identity,identity_body));
+    OK(xr_lir_function_parameter(c.module,identity,0,&borrowed));
+    XrLirValue scope=callable_fixture_scope(&c,identity_body,(XrLirValue){0}), bind_args[]={scope,borrowed};
+    XrLirValue bound=ca_value(&c,identity_body,XR_LIR_FUNCTION_BIND,callable,bind_args,2);
+    XrLirValue kept=callable_fixture_leave(&c,identity_body,scope,bound,callable); ca_return(&c,identity_body,kept);
+    XrLirFunction root={0}; XrLirFunctionSpec root_spec={.name="root",.name_length=4,.result=branching ? XR_LIR_I64 : callable};
+    OK(xr_lir_declare_function(c.module,&root_spec,&root)); OK(xr_lir_define_function(c.module,root));
+    XrLirBlock entry={0},branches[2]={{0}},join={0};
+    OK(xr_lir_add_block(c.module,root,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,root,entry));
+    XrLirValue condition={0};
+    XrLirValue weakened={0};
+    if (branching) {
+        for (uint32_t n=0;n<2;++n) OK(xr_lir_add_block(c.module,root,NULL,0,&branches[n]));
+        XrLirType parameters[]={callable,callable};
+        OK(xr_lir_add_block(c.module,root,parameters,shape==2 ? 2u : 1u,&join));
+        condition=number(&c,entry,XR_LIR_I1,1);
+    } else branches[0]=branches[1]=entry;
+    XrLirValue values[2]={{0}};
+    for (uint32_t n=0;n<2;++n) {
+        XrLirInstruction reference={.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=targets[n],
+            .bits=shape==2 || (mixed && n) ? XR_LIR_CLOSURE_OWNED : XR_LIR_CLOSURE_FRAME};
+        OK(xr_lir_emit_value(c.module,shape==2 ? entry : branches[n],&reference,&values[n]));
+        if (branching && shape!=2) {
+            XrLirInstruction edge={.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{join,&values[n],1}},.edge_count=1};
+            OK(xr_lir_set_terminator(c.module,branches[n],&edge));
+        }
+    }
+    if (shape==2) weakened=ca_value(&c,entry,XR_LIR_FUNCTION_WEAKEN,callable,&values[0],1);
+    if (branching) {
+        if (shape==2) for (uint32_t n=0;n<2;++n) {
+            XrLirValue duplicate[]={values[0],values[0]};
+            XrLirInstruction edge={.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{join,duplicate,2}},.edge_count=1};
+            OK(xr_lir_set_terminator(c.module,branches[n],&edge));
+        }
+        XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+            .edges={{branches[0],NULL,0},{branches[1],NULL,0}},.edge_count=2};
+        OK(xr_lir_set_terminator(c.module,entry,&branch));
+    }
+    XrLirValue selected={0},second_parameter={0};
+    if (branching) {
+        OK(xr_lir_block_parameter(c.module,join,0,&selected));
+        if (shape==2) OK(xr_lir_block_parameter(c.module,join,1,&second_parameter));
+        XrLirValue args[]={selected,ca_constant(&c,join,41)};
+        XrLirValue result=ca_value(&c,join,XR_LIR_CALL_INDIRECT,XR_LIR_I64,args,2);
+        if (shape==2) {
+            args[0]=values[0];
+            result=ca_binary(&c,join,XR_LIR_ADD,result,ca_value(&c,join,XR_LIR_CALL_INDIRECT,XR_LIR_I64,args,2));
+        }
+        ca_return(&c,join,result);
+    } else ca_return(&c,entry,values[0]);
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrLirCallableFacts *facts=NULL; OK(xr_lir_callable_facts_create(c.module,&facts));
+    XrLirCallableFunctionFacts rows; OK(xr_lir_callable_facts_function(facts,root.id,&rows));
+    CHECK(branching ? rows.values[selected.id].transport==(mixed ? XR_LIR_CALLABLE_TRANSPORT_MIXED :
+        shape==2 ? XR_LIR_CALLABLE_TRANSPORT_OWNED : XR_LIR_CALLABLE_TRANSPORT_FRAME) :
+        rows.values[values[0].id].materialize && rows.values[values[0].id].constructor_storage==XR_LIR_CLOSURE_FRAME);
+    CHECK(branching || (rows.values[values[1].id].transport==XR_LIR_CALLABLE_TRANSPORT_FRAME && !rows.values[values[1].id].materialize));
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey keys[]={{callable,0,0},{callable,0,1},{callable,0,2},{callable,0,1},{XR_LIR_I1,0,0}};
+    XrLirValueLayouts *layouts=NULL; HOME(xr_lir_value_layouts_create(c.module,keys,5,billing,&layouts));
+    const XrtValuePlan *first=NULL,*second=NULL,*duplicate=NULL; uint32_t first_id=0,second_id=0,id=0;
+    HOME(xr_lir_value_layouts_lookup(layouts,keys[1],&first,&first_id));
+    HOME(xr_lir_value_layouts_lookup(layouts,keys[2],&second,&second_id));
+    HOME(xr_lir_value_layouts_lookup(layouts,keys[3],&duplicate,&id));
+    CHECK(first!=second && first_id!=second_id && duplicate==first && id==first_id);
+    CHECK(xr_lir_value_layouts_get(layouts,(XrLirValueLayoutKey){XR_LIR_I64,0,1},&duplicate)==XR_LIR_VALUE_LAYOUT_ARGUMENT && duplicate==first);
+    XrLirValueImage *image=NULL; HOME(xr_lir_value_image_create(layouts,billing,&image));
+    const XrtValueImage *raw=xr_lir_value_image_view(image);
+    CHECK(raw->types[first_id-1].entry_ordinal==1 && raw->types[second_id-1].entry_ordinal==2 &&
+        raw->types[first_id-1].entry_signature==raw->types[second_id-1].entry_signature);
+    XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    if (shape==2) {
+        bool seen=false; size_t copies=0;
+        for (uint32_t n=0;n<xr_lir_ownership_fact_count(plan);++n) {
+            XrLirOwnershipFact fact; OK(xr_lir_ownership_fact_at(plan,n,&fact));
+            if (fact.kind==XR_LIR_OWNERSHIP_BLOCK_OWNER && fact.value==second_parameter.id) { CHECK(fact.argument==1);seen=true; }
+            if (fact.kind==XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) {
+                CHECK(fact.value==values[0].id && fact.argument<2 && fact.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY); ++copies;
+            }
+        }
+        CHECK(seen && copies==4);
+    }
+    XrLirValueHomes *identity_homes=NULL;
+    HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,identity,layouts,plan},&identity_homes));
+    CHECK(identity_homes && !identity_homes->owned_frame_needed && !identity_homes->frame.slot_count &&
+        !identity_homes->values[borrowed.id].owner_count && identity_homes->values[borrowed.id].parameter==1);
+    bool borrowed_return=false,borrowed_bind=false,borrowed_keep=false;
+    for (size_t e=0;e<identity_homes->event_count;++e) {
+        const XrLirHomeEvent *event=&identity_homes->events[e];
+        if (event->kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER) {
+            CHECK(event->source==kept.id && event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY); borrowed_return=true;
+        }
+        if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_VALUE && event->source==bound.id) {
+            CHECK(event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW); borrowed_bind=true;
+        }
+        if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT) {
+            CHECK(event->source==bound.id && event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW); borrowed_keep=true;
+        }
+    }
+    CHECK(borrowed_return && borrowed_bind && borrowed_keep); xr_lir_value_homes_destroy(identity_homes);
+    XrLirValueHomes *homes=NULL;
+    attempts=0;
+    XrLirValueLayoutStatus status=xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,root,layouts,plan},&homes);
+    size_t allocation_count=attempts;
+    if (mixed) CHECK(status==XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !homes);
+    else if (!branching) {
+        HOME(status); CHECK(homes->frame.slot_count==2 && homes->values[values[0].id].environment_type==first_id &&
+            homes->values[values[0].id].owner_count==1 && !homes->values[values[1].id].owner_count);
+        bool materialize=false;
+        for (size_t e=0;e<homes->event_count;++e) materialize|=homes->events[e].kind==XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE;
+        CHECK(materialize);
+    } else if (shape==2) {
+        HOME(status); CHECK(homes->transfer_count==4 && homes->edge_count==2 && homes->values[values[0].id].owner_count==1);
+        for (size_t t=0;t<homes->transfer_count;++t) {
+            XrLirHomeTransfer transfer=homes->transfers[t];
+            CHECK(transfer.source==values[0].id && (transfer.target==selected.id || transfer.target==second_parameter.id) &&
+                transfer.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY);
+        }
+        bool weakened_copy=false;
+        for (size_t e=0;e<homes->event_count;++e) {
+            const XrLirHomeEvent *event=&homes->events[e];
+            if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_VALUE && event->source==weakened.id) {
+                CHECK(event->target==values[0].id && event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY); weakened_copy=true;
+            }
+        }
+        CHECK(weakened_copy);
+        xr_lir_value_homes_destroy(homes); homes=NULL; CHECK(!live);
+        for (size_t n=1;n<=allocation_count;++n) {
+            attempts=0; fail_at=n;
+            CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,root,layouts,plan},&homes)==XR_LIR_VALUE_LAYOUT_OOM &&
+                !homes && !live);
+        }
+        fail_at=SIZE_MAX;
+        printf("callable selected-copy allocation rollback sites: %zu\n",allocation_count);
+    } else {
+        HOME(status); CHECK(!homes->owned_frame_needed && !homes->frame.slot_count && homes->transfer_count==2);
+        for (size_t t=0;t<homes->transfer_count;++t) CHECK(homes->transfers[t].transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
+    }
+    xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan); xr_lir_callable_facts_destroy(facts);
+    xr_lir_value_image_destroy(image); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+    CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+    puts(mixed ? "mixed callable join remains explicit and unsupported" : "same-signature targets stay distinct and only a checked code-only escape materializes");
+}
 int main(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};
     for (size_t i=0;i<4;++i) {
@@ -397,6 +571,7 @@ int main(void) {
         (1u<<XR_LIR_HOME_BINDING_CELL_BORROW)|(1u<<XR_LIR_HOME_BINDING_STATE_BORROW)));
     CHECK(array_roles==254 && map_roles==255); array_cell_cfg(); array_block_cells();
     callable_projection(false,false); callable_projection(true,false); callable_projection(true,true);
+    callable_targets_and_join(0); callable_targets_and_join(1); callable_targets_and_join(2); callable_targets_and_join(3);
     puts("binding homes: four Array families, Map roles, real pending slots, loop lifetime, input retirement and allocation rollback passed");
     return 0;
 }

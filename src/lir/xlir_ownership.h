@@ -35,6 +35,16 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT
 } XrLirOwnershipFactKind;
 
+/* Transfer semantics belong to the verified event, not to a type's possible
+ * owner leaves or a receiving home's slot count. BORROW copies the complete
+ * borrowed representation without acquiring or releasing any owner. */
+typedef enum XrLirOwnershipTransferMode {
+    XR_LIR_OWNERSHIP_TRANSFER_NONE,
+    XR_LIR_OWNERSHIP_TRANSFER_BORROW,
+    XR_LIR_OWNERSHIP_TRANSFER_COPY,
+    XR_LIR_OWNERSHIP_TRANSFER_MOVE
+} XrLirOwnershipTransferMode;
+
 /* Positions and SSA IDs belong to the exact input module: function, block,
  * instruction and edge are one-based; argument is a zero-based parameter or
  * operand ordinal. Facts are grouped by function, not an execution schedule.
@@ -51,7 +61,10 @@ typedef enum XrLirOwnershipFactKind {
  * MATERIALIZE requests a real zero-capture environment at that constructor.
  * SCOPE_EXIT names the kept source/result in value/target_value and the scope
  * in callable_scope. Publish that keep before the following same-position
- * RELEASE facts. These events do not replace scope or escaping validation. */
+ * RELEASE facts. Selected callable edges COPY owned sources, which can remain
+ * live or feed multiple parameters; other owned-value edges MOVE. A borrowed
+ * callable return COPYs into the caller's owning landing. Transfer modes do
+ * not replace scope or escaping validation. */
 typedef struct XrLirOwnershipFact {
     XrLirOwnershipFactKind kind;
     uint32_t function, block, instruction, value, argument, edge;
@@ -63,6 +76,7 @@ typedef struct XrLirOwnershipFact {
     XrLirOp callable_operation;
     uint32_t callable_function, callable_scope;
     bool callable_materialize;
+    XrLirOwnershipTransferMode transfer_mode;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

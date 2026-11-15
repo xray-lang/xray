@@ -33,7 +33,12 @@ typedef struct XrLirValueHome {
     uint32_t borrow_source, environment_type;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
-typedef struct XrLirHomeTransfer { uint32_t source, target; } XrLirHomeTransfer;
+typedef struct XrLirHomeTransfer {
+    uint32_t source, target;
+    /* Copied from the selected ownership event. NONE is a POD byte transfer;
+     * BORROW preserves the full representation without an owning transaction. */
+    XrLirOwnershipTransferMode transfer_mode;
+} XrLirHomeTransfer;
 typedef struct XrLirHomeEdge {
     uint32_t block, edge, target_block;
     size_t first, count;
@@ -66,6 +71,7 @@ typedef struct XrLirHomeEvent {
     uint32_t callable_function, callable_scope;
     XrLirCallableTransport callable_transport;
     bool callable_materialize;
+    XrLirOwnershipTransferMode transfer_mode;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {
