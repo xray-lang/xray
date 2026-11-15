@@ -12,6 +12,7 @@
  */
 #include "xlir_value_layout.h"
 #include "xlir_internal.h"
+#include "xray_native_function.h"
 #include "base/xchecks.h"
 #include <stdalign.h>
 #include <string.h>
@@ -86,6 +87,15 @@ static XrLirValueLayoutStatus need_type(XrLirValueLayouts *set, XrLirType type, 
     if (status == XR_LIR_VALUE_LAYOUT_OK) set->values[index].needed = true;
     return status;
 }
+static XrLirValueLayoutStatus need_callable_type(XrLirValueLayouts *set,
+    XrLirType type, XrLirType element, XrLirType parent) {
+    if (type >= parent) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    if (type != XR_LIR_ARRAY) return element ? XR_LIR_VALUE_LAYOUT_UNSUPPORTED : need_type(set, type, parent);
+    size_t index = 0;
+    XrLirValueLayoutStatus status = key_index(set, (XrLirValueLayoutKey){type, element}, &index);
+    if (status == XR_LIR_VALUE_LAYOUT_OK) set->values[index].needed = true;
+    return status;
+}
 static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLirValueLayouts *set) {
     for (size_t row = XR_LIR_TYPE_COUNT + set->constructed; row-- > XR_LIR_TYPE_COUNT;) {
         if (!set->values[row].needed) continue;
@@ -103,6 +113,14 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
                 XrLirValueLayoutStatus status = need_type(set, fields[f].type, type);
                 if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
             }
+        } else if (shape.kind == XR_LIR_TYPE_CALLABLE) {
+            XrLirCallableType signature;
+            if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+            if (signature.throws) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+            XrLirValueLayoutStatus status = need_callable_type(set, signature.result, signature.result_element, type);
+            for (uint32_t p = 0; p < signature.parameter_count && status == XR_LIR_VALUE_LAYOUT_OK; ++p)
+                status = need_callable_type(set, signature.parameters[p].type, signature.parameters[p].array_element, type);
+            if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
         } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_TUPLE)
             return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
@@ -140,11 +158,30 @@ static XrLirValueLayoutStatus scalar_spec(XrLirValueLayoutKey key, XrtValuePlanS
 static const XrtValuePlan *dependency(const XrLirValueLayouts *set, XrLirType type) {
     return set->values[type].plan;
 }
+static const XrtValuePlan *callable_dependency(const XrLirValueLayouts *set, XrLirType type, XrLirType element) {
+    size_t index = 0;
+    XR_CHECK(key_index(set, (XrLirValueLayoutKey){type, element}, &index) == XR_LIR_VALUE_LAYOUT_OK && set->values[index].plan,
+        "signature dependencies precede their receiving callable plan");
+    return set->values[index].plan;
+}
 static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirValueLayouts *set,
     XrLirType type, XrtValuePlanSpec *spec, size_t *scratch_bytes) {
     XrLirTypeView shape;
     if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *spec = (XrtValuePlanSpec){0};
+    if (shape.kind == XR_LIR_TYPE_CALLABLE) {
+        XrLirCallableType signature;
+        if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        spec->kind = XRT_VALUE_FUNCTION; spec->size = sizeof(XrtFunction); spec->alignment = alignof(XrtFunction);
+        spec->owned_count = 1;
+        spec->signature = (XrtValueSignatureSpec){.parameter_count=signature.parameter_count,
+            .result=callable_dependency(set, signature.result, signature.result_element),
+            .flags=((signature.flags & XR_LIR_CALLABLE_NO_SUSPEND) ? XRT_VALUE_NO_SUSPEND : 0u) |
+                ((signature.flags & XR_LIR_CALLABLE_C_ABI) ? XRT_VALUE_C_ABI : 0u), .throws=signature.throws};
+        if (!extent_add(scratch_bytes, signature.parameter_count, sizeof(XrtValueParameterSpec)) ||
+            !extent_add(scratch_bytes, 1, sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+        return XR_LIR_VALUE_LAYOUT_OK;
+    }
     if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE) {
         bool fixed = shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
         XrLirType element = fixed ? XR_LIR_U8 : XR_LIR_I64;
@@ -185,6 +222,21 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
 static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *set, XrLirType type,
     XrtValuePlanSpec *spec, void *scratch) {
     size_t *owned;
+    if (spec->kind == XRT_VALUE_FUNCTION) {
+        XrLirCallableType signature;
+        XR_CHECK(xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK,
+            "finished callable contracts stay borrowed during projection");
+        XrtValueParameterSpec *parameters = scratch;
+        owned = (size_t *)(parameters + signature.parameter_count);
+        *owned = offsetof(XrtFunction, owner); spec->owned_offsets = owned;
+        spec->signature.parameters = signature.parameter_count ? parameters : NULL;
+        for (uint32_t p = 0; p < signature.parameter_count; ++p) {
+            XrLirCallableParameter parameter = signature.parameters[p];
+            parameters[p] = (XrtValueParameterSpec){.type=callable_dependency(set, parameter.type, parameter.array_element),
+                .mode=parameter.mode, .escaping=parameter.escaping};
+        }
+        return;
+    }
     if (spec->kind == XRT_VALUE_NULLABLE) {
         XrtValuePlanSpec child;
         XR_CHECK(xrt_value_plan_view(spec->nullable.element, &child) == XRT_MANAGED_OK, "nullable dependency is independently owned");

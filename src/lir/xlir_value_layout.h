@@ -32,8 +32,11 @@ typedef enum XrLirValueLayoutStatus {
  * other key requires array_element=0. Only requested roots and their earlier
  * type dependencies are projected. Records and Nullable use natural inline C11
  * layout, not the old boxed transport. Empty Records have one private storage
- * byte and no language fields. Fn/Cell/capability projections are explicitly
- * unsupported here, not newly rejected by LIR.
+ * byte and no language fields. Callable plans use the canonical fixed binding
+ * layout and copy exact parameter contracts and receiving dependencies. A
+ * signature's owner leaf does not classify any SSA value as an owning value;
+ * Frame constructors and borrowed parameters still require their own verified
+ * transport facts. Unsupported Cell/capability dependencies fail closed.
  * Common C storage declares every owned leaf as XrtManagedHeader *; typed
  * String/Array/Map pointers are borrowed casts, never aliased owner fields.
  * Output starts NULL and is unchanged on failure. All persistent and temporary
