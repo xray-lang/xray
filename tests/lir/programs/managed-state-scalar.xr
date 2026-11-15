@@ -1,0 +1,9 @@
+var counter = 17
+fn read() -> i64 { return counter }
+fn write(value: i64) { counter = value }
+fn add(value: i64) { counter = counter + value }
+print(read())
+write(42)
+print(read())
+add(5)
+print(read())

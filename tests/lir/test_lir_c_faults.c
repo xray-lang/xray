@@ -374,9 +374,29 @@ static void edge_control_boundaries(void) {
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     puts("edge statistics mid-loop cancellation, deadline and clock failure allocate nothing and refund exactly PASS");
 }
+#include "lir_c_managed_state_fixture.h"
+static void managed_state_boundaries(const char *path) {
+    XrLirFunction root = {0}; XrLirModule *module = managed_state_fixture(&root);
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XrLirCRequest request = {module, root, resources, "managed-State-publication", NULL};
+    control_boundaries(&request);
+    XrLirCOutput output = memory_boundaries(&request);
+    CHECK(strstr(output.bytes, "XrtValueImage xrl_value_image") && strstr(output.bytes, "XrtModuleLayoutSpec xrl_state_spec") &&
+        strstr(output.bytes, "source_access_") && !strstr(output.bytes, "XrtModuleTypeSpec"));
+    xr_lir_module_destroy(module); xr_compile_resources_release(resources);
+    memset(&request, 0xa5, sizeof(request));
+    FILE *file = fopen(path, "wb");
+    CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && fclose(file) == 0);
+    xr_lir_c_output_free(&output);
+    CHECK(!runtime_live && !runtime_bytes);
+    puts("State images, mixed String/reference cache edges, allocator faults and producer retirement PASS");
+}
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
         edge_control_boundaries(); return 0;
+    }
+    if (argc == 3 && !strcmp(argv[1], "--managed-state")) {
+        managed_state_boundaries(argv[2]); return 0;
     }
     if (argc == 3 && !strcmp(argv[1], "--managed-string")) {
         edge_control_boundaries();

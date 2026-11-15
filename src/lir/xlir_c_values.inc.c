@@ -55,6 +55,8 @@ static void c_values_destroy(LirC *c) {
         xr_compile_resources_free(c->value_types);
     }
     xr_lir_ownership_plan_destroy(c->ownership);
+    xr_lir_state_projection_destroy(c->state_projection);
+    xr_lir_value_image_destroy(c->value_image);
     xr_lir_value_layouts_destroy(c->value_layouts);
     xrt_billing_owner_drop(c->value_billing);
 }
@@ -72,7 +74,11 @@ static void c_values_prepare(LirC *c) {
     size_t type_count = (size_t)XR_LIR_TYPE_COUNT + c->constructed_count;
     void *flags = NULL, *memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count, 1, &flags))) return;
-    uint8_t *needed = flags; bool projected = false;
+    uint8_t *needed = flags; bool projected = c->state;
+    for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
+        XrLirType payload = c->state_layout.slots[slot].payload;
+        if (!c_scalar(c, payload) || !c_value_mark(c, needed, type_count, payload)) break;
+    }
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
         XrLirFunction function = {module, c->closure[i]}; XrLirFunctionView view;
         xr_lir_function_view(module, function, &view);
@@ -89,7 +95,7 @@ static void c_values_prepare(LirC *c) {
         }
     }
     if (!projected || c->status != XR_LIR_C_OK) { xr_compile_resources_free(flags); return; }
-    /* Ownership collection validates the complete final module, so its exact
+    /* Ownership events cover the complete immutable final module, so its exact
      * Record/Nullable facts include definitions outside the selected closure. */
     for (uint32_t i = 0; i < c->constructed_count; ++i) {
         XrLirTypeKind kind = c->constructed_types[i].shape.kind;
@@ -113,6 +119,11 @@ static void c_values_prepare(LirC *c) {
     memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, 1, sizeof(*c->value_types), &memory))) return;
     c->value_types = memory; c_value_types_prepare(c, c->value_layouts, c->value_types);
+    if (c->state && c_request_poll(c)) {
+        c_value_layout_status(c, xr_lir_value_image_create(c->value_layouts, c->value_billing, &c->value_image));
+        if (c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
+            xr_lir_value_image_view(c->value_image), c->value_billing, &c->state_projection));
+    }
     const XrLirOwnershipTypeFact *facts = NULL; uint32_t fact_count = 0;
     if (!c_request_poll(c) || !c_value_layout_status(c, xr_lir_value_layouts_ownership(c->value_layouts, &facts, &fact_count))) return;
     XrLirDiagnostic invalid = {0};
@@ -194,13 +205,18 @@ static void c_values_scalar_publication(LirC *c, const XrLirHomeEdge *edge) {
         if (!c->homes->values[selected->arguments[a]].type) {
             const char *type = c_type(c, c_value_type(c, selected->arguments[a]));
             c_format(c, "    %s *destination_%" PRIu32 "; %s source_%" PRIu32 ";\n", type, a, type, a);
+            if (c_value_type(c, selected->arguments[a]) == XR_LIR_STATE_REF)
+                c_format(c, "    XrtModuleAccess *destination_access_%" PRIu32 "; XrtModuleAccess source_access_%" PRIu32 ";\n", a, a);
         }
     c_format(c, "} XrlScalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ";\n", c->function.id, edge->block, edge->edge);
     c_format(c, "static void xrl_scalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(void *context) {\n", c->function.id, edge->block, edge->edge);
     c_format(c, "    XrlScalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " *values = context;\n", c->function.id, edge->block, edge->edge);
     for (uint32_t a = 0; a < selected->argument_count && c_request_poll(c); ++a)
-        if (!c->homes->values[selected->arguments[a]].type)
+        if (!c->homes->values[selected->arguments[a]].type) {
             c_format(c, "    *values->destination_%" PRIu32 " = values->source_%" PRIu32 ";\n", a, a);
+            if (c_value_type(c, selected->arguments[a]) == XR_LIR_STATE_REF)
+                c_format(c, "    *values->destination_access_%" PRIu32 " = values->source_access_%" PRIu32 ";\n", a, a);
+        }
     c_text(c, "}\n");
 }
 static void c_values_helpers(LirC *c) {
@@ -256,6 +272,8 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
             if (!c->homes->values[edge->arguments[a]].type) {
                 if (!first) c_text(c, ", "); first = false;
                 c_text(c, "&"); c_value(c, target.parameters[a]); c_text(c, ", "); c_value(c, edge->arguments[a]);
+                if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
+                    c_format(c, ", &xrl_access%" PRIu32 ", xrl_access%" PRIu32, target.parameters[a], edge->arguments[a]);
             }
         c_text(c, "};\n");
         c_format(c, "    XrtPlacePublication scalar_publication = {xrl_scalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &values};\n", c->function.id, c->block, selected);
@@ -283,7 +301,9 @@ static bool c_values_signature(LirC *c, bool definition) {
 static void c_values_root(LirC *c) {
     uint32_t entry = c->request->entry.id;
     c->function = c->request->entry;
-    c_text(c, "static void xrl_invoke(void *context) {\n"
+    c_text(c, c->state ? "static void xrl_invoke(void *context, XrtModuleState *state) {\n" :
+        "static void xrl_invoke(void *context) {\n");
+    c_text(c,
         "    XrtManagedRoot *root = xrt_native_managed_root(0);\n"
         "    XrtManagedFrame *landing = NULL;\n"
         "    XrtManagedStatus status = xrt_managed_frame_enter(root, 2, &landing);\n"
@@ -294,14 +314,17 @@ static void c_values_root(LirC *c) {
         "    status = xrt_managed_slot_location(landing, 1, &temporary);\n"
         "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n    ");
     c_function_name(c, entry);
-    c_format(c, "((XrlLanding_%" PRIu32 "){landing, 0, 1, destination.owner, temporary.owner});\n", entry);
+    c_format(c, "((XrlLanding_%" PRIu32 "){landing, 0, 1, destination.owner, temporary.owner}%s);\n", entry,
+        c->state ? ", state" : "");
     c_text(c, "    status = xrt_managed_slot_take(landing, 0, (XrtManagedHeader **)context);\n"
         "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n"
         "    status = xrt_managed_frame_leave(root, landing);\n"
         "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n}\n"
-        "XrtManagedHeader *xray_lir_entry(void) {\n    XrtManagedHeader *result = NULL;\n"
-        "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n"
-        "    return result;\n}\n");
+        "XrtManagedHeader *xray_lir_entry(void) {\n    XrtManagedHeader *result = NULL;\n");
+    c_text(c, c->state ?
+        "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, &result, &xrl_state_spec);\n" :
+        "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n");
+    c_text(c, "    return result;\n}\n");
 }
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_CALL && v->type == XR_LIR_STRING) {

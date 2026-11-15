@@ -1,0 +1,19 @@
+var text = "seed"
+fn read() -> string { return text }
+fn write(value: string) { text = value }
+const before = read()
+write("é\0next")
+print(before)
+print(read())
+write(read())
+print(read())
+fn update(rounds: i64) {
+    var i = 0
+    while (i < rounds) {
+        write(read() + "!")
+        i = i + 1
+    }
+}
+update(3)
+print(read())
+print(before)
