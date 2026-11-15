@@ -7,7 +7,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.artifacts import complete_native_artifacts
 
 
 def main() -> None:
@@ -60,6 +64,7 @@ def main() -> None:
                 assert native.stderr == vm.stderr, (name, vm.stderr, native.stderr)
             else:
                 assert not native.stderr, (name, native.stderr)
+    complete_native_artifacts(work)
     print(f"{len(records)} module-state commands passed")
 
 
