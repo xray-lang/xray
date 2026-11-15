@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrbc_lir_map.inc.c - Recognize unsupported closed Map operations
+ * xrbc_lir_map.inc.c - Recognize closed Map operations for fixed home consumers
  *
  * KEY CONCEPT:
- *   Existing logical role queries identify unsupported operations without
+ *   Existing logical role queries identify exact operations without
  *   constructing a retired runtime carrier or a second ownership directory.
  */
 static uint32_t rbc_lir_map_role(const XrLirModule *module, const XrLirInstructionView *i) {

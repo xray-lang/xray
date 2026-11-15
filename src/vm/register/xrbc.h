@@ -408,6 +408,8 @@ XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtManaged
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtManagedHeader **output);
 XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtManagedHeader **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtManagedHeader **empty);
+XR_FUNC bool xr_rbc_outcome_map(const XrRbcOutcome *, const XrtManagedHeader **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_map(XrRbcOutcome *, XrtManagedHeader **empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,

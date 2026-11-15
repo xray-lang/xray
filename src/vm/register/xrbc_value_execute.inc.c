@@ -12,6 +12,7 @@
  */
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "runtime/native/xnative_array_ops.h"
+#include "runtime/native/xnative_map_backing.h"
 #include "runtime/native/xnative_values.h"
 
 typedef struct RbcValueActivation RbcValueActivation;
@@ -78,7 +79,8 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, size_t *leaves, siz
     }
     for (size_t n = 0; n < code->access_count; ++n) {
         XrRbcValueAccess access = code->accesses[n];
-        if (access.operation==XR_RBC_VALUE_ARRAY && access.index==XR_LIR_ARRAY_OP_NEW) {
+        if ((access.operation==XR_RBC_VALUE_ARRAY && access.index==XR_LIR_ARRAY_OP_NEW) ||
+            (access.operation==XR_RBC_VALUE_MAP && access.index==XR_LIR_MAP_OP_NEW)) {
             size_t count=access.count;
             if (count>SIZE_MAX/8) return false;
             if (count*8>*snapshots) *snapshots=count*8;
@@ -535,6 +537,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     return XR_RBC_OK;
 }
 #include "xrbc_value_array_execute.inc.c"
+#include "xrbc_value_map_execute.inc.c"
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
@@ -571,6 +574,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_EDGE) status=rbc_value_edge(module,stack,activation,access);
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);
     else return XR_RBC_INVALID;
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     stack->frames[stack->depth-1].pc=pc;

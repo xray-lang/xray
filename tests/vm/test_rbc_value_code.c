@@ -11,6 +11,7 @@
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_string_value.h"
 #include "runtime/native/xnative_array_backing.h"
+#include "runtime/native/xnative_map_backing.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -337,6 +338,60 @@ static void array_outcome_lifetime(void) {
     CHECK(first->length==sizeof(bytes) && !memcmp(first->bytes,bytes,sizeof(bytes))); xrt_managed_drop(owned);
     puts("Array outcome: real aliased String tail survives code and outcome retirement; raw Array returns reject passed");
 }
+static void map_outcome_lifetime(void) {
+    static const uint8_t bytes[]={'A',0xc3,0xa9,0,0xe4,0xb8,0xad};
+    XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
+    OK(xr_lir_map_catalog_install(module,false,false,false,false,false));
+    XrLirFunction root={0},echo={0}; XrLirType map_type=XR_LIR_MAP_STRING_I64;
+    XrLirFunctionSpec spec={.name="map_result",.name_length=10,.result=map_type};
+    OK(xr_lir_declare_function(module,&spec,&root)); OK(xr_lir_define_function(module,root));
+    spec=(XrLirFunctionSpec){.name="map_echo",.name_length=8,.parameters=&map_type,.parameter_count=1,.result=map_type};
+    OK(xr_lir_declare_function(module,&spec,&echo)); OK(xr_lir_define_function(module,echo));
+    XrLirBlock body={0}; OK(xr_lir_add_block(module,echo,NULL,0,&body)); OK(xr_lir_set_entry(module,echo,body));
+    XrLirValue parameter={0}; OK(xr_lir_function_parameter(module,echo,0,&parameter));
+    XrLirValue copy=managed_state_value(module,body,XR_LIR_MAP_RETAIN,map_type,&parameter,1,0);
+    OK(xr_lir_set_terminator(module,body,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&copy,.operand_count=1}));
+    XrLirBlock block={0}; OK(xr_lir_add_block(module,root,NULL,0,&block)); OK(xr_lir_set_entry(module,root,block));
+    XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,bytes,sizeof(bytes),&literal));
+    XrLirValue text=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+    XrLirValue value=managed_state_value(module,block,XR_LIR_CONST,XR_LIR_I64,NULL,0,42),args[]={text,value},map={0};
+    uint32_t constructor=0; OK(xr_lir_map_operation(module,XR_LIR_MAP_OP_NEW,map_type,&constructor));
+    OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=map_type,
+        .intrinsic=constructor,.operands=args,.operand_count=2},&map));
+    XrLirValue result={0}; OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=map_type,
+        .callee=echo,.operands=&map,.operand_count=1},&result));
+    managed_state_effect(module,block,XR_LIR_MAP_DROP,&map,1,0);
+    managed_state_effect(module,block,XR_LIR_STRING_DROP,&text,1,0);
+    OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1}));
+    OK(xr_lir_module_finish(module,NULL));
+    attempts=0; XrRbcProgram *program=compile(module,root); size_t sites=attempts;
+    xr_rbc_program_destroy(program); program=NULL; CHECK(!compiler_live_allocations && sites);
+    for (size_t n=1;n<=sites;++n) {
+        attempts=0; failure=n;
+        CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_OUT_OF_MEMORY && !program && !compiler_live_allocations);
+    }
+    failure=SIZE_MAX; program=compile(module,root); check_receiving(program);
+    XrRbcModule raw=*xr_rbc_program_view(program); raw.code_lease=(XrRbcCodeLease){0}; XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
+    uint32_t word=XR_RBC_RET; XrRbcRegisterKind kind=XR_RBC_MAP_STRING_I64;
+    XrRbcFunction function={.code=&word,.code_count=1,.register_count=1,.register_kinds=&kind,.register_kind_count=1,.result_kind=kind};
+    raw=(XrRbcModule){.functions=&function,.function_count=1};
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
+    xr_lir_module_destroy(module); CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program); XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK); xr_rbc_execution_free(&execution);
+    const XrtManagedHeader *header=NULL; CHECK(xr_rbc_outcome_map(outcome,&header) && header);
+    const XrtMapBacking *answer=(const XrtMapBacking *)header;
+    CHECK(answer->length==1 && answer->capacity>=1 && answer->rows[0].key);
+    const XrtStringBacking *key=answer->rows[0].key;
+    CHECK(key->length==sizeof(bytes) && key->runes==4 && !memcmp(key->bytes,bytes,sizeof(bytes)));
+    int64_t found_value=0; bool found=false;
+    CHECK(xrt_map_backing_get(answer,key,&found_value,&found)==XRT_MANAGED_OK && found && found_value==42);
+    XrtManagedHeader *owned=NULL; CHECK(xr_rbc_outcome_take_map(outcome,&owned) && owned==header);
+    xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
+    CHECK(key->length==sizeof(bytes) && !memcmp(key->bytes,bytes,sizeof(bytes))); xrt_managed_drop(owned);
+    printf("Map typed code: %zu allocation rollback sites; real UTF-8 key and call/result owner survive code retirement\n",sites);
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
@@ -344,7 +399,7 @@ int main(void) {
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
     allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
-    array_binding_calls(); array_outcome_lifetime(); CHECK(!compiler_live_allocations);
+    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
