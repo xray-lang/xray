@@ -14,18 +14,9 @@
 #define XNATIVE_VALUE_PLAN_H
 #include "xnative_managed.h"
 #include "shared/xr_param_mode.h"
+#include "xray_native_value_image.h"
 
 typedef struct XrtValuePlan XrtValuePlan;
-typedef enum XrtValueKind {
-    XRT_VALUE_UNIT, XRT_VALUE_BOOL, XRT_VALUE_RUNE,
-    XRT_VALUE_I8, XRT_VALUE_I16, XRT_VALUE_I32, XRT_VALUE_I64,
-    XRT_VALUE_U8, XRT_VALUE_U16, XRT_VALUE_U32, XRT_VALUE_U64,
-    XRT_VALUE_F32, XRT_VALUE_F64, XRT_VALUE_STRING,
-    XRT_VALUE_ARRAY_I64, XRT_VALUE_ARRAY_STRING, XRT_VALUE_ARRAY_U8, XRT_VALUE_ARRAY_U64,
-    XRT_VALUE_MAP_STRING_I64, XRT_VALUE_FIXED_U8, XRT_VALUE_TUPLE_I64,
-    XRT_VALUE_RECORD, XRT_VALUE_NULLABLE, XRT_VALUE_FUNCTION, XRT_VALUE_CELL,
-    XRT_VALUE_ENVIRONMENT
-} XrtValueKind;
 typedef struct XrtValueSlotSpec {
     const XrtValuePlan *type;
     size_t offset;
@@ -39,7 +30,6 @@ typedef struct XrtValueParameterSpec {
     const char *name;
     size_t name_length;
 } XrtValueParameterSpec;
-enum { XRT_VALUE_NO_SUSPEND = 1u, XRT_VALUE_C_ABI = 2u };
 typedef struct XrtValueSignatureSpec {
     const XrtValueParameterSpec *parameters;
     size_t parameter_count;

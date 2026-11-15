@@ -6,7 +6,7 @@ add_executable(test_native_capture_backing test_capture_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_map_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_capture_backing.c")
-target_include_directories(test_native_capture_backing PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_native_capture_backing PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_capture_backing PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_capture_backing PRIVATE /W4 /WX /utf-8)
@@ -25,8 +25,9 @@ add_executable(test_native_value_plan test_value_plan.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
-    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c")
-target_include_directories(test_native_value_plan PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_image.c")
+target_include_directories(test_native_value_plan PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_value_plan PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(test_native_value_plan PRIVATE /W4 /WX /utf-8)
