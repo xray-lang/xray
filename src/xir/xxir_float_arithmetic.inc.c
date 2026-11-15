@@ -14,14 +14,14 @@ static uint64_t float_shift_jam(uint64_t value, unsigned shift) {
     if (shift >= 64) return value != 0;
     return (value >> shift) | ((value & ((UINT64_C(1) << shift) - 1)) != 0);
 }
-static void float_normalize(const FloatFormat *format, FloatParts *parts) {
+static void float_normalize(const XrIeeeFormat *format, XrIeeeParts *parts) {
     if (!parts->significand) return;
     while (!(parts->significand & (UINT64_C(1) << format->fraction))) {
         parts->significand <<= 1;
         --parts->exponent;
     }
 }
-static FloatParts float_sum(FloatParts a, FloatParts b) {
+static XrIeeeParts float_sum(XrIeeeParts a, XrIeeeParts b) {
     if (!a.significand && !b.significand) {
         a.negative = a.negative && b.negative;
         return a;
@@ -29,7 +29,7 @@ static FloatParts float_sum(FloatParts a, FloatParts b) {
     if (!a.significand) return b;
     if (!b.significand) return a;
     if (a.exponent < b.exponent || (a.exponent == b.exponent && a.significand < b.significand)) {
-        FloatParts swap = a; a = b; b = swap;
+        XrIeeeParts swap = a; a = b; b = swap;
     }
     uint64_t first = a.significand << 4;
     uint64_t second = float_shift_jam(b.significand << 4, (unsigned) (a.exponent - b.exponent));
@@ -38,7 +38,7 @@ static FloatParts float_sum(FloatParts a, FloatParts b) {
     if (!a.significand) a.negative = false;
     return a;
 }
-static FloatParts float_product(FloatParts a, FloatParts b) {
+static XrIeeeParts float_product(XrIeeeParts a, XrIeeeParts b) {
     uint64_t low_a = (uint32_t) a.significand, high_a = a.significand >> 32;
     uint64_t low_b = (uint32_t) b.significand, high_b = b.significand >> 32;
     uint64_t low = low_a * low_b;
@@ -59,7 +59,7 @@ static FloatParts float_product(FloatParts a, FloatParts b) {
     } else a.significand = low;
     return a;
 }
-static FloatParts float_quotient(const FloatFormat *format, FloatParts a, FloatParts b) {
+static XrIeeeParts float_quotient(const XrIeeeFormat *format, XrIeeeParts a, XrIeeeParts b) {
     uint64_t quotient = a.significand / b.significand;
     uint64_t remainder = a.significand % b.significand;
     unsigned scale = format->fraction + 4;
@@ -77,9 +77,9 @@ XR_FUNC XrXirNumericStatus xr_xir_float_arithmetic(uint32_t bits, XrXirFloatOper
     uint64_t left, uint64_t right, uint64_t *output) {
     if (!output) return XR_XIR_NUMERIC_BAD_ARGUMENT;
     *output = 0;
-    FloatFormat format; FloatParts a, b;
+    XrIeeeFormat format; XrIeeeParts a, b;
     if (operation < XR_XIR_FLOAT_ADD || operation > XR_XIR_FLOAT_DIVIDE ||
-        !float_format(bits, &format) || !float_decode(bits, left, &a) || !float_decode(bits, right, &b))
+        !xr_ieee_format(bits, &format) || !xr_ieee_decode(bits, left, &a) || !xr_ieee_decode(bits, right, &b))
         return XR_XIR_NUMERIC_BAD_ARGUMENT;
     if (operation == XR_XIR_FLOAT_SUBTRACT) { b.negative = !b.negative; operation = XR_XIR_FLOAT_ADD; }
     bool negative = a.negative != b.negative;
@@ -97,7 +97,7 @@ XR_FUNC XrXirNumericStatus xr_xir_float_arithmetic(uint32_t bits, XrXirFloatOper
         else *output = b.infinite ? sign : sign | format.infinity;
     } else {
         float_normalize(&format, &a); float_normalize(&format, &b);
-        FloatParts result = operation == XR_XIR_FLOAT_ADD ? float_sum(a, b) :
+        XrIeeeParts result = operation == XR_XIR_FLOAT_ADD ? float_sum(a, b) :
             operation == XR_XIR_FLOAT_MULTIPLY ? float_product(a, b) : float_quotient(&format, a, b);
         *output = float_pack(&format, result);
     }
