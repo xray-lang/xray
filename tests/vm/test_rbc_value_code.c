@@ -432,6 +432,27 @@ static void pod_outcome_lifetime(void) {
     xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
     puts("POD outcome: typed body publishes inline Nullable bytes after code retirement passed");
 }
+#include "../lir/lir_record_fixture.h"
+static void inline_code_retirement(void) {
+    XrLirFunction root={0}; XrLirModule *module=record_fixture(&root);
+    attempts=0; XrRbcProgram *program=compile(module,root); size_t sites=attempts;
+    xr_rbc_program_destroy(program); program=NULL; CHECK(!compiler_live_allocations);
+    for (size_t n=1;n<=sites;++n) {
+        attempts=0; failure=n;
+        CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_OUT_OF_MEMORY && !program && !compiler_live_allocations);
+    }
+    failure=SIZE_MAX; program=compile(module,root); check_receiving(program);
+    const XrRbcModule *code=xr_rbc_program_view(program); bool field=false,record=false;
+    for (uint32_t f=0;f<code->function_count;++f) {
+        const XrRbcValueCode *values=xr_rbc_module_value_code(code,f); CHECK(values);
+        for (size_t n=0;n<values->access_count;++n) {
+            field|=values->accesses[n].operation==XR_RBC_VALUE_RECORD_FIELD;
+            record|=values->accesses[n].operation==XR_RBC_VALUE_RECORD_NEW;
+        }
+    }
+    CHECK(field && record); xr_lir_module_destroy(module); run_after_input_retirement(program,100);
+    printf("inline Record/Nullable code: %zu allocation failures preserved empty output and retired metadata\n",sites);
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
@@ -439,7 +460,7 @@ int main(void) {
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
     allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
-    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); CHECK(!compiler_live_allocations);
+    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); inline_code_retirement(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }

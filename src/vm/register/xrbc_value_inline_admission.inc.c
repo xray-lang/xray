@@ -1,0 +1,53 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xrbc_value_inline_admission.inc.c - Sealed field and Nullable descriptions
+ */
+static bool rbc_value_inline_operand(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcFunction *function,uint32_t value,uint32_t type,bool destination) {
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!type || !image || !image->types || type>image->type_count) return false;
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    if (home && home->type) {
+        if (home->type!=type) return false;
+        if (rbc_value_owner(module,code,value,destination)) return true;
+        return !home->owner_count && rbc_value_location_valid(function,code->locations[value]) &&
+            code->locations[value].kind==XR_RBC_VALUE_AGGREGATE;
+    }
+    const XrtValueImageType *row=&image->types[type-1];
+    return !row->owned_count && row->size<=8 && row->kind<XRT_VALUE_STRING &&
+        rbc_value_scalar(code,function,value,XR_RBC_BITS);
+}
+static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcFunction *function,XrRbcValueAccess a) {
+    bool create=a.operation==XR_RBC_VALUE_RECORD_NEW || a.operation==XR_RBC_VALUE_NULLABLE_NONE || a.operation==XR_RBC_VALUE_NULLABLE_SOME;
+    uint32_t value=create ? a.result : a.source;
+    if (!rbc_value_inline(module,code,value,create)) return false;
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    const XrtValueImageType *type=&image->types[home->type-1];
+    if (a.operation==XR_RBC_VALUE_RECORD_NEW) {
+        if (a.source || a.other || a.window || type->kind!=XRT_VALUE_RECORD || a.count!=type->field_count ||
+            a.first>code->argument_count || a.count>code->argument_count-a.first ||
+            (a.count && (!code->arguments || !image->slots)) || type->first_field>image->slot_count ||
+            type->field_count>image->slot_count-type->first_field) return false;
+        for (uint32_t p=0;p<a.count;++p)
+            if (!rbc_value_inline_operand(module,code,function,code->arguments[a.first+p],image->slots[type->first_field+p].type,false)) return false;
+        return true;
+    }
+    if (a.operation==XR_RBC_VALUE_RECORD_FIELD)
+        return !a.other && type->kind==XRT_VALUE_RECORD && a.index<type->field_count && image->slots &&
+            type->first_field<=image->slot_count && type->field_count<=image->slot_count-type->first_field &&
+            rbc_value_inline_operand(module,code,function,a.result,image->slots[type->first_field+a.index].type,true);
+    if (type->kind!=XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element>=home->type ||
+        type->nullable_tag>=type->size || type->nullable_payload>type->size) return false;
+    if (a.operation==XR_RBC_VALUE_NULLABLE_NONE) return !a.source && !a.other;
+    if (a.operation==XR_RBC_VALUE_NULLABLE_SOME)
+        return !a.other && rbc_value_inline_operand(module,code,function,a.source,type->nullable_element,false);
+    if (a.operation==XR_RBC_VALUE_NULLABLE_IS_SOME)
+        return !a.other && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    return !a.other && rbc_value_inline_operand(module,code,function,a.result,type->nullable_element,true);
+}

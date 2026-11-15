@@ -100,7 +100,7 @@ typedef struct {
     const XrLirValueHomes *homes;
     XrRbcValueCode *value_code;
     uint32_t *value_edges;
-    size_t value_access_capacity, value_argument_capacity, value_display_capacity;
+    size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
     bool typed_values;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
@@ -515,7 +515,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             XrLirStateReference shape = {0};
             if (xr_lir_state_reference_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
                 (shape.payload != XR_LIR_STRING && shape.payload != XR_LIR_ARRAY && shape.payload != XR_LIR_MAP_STRING_I64 && !rbc_lir_scalar(shape.payload) && shape.payload != XR_LIR_UNIT &&
-                 !rbc_lir_aggregate_type(input,shape.payload))) {
+                 !rbc_lir_aggregate_type(input,shape.payload) && !rbc_lir_inline_type(input,shape.payload))) {
                 rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "module reference has no bytecode element implementation", (XrLirSource){0});
                 return false;
             }
@@ -528,7 +528,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
     if (xr_lir_string_role(input,i)) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
-        i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return false;
+        i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return false;
     if (rbc_lir_string_call(input, i)) return true;
@@ -1824,6 +1824,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (all > SIZE_MAX / sizeof(uint32_t))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "function table exceeds address space",
             (XrLirSource) {0});
+    if (rbc_lir_inline_type(input,root.result))
+        return rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"inline value results require an internal typed caller",(XrLirSource){0});
     uint32_t *ids = xr_malloc(all * sizeof(*ids));
     uint32_t *mapping = xr_calloc(all, sizeof(*mapping));
     XrRbcProgram *p = xr_calloc(1, sizeof(*p));
@@ -1844,22 +1846,21 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     for (uint32_t f = 0; f < count; ++f) {
         XrLirFunction function = {input,ids[f]}; XrLirFunctionView view;
         xr_lir_function_view(input,function,&view);
-        boxed |= xr_lir_boxed_type(input,view.result) || rbc_lir_captured_cell(input,view.result) ||
+        boxed |= rbc_lir_captured_cell(input,view.result) ||
             view.result == XR_LIR_VIEW_FRAME || view.result == XR_LIR_VIEW_CELL || view.result == XR_LIR_SLICE_I64;
         for (uint32_t parameter = 0; parameter < view.parameter_count; ++parameter)
-            boxed |= xr_lir_boxed_type(input,view.parameter_types[parameter]) ||
-                rbc_lir_captured_cell(input,view.parameter_types[parameter]) ||
+            boxed |= rbc_lir_captured_cell(input,view.parameter_types[parameter]) ||
                 view.parameter_types[parameter] == XR_LIR_VIEW_FRAME || view.parameter_types[parameter] == XR_LIR_VIEW_CELL ||
                 view.parameter_types[parameter] == XR_LIR_SLICE_I64;
         for (size_t index = 1; index <= view.value_count; ++index) {
             XrLirType type; xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
-            boxed |= xr_lir_boxed_type(input,type) || rbc_lir_captured_cell(input,type) ||
+            boxed |= rbc_lir_captured_cell(input,type) ||
                 type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
         }
     }
     if (owned_closures || boxed) {
         status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-            "owned callable, Cell, boxed and View execution plans are not available", (XrLirSource){0});
+            "owned callable, Cell and View execution plans are not available", (XrLirSource){0});
         goto done;
     }
     status = rbc_lir_prepare_values(input, entry, ids, count, p, &preparation, d);
