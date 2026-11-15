@@ -27,6 +27,27 @@ XR_FUNC XrtManagedStatus xrt_managed_root_drain(XrtManagedRoot *);
 XR_FUNC XrtManagedStatus xrt_managed_root_destroy(XrtManagedRoot **);
 XR_FUNC XrtManagedStatus xrt_managed_frame_enter(XrtManagedRoot *, size_t slots,
     XrtManagedFrame **);
+/* A function may keep inline aggregate homes in its one stable frame allocation.
+ * SIZE_MAX selects the slot's ordinary Header* field. Other offsets select real
+ * XrtManagedHeader* fields inside payload; they are strictly increasing among
+ * bound slots, aligned and nonoverlapping. Typed family pointers are borrowed
+ * casts of these Header* homes, never aliased through Header** lvalues.
+ * The constructor copies all offsets and initializes every owner as true NULL.
+ * The spec and vector are only borrowed until this call returns. Scalar-only
+ * calls need no frame; this interface does not allocate a box per aggregate. */
+typedef struct XrtManagedFrameSpec {
+    size_t slot_count, payload_size, payload_alignment;
+    const size_t *owned_offsets;
+} XrtManagedFrameSpec;
+XR_FUNC XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *,
+    const XrtManagedFrameSpec *, XrtManagedFrame **);
+/* The borrowed slab lives exactly as long as the active frame. Scalar bytes may
+ * be accessed by the admitted typed code. Its owner fields are the actual slot
+ * storage, not a second set of references: copies, transfers and publication
+ * still follow the verified ownership operations, including pending exclusion.
+ * Obtaining an address grants no mutation or guest borrowing authority. */
+XR_FUNC XrtManagedStatus xrt_managed_frame_payload(XrtManagedFrame *, void **empty,
+    size_t *bytes);
 /* Only the active top frame may leave. Its borrowed handle expires on success.
  * Leaving and draining abort partial values before dropping committed owners. */
 XR_FUNC XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *, XrtManagedFrame *);
