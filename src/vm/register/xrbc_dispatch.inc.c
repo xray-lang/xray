@@ -16,16 +16,18 @@
     do { \
         instruction = code[pc++]; \
         op = instruction & 255; \
-        a = (instruction >> 8) & 255; \
-        b = (instruction >> 16) & 255; \
-        c = instruction >> 24; \
     } while (0)
 
+/* Decode only operands used by the selected handler. Keeping all three live
+ * through every dispatch needlessly consumes registers and instruction bytes. */
+#define XR_RBC_A() ((instruction >> 8) & 255u)
+#define XR_RBC_B() ((instruction >> 16) & 255u)
+#define XR_RBC_C() (instruction >> 24)
 #define XR_RBC_SLOT(index) registers[index]
 #define XR_RBC_REG(index) XR_RBC_SLOT(index).bits
 #define XR_RBC_STRING(index) XR_RBC_SLOT(index).string
 #define XR_RBC_SOURCE() (function->source_ids ? function->source_ids[pc - 1] : 0)
-#define XR_RBC_BINARY(expression) (XR_RBC_REG(a) = (expression))
+#define XR_RBC_BINARY(expression) (XR_RBC_REG(XR_RBC_A()) = (expression))
 #define XR_RBC_AGGREGATE_EXECUTE() do { \
     uint32_t aggregate_index = instruction >> 16; \
     bool aggregate_control = function->aggregate_accesses[aggregate_index].operation >= XR_RBC_AGGREGATE_CALL; \
@@ -90,7 +92,7 @@ xr_rbc_next : XR_RBC_FETCH();
 switch (op) {
 #endif
 XR_RBC_CASE(MOV) {
-    XR_RBC_SLOT(a) = XR_RBC_SLOT(b);
+    XR_RBC_SLOT(XR_RBC_A()) = XR_RBC_SLOT(XR_RBC_B());
     XR_RBC_NEXT();
 }
 #if defined(__clang__) || defined(__GNUC__)
@@ -101,24 +103,24 @@ XR_RBC_CASE(AGGREGATE_ACCESS) {
 #endif
 XR_RBC_CASE(LOADK) {
     uint32_t index = instruction >> 16;
-    XR_RBC_REG(a) = constants[index];
+    XR_RBC_REG(XR_RBC_A()) = constants[index];
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(LOADI) {
     uint32_t bits = instruction >> 16;
     int64_t value = bits <= INT16_MAX ? (int64_t) bits : (int64_t) bits - 65536;
-    XR_RBC_REG(a) = (uint64_t) value;
+    XR_RBC_REG(XR_RBC_A()) = (uint64_t) value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SPILL) {
     size_t index = frame->spill_base + (instruction >> 16);
-    stack->spills[index] = XR_RBC_SLOT(a);
-    XR_RBC_SLOT(a) = (XrRbcRegister){0};
+    stack->spills[index] = XR_RBC_SLOT(XR_RBC_A());
+    XR_RBC_SLOT(XR_RBC_A()) = (XrRbcRegister){0};
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(RELOAD) {
     size_t index = frame->spill_base + (instruction >> 16);
-    XR_RBC_SLOT(a) = stack->spills[index];
+    XR_RBC_SLOT(XR_RBC_A()) = stack->spills[index];
     // Scalar reloads copy bits. Reference reloads transfer the sole owner.
     if ((instruction >> 16) < function->reference_spill_count)
         stack->spills[index] = (XrRbcRegister){0};
@@ -129,114 +131,114 @@ XR_RBC_CASE(CELL_NEW) {
     for (uint32_t skipped = frame->initialized_cells; skipped < ordinal; ++skipped)
         if (!function->cell_kinds || !rbc_indexed_cell_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
     size_t index = frame->cell_base + ordinal;
-    stack->cells[index].bits = XR_RBC_REG(a);
+    stack->cells[index].bits = XR_RBC_REG(XR_RBC_A());
     if (ordinal >= frame->initialized_cells) frame->initialized_cells = ordinal + 1;
-    XR_RBC_REG(a) = (uint64_t)index + 1;
+    XR_RBC_REG(XR_RBC_A()) = (uint64_t)index + 1;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CELL_READ) {
-    XrRbcRegister *cell = xr_rbc_cell(stack,module,XR_RBC_REG(b),XR_RBC_BITS);
+    XrRbcRegister *cell = xr_rbc_cell(stack,module,XR_RBC_REG(XR_RBC_B()),XR_RBC_BITS);
     if (!cell) return XR_RBC_INVALID;
-    XR_RBC_REG(a) = cell->bits;
+    XR_RBC_REG(XR_RBC_A()) = cell->bits;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CELL_WRITE) {
-    XrRbcRegister *cell = xr_rbc_cell(stack,module,XR_RBC_REG(a),XR_RBC_BITS);
+    XrRbcRegister *cell = xr_rbc_cell(stack,module,XR_RBC_REG(XR_RBC_A()),XR_RBC_BITS);
     if (!cell) return XR_RBC_INVALID;
-    cell->bits = XR_RBC_REG(b);
+    cell->bits = XR_RBC_REG(XR_RBC_B());
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(ADD) {
-    XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) + XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(ADDI) {
-    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
-    XR_RBC_REG(a) = XR_RBC_REG(b) + value;
+    uint64_t value = XR_RBC_C() <= INT8_MAX ? (uint64_t)XR_RBC_C() : (uint64_t)XR_RBC_C() - 256;
+    XR_RBC_REG(XR_RBC_A()) = XR_RBC_REG(XR_RBC_B()) + value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SUBI) {
-    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
-    XR_RBC_REG(a) = XR_RBC_REG(b) - value;
+    uint64_t value = XR_RBC_C() <= INT8_MAX ? (uint64_t)XR_RBC_C() : (uint64_t)XR_RBC_C() - 256;
+    XR_RBC_REG(XR_RBC_A()) = XR_RBC_REG(XR_RBC_B()) - value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SUB) {
-    XR_RBC_BINARY(XR_RBC_REG(b) - XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) - XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(MUL) {
-    XR_RBC_BINARY(XR_RBC_REG(b) * XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) * XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(MULI) {
-    uint64_t value = c <= INT8_MAX ? (uint64_t)c : (uint64_t)c - 256;
-    XR_RBC_REG(a) = XR_RBC_REG(b) * value;
+    uint64_t value = XR_RBC_C() <= INT8_MAX ? (uint64_t)XR_RBC_C() : (uint64_t)XR_RBC_C() - 256;
+    XR_RBC_REG(XR_RBC_A()) = XR_RBC_REG(XR_RBC_B()) * value;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(NEG) {
-    XR_RBC_REG(a) = 0 - XR_RBC_REG(b);
+    XR_RBC_REG(XR_RBC_A()) = 0 - XR_RBC_REG(XR_RBC_B());
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FNEG) {
-    XR_RBC_REG(a) = xr_rbc_float_bits(-xr_rbc_float(XR_RBC_REG(b)));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(-xr_rbc_float(XR_RBC_REG(XR_RBC_B())));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FADD) {
-    double left = xr_rbc_float(XR_RBC_REG(b)), right = xr_rbc_float(XR_RBC_REG(c));
-    XR_RBC_REG(a) = xr_rbc_float_bits(left + right);
+    double left = xr_rbc_float(XR_RBC_REG(XR_RBC_B())), right = xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(left + right);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FSUB) {
-    double left = xr_rbc_float(XR_RBC_REG(b)), right = xr_rbc_float(XR_RBC_REG(c));
-    XR_RBC_REG(a) = xr_rbc_float_bits(left - right);
+    double left = xr_rbc_float(XR_RBC_REG(XR_RBC_B())), right = xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(left - right);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FMUL) {
-    double left = xr_rbc_float(XR_RBC_REG(b)), right = xr_rbc_float(XR_RBC_REG(c));
-    XR_RBC_REG(a) = xr_rbc_float_bits(left * right);
+    double left = xr_rbc_float(XR_RBC_REG(XR_RBC_B())), right = xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(left * right);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FDIV) {
-    double left = xr_rbc_float(XR_RBC_REG(b)), right = xr_rbc_float(XR_RBC_REG(c));
-    XR_RBC_REG(a) = xr_rbc_float_bits(left / right);
+    double left = xr_rbc_float(XR_RBC_REG(XR_RBC_B())), right = xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(left / right);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FEQ) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) == xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) == xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 XR_RBC_CASE(FNE) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) != xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) != xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 XR_RBC_CASE(FLT) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) < xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) < xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 XR_RBC_CASE(FLE) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) <= xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) <= xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 XR_RBC_CASE(FLEK) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) <= xr_rbc_float(constants[c]);
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) <= xr_rbc_float(constants[XR_RBC_C()]);
     goto xr_rbc_float_compare;
 }
 #if defined(__clang__) || defined(__GNUC__)
 #include "xrbc_state_dispatch.inc.c"
 #endif
 XR_RBC_CASE(FGT) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) > xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) > xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 XR_RBC_CASE(FGE) {
-    XR_RBC_REG(a) = xr_rbc_float(XR_RBC_REG(b)) >= xr_rbc_float(XR_RBC_REG(c));
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_float(XR_RBC_REG(XR_RBC_B())) >= xr_rbc_float(XR_RBC_REG(XR_RBC_C()));
     goto xr_rbc_float_compare;
 }
 xr_rbc_float_compare: {
     // Admission guarantees the successor exists, and EQI retains its complete
     // jump/skip pair. Keep the boolean register for any later independent use.
-    if (code[pc] == ((uint32_t)XR_RBC_EQI | (a << 8))) {
-        bool take = XR_RBC_REG(a) == 0;
+    if (code[pc] == ((uint32_t)XR_RBC_EQI | (XR_RBC_A() << 8))) {
+        bool take = XR_RBC_REG(XR_RBC_A()) == 0;
         ++pc;
         instruction = code[pc++];
         if (take) goto xr_rbc_jump;
@@ -244,54 +246,54 @@ xr_rbc_float_compare: {
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(ITOF) {
-    int64_t source = xr_rbc_signed(XR_RBC_REG(b));
-    XR_RBC_REG(a) = xrt_i64_to_f64(source);
+    int64_t source = xr_rbc_signed(XR_RBC_REG(XR_RBC_B()));
+    XR_RBC_REG(XR_RBC_A()) = xrt_i64_to_f64(source);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(FTOI) {
-    uint64_t source = XR_RBC_REG(b);
+    uint64_t source = XR_RBC_REG(XR_RBC_B());
     int64_t result = xrt_f64_to_i64(source, function->source_ids ? function->source_ids[pc - 1] : 0);
-    XR_RBC_REG(a) = (uint64_t) result;
+    XR_RBC_REG(XR_RBC_A()) = (uint64_t) result;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(DIV)
 XR_RBC_CASE(REM)
 XR_RBC_CASE(REMI) {
-    int64_t lhs = xr_rbc_signed(XR_RBC_REG(b));
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(XR_RBC_B()));
     int64_t rhs = op == XR_RBC_REMI ?
-        (c <= INT8_MAX ? (int64_t)c : (int64_t)c - 256) : xr_rbc_signed(XR_RBC_REG(c));
+        (XR_RBC_C() <= INT8_MAX ? (int64_t)XR_RBC_C() : (int64_t)XR_RBC_C() - 256) : xr_rbc_signed(XR_RBC_REG(XR_RBC_C()));
     if (!rhs) {
         uint32_t source_id = function->source_ids ? function->source_ids[pc - 1] : 0;
         xrt_arithmetic_panic(op == XR_RBC_DIV ? 420u : 421u, source_id);
     }
     if (lhs == INT64_MIN && rhs == -1)
-        XR_RBC_REG(a) = op == XR_RBC_DIV ? (uint64_t) INT64_MIN : 0;
+        XR_RBC_REG(XR_RBC_A()) = op == XR_RBC_DIV ? (uint64_t) INT64_MIN : 0;
     else
-        XR_RBC_REG(a) = (uint64_t) (op == XR_RBC_DIV ? lhs / rhs : lhs % rhs);
+        XR_RBC_REG(XR_RBC_A()) = (uint64_t) (op == XR_RBC_DIV ? lhs / rhs : lhs % rhs);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(AND) {
-    XR_RBC_BINARY(XR_RBC_REG(b) & XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) & XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(OR) {
-    XR_RBC_BINARY(XR_RBC_REG(b) | XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) | XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(XOR) {
-    XR_RBC_BINARY(XR_RBC_REG(b) ^ XR_RBC_REG(c));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) ^ XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SHL) {
-    XR_RBC_BINARY(XR_RBC_REG(b) << (XR_RBC_REG(c) & 63));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) << (XR_RBC_REG(XR_RBC_C()) & 63));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(SHR) {
-    XR_RBC_BINARY(xr_rbc_shift_right(XR_RBC_REG(b), XR_RBC_REG(c)));
+    XR_RBC_BINARY(xr_rbc_shift_right(XR_RBC_REG(XR_RBC_B()), XR_RBC_REG(XR_RBC_C())));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(USHR) {
-    XR_RBC_BINARY(XR_RBC_REG(b) >> (XR_RBC_REG(c) & 63));
+    XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) >> (XR_RBC_REG(XR_RBC_C()) & 63));
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(LTI)
@@ -301,7 +303,7 @@ XR_RBC_CASE(GEI)
 XR_RBC_CASE(EQI) {
     uint32_t bits = instruction >> 16;
     int64_t rhs = bits <= INT16_MAX ? (int64_t)bits : (int64_t)bits - 65536;
-    int64_t lhs = xr_rbc_signed(XR_RBC_REG(a));
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(XR_RBC_A()));
     bool take = op == XR_RBC_LTI ? lhs < rhs : op == XR_RBC_LEI ? lhs <= rhs :
         op == XR_RBC_GTI ? lhs > rhs : op == XR_RBC_GEI ? lhs >= rhs : lhs == rhs;
     instruction = code[pc++];
@@ -311,7 +313,7 @@ XR_RBC_CASE(EQI) {
 XR_RBC_CASE(LT)
 XR_RBC_CASE(LE)
 XR_RBC_CASE(EQ) {
-    int64_t lhs = xr_rbc_signed(XR_RBC_REG(a)), rhs = xr_rbc_signed(XR_RBC_REG(b));
+    int64_t lhs = xr_rbc_signed(XR_RBC_REG(XR_RBC_A())), rhs = xr_rbc_signed(XR_RBC_REG(XR_RBC_B()));
     bool take = op == XR_RBC_LT ? lhs < rhs : op == XR_RBC_LE ? lhs <= rhs : lhs == rhs;
     instruction = code[pc++];
     if (take)
@@ -329,7 +331,7 @@ xr_rbc_jump: {
 XR_RBC_CASE(CALL) {
     uint32_t target = instruction >> 16;
     const XrRbcFunction *callee = &module->functions[target];
-    size_t base = frame->base + a + 1;
+    size_t base = frame->base + XR_RBC_A() + 1;
     frame->pc = pc;
     // Admission places the complete argument window at the caller's top.
     // Its end already fits the allocated stack, so this base cannot overflow.
@@ -342,7 +344,7 @@ XR_RBC_CASE(CALL) {
     // Reserve may move every stack array. Rebind both cached pointers before
     // touching the new frame or its arguments, including on partial growth.
     frame = &stack->frames[stack->depth++];
-    *frame = (XrRbcFrame){target, 0, base, a, stack->cell_count, 0, stack->spill_count, 0};
+    *frame = (XrRbcFrame){target, 0, base, XR_RBC_A(), stack->cell_count, 0, stack->spill_count, 0};
     registers = stack->slots + base;
     xr_rbc_entry_clear(registers, &entries[target]);
     if (callee->reference_spill_count)
@@ -358,21 +360,21 @@ XR_RBC_CASE(CALL) {
 XR_RBC_CASE(CALLN) {
     uint32_t target = instruction >> 16;
     XrRbcNativeKind kind = module->natives[target];
-    uint64_t id = XR_RBC_REG(a + (kind == XR_RBC_NATIVE_PRINT_I64 ||
+    uint64_t id = XR_RBC_REG(XR_RBC_A() + (kind == XR_RBC_NATIVE_PRINT_I64 ||
         kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2 : 1));
     if (id > UINT32_MAX || id > xrt_locations_count(locations))
         return XR_RBC_INVALID;
     switch (kind) {
     case XR_RBC_NATIVE_PRINT_I64:
-        xrt_print_i64(xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t)id); break;
+        xrt_print_i64(xr_rbc_signed(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id); break;
     case XR_RBC_NATIVE_CLOCK_REALTIME:
-        XR_RBC_REG(a) = (uint64_t)xrt_clock_realtime_nanos((uint32_t)id); break;
+        XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_realtime_nanos((uint32_t)id); break;
     case XR_RBC_NATIVE_CLOCK_CPU:
-        XR_RBC_REG(a) = (uint64_t)xrt_clock_process_cpu_nanos((uint32_t)id); break;
+        XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_process_cpu_nanos((uint32_t)id); break;
     case XR_RBC_NATIVE_CLOCK_MONOTONIC:
-        XR_RBC_REG(a) = (uint64_t)xrt_clock_monotonic_nanos((uint32_t)id); break;
+        XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_monotonic_nanos((uint32_t)id); break;
     case XR_RBC_NATIVE_UTC_OFFSET_AT:
-        XR_RBC_REG(a) = (uint64_t)xrt_clock_utc_offset_at(xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t)id); break;
+        XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_utc_offset_at(xr_rbc_signed(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id); break;
     default: return XR_RBC_INVALID;
     }
     XR_RBC_NEXT();
@@ -387,8 +389,8 @@ XR_RBC_CASE(RET)
 XR_RBC_CASE(RET0) {
     XrRbcRegister value = {0};
     if (op == XR_RBC_RET) {
-        value = XR_RBC_SLOT(a);
-        if (rbc_direct_managed_kind(function->result_kind)) XR_RBC_SLOT(a) = (XrRbcRegister){0};
+        value = XR_RBC_SLOT(XR_RBC_A());
+        if (rbc_direct_managed_kind(function->result_kind)) XR_RBC_SLOT(XR_RBC_A()) = (XrRbcRegister){0};
     }
     uint32_t destination = frame->destination;
     stack->cell_count = frame->cell_base;
@@ -440,6 +442,9 @@ default:
 return XR_RBC_INVALID;
 #endif
 
+#undef XR_RBC_A
+#undef XR_RBC_B
+#undef XR_RBC_C
 #undef XR_RBC_FETCH
 #undef XR_RBC_REG
 #undef XR_RBC_SLOT
