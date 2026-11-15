@@ -264,24 +264,92 @@ static bool allocation_extent(const XrtRuntimeTypePlan *plan, const XrtManagedHe
     *bytes += capacity * plan->spec.stride;
     return true;
 }
-static void payload_drop(XrtManagedHeader *value, const XrtRuntimeTypePlan *plan) {
-    for (size_t i = 0; i < plan->spec.child_count; ++i) {
-        void *field = (unsigned char *)value + plan->spec.child_offsets[i];
-        XrtManagedHeader *child;
-        memcpy(&child, field, sizeof(child));
-        XrtManagedHeader *empty = NULL;
-        memcpy(field, &empty, sizeof(empty));
-        xrt_managed_drop(child);
-    }
-    if (plan->spec.drop_payload) plan->spec.drop_payload(value, plan->spec.code.context);
+static const uint32_t retirement_cursor = UINT32_C(0x80000000);
+_Static_assert(sizeof(size_t) <= sizeof(XrtManagedHeader *), "a dead child slot holds its cursor bytes");
+
+static void child_store(XrtManagedHeader *value, size_t index, XrtManagedHeader *child) {
+    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[index];
+    memcpy(field, &child, sizeof(child));
 }
-static void allocation_dispose(XrtManagedHeader *value, size_t bytes) {
+static XrtManagedHeader *child_take(XrtManagedHeader *value, size_t index) {
+    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[index];
+    XrtManagedHeader *child;
+    memcpy(&child, field, sizeof(child));
+    child_store(value, index, NULL);
+    return child;
+}
+static void cursor_store(XrtManagedHeader *value, size_t index) {
+    void *field = (unsigned char *)value + value->ops->plan->spec.child_offsets[1];
+    memcpy(field, &index, sizeof(index));
+}
+static bool value_release_last(XrtManagedHeader *value) {
+    if (!value) return false;
+    XrSignedRcRelease released = xr_signed_rc_release(&value->references);
+    XR_CHECK(released != XR_SIGNED_RC_INVALID, "managed value reference count underflow");
+    return released == XR_SIGNED_RC_LAST;
+}
+
+/* No continuation is stored before LAST. Slot zero then holds the parent. Slot
+ * one remains a real owner until taken; only the phase bit permits cursor reads. */
+static bool retirement_next(XrtManagedHeader *value, XrtManagedHeader *parent,
+    bool entering, XrtManagedHeader **child) {
+    const XrtRuntimeTypeSpec *spec = &value->ops->plan->spec;
+    if (entering) {
+        XR_CHECK(xr_signed_rc_read(&value->references) == 0, "only a last release owns retirement storage");
+        XR_CHECK(!(value->flags & retirement_cursor), "live flags exclude the dead cursor phase");
+        if (!spec->child_count) return false;
+        *child = child_take(value, 0);
+        child_store(value, 0, parent);
+        return true;
+    }
+    if (spec->child_count < 2) return false;
+    if (!(value->flags & retirement_cursor)) {
+        *child = child_take(value, 1);
+        cursor_store(value, 2);
+        value->flags |= retirement_cursor;
+        return true;
+    }
+    size_t index;
+    const void *field = (const unsigned char *)value + spec->child_offsets[1];
+    memcpy(&index, field, sizeof(index));
+    XR_CHECK(index >= 2 && index <= spec->child_count, "a dead cursor stays within the owned schema");
+    if (index == spec->child_count) return false;
+    *child = child_take(value, index);
+    cursor_store(value, index + 1);
+    return true;
+}
+
+static XrtManagedHeader *retirement_finish(XrtManagedHeader *value, XrtManagedHeader *parent,
+    XrtManagedHeader *root, size_t root_bytes) {
     XrtManagedOps *ops = (XrtManagedOps *)value->ops;
     XrtBillingOwner *owner = ops->billing;
-    payload_drop(value, ops->plan);
+    const XrtRuntimeTypePlan *plan = ops->plan;
+    size_t bytes = root_bytes;
+    if (value != root)
+        XR_CHECK(allocation_extent(plan, value, &bytes), "published physical extent remains representable");
+    if (plan->spec.child_count) parent = child_take(value, 0);
+    if (plan->spec.child_count > 1) child_store(value, 1, NULL);
+    value->flags &= ~retirement_cursor;
+    if (plan->spec.drop_payload) plan->spec.drop_payload(value, plan->spec.code.context);
     billing_free(owner, value, bytes);
     xrt_managed_ops_drop(ops);
     xrt_billing_owner_drop(owner);
+    return parent;
+}
+static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
+    XrtManagedHeader *value = root, *parent = NULL;
+    bool entering = true;
+    while (value) {
+        XrtManagedHeader *child = NULL;
+        if (retirement_next(value, parent, entering, &child)) {
+            if (value_release_last(child)) {
+                parent = value; value = child; entering = true;
+            } else entering = false;
+        } else {
+            value = retirement_finish(value, parent, root, root_bytes);
+            parent = NULL; entering = false;
+        }
+    }
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
     if (!ops || !pending || pending->value || pending->allocation_bytes) return XRT_MANAGED_ARGUMENT;
@@ -324,16 +392,14 @@ XR_FUNCDEF void xrt_managed_abort(XrtManagedPending *pending) {
     if (!pending || !pending->value) return;
     XrtManagedPending owned = *pending;
     *pending = (XrtManagedPending){0};
+    XR_CHECK(value_release_last(owned.value), "a pending token owns the last unpublished reference");
     allocation_dispose(owned.value, owned.allocation_bytes);
 }
 XR_FUNCDEF bool xrt_managed_retain(XrtManagedHeader *value) {
     return value && xr_signed_rc_retain(&value->references);
 }
 XR_FUNCDEF void xrt_managed_drop(XrtManagedHeader *value) {
-    if (!value) return;
-    XrSignedRcRelease released = xr_signed_rc_release(&value->references);
-    XR_CHECK(released != XR_SIGNED_RC_INVALID, "managed value reference count underflow");
-    if (released != XR_SIGNED_RC_LAST) return;
+    if (!value_release_last(value)) return;
     size_t bytes;
     XR_CHECK(allocation_extent(value->ops->plan, value, &bytes), "published physical extent remains representable");
     allocation_dispose(value, bytes);
