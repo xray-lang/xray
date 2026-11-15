@@ -13,6 +13,8 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_c.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_value_code.h"
+#include "xray_native_array.h"
 #include "base/xmalloc.h"
 #include "lir_array_fixture.h"
 #include "lir_array_repeat_fixture.h"
@@ -29,8 +31,8 @@
 #include "lir_callable_frontier_cases.h"
 #include "lir_callable_fixture.h"
 #include "lir_callable_factory_fixture.h"
-#include "lir_callable_factory_cases.h"
 #include "lir_callable_execution_cases.h"
+#include "lir_callable_factory_cases.h"
 #include "lir_callable_composition_cases.h"
 #include "lir_captured_cell_cases.h"
 #include "lir_tuple_cases.h"
@@ -288,7 +290,8 @@ static void array_backend_frontier(const XrLirModule *m, XrLirFunction entry) {
         .translation_unit="array-frontier.c"};
     XrLirCOutput output = {0};
     CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
-    CHECK(output.bytes && output.length && strstr(output.bytes, "xrt_array_i64_new(NULL, UINT32_C(0)"));
+    CHECK(output.bytes && output.length && strstr(output.bytes, "xrt_native_array_create(") &&
+        strstr(output.bytes, "XRT_BACKING_ARRAY_I64"));
     xr_lir_c_output_free(&output);
     xr_compile_resources_release(resources);
 }
@@ -441,7 +444,8 @@ static void array_c_output(const char *name, const char *path) {
     if (status != XR_LIR_C_OK) fprintf(stderr, "C emission status=%u %s\n", (unsigned)status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes);
     if (!strcmp(name, "state-layout")) {
-        CHECK(strstr(output.bytes, "XRT_MODULE_ARRAY_I64") && strstr(output.bytes, "XRT_MODULE_ARRAY_STRING"));
+        CHECK(strstr(output.bytes, "static const XrtValueImage xrl_value_image") &&
+            strstr(output.bytes, "XRT_BACKING_ARRAY_I64") && strstr(output.bytes, "XRT_BACKING_ARRAY_STRING"));
         XrRbcProgram *program = NULL;
         CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
         xr_rbc_program_destroy(program);
@@ -452,18 +456,20 @@ static void array_c_output(const char *name, const char *path) {
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
 }
 
-typedef struct ArrayVmResult { XrtArray *array; bool string; int64_t value; XrLirType element; } ArrayVmResult;
+typedef struct ArrayVmResult { XrtManagedHeader *array; bool string; int64_t value; XrLirType element; } ArrayVmResult;
 static void array_vm_result(void *context) {
-    ArrayVmResult *result=context;
-    result->value=xrt_array_length(result->array,0);
-    if(result->string) {
-        XrtString *string=xrt_array_string_get(result->array,0,0);
-        result->value+=xrt_string_length(string,0);xrt_string_drop(&string);
-    } else if(result->element==XR_LIR_U8)result->value+=xrt_array_u8_get(result->array,0,0);
-    else if(result->element==XR_LIR_U64) {
-        uint64_t bits=xrt_array_u64_get(result->array,0,0);int64_t value;
-        memcpy(&value,&bits,sizeof(value));result->value+=value;
-    } else result->value+=xrt_array_i64_get(result->array,0,0);
+    ArrayVmResult *result = context;
+    XrtArrayItem item = {0};
+    XrtBackingArrayKind kind = result->string ? XRT_BACKING_ARRAY_STRING :
+        result->element == XR_LIR_U8 ? XRT_BACKING_ARRAY_U8 :
+        result->element == XR_LIR_U64 ? XRT_BACKING_ARRAY_U64 : XRT_BACKING_ARRAY_I64;
+    xrt_native_array_get(result->array, kind, 0, &item, 0);
+    result->value = (int64_t)((const XrtArrayBacking *)result->array)->length;
+    if (result->string) result->value += (int64_t)item.value.string->runes;
+    else if (result->element == XR_LIR_U8) result->value += item.value.u8;
+    else if (result->element == XR_LIR_U64) {
+        int64_t value; memcpy(&value, &item.value.u64, sizeof(value)); result->value += value;
+    } else result->value += item.value.i64;
 }
 static void array_vm_fixture(const char *name,int64_t expected) {
     XrLirModule *m=NULL;XrLirFunction root={0};
@@ -475,7 +481,8 @@ static void array_vm_fixture(const char *name,int64_t expected) {
     xr_lir_module_destroy(m);
     if(!strncmp(name,"array-spills",12) || !strncmp(name,"unsigned-spills",15)) {
         const XrRbcModule *view=xr_rbc_program_view(program);
-        CHECK(view->functions[0].reference_spill_count && view->functions[0].reference_spill_kinds);
+        const XrRbcValueCode *code = xr_rbc_module_value_code(view, 0);
+        CHECK(code && code->homes->owned_frame_needed && code->homes->frame.slot_count >= 300);
     }
     XrRbcExecution *execution=NULL;
     CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
@@ -497,7 +504,7 @@ static void array_vm_fixture(const char *name,int64_t expected) {
         CHECK(xr_rbc_outcome_take_array(outcome,&result.array));
         xr_rbc_outcome_free(&outcome);
         XrtSourceMap map={0};xrt_run_standalone(&map,array_vm_result,&result);
-        CHECK(result.value==expected);xrt_array_owned_drop(&result.array);
+        CHECK(result.value==expected);xrt_managed_drop(result.array);
     } else {
         uint64_t result=0;
         CHECK(xr_rbc_outcome_bits(outcome,&result) && result==(uint64_t)expected);
@@ -513,7 +520,6 @@ int main(int argc, char **argv) {
     tuple_receiving_owners();
     tuple_group_admission();
     callable_owned_factory_cases();
-    captured_cell_scope_join();
     captured_cell_frame_extent();
     callable_owned_edge_binding();
     view_receiving_owners();

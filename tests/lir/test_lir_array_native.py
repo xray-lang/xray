@@ -27,27 +27,29 @@ def adapter(name, generated):
     prefix = '#include <inttypes.h>\n#include <stdio.h>\n#include <string.h>\n' + f'#include "{generated.name}"\n'
     if not name.startswith('return-'):
         return prefix + 'int main(void) { printf("%" PRId64 "\\n", xray_lir_entry()); return 0; }\n'
-    string = name.endswith('string')
-    observe = ('XrtString *s = xrt_array_string_get(p->array, 0, 0);\n'
-               '    p->value = xrt_string_length(s, 0); xrt_string_drop(&s);\n' if string else
-               'p->value = xrt_array_i64_get(p->array, 0, 0);\n')
-    if name.endswith('u8'):
-        observe = 'p->value = xrt_array_u8_get(p->array, 0, 0);\n'
-    if name.endswith('u64'):
-        observe = 'uint64_t bits = xrt_array_u64_get(p->array, 0, 0); memcpy(&p->value, &bits, sizeof(bits));\n'
-    return prefix + '''typedef struct Probe { XrtArray *array; int64_t value; } Probe;
-static void probe(void *context) {
+    kind = ('XRT_BACKING_ARRAY_STRING' if name.endswith('string') else
+            'XRT_BACKING_ARRAY_U8' if name.endswith('u8') else
+            'XRT_BACKING_ARRAY_U64' if name.endswith('u64') else 'XRT_BACKING_ARRAY_I64')
+    observe = ('p->value = (int64_t)item.value.string->runes;' if name.endswith('string') else
+               'p->value = item.value.u8;' if name.endswith('u8') else
+               'memcpy(&p->value, &item.value.u64, sizeof(p->value));' if name.endswith('u64') else
+               'p->value = item.value.i64;')
+    return prefix + f'''typedef struct Probe {{ XrtManagedHeader *array; int64_t value; }} Probe;
+static void probe(void *context) {{
     Probe *p = context;
-    ''' + observe + '''    p->value += xrt_array_length(p->array, 0);
-}
-int main(void) {
-    Probe p = {xray_lir_entry(), 0};
-    XrtSourceMap map = {NULL, 0};
+    XrtArrayItem item = {{0}};
+    xrt_native_array_get(p->array, {kind}, 0, &item, 0);
+    {observe}
+    p->value += (int64_t)((const XrtArrayBacking *)p->array)->length;
+}}
+int main(void) {{
+    Probe p = {{xray_lir_entry(), 0}};
+    XrtSourceMap map = {{NULL, 0}};
     xrt_run_standalone(&map, probe, &p);
     printf("%" PRId64 "\\n", p.value);
-    xrt_array_owned_drop(&p.array);
+    xrt_managed_drop(p.array);
     return 0;
-}
+}}
 '''
 
 
@@ -82,9 +84,10 @@ def main():
         text = generated.read_text(encoding='ascii')
         assert '({' not in text
         if name == 'large':
-            assert 'UINT32_C(300)' in text and '(const int64_t[]){' in text
+            assert ', 300}, UINT32_C(' in text and '(int64_t[]){' in text
         if name == 'state-layout':
-            assert 'XRT_MODULE_ARRAY_I64' in text and 'XRT_MODULE_ARRAY_STRING' in text
+            assert 'static const XrtValueImage xrl_value_image' in text
+            assert 'XRT_BACKING_ARRAY_I64' in text and 'XRT_BACKING_ARRAY_STRING' in text
         client.write_text(adapter(name, generated), encoding='ascii')
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',

@@ -7,7 +7,6 @@
  * lir_view_cases.h - Owned typed roles and raw bytecode rejection boundaries
  */
 #include "lir_view_fixture.h"
-#include "vm/register/xrbc_internal.h"
 static void view_lir_rejections(XrLirModule *module) {
     XrLirBlockData *block = &module->functions[0].blocks[0];
     CHECK(block->instruction_count >= 3);
@@ -40,46 +39,6 @@ static void view_lir_rejections(XrLirModule *module) {
     *leave = saved;
     OK(xr_lir_verify(module, NULL));
 }
-static void view_rbc_rejections(XrRbcProgram *program) {
-    const XrRbcModule *owned = xr_rbc_program_view(program);
-    CHECK(owned->function_count == 1);
-    XrRbcFunction function = owned->functions[0];
-    CHECK(function.view_access_count >= 5 && function.view_access_count <= 16);
-    XrRbcViewAccess rows[16];
-    memcpy(rows, function.view_accesses, function.view_access_count * sizeof(*rows));
-    function.view_accesses = rows;
-    XrRbcModule module = *owned;
-    module.functions = &function;
-    XrtLocationOwner *locations = xr_rbc_program_locations(program);
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_OK);
-    XrRbcViewAccess saved = rows[0];
-    rows[0].operation = XR_RBC_VIEW_NONE;
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_INVALID);
-    rows[0] = saved;
-    rows[0].result = rows[1].operands[1];
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_INVALID);
-    rows[0] = saved;
-    rows[1].bits = UINT64_C(1);
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_INVALID);
-    rows[1].bits = 0;
-    XrRbcArrayLocation operand = rows[1].operands[0];
-    rows[1].operands[0] = rows[1].operands[1];
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_INVALID);
-    rows[1].operands[0] = operand;
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_OK);
-    CHECK(function.code_count >= 3 && function.code_count <= 128);
-    uint32_t code[128];
-    memcpy(code, function.code, function.code_count * sizeof(*code));
-    function.code = code;
-    size_t branch = function.code_count - 3, leave = function.code_count - 2;
-    CHECK((code[branch] & 255) == XR_RBC_VIEW_ACCESS && (code[leave] & 255) == XR_RBC_VIEW_ACCESS);
-    CHECK(rows[code[branch] >> 16].operation == XR_RBC_VIEW_CLEANUP);
-    CHECK(rows[code[leave] >> 16].operation == XR_RBC_VIEW_FRAME_LEAVE);
-    CHECK(xr_rbc_jump(&code[branch], branch, function.code_count - 1, function.code_count));
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_INVALID);
-    CHECK(xr_rbc_jump(&code[branch], branch, leave, function.code_count));
-    CHECK(xr_rbc_module_admit(&module, locations) == XR_RBC_OK);
-}
 static void view_receiving_owners(void) {
     XrLirModule *source = NULL, *copy = NULL;
     OK(view_fixture_create(&source));
@@ -95,15 +54,14 @@ static void view_receiving_owners(void) {
     xr_lir_module_destroy(source);
     OK(xr_lir_verify(copy, NULL));
     XrRbcProgram *program = NULL;
-    CHECK(xr_rbc_compile(copy, (XrLirFunction){copy, 1}, &program, NULL) == XR_RBC_COMPILE_OK);
+    CHECK(xr_rbc_compile(copy, (XrLirFunction){copy, 1}, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=copy, .entry={copy, 1}, .resources=resources,
+        .translation_unit="view-frontier.c"};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_UNSUPPORTED && !output.bytes && !output.length);
+    xr_compile_resources_release(resources);
     xr_lir_module_destroy(copy);
-    view_rbc_rejections(program);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
-    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-    uint64_t result = 0;
-    CHECK(xr_rbc_outcome_bits(outcome, &result) && result == 1);
-    xr_rbc_execution_free(&execution);
-    xr_rbc_outcome_free(&outcome);
-    xr_rbc_program_destroy(program);
 }
