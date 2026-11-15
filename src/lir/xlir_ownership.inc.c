@@ -122,6 +122,33 @@ static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLi
         v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_SET_DROP) return XR_LIR_OWNERSHIP_RELEASE;
     return 0;
 }
+static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
+    const XrLirInstructionView *v, uint32_t function, uint32_t block, uint32_t instruction) {
+    XrLirOwnershipFact fact = {.function=function,.block=block,.instruction=instruction};
+    switch (v->op) {
+    case XR_LIR_CELL_NEW:
+        if (!lir_cfg_cell(v->type)) return true;
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_NEW; fact.value=v->result; fact.target_value=v->operands[0]; break;
+    case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_MAP_CELL_DROP:
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_RELEASE; fact.value=v->operands[0]; break;
+    case XR_LIR_ARRAY_BORROW: case XR_LIR_MAP_BORROW:
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_BORROW; fact.value=v->result; fact.target_value=v->operands[0]; break;
+    case XR_LIR_CELL_READ:
+        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type)) return true;
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
+    case XR_LIR_ARRAY_REF_READ: case XR_LIR_MAP_REF_READ:
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
+    case XR_LIR_CELL_WRITE:
+        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type)) return true;
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
+    case XR_LIR_ARRAY_REF_WRITE: case XR_LIR_MAP_REF_WRITE:
+        fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
+    default: return true;
+    }
+    fact.type=f->values[fact.value - 1].type;
+    fact.array_element=f->values[fact.value - 1].array_element;
+    return lir_plan_add(plan,fact);
+}
 /* The verifier establishes ownership once. This one deterministic producer
  * records already checked positions without rebuilding graphs or owner sets. */
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan, XrLirDiagnostic *d) {
@@ -143,6 +170,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                     XR_LIR_OWNERSHIP_BLOCK_OWNER,function,b + 1,0,block->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
             for (uint32_t i = 0; i < block->instruction_count; ++i) {
                 const XrLirInstructionView *v = &block->instructions[i].view;
+                if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
                 XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
                 for (uint32_t a = 0; a < v->operand_count; ++a) {
                     uint32_t id = v->operands[a];
@@ -164,6 +192,14 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
                             .array_element=constructor ? shape->result_element : shape->parameter_elements[0],
                             .array_operation=shape->operation})) return XR_LIR_OUT_OF_MEMORY;
+                    }
+                    XrLirIntrinsic entry;
+                    if (xr_lir_intrinsic_view(m,v->intrinsic,&entry) == XR_LIR_OK && xr_lir_map_intrinsic_valid(m,&entry)) {
+                        uint32_t receiver=entry.operation == XR_LIR_MAP_OP_NEW ? 0 : v->operands[0];
+                        if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_MAP_OPERATION,
+                            .function=function,.block=b + 1,.instruction=i + 1,.value=receiver,
+                            .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
+                            .map_operation=(XrLirMapOperation)entry.operation})) return XR_LIR_OUT_OF_MEMORY;
                     }
                 }
             }
