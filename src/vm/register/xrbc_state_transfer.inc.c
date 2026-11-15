@@ -9,7 +9,7 @@
 static bool rbc_state_payload(RbcStringAdmission *s, uint32_t slot, uint32_t kind) {
     XrRbcRegisterKind payload;
     if (!rbc_state_register_kind(kind, &payload)) return false;
-    return kind == XRT_MODULE_UNIT || (rbc_managed_kind(payload) ?
+    return kind == XRT_VALUE_UNIT || (rbc_managed_kind(payload) ?
         rbc_register_kind(s->function, slot) == payload && rbc_string_state(s->state[slot]) :
         rbc_register_kind(s->function, slot) == XR_RBC_BITS && s->state[slot] == RBC_BITS);
 }
@@ -25,7 +25,7 @@ static bool rbc_state_transfer(RbcStringAdmission *s, XrRbcOperands v) {
             return false;
         if (v.op == XR_RBC_STATE_WRITE)
             return (s->origin[reference] & 1u) && rbc_state_payload(s, v.b, v.c);
-        if (v.c == XRT_MODULE_UNIT) return true;
+        if (v.c == XRT_VALUE_UNIT) return true;
         XrRbcRegisterKind payload;
         if (!rbc_state_register_kind(v.c, &payload)) return false;
         if (rbc_managed_kind(payload)) {
