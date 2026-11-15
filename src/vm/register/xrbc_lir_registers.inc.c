@@ -192,7 +192,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         c->binding_scratch |= rbc_lir_value_type(c,v)==XR_LIR_I64_CELL;
     }
     uint64_t reserved=(uint64_t)c->temporary_strings+rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_maps+c->temporary_refs+c->temporary_bits+window+
-        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u)+c->binding_scratch;
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+c->binding_scratch;
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
     uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
@@ -223,12 +223,6 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                 xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_BORROW_STATE ||
                 xr_lir_string_role(c->input, &i) == XR_LIR_STRING_OP_APPEND_STATE) &&
                 !rbc_lir_pin_value(c, i.operands[0], budget)) return false;
-            /* The view import ABI consumes an actual State reference register.
-             * Ordinary numeric spill homes carry no such descriptor kind. */
-            if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_IMPORT &&
-                !rbc_lir_pin_value(c, i.operands[2], budget)) return false;
-            if (rbc_lir_view_role(c->input, &i) == XR_LIR_VIEW_OP_CELL_CONSTRUCT &&
-                !rbc_lir_pin_value(c, i.result, budget)) return false;
         }
     }
     for(uint32_t v=1;v<=c->view.value_count;++v) {
@@ -258,7 +252,7 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     }
     c->typed_spills=true;
     c->scratch_count=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_maps+c->temporary_refs+c->temporary_bits+
-        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+(c->has_views?3u:0u)+c->binding_scratch;
+        (c->control_scratch?1u:0u)+(c->state_scratch?1u:0u)+c->binding_scratch;
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
     return true;
@@ -339,7 +333,6 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (kinds[first] == XR_RBC_STATE) c->state_scratch = true;
         if (kinds[first] == XR_RBC_STATE_REF) c->state_ref_scratch = true;
         if (kinds[first] == XR_RBC_I64_BINDING) c->binding_scratch = true;
-        if (xr_rbc_view_kind(kinds[first])) c->view_scratch[kinds[first] - XR_RBC_VIEW_FRAME] = true;
         uint32_t family = xr_rbc_array_family(kinds[first]);
         if (family < XR_RBC_ARRAY_FAMILY_COUNT) c->array_scratch[family] = true;
         if (kinds[first] == XR_RBC_MAP_STRING_I64) c->map_scratch = true;
