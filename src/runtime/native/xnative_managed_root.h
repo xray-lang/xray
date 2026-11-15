@@ -38,6 +38,11 @@ XR_FUNC XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *, XrtManagedFra
  * adopted. Borrowed outputs are not additional owners. */
 XR_FUNC XrtManagedStatus xrt_managed_slot_adopt(XrtManagedFrame *, size_t,
     XrtManagedHeader **owned);
+/* Move one real committed reference to an empty external owner. The value may
+ * have other owners. No allocation or reference-count change occurs; a pending
+ * replacement rejects the transfer without changing either owner. */
+XR_FUNC XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *, size_t,
+    XrtManagedHeader **empty_owned);
 XR_FUNC XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *, size_t,
     XrtManagedHeader **borrowed);
 XR_FUNC XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t,
