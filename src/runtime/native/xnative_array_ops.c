@@ -1,0 +1,240 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_array_ops.c - Checked in-place edits and complete pending replacements
+ *
+ * KEY CONCEPT:
+ *   All failing work precedes publication. Pending String owners occupy real
+ *   tail slots so rollback uses the same iterative capacity walk as final drop.
+ */
+#include "xnative_array_ops.h"
+#include "base/xchecks.h"
+#include "shared/xr_utf8_core.h"
+#include "shared/xr_value_format_core.h"
+#include <string.h>
+
+static bool array_item_valid(const XrtArrayItem *item) {
+    return item && xrt_backing_array_stride(item->kind) &&
+        (item->kind != XRT_BACKING_ARRAY_STRING || item->value.string);
+}
+static XrtManagedStatus array_update_check(const XrtArrayBacking *array,
+    const XrtArrayUpdate *update, size_t *length) {
+    if (!array || !update || array->length > array->capacity || !array_item_valid(&update->item))
+        return XRT_MANAGED_ARGUMENT;
+    if (update->operation == XRT_ARRAY_UPDATE_SET) {
+        if (update->index < 0 || (uint64_t)update->index >= array->length) return XRT_MANAGED_BOUNDS;
+        *length = array->length;
+    } else if (update->operation == XRT_ARRAY_UPDATE_PUSH) {
+        size_t stride = xrt_backing_array_stride(update->item.kind);
+        size_t maximum = (SIZE_MAX - sizeof(XrtArrayBacking)) / stride;
+        if (array->length >= maximum || array->length >= INT64_MAX) return XRT_MANAGED_OVERFLOW;
+        *length = array->length + 1;
+    } else return XRT_MANAGED_ARGUMENT;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedHeader *array_owned_child(const XrtArrayBacking *array, size_t index) {
+    XrtManagedHeader *child = NULL;
+    memcpy(&child, array->elements + index * sizeof(child), sizeof(child));
+    return child;
+}
+static void array_store_scalar(unsigned char *destination, const XrtArrayItem *item) {
+    switch (item->kind) {
+    case XRT_BACKING_ARRAY_I64: memcpy(destination, &item->value.i64, sizeof(item->value.i64)); break;
+    case XRT_BACKING_ARRAY_U8: memcpy(destination, &item->value.u8, sizeof(item->value.u8)); break;
+    case XRT_BACKING_ARRAY_U64: memcpy(destination, &item->value.u64, sizeof(item->value.u64)); break;
+    default: XR_CHECK(false, "only an admitted scalar item reaches scalar storage"); break;
+    }
+}
+static XrtManagedStatus array_capacity(size_t current, size_t required, size_t stride, size_t *output) {
+    size_t maximum = (SIZE_MAX - sizeof(XrtArrayBacking)) / stride;
+    if (maximum > INT64_MAX) maximum = INT64_MAX;
+    if (required > maximum) return XRT_MANAGED_OVERFLOW;
+    size_t capacity = current;
+    if (capacity < required) {
+        capacity = required ? 4 : 0;
+        while (capacity < required) {
+            if (capacity > maximum / 2) { capacity = required; break; }
+            capacity *= 2;
+        }
+    }
+    if (capacity > maximum) return XRT_MANAGED_OVERFLOW;
+    *output = capacity;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus array_finish(XrtManagedFrame *frame, size_t slot, XrtManagedStatus status) {
+    if (status == XRT_MANAGED_OK) status = xrt_managed_slot_commit(frame, slot);
+    if (status != XRT_MANAGED_OK)
+        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "only this factory's prepared candidate is aborted");
+    return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_try_update(XrtArrayBacking *array,
+    const XrtArrayUpdate *update, bool *applied) {
+    if (!applied) return XRT_MANAGED_ARGUMENT;
+    *applied = false;
+    size_t length = 0;
+    XrtManagedStatus status = array_update_check(array, update, &length);
+    if (status != XRT_MANAGED_OK) return status;
+    int32_t references = xr_signed_rc_read(&array->managed.references);
+    if ((references != 1 && references != -1) || length > array->capacity) return XRT_MANAGED_OK;
+    XrtManagedHeader *child = update->item.kind == XRT_BACKING_ARRAY_STRING ? &update->item.value.string->managed : NULL;
+    if (child && !xrt_managed_retain(child)) return XRT_MANAGED_REFCOUNT;
+    if (!xr_signed_rc_unique(&array->managed.references)) { xrt_managed_drop(child); return XRT_MANAGED_OK; }
+    size_t index = update->operation == XRT_ARRAY_UPDATE_PUSH ? array->length : (size_t)update->index;
+    size_t stride = xrt_backing_array_stride(update->item.kind);
+    XrtManagedHeader *old = child ? array_owned_child(array, index) : NULL;
+    if (child) memcpy(array->elements + index * stride, &child, sizeof(child));
+    else array_store_scalar(array->elements + index * stride, &update->item);
+    array->length = length;
+    *applied = true;
+    xrt_managed_drop(old);
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtArrayBacking *source, const XrtArrayUpdate *update) {
+    size_t length = 0, capacity = 0;
+    XrtManagedStatus status = array_update_check(source, update, &length);
+    if (status != XRT_MANAGED_OK) return status;
+    size_t stride = xrt_backing_array_stride(update->item.kind);
+    if (!types || !types->arrays[update->item.kind]) return XRT_MANAGED_ARGUMENT;
+    status = array_capacity(source->capacity, length, stride, &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *payload = NULL;
+    status = xrt_managed_slot_prepare(frame, slot, types->arrays[update->item.kind],
+        sizeof(XrtArrayBacking) + capacity * stride, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtArrayBacking *array = (XrtArrayBacking *)payload;
+    size_t changed = update->operation == XRT_ARRAY_UPDATE_PUSH ? source->length : (size_t)update->index;
+    for (size_t i = 0; i < length; ++i) {
+        if (update->item.kind == XRT_BACKING_ARRAY_STRING) {
+            XrtManagedHeader *child = i == changed ? &update->item.value.string->managed : array_owned_child(source, i);
+            if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
+            memcpy(array->elements + i * stride, &child, sizeof(child));
+        } else if (i == changed) array_store_scalar(array->elements + i * stride, &update->item);
+        else memcpy(array->elements + i * stride, source->elements + i * stride, stride);
+    }
+    if (status == XRT_MANAGED_OK) array->length = length;
+    return array_finish(frame, slot, status);
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_get(const XrtArrayBacking *array,
+    XrtBackingArrayKind kind, int64_t index, XrtArrayItem *output) {
+    size_t stride = xrt_backing_array_stride(kind);
+    if (!array || !stride || !output || array->length > array->capacity) return XRT_MANAGED_ARGUMENT;
+    if (index < 0 || (uint64_t)index >= array->length) return XRT_MANAGED_BOUNDS;
+    XrtArrayItem item = {.kind=kind};
+    const unsigned char *element = array->elements + (size_t)index * stride;
+    switch (kind) {
+    case XRT_BACKING_ARRAY_I64: memcpy(&item.value.i64, element, sizeof(item.value.i64)); break;
+    case XRT_BACKING_ARRAY_U8: memcpy(&item.value.u8, element, sizeof(item.value.u8)); break;
+    case XRT_BACKING_ARRAY_U64: memcpy(&item.value.u64, element, sizeof(item.value.u64)); break;
+    case XRT_BACKING_ARRAY_STRING:
+        item.value.string = (XrtStringBacking *)array_owned_child(array, (size_t)index);
+        if (!item.value.string) return XRT_MANAGED_ARGUMENT;
+        break;
+    default: XR_CHECK(false, "an admitted Array kind has one read representation"); break;
+    }
+    *output = item;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_repeat_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtArrayItem *fill, int64_t count) {
+    if (!types || !array_item_valid(fill) || !types->arrays[fill->kind] || count < 0) return XRT_MANAGED_ARGUMENT;
+    size_t stride = xrt_backing_array_stride(fill->kind), capacity = 0;
+    XrtManagedStatus status = array_capacity(0, (size_t)count, stride, &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *payload = NULL;
+    status = xrt_managed_slot_prepare(frame, slot, types->arrays[fill->kind],
+        sizeof(XrtArrayBacking) + capacity * stride, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtArrayBacking *array = (XrtArrayBacking *)payload;
+    for (size_t i = 0; i < (size_t)count; ++i) {
+        if (fill->kind == XRT_BACKING_ARRAY_STRING) {
+            XrtManagedHeader *child = &fill->value.string->managed;
+            if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
+            memcpy(array->elements + i * stride, &child, sizeof(child));
+        } else array_store_scalar(array->elements + i * stride, fill);
+    }
+    if (status == XRT_MANAGED_OK) array->length = (size_t)count;
+    return array_finish(frame, slot, status);
+}
+
+typedef struct ArrayFormat {
+    const XrtArrayBacking *array;
+    XrtBackingArrayKind kind;
+} ArrayFormat;
+typedef struct ArrayText {
+    char *bytes;
+    size_t length, capacity;
+    bool overflow;
+} ArrayText;
+static int array_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    const ArrayFormat *format = context;
+    if (node.type == XRT_BACKING_ARRAY_COUNT) {
+        view->kind = XR_VALUE_FORMAT_ARRAY;
+        view->unsigned_value = format->array->length;
+    } else if (node.type == XRT_BACKING_ARRAY_STRING) {
+        const XrtStringBacking *string = NULL;
+        memcpy(&string, node.value, sizeof(string));
+        if (!string) return 0;
+        view->kind = XR_VALUE_FORMAT_BYTES;
+        view->bytes = (const unsigned char *)string->bytes;
+        view->size = string->length;
+        view->quote = '"';
+    } else if (node.type == XRT_BACKING_ARRAY_I64) {
+        view->kind = XR_VALUE_FORMAT_SIGNED;
+        memcpy(&view->signed_value, node.value, sizeof(view->signed_value));
+    } else {
+        view->kind = XR_VALUE_FORMAT_UNSIGNED;
+        if (node.type == XRT_BACKING_ARRAY_U8) view->unsigned_value = *(const uint8_t *)node.value;
+        else memcpy(&view->unsigned_value, node.value, sizeof(view->unsigned_value));
+    }
+    return 1;
+}
+static int array_format_child(const void *context, XrValueFormatNode node, uint32_t index, XrValueFormatNode *child) {
+    const ArrayFormat *format = context;
+    if (node.type != XRT_BACKING_ARRAY_COUNT || index >= format->array->length) return 0;
+    *child = (XrValueFormatNode){format->array->elements + (size_t)index * xrt_backing_array_stride(format->kind),
+        (uint16_t)format->kind};
+    return 1;
+}
+static int array_text_write(void *context, const void *bytes, size_t count) {
+    ArrayText *text = context;
+    if (count > SIZE_MAX - text->length) { text->overflow = true; return 0; }
+    if (text->bytes) {
+        if (count > text->capacity - text->length) return 0;
+        if (count) memcpy(text->bytes + text->length, bytes, count);
+    }
+    text->length += count;
+    return 1;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_display_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtArrayBacking *array, XrtBackingArrayKind kind) {
+    if (!types || !types->string || !array || !xrt_backing_array_stride(kind) || array->length > array->capacity)
+        return XRT_MANAGED_ARGUMENT;
+    if (array->length > INT64_MAX) return XRT_MANAGED_OVERFLOW;
+    ArrayFormat format = {array, kind};
+    XrValueFormatReader reader = {&format, array_format_read, array_format_child};
+    XrValueFormatNode node = {array, XRT_BACKING_ARRAY_COUNT};
+    ArrayText text = {0};
+    if (!xr_value_format_value(reader, node, (XrValueFormatSink){&text, array_text_write}, 0))
+        return text.overflow ? XRT_MANAGED_OVERFLOW : XRT_MANAGED_ARGUMENT;
+    if (text.length > SIZE_MAX - sizeof(XrtStringBacking) - 1) return XRT_MANAGED_OVERFLOW;
+    XrtManagedHeader *payload = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->string,
+        sizeof(XrtStringBacking) + text.length + 1, &payload);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtStringBacking *string = (XrtStringBacking *)payload;
+    text = (ArrayText){string->bytes, 0, text.length, false};
+    if (!xr_value_format_value(reader, node, (XrValueFormatSink){&text, array_text_write}, 0))
+        status = text.overflow ? XRT_MANAGED_OVERFLOW : XRT_MANAGED_ARGUMENT;
+    if (status == XRT_MANAGED_OK) {
+        XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)string->bytes, text.length);
+        XR_CHECK(scan.error == XR_UTF8_OK, "shared formatting preserves admitted String UTF-8");
+        string->length = text.length;
+        string->runes = scan.rune_count;
+        string->bytes[text.length] = 0;
+    }
+    return array_finish(frame, slot, status);
+}

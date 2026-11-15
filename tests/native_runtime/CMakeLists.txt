@@ -3,7 +3,8 @@ add_executable(test_native_backing test_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
-    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c")
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c")
 target_include_directories(test_native_backing PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(test_native_backing PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
