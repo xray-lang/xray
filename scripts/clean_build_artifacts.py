@@ -91,7 +91,9 @@ def relative_path(value: str) -> Path:
 
 
 def signature(info: os.stat_result) -> tuple:
-    return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_dev, info.st_ino,
+    # A directory index may materialize during enumeration without a write.
+    size = 0 if stat.S_ISDIR(info.st_mode) else info.st_size
+    return (info.st_mode, size, info.st_mtime_ns, info.st_dev, info.st_ino,
             getattr(info, "st_file_attributes", 0))
 
 
@@ -128,7 +130,12 @@ def tree_snapshot(root: Path, attempt: Path) -> dict[str, tuple]:
                     raise UnsafeAttempt(f"reparse or nonregular entry: {path}")
                 snapshot[path.relative_to(attempt).as_posix()] = signature(info)
                 if stat.S_ISDIR(info.st_mode):
-                    pending.append((path, signature(info)))
+                    # Enumeration can cache an older directory timestamp on
+                    # Windows; establish its full identity before queueing it.
+                    child = path.lstat()
+                    if is_reparse(child) or not stat.S_ISDIR(child.st_mode):
+                        raise UnsafeAttempt(f"directory changed during discovery: {path}")
+                    pending.append((path, signature(child)))
         contained(root, directory)
         if signature(directory.lstat()) != signature(before):
             raise UnsafeAttempt(f"directory changed during enumeration: {directory}")
@@ -209,7 +216,7 @@ def collect_attempt(root: Path, path: Path, rule: dict) -> Attempt:
             continue
         if any(word in item.name.lower() for word in ("command", "stdout", "stderr", "exit")):
             continue
-        if item.suffix.lower() in PRODUCT_SUFFIXES or (not item.suffix and name in native):
+        if item.suffix.lower() in PRODUCT_SUFFIXES or name in native:
             identity = signature((path / item).lstat())
             if not same_metadata(identity, info):
                 raise UnsafeAttempt(f"candidate changed during tree discovery: {path / item}")
@@ -361,8 +368,8 @@ def load_policy(path: Path) -> dict:
                 raise ValueError("all_values requires a nonempty required_keys list")
         rule.setdefault("native_artifacts", [])
         for item in rule["native_artifacts"]:
-            if relative_path(item).suffix:
-                raise ValueError("native_artifacts registers exact extensionless paths only")
+            if relative_path(item).suffix.lower() not in {"", ".lib", ".a"}:
+                raise ValueError("native_artifacts registers exact executables or copied static archives only")
     roots = [Path(rule["path"]) for rule in policy["roots"]]
     if any(left == right or left.is_relative_to(right) or right.is_relative_to(left)
            for index, left in enumerate(roots) for right in roots[index + 1:]):
