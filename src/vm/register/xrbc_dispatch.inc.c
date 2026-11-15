@@ -362,7 +362,7 @@ XR_RBC_CASE(CALLN) {
     XrRbcNativeKind kind = module->natives[target];
     uint64_t id = XR_RBC_REG(XR_RBC_A() + (kind == XR_RBC_NATIVE_PRINT_I64 ||
         kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2 : 1));
-    if (id > UINT32_MAX || id > xrt_locations_count(locations))
+    if (id > UINT32_MAX || id > xrt_locations_count(stack->call_locations))
         return XR_RBC_INVALID;
     switch (kind) {
     case XR_RBC_NATIVE_PRINT_I64:
