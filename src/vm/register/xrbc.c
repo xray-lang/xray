@@ -201,6 +201,20 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     return rbc_array_metadata_valid(function);
 }
 
+static bool xr_rbc_typed_array_function_valid(const XrRbcModule *module,const XrRbcFunction *function) {
+    const XrRbcValueCode *code=rbc_value_code(module,function);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!code || !code->homes || !image || !image->types || !code->homes->result_type ||
+        code->homes->result_type>image->type_count) return false;
+    XrtValueKind kind=image->types[code->homes->result_type-1].kind;
+    if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
+        function->result_kind!=xr_rbc_array_kind_at((uint32_t)(kind-XRT_VALUE_ARRAY_I64))) return false;
+    /* Only the sealed CodeOwner grants this extension. Keep the raw function
+     * validator and every other physical descriptor obligation unchanged. */
+    XrRbcFunction shape=*function; shape.result_kind=XR_RBC_BITS;
+    return xr_rbc_function_valid(&shape);
+}
+
 static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, size_t pc) {
     uint32_t word = function->code[pc], op = word & 255;
@@ -284,7 +298,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_RET:
         return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
             (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
-                function->result_kind == XR_RBC_BOXED || rbc_direct_managed_kind(function->result_kind));
+                function->result_kind == XR_RBC_BOXED || function->result_kind == XR_RBC_STRING);
     case XR_RBC_RET0:
         return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
@@ -311,7 +325,8 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
             (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
-        if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
+        if (!xr_rbc_function_valid(&module->functions[f]) &&
+            !xr_rbc_typed_array_function_valid(module,&module->functions[f])) return XR_RBC_INVALID;
     if (!rbc_callable_metadata_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f)
         if (!rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;

@@ -725,13 +725,13 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
     if (type == XR_LIR_MAP_STRING_I64_REF) return XR_RBC_MAP_STRING_I64_REF;
     if (type == XR_LIR_I64_CELL) return XR_RBC_I64_BINDING;
     if (rbc_lir_callable_type(c->input, type)) return XR_RBC_FUNCTION;
-    if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
+    if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) return XR_RBC_BITS;
+    if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         if (xr_lir_array_shape_view(c->input, (XrLirValue){c->input, c->function.id, value}, &shape) != XR_LIR_OK)
             return XR_RBC_BITS;
         uint32_t family = rbc_lir_array_family(shape.element);
-        return type == XR_LIR_ARRAY_CELL ? xr_rbc_array_cell_at(family) :
-            type == XR_LIR_ARRAY_REF ? xr_rbc_array_ref_at(family) : xr_rbc_array_kind_at(family);
+        return xr_rbc_array_kind_at(family);
     }
     if (type == XR_LIR_STRING_REF) return XR_RBC_STRING_REF;
     return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL :
