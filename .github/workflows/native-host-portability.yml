@@ -502,7 +502,7 @@ jobs:
           -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           -DENABLE_TSAN=ON -DXR_XIR_PARANOID=ON
       - name: Build thread kernels
-        run: cmake --build build-tsan --parallel 4 --target test_os_thread_token test_xir_values test_xir_value_allocations test_xir_signed_object_rc test_native_managed_kernel test_native_managed_root test_native_backing test_native_string_backing_ops test_native_place test_native_value_plan test_native_managed_status test_rbc_code_owner
+        run: cmake --build build-tsan --parallel 4 --target test_os_thread_token test_xir_values test_xir_value_allocations test_xir_signed_object_rc test_native_managed_kernel test_native_managed_root test_native_backing test_native_string_backing_ops test_native_place test_native_value_plan test_native_managed_status test_native_capture_backing test_rbc_code_owner
       - name: Run thread kernels
         run: |
           ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^os_thread_token$'
@@ -512,7 +512,7 @@ jobs:
           ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^native_managed_root$'
           ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^native_backing$'
           ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^native_string_backing_ops$'
-          ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^native_place$|^native_value_plan$|^native_managed_status$|^rbc_code_owner$'
+          ctest --test-dir build-tsan --output-on-failure --no-tests=error -R '^native_place$|^native_value_plan$|^native_managed_status$|^native_capture_backing$|^rbc_code_owner$'
           timeout 60s ./build-tsan/tests/unit/test_xir_value_allocations --closed-threads > build-tsan/closed-threads.stdout 2> build-tsan/closed-threads.stderr
       - uses: actions/upload-artifact@v4
         if: always()

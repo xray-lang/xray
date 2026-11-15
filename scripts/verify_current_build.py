@@ -28,7 +28,7 @@ REQUIRED = (
     "test_native_boxed", "test_native_boxed_allocations",
     # Physical metadata, allocator and foreign-thread owner retirement.
     "native_managed_kernel", "native_managed_root", "native_backing", "native_string_backing_ops",
-    "native_place", "native_value_plan", "native_managed_status", "rbc_code_owner",
+    "native_place", "native_value_plan", "native_managed_status", "native_capture_backing", "rbc_code_owner",
     # Shared scalar decoding and text must retain independent native/RBC witnesses.
     "native_f64_i64_conversion", "native_f64_text",
     # Value delimiters must reject type arrows and preserve source ownership.
