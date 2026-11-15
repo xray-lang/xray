@@ -55,6 +55,7 @@ typedef struct XrLirCDiagnostic {
 } XrLirCDiagnostic;
 
 typedef struct XrLirValueLayouts XrLirValueLayouts;
+typedef struct XrLirValueHomes XrLirValueHomes;
 typedef struct XrLirCValueTypesRequest {
     const XrLirValueLayouts *layouts;
     XrCompileResources *resources;
@@ -73,6 +74,33 @@ typedef struct XrLirCValueTypesRequest {
  * and survives set retirement. Entry facts stay zero. W1-W4 runs before text
  * publication, including for a declaration-only translation unit. */
 XR_FUNC XrLirCStatus xr_lir_emit_c_value_types(const XrLirCValueTypesRequest *,
+    XrLirCOutput *, XrLirCDiagnostic *);
+
+typedef struct XrLirCValueTransfersRequest {
+    const XrLirValueLayouts *layouts;
+    const XrLirValueHomes *homes;
+    XrCompileResources *resources;
+    const char *translation_unit;
+    XrCompileRequestControl *control;
+} XrLirCValueTransfersRequest;
+/* Emit the same typed declarations and callable function-specific stable-frame
+ * and selected-edge helpers. Both borrowed inputs are the unchanged receiving
+ * products for the exact final module. Home positions and owner events come
+ * only from that common producer; this emitter computes no value layout or
+ * lifetime analysis. Scalar/tag staging occurs inside the guarded publication
+ * interval, before any replaced owner retires. POD-only edges use ordinary C
+ * values and create no Root. Managed edge helpers accept an optional scalar
+ * publication descriptor: its caller first protects every ordinary C scalar
+ * source, and its callback writes only the corresponding non-owner destinations
+ * in this same interval. It follows the public Place publication restrictions.
+ * It returns normally, allocates nothing, calls no Root/Place or guest function,
+ * and never writes an owner field. A rejected transfer never invokes it.
+ * Return helpers require the real top callee frame and a distinct stable caller
+ * landing of the exact result type; successful publication precedes callee leave.
+ * This is executor preparation, not a second product
+ * execution path or new guest mutation authority. Output follows the same
+ * empty/publication/resource contract as the declaration emitter. */
+XR_FUNC XrLirCStatus xr_lir_emit_c_value_transfers(const XrLirCValueTransfersRequest *,
     XrLirCOutput *, XrLirCDiagnostic *);
 
 /* The public consumption boundary validates the finished module, then admits

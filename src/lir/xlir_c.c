@@ -22,6 +22,7 @@
 #include "xlir_state_projection.h"
 #include "xlir_native_callable.h"
 #include "xlir_value_layout.h"
+#include "xlir_value_homes.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -1275,6 +1276,7 @@ static void c_verify_text(LirC *c) {
     c_error(c, mapped, "C output verifier could not complete");
 }
 #include "xlir_c_value_types.inc.c"
+#include "xlir_c_value_transfers.inc.c"
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic, bool standalone) {
     if (diagnostic)
