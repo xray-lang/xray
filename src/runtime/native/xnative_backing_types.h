@@ -7,7 +7,7 @@
  * xnative_backing_types.h - Stable private descriptors for fixed value storage
  *
  * KEY CONCEPT:
- *   A receiving setup owns five immutable descriptors; objects keep their own
+ *   A receiving setup owns immutable descriptors; objects keep their own
  *   descriptor leases after the move-only setup has been dropped.
  */
 #ifndef XNATIVE_BACKING_TYPES_H
@@ -29,6 +29,7 @@ static inline size_t xrt_backing_array_stride(XrtBackingArrayKind kind) {
 typedef struct XrtBackingTypes {
     XrtManagedOps *string;
     XrtManagedOps *arrays[XRT_BACKING_ARRAY_COUNT];
+    XrtManagedOps *map;
 } XrtBackingTypes;
 
 /* Cold setup only. Failure leaves the empty output unchanged and refunds every

@@ -11,6 +11,8 @@
  *   value, guest registry or a linked product-family implementation.
  */
 #include "runtime/native/xnative_array_ops.h"
+#include "runtime/native/xnative_map_backing.h"
+#include "base/xhash.h"
 #include "base/xmalloc.h"
 #include <limits.h>
 #include <setjmp.h>
@@ -23,6 +25,10 @@
 
 typedef struct Audit {
     _Atomic(size_t) leases, bytes, blocks, finalized;
+    const XrtMapBacking *watched_map;
+    const XrtStringBacking *watched_key;
+    bool watched_empty;
+    size_t watched_frees;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -53,6 +59,15 @@ static void *provider_allocate(void *context, size_t bytes) {
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *audit = context;
+    if (memory == audit->watched_key) {
+        const XrtMapBacking *map = audit->watched_map;
+        int64_t value = 99; bool found = true;
+        OK(xrt_map_backing_get(map, audit->watched_key, &value, &found));
+        CHECK(!found && !value);
+        for (size_t i = 0; i < map->capacity; ++i) CHECK(map->rows[i].key != audit->watched_key);
+        if (audit->watched_empty) CHECK(!map->length && !map->order_count);
+        ++audit->watched_frees;
+    }
     CHECK(atomic_fetch_sub(&audit->bytes, bytes) >= bytes);
     CHECK(atomic_fetch_sub(&audit->blocks, 1));
     xr_free(memory);
@@ -103,19 +118,19 @@ static void setup_failures(void) {
     XrtBillingOwner *billing = NULL;
     billing_new(&audit, SIZE_MAX, &billing);
     XrtBillingStats baseline = xrt_billing_owner_stats(billing);
-    for (size_t allowed = 0; allowed < 10; ++allowed) {
+    for (size_t allowed = 0; allowed < 12; ++allowed) {
         XrtBackingTypes types = {0};
         xrt_billing_owner_fail_after(billing, allowed);
         CHECK(xrt_backing_types_init(billing, &types) == XRT_MANAGED_OOM);
-        CHECK(!types.string);
+        CHECK(!types.string && !types.map);
         for (size_t i = 0; i < XRT_BACKING_ARRAY_COUNT; ++i) CHECK(!types.arrays[i]);
         xrt_backing_types_drop(&types);
         same_bill(billing, baseline);
     }
-    xrt_billing_owner_fail_after(billing, 10);
+    xrt_billing_owner_fail_after(billing, 12);
     XrtBackingTypes types = {0};
     OK(xrt_backing_types_init(billing, &types));
-    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + 10);
+    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + 12 && types.map);
     XrtManagedOps *stable = types.string;
     BAD(xrt_backing_types_init(billing, &types));
     CHECK(types.string == stable);
@@ -604,6 +619,248 @@ static void array_displays(void) {
     CHECK(text->length == 7 && text->runes == 7 && !memcmp(text->bytes, "[\"a\0b\"]", 8));
     fixture_done(&fixture);
 }
+static XrtStringBacking *map_key(Fixture *fixture, size_t slot, const char *bytes, size_t length) {
+    OK(xrt_string_backing_create(fixture->frame, slot, &fixture->types, bytes, length, 0));
+    return (XrtStringBacking *)borrow(fixture, slot);
+}
+static void map_value(const XrtMapBacking *map, const XrtStringBacking *key, bool expected_found, int64_t expected) {
+    int64_t value = 99; bool found = !expected_found;
+    OK(xrt_map_backing_get(map, key, &value, &found));
+    CHECK(found == expected_found && value == expected);
+}
+static void map_check(const XrtMapBacking *map, XrtStringBacking *const *ordered, size_t count) {
+    CHECK(map->length == count && count <= map->capacity / 2 && map->order_count <= map->capacity);
+    size_t buckets = 0, order = 0;
+    for (size_t i = 0; i < map->capacity; ++i) {
+        if (i < count) {
+            CHECK(map->rows[i].key && map->rows[i].hash == xr_hash_bytes64(map->rows[i].key->bytes, map->rows[i].key->length));
+            map_value(map, map->rows[i].key, true, map->rows[i].value);
+        } else CHECK(!map->rows[i].key);
+        if (map->rows[i].bucket) { CHECK(map->rows[i].bucket <= count); ++buckets; }
+        if (map->rows[i].order) {
+            CHECK(i < map->order_count && map->rows[i].order <= count && order < count);
+            size_t entry = map->rows[i].order - 1;
+            CHECK(map->rows[entry].entry_order == i);
+            if (ordered) CHECK(map->rows[entry].key == ordered[order]);
+            ++order;
+        }
+        size_t rank = 0;
+        for (size_t p = i & (i + 1); p <= i; ++p) rank += map->rows[p].order != 0;
+        CHECK(map->rows[i].rank == rank);
+    }
+    CHECK(buckets == count && order == count);
+}
+static void map_construction_and_updates(void) {
+    Fixture fixture;
+    fixture_init(&fixture, 16384);
+    XrtStringBacking *first = map_key(&fixture, 0, "same", 4);
+    XrtStringBacking *other = map_key(&fixture, 1, "other", 5);
+    XrtStringBacking *equal = map_key(&fixture, 2, "same", 4);
+    XrtStringBacking *missing = map_key(&fixture, 3, "missing", 7);
+    XrtStringBacking *keys[] = {first, other, equal};
+    const int64_t values[] = {1, 7, 42};
+    atomic_store(&equal->managed.references, INT32_MAX);
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    OK(xrt_map_backing_create(fixture.frame, 4, &fixture.types, keys, values, 3));
+    atomic_store(&equal->managed.references, 1);
+    XrtMapBacking *map = (XrtMapBacking *)borrow(&fixture, 4);
+    CHECK(map->capacity == 8 && map->order_count == 2);
+    CHECK(xrt_billing_owner_stats(fixture.billing).bytes == before.bytes + 40 + 8 * 56);
+    XrtStringBacking *ordered[] = {first, other};
+    map_check(map, ordered, 2);
+    map_value(map, equal, true, 42); map_value(map, missing, false, 0);
+    CHECK(xr_signed_rc_read(&first->managed.references) == 2 && xr_signed_rc_read(&equal->managed.references) == 1);
+    int64_t unchanged = 73; bool found = true;
+    BAD(xrt_map_backing_get(map, NULL, &unchanged, &found));
+    CHECK(unchanged == 73 && found);
+    before = xrt_billing_owner_stats(fixture.billing);
+    CHECK(xrt_map_backing_create(fixture.frame, 4, &fixture.types, keys, values, SIZE_MAX) == XRT_MANAGED_OVERFLOW);
+    XrtStringBacking *invalid[] = {first, NULL};
+    BAD(xrt_map_backing_create(fixture.frame, 4, &fixture.types, invalid, values, 2));
+    same_bill(fixture.billing, before);
+    XrtManagedHeader *owned = NULL;
+    OK(xrt_managed_slot_take(fixture.frame, 4, &owned));
+    XrtMapUpdate update = {XRT_MAP_UPDATE_SET, equal, 91};
+    bool applied = false, removed = true;
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    atomic_store(&equal->managed.references, INT32_MAX);
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    CHECK(applied && !removed && map->rows[0].key == first);
+    atomic_store(&equal->managed.references, 1);
+    map_value(map, first, true, 91);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_SET, missing, -9};
+    atomic_store(&missing->managed.references, INT32_MAX);
+    CHECK(xrt_map_backing_try_update(map, &update, &applied, &removed) == XRT_MANAGED_REFCOUNT && !applied);
+    atomic_store(&missing->managed.references, 1);
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    CHECK(applied && !removed && xr_signed_rc_read(&missing->managed.references) == 2);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, equal, 0};
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    CHECK(applied && removed && xr_signed_rc_read(&first->managed.references) == 1);
+    ordered[0] = other; ordered[1] = missing;
+    map_check(map, ordered, 2);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_SET, first, 12};
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    XrtStringBacking *reordered[] = {other, missing, first};
+    for (size_t i = 0; i < 32; ++i) {
+        update.operation = XRT_MAP_UPDATE_REMOVE;
+        OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(applied && removed);
+        update.operation = XRT_MAP_UPDATE_SET;
+        OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(applied && !removed);
+        map_check(map, reordered, 3);
+    }
+    same_bill(fixture.billing, before);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    OK(xrt_managed_slot_adopt(fixture.frame, 4, &owned));
+    fixture_done(&fixture);
+}
+static void map_cow_and_failures(void) {
+    Fixture fixture;
+    fixture_init(&fixture, 16384);
+    XrtStringBacking *a = map_key(&fixture, 0, "a", 1), *b = map_key(&fixture, 1, "b", 1);
+    XrtStringBacking *equal = map_key(&fixture, 2, "a", 1), *absent = map_key(&fixture, 3, "absent", 6);
+    XrtStringBacking *keys[] = {a, b}; const int64_t values[] = {1, 2};
+    OK(xrt_map_backing_create(fixture.frame, 4, &fixture.types, keys, values, 2));
+    XrtMapBacking *source = (XrtMapBacking *)borrow(&fixture, 4);
+    OK(xrt_backing_slot_copy(fixture.frame, 5, &source->managed));
+    XrtMapUpdate update = {XRT_MAP_UPDATE_REMOVE, absent, 0};
+    bool applied = false, removed = true;
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_map_backing_try_update(source, &update, &applied, &removed));
+    CHECK(applied && !removed && xr_signed_rc_read(&source->managed.references) == 2);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_SET, equal, 99};
+    OK(xrt_map_backing_try_update(source, &update, &applied, &removed)); CHECK(!applied);
+    removed = true;
+    CHECK(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, source, &update, &removed) == XRT_MANAGED_OOM);
+    CHECK(removed && borrow(&fixture, 4) == &source->managed);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    atomic_store(&b->managed.references, INT32_MAX);
+    CHECK(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, source, &update, &removed) == XRT_MANAGED_REFCOUNT);
+    CHECK(xr_signed_rc_read(&a->managed.references) == 2 && borrow(&fixture, 4) == &source->managed);
+    atomic_store(&b->managed.references, 2);
+    same_bill(fixture.billing, before);
+    atomic_store(&equal->managed.references, INT32_MAX);
+    OK(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, source, &update, &removed));
+    atomic_store(&equal->managed.references, 1);
+    XrtMapBacking *next = (XrtMapBacking *)borrow(&fixture, 4);
+    CHECK(next != source && !removed && next->rows[0].key == a);
+    map_check(next, keys, 2); map_value(source, a, true, 1); map_value(next, a, true, 99);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, a, 0};
+    atomic_store(&a->managed.references, INT32_MAX);
+    OK(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, next, &update, &removed));
+    atomic_store(&a->managed.references, 2);
+    CHECK(removed);
+    next = (XrtMapBacking *)borrow(&fixture, 4);
+    map_check(next, &b, 1); map_value(source, a, true, 1);
+    before = xrt_billing_owner_stats(fixture.billing);
+    XrtStringBacking *many[256]; int64_t numbers[256];
+    for (size_t i = 0; i < 256; ++i) { many[i] = b; numbers[i] = (int64_t)i; }
+    CHECK(xrt_map_backing_create(fixture.frame, 4, &fixture.types, many, numbers, 256) == XRT_MANAGED_LIMIT);
+    CHECK(borrow(&fixture, 4) == &next->managed); same_bill(fixture.billing, before);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame, 4, fixture.types.string, 42, &pending));
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_CLEAR, NULL, 0};
+    BAD(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, next, &update, &removed));
+    CHECK(borrow(&fixture, 4) == &next->managed);
+    OK(xrt_managed_slot_abort(fixture.frame, 4));
+    atomic_store(&b->managed.references, INT32_MAX);
+    OK(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, next, &update, &removed));
+    atomic_store(&b->managed.references, 2);
+    next = (XrtMapBacking *)borrow(&fixture, 4);
+    CHECK(!next->capacity && !next->length && !removed);
+    map_check(source, keys, 2);
+    fixture_done(&fixture);
+}
+static void map_collisions_and_growth(void) {
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    XrtStringBacking *keys[5]; int64_t values[] = {1, 2, 3, 4, 5};
+    size_t count = 0;
+    for (unsigned candidate = 0; count < 5; ++candidate) {
+        char text[24]; int length = snprintf(text, sizeof(text), "key%u", candidate);
+        CHECK(length > 0 && (size_t)length < sizeof(text));
+        if ((xr_hash_bytes64(text, (size_t)length) & 15) != 15) continue;
+        keys[count] = map_key(&fixture, count, text, (size_t)length); ++count;
+    }
+    OK(xrt_map_backing_create(fixture.frame, 8, &fixture.types, keys, values, 4));
+    XrtMapBacking *map = (XrtMapBacking *)borrow(&fixture, 8);
+    CHECK(map->capacity == 8);
+    XrtMapUpdate update = {XRT_MAP_UPDATE_SET, keys[4], 5};
+    bool applied = false, removed = true;
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(!applied);
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    CHECK(xrt_map_backing_update_create(fixture.frame, 8, &fixture.types, map, &update, &removed) == XRT_MANAGED_OOM);
+    CHECK(borrow(&fixture, 8) == &map->managed && map->length == 4); same_bill(fixture.billing, before);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    OK(xrt_map_backing_update_create(fixture.frame, 8, &fixture.types, map, &update, &removed));
+    map = (XrtMapBacking *)borrow(&fixture, 8);
+    CHECK(map->capacity == 16); map_check(map, keys, 5);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, keys[1], 0};
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(applied && removed);
+    XrtStringBacking *ordered[] = {keys[0], keys[2], keys[3], keys[4]};
+    map_check(map, ordered, 4); map_value(map, keys[1], false, 0);
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_SET, keys[1], -2};
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(applied && !removed);
+    XrtStringBacking *reordered[] = {keys[0], keys[2], keys[3], keys[4], keys[1]};
+    map_check(map, reordered, 5);
+    OK(xrt_backing_slot_copy(fixture.frame, 9, &map->managed));
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_CLEAR, NULL, 0};
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed)); CHECK(!applied);
+    OK(xrt_map_backing_update_create(fixture.frame, 8, &fixture.types, map, &update, &removed));
+    map_check(map, reordered, 5);
+    CHECK(!((XrtMapBacking *)borrow(&fixture, 8))->capacity);
+    fixture_done(&fixture);
+}
+static void map_retirement_and_lifetimes(void) {
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    XrtStringBacking *key = map_key(&fixture, 0, "a\0\303\251", 4);
+    XrtStringBacking *keys[] = {key}; int64_t values[] = {7};
+    OK(xrt_map_backing_create(fixture.frame, 1, &fixture.types, keys, values, 1));
+    XrtMapBacking *map = (XrtMapBacking *)borrow(&fixture, 1);
+    OK(xrt_managed_slot_drop(fixture.frame, 0));
+    fixture.audit.watched_map = map; fixture.audit.watched_key = key; fixture.audit.watched_empty = true;
+    XrtMapUpdate update = {XRT_MAP_UPDATE_REMOVE, key, 0};
+    bool applied = false, removed = false;
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    CHECK(applied && removed && fixture.audit.watched_frees == 1); map_check(map, NULL, 0);
+    fixture.audit.watched_key = NULL;
+    key = map_key(&fixture, 0, "clear", 5); keys[0] = key;
+    OK(xrt_map_backing_create(fixture.frame, 1, &fixture.types, keys, values, 1));
+    map = (XrtMapBacking *)borrow(&fixture, 1);
+    OK(xrt_managed_slot_drop(fixture.frame, 0));
+    fixture.audit.watched_map = map; fixture.audit.watched_key = key;
+    update = (XrtMapUpdate){XRT_MAP_UPDATE_CLEAR, NULL, 0};
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    OK(xrt_map_backing_try_update(map, &update, &applied, &removed));
+    CHECK(applied && !removed && fixture.audit.watched_frees == 2); map_check(map, NULL, 0);
+    fixture.audit.watched_key = NULL;
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    key = map_key(&fixture, 0, "pending", 7);
+    XrtManagedHeader *payload = NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.map, 40 + 8 * 56, &payload));
+    XrtMapBacking *pending = (XrtMapBacking *)payload;
+    CHECK(xrt_managed_retain(&key->managed)); pending->rows[7].key = key;
+    pending->capacity = SIZE_MAX;
+    BAD(xrt_managed_slot_commit(fixture.frame, 1));
+    OK(xrt_managed_slot_abort(fixture.frame, 1));
+    CHECK(xr_signed_rc_read(&key->managed.references) == 1 && borrow(&fixture, 1) == &map->managed);
+    fixture_done(&fixture);
+    Fixture strings, maps;
+    fixture_init(&strings, SIZE_MAX); fixture_init(&maps, SIZE_MAX);
+    key = map_key(&strings, 0, "cross", 5); keys[0] = key;
+    OK(xrt_map_backing_create(maps.frame, 0, &maps.types, keys, values, 1));
+    XrtManagedHeader *owned = NULL;
+    OK(xrt_managed_slot_take(maps.frame, 0, &owned));
+    fixture_retire(&strings); fixture_retire(&maps);
+    CHECK(!atomic_load(&strings.audit.finalized) && !atomic_load(&maps.audit.finalized));
+    map = (XrtMapBacking *)owned; map_value(map, map->rows[0].key, true, 7);
+    xrt_managed_drop(owned);
+    CHECK(atomic_load(&strings.audit.finalized) == 1 && atomic_load(&maps.audit.finalized) == 1);
+    CHECK(!atomic_load(&strings.audit.bytes) && !atomic_load(&maps.audit.bytes));
+}
 int main(void) {
     setup_failures();
     string_values();
@@ -618,6 +875,10 @@ int main(void) {
     sole_child_updates();
     repeat_and_get();
     array_displays();
-    puts("fixed String and four Array backings: construction, updates, reads, repeat, display and retirement passed");
+    map_construction_and_updates();
+    map_cow_and_failures();
+    map_collisions_and_growth();
+    map_retirement_and_lifetimes();
+    puts("fixed String, Array and Map backings: operations, rollback, order and retirement passed");
     return 0;
 }
