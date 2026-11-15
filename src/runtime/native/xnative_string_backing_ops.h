@@ -12,6 +12,7 @@
 #ifndef XNATIVE_STRING_BACKING_OPS_H
 #define XNATIVE_STRING_BACKING_OPS_H
 #include "xnative_string_backing.h"
+#include "xray_native_pod.h"
 
 typedef enum XrtStringTest {
     XRT_STRING_CONTAINS, XRT_STRING_STARTS_WITH, XRT_STRING_ENDS_WITH
@@ -70,4 +71,9 @@ XR_FUNC XrtManagedStatus xrt_string_backing_u64_create(XrtManagedFrame *, size_t
 XR_FUNC XrtManagedStatus xrt_string_backing_f64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint64_t bits);
 XR_FUNC XrtManagedStatus xrt_string_backing_bool_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, bool);
 XR_FUNC XrtManagedStatus xrt_string_backing_rune_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint32_t);
+/* Exact POD bytes are borrowed through the shared primitive/Nullable layout.
+ * Input borrows need no type-pool lookup, retain or floating-point operation.
+ * Complete text occupies one real pending String before atomic publication. */
+XR_FUNC XrtManagedStatus xrt_string_backing_pod_display_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, const XrtPodDisplay *, const void *bytes);
 #endif // XNATIVE_STRING_BACKING_OPS_H
