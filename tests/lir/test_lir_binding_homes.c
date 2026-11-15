@@ -64,7 +64,8 @@ static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
     XrLirValue value={0}; XrLirInstruction instruction={.op=XR_LIR_CALL_INTRINSIC,.type=result,
         .intrinsic=id,.operands=args,.operand_count=count};
     if (result==XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module,block,&instruction));
-    else OK(xr_lir_emit_value(c->module,block,&instruction,&value)); return value;
+    else OK(xr_lir_emit_value(c->module,block,&instruction,&value));
+    return value;
 }
 static XrLirModule *roles_fixture(XrLirType element,bool map) {
     CArrayFixture c={.element=element}; XrLirType optional=0;
@@ -153,7 +154,8 @@ static void home_free(void *memory) {
 }
 static void *home_callocate(size_t count,size_t bytes) {
     CHECK(!bytes || count<=SIZE_MAX/bytes); void *memory=home_allocate(count*bytes);
-    if (memory) memset(memory,0,count*bytes); return memory;
+    if (memory) memset(memory,0,count*bytes);
+    return memory;
 }
 static void *home_resize(void *old,size_t bytes) {
     if (++attempts==fail_at) return NULL;
