@@ -79,12 +79,16 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     c_state_check_access(c, reference, source);
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
-        if (v->result && c->homes && c->homes->values[v->result].owner_count && shape.payload >= XR_LIR_TYPE_COUNT) {
+        if (shape.payload >= XR_LIR_TYPE_COUNT && xr_lir_boxed_type(c->request->module, shape.payload)) {
+            bool owned = c->homes && c->homes->values[v->result].owner_count;
+            /* Frame acquisition can call a provider that changes State. Take
+             * the checked borrow only after that allocation has completed. */
+            if (owned) c_values_ensure(c, source);
             c_text(c, "    { const void *borrowed = NULL;\n    xrt_module_require(xrt_module_borrow(");
             c_value(c, reference); c_text(c, ", &borrowed)"); c_state_require_end(c, source);
-            c_values_replace_begin(c, v->result, source);
-            c_text(c, "borrowed");
-            c_values_replace_end(c, source);
+            if (owned) {
+                c_values_replace_begin(c, v->result, source); c_text(c, "borrowed"); c_values_replace_end(c, source);
+            } else c_format(c, "    memcpy(&v%" PRIu32 ", borrowed, sizeof(v%" PRIu32 "));\n", v->result, v->result);
             c_text(c, "    }\n");
         } else if (c_managed_leaf(shape.payload)) {
             c_values_ensure(c, source);

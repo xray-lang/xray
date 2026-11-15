@@ -1,0 +1,3 @@
+var current = {left:"first",right:"second",score:41}
+fn read()->i64 { return current.score }
+print(read())

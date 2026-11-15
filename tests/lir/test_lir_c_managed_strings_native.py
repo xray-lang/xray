@@ -258,6 +258,12 @@ def main():
     run([args.faults.resolve(), '--managed-state', generated], root)
     assert not compile_run('mixed-state', '#include ' + json.dumps(generated.as_posix()) +
                            '\nint main(void) { return xray_lir_entry() != 3311; }\n').stdout
+    generated = root / 'record-state-first-read-generated.c'
+    first_read = Path(__file__).resolve().parents[1] / 'fixtures/lir_cli/array_lower/record_state_first_read.xr'
+    run([args.driver.resolve(), first_read, generated], root)
+    observer = (programs / 'record-state-first-read.c').read_text(encoding='ascii').replace('GENERATED', generated.name)
+    observed = compile_run('record-state-first-read', observer, private=True)
+    assert (observed.stdout, observed.stderr) == (b'', b'')
     for name, text, expected in [
         ('format', 'print("n=${42}")\n', b'n=42\n'),
         ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n', b'2\n'),
