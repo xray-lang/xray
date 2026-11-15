@@ -14,7 +14,7 @@ struct XrLirOwnershipPlan {
     uint32_t type_count;
 };
 
-static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *);
+static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirCallableFacts **);
 
 static void *lir_plan_allocate(size_t count, size_t size) {
     return size && count && count <= SIZE_MAX / size ? xr_calloc(count, size) : NULL;
@@ -278,7 +278,7 @@ XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *re
     if (d) memset(d,0,sizeof(*d));
     if (!request || !output || *output || !xr_lir_module_is_readable(request->module))
         return lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"invalid ownership plan request");
-    XrLirStatus status = lir_verify(request->module,d);
+    XrLirStatus status = lir_verify(request->module,d,NULL);
     return status == XR_LIR_OK ? xr_lir_internal_ownership_collect(request,output,d) : status;
 }
 

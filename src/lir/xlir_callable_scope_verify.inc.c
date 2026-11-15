@@ -59,9 +59,9 @@ static int lir_scope_binding_compare(const void *left, const void *right) {
     return (a[1] > b[1]) - (a[1] < b[1]);
 }
 static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t function, const LirGraph *graph, XrLirDiagnostic *diagnostic) {
+    uint32_t function, const LirGraph *graph, XrLirDiagnostic *diagnostic, XrLirCallableFacts **facts) {
     uint64_t values = (uint64_t)f->value_count + 1;
-    uint64_t words = 4 * values + (uint64_t)f->block_count * 2;
+    uint64_t words = (facts ? 5 : 4) * values + (uint64_t)f->block_count * 2;
     if (words > SIZE_MAX / sizeof(uint32_t)) return XR_LIR_OUT_OF_MEMORY;
     uint32_t *storage = xr_malloc((size_t)words * sizeof(*storage));
     if (!storage) return XR_LIR_OUT_OF_MEMORY;
@@ -69,6 +69,7 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
     uint32_t *parents = storage, *owners = parents + (size_t)values;
     uint32_t *incoming = owners + (size_t)values, *outgoing = incoming + f->block_count;
     uint32_t *bindings = outgoing + f->block_count;
+    uint32_t *floors = facts ? bindings + (size_t)values * 2 : NULL;
     size_t binding_count = 0;
     parents[0] = 0;
     bool captured_cells = false;
@@ -113,12 +114,13 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
                 bindings[binding_count * 2] = v->operands[0];
                 bindings[binding_count++ * 2 + 1] = (uint32_t)v->bits;
             }
-            if (captured_cells && (v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) && v->result) {
+            if ((v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) && v->result) {
                 XrLirCallableType signature;
                 if (xr_lir_callable_type_view(m, v->type, &signature) == XR_LIR_OK) {
                     uint32_t receiving = v->op == XR_LIR_FUNCTION_BIND ? v->operands[0] : current;
-                    uint32_t floor = lir_scope_frame_floor(m, f, parents, owners, v->operands[1]);
-                    if (!lir_scope_contains(parents, f->value_count, floor, receiving)) goto invalid;
+                    uint32_t floor = captured_cells ? lir_scope_frame_floor(m, f, parents, owners, v->operands[1]) : 0;
+                    if (captured_cells && !lir_scope_contains(parents, f->value_count, floor, receiving)) goto invalid;
+                    if (floors) floors[v->result] = floor;
                 }
             }
             if (v->result && lir_scope_callable(m, v->type))
@@ -159,8 +161,10 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
             }
         }
     }
+    XrLirStatus status = lir_callable_facts_capture(m, f, function,
+        (LirCallableGeometry){parents, owners, floors}, facts);
     xr_free(storage);
-    return XR_LIR_OK;
+    return status;
 invalid:
     xr_free(storage);
     return xr_lir_internal_error(diagnostic, failure, function, bad_block, bad_instruction, NULL);
