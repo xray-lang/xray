@@ -96,6 +96,7 @@ static void scalar_entry_receives_state_descriptions(void) {
     XrRbcFunction functions[2] = {module.functions[0],
         {.code=code,.code_count=2,.register_count=1}};
     module.functions = functions; module.function_count = 2;
+    module.code_lease = (XrRbcCodeLease){0};
     XrtModuleLayoutSpec spec = *module.state_spec;
     XrtValueImage image = *spec.values;
     CHECK(image.type_count && image.type_count <= 64);
