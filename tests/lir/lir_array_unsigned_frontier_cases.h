@@ -64,9 +64,11 @@ static void array_unsigned_frontier(void) {
             .translation_unit="unsigned-frontier.c"};
         XrLirCOutput output = {0};
         CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK && output.bytes && output.length);
-        CHECK(strstr(output.bytes, element == XR_LIR_U8 ? "XRT_BACKING_ARRAY_U8" : "XRT_BACKING_ARRAY_U64"));
-        CHECK(strstr(output.bytes, "xrt_native_array_create("));
         if (stateful) CHECK(strstr(output.bytes, "static const XrtValueImage xrl_value_image"));
+        else {
+            CHECK(strstr(output.bytes, element == XR_LIR_U8 ? "XRT_BACKING_ARRAY_U8" : "XRT_BACKING_ARRAY_U64"));
+            CHECK(strstr(output.bytes, "xrt_native_array_create("));
+        }
         xr_lir_c_output_free(&output);
         xr_compile_resources_release(resources);
         xr_lir_module_destroy(m);

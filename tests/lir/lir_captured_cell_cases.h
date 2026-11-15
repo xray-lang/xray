@@ -49,8 +49,22 @@ static void callable_owned_edge_binding(void) {
     XrLirValue result = ca_value(&c, receiving, XR_LIR_CALL_INDIRECT, XR_LIR_I64, &value, 1);
     (void)callable_fixture_leave(&c, receiving, outer, (XrLirValue){0}, XR_LIR_UNIT);
     ca_return(&c, receiving, result);
+    XrLirFunction entry = {0};
+    spec = (XrLirFunctionSpec){.name="entry", .name_length=5, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &spec, &entry));
+    OK(xr_lir_define_function(c.module, entry));
+    OK(xr_lir_add_block(c.module, entry, NULL, 0, &block));
+    OK(xr_lir_set_entry(c.module, entry, block));
+    XrLirValue argument = {0}, returned = {0};
+    XrLirInstruction boolean = {.op=XR_LIR_CONST, .type=XR_LIR_I1, .bits=1};
+    OK(xr_lir_emit_value(c.module, block, &boolean, &argument));
+    XrLirInstruction invoke = {.op=XR_LIR_CALL, .type=XR_LIR_I64, .callee=root,
+        .operands=&argument, .operand_count=1};
+    OK(xr_lir_emit_value(c.module, block, &invoke, &returned));
+    ca_return(&c, block, returned);
     OK(xr_lir_module_finish(c.module, NULL));
-    callable_execution_unavailable(c.module, root);
+    callable_c_rejected(c.module, root, XR_LIR_C_BAD_ARGUMENT);
+    callable_execution_unavailable(c.module, entry);
     xr_lir_module_destroy(c.module);
 }
 
