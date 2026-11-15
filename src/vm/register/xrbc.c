@@ -180,8 +180,8 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
          function->register_kind_count != 0) ||
         (function->cell_kinds ? function->cell_kind_count != function->cell_count :
          function->cell_kind_count != 0) ||
-        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
-         !rbc_managed_kind(function->result_kind))) return false;
+        (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION &&
+         function->result_kind != XR_RBC_STRING))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i) {
         XrRbcRegisterKind kind = function->register_kinds[i];
         if (kind == XR_RBC_BOXED || kind == XR_RBC_CAPTURED_CELL || kind == XR_RBC_CAPTURED_CELL_BORROW ||
