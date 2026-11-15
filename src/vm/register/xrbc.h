@@ -21,8 +21,7 @@
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_callable.h"
-#include "xray_native_array.h"
-#include "xray_native_map.h"
+typedef struct XrtArray XrtArray;
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -340,9 +339,9 @@ typedef struct {
     // Immutable bytes share the same borrowed lifetime as code/descriptors.
     const XrRbcLiteral *literals;
     size_t literal_count;
-    // One immutable owned layout supplies this module's capability identity.
-    // Preparation retains it separately from code. Each execution owns a distinct state.
-    XrtModuleLayout *state_layout;
+    // Raw physical descriptions share the code lifetime. Preparation receives
+    // independent billed plans and storage; code never owns a runtime Layout.
+    const XrtModuleLayoutSpec *state_spec;
     uint32_t state_entry;
     // Physical aggregate shapes have module-local ordinals. Programs own this
     // projection; externally supplied modules borrow it with their code.
@@ -351,7 +350,7 @@ typedef struct {
     const XrRbcCallableType *callable_types;
     size_t callable_type_count;
     // An authentic code owner extends code bytes and immutable descriptors,
-    // excluding state_layout. An empty lease preserves borrowed code-buffer lifetimes.
+    // including raw state_spec. An empty lease preserves borrowed code-buffer lifetimes.
     XrRbcCodeLease code_lease;
     // Owned closures use a canonical receiving pool and dense authenticated
     // target directory. Every target is an actual function in this module.

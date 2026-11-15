@@ -10,10 +10,11 @@
 #define XR_POD_STATE_H
 #include "xray_native_pod.h"
 #include "xray_native_state.h"
-static inline XrtModuleTypeKind xr_pod_module_kind(XrPodScalar scalar) {
-    static const XrtModuleTypeKind kinds[] = {XRT_MODULE_UNIT, XRT_MODULE_BOOL,
-        XRT_MODULE_I8, XRT_MODULE_I16, XRT_MODULE_I32, XRT_MODULE_I64,
-        XRT_MODULE_U8, XRT_MODULE_U16, XRT_MODULE_U32, XRT_MODULE_U64, XRT_MODULE_F32, XRT_MODULE_F64};
-    return (uint32_t)scalar < XR_POD_SCALAR_COUNT ? kinds[scalar] : XRT_MODULE_TYPE_INVALID;
+static inline bool xr_pod_value_kind(XrPodScalar scalar, XrtValueKind *output) {
+    static const XrtValueKind kinds[] = {XRT_VALUE_UNIT, XRT_VALUE_BOOL,
+        XRT_VALUE_I8, XRT_VALUE_I16, XRT_VALUE_I32, XRT_VALUE_I64,
+        XRT_VALUE_U8, XRT_VALUE_U16, XRT_VALUE_U32, XRT_VALUE_U64, XRT_VALUE_F32, XRT_VALUE_F64};
+    if (!output || (uint32_t)scalar >= XR_POD_SCALAR_COUNT) return false;
+    *output = kinds[scalar]; return true;
 }
 #endif // XR_POD_STATE_H

@@ -1,4 +1,3 @@
-#include "lir/xlir_state_projection.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -26,19 +25,24 @@
 #include "lir/xlir_native_callable.h"
 #include "lir/xlir_value_layout.h"
 #include "xrbc_value_homes.h"
+#include "lir/xlir_state_projection.h"
+#include "lir/xlir_value_image.h"
+#include "lir/xlir_internal.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdatomic.h>
 
-/* Code leases retain this leaf, never the Program shell or a runtime Layout.
- * The module copy owns code assets and keeps state_layout permanently NULL. */
+/* Code leases retain only executable assets and raw descriptions. No runtime
+ * plan, Ops, Layout or State points back through this code owner. */
 typedef struct XrRbcCodeImage {
     _Atomic(uint32_t) references;
     XrRbcModule module;
     XrtLocationOwner *locations;
     XrLirValueHomes **value_homes;
+    XrLirValueImage *value_image;
+    XrLirStateProjection *state_projection;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
 } XrRbcCodeImage;
 
@@ -53,6 +57,8 @@ struct XrRbcProgram {
     XrRbcCodeImage *image;
     uint32_t *closure_mapping;
     XrLirValueHomes **value_homes;
+    XrLirValueImage *value_image;
+    XrLirStateProjection *state_projection;
 };
 
 static bool rbc_code_retain(void *owner) {
@@ -76,6 +82,14 @@ XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *modu
         return NULL;
     return image->value_homes ? image->value_homes[function] : NULL;
 }
+XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module) {
+    if (!module || module->code_lease.retain != rbc_code_retain || module->code_lease.release != rbc_code_release ||
+        !module->code_lease.owner) return NULL;
+    const XrRbcCodeImage *image = module->code_lease.owner;
+    if (module->functions != image->module.functions || module->function_count != image->module.function_count)
+        return NULL;
+    return image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
+}
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
@@ -92,6 +106,7 @@ typedef struct {
 
 typedef struct {
     XrRbcProgram *program;
+    const XrLirValueLayouts *layouts;
     uint32_t *mapping;
     size_t capacity;
 } RbcLirLiteralPool;
@@ -1692,7 +1707,8 @@ static void rbc_code_release(void *owner) {
     uint32_t count = atomic_fetch_sub_explicit(&image->references, 1, memory_order_acq_rel);
     XR_CHECK(count, "a code image retires only after its final actual lease");
     if (count != 1) return;
-    XR_CHECK(!image->module.state_layout, "code assets never retain a runtime layout");
+    xr_lir_state_projection_destroy(image->state_projection);
+    xr_lir_value_image_destroy(image->value_image);
     rbc_value_homes_clear(image->value_homes, image->module.function_count);
     rbc_code_clear(image->module, image->locations);
     xr_free(image);
@@ -1702,10 +1718,13 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
     if (!image) return false;
     atomic_init(&image->references, 1);
     image->module = program->module;
-    image->module.state_layout = NULL;
     image->locations = program->locations;
     image->value_homes = program->value_homes;
     program->value_homes = NULL;
+    image->value_image = program->value_image;
+    program->value_image = NULL;
+    image->state_projection = program->state_projection;
+    program->state_projection = NULL;
     if (image->module.native_count) {
         memcpy(image->natives, program->module.natives, image->module.native_count * sizeof(*image->natives));
         image->module.natives = image->natives;
@@ -1718,9 +1737,10 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
 }
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     if (!program) return;
-    xrt_module_layout_drop(&program->module.state_layout);
     if (program->image) rbc_code_release(program->image);
     else {
+        xr_lir_state_projection_destroy(program->state_projection);
+        xr_lir_value_image_destroy(program->value_image);
         rbc_value_homes_clear(program->value_homes, program->module.function_count);
         rbc_code_clear(program->module, program->locations);
     }
@@ -1789,10 +1809,10 @@ done:
 }
 
 static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t *ids,
-    const uint32_t *mapping, XrRbcProgram *p, XrRbcCompileDiagnostic *d) {
+    const uint32_t *mapping, XrRbcProgram *p, const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *d) {
     uint32_t source_id = 0;
     size_t literals = xr_lir_literal_count(input);
-    RbcLirLiteralPool pool = {.program = p};
+    RbcLirLiteralPool pool = {.program = p, .layouts=layouts};
     if (literals > SIZE_MAX / sizeof(*pool.mapping))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "literal mapping exceeds address space",
             (XrLirSource) {0});
@@ -1837,7 +1857,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             return c.status;
         }
         if (!f) {
-            p->parameter_count = c.view.parameter_count - (p->module.state_layout ? 1u : 0u);
+            p->parameter_count = c.view.parameter_count - (p->module.state_spec ? 1u : 0u);
             if (p->parameter_count)
                 memcpy(p->parameters, c.view.parameter_types,
                     p->parameter_count * sizeof(*p->parameters));
@@ -1902,12 +1922,12 @@ static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
 }
 
 #include "xrbc_lir_callable_types.inc.c"
-#include "xrbc_lir_owned_callable.inc.c"
 
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
     XrRbcCompileDiagnostic local = {0};
     XrRbcCompileDiagnostic *d = diagnostic ? diagnostic : &local;
+    RbcValuePreparation preparation = {0};
     *d = (XrRbcCompileDiagnostic) {0};
     XrLirFunctionView root;
     if (!output || *output || entry.module != input ||
@@ -1951,31 +1971,40 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     uint32_t count = 1;
     ids[0] = entry.id;
     mapping[entry.id - 1] = 1;
+    status = rbc_lir_prepare_values(input, entry, p, &preparation, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_aggregate_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_callable_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
-    status = rbc_lir_state_layout(input, entry, p, d);
-    if (status != XR_RBC_COMPILE_OK) goto done;
     if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
-        !p->module.state_layout) {
+        !p->module.state_spec) {
         status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "only the designated entry receives module state", (XrLirSource){0});
         goto done;
     }
     bool owned_closures = false;
-    XrLirStateLayout state_layout = {0};
-    if (xr_lir_state_layout_view(input, &state_layout) == XR_LIR_OK)
-        owned_closures = lir_state_has_callables(input, &state_layout);
     if (!rbc_lir_closure(input, ids, mapping, &count, &owned_closures, d)) {
         status = d->status;
         goto done;
     }
     bool boxed = false;
-    for (uint32_t t = 0; t < xr_lir_constructed_type_count(input); ++t) boxed |= xr_lir_boxed_type(input, XR_LIR_TYPE_COUNT + t);
+    for (uint32_t f = 0; f < count; ++f) {
+        XrLirFunction function = {input,ids[f]}; XrLirFunctionView view;
+        xr_lir_function_view(input,function,&view);
+        boxed |= xr_lir_boxed_type(input,view.result) || rbc_lir_callable_type(input,view.result);
+        for (uint32_t parameter = 0; parameter < view.parameter_count; ++parameter)
+            boxed |= xr_lir_boxed_type(input,view.parameter_types[parameter]) ||
+                rbc_lir_callable_type(input,view.parameter_types[parameter]);
+        for (uint32_t v = 1; v <= view.value_count; ++v) {
+            XrLirType type; xr_lir_value_type(input,(XrLirValue){input,function.id,v},&type);
+            boxed |= xr_lir_boxed_type(input,type) || rbc_lir_callable_type(input,type);
+        }
+    }
     if (owned_closures || boxed) {
-        status = rbc_lir_owned_callable(input, ids, count, p, d, owned_closures);
-        if (status != XR_RBC_COMPILE_OK) goto done;
+        status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "fixed callable and boxed execution plans are not available", (XrLirSource){0});
+        goto done;
     }
     status = rbc_lir_callable_parameters(input, ids, count, p);
     if (status != XR_RBC_COMPILE_OK) goto done;
@@ -2008,8 +2037,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     }
     p->module.functions = functions;
     p->module.function_count = count;
-    status = rbc_lir_build(input, ids, mapping, p, d);
-    if (status == XR_RBC_COMPILE_OK) status = rbc_lir_value_homes(input, ids, p, d);
+    status = rbc_lir_build(input, ids, mapping, p, preparation.layouts, d);
+    if (status == XR_RBC_COMPILE_OK) status = rbc_lir_value_homes(input, ids, p, &preparation, d);
     if (status == XR_RBC_COMPILE_OK) {
         if (!rbc_lir_seal(p)) {
             status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
@@ -2029,6 +2058,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         *d = (XrRbcCompileDiagnostic) {0};
     }
 done:
+    rbc_value_preparation_clear(&preparation);
     xr_rbc_program_destroy(p);
     xr_free(mapping);
     xr_free(ids);

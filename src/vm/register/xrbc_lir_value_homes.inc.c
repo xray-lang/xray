@@ -4,55 +4,90 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrbc_lir_value_homes.inc.c - Consume sealed layouts and verified owner events
+ * xrbc_lir_value_homes.inc.c - One cold receiving preparation for immutable LIR
  */
-typedef struct RbcHomeVector { void *data; size_t count, capacity, stride; } RbcHomeVector;
-static bool rbc_home_root_append(RbcLirCompiler *c, RbcHomeVector *roots, XrLirValueLayoutKey key) {
-    if (roots->count == SIZE_MAX) return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "value root vector count overflows");
-    if (!rbc_lir_grow(c, &roots->data, &roots->capacity, roots->count + 1, sizeof(key))) return false;
-    ((XrLirValueLayoutKey *)roots->data)[roots->count++] = key;
-    return true;
-}
+typedef struct RbcHomeVector { void *data; size_t count, capacity; } RbcHomeVector;
+typedef struct RbcValuePreparation {
+    XrtBillingOwner *billing;
+    XrLirValueLayouts *layouts;
+    XrLirOwnershipPlan *ownership;
+} RbcValuePreparation;
 static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     uint32_t value, XrLirType type, XrLirValueLayoutKey *key) {
     bool plain = type >= XR_LIR_UNIT && type <= XR_LIR_F64;
     if (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape;
-        if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return false;
+        if (xr_lir_type_view(module,type,&shape) != XR_LIR_OK) return false;
         plain = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
-    *key = (XrLirValueLayoutKey){type, 0};
+    *key = (XrLirValueLayoutKey){type,0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         XrLirStatus status = value ? xr_lir_array_shape_view(module,
-            (XrLirValue){module, function.id, value}, &shape) : xr_lir_array_result_view(module, function, &shape);
+            (XrLirValue){module,function.id,value},&shape) : xr_lir_array_result_view(module,function,&shape);
         if (status != XR_LIR_OK) return false;
         key->array_element = shape.element;
     }
     return true;
 }
-static bool rbc_home_roots(RbcLirCompiler *c, RbcHomeVector *roots, bool *needed) {
-    const XrLirModule *input = c->input;
+static bool rbc_home_needed(const XrLirModule *input) {
     for (uint32_t f = 0; f < xr_lir_function_count(input); ++f) {
         XrLirFunction function; XrLirFunctionView view;
-        if (xr_lir_function_at(input, f, &function) != XR_LIR_OK || xr_lir_function_view(input, function, &view) != XR_LIR_OK)
-            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "value root function is unreadable");
+        xr_lir_function_at(input,f,&function); xr_lir_function_view(input,function,&view);
         for (size_t index = 0; index <= view.value_count; ++index) {
-            uint32_t v = (uint32_t)index;
             XrLirType type = view.result; XrLirValueLayoutKey key;
-            if (v && xr_lir_value_type(input, (XrLirValue){input, function.id, v}, &type) != XR_LIR_OK)
-                return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "value root is unreadable");
-            if (!rbc_home_key(input, function, v, type, &key)) continue;
-            *needed |= type > XR_LIR_F64;
-            const XrLirValueLayoutKey *keys = roots->data;
-            size_t i = 0;
-            while (i < roots->count && (keys[i].type != key.type || keys[i].array_element != key.array_element)) ++i;
-            if (i == roots->count && !rbc_home_root_append(c, roots, key)) return false;
+            if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
+            if (type > XR_LIR_F64 && rbc_home_key(input,function,(uint32_t)index,type,&key)) return true;
         }
     }
+    return false;
+}
+static bool rbc_home_root_append(RbcLirCompiler *c, RbcHomeVector *roots, uint8_t *seen,
+    size_t array_base, XrLirValueLayoutKey key) {
+    size_t index = key.type;
+    if (key.type == XR_LIR_ARRAY) {
+        uint32_t family = rbc_lir_array_family(key.array_element);
+        if (family >= XR_RBC_ARRAY_FAMILY_COUNT)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"value root Array element is unavailable");
+        index = array_base + family;
+    }
+    if (seen[index]) return true;
+    if (roots->count == SIZE_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"value root count overflows");
+    if (!rbc_lir_grow(c,&roots->data,&roots->capacity,roots->count + 1,sizeof(key))) return false;
+    ((XrLirValueLayoutKey *)roots->data)[roots->count++] = key;
+    seen[index] = 1;
     return true;
+}
+static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, RbcHomeVector *roots) {
+    const XrLirModule *input = c->input;
+    size_t base = (size_t)XR_LIR_TYPE_COUNT + xr_lir_constructed_type_count(input);
+    if (base > SIZE_MAX - XR_RBC_ARRAY_FAMILY_COUNT)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"value root bitmap overflows");
+    uint8_t *seen = xr_calloc(base + XR_RBC_ARRAY_FAMILY_COUNT,1);
+    if (!seen) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own value root bitmap");
+    bool valid = true;
+    for (uint32_t f = 0; valid && f < xr_lir_function_count(input); ++f) {
+        XrLirFunction function; XrLirFunctionView view;
+        xr_lir_function_at(input,f,&function); xr_lir_function_view(input,function,&view);
+        for (size_t index = 0; valid && index <= view.value_count; ++index) {
+            XrLirType type = view.result; XrLirValueLayoutKey key;
+            if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
+            if (rbc_home_key(input,function,(uint32_t)index,type,&key)) valid = rbc_home_root_append(c,roots,seen,base,key);
+        }
+    }
+    for (uint32_t i = 0; valid && state && i < state->slot_count; ++i) {
+        const XrLirStateSlot *slot = &state->slots[i];
+        XrLirValueLayoutKey key;
+        if (slot->payload == XR_LIR_ARRAY) key = (XrLirValueLayoutKey){XR_LIR_ARRAY,slot->array_element};
+        else if (!rbc_home_key(input,(XrLirFunction){0},0,slot->payload,&key)) {
+            valid = rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"State payload has no fixed value plan"); break;
+        }
+        valid = rbc_home_root_append(c,roots,seen,base,key);
+    }
+    xr_free(seen);
+    return valid;
 }
 static XrRbcCompileStatus rbc_home_layout_status(XrLirValueLayoutStatus status) {
     switch (status) {
@@ -63,51 +98,65 @@ static XrRbcCompileStatus rbc_home_layout_status(XrLirValueLayoutStatus status) 
     default: return XR_RBC_COMPILE_INVALID;
     }
 }
-static XrRbcCompileStatus rbc_lir_value_homes(const XrLirModule *input, const uint32_t *ids,
-    XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
-    bool typed = false;
-    for (size_t f = 0; f < program->module.function_count; ++f) {
-        const XrRbcFunction *function = &program->module.functions[f];
-        typed |= function->register_kinds != NULL || function->aggregate_value_count != 0 || function->result_kind != XR_RBC_BITS;
-    }
-    if (!typed) return XR_RBC_COMPILE_OK;
-    RbcLirCompiler c = {.input=input, .diagnostic=diagnostic};
-    RbcHomeVector roots = {.stride=sizeof(XrLirValueLayoutKey)};
-    XrtBillingOwner *billing = NULL; XrLirValueLayouts *layouts = NULL; XrLirOwnershipPlan *ownership = NULL;
-    bool needed = false;
-    if (!rbc_home_roots(&c, &roots, &needed)) { xr_free(roots.data); return c.status; }
-    if (!needed) { xr_free(roots.data); return XR_RBC_COMPILE_OK; }
-    XrtManagedStatus memory = xrt_billing_owner_new(NULL, SIZE_MAX, &billing);
+static void rbc_value_preparation_clear(RbcValuePreparation *preparation) {
+    xr_lir_ownership_plan_destroy(preparation->ownership);
+    xr_lir_value_layouts_destroy(preparation->layouts);
+    xrt_billing_owner_drop(preparation->billing);
+    *preparation = (RbcValuePreparation){0};
+}
+static XrRbcCompileStatus rbc_lir_prepare_values(const XrLirModule *input, XrLirFunction entry,
+    XrRbcProgram *program, RbcValuePreparation *preparation, XrRbcCompileDiagnostic *diagnostic) {
+    XrLirFunction state_entry = {0}; XrLirStateLayout state = {0};
+    xr_lir_state_entry(input,&state_entry); xr_lir_state_layout_view(input,&state);
+    bool receive_state = state_entry.id == entry.id && state.module_count;
+    if (!receive_state && !rbc_home_needed(input)) return XR_RBC_COMPILE_OK;
+    RbcLirCompiler c = {.input=input,.diagnostic=diagnostic}; RbcHomeVector roots = {0};
+    if (!rbc_home_roots(&c,receive_state ? &state : NULL,&roots)) { xr_free(roots.data); return c.status; }
+    XrtManagedStatus memory = xrt_billing_owner_new(NULL,SIZE_MAX,&preparation->billing);
     XrRbcCompileStatus status = memory == XRT_MANAGED_OK ? XR_RBC_COMPILE_OK :
         memory == XRT_MANAGED_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_LIMIT;
     if (status == XR_RBC_COMPILE_OK)
-        status = rbc_home_layout_status(xr_lir_value_layouts_create(input, roots.data, roots.count, billing, &layouts));
+        status = rbc_home_layout_status(xr_lir_value_layouts_create(input,roots.data,roots.count,
+            preparation->billing,&preparation->layouts));
+    xr_free(roots.data);
     if (status == XR_RBC_COMPILE_OK) {
         const XrLirOwnershipTypeFact *types = NULL; uint32_t count = 0;
-        if (xr_lir_value_layouts_ownership(layouts, &types, &count) != XR_LIR_VALUE_LAYOUT_OK) status = XR_RBC_COMPILE_INVALID;
-        else {
-            XrLirDiagnostic invalid = {0};
-            XrLirStatus verified = xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){input, types, count}, &ownership, &invalid);
-            if (verified != XR_LIR_OK) {
-                status = verified == XR_LIR_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID;
-                diagnostic->function = invalid.function; diagnostic->block = invalid.block; diagnostic->instruction = invalid.instruction;
-                rbc_lir_error(diagnostic, status, invalid.message, invalid.source);
-            } else {
-                program->value_homes = xr_calloc(program->module.function_count, sizeof(*program->value_homes));
-                if (!program->value_homes) status = XR_RBC_COMPILE_OUT_OF_MEMORY;
-                for (size_t f = 0; f < program->module.function_count && status == XR_RBC_COMPILE_OK; ++f) {
-                    XrLirValueHomes *homes = NULL;
-                    XrLirValueHomesRequest request = {input, {input, ids[f]}, layouts, ownership};
-                    status = rbc_home_layout_status(xr_lir_value_homes_create(&request, &homes));
-                    if (status == XR_RBC_COMPILE_OK) program->value_homes[f] = homes;
-                    else diagnostic->function = ids[f];
-                }
-            }
+        xr_lir_value_layouts_ownership(preparation->layouts,&types,&count);
+        XrLirDiagnostic invalid = {0};
+        /* Public finish fully verified this exact immutable module. The original
+         * paranoid entry check has also finished before any preparation starts. */
+        XrLirStatus collected = xr_lir_internal_ownership_collect(&(XrLirOwnershipRequest){input,types,count},
+            &preparation->ownership,&invalid);
+        if (collected != XR_LIR_OK) {
+            status = collected == XR_LIR_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID;
+            diagnostic->function = invalid.function; diagnostic->block = invalid.block;
+            diagnostic->instruction = invalid.instruction;
+            return rbc_lir_error(diagnostic,status,invalid.message,invalid.source);
+        }
+        status = rbc_home_layout_status(xr_lir_value_image_create(preparation->layouts,
+            preparation->billing,&program->value_image));
+    }
+    if (status == XR_RBC_COMPILE_OK && receive_state) {
+        status = rbc_home_layout_status(xr_lir_state_projection_create(input,preparation->layouts,
+            xr_lir_value_image_view(program->value_image),preparation->billing,&program->state_projection));
+        if (status == XR_RBC_COMPILE_OK) program->module.state_spec = xr_lir_state_projection_view(program->state_projection);
+    }
+    return status == XR_RBC_COMPILE_OK ? status :
+        rbc_lir_error(diagnostic,status,"cannot prepare fixed physical values",(XrLirSource){0});
+}
+static XrRbcCompileStatus rbc_lir_value_homes(const XrLirModule *input, const uint32_t *ids,
+    XrRbcProgram *program, const RbcValuePreparation *preparation, XrRbcCompileDiagnostic *diagnostic) {
+    if (!preparation->layouts) return XR_RBC_COMPILE_OK;
+    program->value_homes = xr_calloc(program->module.function_count,sizeof(*program->value_homes));
+    if (!program->value_homes) return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,
+        "cannot own activation homes",(XrLirSource){0});
+    for (size_t f = 0; f < program->module.function_count; ++f) {
+        XrLirValueHomesRequest request = {input,{input,ids[f]},preparation->layouts,preparation->ownership};
+        XrRbcCompileStatus status = rbc_home_layout_status(xr_lir_value_homes_create(&request,&program->value_homes[f]));
+        if (status != XR_RBC_COMPILE_OK) {
+            diagnostic->function = ids[f];
+            return rbc_lir_error(diagnostic,status,"cannot project activation homes",(XrLirSource){0});
         }
     }
-    if (status != XR_RBC_COMPILE_OK && diagnostic->status == XR_RBC_COMPILE_OK)
-        rbc_lir_error(diagnostic, status, "cannot project receiving value homes", (XrLirSource){0});
-    xr_lir_ownership_plan_destroy(ownership); xr_lir_value_layouts_destroy(layouts);
-    xrt_billing_owner_drop(billing); xr_free(roots.data);
-    return status;
+    return XR_RBC_COMPILE_OK;
 }

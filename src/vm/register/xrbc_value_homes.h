@@ -30,6 +30,9 @@ typedef struct XrRbcHomeLocation {
  * scalar-only functions have no descriptor. Cold homes stay outside the hot
  * function table so adding physical metadata cannot change interpreter stride. */
 XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *, uint32_t function);
+/* The same real code lease protects this raw metadata borrow. Scalar-only and
+ * foreign borrowed modules have no compiler-owned image. */
+XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *);
 /* A scalar-only or entirely borrowed activation creates no frame and performs
  * no payload initialization. Formal parameters borrow their caller's normalized
  * stable places; they never acquire references merely to enter a function. */
