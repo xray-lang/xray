@@ -457,7 +457,7 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
 #include "xrbc_dispatch.inc.c"
 }
 
-static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution) {
+static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution, bool instantiate) {
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus status = xrt_native_values_prepare(&execution->values, &billing);
     const XrRbcModule *module = execution->module;
@@ -465,9 +465,9 @@ static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution) {
     if (status == XRT_MANAGED_OK)
         status = xrt_module_layout_new(billing, module->state_spec,
             (XrtManagedLease){code.owner, code.retain, code.release}, &execution->layout);
-    if (status == XRT_MANAGED_OK)
+    if (status == XRT_MANAGED_OK && instantiate)
         status = xrt_module_state_new(execution->layout, billing, &execution->state);
-    if (status == XRT_MANAGED_OK)
+    if (status == XRT_MANAGED_OK && instantiate)
         status = xr_rbc_state_caches(execution->layout, execution->state,
             &execution->stack.module_accesses);
     return status == XRT_MANAGED_OK ? XR_RBC_OK :
@@ -547,8 +547,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
         execution->pending->aggregate_type_count = module->aggregate_type_count;
         execution->stack.aggregate_result = execution->pending->aggregate_bytes;
     }
-    if (inject_state) {
-        XrRbcStatus status = xr_rbc_prepare_state(execution);
+    if (module->state_spec) {
+        XrRbcStatus status = xr_rbc_prepare_state(execution, inject_state);
         if (status != XR_RBC_OK) {
             xr_rbc_execution_free(&execution);
             return status;

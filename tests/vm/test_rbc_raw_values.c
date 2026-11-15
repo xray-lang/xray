@@ -85,6 +85,38 @@ static void state_code_retirement(void) {
     xrt_module_layout_drop(&layout); CHECK(xrt_billing_owner_stats(billing).blocks == 1);
     xrt_billing_owner_drop(billing);
 }
+static void scalar_entry_receives_state_descriptions(void) {
+    XrLirFunction root; XrLirModule *input = state_fixture(&root); XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(input,root,&program,NULL) == XR_RBC_COMPILE_OK);
+    XrRbcModule module = *xr_rbc_program_view(program);
+    CHECK(module.function_count == 1 && module.state_spec && module.state_spec->slot_count == 1);
+    uint32_t code[2] = {0};
+    CHECK(xr_rbc_encode(&code[0],(XrRbcOperands){.op=XR_RBC_LOADI,.immediate=42}));
+    CHECK(xr_rbc_encode(&code[1],(XrRbcOperands){.op=XR_RBC_RET}));
+    XrRbcFunction functions[2] = {module.functions[0],
+        {.code=code,.code_count=2,.register_count=1}};
+    module.functions = functions; module.function_count = 2;
+    XrtModuleLayoutSpec spec = *module.state_spec;
+    XrtValueImage image = *spec.values;
+    CHECK(image.type_count && image.type_count <= 64);
+    XrtValueImageType types[64]; memcpy(types,image.types,image.type_count * sizeof(*types));
+    XrtModuleSlotSpec slot = spec.slots[0];
+    CHECK(slot.type && slot.type <= image.type_count && types[slot.type - 1].kind == XRT_VALUE_I64);
+    /* Bounded raw spans cannot establish the primitive's natural layout. The
+     * actual receiving boundary must still run for a non-State entry. */
+    types[slot.type - 1].size = types[slot.type - 1].alignment = 1;
+    slot.offset = 0; slot.size = slot.alignment = 1;
+    image.types = types; spec.values = &image; spec.slots = &slot;
+    spec.payload_size = spec.payload_alignment = 1; module.state_spec = &spec;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module,1,NULL,0,xr_rbc_program_locations(program),&execution) != XR_RBC_OK && !execution);
+    module.state_spec = xr_rbc_program_view(program)->state_spec;
+    CHECK(xr_rbc_module_prepare(&module,1,NULL,0,xr_rbc_program_locations(program),&execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution); uint64_t result = 0;
+    CHECK(outcome && xr_rbc_outcome_bits(outcome,&result) && result == 42);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    xr_rbc_program_destroy(program); xr_lir_module_destroy(input);
+}
 static void scalar_and_mapping(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL,&module));
     XrLirFunction root = test_function(module,"scalar",NULL,0,XR_LIR_I64);
@@ -122,6 +154,6 @@ static void unsupported_targets(void) {
     xr_lir_module_destroy(module);
 }
 int main(void) {
-    scalar_and_mapping(); unsupported_targets(); state_code_retirement();
+    scalar_and_mapping(); unsupported_targets(); state_code_retirement(); scalar_entry_receives_state_descriptions();
     puts("raw CodeImage State metadata and independent prepare passed"); return 0;
 }
