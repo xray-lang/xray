@@ -1,17 +1,24 @@
 // 1234_generic_type_alias.xr
 // Test: generic type aliases are syntax-level substitutions.
 
-type Pair<T> = { first: T, second: T }
+struct PairValue<T> {
+    first: T
+    second: T
+}
+type Pair<T> = PairValue<T>
+type Box<T> = BoxValue<T>
 type Mapper<T, U> = fn(T) -> U
 type Vec<T> = Array<T>
 type Maybe<T> = T?
 type Forward<T> = Box<T>
-type Box<T> = { value: T }
+struct BoxValue<T> {
+    value: T
+}
 
 @test
 fn test_object_alias() {
-    var ints: Pair<i64> = { first: 2, second: 5 }
-    var names: Pair<string> = { first: "x", second: "ray" }
+    var ints: Pair<i64> = PairValue<i64>{ first: 2, second: 5 }
+    var names: Pair<string> = PairValue<string>{ first: "x", second: "ray" }
     assertEqual(ints.first + ints.second, 7)
     assertEqual(names.first + names.second, "xray")
 }
@@ -36,6 +43,6 @@ fn test_container_and_optional_alias() {
 
 @test
 fn test_forward_generic_alias() {
-    var box: Forward<i64> = { value: 42 }
+    var box: Forward<i64> = BoxValue<i64>{ value: 42 }
     assertEqual(box.value, 42)
 }

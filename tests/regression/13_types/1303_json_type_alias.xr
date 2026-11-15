@@ -4,31 +4,89 @@
 
 // ===== 严格类型别名（不允许扩展）=====
 
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct Point2 {
+    x: i64
+    y: i64
+}
+
+struct Config {
+    port: i64
+    host: string
+}
+
+struct Server {
+    id: i64
+}
+
+struct User1 {
+    const id: i64
+    name: string
+}
+
+struct Profile1 {
+    name: string
+    email: string?
+}
+
+struct Address {
+    city: string
+    zip: string
+}
+
+struct Person {
+    name: string
+    addr: Address
+}
+
+struct Metrics {
+    cpu: f64
+    mem: f64
+}
+
+struct ExtendedConfig {
+    port: i64
+    host: string
+    timeout: i64
+    debug: bool
+}
+
+struct ExtendedServer {
+    id: i64
+    name: string
+    status: string
+    metrics: Metrics
+}
+
 @test
 fn test_strict_type_alias() {
-    type Point = { x: i64, y: i64 }
-    var p: Point = { x: 10, y: 20 }
+
+    var p: Point = Point{ x: 10, y: 20 }
     assertEqual(p.x, 10)
     assertEqual(p.y, 20)
 }
 
 @test
 fn test_strict_type_modify_existing() {
-    type Point2 = { x: i64, y: i64 }
-    var p: Point2 = { x: 1, y: 2 }
+
+    var p: Point2 = Point2{ x: 1, y: 2 }
     p.x = 100      // 修改已有字段，允许
     p.y = 200
     assertEqual(p.x, 100)
     assertEqual(p.y, 200)
 }
 
-// ===== spread 构造新的精确 shape =====
+// ===== spread 构造显式目标 struct =====
 
 @test
 fn test_spread_adds_static_fields() {
-    type Config = { port: i64, host: string }
-    var cfg: Config = { port: 8080, host: "localhost" }
-    var extended = { ...cfg, timeout: 30, debug: true }
+
+    var cfg: Config = Config{ port: 8080, host: "localhost" }
+    var extended = ExtendedConfig{ ...cfg, timeout: 30, debug: true }
     assertEqual(extended.port, 8080)
     assertEqual(extended.host, "localhost")
     assertEqual(extended.timeout, 30)
@@ -37,13 +95,13 @@ fn test_spread_adds_static_fields() {
 
 @test
 fn test_spread_adds_nested_static_field() {
-    type Server = { id: i64 }
-    var s: Server = { id: 1 }
-    var extended = {
+
+    var s: Server = Server{ id: 1 }
+    var extended = ExtendedServer{
         ...s,
         name: "main",
         status: "running",
-        metrics: { cpu: 0.5, mem: 0.8 }
+        metrics: Metrics{ cpu: 0.5, mem: 0.8 }
     }
     assertEqual(extended.id, 1)
     assertEqual(extended.name, "main")
@@ -55,8 +113,8 @@ fn test_spread_adds_nested_static_field() {
 
 @test
 fn test_readonly_field() {
-    type User1 = { const id: i64, name: string }
-    var u: User1 = { id: 1, name: "Alice" }
+
+    var u: User1 = User1{ id: 1, name: "Alice" }
     u.name = "Bob"       // 可修改普通字段
     assertEqual(u.id, 1)
     assertEqual(u.name, "Bob")
@@ -66,11 +124,11 @@ fn test_readonly_field() {
 
 @test
 fn test_optional_field() {
-    type Profile1 = { name: string, email: string? }
-    var p1: Profile1 = { name: "Alice" }
+
+    var p1: Profile1 = Profile1{ name: "Alice" }
     assertEqual(p1.name, "Alice")
     
-    var p2: Profile1 = { name: "Bob", email: "bob@test.com" }
+    var p2: Profile1 = Profile1{ name: "Bob", email: "bob@test.com" }
     assertEqual(p2.email, "bob@test.com")
 }
 
@@ -78,12 +136,12 @@ fn test_optional_field() {
 
 @test
 fn test_nested_type_alias() {
-    type Address = { city: string, zip: string }
-    type Person = { name: string, addr: Address }
+
+
     
-    var p: Person = {
+    var p: Person = Person{
         name: "Charlie",
-        addr: { city: "Beijing", zip: "100000" }
+        addr: Address{ city: "Beijing", zip: "100000" }
     }
     assertEqual(p.name, "Charlie")
     assertEqual(p.addr.city, "Beijing")

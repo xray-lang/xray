@@ -16,9 +16,9 @@ class Token implements Hashable {
 
 fn run(n: i64) -> i64 {
     var token = Token(7)
-    var values: Map<Token, i64> = #{}
+    var values: Map<Token, i64> = {}
     values.set(token, 99)
-    var seen: Set<Token> = #[]
+    var seen: Set<Token> = Set()
     seen.add(token)
 
     var i = 0

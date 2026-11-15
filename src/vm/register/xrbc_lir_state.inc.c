@@ -9,7 +9,7 @@
 static bool rbc_lir_state_payload(XrLirType type, XrLirType element, XrtModuleTypeKind *kind, uint32_t *index) {
     *kind = lir_state_payload_kind(type, element);
     if (!*kind) return false;
-    *index = (uint32_t)*kind - XRT_MODULE_UNIT;
+    *index=*kind==XRT_MODULE_SET_I64?LIR_STATE_CONSTRUCTED_BASE-1:(uint32_t)*kind-XRT_MODULE_UNIT;
     return true;
 }
 
@@ -60,7 +60,8 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
             XrLirCallableType signature;
             XrLirTypeView shape;
             xr_lir_type_view(input, XR_LIR_TYPE_COUNT + t, &shape);
-            if (shape.kind == XR_LIR_TYPE_RECORD && shape.count > parameter_capacity) parameter_capacity = shape.count;
+            uint32_t members = lir_native_record_parameters(input, XR_LIR_TYPE_COUNT + t);
+            if (members > parameter_capacity) parameter_capacity = members;
             if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK &&
                 signature.parameter_count > parameter_capacity) parameter_capacity = signature.parameter_count;
         }
@@ -83,6 +84,7 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
         if (types) {
             for (uint32_t kind = XRT_MODULE_UNIT; kind < XRT_MODULE_FIXED_U8; ++kind)
                 types[kind - XRT_MODULE_UNIT] = (XrtModuleTypeSpec){(XrtModuleTypeKind)kind, 0};
+            types[LIR_STATE_CONSTRUCTED_BASE-1]=(XrtModuleTypeSpec){XRT_MODULE_SET_I64,0};
             for (size_t t = 0; t < program->module.aggregate_type_count; ++t) {
                 XrPodType shape = program->module.aggregate_types[t];
                 uint32_t argument = shape.count;
@@ -102,7 +104,7 @@ static XrRbcCompileStatus rbc_lir_state_layout(const XrLirModule *input, XrLirFu
                 xr_lir_boxed_type(input, XR_LIR_TYPE_COUNT + t) ||
                 (callables && callables[t].kind == XRT_CALLABLE_SIGNATURE) ? t : 0};
         }
-        XrtModuleLayoutSpec spec = {types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
+        XrtModuleLayoutSpec spec = {XRT_MODULE_LAYOUT_HEADER, types, (uint32_t)type_count, modules, layout.module_count, layout.dependencies,
             layout.dependency_count, slots, layout.slot_count, layout.payload_size, UINT64_MAX,
             layout.payload_alignment, callables, callable_count};
         XrXirValueStatus copied = status == XR_RBC_COMPILE_OK ?

@@ -1,11 +1,15 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn describeAssigned(user: User) -> string {
     var localName = ""
     var years = 0
-    { name: localName, age: years } = user
+    localName = user.name
+    years = user.age
     return localName + ":" + string(years)
 }
 
-var user: User = { name: "Ada", age: 7 }
+var user: User = User{ name: "Ada", age: 7 }
 print(describeAssigned(user))

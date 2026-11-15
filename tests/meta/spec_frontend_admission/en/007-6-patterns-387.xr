@@ -1,0 +1,6 @@
+match (p) {
+    { x, y } => print(x, y),             // object field destructure (shorthand binding)
+    { name: n, age } => print(n, age),    // field rename + shorthand mixed
+    [a, b, ..rest,] => print(a, b, rest), // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] => print(mid),           // element-position wildcards
+}

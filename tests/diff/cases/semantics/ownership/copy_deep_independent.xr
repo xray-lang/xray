@@ -8,7 +8,7 @@ print(len(nums))
 print(len(dup))
 print(dup[0])
 
-var m: Map<string, i64> = #{}
+var m: Map<string, i64> = {}
 m.set("a", 1)
 var mcopy = copy(m)
 m.set("b", 2)

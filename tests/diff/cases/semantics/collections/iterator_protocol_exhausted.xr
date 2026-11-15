@@ -38,7 +38,7 @@ try {
 }
 
 // --- Map ---------------------------------------------------------------
-var m = #{"k": 1, "j": 2}
+var m = {"k": 1, "j": 2}
 var mi = m.iterator()
 while (mi.hasNext()) {
     print("map " + mi.next())
@@ -62,7 +62,7 @@ try {
 }
 
 // --- Set ---------------------------------------------------------------
-var s = #[7, 8]
+var s = Set([7, 8])
 var si = s.iterator()
 while (si.hasNext()) {
     print("set " + string(si.next()))

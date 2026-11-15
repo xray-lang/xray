@@ -19,8 +19,6 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `var` — 可变绑定
@@ -71,7 +69,7 @@ print(len(snapshot))        // 3
 
 #### 5.1.3 解构绑定
 
-```xray @id=decl-destructuring
+```xray @id=decl-destructuring @fragment
 // 数组解构
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // 跳过元素
@@ -79,16 +77,12 @@ var [first, , third] = [10, 20, 30]         // 跳过元素
 // 元组解构（多返回值）
 var (q, r) = divmod(17, 5)
 
-// 对象解构（按字段名提取，可重命名本地绑定）
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
-- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
 
-当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
 
 ### 5.2 `fn` 函数声明
 
@@ -144,7 +138,7 @@ fn runAll() throws { /* body omitted */ }
 
 可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
-#### 5.2.2 默认参数值
+#### 5.2.2 默认参数值与命名实参
 
 ```xray @id=decl-fn-default
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
@@ -156,18 +150,32 @@ connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
 
-- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 默认值在**调用点**求值：省略已声明默认值的参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
 - 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
 - 有默认值的参数必须在尾部连续出现。
 - 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
 - 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
-- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
 - 函数的 `throws(E)` 只约束函数体，不包含调用方执行的参数默认表达式。调用的错误包含被调声明的错误，以及本次实际执行的默认表达式逃逸的错误；显式实参不承担被跳过默认表达式的错误。按实际泛型实参替换后再检查这一规则，不把所有默认值的错误无条件并入函数签名。
 - 默认表达式中的抛错调用仍须在声明处有自己的传播标记，调用方的外层 `try` 不能代替它。例如 `fn f(x: i64 = try read()) {}` 可有不抛错的函数体；省略参数的 `try f()` 承担默认值错误，显式 `f(1)` 不承担。遗漏默认表达式内的 `try` 或省略参数时缺少所需的调用点标记均报错；`try { } catch` 区域仍按 §8 的普通规则处理。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
 - 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
 - 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
+##### 命名实参与参数绑定
+
+位置实参必须在命名实参之前；每个形参至多绑定一次，未知名字、重复名字、按位置给出后再命名、命名之后的位置实参均报 E0327。rest 只能按位置传递。直接调用具名函数、方法和构造器使用被调声明的参数名；函数值调用不能使用标签，包括具名函数的 const 别名。
+
+```xray @id=decl-named-arguments @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+
+接收者/被调表达式先求值，显式实参按书写顺序求值，省略的默认值按声明顺序求值。按形参顺序排列的是已经求出的值，不得重排表达式。期望类型与泛型证据按绑定后的形参位置取得；默认值不补充新的调用方推导证据。`ref`、`move` 位于标签后的值之前；参数名属于导出 API，跨模块保持同一名字。参见 §3.11。
 
 #### 5.2.3 多返回值
 
@@ -743,7 +751,7 @@ b.x = 99.0
 // q.x 仍为 3.0
 ```
 
-**聚合字面量的字段规则**（与 sealed structural object 一致）：
+**聚合字面量的字段规则**（名义 struct 的声明字段）：
 
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
@@ -1167,22 +1175,23 @@ TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @id=decl-nominal-type-aliases @check
 type Outcome = i64 | string                          // union 别名
 type Mapper = fn(i64) -> i64                              // 函数类型别名
-type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
-type Pair<T> = { first: T, second: T }                // 泛型别名
+struct Point { x: f64; y: f64 }
+type Position = Point                              // 同一名义类型的别名
+type Pair<T> = (T, T)                               // 无标签 tuple 的泛型别名
 ```
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
 - 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
 - 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
-- `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
+- 名义类型的别名保留原声明身份；字段集合相同不会使不同 struct 相等。匿名对象形状不是合法的别名 RHS。
 - `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
 - 别名可前向引用，但**禁止循环别名**。
 
-详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
+详见 §2.4.7 与 [§2.8](#28-类型别名)。
 
 ### 5.8 `import` / `export`
 
@@ -1231,8 +1240,6 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `var` — mutable binding
@@ -1283,7 +1290,7 @@ These are language contracts. See §17 for current new XIR implementation qualif
 
 #### 5.1.3 Destructuring bindings
 
-```xray @id=decl-destructuring
+```xray @id=decl-destructuring @fragment
 // array destructuring
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // skip elements
@@ -1291,16 +1298,12 @@ var [first, , third] = [10, 20, 30]         // skip elements
 // tuple destructuring (multi-return)
 var (q, r) = divmod(17, 5)
 
-// object destructuring (extract by field name; local binding may be renamed)
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
-- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
 
-The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
 
 ### 5.2 `fn` function declaration
 
@@ -1356,7 +1359,7 @@ Top-level statements of the entry file and module-state initializers implicitly 
 
 Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
-#### 5.2.2 Default parameter values
+#### 5.2.2 Default Values and Named Arguments
 
 ```xray @id=decl-fn-default
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
@@ -1380,6 +1383,20 @@ connect("localhost", 443, true)
 
 - Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
 - Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
+
+##### Named Argument Binding
+
+Positional arguments must precede named arguments. Each formal is bound at most once. Unknown names, duplicates, naming a parameter already supplied positionally, and positional arguments after named arguments report E0327. Rest arguments remain positional. Direct named-function, method and constructor calls use the called declaration's parameter names. Function values, including const aliases of named functions, accept no labels.
+
+```xray @id=decl-named-arguments @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+
+Evaluate the receiver/callee first, explicit arguments in written order, then omitted defaults in declaration order. Reorder already evaluated values into formal slots, never expressions. Expected types and generic evidence use the bound formal positions; defaults provide no extra caller inference evidence. Place `ref` or `move` after the label and before the value. Parameter names are exported API and retain their names across modules. See §3.11.
 
 #### 5.2.3 Multiple return values
 
@@ -2370,22 +2387,23 @@ TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @id=decl-nominal-type-aliases @check
 type Outcome = i64 | string                          // union alias
 type Mapper = fn(i64) -> i64                           // function-type alias
-type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
-type Pair<T> = { first: T, second: T }                // generic alias
+struct Point { x: f64; y: f64 }
+type Position = Point                              // alias of the same nominal type
+type Pair<T> = (T, T)                               // generic alias of an unlabeled tuple
 ```
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
 - A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
 - Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
-- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- An alias of a nominal type preserves its declaration identity. Equal field sets do not make distinct structs equal. An anonymous object shape is not a valid alias RHS.
 - `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
-See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
+See §2.4.7 and [§2.8](#28-type-aliases).
 
 ### 5.8 `import` / `export`
 

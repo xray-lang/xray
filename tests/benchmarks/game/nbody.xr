@@ -19,15 +19,23 @@ const PI = 3.141592653589793
 const DAYS_PER_YEAR = 365.24
 const SOLAR_MASS = 4.0 * PI * PI
 
-type Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
+struct Body {
+    x: f64
+    y: f64
+    z: f64
+    vx: f64
+    vy: f64
+    vz: f64
+    mass: f64
+}
 
 // 创建天体对象
-fn createBody(x, y, z, vx, vy, vz, mass): Body {
-    return { x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, mass: mass }
+fn createBody(x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64) -> Body {
+    return Body{ x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, mass: mass }
 }
 
 // 初始化太阳系天体
-fn createBodies(): Array<Body> {
+fn createBodies() -> Array<Body> {
     var bodies: Array<Body> = []
     // 太阳
     bodies.push(createBody(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, SOLAR_MASS))
@@ -74,7 +82,7 @@ fn createBodies(): Array<Body> {
 ** 调整系统动量，使总动量为零（质心参考系）
 ** 通过调整太阳的速度来实现
 */
-fn offsetMomentum(bodies: Array<Body>) {
+fn offsetMomentum(bodies: ref Array<Body>) {
     var px = 0.0
     var py = 0.0
     var pz = 0.0
@@ -96,7 +104,7 @@ fn offsetMomentum(bodies: Array<Body>) {
 ** 动能 = 0.5 * m * v^2
 ** 势能 = -G * m1 * m2 / r（G=1）
 */
-fn energy(bodies: Array<Body>): f64 {
+fn energy(bodies: Array<Body>) -> f64 {
     var e = 0.0
     var nbodies = len(bodies)
     for (var i = 0; i < nbodies; i++) {
@@ -125,7 +133,7 @@ fn energy(bodies: Array<Body>): f64 {
 ** 2. 更新速度
 ** 3. 更新位置
 */
-fn advance(bodies: Array<Body>, dt: f64) {
+fn advance(bodies: ref Array<Body>, dt: f64) {
     var nbodies = len(bodies)
     // 计算引力并更新速度
     for (var i = 0; i < nbodies; i++) {
@@ -145,7 +153,9 @@ fn advance(bodies: Array<Body>, dt: f64) {
             bj.vx = bj.vx + dx * bi.mass * mag
             bj.vy = bj.vy + dy * bi.mass * mag
             bj.vz = bj.vz + dz * bi.mass * mag
+            bodies[j] = bj
         }
+        bodies[i] = bi
     }
     // 更新位置
     for (var i = 0; i < nbodies; i++) {
@@ -153,6 +163,7 @@ fn advance(bodies: Array<Body>, dt: f64) {
         b.x = b.x + dt * b.vx
         b.y = b.y + dt * b.vy
         b.z = b.z + dt * b.vz
+        bodies[i] = b
     }
 }
 
@@ -163,12 +174,12 @@ fn main() {
     // 创建天体系统
     var bodies = createBodies()
     // 初始化：调整动量使系统质心静止
-    offsetMomentum(bodies)
+    offsetMomentum(ref bodies)
     // 输出初始能量
     print(energy(bodies).toFixed(9))
     // 执行 n 次模拟步骤
     for (var i = 0; i < n; i++) {
-        advance(bodies, 0.01)
+        advance(ref bodies, 0.01)
     }
     // 输出最终能量
     print(energy(bodies).toFixed(9))

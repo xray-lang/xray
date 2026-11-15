@@ -17,6 +17,7 @@
 #include "xlir_array_copy.h"
 #include "xlir_callable_copy.h"
 #include "xlir_types.h"
+#include "xlir_map.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 
@@ -194,6 +195,7 @@ static XrLirStatus inline_registry(Inliner *c) {
     if (status == XR_LIR_OK) status = xr_lir_set_registry(c->output, &registry);
     xr_free(entries);
     if (status == XR_LIR_OK) status = lir_copy_array_registry(c->input, c->output);
+    if (status == XR_LIR_OK) status = xr_lir_map_literals_copy(c->output,c->input);
     if (status == XR_LIR_OK) {
         XrLirStateLayout layout;
         status = xr_lir_state_layout_view(c->input, &layout);

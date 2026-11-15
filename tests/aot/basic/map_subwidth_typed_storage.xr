@@ -1,4 +1,4 @@
-var m: Map<u8, i32> = #{}
+var m: Map<u8, i32> = {}
 m.set(255, 2147483647)
 m.set(255 + 1, 2147483647 + 1)
 m.set(1, -2147483648 - 1)
@@ -21,7 +21,7 @@ class ByteMapBag {
     values: Map<u8, i32>
 
     init() {
-        var values: Map<u8, i32> = #{}
+        var values: Map<u8, i32> = {}
         this.values = values
     }
 

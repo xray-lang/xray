@@ -49,6 +49,7 @@ static XrtCallableRegistry *callable_registry(uint32_t source) {
 }
 static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
     const XrtCallableImage *image, XrXirTypeArena *arena, uint32_t source) {
+    if (!xrt_callable_image_valid(image)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     for (XrtCallableGroup *group = registry->groups; group; group = group->next)
         if (group->image == image) {
             if (arena && group->types != arena) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
@@ -68,7 +69,7 @@ static XrtCallableGroup *callable_group_receive(XrtCallableRegistry *registry,
         if (maps) callable_scope_require(xrt_map_root_bind_types(maps), source);
         if (!xr_xir_compile_type_arena_retain(arena)) xrt_value_failure(XR_XIR_VALUE_REFCOUNT_LIMIT, source);
         group->types = arena;
-    } else callable_scope_require(xrt_callable_types_new(image->types, image->type_count, limit, &group->types), source);
+    } else callable_scope_require(xrt_callable_types_new(image, limit, &group->types), source);
     size_t captures = 0;
     for (uint32_t e = 0; e < image->entry_count; ++e) {
         XrtCallableEntrySpec entry = image->entries[e];
@@ -144,6 +145,7 @@ static void callable_scope_drop(XrtCallableRegistry *registry, XrtCallableScopeB
     xr_xir_domain_deallocate(scope->group->domain, scope, sizeof(*scope));
 }
 static XrtCallableScopeBody *callable_scope_body(XrtCallableScope *scope, uint32_t source) {
+    if (!scope || !xrt_callable_image_valid(scope->image)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     if (scope->body) return scope->body;
     XrtCallableRegistry *registry = callable_registry(source);
     XrtCallableGroup *group = callable_group(registry, scope->image, source);
@@ -165,7 +167,7 @@ static XrtCallableScopeBody *callable_scope_body(XrtCallableScope *scope, uint32
 }
 XRAY_API void xrt_callable_scope_enter(XrtCallableScope *scope, const XrtCallableImage *image, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || !image)
+    if (!scope || !xrt_callable_image_valid(image))
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     if (root->callable_identity == UINT64_MAX) xrt_value_failure(XR_XIR_VALUE_LIMIT, source);
     *scope = (XrtCallableScope){.image=image, .parent=root->callable_scope,
@@ -175,7 +177,7 @@ XRAY_API void xrt_callable_scope_enter(XrtCallableScope *scope, const XrtCallabl
 XRAY_API XrtCallable *xrt_callable_scope_new(XrtCallableScope *scope, uint32_t entry,
     const uint64_t *captures, uint32_t count, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || scope != root->callable_scope || scope->root != root ||
+    if (!scope || scope != root->callable_scope || scope->root != root || !xrt_callable_image_valid(scope->image) ||
         entry >= scope->image->entry_count || count != scope->image->entries[entry].capture_count || (count && !captures))
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
@@ -237,7 +239,7 @@ XRAY_API uint32_t xrt_callable_entry(const XrtCallableImage *image, const XrtCal
 }
 XRAY_API XrtCallable *xrt_callable_scope_copy(XrtCallableScope *scope, XrtCallable *function, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || scope != root->callable_scope || scope->root != root || !function)
+    if (!scope || scope != root->callable_scope || scope->root != root || !xrt_callable_image_valid(scope->image) || !function)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
     if (body->count == UINT32_MAX) xrt_value_failure(XR_XIR_VALUE_LIMIT, source);
@@ -254,7 +256,7 @@ XRAY_API XrtCallable *xrt_callable_scope_bind(XrtCallableScope *scope, uint32_t 
     XrtValueRoot *root = xrt_value_root_current(source);
     XrtCallableScope *current = root->callable_scope;
     while (current && current != scope) current = current->parent;
-    if (!current || current->root != root || binding == UINT32_MAX)
+    if (!current || current->root != root || !xrt_callable_image_valid(current->image) || binding == UINT32_MAX)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     if (!function && !scope->body) return NULL;
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
@@ -285,7 +287,7 @@ XRAY_API XrtCallable *xrt_callable_scope_bind(XrtCallableScope *scope, uint32_t 
 }
 XRAY_API XrtCallable *xrt_callable_scope_leave(XrtCallableScope *scope, XrtCallable *result, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || scope != root->callable_scope || scope->root != root || (result && !scope->parent))
+    if (!scope || scope != root->callable_scope || scope->root != root || !xrt_callable_image_valid(scope->image) || (result && !scope->parent))
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     if (result) {
         XrtCallableGroup *group = callable_group(callable_registry(source), scope->image, source);

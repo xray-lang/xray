@@ -1,8 +1,14 @@
 // A literal written for a declared shape adopts that shape, so a nullable field
 // still accepts a non-null value and an omitted nullable field stays optional.
 // Both backends must agree on the values read back.
-type PageOpts = { limit: i64?, cursor: string? }
-type User = { name: string, age: i64? }
+struct PageOpts {
+    limit: i64?
+    cursor: string?
+}
+struct User {
+    name: string
+    age: i64?
+}
 
 fn describe(o: PageOpts) -> string {
     var lim = o.limit ?? -1
@@ -10,12 +16,12 @@ fn describe(o: PageOpts) -> string {
     return lim.toString() + "/" + cur
 }
 
-print(describe({ limit: 5, cursor: null }))
-print(describe({ limit: null, cursor: "abc" }))
-var empty: PageOpts = { }
+print(describe(PageOpts{ limit: 5, cursor: null }))
+print(describe(PageOpts{ limit: null, cursor: "abc" }))
+var empty: PageOpts = PageOpts{ }
 print(describe(empty))
 
-var u: User = { name: "Alice" }
+var u: User = User{ name: "Alice" }
 print(u.name + "/" + (u.age ?? -1).toString())
-var v: User = { name: "Bob", age: 3 }
+var v: User = User{ name: "Bob", age: 3 }
 print(v.name + "/" + (v.age ?? -1).toString())

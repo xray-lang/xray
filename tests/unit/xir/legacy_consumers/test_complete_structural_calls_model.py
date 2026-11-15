@@ -1,4 +1,4 @@
-"""Complete structural calls and declaration-only execution boundaries."""
+"""Retained nominal calls and historical declaration-only observations."""
 from provenance_test_support import provenance_input_path
 from pathlib import Path
 import hashlib,itertools,json,unittest
@@ -19,29 +19,30 @@ class CompleteStructuralCalls(unittest.TestCase):
             name=Path(row['source']).stem
             self.assertEqual(row['expected']['stdout_utf8'],''.join(m.render({'expected':x})+'\n' for x in expected[name]))
 
-    def test_width_calls_keep_every_concrete_field_and_original_projection(self):
+    def test_nominal_calls_keep_written_fields_and_original_values(self):
         trace=m.observations()['generic_width_direct_ordinal']
         self.assertEqual(trace['all_original_field_values'],[{'name':'ada','age':1},{'name':'bob','zzz':2},{'age':3,'name':'cat'},{'id':4,'name':'dot'}])
         self.assertEqual(trace['concrete_fields_in_written_order'],[['name','age'],['name','zzz'],['age','name'],['id','name']])
         self.assertEqual(trace['original_projection_calls'],4);self.assertTrue(trace['no_physical_ordinal_assumed'])
 
-    def test_logical_name_projection_is_independent_of_written_field_order(self):
-        for fields in itertools.permutations([('id',4),('name','dot'),('extra',True)]):
-            self.assertEqual(m.project(dict(fields),'name',{'name':'string'}),'dot')
-        with mock.patch.object(m,'project',lambda value,name,required:'wrong'):
+    def test_nominal_name_read_keeps_declaration_and_written_argument_order(self):
+        for values in itertools.permutations([('id',4),('name','dot'),('age',1)]):
+            self.assertEqual(m.read_name(m.Named(**dict(values))),'dot')
+        with mock.patch.object(m,'read_name',lambda value:'wrong'):
             row=m.expected_rows()[0];self.assertNotEqual(row['expected']['stdout_utf8'],'adabobcatdot\n')
 
-    def test_definition_site_constraint_exposes_only_declared_fields(self):
-        value={'name':'ada','age':1}
-        with self.assertRaisesRegex(ValueError,'unconstrained'):m.project(value,'age',{'name':'string'})
-        for value in [{},{'name':1},{'name':True},{'name':None}]:
-            with self.assertRaises(ValueError):m.project(value,'name',{'name':'string'})
+    def test_same_fields_do_not_create_a_nominal_identity(self):
+        for value in [{},{'name':'ada'},{'name':'ada','age':1},m.User('ada',1)]:
+            with self.assertRaisesRegex(ValueError,'declaration identity'):m.read_name(value)
+        with self.assertRaises(TypeError):m.Named(name='ada',extra=1)
+        for value in [True,None,'1',1<<63]:
+            with self.assertRaises(ValueError):m.Named('ada',age=value)
 
-    def test_exact_shape_and_width_constraint_are_distinct_relations(self):
-        value={'name':'ada','age':1}
-        self.assertFalse(m.satisfies(value,{'name':'string'}));self.assertTrue(m.satisfies(value,{'name':'string'},exact=False))
-        self.assertTrue(m.satisfies(value,{'name':'string','age':'i64'}))
-        self.assertFalse(m.satisfies({'name':'ada','age':True},{'name':'string','age':'i64'}))
+    def test_defaults_are_declared_on_one_named_type(self):
+        value=m.Named('ada')
+        self.assertEqual((value.age,value.zzz,value.id),(0,0,0))
+        self.assertEqual(m.observations()['generic_width_direct_ordinal']['current_nominal_declaration'],'Named')
+        self.assertFalse(hasattr(m,'satisfies'));self.assertFalse(hasattr(m,'project'))
 
     def test_json_boundary_requires_explicit_unknown_field_permission(self):
         schema={'name':'string','age':'i64'};extra={'name':'Carol','age':7,'extra':True}
@@ -50,10 +51,13 @@ class CompleteStructuralCalls(unittest.TestCase):
         for value in [{'name':'Bob'},{'name':'Dan','age':'not an int'},{'name':'Dan','age':True},42,None]:
             self.assertIs(m.codec.decode(value,schema),m.codec.INVALID)
 
-    def test_static_union_narrowing_uses_exact_fields_and_types(self):
-        self.assertEqual(m.describe({'kind':'t','n':9}),'tagged:9');self.assertEqual(m.describe({'name':'Eve','age':1}),'user:Eve')
-        for value in [42,{'kind':'t','n':True},{'kind':'t','n':1<<63},{'kind':'t','n':9,'extra':1},{'name':'Eve'},{'name':'Eve','age':'1'}]:
+    def test_union_membership_uses_real_nominal_declarations(self):
+        self.assertEqual(m.describe(m.Tagged('t',9)),'tagged:9')
+        self.assertEqual(m.describe(m.User('Eve',1)),'user:Eve')
+        for value in [42,{'kind':'t','n':9},{'name':'Eve','age':1},m.Named('Eve',age=1)]:
             self.assertEqual(m.describe(value),'neither')
+        for value in [True,'9',1<<63]:
+            with self.assertRaises(ValueError):m.Tagged('t',value)
 
     def test_hashable_key_observations_follow_original_hash_and_equality(self):
         a=m.Token('a',7);b=m.Token('b',7);c=m.Token('c',8);table=m.KeyTable();table.set(a,99)
@@ -94,6 +98,24 @@ class CompleteStructuralCalls(unittest.TestCase):
                 with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
         with mock.patch.object(m,'_INPUTS',{}),self.assertRaises(ValueError):m.expected_rows()
         with mock.patch.object(m,'_PROGRAMS',dict(reversed(list(m._PROGRAMS.items())))),self.assertRaises(ValueError):m.expected_rows()
+
+    def test_current_source_mapping_preserves_original_digest_and_rejects_new_drift(self):
+        from task342_responsibility_migration import verify_input
+        source=m._PROGRAMS['generic_width_direct_ordinal'];pin=m._INPUTS[source]
+        verify_input(m.ROOT,source,pin)
+        with self.assertRaisesRegex(ValueError,'historical model input identity'):
+            verify_input(m.ROOT,source,'0'*64)
+        saved=Path.read_bytes
+        def changed(path):return saved(path)+b'\nchanged\n' if path==m.ROOT/source else saved(path)
+        with mock.patch.object(Path,'read_bytes',changed),self.assertRaisesRegex(ValueError,'current nominal/Map input'):
+            verify_input(m.ROOT,source,pin)
+
+    def test_preexisting_authority_divergences_do_not_supply_current_qualification(self):
+        from task342_responsibility_migration import verify_input
+        manifest=json.loads((m.ROOT/'tests/aot/task342_structural_responsibilities.json').read_text(encoding='utf-8'))
+        for row in manifest['preexisting_authority_observations']:
+            self.assertFalse(row['task342_modified'])
+            with self.assertRaises(ValueError):verify_input(m.ROOT,row['original_source'],row['preserved_model_input_lf_sha256'])
 
     def test_product_registrations_keep_all_original_sources_and_arguments(self):
         cases={x['id']:x for x in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}

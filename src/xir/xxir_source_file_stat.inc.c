@@ -15,7 +15,7 @@ static bool source_file_stat_declare(SourceContext *ctx,XrXirType *output) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"file metadata declaration is missing");
     if(find_name(ctx,ctx->names[ctx->module],native->name))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"file metadata identity is reserved to its native declaration");
-    if(!source_record_reserve(ctx))return false;
+    if(!source_nominal_reserve(ctx))return false;
     uint32_t d=ctx->nominals.count;
     const char *name=source_owned_text(ctx,native->name);if(!name)return false;
     SourceName *owner=add_name(ctx,&ctx->names[ctx->module],name,NULL);if(!owner)return false;

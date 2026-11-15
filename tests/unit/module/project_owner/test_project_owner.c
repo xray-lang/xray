@@ -163,7 +163,7 @@ static XrXirLibraryCatalog *real_catalog(const XrXirCompileContext *context) {
     const char canonical[]="module-id-v1:kind=6:script:namespace=0::path=6:lib.xr";
     XrXirSourceModule source={canonical,sizeof(canonical)-1,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity name={0};
-    XrXirDeclarations declarations={&source,1,&name,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=&name, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=UINT32_MAX, .entry_function=UINT32_MAX, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module={XR_XIR_BUILT,&function,1,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
     CHECK(xir_fixture_check(context, &module, &artifact, NULL)==XR_XIR_OK);

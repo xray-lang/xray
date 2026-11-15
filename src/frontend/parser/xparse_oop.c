@@ -1488,6 +1488,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
 
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
+    XrParsedCallLabels labels = {0};
     int arg_count = 0;
     int arg_capacity = 0;
     int access_count = 0;
@@ -1496,7 +1497,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            AstNode *arg = xr_parse_labeled_call_argument(parser, &access, &labels, arg_count);
             if (!xr_parser_healthy(parser)) return NULL;
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
@@ -1519,7 +1520,8 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     // so release our copy of module_name here.
     AstNode *node = xr_ast_new_expr(parser->compiler_session, module_name, class_name, arguments,
                                     arg_accesses, arg_count, type_args, type_arg_count, line);
-    if (!xr_parser_healthy(parser)) return NULL;
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->as.new_expr.arg_labels = labels.labels;
     return node;
 }
 
@@ -1588,6 +1590,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     // Parse arguments
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
+    XrParsedCallLabels labels = {0};
     int arg_count = 0;
     int arg_capacity = 0;
     int access_count = 0;
@@ -1596,7 +1599,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            AstNode *arg = xr_parse_labeled_call_argument(parser, &access, &labels, arg_count);
             if (!xr_parser_healthy(parser)) return NULL;
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
@@ -1615,8 +1618,11 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     } while (0);
 
     // Create super call node
-    return xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_accesses,
-                             arg_count, line);
+    AstNode *node = xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_accesses,
+                                      arg_count, line);
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->as.super_call.arg_labels = labels.labels;
+    return node;
 }
 
 /* ========== Operator Method Parsing ========== */

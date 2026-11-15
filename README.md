@@ -26,7 +26,7 @@ Xray is designed for scripts, services, and command-line programs that benefit f
 
 ## Highlights
 
-- **Static typing** — type inference, nullable types (`T?`), unions, generics, tuples, records, and control-flow narrowing, without a universal `any` type.
+- **Static typing** — type inference, nullable types (`T?`), unions, generics, tuples, nominal structs, and control-flow narrowing, without a universal `any` type.
 - **Explicit concurrency** — `go`, `await`, `Channel<T>`, `select`, `scope`, and ownership-aware transfer rules are part of the language.
 - **Language-level data modeling** — `class`, `struct`, `interface`, algebraic `enum`, pattern matching, collection literals, and modules.
 - **Structured error handling** — typed enum errors use the value-return `throw` / `try` / `catch` channel; runtime faults use `PanicInfo`; `defer` provides deterministic cleanup.
@@ -124,6 +124,11 @@ programs.
 ## Language at a glance
 
 ```xray
+struct User {
+    name: string
+    score: i64
+}
+
 fn greet(name: string?) -> string {
     if (name == null) {
         return "hello, guest"
@@ -131,15 +136,18 @@ fn greet(name: string?) -> string {
     return "hello, ${name!}"
 }
 
-var scores = #{ "alice": 95, "bob": 88 }
-var user = { "name": "alice", "score": scores["alice"] }
-for (i in 1..=3) {
-    print(i)
+fn main() {
+    var scores = { "alice": 95, "bob": 88 }
+    var user = User{ name: "alice", score: scores["alice"] }
+    for (i in 1..=3) {
+        print(i)
+    }
+    print(greet(user.name))
 }
-print(greet(user.name))
+main()
 ```
 
-The range operator `a..b` excludes `b`; `a..=b` includes it. Collection literals use `[value]` for arrays, `#[value]` for sets, and `#{ key: value }` for maps. A record literal such as `{ "name": "alice", "score": 95 }` is checked against its structural type.
+The range operator `a..b` excludes `b`; `a..=b` includes it. Arrays use `[value]`, Maps use `{ key: value }`, and Sets are constructed with `Set([value])`. Fixed named fields use a nominal `struct` declaration and a named literal such as `User{ name: "alice", score: 95 }`.
 
 Quoted literals use one quote for single-line inline text, two quotes for an empty payload, and three or more quotes for blocks whose opener is followed immediately by a newline and whose exact-count closer occupies its own line. Use no prefix / `r` for strings, `b/br` for fixed bytes, and `c/cr` for fixed C bytes with an appended NUL; `r/br/cr` preserve backslashes.
 

@@ -92,6 +92,10 @@ static bool type_identity_child(const XrXirTypeNode *node,uint64_t index,XrXirTy
         if(index)return false;
         *type=node->element;
         return true;
+    case XR_XIR_TYPE_ITERATOR:
+        if(index>1)return false;
+        *type=index?node->result:node->element;
+        return true;
     case XR_XIR_TYPE_CALLABLE:case XR_XIR_TYPE_TUPLE:
         if(index<node->parameter_count){*type=node->parameters[index].type;*mode=node->parameters[index].mode;return true;}
         if(index==node->parameter_count&&node->kind==XR_XIR_TYPE_CALLABLE){*type=node->result;return true;}return false;
@@ -129,7 +133,8 @@ static void type_identity_graph(LspHoverBuilder *b,const XrXirSourceView *view,X
         }
         const XrXirTypeNode *node=hover_node(view,frame->type);if(!node){b->status=XR_XIR_BAD_TYPE;break;}
         if(!frame->started) {
-            if(node->kind<XR_XIR_TYPE_CALLABLE||node->kind>XR_XIR_TYPE_TASK){b->status=XR_XIR_UNSUPPORTED;break;}
+            if(node->kind<XR_XIR_TYPE_CALLABLE||
+                (node->kind>XR_XIR_TYPE_TASK&&node->kind!=XR_XIR_TYPE_ITERATOR)){b->status=XR_XIR_UNSUPPORTED;break;}
             type_identity_number(b,2);type_identity_number(b,node->kind);type_identity_number(b,node->flags);
             type_identity_number(b,node->parameter_span);type_identity_number(b,node->parameter_count);
             type_identity_number(b,node->nominal.argument_count);type_identity_number(b,node->nominal.field_count);

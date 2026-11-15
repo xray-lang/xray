@@ -19,6 +19,7 @@ typedef struct XrtStringOwner XrtStringOwner;
 typedef struct XrtStringLiteral XrtStringLiteral;
 typedef struct XrtArrayOwner XrtArrayOwner;
 typedef struct XrtMapOwner XrtMapOwner;
+typedef struct XrtSetOwner XrtSetOwner;
 typedef struct XrtViewRegistry XrtViewRegistry;
 typedef struct XrtCallableRegistry XrtCallableRegistry;
 typedef struct XrtCallableScope XrtCallableScope;
@@ -40,6 +41,10 @@ typedef struct XrtValueRoot {
     XrtMapOwner *maps;
     uint32_t map_capacity, map_count;
     uint64_t map_held;
+    XrXirTypeArena *set_types;
+    XrtSetOwner *sets;
+    uint32_t set_capacity,set_count;
+    uint64_t set_held;
     XrXirValue pending;
     XrtViewRegistry *views;
     XrtCallableRegistry *callables;
@@ -69,7 +74,8 @@ static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
         !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
         !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
         !root->array_held && !root->map_types && !root->maps && !root->map_capacity &&
-        !root->map_count && !root->map_held && !root->views && !root->callables && !root->callable_scope &&
+        !root->map_count && !root->map_held && !root->set_types && !root->sets &&
+        !root->set_capacity && !root->set_count && !root->set_held && !root->views && !root->callables && !root->callable_scope &&
         !root->pending.type && !root->pending.reserved && !root->pending.payload &&
         !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size;
 }

@@ -52,7 +52,7 @@ static XrXirArtifact *struct_ops_checked(const XrXirCompileContext *context, uns
         {.exported=1,.method_kind=XR_XIR_NON_MEMBER},
         {.exported=1,.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR}};
     XrXirLiteral literal = {"constructed",11};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=&literal, .literal_count=1, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     if (invalid == 1) identities[2].nominal_owner = 0;
     if (invalid == 2) make[1].immediate = -1;

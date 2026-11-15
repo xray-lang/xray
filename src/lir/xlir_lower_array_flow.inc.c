@@ -39,11 +39,13 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
     const XrXirFunction *source = f->source;
     bool needed = c->arrays || c->string_appends || c->maps;
     for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
-        needed = source->parameters[p] == XR_XIR_STRING;
+        needed = source->parameters[p] == XR_XIR_STRING || lower_set_type(c, source->parameters[p]) ||
+            lower_set_type(c, xr_xir_cell_element(c->source->types, source->parameters[p]));
     for (uint32_t i = 0; !needed && i < source->instruction_count; ++i) {
         XrXirType type = source->instructions[i].type;
         XrXirType element = xr_xir_cell_element(c->source->types, type);
-        needed = (source->block_count > 1 && (type == XR_XIR_STRING || element == XR_XIR_STRING)) ||
+        needed = lower_set_type(c, type) || lower_set_type(c, element) ||
+            (source->block_count > 1 && (type == XR_XIR_STRING || element == XR_XIR_STRING)) ||
             xr_xir_type_is_callable(c->source->types, element);
     }
     if (!needed) return true;
@@ -63,7 +65,7 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             f->value_blocks[value] = b;
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
                 (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL ||
-                 lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL ||
+                 lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL || lower_type(c,op->type)==XR_LIR_SET_I64_CELL ||
                  xr_xir_type_is_callable(c->source->types, xr_xir_cell_element(c->source->types, op->type)) ||
                  (source->block_count > 1 && xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING)) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;

@@ -328,7 +328,7 @@ static void constraint_proof_scalar_slot_sharing(void) {
     XrXirSourceModule modules[] = {{"provider",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"root",4,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
     XrXirSlot slot = {1,XR_XIR_ERROR,0};
-    XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=&slot, .slot_count=1, .literals=NULL, .literal_count=0, .root_module=1, .entry_function=2, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     /* Declaration obligations precede initializer execution. Error and PanicInfo
      * are valid owned slot types, but neither can be shared from another module. */
@@ -336,7 +336,7 @@ static void constraint_proof_scalar_slot_sharing(void) {
         slot.type = type == 0 ? XR_XIR_ERROR : type == 1 ? XR_XIR_PANIC_INFO : XR_XIR_STRING;
         slot.module = owner;
         XrXirCompileContext budget = interface_context_default();
-        CHECK(xr_xir_compile_declarations_verify(&budget, &declarations, NULL, 3, module.linkage_kind)==XR_XIR_OK);
+        CHECK(xr_xir_compile_declarations_verify(&budget, &declarations, NULL, 3, module.linkage_kind, NULL)==XR_XIR_OK);
         for (uint32_t f = 0; f < 3; ++f)
             CHECK(xr_xir_compile_type_expression_shape(&budget, NULL, functions[f].result, 0)==XR_XIR_OK);
         CHECK(xr_xir_compile_module_constraints_verify(&budget, &module)==

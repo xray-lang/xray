@@ -220,7 +220,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
+**Map 字面量**：`{"k1": v1, "k2": v2}`，空 `{}` 需要类型上下文。键为表达式；重复显式键与展开规则见 §3.10。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -245,7 +245,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(T)->()` |
 | `iterator()` | 迭代协议 |
 
-**Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+**Set 构造**：`Set([1, 2, 3])`；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。
 
 `values()` 以同样的零参数 READ 和拥有式快照规则返回 `Array<T>`，按首次插入顺序排列；重复添加不改变位置，删除后重新添加位于末尾。
 
@@ -278,7 +278,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | 静态函数 | 说明 |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，直接返回 JSON.Object 或 JSON.Value |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
 | `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
@@ -293,8 +293,9 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
-```xray @id=json-boundary-and-path
-type Request = { action: string, userId: i64 }
+```xray @id=json-boundary-and-path @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
 var payload = JSON.parseObject(body)          // JSON.Object，即 Map
@@ -305,7 +306,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；struct、数组和其他复合值仍通过 `JSON.value(...)` 显式编码。`{"name": "alice"}` 是 Map 字面量；在 `JSON.Object` 上下文中，键为 string，值按现有标量规则进入 JSON.Value。固定字段的类型化解码目标使用 struct。
 
 ### 14.12 `Range`
 
@@ -621,7 +622,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | insertion-order traversal with exact `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
+**Map literal**: `{"k1": v1, "k2": v2}`; empty `{}` needs an expected type. Keys are expressions. See §3.10 for duplicate explicit keys and spread.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -648,7 +649,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `forEach(fn)` | insertion-order traversal with exact `fn(T)->()` |
 | `iterator()` | iteration protocol |
 
-**Set literal**: `#[1, 2, 3]` or `#[]`.
+**Set construction**: `Set([1, 2, 3])`. Use `Set<T>()` for an empty set, or `Set()` with an expected type.
 
 `values()` returns `Array<T>` under the same zero-argument READ and owned-snapshot rules, preserving first insertion order. Adding an existing element preserves its position; deleting and adding it again places it last.
 
@@ -681,7 +682,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | Static function | Description |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | constructs a typed value directly; unknown fields default to `Reject`, with explicit `JSON.UnknownFields.Ignore` available |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root without a structural-object intermediate |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root returning JSON.Object or JSON.Value directly |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
 | `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
@@ -696,8 +697,9 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 `JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
-```xray @id=json-boundary-and-path-en
-type Request = { action: string, userId: i64 }
+```xray @id=json-boundary-and-path-en @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // unknown fields reject by default
 var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
@@ -708,7 +710,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly with an explicit `JSON.Value` target. Structs, arrays and other composites still require explicit `JSON.value(...)` encoding. `{"name": "alice"}` is a Map literal; under `JSON.Object`, keys are strings and values use existing scalar widening into JSON.Value. Fixed-field typed decoding targets are structs.
 
 ### 14.12 `Range`
 

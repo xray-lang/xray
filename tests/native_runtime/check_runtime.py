@@ -35,8 +35,10 @@ def header_clients(build, logs, libraries):
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
     shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
     shutil.copyfile(source / 'include/xray_native_callable.h', prefix / 'include/xray_native_callable.h')
+    shutil.copyfile(source / 'include/xray_native_metadata.h', prefix / 'include/xray_native_metadata.h')
     shutil.copyfile(source / 'include/xray_native_array.h', prefix / 'include/xray_native_array.h')
     shutil.copyfile(source / 'include/xray_native_map.h', prefix / 'include/xray_native_map.h')
+    shutil.copyfile(source / 'include/xray_native_set.h', prefix / 'include/xray_native_set.h')
     shutil.copyfile(source / 'include/xray_native_boxed.h', prefix / 'include/xray_native_boxed.h')
     shutil.copyfile(source / 'include/xray_native_view.h', prefix / 'include/xray_native_view.h')
     shutil.copyfile(source / 'include/xray_native_pod.h', prefix / 'include/xray_native_pod.h')
@@ -62,7 +64,9 @@ def header_clients(build, logs, libraries):
     text = ('#include "xray_native_runtime.h"\n'
             '#include "xray_native_array.h"\n'
             '#include "xray_native_map.h"\n'
+            '#include "xray_native_set.h"\n'
             '#include "xray_native_string.h"\n'
+            '#include "xray_native_callable.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'
@@ -72,6 +76,9 @@ def header_clients(build, logs, libraries):
             'static int64_t (*const monotonic)(uint32_t) = xrt_clock_monotonic_nanos;\n'
             'static int64_t (*const offset)(int64_t, uint32_t) = xrt_clock_utc_offset_at;\n'
             'static void invoke(void *context) { int64_t a = monotonic(0);\n'
+            ' static const XrtCallableImage image = {XRT_CALLABLE_IMAGE_HEADER, NULL, 0, NULL, 0};\n'
+            ' XrtCallableScope scope; xrt_callable_scope_enter(&scope, &image, 0);\n'
+            ' (void)xrt_callable_scope_leave(&scope, NULL, 0);\n'
             ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a ||\n'
             ' offset(INT64_C(1700000000), 0) != offset(INT64_C(1700000000), 0)) return;\n'
             ' XrtString *s = xrt_string_new("head", 4, 0);\n'

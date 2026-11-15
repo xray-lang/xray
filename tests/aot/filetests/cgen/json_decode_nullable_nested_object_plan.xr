@@ -1,5 +1,11 @@
-type Address = { city: string, zip: i64 }
-type Profile = { name: string, address: Address? }
+struct Address {
+    city: string
+    zip: i64
+}
+struct Profile {
+    name: string
+    address: Address?
+}
 
 fn jsonDecodeNullableNestedObjectPlan() -> JSON.Value {
     var data: JSON.Value = JSON.parseValue("{\"name\":\"Dana\",\"address\":null}")

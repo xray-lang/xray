@@ -12,6 +12,7 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_internal.h"
 #include "vm/register/xrbc_lir.h"
+#include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -410,14 +411,18 @@ static XrLirModule *transport(XrLirType type, uint64_t bits) {
 static void record_metadata(void) {
     XrLirModule *source = NULL, *target = NULL;
     OK(xr_lir_module_create(NULL, &source)); OK(xr_lir_module_create(NULL, &target));
+    XrLirRecordIdentity leaf = {.module="test", .module_length=4, .name="Leaf", .name_length=4};
+    XrLirRecordArgument argument = {0};
+    XrLirRecordIdentity chain = {.module="test", .module_length=4, .name="Chain", .name_length=5, .arguments=&argument, .argument_count=1};
     char name[] = "name";
-    XrLirRecordField field = {name, 4, XR_LIR_STRING};
+    XrLirRecordField field = {name, 4, XR_LIR_STRING, 0};
     XrLirType type, unused, received;
-    OK(xr_lir_record_type(source, &field, 1, &type));
+    OK(xr_lir_record_type(source, &leaf, &field, 1, &type));
     memset(name, 'x', sizeof(name));
     for (unsigned n = 0; n < 512; ++n) {
-        field = (XrLirRecordField){"child", 5, type};
-        OK(xr_lir_record_type(source, &field, 1, &type));
+        field = (XrLirRecordField){"child", 5, type, 0};
+        argument.type = type;
+        OK(xr_lir_record_type(source, &chain, &field, 1, &type));
     }
     OK(xr_lir_nullable_type(source, type, &type));
     OK(xr_lir_fixed_array_type(target, XR_LIR_U8, 3, &unused));
@@ -441,8 +446,8 @@ static void record_metadata(void) {
 }
 static void boxed_entry_frontier(void) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-    XrLirRecordField field = {"score", 5, XR_LIR_I64};
-    XrLirType type; OK(xr_lir_record_type(m, &field, 1, &type));
+    XrLirRecordField field = {"score", 5, XR_LIR_I64, 0};
+    XrLirType type; OK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Score", .name_length=5}, &field, 1, &type));
     XrLirFunction root = function(m, "boxed", NULL, 0, type);
     XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
     XrLirValue input = constant(m, b, XR_LIR_I64, 7), result;
@@ -471,14 +476,14 @@ static void record_field_frontier(void) {
         } else if (n == sizeof(rejected) / sizeof(*rejected) + 1)
             OK(xr_lir_cell_type(m, (XrLirCellType){XR_LIR_I64,0}, &field));
         else OK(xr_lir_nullable_type(m, XR_LIR_I64, &field));
-        XrLirRecordField member = {"value",5,field};
-        CHECK(xr_lir_record_type(m, &member, 1, &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
+        XrLirRecordField member = {"value",5,field,0};
+        CHECK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Value", .name_length=5}, &member, 1, &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
         xr_lir_module_destroy(m);
     }
     for (unsigned n = 0; n < 4; ++n) {
         XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-        XrLirRecordField member = {"value",5,XR_LIR_I64};
-        XrLirType type; OK(xr_lir_record_type(m, &member, 1, &type));
+        XrLirRecordField member = {"value",5,XR_LIR_I64,0};
+        XrLirType type; OK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Value", .name_length=5}, &member, 1, &type));
         XrLirFunction root = function(m, "empty", NULL, 0, XR_LIR_UNIT);
         XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
         XrLirInstruction finish = {.op=XR_LIR_RET, .type=XR_LIR_UNIT};
@@ -533,10 +538,15 @@ static void test_frontier(void) {
         }
     }
 }
+#include "lir_record_identity_cases.h"
+#include "lir_map_literal_cases.h"
 int main(int argc, char **argv) {
     const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_PTR};
     if (argc == 1) {
-        test_frontier(); record_metadata(); boxed_entry_frontier(); record_field_frontier();
+        test_frontier(); record_metadata(); record_identity_cases(); boxed_entry_frontier(); record_field_frontier();
+        map_literal_metadata();
+        map_literal_operand_boundaries();
+        for(unsigned mode=0;mode<4;++mode)for(unsigned rewrite=0;rewrite<2;++rewrite)map_literal_products(mode,rewrite!=0,NULL);
         f64_owned_programs(); reject_float_operations(); native_negation();
         for (size_t i = 0; i < 4; ++i) {
             for (unsigned output = 0; output <= (types[i] == XR_LIR_PTR ? 1u : 0u); ++output) {
@@ -547,6 +557,11 @@ int main(int argc, char **argv) {
         puts("Typed carriers, parallel edges and explicit backend frontiers passed"); return 0;
     }
     CHECK(argc == 4); XrLirType type = XR_LIR_TYPE_INVALID;
+    if(!strcmp(argv[1],"map-literal") || !strcmp(argv[1],"map-literal-duplicate") || !strcmp(argv[1],"map-literal-empty")) {
+        CHECK(!strcmp(argv[2],"before") || !strcmp(argv[2],"after"));
+        map_literal_products(!strcmp(argv[1],"map-literal")?0u:!strcmp(argv[1],"map-literal-duplicate")?1u:2u,
+            !strcmp(argv[2],"after"),argv[3]);return 0;
+    }
     if (!strcmp(argv[1], "fneg-zero") || !strcmp(argv[1], "fneg-zero-output") ||
         !strcmp(argv[1], "fneg-nan") || !strcmp(argv[1], "fneg-nan-output")) {
         CHECK(!strcmp(argv[2], "before") || !strcmp(argv[2], "after"));

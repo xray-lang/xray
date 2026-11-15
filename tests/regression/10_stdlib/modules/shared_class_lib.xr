@@ -1,8 +1,8 @@
 // shared_class_lib.xr - helper module for 1035_cross_module_shared_method test
 
-export type CounterStats = {
-    count: i64,
-    label: string,
+export struct CounterStats {
+    count: i64
+    label: string
 }
 
 export class Counter {
@@ -17,7 +17,7 @@ export class Counter {
     }
 
     stats() -> CounterStats {
-        return {
+        return CounterStats{
             count: this.count.load(),
             label: "counter",
         }

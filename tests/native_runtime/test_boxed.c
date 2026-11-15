@@ -32,9 +32,9 @@ static const XrtCallableParameterSpec nested_fields[] = {
     {.value={XRT_CALLABLE_CONSTRUCTED,0}, .name="maybe", .name_length=5}};
 static const XrtCallableTypeSpec specs[] = {
     {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_STRING,0}},
-    {.kind=XRT_CALLABLE_RECORD, .parameters=record_fields, .parameter_count=2},
-    {.kind=XRT_CALLABLE_RECORD, .parameters=nested_fields, .parameter_count=2}};
-static const XrtBoxedImage image = {specs, 3};
+    {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record1", .name_length=7, .count=2, .parameters=record_fields, .parameter_count=2},
+    {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record2", .name_length=7, .count=2, .parameters=nested_fields, .parameter_count=2}};
+static const XrtBoxedImage image = {XRT_BOXED_IMAGE_HEADER,specs, 3};
 static const char text[] = "record owns UTF-8 \xf0\x9f\x8c\x8d and an embedded\0byte";
 
 static void string_equals(XrtString *value) {
@@ -76,28 +76,32 @@ typedef struct BoxedContext {
 } BoxedContext;
 
 static void state_new(BoxedContext *context) {
-    char name[] = "name";
+    char name[] = "name", module_name[] = "test", type_name[] = "Record1";
     XrtCallableParameterSpec fields[2];
     memcpy(fields, record_fields, sizeof(fields));
     fields[0].name = name;
     XrtCallableTypeSpec types[3];
     memcpy(types, specs, sizeof(types));
     types[1].parameters = fields;
+    types[1].module = module_name; types[1].name = type_name;
     XrtModuleTypeSpec type = {XRT_MODULE_BOXED, 2};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX,
         .callable_types=types, .callable_type_count=3};
     XrtModuleLayout *layout = NULL;
     OK(xrt_module_layout_new(&spec, &layout));
     memset(name, 'x', sizeof(name));
+    memset(module_name, 'x', sizeof(module_name)); memset(type_name, 'x', sizeof(type_name));
     memset(fields, 0xa5, sizeof(fields));
     memset(types, 0xa5, sizeof(types));
-    XrtModuleLayoutSpec received;
+    XrtModuleLayoutSpec received={.metadata=XRT_MODULE_LAYOUT_HEADER};
     OK(xrt_module_layout_view(layout, &received));
     CHECK(received.callable_types[1].parameters[0].name_length == 4 &&
         !memcmp(received.callable_types[1].parameters[0].name, "name", 4));
+    CHECK(!memcmp(received.callable_types[1].module, "test", 4) &&
+        !memcmp(received.callable_types[1].name, "Record1", 7));
     OK(xrt_module_state_new(layout, UINT64_MAX, &context->state));
     xrt_module_layout_drop(&layout);
 }
@@ -152,8 +156,8 @@ static void consume(void *opaque) {
 }
 static void create_values(void *opaque) {
     (void)opaque;
-    XrtCallableTypeSpec empty_type = {.kind=XRT_CALLABLE_RECORD};
-    XrtBoxedImage empty_image = {&empty_type,1};
+    XrtCallableTypeSpec empty_type = {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record3", .name_length=7, .count=0};
+    XrtBoxedImage empty_image = {XRT_BOXED_IMAGE_HEADER,&empty_type,1};
     XrtBoxed *empty = xrt_boxed_new(&empty_image, 0, NULL, 0, 0);
     XrtBoxed *empty_copy = xrt_boxed_retain(empty, 0);
     xrt_boxed_drop(empty, 0); xrt_boxed_drop(empty_copy, 0);
@@ -174,8 +178,8 @@ static void invalid_handle(void *opaque) {
 static void invalid_schema(void *opaque) {
     (void)opaque;
     XrtCallableParameterSpec field = {.value={XRT_CALLABLE_ARRAY,0}, .name="items", .name_length=5};
-    XrtCallableTypeSpec type = {.kind=XRT_CALLABLE_RECORD, .parameters=&field, .parameter_count=1};
-    XrtBoxedImage wrong = {&type,1};
+    XrtCallableTypeSpec type = {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record4", .name_length=7, .count=1, .parameters=&field, .parameter_count=1};
+    XrtBoxedImage wrong = {XRT_BOXED_IMAGE_HEADER,&type,1};
     uint64_t bits = 0;
     (void)xrt_boxed_new(&wrong, 0, &bits, 1, 0);
     CHECK(false);
@@ -192,15 +196,15 @@ static void closed_shapes(void) {
     XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirTypeArena *arena = NULL;
     OK(xr_xir_compile_type_arena_new(&context, &types, &arena));
-    CHECK(!xrt_boxed_type(arena, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE));
-    CHECK(!xrt_boxed_type(arena, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1)));
+    CHECK(xrt_boxed_type(arena, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE));
+    CHECK(xrt_boxed_type(arena, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1)));
     xr_xir_compile_type_arena_drop(arena);
     xr_compile_resources_release(context.resources);
     XrtCallableTypeSpec nullable = {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_SCALAR,XR_POD_I64}};
     XrtModuleTypeSpec slot_type = {XRT_MODULE_BOXED,0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.size=8, .alignment=8};
-    XrtModuleLayoutSpec layout_spec = {.types=&slot_type, .type_count=1, .byte_limit=UINT64_MAX,
+    XrtModuleLayoutSpec layout_spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&slot_type, .type_count=1, .byte_limit=UINT64_MAX,
         .modules=&module, .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8,
         .callable_types=&nullable, .callable_type_count=1};
     XrtModuleLayout *layout = NULL;
@@ -217,10 +221,10 @@ static void pending_projection_failure(XrtLocationOwner *locations) {
     XrtCallableParameterSpec inner_field = {.value={XRT_CALLABLE_ARRAY,0}, .name="items", .name_length=5};
     XrtCallableParameterSpec outer_field = {.value={XRT_CALLABLE_CONSTRUCTED,0}, .name="child", .name_length=5};
     XrtCallableTypeSpec schema[] = {
-        {.kind=XRT_CALLABLE_RECORD, .parameters=&inner_field, .parameter_count=1},
-        {.kind=XRT_CALLABLE_RECORD, .parameters=&outer_field, .parameter_count=1}};
+        {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record5", .name_length=7, .count=1, .parameters=&inner_field, .parameter_count=1},
+        {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record6", .name_length=7, .count=1, .parameters=&outer_field, .parameter_count=1}};
     XrXirTypeArena *arena = NULL;
-    OK(xrt_callable_types_new(schema, 2, UINT64_MAX, &arena));
+    OK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=schema,.type_count=2}, UINT64_MAX, &arena));
     XrXirDomain *domain = NULL;
     OK(xr_xir_domain_new(UINT64_MAX, &domain));
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
@@ -263,10 +267,11 @@ static void allocation_sweep(XrtLocationOwner *locations) {
     printf("Record/Nullable allocation failure points: %zu\n", points);
 }
 #endif
+#include "native_record_identity_cases.h"
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
-    closed_shapes();
+    closed_shapes(); native_record_identity_cases();
     pending_projection_failure(locations);
     for (uint32_t scenario = 0; scenario < 5; ++scenario) {
         BoxedContext context = {.scenario=scenario};

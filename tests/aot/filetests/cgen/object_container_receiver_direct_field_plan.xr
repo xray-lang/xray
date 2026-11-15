@@ -1,4 +1,7 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn objectContainerReceiverPlan(users: Array<User>) -> i64 {
     return users[0].age
@@ -6,7 +9,7 @@ fn objectContainerReceiverPlan(users: Array<User>) -> i64 {
 
 fn mainValue() -> i64 {
     var users: Array<User> = []
-    users.push({ name: "ada", age: 7 })
+    users.push(User{ name: "ada", age: 7 })
     return objectContainerReceiverPlan(users)
 }
 

@@ -38,7 +38,7 @@ static bool rbc_boxed_location_matches(const XrRbcModule *module, const XrRbcFun
     return (type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_F64) && kind == XR_RBC_BITS;
 }
 static bool rbc_boxed_state_type(const XrRbcModule *module, uint32_t runtime, uint32_t exact) {
-    XrtModuleLayoutSpec layout;
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     return module->state_layout && xrt_module_layout_view(module->state_layout, &layout) == 0 &&
         runtime < layout.type_count && layout.types[runtime].kind == XRT_MODULE_BOXED &&
         exact == XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + layout.types[runtime].argument;
@@ -64,7 +64,7 @@ static bool rbc_boxed_access_valid(const XrRbcModule *module, const XrRbcFunctio
             rbc_register_kind(function, args[0].index) != (construct || initialize ? XR_RBC_STATE : XR_RBC_STATE_REF)) return false;
         if (!read && !rbc_boxed_location_matches(module, function, args[1], (XrXirType)access.slot)) return false;
         if (construct || initialize) {
-            XrtModuleLayoutSpec layout;
+            XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
             if (!module->state_layout || xrt_module_layout_view(module->state_layout, &layout) ||
                 access.destination >= layout.slot_count ||
                 !rbc_boxed_state_type(module, layout.slots[access.destination].type, access.slot)) return false;

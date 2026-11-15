@@ -70,7 +70,7 @@ static void reference_state_new(ArrayRefProbe *probe) {
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=probe->failure == 2 ? 0 : XRT_MODULE_SLOT_MUTABLE,
         .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
     OK(xrt_module_layout_new(&spec, &layout));

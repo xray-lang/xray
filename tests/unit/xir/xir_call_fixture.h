@@ -113,7 +113,7 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirSourceModule source={"alpha",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity ids[5]={{.exported=1},{0},{0},{0},{0}};
-    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4, NULL};
+    const XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=ids, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=4, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generic ? generics : NULL, &error.types, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;

@@ -1,8 +1,14 @@
-type Address = { city: string, zip: i64 }
-type User = { name: string, address: Address }
+struct Address {
+    city: string
+    zip: i64
+}
+struct User {
+    name: string
+    address: Address
+}
 
 fn jsonNestedObjectCodecBridgePlan() -> JSON.Value {
-    var user: User = { name: "Ada", address: { city: "Hangzhou", zip: 310000 } }
+    var user: User = User{ name: "Ada", address: Address{ city: "Hangzhou", zip: 310000 } }
     var encoded = JSON.value(user)
     var decoded = JSON.decode<User>(encoded)
     return JSON.value(decoded!)

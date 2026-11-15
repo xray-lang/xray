@@ -12,7 +12,7 @@
  */
 static XrXirValueStatus xr_rbc_state_caches(XrtModuleLayout *layout, XrtModuleState *state,
     XrtModuleAccess **out) {
-    XrtModuleLayoutSpec view = {0};
+    XrtModuleLayoutSpec view={.metadata=XRT_MODULE_LAYOUT_HEADER};
     XrXirValueStatus status = xrt_module_layout_view(layout, &view);
     if (status != XR_XIR_VALUE_OK || !view.slot_count) return status;
     size_t count = view.slot_count;

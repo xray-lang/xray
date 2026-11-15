@@ -34,7 +34,7 @@ static const Example examples[]={
     {"fn run(){}",NULL,{0,10},'}',true,0},
     {"fn run(){\n  \n","  ",{2,0},'\n',true,0},
     {"fn run(){\n??","    ",{1,0},'\n',true,0},
-    {"var m=#{\n","    ",{1,0},'\n',true,0},
+    {"var m={\n","    ",{1,0},'\n',true,0},
     {"fn run(){\nvar x=1",NULL,{1,3},'\n',true,0}
 };
 static void facts(XrJsonValue *result,unsigned mode) {

@@ -13,14 +13,14 @@ fn dump_int(m: Map<bool, i64>) {
 }
 
 print("-- insert false then true --")
-var a: Map<bool, i64> = #{}
+var a: Map<bool, i64> = {}
 a.set(false, 34)
 a.set(true, 21)
 dump_int(a)
 print("get true=" + a.get(true)!.toString() + " get false=" + a.get(false)!.toString())
 
 print("-- insert true then false --")
-var b: Map<bool, i64> = #{}
+var b: Map<bool, i64> = {}
 b.set(true, 7)
 b.set(false, 9)
 dump_int(b)
@@ -40,7 +40,7 @@ b.delete(false)
 print("size=" + len(b).toString() + " has true=" + b.containsKey(true).toString())
 
 print("-- float32 narrowing --")
-var c: Map<bool, f32> = #{}
+var c: Map<bool, f32> = {}
 c.set(true, 1.5)
 c.set(false, 2.25)
 print("csize=" + len(c).toString())
@@ -50,7 +50,7 @@ for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 class BoolIntMapBag {
     values: Map<bool, i64>
     init() {
-        var values: Map<bool, i64> = #{}
+        var values: Map<bool, i64> = {}
         this.values = values
     }
     fill() -> i64 {

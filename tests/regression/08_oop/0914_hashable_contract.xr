@@ -35,12 +35,12 @@ fn passHashable<T: Hashable>(value: T) -> T {
 @test
 fn test_class_hashable_map_set_key() {
     var token = Token(7)
-    var values: Map<Token, i64> = #{}
+    var values: Map<Token, i64> = {}
     values.set(token, 99)
     assert(values.containsKey(token))
     assertEqual(values.get(token), 99)
 
-    var seen: Set<Token> = #[]
+    var seen: Set<Token> = Set()
     seen.add(token)
     assert(seen.contains(token))
 }

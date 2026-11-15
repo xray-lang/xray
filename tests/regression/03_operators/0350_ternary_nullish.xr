@@ -4,6 +4,35 @@
 
 // ===== 三元运算符基础 =====
 
+struct Person {
+    name: string
+    age: i64
+}
+
+struct UserName {
+    name: string
+}
+
+struct UserData {
+    user: UserName?
+}
+
+struct DepthD {
+    d: i64
+}
+
+struct DepthC {
+    c: DepthD?
+}
+
+struct DepthB {
+    b: DepthC?
+}
+
+struct DepthA {
+    a: DepthB?
+}
+
 @test
 fn test_ternary_true() {
     var result = true ? "yes" : "no"
@@ -96,23 +125,23 @@ fn test_nullish_chain() {
 
 @test
 fn test_optional_chain_null() {
-    var obj = null
+    var obj: Person? = null
     assertEqual(obj?.name, null)
 }
 
 @test
 fn test_optional_chain_value() {
-    var obj = { name: "Alice", age: 30 }
+    var obj = Person{ name: "Alice", age: 30 }
     assertEqual(obj?.name, "Alice")
     assertEqual(obj?.age, 30)
 }
 
 @test
 fn test_optional_chain_nested() {
-    var data = { user: { name: "Bob" } }
+    var data = UserData{ user: UserName{ name: "Bob" } }
     assertEqual(data?.user?.name, "Bob")
     
-    var empty = null
+    var empty: UserData? = null
     assertEqual(empty?.user?.name, null)
 }
 
@@ -122,10 +151,10 @@ fn test_optional_chain_nested() {
 
 @test
 fn test_optional_with_nullish() {
-    var obj = null
+    var obj: Person? = null
     assertEqual(obj?.name ?? "unknown", "unknown")
     
-    var data = { name: "Alice" }
+    var data = UserName{ name: "Alice" }
     assertEqual(data?.name ?? "unknown", "Alice")
 }
 
@@ -143,7 +172,7 @@ fn test_ternary_with_nullish() {
 
 @test
 fn test_deeply_nested_optional() {
-    var obj = { a: { b: { c: { d: 42 } } } }
+    var obj = DepthA{ a: DepthB{ b: DepthC{ c: DepthD{ d: 42 } } } }
     assertEqual(obj?.a?.b?.c?.d, 42)
 }
 

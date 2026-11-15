@@ -817,6 +817,13 @@ static bool template_source_token(XrTemplateArrowSource *map, const Token *token
     return true;
 }
 
+static bool template_metadata_source(void *data, const Token *token, Token *output) {
+    XrTemplateArrowSource *map = data;
+    Token original;
+    return template_source_token(map, token, &original) &&
+           xr_parser_source_token(map->parent, &original, output);
+}
+
 static void template_arrow_error(void *data, const Token *token, bool value_arrow) {
     XrTemplateArrowSource *map = data;
     Token original;
@@ -964,6 +971,8 @@ AstNode *xr_parse_template_string(Parser *parser) {
             };
             expr_parser.arrow_error_callback = template_arrow_error;
             expr_parser.arrow_error_data = &arrow_source;
+            expr_parser.source_token_callback = template_metadata_source;
+            expr_parser.source_token_data = &arrow_source;
             if (parser->arrow_syntax_callback) {
                 expr_parser.arrow_syntax_callback = template_arrow_source;
                 expr_parser.arrow_syntax_data = &arrow_source;
@@ -1514,6 +1523,7 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
         return NULL;
 
     char **field_names = NULL;
+    XrNameSpan *field_spans = NULL;
     AstNode **field_values = NULL;
     int field_count = 0;
     int field_capacity = 0;
@@ -1537,10 +1547,27 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
                 do { if (!ast_copy(parser->compiler_session, grown_names, field_names, sizeof(char *) * (size_t) old_capacity)) return NULL; } while (0);
                 do { if (!ast_copy(parser->compiler_session, grown_values, field_values, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
             }
+            XrNameSpan *grown_spans = ast_array_grow(parser->compiler_session, field_spans,
+                sizeof(*grown_spans), (size_t)field_count, (size_t)field_capacity);
+            if (!xr_parser_healthy(parser) || !grown_spans) return NULL;
+            field_spans = grown_spans;
             field_names = grown_names;
             field_values = grown_values;
         }
 
+        Token original;
+        if (!xr_parser_source_token(parser, &parser->current, &original)) return NULL;
+        field_spans[field_count] = (XrNameSpan){original.line, original.column};
+        if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+            AstNode *inner = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser) || !inner) return NULL;
+            AstNode *spread = xr_ast_spread_expr(parser->compiler_session, inner, original.line);
+            if (!xr_parser_healthy(parser) || !spread) return NULL;
+            spread->column = original.column;
+            field_names[field_count] = NULL;
+            field_values[field_count] = spread;
+            goto field_complete;
+        }
         if (!xr_parser_check(parser, TK_NAME)) {
             do {
                 xr_parser_error(parser, "expected field name in struct literal");
@@ -1591,6 +1618,7 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
             break;
         }
         field_values[field_count] = field_value;
+field_complete:
         field_count++;
 
         if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
@@ -1617,6 +1645,7 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
     if (!xr_parser_healthy(parser)) return NULL;
     if (!node)
         return NULL;
+    node->as.struct_literal.field_name_spans = field_spans;
     node->column = type_path->column;
     node->end_line = parser->previous.line;
     node->end_column = parser->previous.column + parser->previous.length;

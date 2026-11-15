@@ -16,12 +16,19 @@ fn recvArray(ch: Channel<Array<i64>>) -> Array<i64> {
     }
 }
 
-type Config = { name: string, value: i64 }
-type StepMessage = { step: i64 }
-type CountRecord = { count: i64 }
+struct Config {
+    name: string
+    value: i64
+}
+struct StepMessage {
+    step: i64
+}
+struct CountRecord {
+    count: i64
+}
 
 fn emptyStep() -> StepMessage {
-    return { step: 0 }
+    return StepMessage{ step: 0 }
 }
 
 fn recvStep(ch: Channel<StepMessage>) -> StepMessage {
@@ -36,7 +43,7 @@ fn recvStep(ch: Channel<StepMessage>) -> StepMessage {
 fn test_shared_const() {
     print("=== Test shared ===")
 
-    const config: Config = {
+    const config: Config = Config{
         name: "test",
         value: 42
     }
@@ -63,7 +70,7 @@ fn test_shared_const() {
 fn test_move_go() {
     print("=== Test move go ===")
 
-    var data: CountRecord = { count: 10 }
+    var data: CountRecord = CountRecord{ count: 10 }
 
     // 'move data' transfers the owned root to child coroutine
     var task = go fn(d: move CountRecord) -> i64 {
@@ -120,7 +127,7 @@ fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
     const ch: Channel<StepMessage> = Channel(1)
-    var msg: StepMessage = { step: 0 }
+    var msg: StepMessage = StepMessage{ step: 0 }
 
     // Stage 1: modify and move-send
     var t1 = go fn(c: Channel<StepMessage>, d: move StepMessage) {

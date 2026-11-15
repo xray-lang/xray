@@ -1,28 +1,29 @@
 // anchor: match-struct-destructure
-// D44: match object `{ x, y }` / `{ x: a }` and array `[a, b, ..rest]` patterns,
+// Named struct fields and array `[a, b, ..rest]` patterns,
 // exercised through the VM/AOT differential runner for parity.
 
-// ---- Object patterns ----
-var p = {x: 3, y: 4}
-match (p) {
-    { x, y } => { print(x + y) },       // 7
-    _ => { print(0) },
+// ---- Named struct projections; object patterns have been removed ----
+struct Point {
+    x: i64
+    y: i64
 }
-
-var user = {name: "Bob", age: 5}
-match (user) {
-    { name: n, age } => {
-        print(n)                        // Bob
-        print(age)                      // 5
-    },
-    _ => { print("none") },
+struct Person {
+    name: string
+    age: i64
 }
-
-// Object pattern with a refutable field sub-pattern (field reads are null-safe).
-var cfg = {mode: 2, label: "go"}
-match (cfg) {
-    { mode: 1 } => { print("one") },
-    { mode: 2, label } => { print("two:" + label) },   // two:go
+struct Config {
+    mode: i64
+    label: string
+}
+var p = Point{x: 3, y: 4}
+print(p.x + p.y)
+var user = Person{name: "Bob", age: 5}
+print(user.name)
+print(user.age)
+var cfg = Config{mode: 2, label: "go"}
+match (cfg.mode) {
+    1 => { print("one") },
+    2 => { print("two:" + cfg.label) },
     _ => { print("other") },
 }
 

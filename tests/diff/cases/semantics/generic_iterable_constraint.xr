@@ -46,8 +46,8 @@ fn upTo(limit: i64) -> Iterator<i64> {
     }
 }
 
-var s: Set<i64> = #[1, 2, 3]
-var m: Map<string, i64> = #{"aa": 1, "bbb": 2}
+var s: Set<i64> = Set([1, 2, 3])
+var m: Map<string, i64> = {"aa": 1, "bbb": 2}
 var j: JSON.Object = JSON.parseObject("{\"a\":1,\"bb\":2}")
 var r = 2..6
 

@@ -37,7 +37,7 @@ static XrXirStatus syntax_arguments_copy(const XlspSyntaxSnapshot *s,XlspSourceC
         call->arguments=record->argument_count?owner->arguments+at:NULL;
         for(size_t p=0;p<record->argument_count;++p) {
             const XlspSyntaxArgumentRecord *fact=&record->arguments[p];XlspSourceArgumentSyntax *argument=&owner->arguments[at++];
-            argument->has_variable=fact->has_variable;status=syntax_call_range(s,fact->start,fact->end,&argument->range);
+            argument->has_label=fact->has_label;argument->has_variable=fact->has_variable;status=syntax_call_range(s,fact->start,fact->end,&argument->range);
             if(status==XR_XIR_OK&&fact->has_variable)status=syntax_call_range(s,fact->variable,fact->variable_end,&argument->variable);
             if(status!=XR_XIR_OK)return status;
         }

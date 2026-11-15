@@ -63,7 +63,7 @@ fn test_null_in_array() {
 
 @test
 fn test_null_in_map() {
-    var m = #{"key": null}
+    var m = {"key": null}
     assertEqual(m.get("key"), null)
     assertEqual(m.containsKey("key"), true)
 }
@@ -92,13 +92,13 @@ fn test_empty_array() {
 
 @test
 fn test_empty_map() {
-    var m: Map<string, i64> = #{}
+    var m: Map<string, i64> = {}
     assertEqual(len(m), 0)
 }
 
 @test
 fn test_empty_set() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     assertEqual(len(s), 0)
 }
 

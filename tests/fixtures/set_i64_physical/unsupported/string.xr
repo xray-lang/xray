@@ -1,0 +1,2 @@
+var values = Set(["alpha", "beta"])
+print(len(values))

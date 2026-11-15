@@ -1,13 +1,20 @@
-type Meta = { label: string, payload: JSON.Value }
-type Envelope = { id: i64, meta: Meta, note: string }
+struct Meta {
+    label: string
+    payload: JSON.Value
+}
+struct Envelope {
+    id: i64
+    meta: Meta
+    note: string
+}
 
-var base: Envelope = {
+var base: Envelope = Envelope{
     id: 7,
-    meta: { label: "base", payload: JSON.parseValue("{\"ok\":true}") },
+    meta: Meta{ label: "base", payload: JSON.parseValue("{\"ok\":true}") },
     note: "old",
 }
 
-var merged = { ...base, note: "new" }
+var merged = Envelope{ ...base, note: "new" }
 
 print(merged.id)
 print(merged.meta.label)

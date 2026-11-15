@@ -1,11 +1,11 @@
 import sys
 
 var pMap = sys.Process.spawn("sh", ["-c", "exit 0"])
-var m: Map<string, i64> = #{"code": pMap!.wait()}
+var m: Map<string, i64> = {"code": pMap!.wait()}
 print(m.get("code") ?? -1)
 
 var pSet = sys.Process.spawn("sh", ["-c", "exit 0"])
-var s: Set<i64> = #[pSet!.wait()]
+var s: Set<i64> = Set([pSet!.wait()])
 print(s.contains(0))
 
 var pTemplate = sys.Process.spawn("sh", ["-c", "exit 0"])
@@ -24,9 +24,9 @@ var code = unsafe { pUnsafe!.wait() }
 print(code)
 
 var pipeMap = sys.Pipe.open()
-var pm: Map<string, bool> = #{"closed": pipeMap!.close()}
+var pm: Map<string, bool> = {"closed": pipeMap!.close()}
 print(pm.get("closed") ?? false)
 
 var pipeSet = sys.Pipe.open()
-var ps: Set<bool> = #[pipeSet!.close()]
+var ps: Set<bool> = Set([pipeSet!.close()])
 print(ps.contains(true))

@@ -64,7 +64,7 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirSlot slot = {0, (XrXirType)257, 1};
     XrXirLiteral literal = {"owned callback result", 21};
-    XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL};
+    XrXirDeclarations declarations = {.modules=&module, .module_count=1, .functions=identities, .slots=&slot, .slot_count=1, .literals=&literal, .literal_count=1, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};

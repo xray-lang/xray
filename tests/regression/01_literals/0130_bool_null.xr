@@ -2,6 +2,10 @@
 // 作者：xingleixu@gmail.com
 // 测试：布尔值和 null
 // ===== 布尔值基础 =====
+struct NamedValue {
+    name: string
+}
+
 @test
 fn test_bool_true() {
     assertEqual(true, true)
@@ -125,6 +129,6 @@ fn test_nullish_coalesce() {
 fn test_optional_chain() {
     var obj = null
     assertEqual(obj?.property, null)
-    var data = { "name": "test" }
+    var data = NamedValue{ name: "test" }
     assertEqual(data?.name, "test")
 }

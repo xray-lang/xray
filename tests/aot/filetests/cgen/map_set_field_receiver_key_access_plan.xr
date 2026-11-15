@@ -28,6 +28,6 @@ class Registry {
     }
 }
 
-var scores: Map<i64, i64> = #{}
-var seen: Set<i64> = #[]
+var scores: Map<i64, i64> = {}
+var seen: Set<i64> = Set()
 print(Registry(scores, seen).mark(7))

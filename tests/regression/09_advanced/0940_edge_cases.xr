@@ -6,6 +6,22 @@ import text
 
 // ===== 空值处理 =====
 
+struct DeepValue {
+    value: i64
+}
+
+struct DepthC {
+    c: DeepValue
+}
+
+struct DepthB {
+    b: DepthC
+}
+
+struct DepthA {
+    a: DepthB
+}
+
 @test
 fn test_null_equality() {
     var x = null
@@ -128,10 +144,10 @@ fn test_unicode_string() {
 
 @test
 fn test_deep_nesting() {
-    var data = {
-        a: {
-            b: {
-                c: {
+    var data = DepthA{
+        a: DepthB{
+            b: DepthC{
+                c: DeepValue{
                     value: 42
                 }
             }

@@ -17,22 +17,22 @@ var fullArray: Array<i64> = [1]
 show("empty-array", bool(emptyArray))
 show("full-array", bool(fullArray))
 
-var emptyMap: Map<string, i64> = #{}
-var fullMap: Map<string, i64> = #{"x": 1}
+var emptyMap: Map<string, i64> = {}
+var fullMap: Map<string, i64> = {"x": 1}
 show("empty-map", bool(emptyMap))
 show("full-map", bool(fullMap))
 
-var emptyBoolMap: Map<bool, i64> = #{}
-var fullBoolMap: Map<bool, i64> = #{true: 1}
+var emptyBoolMap: Map<bool, i64> = {}
+var fullBoolMap: Map<bool, i64> = {true: 1}
 show("empty-boolmap", bool(emptyBoolMap))
 show("full-boolmap", bool(fullBoolMap))
 
-var emptySet: Set<string> = #[]
-var fullSet: Set<string> = #["x"]
+var emptySet: Set<string> = Set()
+var fullSet: Set<string> = Set(["x"])
 show("empty-set", bool(emptySet))
 show("full-set", bool(fullSet))
 
-var emptyTypedSet: Set<u8> = #[]
-var fullTypedSet: Set<u8> = #[7]
+var emptyTypedSet: Set<u8> = Set()
+var fullTypedSet: Set<u8> = Set([7])
 show("empty-typed-set", bool(emptyTypedSet))
 show("full-typed-set", bool(fullTypedSet))

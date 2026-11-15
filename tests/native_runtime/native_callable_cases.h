@@ -47,7 +47,7 @@ static void native_callable_binding_snapshot(void) {
     const XrtCallableTypeSpec spec = {.kind=XRT_CALLABLE_SIGNATURE,
         .result={XRT_CALLABLE_SCALAR, XR_POD_I64}};
     XrXirTypeArena *arena = NULL;
-    CHECK(xrt_callable_types_new(&spec, 1, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     XrXirType type = XR_XIR_UNIT;
     CHECK(xrt_callable_type_id((XrtCallableValueSpec){XRT_CALLABLE_CONSTRUCTED, 0}, 1, &type));
     XrXirDomain *domain = NULL;
@@ -98,17 +98,17 @@ static void native_callable_projection(void) {
         if (invalid == 6) parameter.value.type = 3;
         if (invalid == 7) specs[3].kind = (XrtCallableShapeKind)-1;
         XrXirTypeArena *rejected = NULL;
-        CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &rejected) ==
+        CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=6}, UINT64_MAX, &rejected) ==
             (invalid == 1 ? XR_XIR_VALUE_UNSUPPORTED : XR_XIR_VALUE_BAD_ARGUMENT));
         CHECK(!rejected);
         specs[3] = saved;
         parameter = prior;
     }
     XrXirTypeArena *arena = NULL;
-    CHECK(xrt_callable_types_new(specs, 6, 1, &arena) == XR_XIR_VALUE_MEMORY_LIMIT && !arena);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=6}, 1, &arena) == XR_XIR_VALUE_MEMORY_LIMIT && !arena);
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     size_t first_call = native_string_calls;
-    CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=6}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     size_t sites = native_string_calls - first_call;
     xr_xir_compile_type_arena_drop(arena);
     arena = NULL;
@@ -116,13 +116,13 @@ static void native_callable_projection(void) {
     for (size_t point = 0; point < sites; ++point) {
         native_string_fail_at = native_string_calls + point;
         native_string_injected = false;
-        CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OOM);
+        CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=6}, UINT64_MAX, &arena) == XR_XIR_VALUE_OOM);
         CHECK(!arena && native_string_injected && !native_string_live && !native_string_bytes);
     }
     native_string_fail_at = SIZE_MAX;
     printf("canonical callable projection receiving failures cover %zu allocation sites\n", sites);
 #endif
-    CHECK(xrt_callable_types_new(specs, 6, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=6}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     memset(specs, 0, sizeof(specs));
     memset(&parameter, 0, sizeof(parameter));
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);

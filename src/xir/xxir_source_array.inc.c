@@ -94,8 +94,8 @@ static bool source_array_static_call(SourceContext *ctx, AstNode *node, SourceVa
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array static member requires its declared ordinary arguments");
     XrXirType type = XR_XIR_UNIT,parameter=XR_XIR_I64; SourceValue capacity;uint32_t supplied;
     if (!source_array_static_type(ctx, access->object, &type) ||
-        !source_native_read_arguments(ctx,node,&parameter,1,1,&capacity,&supplied,
-            "Array static member requires its declared ordinary arguments")) return false;
+        !source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=1,.maximum=1,
+        .values=&capacity,.supplied=&supplied,.diagnostic="Array static member requires its declared ordinary arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     if (capacity.type != XR_XIR_I64)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array capacity must be exact i64");
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_WITH_CAPACITY, type,
@@ -197,18 +197,28 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if (!literal->count && !element.present)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
     SourceValue *elements = literal->count ? source_alloc(ctx, (size_t) literal->count, sizeof(*elements)) : NULL;
-    if (literal->count && !elements) return false;
+    XrHirCollectionEntry *entries=literal->count?source_alloc(ctx,(size_t)literal->count,sizeof(*entries)):NULL;
+    if (literal->count && (!elements || !entries)) return false;
     for (int i = 0; i < literal->count; ++i) {
-        if (!source_plan_expression(ctx, literal->elements[i], element, &elements[i])) return false;
+        if (!source_collection_expression(ctx,literal->elements[i],element,!expected.present || expected.inferred,&elements[i])) return false;
         if (!i && !element.present) element = (SourceExpectedType){true,elements[i].type, false, true};
+        if(!i && expected.inferred && elements[i].type!=element.type) {
+            element=(SourceExpectedType){true,elements[i].type,false,true};expected.present=false;
+        }
         if ((!expected.present || expected.inferred) && !source_root_join_record(ctx,&elements[i])) return false;
-        if (elements[i].type != element.type)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal elements require one exact type");
+        entries[i]=(XrHirCollectionEntry){.value=elements[i].type};
     }
+    XrHirCollectionInput input={.kind=XR_HIR_COLLECTION_ARRAY,.expected=expected.type,.has_expected=expected.present,
+        .entries=entries,.count=(uint32_t)literal->count};
+    XrHirCollection checked={0};XrHirCollectionError error={0};
+    XrXirStatus status=xr_hir_collection_check(&ctx->compile,&ctx->types,&input,ctx->request,&checked,&error);
+    if(status==XR_XIR_BAD_TYPE && (!expected.present || expected.inferred) && error.kind==XR_HIR_COLLECTION_VALUE_TYPE)
+        return source_collection_type_failure(ctx,node,&input,error);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"Array literal elements require one exact type");
+    element.type=checked.value;
     XrXirType array = XR_XIR_UNIT;
     if (!source_array_element_type(ctx, element.type, &array) || !source_native_array_declaration(ctx)) return false;
-    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}},
-        elements, (uint32_t) literal->count, value)) return false;
+    if (!source_collection_construct(ctx,node,&input,array,elements,(uint32_t)literal->count,0,value)) return false;
     /* Literal brackets imply Array without spelling a type name. */
     return source_query_target_selected_reference(ctx,source_query_range(ctx,node,NULL),
         (XrXirSourceRange){ctx->module,0,0,0,0},ctx->array_declaration,XR_XIR_SOURCE_TYPE_USE);
@@ -302,8 +312,8 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
     case XR_NATIVE_OPERATION_ARRAY_RESERVE: {
         SourceValue root, capacity, current, candidate;XrXirType parameter=XR_XIR_I64;uint32_t supplied;
         if (!source_value_place(ctx, access->object, &root) ||
-            !source_native_read_arguments(ctx,node,&parameter,1,1,&capacity,&supplied,
-                "Array method requires its declared arguments")) return false;
+            !source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=1,.maximum=1,
+        .values=&capacity,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
         if (!xr_xir_type_is_array(&ctx->types, root.type) || capacity.type != XR_XIR_I64)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array reserve requires an Array place and exact i64");
         /* Arguments may rebind the root, so read the current value only after them. */
@@ -331,8 +341,8 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
             !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count))return false;
         XrXirType parameters[]={shape.key,shape.type};
         uint32_t count=setting ? 2u : 1u;
-        if (member->parameter_count!=count || !source_native_read_arguments(ctx,node,parameters,count,count,
-            &args[1],&supplied,"Array method requires its declared arguments")) return false;
+        if (member->parameter_count!=count || !source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=count,.maximum=count,
+        .values=&args[1],.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
         XrHirPlaceAction action;
         if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=setting?XR_HIR_PLACE_INDEX_WRITE:XR_HIR_PLACE_INDEX_READ,
             .parent=args[0].place,.type=args[0].type,.base=args[0].id,.key=args[1].type,.selector=args[1].id,
@@ -349,14 +359,14 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
             if(!root->mutable)return source_fail(ctx,access->object,XR_XIR_BAD_TYPE,"push requires a mutable Array binding");
             SourceName saved=*root;XrXirType element=xr_xir_array_element(&ctx->types,saved.type);
             return source_query_reference(ctx,access->object,root,root,XR_XIR_SOURCE_READ_WRITE) &&
-                source_native_read_arguments(ctx,node,&element,1,1,&input,&supplied,
-                    "Array method requires its declared arguments") &&
+                source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&element,.minimum=1,.maximum=1,
+        .values=&input,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY}) &&
                 source_history_binding_push(ctx,&saved,input,value) && source_array_member_reference(ctx,node,member);
         }
         if (!source_array_receiver(ctx, access->object, NULL, true, &place)) return false;
         XrXirType parameter=xr_xir_array_element(&ctx->types,place.type);
-        if (!source_native_read_arguments(ctx,node,&parameter,1,1,&input,&supplied,
-            "Array method requires its declared arguments")) return false;
+        if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=1,.maximum=1,
+        .values=&input,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {place.id, input.id}, {0}, 0, {0}}, value) &&
             source_array_member_reference(ctx, node, member) &&
             source_array_call_signature(ctx,node,&(SourceNativeCallShape){place.type,&input.type,1},value->type);

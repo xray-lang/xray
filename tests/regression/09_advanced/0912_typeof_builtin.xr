@@ -12,8 +12,8 @@ fn test_typeof_typeid_constants() {
     assertEqual(typeOf(true), Type.bool)
     assertEqual(typeOf(null), Type.null)
     assertEqual(typeOf([1, 2, 3]), Type.Array)
-    assertEqual(typeOf(#{"a": 1}), Type.Map)
-    assertEqual(typeOf(#[1, 2, 3]), Type.Set)
+    assertEqual(typeOf({"a": 1}), Type.Map)
+    assertEqual(typeOf(Set([1, 2, 3])), Type.Set)
 }
 
 @test
@@ -57,13 +57,13 @@ fn test_typeof_array() {
 
 @test
 fn test_typeof_map() {
-    var m = #{"a": 1}
+    var m = {"a": 1}
     assertEqual(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assertEqual(typeName(s), "Set")
 }
 

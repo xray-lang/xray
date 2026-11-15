@@ -215,7 +215,7 @@ static void array_instance_cases(void) {
             {"library",7,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
         XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
         XrXirSlot slots[] = {{0,(XrXirType)257,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
-        XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1, NULL};
+        XrXirDeclarations declarations = {.modules=modules, .module_count=mode ? 1 : 2, .functions=identities, .slots=slots, .slot_count=mode ? 0 : 3, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
         XrXirCallEntry entries[] = {
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,sizeof(ArrayAccessFrame),

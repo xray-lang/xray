@@ -1,4 +1,6 @@
-type JsonBag = { items: Array<JSON.Value> }
+struct JsonBag {
+    items: Array<JSON.Value>
+}
 
 fn main() -> i64 {
     var data = JSON.parseValue("{\"items\":[1,true,null]}")

@@ -1,25 +1,49 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Each call owns a snapshot of its real declaration's ordered formals. */
-static XrXirStatus body_array_contract(XrHirBody *body,const XrHirSignatureInput *input,
-    XrCompileRequestControl *control,XrHirArrayCallbackShape *output) {
-    if(!xr_xir_type_is_array(body->types,input->array)||input->callback_error!=XR_XIR_NEVER)return XR_XIR_BAD_TYPE;
-    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+static XrXirStatus body_native_member(uint32_t identity,const XrNativeMemberDeclaration *input,
+    XrCompileRequestControl *control,const XrNativeMemberDeclaration **output) {
+    const XrNativeTypeDeclaration *owner=xr_native_declaration_by_id(identity);
+    for(uint32_t m=0;owner&&m<owner->member_count;++m) {
+        XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
+        if(&owner->members[m]==input) {
+            if(!input->is_public||!input->is_method||(input->parameter_count&&!input->parameters))return XR_XIR_BAD_STRUCTURE;
+            *output=input;return XR_XIR_OK;
+        }
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}
+static uint32_t body_callback_owner(const XrXirTypes *types,XrXirType type) {
+    return xr_xir_type_is_array(types,type)?XR_NATIVE_DECLARATION_ARRAY:
+        xr_xir_type_is_map(types,type)?XR_NATIVE_DECLARATION_MAP:
+        xr_xir_type_is_set(types,type)?XR_NATIVE_DECLARATION_SET:0;
+}
+static XrXirStatus body_native_callback_contract(XrHirBody *body,const XrHirSignatureInput *input,
+    XrCompileRequestControl *control,XrHirNativeCallbackShape *output) {
+    uint32_t owner=body_callback_owner(body->types,input->collection_type);
+    if(!owner||input->callback_error!=XR_XIR_NEVER)return XR_XIR_BAD_TYPE;
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(owner);
     const XrNativeMemberDeclaration *member=NULL;
     for(uint32_t m=0;native&&m<native->member_count;++m) {
         XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
-        if(&native->members[m]==input->array_member){member=&native->members[m];break;}
+        if(&native->members[m]==input->native_member){member=&native->members[m];break;}
     }
     if(!member||!member->is_public||!member->is_method||member->is_static||input->count!=member->parameter_count)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirType element=xr_xir_array_element(body->types,input->array);
-    XrHirArrayCallbackShape shape={{element,XR_XIR_I64},XR_XIR_BOOL,XR_XIR_NEVER,1,1,true};
+    if(owner!=XR_NATIVE_DECLARATION_ARRAY) {
+        if(member->operation!=XR_NATIVE_OPERATION_HASH_FOR_EACH||input->count!=1)return XR_XIR_BAD_STRUCTURE;
+        const XrXirTypeNode *type=xr_xir_type_node(body->types,input->collection_type);
+        uint32_t arity=owner==XR_NATIVE_DECLARATION_MAP?2u:1u;
+        *output=(XrHirNativeCallbackShape){{type->element,type->result},XR_XIR_UNIT,XR_XIR_NEVER,arity,arity,true};
+        return XR_XIR_OK;
+    }
+    XrXirType element=xr_xir_array_element(body->types,input->collection_type);
+    XrHirNativeCallbackShape shape={{element,XR_XIR_I64},XR_XIR_BOOL,XR_XIR_NEVER,1,1,true};
     switch(member->operation) {
     case XR_NATIVE_OPERATION_ARRAY_MAP:shape.has_result=false;shape.maximum=2;break;
     case XR_NATIVE_OPERATION_ARRAY_FILTER:shape.maximum=2;break;
     case XR_NATIVE_OPERATION_ARRAY_FOR_EACH:shape.result=XR_XIR_UNIT;shape.maximum=2;break;
     case XR_NATIVE_OPERATION_ARRAY_REDUCE:
-        if(input->accumulator==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
-        shape=(XrHirArrayCallbackShape){{input->accumulator,element},input->accumulator,XR_XIR_NEVER,2,2,true};break;
+        shape=(XrHirNativeCallbackShape){{input->accumulator,element},input->accumulator,XR_XIR_NEVER,2,2,true};break;
     case XR_NATIVE_OPERATION_ARRAY_FIND:case XR_NATIVE_OPERATION_ARRAY_FIND_INDEX:
     case XR_NATIVE_OPERATION_ARRAY_EVERY:case XR_NATIVE_OPERATION_ARRAY_SOME:break;
     default:return XR_XIR_BAD_STRUCTURE;
@@ -33,13 +57,35 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
     if(input->scope.owner!=body||input->scope.index>=body->scopes.count)return XR_XIR_BAD_STRUCTURE;
     HirBodyScope scope=((HirBodyScope *)body->scopes.items)[input->scope.index];
     if(scope.origin.function!=input->origin.function||scope.origin.module!=input->origin.module)return XR_XIR_BAD_STRUCTURE;
+    if(input->declaration_binding.owner) {
+        if(input->family!=XR_HIR_CALL_INDIRECT||input->declaration_binding.owner!=body||
+            input->declaration_binding.index>=body->binding_count)return XR_XIR_BAD_STRUCTURE;
+        HirBodyBinding binding=body->bindings[input->declaration_binding.index];
+        if(!binding.materialized||!binding.declared_function||binding.location!=input->callee_value||
+            binding.declaration.logical!=input->callable||binding.declaration.origin.function!=input->origin.function||
+            binding.declaration.origin.module!=input->origin.module)return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=body_scope_contains(body,binding.declaration.scope,input->scope,control);
+        if(status!=XR_XIR_OK)return status;
+    }
     const XrXirType *function_parameters=NULL;
     XrXirFunction function_declaration={0};
     const XrXirCallableParameter *callable_parameters=NULL;
     uint32_t count=input->count;
-    XrHirArrayCallbackShape callback={0};
-    if(input->family==XR_HIR_CALL_ARRAY) {
-        XrXirStatus status=body_array_contract(body,input,control,&callback);if(status!=XR_XIR_OK)return status;
+    const XrNativeMemberDeclaration *native=NULL;
+    uint32_t native_owner=input->family==XR_HIR_CALL_NATIVE_CALLBACK?
+        body_callback_owner(body->types,input->collection_type):input->native_owner;
+    if(input->family==XR_HIR_CALL_NATIVE_CALLBACK&&(!native_owner||(input->native_owner&&input->native_owner!=native_owner)))
+        return XR_XIR_BAD_STRUCTURE;
+    if(input->native_member) {
+        XrXirStatus status=body_native_member(native_owner,input->native_member,control,&native);
+        if(status!=XR_XIR_OK)return status;
+        if(native->parameter_count!=count ||
+            (input->family!=XR_HIR_CALL_NATIVE&&input->family!=XR_HIR_CALL_NATIVE_CALLBACK&&input->family!=XR_HIR_CALL_VARIADIC_READ))
+            return XR_XIR_BAD_STRUCTURE;
+    } else if(input->native_owner)return XR_XIR_BAD_STRUCTURE;
+    XrHirNativeCallbackShape callback={0};
+    if(input->family==XR_HIR_CALL_NATIVE_CALLBACK) {
+        XrXirStatus status=body_native_callback_contract(body,input,control,&callback);if(status!=XR_XIR_OK)return status;
     }
     if(input->family==XR_HIR_CALL_FUNCTION||input->family==XR_HIR_CALL_CONSTRUCTOR) {
         if(!body->declarations.functions||!*body->declarations.functions||
@@ -69,7 +115,7 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
         const XrXirTypeNode *type=xr_xir_callable_signature(body->types,input->callable);
         if(!type||type->parameter_count!=count)return XR_XIR_BAD_TYPE;
         callable_parameters=type->parameters;
-    } else if(input->family==XR_HIR_CALL_NATIVE||input->family==XR_HIR_CALL_VARIADIC_READ||input->family==XR_HIR_CALL_ARRAY) {
+    } else if(input->family==XR_HIR_CALL_NATIVE||input->family==XR_HIR_CALL_VARIADIC_READ||input->family==XR_HIR_CALL_NATIVE_CALLBACK) {
         if(count&&!input->native_parameters)return XR_XIR_BAD_STRUCTURE;
         function_parameters=input->native_parameters;
     } else return XR_XIR_BAD_STRUCTURE;
@@ -81,17 +127,17 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
             return XR_XIR_BAD_TYPE;
         }
     }
-    if(count&&(sizeof(XrXirCallableParameter)+1)>SIZE_MAX/count)return XR_XIR_OVERFLOW;
+    if(count&&(sizeof(XrXirCallableParameter)+2)>SIZE_MAX/count)return XR_XIR_OVERFLOW;
     XrXirCallableParameter *parameters=NULL;XrXirStatus status=body_poll(control);
     if(status==XR_XIR_OK&&count)status=xir_compile_resource_status(xr_compile_resources_alloc(body->resources,
-        (size_t)count*(sizeof(*parameters)+1),(void **)&parameters));
-    if(status==XR_XIR_OK)status=body_bytes(parameters,NULL,(size_t)count*(sizeof(*parameters)+1),control);
+        (size_t)count*(sizeof(*parameters)+2),(void **)&parameters));
+    if(status==XR_XIR_OK)status=body_bytes(parameters,NULL,(size_t)count*(sizeof(*parameters)+2),control);
     for(uint32_t p=0;status==XR_XIR_OK&&p<count;++p) {
         if (!(p % 64))
             status = body_poll(control);
         if (status != XR_XIR_OK)
             break;
-        if(input->family==XR_HIR_CALL_ARRAY&&!p) {
+        if(input->family==XR_HIR_CALL_NATIVE_CALLBACK&&!p) {
             /* This formal is an owned shape, not a provisional Unit type. */
             parameters[p]=(XrXirCallableParameter){(XrXirType)UINT32_MAX,XR_PARAM_READ,0};continue;
         }
@@ -112,6 +158,8 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
                 status=input->family==XR_HIR_CALL_VARIADIC_READ?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
         }
     }
+    uint32_t default_owner = input->function;
+    if(status==XR_XIR_OK)status=body_call_default_declaration(body,input,control,&default_owner);
     if(status==XR_XIR_OK)status=body_vector_reserve(body,&body->signatures,sizeof(HirBodySignature),control);
     if(status!=XR_XIR_OK) {
         xr_compile_resources_free(parameters);
@@ -121,44 +169,102 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
         return status;
     }
     HirBodySignature row={.declaration=*input,.parameters=parameters,.callback=callback,.accesses=count?(unsigned char *)(parameters+count):NULL,.first_argument=UINT32_MAX,.last_argument=UINT32_MAX};row.declaration.native_parameters=NULL;row.declaration.types=NULL;
-    row.declaration.constructor_accesses=NULL;row.declaration.constructor_argument_count=0;row.declaration.array_member=NULL;
+    row.default_owner=default_owner;
+    if(input->declaration_binding.owner)
+        row.default_parameter_offset=(*body->declarations.identities)[default_owner].capture_count;
+    row.native_optional=count?row.accesses+count:NULL;
+    if(native) {
+        row.native_member=native->id;row.native_owner=native_owner;
+        for(uint32_t p=0;p<count;++p)row.native_optional[p]=native->parameters[p].optional?1:0;
+        row.native_variadic=count&&native->parameters[count-1].variadic;
+    }
+    row.declaration.constructor_accesses=NULL;row.declaration.constructor_argument_count=0;row.declaration.native_member=NULL;
     ((HirBodySignature *)body->signatures.items)[body->signatures.count]=row;
     *output=(XrHirBodySignature){body,body->signatures.count++};return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_hir_body_array_context(const XrHirBody *body,XrHirBodySignature signature,XrXirType type,uint32_t receiver,XrHirArrayCallbackShape *output) {
+XR_FUNC XrXirStatus xr_hir_body_callback_context(const XrHirBody *body,XrHirBodySignature signature,XrXirType type,uint32_t receiver,XrHirNativeCallbackShape *output) {
     if(!body||body->ended||signature.owner!=body||signature.index>=body->signatures.count||!output)return XR_XIR_BAD_STRUCTURE;
     HirBodySignature row=((HirBodySignature *)body->signatures.items)[signature.index];
-    if(row.declaration.family!=XR_HIR_CALL_ARRAY||row.finished||type!=row.declaration.array||receiver!=row.declaration.array_value)return XR_XIR_BAD_STRUCTURE;
+    if(row.declaration.family!=XR_HIR_CALL_NATIVE_CALLBACK||row.finished||type!=row.declaration.collection_type||receiver!=row.declaration.collection_value)return XR_XIR_BAD_STRUCTURE;
+    if(row.declaration.count==2&&row.declaration.accumulator==XR_XIR_UNIT)return XR_XIR_BAD_STRUCTURE;
     *output=row.callback;return XR_XIR_OK;
 }
-static XrXirStatus body_array_callback(const XrHirBody *body,const HirBodySignature *call,
+XR_FUNC XrXirStatus xr_hir_body_array_accumulator(XrHirBody *body,XrHirBodySignature signature,
+    XrXirType type,XrCompileRequestControl *control) {
+    if(!body||body->ended||signature.owner!=body||signature.index>=body->signatures.count)
+        return XR_XIR_BAD_STRUCTURE;
+    HirBodySignature *row=&((HirBodySignature *)body->signatures.items)[signature.index];
+    if(row->declaration.family!=XR_HIR_CALL_NATIVE_CALLBACK||row->finished||row->access_count||row->argument_count||
+        row->declaration.count!=2||row->declaration.accumulator!=XR_XIR_UNIT||
+        row->callback.parameters[0]!=XR_XIR_UNIT)return XR_XIR_BAD_STRUCTURE;
+    XrXirCallableParameter parameter={type,XR_PARAM_READ,0};
+    if(type==XR_XIR_UNIT||!xr_xir_callable_parameter_storage_valid(body->types,&parameter))return XR_XIR_BAD_TYPE;
+    XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
+    XrXirCompileContext context={body->resources,xr_xir_compile_default_limits()};
+    status=xr_xir_compile_type_expression_shape(&context,body->types,type,xr_xir_type_span(body->types,type));
+    if(status!=XR_XIR_OK)return status;
+    status=body_poll(control);if(status!=XR_XIR_OK)return status;
+    row->declaration.accumulator=type;row->parameters[1]=parameter;
+    row->callback.parameters[0]=type;row->callback.result=type;
+    return XR_XIR_OK;
+}
+static XrXirStatus body_native_callback(const XrHirBody *body,const HirBodySignature *call,
     XrXirType type,XrCompileRequestControl *control,const char **reason) {
     const XrXirTypeNode *actual=xr_xir_callable_signature(body->types,type);
-    XrHirArrayCallbackShape shape=call->callback;
+    XrHirNativeCallbackShape shape=call->callback;
     if(!actual||(actual->flags&XR_XIR_CALLABLE_REST)||actual->parameter_count<shape.minimum||actual->parameter_count>shape.maximum) {
         if (reason)
-            *reason = "Array callback requires a function of the declared shape";
+            *reason = "collection callback requires a function of the declared shape";
         return XR_XIR_BAD_TYPE;
     }
     if(!xr_xir_error_bound_accepts(body->types,actual->element,shape.error)) {
         if (reason)
-            *reason = "Array callback error exceeds its declaration";
+            *reason = "collection callback error exceeds its declaration";
         return XR_XIR_BAD_TYPE;
     }
     for(uint32_t p=0;p<actual->parameter_count;++p) {
         XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
         if(actual->parameters[p].type!=shape.parameters[p]||actual->parameters[p].mode!=XR_PARAM_READ) {
             if (reason)
-                *reason = "Array callback parameter type differs from the element";
+                *reason = "collection callback parameter type differs from the element";
             return XR_XIR_BAD_TYPE;
         }
     }
     if(shape.has_result&&actual->result!=shape.result) {
         if (reason)
-            *reason = "Array callback result differs from its declared result";
+            *reason = "collection callback result differs from its declared result";
         return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_hir_body_call_argument_formals(const XrHirBody *body,XrHirBodySignature signature,
+    XrCompileRequestControl *control,uint32_t *formals,uint32_t count) {
+    if(!body||body->ended||signature.owner!=body||signature.index>=body->signatures.count||count>65536||(!formals&&count))
+        return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t a=0;a<count;++a) {
+        if(!(a%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        formals[a]=UINT32_MAX;
+    }
+    HirBodySignature call=((HirBodySignature *)body->signatures.items)[signature.index];
+    uint32_t selected=call.first_argument;
+    for(uint32_t p=0;p<call.argument_count;++p) {
+        if(!(p%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        if(selected>=body->count)return XR_XIR_BAD_STRUCTURE;
+        HirBodyUse use=body->uses[selected];
+        if(use.signature.owner!=body||use.signature.index!=signature.index)return XR_XIR_BAD_STRUCTURE;
+        uint32_t argument=use.action.argument;
+        uint32_t formal=call.declaration.family==XR_HIR_CALL_VARIADIC_READ?0:use.action.formal;
+        if(!use.defaulted&&argument<count&&formal!=UINT32_MAX) {
+            if(formals[argument]==UINT32_MAX)formals[argument]=formal;
+            else if(formals[argument]!=formal)formals[argument]=UINT32_MAX-1;
+        }
+        selected=use.next_argument;
+    }
+    for(uint32_t a=0;a<count;++a) {
+        if(!(a%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        if(formals[a]==UINT32_MAX-1)formals[a]=UINT32_MAX;
+    }
+    return body_poll(control);
 }
 static XrXirStatus body_call_final_type(XrHirBody *body,const XrHirCallUseInput *input,XrXirCallableParameter formal,XrCompileRequestControl *control) {
     XrXirType expected=input->check_type?input->expected:formal.type;
@@ -176,13 +282,26 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     if(input->defaulted&&input->kind!=XR_HIR_CALL_FINAL)return XR_XIR_BAD_STRUCTURE;
     HirBodySignature declaration=((HirBodySignature *)body->signatures.items)[signature.index];
     if(declaration.finished||input->origin.function!=declaration.declaration.origin.function)return XR_XIR_BAD_STRUCTURE;
+    if(declaration.declaration.family==XR_HIR_CALL_NATIVE_CALLBACK&&declaration.declaration.count==2&&
+        declaration.declaration.accumulator==XR_XIR_UNIT)return XR_XIR_BAD_STRUCTURE;
+    if(declaration.binding_open && !declaration.binding_sealed && input->kind!=XR_HIR_CALL_PLAN)
+        return XR_XIR_BAD_STRUCTURE;
     bool receiver=input->kind==XR_HIR_CALL_FINAL&&input->formal==UINT32_MAX&&declaration.declaration.family==XR_HIR_CALL_REQUIREMENT;
     XrXirStatus scope_status=body_scope_contains(body,declaration.declaration.scope,input->scope,control);
     if(scope_status!=XR_XIR_OK)return scope_status;
     uint32_t parameter=declaration.declaration.family==XR_HIR_CALL_VARIADIC_READ?0:input->formal;
     if(!receiver&&parameter>=declaration.declaration.count)return XR_XIR_BAD_STRUCTURE;
+    if(declaration.binding_sealed&&!receiver&&input->kind!=XR_HIR_CALL_PLAN) {
+        bool rest=body_call_binding_rest(body,&declaration)&&parameter+1==declaration.declaration.count;
+        bool implicit=parameter<declaration.declaration.parameter_offset;
+        if(input->defaulted) {
+            if(implicit||declaration.formal_arguments[parameter]!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+        } else if(!implicit&&!rest&&
+            (input->argument>=declaration.binding_count||declaration.argument_formals[input->argument]!=parameter))
+            return XR_XIR_BAD_STRUCTURE;
+    }
     XrXirCallableParameter formal=receiver?(XrXirCallableParameter){declaration.declaration.receiver_type,XR_PARAM_READ,0}:declaration.parameters[parameter];
-    bool callback=declaration.declaration.family==XR_HIR_CALL_ARRAY&&!parameter;
+    bool callback=declaration.declaration.family==XR_HIR_CALL_NATIVE_CALLBACK&&!parameter;
     if(callback&&input->kind==XR_HIR_CALL_VALUE&&declaration.callback_received)return XR_XIR_BAD_STRUCTURE;
     if((input->kind==XR_HIR_CALL_VALUE||input->kind==XR_HIR_CALL_EXACT||input->kind==XR_HIR_CALL_FINAL)&&
         input->type==XR_XIR_UNIT&&declaration.declaration.family!=XR_HIR_CALL_REQUIREMENT) {
@@ -195,7 +314,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         if(!declaration.callback_received||declaration.callback_use>=body->count)return XR_XIR_BAD_STRUCTURE;
         HirBodyUse received=body->uses[declaration.callback_use];
         if(received.source_value!=input->value||received.action.target!=input->type)return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=body_array_callback(body,&declaration,input->type,control,input->reason);if(status!=XR_XIR_OK)return status;
+        XrXirStatus status=body_native_callback(body,&declaration,input->type,control,input->reason);if(status!=XR_XIR_OK)return status;
         formal.type=input->type;
     } else if(callback&&!declaration.callback_ready)formal.type=XR_XIR_UNIT;
     XrHirBodyAction action={.source=formal.type,.target=formal.type,.formal=input->formal,.argument=input->argument,
@@ -224,28 +343,42 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         if(input->kind==XR_HIR_CALL_FINAL) {
             if(receiver&&input->type!=formal.type)return XR_XIR_BAD_TYPE;
             uint32_t ordinal=declaration.argument_count;
+            if(declaration.declaration.family==XR_HIR_CALL_NATIVE&&declaration.binding_sealed) {
+                uint32_t selected=0;
+                for(ordinal=0;ordinal<declaration.declaration.count;++ordinal) {
+                    if(!(ordinal%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+                    if(declaration.formal_arguments[ordinal]==UINT32_MAX)continue;
+                    if(selected++==declaration.argument_count)break;
+                }
+                if(ordinal==declaration.declaration.count)return XR_XIR_BAD_STRUCTURE;
+            }
             if(declaration.declaration.family==XR_HIR_CALL_REQUIREMENT) {
                 if((!ordinal)!=receiver||(!receiver&&input->formal!=ordinal-1))return XR_XIR_BAD_STRUCTURE;
             } else if(input->formal!=ordinal)return XR_XIR_BAD_STRUCTURE;
             bool implicit_receiver=receiver||(input->formal<declaration.declaration.parameter_offset&&input->argument==UINT32_MAX);
             if(!implicit_receiver&&!input->defaulted) {
-                if(input->formal<declaration.declaration.parameter_offset||
-                    input->argument!=input->formal-declaration.declaration.parameter_offset||
-                    input->argument>=declaration.access_count||!(declaration.accesses[parameter]&1))return XR_XIR_BAD_STRUCTURE;
+                if(input->formal<declaration.declaration.parameter_offset||!(declaration.accesses[parameter]&1))return XR_XIR_BAD_STRUCTURE;
+                if(declaration.binding_sealed) {
+                    bool rest=body_call_binding_rest(body,&declaration)&&parameter+1==declaration.declaration.count;
+                    if(!rest&&(input->argument>=declaration.binding_count||
+                        declaration.argument_formals[input->argument]!=parameter||
+                        declaration.formal_arguments[parameter]!=input->argument))return XR_XIR_BAD_STRUCTURE;
+                } else if(input->argument!=input->formal-declaration.declaration.parameter_offset||
+                    input->argument>=declaration.access_count)return XR_XIR_BAD_STRUCTURE;
             }
             if(!receiver&&!callback) {
                 XrXirStatus status=body_call_final_type(body,input,formal,control);if(status!=XR_XIR_OK)return status;
             }
             if(input->defaulted) {
                 if(declaration.declaration.family!=XR_HIR_CALL_FUNCTION&&
-                    declaration.declaration.family!=XR_HIR_CALL_CONSTRUCTOR)return XR_XIR_BAD_STRUCTURE;
+                    declaration.declaration.family!=XR_HIR_CALL_CONSTRUCTOR&&!declaration.declaration.declaration_binding.owner)return XR_XIR_BAD_STRUCTURE;
                 const XrXirDefaultTable *defaults=body->declarations.defaults;bool found=false;
                 if(!defaults)return XR_XIR_BAD_STRUCTURE;
                 for(uint32_t d=0;d<defaults->count;++d) {
                     if(!(d%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
                     XrXirDefaultBinding binding=defaults->records[d];
-                    if(binding.owner_kind==XR_XIR_DEFAULT_PARAMETER&&binding.owner==declaration.declaration.function&&
-                        binding.ordinal==input->formal&&binding.function==input->default_function){found=true;break;}
+                    if(binding.owner_kind==XR_XIR_DEFAULT_PARAMETER&&binding.owner==declaration.default_owner&&
+                        binding.ordinal==input->formal+declaration.default_parameter_offset&&binding.function==input->default_function){found=true;break;}
                 }
                 if(!found)return XR_XIR_BAD_STRUCTURE;
             }
@@ -316,10 +449,17 @@ XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature s
     if(!body||body->ended||signature.owner!=body||signature.index>=body->signatures.count||!instruction||!use||!output)
         return XR_XIR_BAD_STRUCTURE;
     HirBodySignature row=((HirBodySignature *)body->signatures.items)[signature.index];
-    bool native=row.declaration.family==XR_HIR_CALL_NATIVE||row.declaration.family==XR_HIR_CALL_VARIADIC_READ||row.declaration.family==XR_HIR_CALL_ARRAY;
+    bool native=row.declaration.family==XR_HIR_CALL_NATIVE||row.declaration.family==XR_HIR_CALL_VARIADIC_READ||row.declaration.family==XR_HIR_CALL_NATIVE_CALLBACK;
     uint32_t expected=row.declaration.count+(row.declaration.family==XR_HIR_CALL_REQUIREMENT?1u:0u);
-    if(row.finished||((!native||row.declaration.family==XR_HIR_CALL_ARRAY)&&row.argument_count!=expected)||
+    if(row.finished||(row.binding_open&&!row.binding_sealed)||((!native||row.declaration.family==XR_HIR_CALL_NATIVE_CALLBACK)&&row.argument_count!=expected)||
         (native&&row.declaration.family!=XR_HIR_CALL_VARIADIC_READ&&row.argument_count>expected))return XR_XIR_BAD_STRUCTURE;
+    if(native&&row.binding_sealed&&row.argument_count!=row.binding_count)return XR_XIR_BAD_STRUCTURE;
+    if(native&&row.native_member&&!row.binding_sealed&&row.declaration.family!=XR_HIR_CALL_VARIADIC_READ) {
+        for(uint32_t p=row.argument_count;p<expected;++p) {
+            if(!(p%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+            if(!row.native_optional[p])return XR_XIR_BAD_STRUCTURE;
+        }
+    }
     XrXirOp operation=instruction->op;
     bool scoped=row.group.type!=XR_XIR_UNIT;
     bool method=body_class_call_bound(&row);

@@ -23,6 +23,7 @@
 #include "runtime/native/xnative_callable.h"
 #include "xray_native_array.h"
 #include "xray_native_map.h"
+#include "xray_native_set.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -127,7 +128,8 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
     XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64, XR_RBC_STRING_REF, XR_RBC_FUNCTION,
     XR_RBC_I64_BINDING, XR_RBC_CAPTURED_CELL, XR_RBC_CAPTURED_CELL_BORROW,
-    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF, XR_RBC_BOXED
+    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF, XR_RBC_BOXED,
+    XR_RBC_SET_I64, XR_RBC_SET_I64_CELL, XR_RBC_SET_I64_REF
 } XrRbcRegisterKind;
 
 typedef enum XrRbcViewOperation {
@@ -146,7 +148,9 @@ typedef enum XrRbcArrayOperation {
     XR_RBC_ARRAY_REF_SET, XR_RBC_ARRAY_REF_PUSH, XR_RBC_ARRAY_DISPLAY,
     XR_RBC_MAP_CONTAINS, XR_RBC_MAP_REMOVE, XR_RBC_MAP_CLEAR,
     XR_RBC_MAP_REF_REMOVE, XR_RBC_MAP_REF_CLEAR,
-    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE, XR_RBC_MAP_INDEX
+    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE, XR_RBC_MAP_INDEX, XR_RBC_MAP_LITERAL,
+    XR_RBC_SET_CONTAINS,XR_RBC_SET_ADD,XR_RBC_SET_REMOVE,XR_RBC_SET_CLEAR,
+    XR_RBC_SET_REF_ADD,XR_RBC_SET_REF_REMOVE,XR_RBC_SET_REF_CLEAR,XR_RBC_SET_STATE_READ,XR_RBC_SET_STATE_WRITE
 } XrRbcArrayOperation;
 
 /* A location names one activation-owned bank. Variadic operands remain real
@@ -369,6 +373,8 @@ typedef struct {
     size_t function_scope_count;
     const XrRbcFunctionCallableParameters *function_callable_parameters;
     size_t function_callable_parameter_count;
+    const XrtMapLiteral *map_literals;
+    size_t map_literal_count;
 } XrRbcModule;
 
 typedef enum {
@@ -443,6 +449,9 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
+/* The body is borrowed until outcome_free and preserves every message byte. */
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *,uint32_t *,const char **,size_t *,
+    uint32_t *,const XrtLocationOwner **);
 XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,

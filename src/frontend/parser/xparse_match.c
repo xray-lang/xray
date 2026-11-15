@@ -95,109 +95,6 @@ static char *pattern_copy_token(Parser *parser, const Token *tok) {
     return buf;
 }
 
-/* Parse an object match pattern: `{ x, y }` or `{ x: sub }`.
- * Shorthand `{ x }` binds field `x` to a local `x`; `{ x: sub }` matches the
- * field value against the sub-pattern (rename, literal, nested destructure). */
-static AstNode *parse_object_pattern(Parser *parser) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_object_pattern: NULL parser");
-    int line = parser->current.line;
-    do {
-        xr_parser_consume(parser, TK_LBRACE, "expected '{' to start object pattern");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    char **field_names = NULL;
-    XrNameSpan *field_name_spans = NULL;
-    AstNode **patterns = NULL;
-    int count = 0;
-    int capacity = 0;
-
-    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-        if (!xr_parser_check(parser, TK_NAME)) {
-            do {
-                xr_parser_error(parser, "expected field name in object pattern");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-        Token name_tok = parser->current;
-        do {
-            xr_parser_advance(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        char *field = pattern_copy_token(parser, &name_tok);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        AstNode *sub;
-        if (xr_parser_match(parser, TK_COLON)) {
-            do {
-                sub = parse_pattern_single(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (!sub)
-                return NULL;
-        } else {
-            /* Shorthand `{ x }`: bind field `x` to a fresh local `x`. */
-            AstNode *var = xr_ast_variable(parser->compiler_session, field, name_tok.line);
-            if (!xr_parser_healthy(parser)) return NULL;
-            var->column=name_tok.column;var->end_line=name_tok.line;
-            var->end_column=name_tok.column+name_tok.length;
-            do {
-                sub = xr_ast_pattern_literal(parser->compiler_session, var, name_tok.line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        }
-
-        if (count >= capacity) {
-            int old_capacity = capacity;
-            do {
-                capacity = xr_parser_grow_capacity(parser, capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            char **nf = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
-                                                  (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            AstNode **np = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                        (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            XrNameSpan *ns=(XrNameSpan *)ast_alloc_array(parser->compiler_session,sizeof(*ns),(size_t)capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (old_capacity>0 && !ast_copy(parser->compiler_session,ns,field_name_spans,
-                sizeof(*ns)*(size_t)old_capacity)) return NULL;
-            field_name_spans=ns;
-            if (old_capacity > 0) {
-                do { if (!ast_copy(parser->compiler_session, nf, field_names, sizeof(char *) * (size_t) old_capacity)) return NULL; } while (0);
-                do { if (!ast_copy(parser->compiler_session, np, patterns, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
-            }
-            field_names = nf;
-            patterns = np;
-        }
-        field_name_spans[count]=(XrNameSpan){name_tok.line,name_tok.column};
-        field_names[count] = field;
-        patterns[count] = sub;
-        count++;
-
-        if (!xr_parser_check(parser, TK_RBRACE)) {
-            if (!xr_parser_match(parser, TK_COMMA)) {
-                do {
-                    xr_parser_error(parser, "expected ',' or '}' in object pattern");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return NULL;
-            }
-        }
-    }
-
-    do {
-        xr_parser_consume(parser, TK_RBRACE, "expected '}' to close object pattern");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-    AstNode *result=xr_ast_pattern_object(parser->compiler_session,field_names,patterns,count,line);
-    if (!xr_parser_healthy(parser) || !result) return NULL;
-    result->as.pattern_object.field_name_spans=field_name_spans;return result;
-}
-
 /* Parse an array match pattern: `[a, b, ..rest]`. Positional elements use
  * ordinary sub-patterns; an optional trailing `..rest` (or bare `..`) binds the
  * remaining elements as a new array. The rest element must be last. */
@@ -407,7 +304,8 @@ static AstNode *parse_pattern_single_inner(Parser *parser) {
     }
 
     if (xr_parser_check(parser, TK_LBRACE)) {
-        return parse_object_pattern(parser);
+        xr_parser_error_at_current(parser, "object patterns were removed; match a tuple or use named field access");
+        return NULL;
     }
 
     if (xr_parser_check(parser, TK_LBRACKET)) {

@@ -2,6 +2,11 @@
 
 import http
 
+struct _RedirectResponse {
+    status: i64
+    headers: Map<string, string>
+}
+
 fn isRedirect(s: i64) -> bool { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308 }
 fn isPermanent(s: i64) -> bool { return s == 301 || s == 308 }
 fn isTemporary(s: i64) -> bool { return s == 302 || s == 303 || s == 307 }
@@ -28,7 +33,7 @@ fn test_permanent_vs_temporary() {
 
 @test
 fn test_location_header() {
-    var resp = { status: 302, headers: #{"Location": "https://example.com/new"} }
+    var resp = _RedirectResponse{ status: 302, headers: {"Location": "https://example.com/new"} }
     assertEqual(resp.headers.get("Location"), "https://example.com/new")
 }
 

@@ -5,7 +5,10 @@
 */
 
 enum ForceErr { Msg { message: string } }
-type User = { id: i64, name: string }
+struct User {
+    id: i64
+    name: string
+}
 
 fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
@@ -18,7 +21,7 @@ fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
         throw ForceErr.Msg { message: "deeper failure" }
     }
-    return { id: 99, name: "Bob" }
+    return User{ id: 99, name: "Bob" }
 }
 
 @test

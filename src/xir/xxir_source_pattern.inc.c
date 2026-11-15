@@ -86,7 +86,7 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         return true;
     }
     if (node->type==AST_PATTERN_ARRAY) return source_pattern_array(ctx,node,type,out,depth);
-    if (node->type==AST_PATTERN_TUPLE || node->type==AST_PATTERN_OBJECT)
+    if (node->type==AST_PATTERN_TUPLE)
         return source_pattern_product(ctx,node,type,out,depth);
     AstNode *path=NULL; PatternAdtNode *payload=NULL;
     if (node->type==AST_PATTERN_ADT) {payload=&node->as.pattern_adt;path=payload->variant;}

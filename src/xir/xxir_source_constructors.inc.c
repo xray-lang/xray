@@ -210,10 +210,11 @@ static bool source_constructor_emit(SourceContext *ctx,AstNode *node,const Sourc
         XrXirType expected;
         if(!source_substitute(ctx,&substitution,function.parameters[p],0,&expected))return false;
         if(!request->arguments)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"constructor argument type differs from its declaration");
-        XrHirCallUseInput input={.kind=XR_HIR_CALL_FINAL,.formal=p,.argument=p,.check_type=true,.expected=expected,
+        XrHirCallUseInput input={.kind=XR_HIR_CALL_FINAL,.formal=p,
+            .argument=source_call_final_argument(&plan,p),.check_type=true,.expected=expected,
             .substitution=substitution.types,.substitution_count=substitution.count,
             .failure="constructor argument type differs from its declaration"};
-        if(p>=request->supplied) {
+        if(source_call_default_needed(&plan,p,request->supplied)) {
             if(!source_hir_default_input(ctx,node,request->function,p,request->arguments[p],&input))return false;
         }
         if(!source_hir_call_use(ctx,node,&plan,input,&request->arguments[p],NULL))return false;
@@ -229,7 +230,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     XrXirTypeNode nominal = *xr_xir_type_node(&ctx->types, type);
     uint32_t index = source_hir_nominal_defaults(ctx,nominal.nominal.declaration).constructor;
     if (!index) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "type has no admitted constructor");
-    const XrXirFunction *function = &ctx->functions[index];
+    XrXirFunction function = ctx->functions[index];
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx,node,&syntax)) return false;
     bool inferred=!syntax.type_arg_count && nominal.nominal.argument_count;
@@ -245,20 +246,22 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     if (!source_query_reference(ctx, call->reference, binding, &called, XR_XIR_SOURCE_CALL)) return false;
     SourceSubstitution substitution = {nominal.nominal.arguments, nominal.nominal.argument_count};
     SourceCallStorage storage={0};
-    if(!source_call_storage(ctx,inferred?substitution.count:0,function->parameter_count,&storage))return false;
+    if(!source_call_storage(ctx,inferred?substitution.count:0,function.parameter_count,&storage))return false;
     SourceValue *arguments=storage.values;
     if(inferred)substitution.types=storage.types;
-    SourceCallPlan plan={.family=SOURCE_CALL_CONSTRUCTOR,.prefix=inferred?(SourceSubstitution){0}:substitution,.substitution=substitution,.function_parameters=function->parameters,.requirement_parameters=NULL,
+    SourceCallPlan plan={.family=SOURCE_CALL_CONSTRUCTOR,.prefix=inferred?(SourceSubstitution){0}:substitution,.substitution=substitution,.function_parameters=function.parameters,.requirement_parameters=NULL,
         .result=type,.expected_result=call->expected,.values=arguments,.parameter_offset=0,.value_offset=0,.parameter_kinds=NULL,.argument_contexts=NULL};
     plan.declaration.function=index;plan.declaration.constructor_accesses=call->accesses;
     plan.declaration.constructor_argument_count=call->count;
-    if (!source_call_expand(ctx,node,&syntax,&plan,function->parameter_count) ||
-        !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
+    if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count) ||
+        (!plan.named_arguments && !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count)) ||
+        !source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     if(!source_constructor_application(ctx,node,nominal.nominal.declaration,substitution,&type))return false;
-    for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)
-        if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
+    for (uint32_t p = 0; p < function.parameter_count; ++p)
+        if (source_call_default_needed(&plan,p,(uint32_t)syntax.arg_count) &&
+            !source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
     if(inferred && !source_call_conversions(ctx,node,&(SourceCallConversions){SOURCE_CALL_FUNCTION,
-        substitution,function->parameters,NULL,arguments,function->parameter_count,0,false}))return false;
+        substitution,function.parameters,NULL,arguments,function.parameter_count,0,false}))return false;
     return source_constructor_emit(ctx,node,&(SourceConstructorEmission){type,index,(uint32_t)syntax.arg_count,arguments,plan.signature},value);
 }
 static bool source_constructor_call(SourceContext *ctx, AstNode *node, SourceExpectedType context,

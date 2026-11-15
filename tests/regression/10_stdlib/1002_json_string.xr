@@ -7,6 +7,11 @@
 
 // ===== 基本字符串测试 =====
 
+struct NamedCity {
+    name: string
+    city: string
+}
+
 @test
 fn test_empty_string() {
     var s = JSON.parse<string>("\"\"")
@@ -261,7 +266,7 @@ fn test_mixed_string_array() {
 
 @test
 fn test_string_object_keys() {
-    var obj = JSON.parse<{ name: string, city: string }>("{\"name\": \"Alice\", \"city\": \"北京\"}")
+    var obj = JSON.parse<NamedCity>("{\"name\": \"Alice\", \"city\": \"北京\"}")
     assertEqual(obj.name, "Alice")
     assertEqual(obj.city, "北京")
 }

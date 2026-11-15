@@ -1,4 +1,8 @@
 // Dependency for the imported enum-payload type regression.
+struct Answer {
+    answer: i64
+}
+
 export enum SharedError {
     Invalid { message: string }
 }
@@ -16,7 +20,7 @@ export enum MirroredResult {
 }
 
 export fn produce(ok: bool) -> SharedResult {
-    return ok ? SharedResult.Ok { value: JSON.value({ answer: 42 }) } : SharedResult.Err { error: SharedError.Invalid { message: "bad" } }
+    return ok ? SharedResult.Ok { value: JSON.value(Answer{ answer: 42 }) } : SharedResult.Err { error: SharedError.Invalid { message: "bad" } }
 }
 
 export fn mirror(result: SharedResult) -> MirroredResult {

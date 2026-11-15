@@ -61,18 +61,6 @@ static inline XrXirStatus xir_display_type(const XrXirCompileContext *compile,co
                 status=xir_receive_step(control,&rows);
                 if (status==XR_XIR_OK) status=xir_display_enqueue(&walk,node->parameters[p].type);
             }
-        } else if (node->kind==XR_XIR_TYPE_NOMINAL && types->nominals &&
-            node->nominal.declaration<types->nominals->count) {
-            const XrXirNominalTable *table=types->nominals;uint32_t d=node->nominal.declaration;
-            if (!table->declarations && !table->identities) {status=XR_XIR_BAD_TYPE;break;}
-            uint32_t flags=table->declarations?table->declarations[d].flags:table->identities[d].flags;
-            uint32_t kind=table->declarations?table->declarations[d].kind:table->identities[d].kind;
-            if (flags!=XR_XIR_NOMINAL_RECORD || kind!=XR_XIR_NOMINAL_STRUCT ||
-                (node->nominal.field_count && !node->nominal.fields)) status=XR_XIR_BAD_TYPE;
-            for (uint32_t f=0;f<node->nominal.field_count && status==XR_XIR_OK;++f) {
-                status=xir_receive_step(control,&rows);
-                if (status==XR_XIR_OK) status=xir_display_enqueue(&walk,node->nominal.fields[f]);
-            }
         } else status=XR_XIR_BAD_TYPE;
     }
     xr_compile_resources_free(walk.pending);xr_compile_resources_free(walk.seen);return status;

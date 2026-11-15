@@ -36,7 +36,7 @@ fn test_array_empty_with_annotation() {
 // ===== Map Generic Inference =====
 @test
 fn test_map_type_annotation() {
-    var m: Map<string, i64> = #{}
+    var m: Map<string, i64> = {}
     m.set("a", 1)
     m.set("b", 2)
     assertEqual(m.get("a"), 1)
@@ -45,14 +45,14 @@ fn test_map_type_annotation() {
 
 @test
 fn test_map_infer_from_literal() {
-    var m = #{"name": "Alice", "city": "Beijing"}
+    var m = {"name": "Alice", "city": "Beijing"}
     assertEqual(m.get("name"), "Alice")
 }
 
 // ===== Set Generic Inference =====
 @test
 fn test_set_type_annotation() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     s.add(1)
     s.add(2)
     s.add(1)
@@ -62,7 +62,7 @@ fn test_set_type_annotation() {
 
 @test
 fn test_set_infer_from_literal() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assert(s.contains(1))
     assert(!s.contains(4))
 }
@@ -109,14 +109,14 @@ fn test_array_slice_return_type() {
 
 @test
 fn test_map_keys_return_type() {
-    var m = #{"a": 1, "b": 2}
+    var m = {"a": 1, "b": 2}
     var keys = m.keys()
     assertEqual(typeName(keys), "Array")
 }
 
 @test
 fn test_map_values_return_type() {
-    var m = #{"a": 1, "b": 2}
+    var m = {"a": 1, "b": 2}
     var values = m.values()
     assertEqual(typeName(values), "Array")
 }
@@ -131,7 +131,7 @@ fn test_array_of_arrays() {
 
 @test
 fn test_map_of_arrays() {
-    var groups = #{"odd": [1, 3, 5], "even": [2, 4, 6]}
+    var groups = {"odd": [1, 3, 5], "even": [2, 4, 6]}
     assertEqual(groups.get("odd")![0], 1)
     assertEqual(groups.get("even")![2], 6)
 }

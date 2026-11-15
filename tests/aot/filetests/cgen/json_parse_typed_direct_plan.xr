@@ -1,5 +1,12 @@
-type Inner = { count: i64, ok: bool }
-type Payload = { name: string, inner: Inner, values: Array<JSON.Value> }
+struct Inner {
+    count: i64
+    ok: bool
+}
+struct Payload {
+    name: string
+    inner: Inner
+    values: Array<JSON.Value>
+}
 
 var payload = JSON.parse<Payload>(
     "{\"ignored\":{\"deep\":[1,2,3]},\"values\":[1,true,null],\"inner\":{\"ok\":true,\"count\":7},\"name\":\"Ada\"}",

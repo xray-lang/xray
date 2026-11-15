@@ -2,6 +2,11 @@
 
 // === 1. Basic types toString ===
 
+struct Person {
+    name: string
+    age: i64
+}
+
 fn myFunc() -> i64 { return 1 }
 class Dog {
     name: string
@@ -48,17 +53,17 @@ fn test_tostring() {
     assertEqual(string(nested), "[[1, 2], [3, 4]]")
 
     // === 5. Map toString ===
-    var m = #{"a": 1}
+    var m = {"a": 1}
     var ms = string(m)
     assert(ms.indexOf("\"a\": 1") >= 0)
 
     // === 6. Set toString ===
-    var st = #[1, 2, 3]
+    var st = Set([1, 2, 3])
     var ss = string(st)
-    assert(ss.indexOf("#[") == 0)
+    assert(ss.indexOf("Set([") == 0)
 
-    // === 7. Structural object toString ===
-    var obj = { name: "Alice", age: 30 }
+    // === 7. Named struct toString ===
+    var obj = Person{ name: "Alice", age: 30 }
     var js = string(obj)
     assert(js.indexOf("name") >= 0)
     assert(js.indexOf("Alice") >= 0)

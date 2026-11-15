@@ -263,6 +263,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         if(use->instruction&&!source_region_id(map,value_count,use->recipe,&recipe))goto invalid;
         if(use->block!=UINT32_MAX&&!source_region_id(blocks,body->block_count,use->block,&block))goto invalid;
         if(use->instruction&&(recipe==UINT32_MAX||recipe<parameters))goto invalid;
+        XrXirDeclarations collection_declarations={0};
         XrHirBodyProjection projection={.function=ctx->function,
             .instruction=use->instruction?recipe-parameters:UINT32_MAX,.block=block,
             .value=value,.source_value=use->value,.formal=use->formal,.argument=use->argument,
@@ -274,6 +275,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             projection.operation=raw_recipe.op;projection.source_operands[0]=raw_recipe.args[0];
             projection.source_operands[1]=raw_recipe.args[1];projection.immediate=raw_recipe.immediate;
             projection.type=raw_recipe.type;
+            if(raw_recipe.op==XR_XIR_MAP_LITERAL) {
+                if(raw_recipe.immediate<0 || (uint64_t)raw_recipe.immediate>=ctx->map_literal_count)goto invalid;
+                (void)source_module_view(ctx,&collection_declarations);
+                projection.collection_declarations=&collection_declarations;
+            }
             if(raw_recipe.args[0]>=parameters&&raw_recipe.args[0]-parameters<body->count) {
                 XrXirInstruction producer=body->recipes[raw_recipe.args[0]-parameters].instruction;
                 projection.operand_operation=producer.op;projection.operand_immediate=producer.immediate;projection.operand_type=producer.type;

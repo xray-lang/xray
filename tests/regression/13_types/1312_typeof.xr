@@ -16,9 +16,9 @@ assertEqual(typeName(null), "null")
 // 测试容器类型
 var arr = [1, 2, 3]
 assertEqual(typeName(arr), "Array")
-var map = #{"a": 1}
+var map = {"a": 1}
 assertEqual(typeName(map), "Map")
-var s = #[1, 2, 3]
+var s = Set([1, 2, 3])
 assertEqual(typeName(s), "Set")
 
 // 测试函数类型

@@ -70,7 +70,7 @@ static XrtModuleStatus make_layout(XrtModuleLayout **out) {
         {.module=0, .type=1, .offset=8, .size=8, .alignment=8},
         {.module=1, .type=2, .flags=XRT_MODULE_SLOT_MUTABLE, .offset=16, .size=1, .alignment=1},
         {.module=1, .type=3, .offset=24, .size=8, .alignment=8}};
-    XrtModuleLayoutSpec spec = {.types=types, .type_count=4, .modules=modules, .module_count=2,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=4, .modules=modules, .module_count=2,
         .dependencies=dependencies, .dependency_count=1, .slots=slots, .slot_count=4,
         .payload_size=32, .payload_alignment=8, .byte_limit=UINT64_MAX};
     return xrt_module_layout_new(&spec, out);
@@ -141,7 +141,7 @@ static void initialize_root(void *context) {
 static void independent_lifetimes(void) {
     XrtModuleLayout *layout = NULL;
     OK(make_layout(&layout));
-    XrtModuleLayoutSpec view;
+    XrtModuleLayoutSpec view={.metadata=XRT_MODULE_LAYOUT_HEADER};
     OK(xrt_module_layout_view(layout, &view));
     CHECK(view.modules[1].dependency_count == 1 && view.dependencies[0] == 0);
     XrtLocationOwner *locations = NULL;
@@ -202,7 +202,7 @@ static void replace_string_root(void *context) {
 static void pending_string_failure(void) {
     XrtModuleLayout *layout = NULL, *mutable_layout = NULL;
     OK(make_layout(&layout));
-    XrtModuleLayoutSpec spec;
+    XrtModuleLayoutSpec spec={.metadata=XRT_MODULE_LAYOUT_HEADER};
     OK(xrt_module_layout_view(layout, &spec));
     XrtModuleSlotSpec slots[4];
     memcpy(slots, spec.slots, sizeof(slots));
@@ -227,7 +227,7 @@ static void pending_string_failure(void) {
 static void invalid_layouts(void) {
     XrtModuleLayout *layout = NULL;
     OK(make_layout(&layout));
-    XrtModuleLayoutSpec original;
+    XrtModuleLayoutSpec original={.metadata=XRT_MODULE_LAYOUT_HEADER};
     OK(xrt_module_layout_view(layout, &original));
     for (unsigned scenario = 0; scenario < 8; ++scenario) {
         XrtModuleLayoutSpec spec = original;
@@ -252,6 +252,7 @@ static void invalid_layouts(void) {
 #include "native_fixed_state_cases.h"
 #include "native_nullable_state_cases.h"
 #include "native_callable_state_cases.h"
+#include "native_record_budget_cases.h"
 #include "native_group_state_cases.h"
 
 static void map_layout_root_budget(void *opaque) {
@@ -259,7 +260,7 @@ static void map_layout_root_budget(void *opaque) {
     XrtModuleTypeSpec type = {XRT_MODULE_STRING, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, sizeof(void *), _Alignof(void *)};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
         .byte_limit=UINT64_MAX};
     XrtModuleLayout *reference = NULL, *cold = NULL, *warm = NULL;
@@ -311,6 +312,7 @@ static void map_layout_budget(void) {
 
 int main(void) {
     map_layout_budget();
+    nominal_layout_name_budgets();
     native_group_state();
     callable_state_values();
     nullable_state_values(); nullable_state_invalid_shapes(); nullable_state_deep_copy(); nullable_state_allocation_failures();

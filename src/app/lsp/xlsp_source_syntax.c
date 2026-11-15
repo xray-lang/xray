@@ -12,7 +12,7 @@ typedef struct XlspSyntaxArgumentRecord {
     uint32_t node_id;
     AstNodeType type;
     XrNameSpan start,end,variable,variable_end;
-    bool has_variable;
+    bool has_variable,has_label;
 } XlspSyntaxArgumentRecord;
 typedef struct XlspSyntaxCallRecord {
     uintptr_t address;

@@ -145,8 +145,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
-            (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
+        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
         SourceNominalDeclaration syntax;
         if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
         XrGenericParam **parameters = syntax.parameters;
@@ -291,6 +290,7 @@ static bool source_struct_field(SourceContext *ctx,AstNode *node,XrXirType type,
     return source_query_target_token_reference(ctx,node,ctx->nominal_members[info.declaration][field],
         write==3?XR_XIR_SOURCE_READ_WRITE:write?XR_XIR_SOURCE_WRITE:XR_XIR_SOURCE_READ);
 }
+#include "xxir_source_struct_composition.inc.c"
 static bool source_struct_construct(SourceContext *ctx,AstNode *node,AstNode *path,
     char **names,AstNode **values,int field_count,XrTypeRef **type_args,int type_arg_count,SourceValue *value) {
     SourceName *symbol=NULL,*binding=NULL;
@@ -304,9 +304,12 @@ static bool source_struct_construct(SourceContext *ctx,AstNode *node,AstNode *pa
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"struct literal requires an admitted nominal declaration");
     XrHirNominalShape shape={0};XrHirNominalInfo info={0};XrHirBodyScope scope={0};
     if(!source_hir_nominal_shape(ctx,node,symbol->type,&shape,&info)||!source_hir_current_scope(ctx,&scope))return false;
+    uint32_t explicit_count=0;
+    if(field_count && (!names || !values))return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"struct literal components are missing");
+    for(int f=0;f<field_count;++f)explicit_count+=names[f]!=NULL;
     XrHirNominalPlan plan={0};const char *reason=NULL;
     XrHirNominalPlanInput input={.shape=shape,.scope=scope,.origin=source_hir_origin(ctx,node,symbol->declaration),
-        .count=(uint32_t)field_count,.kind=XR_HIR_NOMINAL_STRUCT_LITERAL,.application_pending=true};
+        .count=explicit_count,.kind=XR_HIR_NOMINAL_STRUCT_LITERAL,.application_pending=true};
     XrXirStatus status=xr_hir_body_nominal_begin(ctx->typed_body,&input,ctx->request,&plan,&reason);
     if(!source_hir_nominal_status(ctx,node,status,reason))return false;
     XrXirType instance_type;
@@ -315,17 +318,7 @@ static bool source_struct_construct(SourceContext *ctx,AstNode *node,AstNode *pa
     status=xr_hir_body_nominal_apply(ctx->typed_body,plan,shape,ctx->request,&reason);
     if(!source_hir_nominal_status(ctx,node,status,reason))return false;
     XrHirNominalPool pool=source_hir_nominal_pool(ctx);
-    for(uint32_t f=0;f<(uint32_t)field_count;++f) {
-        size_t length=source_text_size(ctx,names[f]);if(length>UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"field name size exhausted");
-        uint32_t index=0;status=xr_hir_body_nominal_select(ctx->typed_body,plan,(XrXirLiteral){names[f],(uint32_t)length},ctx->request,&index,&reason);
-        if(!source_hir_nominal_status(ctx,node,status,reason))return false;
-        XrHirNominalField received={0};if(!source_hir_nominal_field(ctx,node,shape,index,&received))return false;
-        if(!source_query_target_token_reference(ctx,node,ctx->nominal_members[symbol->index][index],XR_XIR_SOURCE_READ))return false;
-        SourceValue field;
-        if(!source_plan_expression(ctx,values[f],(SourceExpectedType){received.type!=XR_XIR_UNIT,received.type,false,false},&field))return false;
-        status=xr_hir_body_nominal_supply(ctx->typed_body,plan,&pool,index,(XrHirNominalValue){.type=field.type,.value=field.id},&reason);
-        if(!source_hir_nominal_status(ctx,node,status,reason))return false;
-    }
+    if(!source_struct_components(ctx,node,symbol,shape,plan,names,values,(uint32_t)field_count))return false;
     for(uint32_t f=0;f<info.count;++f) {
         bool missing=false;status=xr_hir_body_nominal_missing(ctx->typed_body,plan,f,ctx->request,&missing,&reason);
         if (!source_hir_nominal_status(ctx, node, status, reason))

@@ -82,15 +82,15 @@ static void contextual_call_receivers(void) {
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
     const XrNativeMemberDeclaration *member=xr_native_declaration_member(native,"map");CHECK(member);
     XrNativeMemberDeclaration fabricated=*member;
-    XrHirSignatureInput declaration={.types=&types,.scope=scope,.family=XR_HIR_CALL_ARRAY,
-        .native_parameters=&context,.count=1,.array=(XrXirType)(context+3),.array_value=99,
-        .callback_error=XR_XIR_NEVER,.array_member=&fabricated};XrHirBodySignature signature={0};
+    XrHirSignatureInput declaration={.types=&types,.scope=scope,.family=XR_HIR_CALL_NATIVE_CALLBACK,
+        .native_parameters=&context,.count=1,.collection_type=(XrXirType)(context+3),.collection_value=99,
+        .callback_error=XR_XIR_NEVER,.native_member=&fabricated};XrHirBodySignature signature={0};
     CHECK(xr_hir_body_signature(body,&declaration,NULL,&signature,NULL)==XR_XIR_BAD_STRUCTURE&&!signature.owner);
-    declaration.array_member=member;
+    declaration.native_member=member;
     CHECK(xr_hir_body_signature(body,&declaration,NULL,&signature,NULL)==XR_XIR_OK);
-    XrHirArrayCallbackShape shape={0};
-    CHECK(xr_hir_body_array_context(body,signature,declaration.array,98,&shape)==XR_XIR_BAD_STRUCTURE);
-    CHECK(xr_hir_body_array_context(body,signature,declaration.array,99,&shape)==XR_XIR_OK&&
+    XrHirNativeCallbackShape shape={0};
+    CHECK(xr_hir_body_callback_context(body,signature,declaration.collection_type,98,&shape)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_hir_body_callback_context(body,signature,declaration.collection_type,99,&shape)==XR_XIR_OK&&
         shape.minimum==1&&shape.maximum==2&&!shape.has_result&&shape.parameters[0]==XR_XIR_I64);
     XrHirCallUseInput input={.types=&types,.scope=scope,.kind=XR_HIR_CALL_ACCESS,.access=XR_CALL_ARG_REF};
     XrHirBodyUse use={0};XrHirBodyAction action;

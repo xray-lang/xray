@@ -146,6 +146,7 @@ static void golden(const char *programs, const char *directory, const char *name
 }
 static void supported_control(void) {
     static const char *cases[] = {
+        "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
         "fn branch(n:i64)->i64{var value=1\nif(n>0){value=2}else{value=3}\nreturn "
         "value}\nprint(branch(1))\n",
         "fn skip(n:i64)->i64{var i=0\nvar "
@@ -263,8 +264,8 @@ static void floating_conversion_source(void) {
 
 static void unsupported(void) {
     rejected(
-        "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
-        false, "STRUCT_NEW");
+        "fn answer()->i64{const values=Set<f64>()\nreturn len(values)}\nprint(answer())\n",
+        false, "SET_NEW");
     rejected("class Box{value:i64\ninit(value){this.value=value}}\nfn answer()->i64{const "
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");

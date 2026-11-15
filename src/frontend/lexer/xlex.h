@@ -197,8 +197,6 @@ typedef enum {
 
     // New syntax tokens
     TK_AT,               // @ - attribute marker (@test, @before_each etc.)
-    TK_EMPTY_MAP_START,  // #{ - empty Map literal start
-    TK_SET_START,        // #[ - Set literal start
 
     // Literals and identifiers
     TK_LITERAL_INT,          // integer literal

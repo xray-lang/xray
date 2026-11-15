@@ -321,7 +321,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。字段标识符和 C literal 仍遵守各自的无 NUL 限制。
 - `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
@@ -412,7 +412,7 @@ var decimal = re"\d+\.\d+"
 | Token | 用途 |
 |--|--|
 | `(` `)` | 分组、调用、参数列表 |
-| `{` `}` | 块、对象字面量 |
+| `{` `}` | 块、Map 与带类型名的 struct 字面量 |
 | `[` `]` | 数组字面量、索引 |
 | `,` | 分隔符 |
 | `.` | 成员访问 |
@@ -472,18 +472,13 @@ var decimal = re"\d+\.\d+"
 
 `!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
 
-#### 1.7.9 集合字面量起始符
+#### 1.7.9 集合字面量边界
 
-| Token | 用途 |
-|--|--|
-| `#{` | 空 Map 字面量 |
-| `#[` | Set 字面量起始 |
+Array 使用 `[` 与 `]`；Map 使用普通 `{` 与 `}`，不添加前缀 token；Set 使用普通具名构造。语句位置及值箭头后的 `{` 是块，Map 表达式的上下文规则见 §3.10。
 
-例：
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
 
 #### 1.7.10 模式
@@ -906,7 +901,7 @@ Full token table (by category):
 | Token | Use |
 |--|--|
 | `(` `)` | grouping, calls, parameter lists |
-| `{` `}` | blocks, object literals |
+| `{` `}` | blocks, Maps and type-prefixed struct literals |
 | `[` `]` | array literals, indexing |
 | `,` | separator |
 | `.` | member access |
@@ -966,18 +961,13 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 
 `!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
 
-#### 1.7.9 Collection-literal Starters
+#### 1.7.9 Collection Literal Boundaries
 
-| Token | Use |
-|--|--|
-| `#{` | empty Map literal |
-| `#[` | Set literal start |
+Arrays use `[` and `]`. Maps use ordinary `{` and `}` without a prefix token. Sets use ordinary named construction. Statement braces and braces after a value arrow begin blocks; Map expression contexts follow §3.10.
 
-Examples:
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
 
 #### 1.7.10 Patterns

@@ -14,7 +14,7 @@ static void module_state_fused_retain_failure(void) {
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0,
         sizeof(void *), _Alignof(void *)};
-    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=sizeof(void *),
         .payload_alignment=_Alignof(void *), .byte_limit=UINT64_MAX};
     XrtModuleLayout *storage = NULL;

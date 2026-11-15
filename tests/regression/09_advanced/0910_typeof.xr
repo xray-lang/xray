@@ -48,13 +48,13 @@ fn test_typeof_array() {
 
 @test
 fn test_typeof_map() {
-    var m = #{"key": "value"}
+    var m = {"key": "value"}
     assertEqual(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assertEqual(typeName(s), "Set")
 }
 

@@ -20,7 +20,7 @@ TypeArgs   ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray @id=generics-basic
+```xray @id=generics-basic @check
 // 泛型函数
 fn identity<T>(x: T) -> T {
     return x
@@ -54,16 +54,18 @@ interface Comparable<T> {
 }
 
 // 泛型 type alias：透明语法替换，不产生新类型
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
 
-`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `(i64, i64)`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
 方法可声明自己的类型参数，例如 `struct Box<T>` 中的 `map<U>(value: U)`。外层类型参数与方法参数按声明身份区分；方法参数不得重复或遮蔽外层类型参数。`Box<i64>.make<string>(value)` 的前一组实参属于类型，后一组属于静态方法；实例方法 `box.map<string>(value)` 从接收者类型取得外层实参。显式方法函数值使用同样的分组，例如 `Box<i64>.make<string>` 和 `box.map<string>`。显式列表必须完整，部分显式实参不自动补齐，也不允许把一组用于另一组。整体省略调用列表时按 §9.3 从原签名和类型证据推断；方法函数值的上下文推断属于同一完整目标的后续阶段。
 
 普通泛型方法的签名、体、默认参数和嵌套闭包在定义处按两层已声明约束检查，即使方法未使用；不从未来实参增加能力。默认参数与捕获继承原声明的类型参数身份和权限。特化仅替换已Checked的参数，复验后进入Lowered，普通实例在Program封存前形成。实例方法函数值只求值并保存接收者一次；静态函数值没有接收者。两者沿用完整间接调用签名、值所有权、效应、挂起和失败清理规则。
+
+匿名对象形状不再是泛型约束；需要成员能力时声明具名 interface，并由实参类型显式 implements。既有内置类型谓词及其余约束规则保持不变。
 
 xray 的约束语法统一用冒号 `:`，多个约束用 `&` 连接（读作“同时满足”）。**不使用** Java/TS 的 `extends` / `implements` 作为约束关键字。
 
@@ -106,7 +108,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `equals(other: T) -> bool` 与 `hash() -> i64`。`equals` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
-```xray @id=generics-hashable-contract
+```xray @id=generics-hashable-contract @check
 class Token implements Hashable {
     value: i64
 
@@ -118,7 +120,7 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
 
@@ -243,41 +245,22 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 | 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
 | 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
-### 9.5 协议（duck typing）与名义类型
+### 9.5 名义类型与显式 interface 实现
 
-#### 名义类型为主
+字段或方法集合相同不会产生类型兼容或 interface 实现。具名 interface 由声明显式 `implements`；泛型成员能力按声明的约束取得。对象形状与 `T: { field: Type }` 已删除，不能通过匿名字段集获得成员权限。
 
-xray 的接口实现需**显式 `implements`**——这与 Go 的"隐式接口实现"不同。
-
-```xray @id=generics-nominal-interface
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // 必须显式 implements
-    draw() { print("square") }
+```xray @id=generics-nominal-interface @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // 编译错误：Wrong 不是 Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
 
-#### 结构化对象
-
-仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
-describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
-```
+struct 展开的字段子集检查只用于构造一个写明类型的目标，不建立宽度子类型或隐式 interface 实现。
 
 ### 9.6 方差（Variance）
 
@@ -286,7 +269,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
-**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+声明点方差仍是独立的未实现能力，本任务只删除结构对象，不改变容器不变性或既有函数类型规则；不能通过字段集合相同推导新的子类型关系。
 
 ### 9.6.1 高阶类型（HKT）
 
@@ -343,7 +326,7 @@ TypeArgs   ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray @id=generics-basic
+```xray @id=generics-basic @check
 // Generic function
 fn identity<T>(x: T) -> T {
     return x
@@ -377,7 +360,7 @@ interface Comparable<T> {
 }
 
 // Generic type alias: transparent syntax substitution, not a new type
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
 
 Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
@@ -391,6 +374,8 @@ monomorphization instance, or AOT branch; cyclic aliases are rejected.
 Methods may declare their own type parameters, such as `map<U>(value: U)` inside `struct Box<T>`. Enclosing and method parameters have distinct declaration identities; method parameters cannot duplicate or shadow enclosing type parameters. In `Box<i64>.make<string>(value)`, the first argument group belongs to the type and the second to the static method. An instance call `box.map<string>(value)` obtains enclosing arguments from the receiver type. Explicit method function values use the same grouping: `Box<i64>.make<string>` and `box.map<string>`. Explicit lists must be complete; partial explicit lists are not filled automatically and one group cannot substitute for another. Wholly omitted call lists infer through original signatures and type evidence under §9.3. Contextual inference of method function values remains part of the later complete target.
 
 Ordinary generic method signatures, bodies, defaults and nested closures are checked against both declared constraint scopes at definition time, even when unused; future arguments grant no additional capabilities. Defaults and captures inherit their original type-parameter identities and authority. Specialization substitutes only Checked parameters and rechecks before Lowered; ordinary instances exist before Program sealing. An instance method value evaluates and saves its receiver once, while a static value has no receiver. Both retain the full indirect-call signature and ordinary value ownership, effect, suspension and failure-cleanup rules.
+
+Anonymous object shapes are not generic constraints. Declare a named interface for member capabilities and require the argument type to implement it explicitly. Existing built-in predicates and other constraint rules remain.
 
 Xray's constraint syntax uses a colon `:` uniformly, with multiple constraints joined by `&` (read as "must satisfy simultaneously"). It **does not use** Java/TS `extends` / `implements` as constraint keywords.
 
@@ -436,7 +421,7 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `equals(other: T) -> bool` and `hash() -> i64`. The parameter type of `equals` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
-```xray @id=generics-hashable-contract
+```xray @id=generics-hashable-contract @check
 class Token implements Hashable {
     value: i64
 
@@ -448,7 +433,7 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
 
@@ -573,41 +558,22 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 | Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
 | Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
-### 9.5 Protocols (Duck Typing) vs. Nominal Typing
+### 9.5 Nominal Types and Explicit Interfaces
 
-#### Nominal typing dominates
+Matching fields or methods grant neither type compatibility nor interface conformance. A named interface requires explicit `implements`; generic member capabilities follow declared constraints. Object shapes and `T: { field: Type }` are removed, so anonymous field sets grant no member access.
 
-Xray's interface implementations require **explicit `implements`** — unlike Go's "implicit interface implementation".
-
-```xray @id=generics-nominal-interface
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // explicit implements required
-    draw() { print("square") }
+```xray @id=generics-nominal-interface @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // compile error: Wrong is not Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
 
-#### Structural objects
-
-Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK: exact field set
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
-describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
-```
+Field-subset checks for struct spread construct an explicitly named target; they establish neither width subtyping nor implicit interface conformance.
 
 ### 9.6 Variance
 
@@ -616,7 +582,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
-**Why not in this round**: variance states rules *on top of* the subtype relation, so it has a prerequisite — the width direction for structural types must be settled first (see the exact-field-set rule in §2.10.1). Introducing declaration-site variance while the subtype relation itself has not converged multiplies an undecided semantics by another layer, and it cannot be patched backward-compatibly afterwards. Invariance is the safe, AOT-friendly starting point, and it can be relaxed at any time.
+Declaration-site variance remains an independent unimplemented capability. Removing structural objects changes neither container invariance nor existing function-type rules; matching field sets grant no new subtype relation.
 
 ### 9.6.1 Higher-Kinded Types (HKT)
 

@@ -52,6 +52,11 @@ typedef struct SourceHistoryReceive {
     SourceHistoryEdge *edges;
     uint32_t edge_count, edge_capacity;
 } SourceHistoryReceive;
+typedef struct SourceImportedParameterNames {
+    XrXirParameterNames row;
+    bool present;
+} SourceImportedParameterNames;
+
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrHirEscapeBuilder *escape_builder; /* Synchronous single-inventory lifetime observer. */
@@ -97,13 +102,21 @@ typedef struct SourceContext {
     uint32_t **nominal_members, **nominal_variants;
     SourceName **nominal_sources, **nominal_methods;
     uint32_t type_capacity, nominal_capacity;
-    bool record_declarations_ready;
     XrXirSlot *slots;
     XrXirSlotFact *slot_facts;
     bool *slot_fact_present;
     XrXirLiteral *literals;
+    XrXirMapLiteral *map_literals;
+    uint32_t map_literal_count,map_literal_capacity;
+    XrXirParameterNames *parameter_names;
+    uint32_t parameter_name_count;
+    XrXirHashableWitness *hashable_witnesses;
+    uint32_t hashable_witness_count;
+    SourceImportedParameterNames **imported_parameter_names;
+    uint32_t imported_parameter_owner_count;
     SourceName **names, *locals, *scope;
     AstNode *recursive_initializer;
+    AstNode *binding_site;
     const char *recursive_name;
     SourceFact *facts;
     SourceEpoch *epochs;
@@ -123,6 +136,7 @@ typedef struct SourceContext {
     uint32_t *string_rune_producers;
     uint32_t *string_split_producers;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
+    uint32_t next_nested_default,nested_default_count;
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
     const SourceInstanceBatch *instance_constants;

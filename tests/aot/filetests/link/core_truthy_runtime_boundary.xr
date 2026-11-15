@@ -7,13 +7,13 @@ var fullArray: Array<i64> = [1]
 show("empty-array-if", bool(emptyArray))
 show("full-array-if", bool(fullArray))
 
-var emptyMap: Map<string, i64> = #{}
-var fullMap: Map<string, i64> = #{"x": 1}
+var emptyMap: Map<string, i64> = {}
+var fullMap: Map<string, i64> = {"x": 1}
 show("empty-map-if", bool(emptyMap))
 show("full-map-if", bool(fullMap))
 
-var emptySet: Set<string> = #[]
-var fullSet: Set<string> = #["x"]
+var emptySet: Set<string> = Set()
+var fullSet: Set<string> = Set(["x"])
 show("empty-set-if", bool(emptySet))
 show("full-set-if", bool(fullSet))
 

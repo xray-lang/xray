@@ -50,7 +50,7 @@ fn test_copy_nested_array() {
 
 @test
 fn test_copy_map_independent() {
-    var m = #{"a": 1, "b": 2}
+    var m = {"a": 1, "b": 2}
     var n = copy(m)
     m["c"] = 3
     assertEqual(len(n), 2)
@@ -118,7 +118,7 @@ fn test_copy_const_array_returns_mutable_owned_copy() {
 
 @test
 fn test_copy_const_map_returns_mutable_owned_copy() {
-    const m = #{"a": 1}
+    const m = {"a": 1}
     var n = copy(m)
     n["b"] = 2
     assertEqual(len(m), 1)

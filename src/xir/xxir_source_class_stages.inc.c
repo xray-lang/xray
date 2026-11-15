@@ -157,21 +157,21 @@ static bool source_class_super(SourceContext *ctx,AstNode *node,SourceValue *val
         }
     if(helper==UINT32_MAX)return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"parent constructor has no owned field transaction");
     SourceCallSyntax syntax;
-    if(!source_call_syntax(ctx,node,&syntax) || !source_argument_arity(ctx,node,constructor,(uint32_t)syntax.arg_count))return false;
+    if(!source_call_syntax(ctx,node,&syntax))return false;
+    if(!syntax.arg_labels&&!source_argument_arity(ctx,node,constructor,(uint32_t)syntax.arg_count))return false;
     XrXirFunction function=ctx->functions[helper];SourceCallStorage storage={0};
     if(!source_call_storage(ctx,0,function.parameter_count,&storage))return false;
     SourceCallPlan plan={.family=SOURCE_CALL_FUNCTION,.function_parameters=function.parameters,
         .values=storage.values,.result=function.result,.declaration={.function=helper}};
     if(!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count) ||
         !source_call_plan_arguments(ctx,node,&plan,&syntax,NULL))return false;
-    for(uint32_t p=(uint32_t)syntax.arg_count;p<function.parameter_count;++p) {
+    for(uint32_t p=0;p<function.parameter_count;++p) {
+        if(!source_call_default_needed(&plan,p,(uint32_t)syntax.arg_count))continue;
         SourceSubstitution none={0};
-        if(!source_argument_default(ctx,node,constructor,p,&none,&storage.values[p]) ||
-            !source_hir_call_use(ctx,node,&plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_ACCESS,
-                .formal=p,.argument=p,.access=XR_CALL_ARG_PLAIN},NULL,NULL))return false;
+        if(!source_argument_default(ctx,node,constructor,p,&none,&storage.values[p]))return false;
     }
     SourceValue tuple;
-    if(!source_hir_call_commit(ctx,node,&plan,storage.values,function.parameter_count,function.parameter_count) ||
+    if(!source_hir_call_commit(ctx,node,&plan,storage.values,function.parameter_count,(uint32_t)syntax.arg_count) ||
         !source_hir_call_group(ctx,plan.signature,(XrXirInstruction){.op=XR_XIR_CALL,.type=function.result,.immediate=helper},storage.values,&tuple))return false;
     uint32_t prefix=ctx->nominals.declarations[parent-1].field_count;
     for(uint32_t f=0;f<prefix;++f) {

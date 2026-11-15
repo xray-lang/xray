@@ -20,7 +20,7 @@
   "sections": [
     {
       "heading": "Primitive and built-in categories",
-      "markdown": "- `i64` — default signed integer\n- `f64` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- exact structural objects `{ field: T }`\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`"
+      "markdown": "- `i64` — default signed integer\n- `f64` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- nominal `struct` / `class` declarations and unlabelled tuples\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`"
     },
     {
       "heading": "Error and task types",

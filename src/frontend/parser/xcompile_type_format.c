@@ -148,30 +148,6 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
             do { tref_append(buf, pos, cap, ")"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             break;
 
-        case XR_TREF_OBJECT:
-            /* A structural-object type introduced by `type Name = { ... }` carries the alias
-             * name (stamped on by the type-alias parser), and every use of that
-             * alias shares this very ref. Render the name: it is what the source
-             * wrote, so the formatter round-trips `o: PageOpts` instead of
-             * expanding it to `o: { limit: int?, cursor: string? }` — an
-             * expansion the re-parsed AST no longer matches. Anonymous object
-             * types have no name and still render structurally. */
-            if (t->name) {
-                do { tref_append(buf, pos, cap, t->name); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-                break;
-            }
-            do { tref_append(buf, pos, cap, "{ "); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-            for (int i = 0; i < t->nchildren && *pos < cap - 1 && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK; i++) {
-                if (i > 0)
-                    do { tref_append(buf, pos, cap, ", "); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-                if (t->field_names && t->field_names[i])
-                    do { tref_append(buf, pos, cap, t->field_names[i]); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-                do { tref_append(buf, pos, cap, ": "); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-                do { tref_to_str_impl(state, t->children[i], buf, pos, cap); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-            }
-            do { tref_append(buf, pos, cap, " }"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
-            break;
-
         case XR_TREF_FIXED_ARRAY: {
             char lenbuf[16];
             do { tref_append(buf, pos, cap, "["); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
@@ -216,23 +192,4 @@ XR_FUNC int xr_compile_tref_to_string_buf(XrCompileState *state, const XrTypeRef
 
     buf[pos] = '\0';
     return pos;
-}
-
-XR_FUNC int xr_compile_tref_to_string_structural(XrCompileState *state, const XrTypeRef *t,
-                                                   char *buf, int cap) {
-    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return -1;
-    if (!buf || cap <= 0) {
-        xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-        return -1;
-    }
-    if (t) {
-
-        if (t->kind == XR_TREF_OBJECT && t->name) {
-            XrTypeRef anonymous;
-            if (xr_compile_state_copy(state, &anonymous, t, sizeof(anonymous)) != XR_COMPILE_RESOURCE_OK) return -1;
-            anonymous.name = NULL;
-            return xr_compile_tref_to_string_buf(state, &anonymous, buf, cap);
-        }
-    }
-    return xr_compile_tref_to_string_buf(state, t, buf, cap);
 }

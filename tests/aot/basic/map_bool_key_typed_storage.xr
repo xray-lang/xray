@@ -1,4 +1,4 @@
-var counts: Map<bool, i64> = #{}
+var counts: Map<bool, i64> = {}
 counts.set(true, 7)
 counts.set(false, 11)
 counts.set(true, 13)
@@ -21,7 +21,7 @@ class BoolKeyMapBag {
     values: Map<bool, i64>
 
     init() {
-        var values: Map<bool, i64> = #{}
+        var values: Map<bool, i64> = {}
         this.values = values
     }
 

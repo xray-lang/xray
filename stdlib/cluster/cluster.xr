@@ -142,82 +142,82 @@ const _HANDSHAKE_FRAME_BODY_MAX = 513
 const _ACCEPT_POLL_MS = 500
 const _REMOTE_MONITOR_POLL_MS = 500
 
-type _ClusterSourceState = {
-    runtimeToken: i64,
-    selfName: string,
-    port: i64,
-    secret: string,
-    heartbeatIntervalMs: i64,
-    heartbeatTimeoutMs: i64,
-    maxMissedHeartbeats: i64,
-    tlsEnabled: bool,
+struct _ClusterSourceState {
+    runtimeToken: i64
+    selfName: string
+    port: i64
+    secret: string
+    heartbeatIntervalMs: i64
+    heartbeatTimeoutMs: i64
+    maxMissedHeartbeats: i64
+    tlsEnabled: bool
 }
 
-type _SourceListener = {
-    runtimeToken: i64,
-    listener: NetListener,
+struct _SourceListener {
+    runtimeToken: i64
+    listener: NetListener
 }
 
-type _DiscoveryGeneration = {
-    runtimeToken: i64,
-    discoveryToken: i64,
-    socket: NetConn?,
+struct _DiscoveryGeneration {
+    runtimeToken: i64
+    discoveryToken: i64
+    socket: NetConn?
 }
 
-type _ClusterTlsResources = {
-    runtimeToken: i64,
-    client: TlsClientContext,
-    server: TlsServerContext,
+struct _ClusterTlsResources {
+    runtimeToken: i64
+    client: TlsClientContext
+    server: TlsServerContext
 }
 
 // Topic routing is ordinary source state. Holding the Channel in this record
 // gives the registry its own strong reference, while temporary delivery
 // snapshots keep each target alive after the registry lock is released.
-type _TopicSubscription = {
-    runtimeToken: i64,
-    pattern: string,
-    notifications: Channel<Buffer>,
+struct _TopicSubscription {
+    runtimeToken: i64
+    pattern: string
+    notifications: Channel<Buffer>
 }
 
-type _NodeMonitor = {
-    target: string,
-    notifications: Channel<string>,
+struct _NodeMonitor {
+    target: string
+    notifications: Channel<string>
 }
 
-type _RemoteMonitor = {
-    id: i64,
-    peerGeneration: i64,
-    coroutineName: string,
-    notifications: Channel<string>,
+struct _RemoteMonitor {
+    id: i64
+    peerGeneration: i64
+    coroutineName: string
+    notifications: Channel<string>
 }
 
-type _RemoteMonitorRegistration = {
-    id: i64,
-    peerGeneration: i64,
+struct _RemoteMonitorRegistration {
+    id: i64
+    peerGeneration: i64
 }
 
-type _NodeDownMonitors = {
-    nodeOneShot: Array<Channel<string>>,
-    nodeStreams: Array<Channel<string>>,
-    remote: Array<Channel<string>>,
+struct _NodeDownMonitors {
+    nodeOneShot: Array<Channel<string>>
+    nodeStreams: Array<Channel<string>>
+    remote: Array<Channel<string>>
 }
 
-type _PhiPeerState = {
-    runtimeToken: i64,
-    peerGeneration: i64,
-    adoptedAtMs: i64,
-    missedHeartbeats: i64,
-    detector: PhiDetector,
+struct _PhiPeerState {
+    runtimeToken: i64
+    peerGeneration: i64
+    adoptedAtMs: i64
+    missedHeartbeats: i64
+    detector: PhiDetector
 }
 
-type _PhiPeerSnapshot = {
-    recorded: bool,
-    adoptedAtMs: i64,
-    missedHeartbeats: i64,
-    samples: i64,
-    mean: f64,
-    variance: f64,
-    lastHeartbeatMs: i64,
+struct _PhiPeerSnapshot {
+    recorded: bool
+    adoptedAtMs: i64
+    missedHeartbeats: i64
+    samples: i64
+    mean: f64
+    variance: f64
+    lastHeartbeatMs: i64
 }
 
 const _PEER_RESERVED = 0
@@ -226,18 +226,18 @@ const _PEER_DEPARTING = 2
 
 // Peer identity and authenticated admission are independent from transport
 // resources, so directory transitions remain stable while an endpoint drains.
-type _PeerDirectoryEntry = {
-    runtimeToken: i64,
-    generation: i64,
-    name: string,
-    endpoint: Endpoint?,
-    flags: i64,
-    state: i64,
+struct _PeerDirectoryEntry {
+    runtimeToken: i64
+    generation: i64
+    name: string
+    endpoint: Endpoint?
+    flags: i64
+    state: i64
 }
 
-type _PeerReservation = {
-    runtimeToken: i64,
-    generation: i64,
+struct _PeerReservation {
+    runtimeToken: i64
+    generation: i64
 }
 
 // A peer endpoint is immutable after authentication. Both transport
@@ -264,51 +264,51 @@ final class _PeerEndpoint {
 // Raw transport state is orthogonal to the source-owned peer directory and
 // failure detector. Every field is protected by _peerTransportLock, and no
 // operation suspends while that lock is held.
-type _PeerTransportState = {
-    endpoint: _PeerEndpoint,
-    committed: bool,
-    outbound: Array<Array<u8>>,
-    queuedBytes: i64,
-    full: bool,
-    lastReceivedAtMs: i64,
-    framesSent: i64,
-    framesReceived: i64,
-    bytesSent: i64,
-    bytesReceived: i64,
-    sendErrors: i64,
-    slowConsumerEvents: i64,
-    rttMs: i64,
+struct _PeerTransportState {
+    endpoint: _PeerEndpoint
+    committed: bool
+    outbound: Array<Array<u8>>
+    queuedBytes: i64
+    full: bool
+    lastReceivedAtMs: i64
+    framesSent: i64
+    framesReceived: i64
+    bytesSent: i64
+    bytesReceived: i64
+    sendErrors: i64
+    slowConsumerEvents: i64
+    rttMs: i64
 }
 
-type _PeerTransportHealthSnapshot = {
-    peerGeneration: i64,
-    lastReceivedAtMs: i64,
+struct _PeerTransportHealthSnapshot {
+    peerGeneration: i64
+    lastReceivedAtMs: i64
 }
 
-type _PeerTransportSnapshot = {
-    peerGeneration: i64,
-    framesSent: i64,
-    framesReceived: i64,
-    bytesSent: i64,
-    bytesReceived: i64,
-    sendErrors: i64,
-    slowConsumerEvents: i64,
-    rttMs: i64,
-    outQueueBytes: i64,
-    outQueueFrames: i64,
-    slow: bool,
-    lastReceivedAtMs: i64,
+struct _PeerTransportSnapshot {
+    peerGeneration: i64
+    framesSent: i64
+    framesReceived: i64
+    bytesSent: i64
+    bytesReceived: i64
+    sendErrors: i64
+    slowConsumerEvents: i64
+    rttMs: i64
+    outQueueBytes: i64
+    outQueueFrames: i64
+    slow: bool
+    lastReceivedAtMs: i64
 }
 
-type _DeliveryStats = {
-    accepted: i64,
-    full: i64,
-    stopped: i64,
+struct _DeliveryStats {
+    accepted: i64
+    full: i64
+    stopped: i64
 }
 
-type _PeerTake = {
-    status: i64,
-    wire: Array<u8>?,
+struct _PeerTake {
+    status: i64
+    wire: Array<u8>?
 }
 
 // Source-owned loops use generation tokens so a retiring coroutine cannot
@@ -434,7 +434,7 @@ fn _reservePeer(runtimeToken: i64, name: string, endpoint: Endpoint?,
                 }
             }
             if (!conflict) {
-                _peerDirectory.push({
+                _peerDirectory.push(_PeerDirectoryEntry{
                     runtimeToken: runtimeToken,
                     generation: generation,
                     name: name,
@@ -442,7 +442,7 @@ fn _reservePeer(runtimeToken: i64, name: string, endpoint: Endpoint?,
                     flags: flags,
                     state: _PEER_RESERVED,
                 })
-                reservation = { runtimeToken: runtimeToken, generation: generation }
+                reservation = _PeerReservation{ runtimeToken: runtimeToken, generation: generation }
             }
             _peerDirectoryLock.store(false)
         }
@@ -685,7 +685,7 @@ fn _recordRecentDepartureLocked(name: string, markedAtMs: i64) {
         var entry = _recentDepartures[i]
         if (entry.name != name) { retained.push(entry) }
     }
-    retained.push({ name: name, markedAtMs: markedAtMs })
+    retained.push(_RecentDeparture{ name: name, markedAtMs: markedAtMs })
     _recentDepartures = retained
 }
 
@@ -768,7 +768,7 @@ fn _takeNodeDownMonitors(token: i64, peerGeneration: i64,
     _nodeMonitors = retainedNode
     _remoteMonitors = retainedRemote
     _monitorStateLock.store(false)
-    return { nodeOneShot: nodeOneShot, nodeStreams: nodeStreams, remote: remote }
+    return _NodeDownMonitors{ nodeOneShot: nodeOneShot, nodeStreams: nodeStreams, remote: remote }
 }
 
 fn _publishOneShot(channels: Array<Channel<string>>, result: string) {
@@ -800,7 +800,7 @@ fn _registerNodeMonitor(token: i64, monitorTarget: string,
         _monitorStateLock.store(false)
         return false
     }
-    _nodeMonitors.push({ target: monitorTarget, notifications: notifications })
+    _nodeMonitors.push(_NodeMonitor{ target: monitorTarget, notifications: notifications })
     _monitorStateLock.store(false)
     return true
 }
@@ -816,7 +816,7 @@ fn _registerRemoteMonitor(token: i64, nodeName: string, coroutineName: string,
         _monitorStateLock.store(false)
         return null
     }
-    _remoteMonitors.push({
+    _remoteMonitors.push(_RemoteMonitor{
         id: id,
         peerGeneration: peerGeneration,
         coroutineName: coroutineName,
@@ -828,7 +828,7 @@ fn _registerRemoteMonitor(token: i64, nodeName: string, coroutineName: string,
         _unregisterRemoteMonitor(token, id)
         return null
     }
-    return { id: id, peerGeneration: peerGeneration }
+    return _RemoteMonitorRegistration{ id: id, peerGeneration: peerGeneration }
 }
 
 fn _unregisterRemoteMonitor(token: i64, id: i64) -> bool {
@@ -956,7 +956,7 @@ fn _installSourceListener(runtimeToken: i64, listener: NetListener) -> bool {
     _lockSourceState()
     var installed = _sourceListener == null && _runtimeActiveToken.load() == runtimeToken
     if (installed) {
-        _sourceListener = { runtimeToken: runtimeToken, listener: listener }
+        _sourceListener = _SourceListener{ runtimeToken: runtimeToken, listener: listener }
     }
     _sourceStateLock.store(false)
     return installed
@@ -980,49 +980,49 @@ fn _closeSourceListener(runtimeToken: i64) {
 
 // ========== Wire protocol ===========
 
-export type ClusterFrame = {
-    kind: i64,
-    payload: Array<u8>,
+export struct ClusterFrame {
+    kind: i64
+    payload: Array<u8>
 }
 
-export type ClusterTransportFrame = {
-    hopLimit: i64,
-    topic: string,
-    envelope: Array<u8>,
+export struct ClusterTransportFrame {
+    hopLimit: i64
+    topic: string
+    envelope: Array<u8>
 }
 
-export type ClusterHandshakeRequest = {
-    name: string,
-    nonce: Array<u8>,
-    flags: i64,
+export struct ClusterHandshakeRequest {
+    name: string
+    nonce: Array<u8>
+    flags: i64
 }
 
-export type ClusterHandshakeAck = {
-    name: string,
-    nonce: Array<u8>,
-    proof: Array<u8>,
-    flags: i64,
+export struct ClusterHandshakeAck {
+    name: string
+    nonce: Array<u8>
+    proof: Array<u8>
+    flags: i64
 }
 
-export type ClusterCoroExit = {
-    name: string,
-    reason: string,
+export struct ClusterCoroExit {
+    name: string
+    reason: string
 }
 
-export type ClusterDiscoveryAnnouncement = {
-    name: string,
-    port: i64,
-    clusterHash: u64,
+export struct ClusterDiscoveryAnnouncement {
+    name: string
+    port: i64
+    clusterHash: u64
 }
 
-type _RecentDeparture = {
-    name: string,
-    markedAtMs: i64,
+struct _RecentDeparture {
+    name: string
+    markedAtMs: i64
 }
 
-type _DiscoveryDatagram = {
-    sender: UdpFrom,
-    bytes: Array<u8>,
+struct _DiscoveryDatagram {
+    sender: UdpFrom
+    bytes: Array<u8>
 }
 
 fn _bytes(text: string) -> Array<u8> {
@@ -1124,7 +1124,7 @@ export fn decodeFrame(data: Array<u8>) -> ClusterFrame? {
     if (!_validFrameKind(kind)) { return null }
     var payload = _copyBytes(data, FRAME_HEADER_SIZE + 1, len(data))
     if (payload == null) { return null }
-    var frame: ClusterFrame = { kind: kind, payload: payload! }
+    var frame: ClusterFrame = ClusterFrame{ kind: kind, payload: payload! }
     return frame
 }
 
@@ -1152,7 +1152,7 @@ export fn decodeTransportFrame(data: Array<u8>) -> ClusterTransportFrame? {
     if (topic == null || !validTopicName(topic!)) { return null }
     var envelope = _copyBytes(payload, 2 + topicLen, len(payload))
     if (envelope == null) { return null }
-    var result: ClusterTransportFrame = {
+    var result: ClusterTransportFrame = ClusterTransportFrame{
         hopLimit: payload[0] as i64,
         topic: topic!,
         envelope: envelope!,
@@ -1182,7 +1182,7 @@ export fn decodeHandshakeRequest(payload: Array<u8>) -> ClusterHandshakeRequest?
     var name = _text(payload, 2, 2 + nameLen)
     var nonce = _copyBytes(payload, 2 + nameLen, 2 + nameLen + NONCE_SIZE)
     if (name == null || !validNodeName(name!) || nonce == null) { return null }
-    var result: ClusterHandshakeRequest = {
+    var result: ClusterHandshakeRequest = ClusterHandshakeRequest{
         name: name!, nonce: nonce!, flags: _readU32(payload, len(payload) - 4),
     }
     return result
@@ -1212,7 +1212,7 @@ export fn decodeHandshakeAck(payload: Array<u8>) -> ClusterHandshakeAck? {
     var proof = _copyBytes(payload, 2 + nameLen + NONCE_SIZE,
                            2 + nameLen + NONCE_SIZE + PROOF_SIZE)
     if (name == null || !validNodeName(name!) || nonce == null || proof == null) { return null }
-    var result: ClusterHandshakeAck = {
+    var result: ClusterHandshakeAck = ClusterHandshakeAck{
         name: name!, nonce: nonce!, proof: proof!, flags: _readU32(payload, len(payload) - 4),
     }
     return result
@@ -1275,7 +1275,7 @@ export fn decodeCoroExit(payload: Array<u8>) -> ClusterCoroExit? {
     var name = _text(payload, 1, 1 + nameLen)
     var reason = _text(payload, 2 + nameLen, len(payload))
     if (name == null || !_validName(name!, CORO_NAME_MAX) || reason == null) { return null }
-    var result: ClusterCoroExit = { name: name!, reason: reason! }
+    var result: ClusterCoroExit = ClusterCoroExit{ name: name!, reason: reason! }
     return result
 }
 
@@ -1306,7 +1306,7 @@ fn _peerTransportHealthSnapshots(runtimeToken: i64) -> Array<_PeerTransportHealt
     for (var i = 0; i < len(_peerTransports); i++) {
         var peer = _peerTransports[i]
         if (peer.endpoint.runtimeToken == runtimeToken && peer.committed) {
-            snapshots.push({
+            snapshots.push(_PeerTransportHealthSnapshot{
                 peerGeneration: peer.endpoint.generation,
                 lastReceivedAtMs: peer.lastReceivedAtMs,
             })
@@ -1326,7 +1326,7 @@ fn _peerTransportSnapshots(runtimeToken: i64) -> Array<_PeerTransportSnapshot>? 
     for (var i = 0; i < len(_peerTransports); i++) {
         var peer = _peerTransports[i]
         if (peer.endpoint.runtimeToken == runtimeToken && peer.committed) {
-            snapshots.push({
+            snapshots.push(_PeerTransportSnapshot{
                 peerGeneration: peer.endpoint.generation,
                 framesSent: peer.framesSent,
                 framesReceived: peer.framesReceived,
@@ -1412,26 +1412,26 @@ fn _takePeerFrame(peerGeneration: i64) -> _PeerTake {
         if (peer.endpoint.generation != peerGeneration || !peer.committed) { continue }
         if (_runtimeActiveToken.load() != peer.endpoint.runtimeToken) {
             _peerTransportLock.store(false)
-            return { status: _PEER_QUEUE_STOPPED, wire: null }
+            return _PeerTake{ status: _PEER_QUEUE_STOPPED, wire: null }
         }
         if (peer.full) {
             peer.slowConsumerEvents = peer.slowConsumerEvents + 1
             _peerTransports[i] = peer
             _peerTransportLock.store(false)
-            return { status: _PEER_QUEUE_FULL, wire: null }
+            return _PeerTake{ status: _PEER_QUEUE_FULL, wire: null }
         }
         var wire = peer.outbound.shift()
         if (wire == null) {
             _peerTransportLock.store(false)
-            return { status: _PEER_QUEUE_EMPTY, wire: null }
+            return _PeerTake{ status: _PEER_QUEUE_EMPTY, wire: null }
         }
         peer.queuedBytes = peer.queuedBytes - len(wire!)
         _peerTransports[i] = peer
         _peerTransportLock.store(false)
-        return { status: _PEER_QUEUE_ACCEPTED, wire: wire }
+        return _PeerTake{ status: _PEER_QUEUE_ACCEPTED, wire: wire }
     }
     _peerTransportLock.store(false)
-    return { status: _PEER_QUEUE_STOPPED, wire: null }
+    return _PeerTake{ status: _PEER_QUEUE_STOPPED, wire: null }
 }
 
 fn _peerQueueStatus(peerGeneration: i64) -> i64 {
@@ -1530,14 +1530,14 @@ fn _forwardRemoteMonitor(peerGeneration: i64, name: string) {
         match (notifications.recvTimeout(_REMOTE_MONITOR_POLL_MS)) {
             Recv.Value { value: reason } => {
                 if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
-                var exited: ClusterCoroExit = { name: name, reason: reason }
+                var exited: ClusterCoroExit = ClusterCoroExit{ name: name, reason: reason }
                 var response = encodeCoroExit(exited)
                 if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
                 return
             },
             Recv.Closed => {
                 if (!_peerIdentityCurrent(peerGeneration, requesterName)) { return }
-                var exited: ClusterCoroExit = { name: name, reason: "noproc" }
+                var exited: ClusterCoroExit = ClusterCoroExit{ name: name, reason: "noproc" }
                 var response = encodeCoroExit(exited)
                 if (response != null) { _enqueueControlFrame(peerGeneration, response!) }
                 return
@@ -1591,7 +1591,7 @@ fn _broadcastPeersForRuntime(runtimeToken: i64, excludedGeneration: i64,
     if (runtimeToken != 0) {
         var peers = _peerDirectorySnapshot(runtimeToken)
         if (_runtimeActiveToken.load() == runtimeToken) {
-            var stats: _DeliveryStats = { accepted: 0, full: 0, stopped: 0 }
+            var stats: _DeliveryStats = _DeliveryStats{ accepted: 0, full: 0, stopped: 0 }
             for (var i = 0; i < len(peers); i++) {
                 var generation = peers[i].generation
                 if (generation == excludedGeneration) { continue }
@@ -1767,7 +1767,7 @@ fn _installPeerTransport(conn: move NetConn, runtimeToken: i64,
     const sharedWake = Channel<i64>(1)
     const endpoint = _PeerEndpoint(
         runtimeToken, peerGeneration, sharedConn, sharedReady, sharedWake)
-    var peer: _PeerTransportState = {
+    var peer: _PeerTransportState = _PeerTransportState{
         endpoint: endpoint,
         committed: false,
         outbound: [],
@@ -1916,7 +1916,7 @@ fn _registerPhiPeerState(runtimeToken: i64, peerGeneration: i64,
             return true
         }
     }
-    var state: _PhiPeerState = {
+    var state: _PhiPeerState = _PhiPeerState{
         runtimeToken: runtimeToken,
         peerGeneration: peerGeneration,
         adoptedAtMs: adoptedAtMs,
@@ -1955,7 +1955,7 @@ fn _recordPhiHeartbeat(runtimeToken: i64, peerGeneration: i64,
     }
     var detector = PhiDetector(expectedIntervalMs)
     detector.record(receivedAtMs)
-    var state: _PhiPeerState = {
+    var state: _PhiPeerState = _PhiPeerState{
         runtimeToken: runtimeToken,
         peerGeneration: peerGeneration,
         adoptedAtMs: receivedAtMs,
@@ -2005,7 +2005,7 @@ fn _observeHeartbeat(peerGeneration: i64, receivedAtMs: i64, rttMs: i64) {
 }
 
 fn _phiPeerSnapshot(runtimeToken: i64, peerGeneration: i64) -> _PhiPeerSnapshot {
-    var snapshot: _PhiPeerSnapshot = {
+    var snapshot: _PhiPeerSnapshot = _PhiPeerSnapshot{
         recorded: false,
         adoptedAtMs: 0,
         missedHeartbeats: 0,
@@ -2109,7 +2109,7 @@ export fn decodeDiscoveryAnnouncement(data: Array<u8>) -> ClusterDiscoveryAnnoun
     var name = _text(data, 6, 6 + nameLen)
     var port = _readU16(data, 6 + nameLen)
     if (name == null || !validNodeName(name!) || port <= 0) { return null }
-    var result: ClusterDiscoveryAnnouncement = {
+    var result: ClusterDiscoveryAnnouncement = ClusterDiscoveryAnnouncement{
         name: name!, port: port, clusterHash: _readU64(data, 8 + nameLen),
     }
     return result
@@ -2136,7 +2136,7 @@ fn _claimDiscovery(runtimeToken: i64, discoveryToken: i64) -> bool {
     var claimed = _discoveryGeneration == null &&
                   _runtimeActiveToken.load() == runtimeToken
     if (claimed) {
-        _discoveryGeneration = {
+        _discoveryGeneration = _DiscoveryGeneration{
             runtimeToken: runtimeToken,
             discoveryToken: discoveryToken,
             socket: null,
@@ -2335,7 +2335,7 @@ fn _joinPeerForRuntime(runtimeToken: i64, host: string, port: i64) -> bool {
         net.close(live)
         return false
     }
-    var requestValue: ClusterHandshakeRequest = {
+    var requestValue: ClusterHandshakeRequest = ClusterHandshakeRequest{
         name: config.selfName, nonce: nonce!, flags: _CLUSTER_PROTOCOL_FLAGS,
     }
     var request = encodeHandshakeRequest(requestValue)
@@ -2431,7 +2431,7 @@ fn _serveAcceptedPeer(conn: move NetConn, token: i64, selfName: string, secret: 
         net.close(conn)
         return
     }
-    var ackValue: ClusterHandshakeAck = {
+    var ackValue: ClusterHandshakeAck = ClusterHandshakeAck{
         name: selfName, nonce: nonce!, proof: proof!, flags: _CLUSTER_PROTOCOL_FLAGS,
     }
     var ack = encodeHandshakeAck(ackValue)
@@ -2599,7 +2599,7 @@ fn _receiveDiscoveryDatagram(conn: NetConn, waitMs: i64) -> _DiscoveryDatagram? 
     var bytes = Array<u8>(_DISCOVERY_ANNOUNCEMENT_MAX_SIZE)
     var sender = net.recvFrom(conn, ref bytes, waitMs)
     if (sender == null) { return null }
-    var datagram: _DiscoveryDatagram = { sender: sender!, bytes: bytes }
+    var datagram: _DiscoveryDatagram = _DiscoveryDatagram{ sender: sender!, bytes: bytes }
     return datagram
 }
 
@@ -2657,24 +2657,24 @@ fn _discoveryLoop(socket: move NetConn, selfName: string, expectedHash: u64,
 
 // Every TLS-enabled node accepts peers as well as joining them, so it must have
 // one complete identity. Client-only half-nodes are not admitted.
-export type ClusterTlsOptions = {
-    enabled: bool,
-    caFile: string?,
-    certFile: string?,
-    keyFile: string?,
-    insecure: bool,
+export struct ClusterTlsOptions {
+    enabled: bool
+    caFile: string?
+    certFile: string?
+    keyFile: string?
+    insecure: bool
 }
 
 // Omitting a heartbeat field takes the source-owned constant above, so the
 // defaults have one owner while callers may still choose a faster detector.
-export type ClusterConfig = {
-    name: string,
-    port: i64,
-    secret: string?,
-    tls: ClusterTlsOptions?,
-    heartbeatIntervalMs: i64?,
-    heartbeatTimeoutMs: i64?,
-    maxMissedHeartbeats: i64?,
+export struct ClusterConfig {
+    name: string
+    port: i64
+    secret: string?
+    tls: ClusterTlsOptions?
+    heartbeatIntervalMs: i64?
+    heartbeatTimeoutMs: i64?
+    maxMissedHeartbeats: i64?
 }
 
 // Public cluster values and private peer state are declared here. Generic net
@@ -2692,33 +2692,33 @@ export enum ClusterDelivery {
 // An outbound peer has the address used to join it. A directly accepted peer
 // has no trustworthy advertised endpoint. The optional endpoint keeps partial
 // addresses unrepresentable instead of coupling two independent optionals.
-export type ClusterNodeInfo = {
-    name: string,
-    endpoint: Endpoint?,
-    framesSent: i64,
-    framesReceived: i64,
-    bytesSent: i64,
-    bytesReceived: i64,
-    sendErrors: i64,
-    slowConsumerEvents: i64,
-    rttMs: i64,
-    outQueueBytes: i64,
-    outQueueFrames: i64,
-    slow: bool,
-    phi: f64,
-    missedHeartbeats: i64,
+export struct ClusterNodeInfo {
+    name: string
+    endpoint: Endpoint?
+    framesSent: i64
+    framesReceived: i64
+    bytesSent: i64
+    bytesReceived: i64
+    sendErrors: i64
+    slowConsumerEvents: i64
+    rttMs: i64
+    outQueueBytes: i64
+    outQueueFrames: i64
+    slow: bool
+    phi: f64
+    missedHeartbeats: i64
 }
 
-export type ClusterInfo = {
-    self: string,
-    port: i64,
-    nodes: Array<ClusterNodeInfo>,
-    listeners: i64,
-    deadNodes: i64,
-    heartbeatIntervalMs: i64,
-    heartbeatTimeoutMs: i64,
-    maxMissedHeartbeats: i64,
-    tlsEnabled: bool,
+export struct ClusterInfo {
+    self: string
+    port: i64
+    nodes: Array<ClusterNodeInfo>
+    listeners: i64
+    deadNodes: i64
+    heartbeatIntervalMs: i64
+    heartbeatTimeoutMs: i64
+    maxMissedHeartbeats: i64
+    tlsEnabled: bool
 }
 
 export enum AddressError {
@@ -2880,7 +2880,7 @@ fn _registerTopicSubscription(pattern: string, capacity: i64) -> Channel<Buffer>
         notifications.close()
         return null
     }
-    var subscription: _TopicSubscription = {
+    var subscription: _TopicSubscription = _TopicSubscription{
         runtimeToken: token,
         pattern: pattern,
         notifications: notifications,
@@ -2970,7 +2970,7 @@ fn _deliverTopicForRuntime(runtimeToken: i64, topic: string,
         else if (outcome == 1) { stopped = stopped + 1 }
         else { full = full + 1 }
     }
-    var stats: _DeliveryStats = {
+    var stats: _DeliveryStats = _DeliveryStats{
         accepted: accepted,
         full: full,
         stopped: stopped,
@@ -3035,7 +3035,7 @@ export fn discover() -> bool {
     var source = _sourceStateSnapshot(runtimeToken)
     if (source == null) { return false }
     var hash = discoveryClusterHash(source!.secret)
-    var value: ClusterDiscoveryAnnouncement = {
+    var value: ClusterDiscoveryAnnouncement = ClusterDiscoveryAnnouncement{
         name: source!.selfName,
         port: source!.port,
         clusterHash: hash,
@@ -3099,7 +3099,7 @@ export fn info() -> ClusterInfo? {
                     ? _phiValue(detector.samples, detector.mean, detector.variance,
                                 detector.lastHeartbeatMs, observedAtMs)
                     : 0.0
-        var publicNode: ClusterNodeInfo = {
+        var publicNode: ClusterNodeInfo = ClusterNodeInfo{
             name: metadata!.name,
             endpoint: metadata!.endpoint,
             framesSent: node.framesSent,
@@ -3121,7 +3121,7 @@ export fn info() -> ClusterInfo? {
     if (listenerCount < 0) { return null }
     var deadNodeCount = _recentDepartureCount(runtimeToken, observedAtMs)
     if (deadNodeCount < 0 || _runtimeActiveToken.load() != runtimeToken) { return null }
-    var result: ClusterInfo = {
+    var result: ClusterInfo = ClusterInfo{
         self: state.selfName,
         port: state.port,
         nodes: nodes,
@@ -3232,7 +3232,7 @@ export fn start(config: ClusterConfig) -> bool {
             var client = TlsClientContext.create(caFile, certFile, keyFile, !insecure)
             var server = TlsServerContext.create(
                 certFile, keyFile, caFile, !insecure)
-            tlsResources = {
+            tlsResources = _ClusterTlsResources{
                 runtimeToken: runtimeToken,
                 client: client,
                 server: server,
@@ -3249,7 +3249,7 @@ export fn start(config: ClusterConfig) -> bool {
         net.close(listener!)
         return false
     }
-    var state: _ClusterSourceState = {
+    var state: _ClusterSourceState = _ClusterSourceState{
         runtimeToken: runtimeToken,
         selfName: config.name,
         port: port,

@@ -394,6 +394,12 @@ static bool value_header_valid(const XrXirValue *value) {
         return !record->count && !record->fields &&
             record == xr_xir_compile_type_arena_empty_variant(object->arena, object->type, record->variant);
     }
+    /* Empty-variant descriptors belong to the type arena allocation, never to
+     * an execution Domain. Their authentic cache address cannot acquire a
+     * second physical owner merely by changing the object header. */
+    if(object->kind==XR_XIR_TYPE_NOMINAL &&
+        (const XirNominalValue *)object==xr_xir_compile_type_arena_empty_variant(
+            object->arena,object->type,((const XirNominalValue *)object)->variant))return false;
     if (type == XR_XIR_ERROR) {
         if (!xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type)) return false;
         type = object->type;
@@ -526,7 +532,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
             if (record->variant >= identity->variant_count) return false;
             begin = identity->variants[record->variant].field_begin;
             count = identity->variants[record->variant].field_count;
-            if (!count) return !record->count && !record->fields &&
+            if (!count) return !object->domain && !record->count && !record->fields &&
                 record == xr_xir_compile_type_arena_empty_variant(object->arena, object->type, record->variant);
         } else if (identity->kind != XR_XIR_NOMINAL_STRUCT || record->variant) return false;
         if (record->count != count || record->fields != (const XrXirValue *) (record + 1)) return false;
@@ -1882,11 +1888,11 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
  * materializes an aggregate, retains a handle, or grants mutation authority. */
 XR_FUNC bool xr_xir_value_format_cursor(const XrXirValue *value,XrXirFormatCursor *output) {
     if (!output || !xr_xir_value_valid(value)) return false;
-    *output=(XrXirFormatCursor){value,xr_xir_value_arena(value),(XrXirType)value->type,false,NULL};
+    *output=(XrXirFormatCursor){value,xr_xir_value_arena(value),(XrXirType)value->type,false};
     return true;
 }
 XR_FUNC bool xr_xir_value_format_leaf(const XrXirFormatCursor *cursor,XrXirValue *output) {
-    if (!cursor || !output || cursor->field_name) return false;
+    if (!cursor || !output) return false;
     XrXirValue value={0};
     if (cursor->compact && cursor->type==XR_XIR_UNIT) {*output=value;return true;}
     if (!cursor->compact) {
@@ -1926,7 +1932,7 @@ XR_FUNC bool xr_xir_value_format_unwrap(const XrXirFormatCursor *input,XrXirForm
             const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(cursor.arena,cursor.type);
             if (!layout || !cursor.storage || *(const uint8_t *)cursor.storage>1) return false;
             if (!*(const uint8_t *)cursor.storage) {*output=cursor;*is_null=true;return true;}
-            cursor=(XrXirFormatCursor){(const unsigned char *)cursor.storage+layout->value.alignment,cursor.arena,node->element,true,NULL};
+            cursor=(XrXirFormatCursor){(const unsigned char *)cursor.storage+layout->value.alignment,cursor.arena,node->element,true};
         } else {
             XrXirValue value={0};if (!xr_xir_value_format_leaf(&cursor,&value)) return false;
             const XirNominalValue *nullable=(const XirNominalValue *)object_pointer(&value);
@@ -1971,16 +1977,6 @@ static bool format_enum_storage(const XrXirFormatCursor *cursor,FormatEnumStorag
     result.count=identity->variants[result.variant].field_count;
     *output=result;return true;
 }
-static const XrXirNominalIdentity *format_record_identity(const XrXirFormatCursor *cursor,const XrXirTypeNode **node) {
-    const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor->arena);
-    *node=xr_xir_type_node(types,cursor->type);
-    if (!*node || (*node)->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals || !types->nominals->identities ||
-        (*node)->nominal.declaration>=types->nominals->count) return NULL;
-    const XrXirNominalIdentity *identity=&types->nominals->identities[(*node)->nominal.declaration];
-    return identity->flags==XR_XIR_NOMINAL_RECORD && identity->kind==XR_XIR_NOMINAL_STRUCT &&
-        identity->field_count==(*node)->nominal.field_count &&
-        (!identity->field_count || (identity->fields && (*node)->nominal.fields))?identity:NULL;
-}
 XR_FUNC bool xr_xir_value_format_aggregate(const XrXirFormatCursor *cursor,XrXirFormatAggregate *output) {
     if (!cursor || !output) return false;
     XrXirValue value={0};
@@ -2000,11 +1996,6 @@ XR_FUNC bool xr_xir_value_format_aggregate(const XrXirFormatCursor *cursor,XrXir
             *output=(XrXirFormatAggregate){.count=hash->length,.kind=object->kind==XR_XIR_TYPE_MAP?XIR_FORMAT_MAP:XIR_FORMAT_SET};return true;
         }
     }
-    const XrXirTypeNode *record_type=NULL;
-    const XrXirNominalIdentity *record=format_record_identity(cursor,&record_type);
-    if (record) {
-        *output=(XrXirFormatAggregate){.count=record->field_count,.kind=XIR_FORMAT_RECORD};return true;
-    }
     FormatEnumStorage storage={0};
     if (!format_enum_storage(cursor,&storage)) return false;
     *output=(XrXirFormatAggregate){.name=storage.identity->name,.member=storage.identity->variants[storage.variant].name,
@@ -2017,7 +2008,7 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
         xr_xir_type_is_array(xr_xir_compile_type_arena_types(cursor->arena),cursor->type)) {
         const XirArray *array=(const XirArray *)object_pointer(&value);
         if (index>=array->length) return false;
-        *output=(XrXirFormatCursor){array_slot(array,index),array->object.arena,array->element,true,NULL};return true;
+        *output=(XrXirFormatCursor){array_slot(array,index),array->object.arena,array->element,true};return true;
     }
     if (xr_xir_value_format_leaf(cursor,&value)) {
         const XirObject *object=owned_carrier_type(cursor->type)?object_pointer(&value):NULL;
@@ -2030,26 +2021,8 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
             size_t ordinal=map?index/2:index;if (ordinal>=hash->length) return false;
             size_t entry=hash_order_entry(hash,ordinal);if (entry==SIZE_MAX) return false;
             StorageSpan span=hash_span(hash,entry,map && (index&1));
-            *output=(XrXirFormatCursor){span.bytes,hash->object.arena,span.type,true,NULL};return true;
+            *output=(XrXirFormatCursor){span.bytes,hash->object.arena,span.type,true};return true;
         }
-    }
-    const XrXirTypeNode *record_type=NULL;
-    const XrXirNominalIdentity *record=format_record_identity(cursor,&record_type);
-    if (record) {
-        uint32_t field=index/2;if (field>=record->field_count) return false;
-        if (!(index&1)) {
-            *output=(XrXirFormatCursor){.arena=cursor->arena,.field_name=&record->fields[field].name};return true;
-        }
-        if (cursor->compact) {
-            const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(cursor->arena,cursor->type);
-            if (!layout || layout->field_count!=record->field_count || !layout->field_offsets ||
-                (layout->value.size && !cursor->storage)) return false;
-            const void *bytes=cursor->storage?(const unsigned char *)cursor->storage+layout->field_offsets[field]:NULL;
-            *output=(XrXirFormatCursor){bytes,cursor->arena,record_type->nominal.fields[field],true,NULL};return true;
-        }
-        if (!xr_xir_value_format_leaf(cursor,&value)) return false;
-        const XirNominalValue *body=(const XirNominalValue *)object_pointer(&value);
-        return field<body->count && xr_xir_value_format_cursor(&body->fields[field],output);
     }
     FormatEnumStorage storage={0};
     if (!format_enum_storage(cursor,&storage) || index>=storage.count) return false;
@@ -2058,7 +2031,7 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
     XrXirType type=storage.node->nominal.fields[storage.begin+index];
     const void *field=storage.fields ? (const void *)&storage.fields[index] :
         cursor->storage ? (const unsigned char *)cursor->storage+storage.layout->field_offsets[storage.begin+index] : NULL;
-    *output=(XrXirFormatCursor){field,cursor->arena,type,cursor->compact,NULL};return true;
+    *output=(XrXirFormatCursor){field,cursor->arena,type,cursor->compact};return true;
 }
 #include "xxir_value_display.inc.c"
 #include "xxir_map_contains_value.inc.c"

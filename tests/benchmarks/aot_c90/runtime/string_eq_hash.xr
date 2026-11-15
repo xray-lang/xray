@@ -6,7 +6,7 @@ fn run(n: i64) -> i64 {
         i = i + 1
     }
 
-    var counts: Map<string, i64> = #{}
+    var counts: Map<string, i64> = {}
     i = 0
     while (i < n) {
         var k = keys[i]

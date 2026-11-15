@@ -185,87 +185,6 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     return xr_pattern_tuple(parser->compiler_session, elements, count);
 }
 
-// Parse field selections with binding, discard or nested product children.
-// Field names drive extraction; optional aliases choose the local binding name.
-XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_object_pattern: NULL parser");
-    // '{' already consumed
-    char **field_names = NULL;
-    XrDestructurePattern **patterns = NULL;
-    int count = 0;
-    int capacity = 0;
-    bool all_shorthand = true;
-
-    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-        if (count >= capacity) {
-            int old_capacity = capacity;
-            do {
-                capacity = xr_parser_grow_capacity(parser, capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            char **_new_field_names = (char **) ast_alloc_array(parser->compiler_session,
-                                                                sizeof(char *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (old_capacity > 0 && field_names)
-                do { if (!ast_copy(parser->compiler_session, _new_field_names, field_names, sizeof(char *) * (size_t) old_capacity)) return NULL; } while (0);
-            field_names = _new_field_names;
-
-            XrDestructurePattern **_new_patterns = (XrDestructurePattern **) ast_alloc_array(
-                parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (old_capacity > 0 && patterns)
-                do { if (!ast_copy(parser->compiler_session, _new_patterns, patterns,
-                       sizeof(XrDestructurePattern *) * (size_t) old_capacity)) return NULL; } while (0);
-            patterns = _new_patterns;
-        }
-
-        if (!xr_parser_match(parser, TK_NAME)) {
-            do {
-                xr_parser_error_expected_name(parser, "expected field name in object destructuring");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-
-        Token field_token=parser->previous;
-        char *field = copy_token_string(parser, &parser->previous);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        XrDestructurePattern *binding=NULL;
-        if (xr_parser_match(parser,TK_COLON)) {
-            all_shorthand=false;binding=parse_destructure_binding(parser);
-        } else {
-            binding=xr_pattern_identifier(parser->compiler_session,field,NULL);
-            if (!xr_parser_healthy(parser) || !binding) return NULL;
-            binding->line=field_token.line;binding->column=field_token.column;
-            binding->end_line=field_token.line;binding->end_column=field_token.column+field_token.length;
-        }
-        if (!xr_parser_healthy(parser) || !binding) return NULL;
-        binding->field_span=(XrNameSpan){field_token.line,field_token.column};
-
-        field_names[count] = field;
-        patterns[count] = binding;
-        count++;
-
-        if (!xr_parser_check(parser, TK_RBRACE)) {
-            if (!xr_parser_match(parser, TK_COMMA)) {
-                do {
-                    xr_parser_error(parser, "expected ',' or '}'");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return NULL;
-            }
-        }
-    }
-
-    do {
-        xr_parser_consume(parser, TK_RBRACE, "expected '}'");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-    return xr_pattern_object(parser->compiler_session, field_names, patterns, count, all_shorthand);
-}
-
 // Unified entry point
 static XrDestructurePattern *parse_destructure_pattern_inner(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -275,10 +194,11 @@ static XrDestructurePattern *parse_destructure_pattern_inner(Parser *parser) {
     } else if (xr_parser_match(parser, TK_LPAREN)) {
         return xr_parse_tuple_pattern(parser);
     } else if (xr_parser_match(parser, TK_LBRACE)) {
-        return xr_parse_object_pattern(parser);
+        xr_parser_error_at_previous(parser, "object destructuring was removed; use named field access");
+        return NULL;
     } else {
         do {
-            xr_parser_error(parser, "expected '(', '[' or '{' for destructuring");
+            xr_parser_error(parser, "expected '(' or '[' for destructuring");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         return NULL;
@@ -408,67 +328,6 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(Parser *parser,
     }
 
     return xr_pattern_tuple(parser->compiler_session, elements, count);
-}
-
-/*
- * Convert object literal to destructure pattern (for destructuring assignment).
- * `{a, b}` and `{a: local}` both become object patterns. Field keys drive
- * extraction; values must be bare variable references so assignment targets
- * never evaluate arbitrary expressions.
- */
-XrDestructurePattern *convert_object_literal_to_pattern(Parser *parser,
-                                                        AstNode *object_literal) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (object_literal->type != AST_OBJECT_LITERAL) {
-        return NULL;
-    }
-
-    int count = object_literal->as.object_literal.count;
-    char **field_names = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *), (size_t) count);
-    if (!xr_parser_healthy(parser)) return NULL;
-    XrDestructurePattern **patterns = (XrDestructurePattern **) ast_alloc_array(
-        parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) count);
-    if (!xr_parser_healthy(parser)) return NULL;
-    bool all_shorthand = true;
-
-    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
-        AstNode *key_node = object_literal->as.object_literal.keys[i];
-        AstNode *value_node = object_literal->as.object_literal.values[i];
-
-        // Check if key is string literal or variable reference
-        char *field_name = NULL;
-        if (key_node->type == AST_LITERAL_STRING) {
-            // Key is string literal
-            do {
-                field_name = ast_strdup(parser->compiler_session, key_node->as.literal.raw_value.string_val);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else if (key_node->type == AST_VARIABLE) {
-            // Key is variable reference (shorthand syntax: {x, y})
-            do {
-                field_name = ast_strdup(parser->compiler_session, key_node->as.variable.name);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            // Key is not string or variable, cannot convert
-            return NULL;
-        }
-
-        if (value_node->type == AST_VARIABLE) {
-            if (xr_parser_compare_string(parser, field_name, value_node->as.variable.name) != 0)
-                all_shorthand = false;
-            field_names[i] = field_name;
-            do {
-                patterns[i] = xr_pattern_identifier(parser->compiler_session, value_node->as.variable.name, NULL);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            // Value is not variable reference, cannot convert to destructure pattern
-            return NULL;
-        }
-    }
-
-    return xr_pattern_object(parser->compiler_session, field_names, patterns, count, all_shorthand);
 }
 
 // Destructuring declaration/pattern parsing moved to xparse_destructure.c

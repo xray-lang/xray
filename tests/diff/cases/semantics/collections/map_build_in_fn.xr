@@ -7,7 +7,7 @@
 // forces a full JIT compile (no field-load bail-out), exposing the bug.
 // Must agree across VM / JIT / AOT.
 fn squares(n: i64) -> Map<i64, i64> {
-    var m: Map<i64, i64> = #{}
+    var m: Map<i64, i64> = {}
     for (i in 0..n) {
         m.set(i, i * i)
     }

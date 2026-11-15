@@ -33,7 +33,7 @@ static XrXirArtifact *cleanup_role_fixture(const XrXirCompileContext *context) {
     XrXirFunctionIdentity identities[5] = {{0}};
     identities[3].cleanup_owner = 3; identities[4].cleanup_owner = 4;
     XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirConstraint constraint = {0}; const XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirGeneric generics[5] = {{0}};
     generics[1] = (XrXirGeneric){NULL, 0, arguments, 2, NULL};

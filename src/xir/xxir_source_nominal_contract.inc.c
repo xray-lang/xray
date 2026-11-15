@@ -84,7 +84,8 @@ static bool source_hir_nominal_construct(SourceContext *ctx,AstNode *node,const 
     XrXirStatus status=xr_hir_body_nominal_construct(ctx->typed_body,&input,ctx->request,&action,&reason);
     return source_hir_nominal_status(ctx,node,status,reason)&&source_hir_nominal_emit(ctx,node,&action,value);
 }
-static bool source_hir_nominal_get(SourceContext *ctx,AstNode *node,SourceValue receiver,uint32_t field,uint32_t variant,SourceValue *value) {
+static bool source_hir_nominal_get_use(SourceContext *ctx,AstNode *node,SourceValue receiver,uint32_t field,
+    uint32_t variant,SourceValue *value,XrHirBodyUse *use) {
     XrHirNominalShape shape={0};XrHirBodyScope scope={0};
     if(!source_hir_nominal_shape(ctx,node,receiver.type,&shape,NULL)||!source_hir_current_scope(ctx,&scope))return false;
     XrHirNominalPool pool=source_hir_nominal_pool(ctx);XrHirNominalAction action;const char *reason=NULL;
@@ -95,7 +96,12 @@ static bool source_hir_nominal_get(SourceContext *ctx,AstNode *node,SourceValue 
     uint32_t before=ctx->bodies[ctx->function].count;
     XrXirInstruction op={.op=action.operation,.type=action.type,.args={receiver.id,action.operation==XR_XIR_ENUM_GET?action.field:0},
         .immediate=action.operation==XR_XIR_ENUM_GET?action.variant:action.field};
-    return source_recipe_record(ctx,op,value)&&source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=action.use},value,before);
+    if(!source_recipe_record(ctx,op,value)||!source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=action.use},value,before))return false;
+    if(use)*use=action.use;
+    return true;
+}
+static bool source_hir_nominal_get(SourceContext *ctx,AstNode *node,SourceValue receiver,uint32_t field,uint32_t variant,SourceValue *value) {
+    return source_hir_nominal_get_use(ctx,node,receiver,field,variant,value,NULL);
 }
 static bool source_hir_nominal_helper(SourceContext *ctx,AstNode *node,XrXirType type,uint32_t field,SourceValue *value,XrHirBodyUse *use) {
     XrHirNominalShape shape={0};XrHirBodyScope scope={0};

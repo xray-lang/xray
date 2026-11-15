@@ -11,7 +11,7 @@ static XrtModuleStatus nullable_state_layout(XrtModuleLayout **output) {
         {XRT_MODULE_NULLABLE, 1}, {XRT_MODULE_ARRAY_I64, 0}};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.type=2, .flags=XRT_MODULE_SLOT_MUTABLE, .size=24, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=types, .type_count=4, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=4, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=24, .payload_alignment=8, .byte_limit=UINT64_MAX};
     return xrt_module_layout_new(&spec, output);
 }
@@ -58,7 +58,7 @@ static void nullable_state_invalid_shapes(void) {
         XrtModuleTypeSpec types[] = {{XRT_MODULE_I64, 0}, {XRT_MODULE_NULLABLE, 0}};
         XrtModuleSpec module = {0};
         XrtModuleSlotSpec slot = {.type=1, .size=16, .alignment=8};
-        XrtModuleLayoutSpec spec = {.types=types, .type_count=2, .modules=&module, .module_count=1,
+        XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=2, .modules=&module, .module_count=1,
             .slots=&slot, .slot_count=1, .payload_size=16, .payload_alignment=8, .byte_limit=UINT64_MAX};
         if (scenario == 0) types[1].argument = 1;
         if (scenario == 1) types[1].argument = UINT32_MAX;
@@ -81,7 +81,7 @@ static void nullable_state_deep_copy(void) {
             types[n] = (XrtModuleTypeSpec){XRT_MODULE_NULLABLE, n - 1};
         XrtModuleSpec module = {0};
         XrtModuleSlotSpec slot = {.type=128, .flags=XRT_MODULE_SLOT_MUTABLE, .size=size, .alignment=alignment};
-        XrtModuleLayoutSpec spec = {.types=types, .type_count=129, .modules=&module, .module_count=1,
+        XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=129, .modules=&module, .module_count=1,
             .slots=&slot, .slot_count=1, .payload_size=size, .payload_alignment=alignment, .byte_limit=UINT64_MAX};
         XrtModuleLayout *layout = NULL;
         XrtModuleState *state = NULL;

@@ -738,8 +738,10 @@ static void native_string_misuse_aborts(void) {
 
 #include "native_callable_cases.h"
 #include "native_callable_scope_cases.h"
+#include "native_message_panic_cases.h"
 
 int main(void) {
+    native_message_panic_owners();
     native_record_projection();
     native_callable_binding_snapshot();
     native_callable_projection();

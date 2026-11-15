@@ -40,7 +40,8 @@ typedef enum XrtModuleTypeKind {
     XRT_MODULE_CELL_ARRAY_I64,
     XRT_MODULE_CALLABLE,
     XRT_MODULE_TUPLE_I64,
-    XRT_MODULE_BOXED
+    XRT_MODULE_BOXED,
+    XRT_MODULE_SET_I64
 } XrtModuleTypeKind;
 /* Fixed U8 and I64 Tuple arguments are their nonzero field counts. Nullable
  * argument is an earlier type ordinal in this catalog. Other kinds require zero. Nullable admits
@@ -57,6 +58,7 @@ typedef struct XrtModuleSlotSpec {
     uint32_t size, alignment;
 } XrtModuleSlotSpec;
 typedef struct XrtModuleLayoutSpec {
+    XrtNativeMetadataHeader metadata;
     const XrtModuleTypeSpec *types;
     uint32_t type_count;
     const XrtModuleSpec *modules;
@@ -70,6 +72,11 @@ typedef struct XrtModuleLayoutSpec {
     const XrtCallableTypeSpec *callable_types;
     uint32_t callable_type_count;
 } XrtModuleLayoutSpec;
+#define XRT_MODULE_LAYOUT_HEADER XRT_NATIVE_METADATA_HEADER(XRT_NATIVE_METADATA_MODULE, XrtModuleLayoutSpec)
+static inline bool xrt_module_layout_spec_valid(const XrtModuleLayoutSpec *spec) {
+    const XrtNativeMetadataHeader expected=XRT_MODULE_LAYOUT_HEADER;
+    return xrt_native_metadata_matches(spec,&expected);
+}
 
 /* Input arrays are copied. Runtime-selected copy/drop callbacks and their type
  * contexts are owned by the retained layout, with no caller code/context borrow.
@@ -78,6 +85,8 @@ typedef struct XrtModuleLayoutSpec {
 XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *, XrtModuleLayout **);
 XRAY_API bool xrt_module_layout_retain(XrtModuleLayout *);
 XRAY_API void xrt_module_layout_drop(XrtModuleLayout **);
+/* Output must start with XRT_MODULE_LAYOUT_HEADER. A refused output is left
+ * byte-for-byte unchanged; an old-sized output cannot receive current rows. */
 XRAY_API XrtModuleStatus xrt_module_layout_view(const XrtModuleLayout *, XrtModuleLayoutSpec *);
 /* The state budget includes its retained layout and all payload/log/scratch
  * storage. A state remains live until its execution owner drops it. */

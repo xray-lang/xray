@@ -22,14 +22,14 @@ fn produce(n: i64) -> string {
 
 fn build_map(seed: string) -> Map<string, string> {
     var key = glue("k", "9")
-    var m: Map<string, string> = #{}
+    var m: Map<string, string> = {}
     m.set(key, seed + "_value")
     Coro.yield()
     return m
 }
 
 var map_key = glue("k", "1")
-var m: Map<string, i64> = #{}
+var m: Map<string, i64> = {}
 m.set(map_key, 7)
 m.set(glue("k", "1"), 11)
 print(len(m))
@@ -38,7 +38,7 @@ print(m.containsKey(glue("k", "1")))
 print(m.delete("k1"))
 print(m.containsKey(glue("k", "1")))
 
-var s: Set<string> = #[]
+var s: Set<string> = Set()
 s.add(glue("t", "ag"))
 s.add("tag")
 print(len(s))

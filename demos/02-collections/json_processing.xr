@@ -2,29 +2,41 @@
 //
 // Run: xray demos/02-collections/json_processing.xr
 
-type Address = { city: string, zip: string }
-type User = {
-    name: string,
-    age: i64,
-    email: string,
-    tags: Array<string>,
-    address: Address,
+struct Contact {
+    name: string
+    age: i64
+    email: string
+    tags: Array<string>
+    address: Address
+    phone: string
 }
 
-// Known application data uses an exact structural-object type.
-var user: User = {
+struct Address {
+    city: string
+    zip: string
+}
+struct User {
+    name: string
+    age: i64
+    email: string
+    tags: Array<string>
+    address: Address
+}
+
+// Known application data uses a named value type.
+var user: User = User{
     name: "Alice",
     age: 30,
     email: "alice@example.com",
     tags: ["admin", "user"],
-    address: { city: "Beijing", zip: "100000" },
+    address: Address{ city: "Beijing", zip: "100000" },
 }
 print("name: ${user.name}")
 print("city: ${user.address.city}")
 print("first tag: ${user.tags[0]}")
 
 user.age = 31
-var contact = { ...user, phone: "123-456-7890" }
+var contact = Contact{ ...user, phone: "123-456-7890" }
 print("updated age: ${contact.age}")
 print("added phone: ${contact.phone}")
 print("typed JSON: ${JSON.stringify(contact)}")

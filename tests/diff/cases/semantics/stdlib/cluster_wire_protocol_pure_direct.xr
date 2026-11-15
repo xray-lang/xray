@@ -55,7 +55,7 @@ print(cluster.encodeTransportFrame(3, "events.user", Array<u8>(63)) == null)
 
 var requestNonce = Array<u8>(16)
 for (var i = 0; i < len(requestNonce); i++) { requestNonce[i] = (16 + i) as u8 }
-var requestValue: ClusterHandshakeRequest = {
+var requestValue: ClusterHandshakeRequest = ClusterHandshakeRequest{
     name: "node-alpha", nonce: requestNonce, flags: 16909060,
 }
 var requestWire = cluster.encodeHandshakeRequest(requestValue)
@@ -89,7 +89,7 @@ var ackNonce = Array<u8>(16)
 var ackProof = Array<u8>(32)
 for (var i = 0; i < len(ackNonce); i++) { ackNonce[i] = (32 + i) as u8 }
 for (var i = 0; i < len(ackProof); i++) { ackProof[i] = (128 + i) as u8 }
-var ackValue: ClusterHandshakeAck = {
+var ackValue: ClusterHandshakeAck = ClusterHandshakeAck{
     name: "node-beta", nonce: ackNonce, proof: ackProof, flags: 168496141,
 }
 var ackWire = cluster.encodeHandshakeAck(ackValue)
@@ -149,7 +149,7 @@ var monitorFrame = cluster.decodeFrame(monitorWire!)
 print(cluster.decodeCoroMonitor(monitorFrame!.payload))
 print(cluster.decodeCoroMonitor(Array<u8>([1])) == null)
 
-var exitValue: ClusterCoroExit = { name: "worker.alpha", reason: "normal" }
+var exitValue: ClusterCoroExit = ClusterCoroExit{ name: "worker.alpha", reason: "normal" }
 var exitWire = cluster.encodeCoroExit(exitValue)
 assertEqual(len(exitWire!), 25)
 assertEqual(exitWire![3], 21)

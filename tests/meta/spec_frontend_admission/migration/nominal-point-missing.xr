@@ -1,0 +1,2 @@
+struct Point { x:f64; y:f64 }
+var point=Point{x:1.0}

@@ -22,12 +22,12 @@ class Registry {
     }
 }
 
-var firstScores: Map<i64, i64> = #{}
-var firstSeen: Set<i64> = #[]
+var firstScores: Map<i64, i64> = {}
+var firstSeen: Set<i64> = Set()
 var registry = Registry(firstScores, firstSeen)
 print(registry.mark(7, 11))
 
-var secondScores: Map<i64, i64> = #{}
-var secondSeen: Set<i64> = #[]
+var secondScores: Map<i64, i64> = {}
+var secondSeen: Set<i64> = Set()
 registry.replace(secondScores, secondSeen)
 print(registry.mark(3, 21))

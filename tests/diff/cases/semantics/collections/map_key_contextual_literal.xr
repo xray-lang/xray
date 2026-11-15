@@ -2,7 +2,7 @@
 // The key position of an index expression is typed by the container's key type,
 // exactly like the value position. An integer literal keying a Map<float, V> is
 // a float key, not an int key stored in a float map.
-var m: Map<f64, string> = #{}
+var m: Map<f64, string> = {}
 m[1] = "int-literal"
 print("size after int literal=${len(m)}")
 m[1.0] = "float-literal"
@@ -13,12 +13,12 @@ for (k in m.keys()) {
     print("key=${k}")
 }
 
-var wide: Map<i32, string> = #{}
+var wide: Map<i32, string> = {}
 wide[1] = "one"
 print("wide size=${len(wide)}")
 print("wide get=${wide[1]}")
 
-var sf: Set<f64> = #[]
+var sf: Set<f64> = Set()
 sf.add(2)
 sf.add(2.0)
 print("set size=${len(sf)}")

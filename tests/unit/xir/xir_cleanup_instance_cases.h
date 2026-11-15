@@ -135,7 +135,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
         {XR_XIR_CALL_ABI_VERSION,parameters,1,XR_XIR_I64,sizeof(DrainState),drain_callee,drain_release,&w,0,0}};
     XrXirFunctionIdentity ids[] = {{0},{0,1,0,0,0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0,0,2, 0, XR_XIR_NON_MEMBER, 0, 0},{0}};
     XrXirSourceModule module = {"main",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}; XrXirSlot slot = {0,XR_XIR_I64,1};
-    XrXirDeclarations declarations = {&module,1,ids,&slot,1,NULL,0,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&module, .module_count=1, .functions=ids, .slots=&slot, .slot_count=1, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         entries,4,&declarations,{&w,drain_lease},&types,{0}};
     SourceFixtureOwner compiler={0}; cleanup_fixture_owner_new(&compiler);
@@ -195,7 +195,7 @@ static void cleanup_compiler_fixture(CleanupCompilerFixture *f, bool late) {
     f->entries[3]=(XrXirCallEntry){XR_XIR_CALL_ABI_VERSION,f->parameters,1,XR_XIR_I64,sizeof(DrainState),drain_callee,drain_release,&f->witness,0,0};
     f->identities[1].exported=1; f->identities[2].cleanup_owner=2;
     f->module=(XrXirSourceModule){"main",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}; f->slot=(XrXirSlot){0,XR_XIR_I64,1};
-    f->declarations=(XrXirDeclarations){&f->module,1,f->identities,&f->slot,1,NULL,0,0,1,NULL};
+    f->declarations=(XrXirDeclarations){.modules=&f->module, .module_count=1, .functions=f->identities, .slots=&f->slot, .slot_count=1, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     f->spec=(XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         f->entries,4,&f->declarations,{&f->witness,drain_lease},&f->types,{0}};
 }

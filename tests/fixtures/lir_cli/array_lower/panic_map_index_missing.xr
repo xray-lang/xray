@@ -1,3 +1,8 @@
-const values=#{"present":7}
-const record={name:"entry",score:values["missing"]}
+struct Entry {
+    name: string
+    score: i64
+}
+
+const values={"present":7}
+const record=Entry{name:"entry",score:values["missing"]}
 print(record.score)

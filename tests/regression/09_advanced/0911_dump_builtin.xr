@@ -59,7 +59,7 @@ fn test_dump_map() {
     // of the map. Even though stdout cannot be asserted, the codegen bug
     // also corrupted the register holding the map. This case verifies the
     // map is intact after dump().
-    var scores = #{"alice": 95, "bob": 87, "charlie": 92}
+    var scores = {"alice": 95, "bob": 87, "charlie": 92}
     dump(scores)
     assertEqual(scores["alice"], 95)
     assertEqual(scores["bob"], 87)
@@ -68,7 +68,7 @@ fn test_dump_map() {
 
 @test
 fn test_dump_set() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     dump(s)
     assertEqual(len(s), 3)
     assertEqual(s.contains(2), true)
@@ -76,7 +76,7 @@ fn test_dump_set() {
 
 @test
 fn test_dump_with_indent() {
-    var data = #{"name": "alice", "score": 95}
+    var data: JSON.Object = {"name": "alice", "score": 95}
     dump(data, 2)
     dump(data, 4)
     dump(data, 0)

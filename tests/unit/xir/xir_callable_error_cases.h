@@ -358,7 +358,7 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     if (initial_status!=XR_XIR_OK) fprintf(stderr,"Callable library raw %u f%u b%u i%u generic%u constraints%u declarations%u\n",
         initial_status,initial.function,initial.block,initial.instruction,
         xr_xir_compile_generics_structure_verify(work,&f->module),xr_xir_compile_declaration_constraints_verify(work,&f->module),
-        xr_xir_compile_declarations_verify(work,&f->declarations,&f->types,4,XR_XIR_LIBRARY));
+        xr_xir_compile_declarations_verify(work,&f->declarations,&f->types,4,XR_XIR_LIBRARY, NULL));
     CHECK(initial_status==XR_XIR_OK);
     memset(f,0xa5,sizeof(*f));xr_free(f);xr_compile_resources_free(canonical);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);

@@ -752,10 +752,7 @@ XR_FUNC void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, " = ");
 
     if (ta->resolved_type) {
-        /* The alias definition prints the structure it names; xfmt_emit_type
-         * would print the name the parser stamped onto the object shape, i.e.
-         * `type PageOpts = PageOpts`. */
-        xfmt_emit_type_structural(ctx, ta->resolved_type);
+        xfmt_emit_type(ctx, ta->resolved_type);
         xfmt_write_newline(ctx);
         return;
     }

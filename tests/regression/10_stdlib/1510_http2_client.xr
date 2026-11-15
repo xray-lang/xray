@@ -1,7 +1,7 @@
 // Test the typed HTTP/2 request control plane without performing network I/O.
 
 import http
-import { Headers, HttpError, HttpMethod, HttpRequestOptions, HttpVersion } from http
+import { Headers, HttpError, HttpMethod, HttpVersion } from http
 
 @test
 fn test_h2_uses_unified_request_api() {
@@ -9,32 +9,27 @@ fn test_h2_uses_unified_request_api() {
 }
 
 @test
-fn test_h2_options_object() {
+fn test_h2_named_arguments_reject_invalid_url() {
     var headers = Headers()
     headers.add("Content-Type", "application/json")
     var body: Array<u8> = [123, 125]
-    var opts: HttpRequestOptions = {
-        url: "https://example.com/api",
-        method: HttpMethod.post(),
-        headers: headers,
-        body: body,
-        version: HttpVersion.Http2,
-        timeoutMs: 2500
+    var rejected = false
+    try {
+        http.request(version: HttpVersion.Http2, timeoutMs: 2500,
+                     body: body, headers: headers, method: HttpMethod.post(), url: "")
+    } catch (HttpError.InvalidUrl { url: invalid }) {
+        rejected = invalid == ""
     }
-    assertEqual(opts.method!.token, "POST")
-    assertEqual(opts.headers!.get("Content-Type"), "application/json")
-    assertEqual(opts.body![0], 123)
-    assert(opts.version == HttpVersion.Http2)
-    assertEqual(opts.timeoutMs, 2500)
+    assert(rejected)
 }
 
 fn h2_rejects_headers(headers: Headers) -> bool {
     try {
-        http.request({
+        http.request(
             url: "https://example.com/api",
             headers: headers,
             version: HttpVersion.Http2
-        })
+        )
     } catch (e: HttpError) {
         return true
     }

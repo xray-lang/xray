@@ -45,7 +45,7 @@ static void assert_core_packet(const XrXirSourceResult *source) {
     XrXirFunctionIdentity identities[3]={{0},{0,1,0,0,0,0,0, 0, 0},{0}};
     XrXirSourceModule module=parent->declarations->modules[1];module.initializer=0;
     const XrXirLiteral literal={NULL,0};
-    XrXirDeclarations declarations={&module,1,identities,NULL,0,&literal,1,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirDeclarations declarations={.modules=&module, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=&literal, .literal_count=1, .root_module=UINT32_MAX, .entry_function=UINT32_MAX, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,1,1,2};
     XrXirDefaultTable defaults={&binding,1};
     XrXirFunction functions[]={parent->functions[begin],parent->functions[begin+1],parent->functions[helper_function]};

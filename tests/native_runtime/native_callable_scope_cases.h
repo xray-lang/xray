@@ -14,15 +14,15 @@ static void native_record_projection(void) {
     XrtCallableParameterSpec nested = {.value={XRT_CALLABLE_CONSTRUCTED,1}, .name="child", .name_length=5};
     XrtCallableTypeSpec specs[] = {
         {.kind=XRT_CALLABLE_NULLABLE, .element={XRT_CALLABLE_STRING,0}},
-        {.kind=XRT_CALLABLE_RECORD, .parameters=fields, .parameter_count=2},
-        {.kind=XRT_CALLABLE_RECORD, .parameters=&nested, .parameter_count=1}};
+        {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record1", .name_length=7, .count=2, .parameters=fields, .parameter_count=2},
+        {.kind=XRT_CALLABLE_RECORD, .module="test", .module_length=4, .name="Record2", .name_length=7, .count=1, .parameters=&nested, .parameter_count=1}};
     XrXirTypeArena *arena = NULL;
     uint64_t bytes = 17;
-    CHECK(xrt_callable_types_new_accounted(specs, 3, 1, &arena, &bytes) == XR_XIR_VALUE_MEMORY_LIMIT &&
+    CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=3}, 1, &arena, &bytes) == XR_XIR_VALUE_MEMORY_LIMIT &&
         !arena && bytes == 17);
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     size_t begin = native_string_calls;
-    CHECK(xrt_callable_types_new(specs, 3, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=3}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     size_t sites = native_string_calls - begin;
     xr_xir_compile_type_arena_drop(arena); arena = NULL;
     CHECK(!native_string_live && !native_string_bytes);
@@ -30,13 +30,13 @@ static void native_record_projection(void) {
         native_string_fail_at = native_string_calls + point;
         native_string_injected = false;
         bytes = 17;
-        CHECK(xrt_callable_types_new_accounted(specs, 3, UINT64_MAX, &arena, &bytes) == XR_XIR_VALUE_OOM);
+        CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=3}, UINT64_MAX, &arena, &bytes) == XR_XIR_VALUE_OOM);
         CHECK(!arena && bytes == 17 && native_string_injected && !native_string_live && !native_string_bytes);
     }
     native_string_fail_at = SIZE_MAX;
     printf("Record canonical catalog receiving failures: %zu allocation sites\n", sites);
 #endif
-    CHECK(xrt_callable_types_new(specs, 3, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=3}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     memset(name, 'x', sizeof(name)); memset(fields, 0xa5, sizeof(fields));
     memset(&nested, 0xa5, sizeof(nested)); memset(specs, 0xa5, sizeof(specs));
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
@@ -63,19 +63,19 @@ static void native_callable_catalog_budget_root(void *opaque) {
     XrXirTypeArena *first = NULL, *second = NULL;
     uint64_t cold = 0, warm = 0;
     CHECK(!context->root.map_types);
-    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &cold) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, UINT64_MAX, &first, &cold) == XR_XIR_VALUE_OK);
     CHECK(xrt_callable_map_catalog(first) == context->root.map_types);
-    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &second, &warm) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, UINT64_MAX, &second, &warm) == XR_XIR_VALUE_OK);
     CHECK(cold == warm && cold > 1 && xrt_callable_map_catalog(second) == context->root.map_types);
     xr_xir_compile_type_arena_drop(first);
     xr_xir_compile_type_arena_drop(second);
     first = NULL;
     uint64_t preserved = 17;
-    CHECK(xrt_callable_types_new_accounted(&spec, 1, cold - 1, &first, &preserved) == XR_XIR_VALUE_MEMORY_LIMIT);
+    CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, cold - 1, &first, &preserved) == XR_XIR_VALUE_MEMORY_LIMIT);
     CHECK(!first && preserved == 17);
 #if defined(XR_NATIVE_STRING_ALLOCATIONS)
     size_t begin = native_string_calls;
-    CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OK);
     size_t sites = native_string_calls - begin;
     xr_xir_compile_type_arena_drop(first);
     first = NULL;
@@ -84,7 +84,7 @@ static void native_callable_catalog_budget_root(void *opaque) {
     for (size_t point = 0; point < sites; ++point) {
         native_string_fail_at = native_string_calls + point;
         native_string_injected = false;
-        CHECK(xrt_callable_types_new_accounted(&spec, 1, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OOM);
+        CHECK(xrt_callable_types_new_accounted(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&spec,.type_count=1}, UINT64_MAX, &first, &warm) == XR_XIR_VALUE_OOM);
         CHECK(!first && native_string_injected && native_string_live == retained && native_string_bytes == retained_bytes);
     }
     native_string_fail_at = SIZE_MAX;
@@ -102,7 +102,7 @@ static void native_callable_catalog_budget(void) {
 }
 
 static void native_callable_empty_scope(void *opaque) {
-    static const XrtCallableImage image = {0};
+    static const XrtCallableImage image = {.metadata=XRT_CALLABLE_IMAGE_HEADER};
     NativeCallableScopeContext *context = opaque;
     XrtCallableScope outer, inner;
     xrt_callable_scope_enter(&outer, &image, 1);
@@ -118,7 +118,7 @@ static void native_callable_scope_root(void *opaque) {
         .result={XRT_CALLABLE_SCALAR, XR_POD_I64}}};
     static const XrtCallableValueSpec captures[] = {{XRT_CALLABLE_SCALAR, XR_POD_I64}};
     static const XrtCallableEntrySpec entries[] = {{0, captures, 1}};
-    static const XrtCallableImage image = {types, 1, entries, 1};
+    static const XrtCallableImage image = {XRT_CALLABLE_IMAGE_HEADER,types, 1, entries, 1};
     NativeCallableScopeContext *context = opaque;
     XrtCallableScope parent_storage, child_storage;
     XrtCallableScope *parent = &parent_storage, *child = &child_storage;
@@ -163,7 +163,7 @@ static void native_captured_cell_scope_root(void *opaque) {
     };
     static const XrtCallableValueSpec captures[] = {{XRT_CALLABLE_CONSTRUCTED, 0}};
     static const XrtCallableEntrySpec entries[] = {{1, captures, 1}};
-    static const XrtCallableImage image = {types, 2, entries, 1};
+    static const XrtCallableImage image = {XRT_CALLABLE_IMAGE_HEADER,types, 2, entries, 1};
     NativeCallableScopeContext *context = opaque;
     XrtCallableScope parent, child;
     xrt_callable_scope_enter(&parent, &image, 1);
@@ -303,7 +303,7 @@ static void native_callable_large_scopes(void) {
             values[i] = (uint64_t)i + 1;
         }
         if (captured) entries[0] = (XrtCallableEntrySpec){0, specs, count};
-        context->image = (XrtCallableImage){types, 1, entries, entries_count};
+        context->image = (XrtCallableImage){XRT_CALLABLE_IMAGE_HEADER,types, 1, entries, entries_count};
         context->captures = values;
         XrtExecutionStatus status = xrt_run_embedded_owned(owner, &context->execution.failure,
             native_callable_large_scope_root, context, &context->execution.root);

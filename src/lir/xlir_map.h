@@ -27,6 +27,19 @@ typedef enum XrLirMapOperation {
     XR_LIR_MAP_OP_REMOVE,
     XR_LIR_MAP_OP_CLEAR
 } XrLirMapOperation;
+typedef struct XrLirMapLiteralOrigin { uint32_t kind,line,column; } XrLirMapLiteralOrigin;
+typedef struct XrLirMapLiteral {
+    const char *path;
+    uint32_t path_length;
+    const XrLirMapLiteralOrigin *items;
+    uint32_t count;
+} XrLirMapLiteral;
+/* Ordinals start at one. All spans are copied into the module; views return
+ * separately owned spans, independent of the descriptor vector's growth. */
+XR_FUNC XrLirStatus xr_lir_map_literal_add(XrLirModule *,const XrLirMapLiteral *,uint32_t *);
+XR_FUNC uint32_t xr_lir_map_literal_count(const XrLirModule *);
+XR_FUNC XrLirStatus xr_lir_map_literal_view(const XrLirModule *,uint32_t,XrLirMapLiteral *);
+XR_FUNC XrLirStatus xr_lir_map_literals_copy(XrLirModule *,const XrLirModule *);
 XR_FUNC XrLirStatus xr_lir_map_operation(const XrLirModule *, XrLirMapOperation,
     XrLirType receiver, uint32_t *id);
 XR_FUNC bool xr_lir_map_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);

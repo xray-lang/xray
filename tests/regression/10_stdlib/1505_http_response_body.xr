@@ -1,30 +1,36 @@
-// Test HTTP response body handling (simulated objects)
+// Test HTTP response body handling with typed simulated responses.
 
 import http
 
+struct _SimulatedHttpResponse {
+    status: i64
+    body: string
+    contentType: string = ""
+}
+
 @test
 fn test_text_response() {
-    var resp = { status: 200, body: "Hello World", contentType: "text/plain" }
+    var resp = _SimulatedHttpResponse{ status: 200, body: "Hello World", contentType: "text/plain" }
     assertEqual(resp.body, "Hello World")
     assertEqual(resp.contentType, "text/plain")
 }
 
 @test
 fn test_json_response() {
-    var resp = { status: 200, body: "{\"name\": \"test\"}", contentType: "application/json" }
+    var resp = _SimulatedHttpResponse{ status: 200, body: "{\"name\": \"test\"}", contentType: "application/json" }
     assert(resp.body.indexOf("name") >= 0)
     assertEqual(resp.contentType, "application/json")
 }
 
 @test
 fn test_html_response() {
-    var resp = { status: 200, body: "<html><body>Hello</body></html>", contentType: "text/html" }
+    var resp = _SimulatedHttpResponse{ status: 200, body: "<html><body>Hello</body></html>", contentType: "text/html" }
     assert(resp.body.indexOf("<html>") >= 0)
 }
 
 @test
 fn test_empty_response() {
-    var resp = { status: 204, body: "" }
+    var resp = _SimulatedHttpResponse{ status: 204, body: "" }
     assertEqual(resp.body, "")
     assertEqual(resp.status, 204)
 }

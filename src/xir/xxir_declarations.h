@@ -18,6 +18,14 @@ typedef struct XrXirLiteral {
     const char *bytes;
     uint32_t length;
 } XrXirLiteral;
+typedef enum XrXirConstantKeyKind { XR_XIR_KEY_DYNAMIC,XR_XIR_KEY_SCALAR,XR_XIR_KEY_STRING,XR_XIR_KEY_ENUM } XrXirConstantKeyKind;
+/* Eligibility comes from checked syntax, independently of optimizer folding.
+ * A receiving declaration owner copies the complete String span. */
+typedef struct XrXirConstantKey {
+    XrXirConstantKeyKind kind;
+    uint64_t bits;
+    XrXirLiteral string;
+} XrXirConstantKey;
 typedef enum XrXirModuleStorage {
     XR_XIR_MODULE_FRESH_STORAGE,
     XR_XIR_MODULE_BIRTH_STORAGE
@@ -74,6 +82,35 @@ typedef struct XrXirSlot {
     XrXirType type;
     uint32_t mutable;
 } XrXirSlot;
+
+/* Literal provenance is typed metadata, independent of executable operands.
+ * Kind zero is an explicit key/value pair; kind one is a Map spread. */
+typedef struct XrXirMapLiteralOrigin { uint32_t kind,line,column; } XrXirMapLiteralOrigin;
+typedef struct XrXirMapLiteral {
+    XrXirLiteral file;
+    const XrXirMapLiteralOrigin *items;
+    uint32_t count,module;
+} XrXirMapLiteral;
+typedef enum XrXirParameterNameOwner {
+    XR_XIR_PARAMETER_FUNCTION, XR_XIR_PARAMETER_REQUIREMENT
+} XrXirParameterNameOwner;
+
+/* Declaration names are API metadata, independently of callable type identity.
+ * The public tail excludes physical receivers and lexical capture prefixes.
+ * An empty name denotes a destructuring parameter without a callable label. */
+typedef struct XrXirParameterNames {
+    uint32_t kind, owner, member, parameter_offset;
+    const XrXirLiteral *names;
+    uint32_t count;
+} XrXirParameterNames;
+
+/* A candidate binds real nominal and method IDs. Receiving verification reads
+ * the current function owner again; this row stores no proof result. */
+typedef struct XrXirHashableWitness {
+    XrXirType nominal_type;
+    uint32_t equals_function, hash_function;
+} XrXirHashableWitness;
+
 typedef struct XrXirDeclarations {
     const XrXirSourceModule *modules;
     uint32_t module_count;
@@ -84,5 +121,27 @@ typedef struct XrXirDeclarations {
     uint32_t literal_count;
     uint32_t root_module, entry_function;
     const XrXirImplementationTable *implementations;
+    const XrXirMapLiteral *map_literals;
+    uint32_t map_literal_count;
+    const XrXirParameterNames *parameter_names;
+    uint32_t parameter_name_count;
+    const XrXirHashableWitness *hashable_witnesses;
+    uint32_t hashable_witness_count;
 } XrXirDeclarations;
+
+/* The receiving validator proves strict ordering before any lookup. */
+static inline const XrXirParameterNames *xr_xir_parameter_names_find(
+    const XrXirDeclarations *d, uint32_t kind, uint32_t owner, uint32_t member) {
+    if (!d) return NULL;
+    uint32_t low=0,high=d->parameter_name_count;
+    while (low<high) {
+        uint32_t mid=low+(high-low)/2;
+        const XrXirParameterNames *row=&d->parameter_names[mid];
+        int order=row->kind<kind?-1:row->kind>kind?1:row->owner<owner?-1:
+            row->owner>owner?1:row->member<member?-1:row->member>member?1:0;
+        if (!order) return row;
+        if (order<0) low=mid+1; else high=mid;
+    }
+    return NULL;
+}
 #endif // XXIR_DECLARATIONS_H

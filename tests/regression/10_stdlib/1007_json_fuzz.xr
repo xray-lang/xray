@@ -6,6 +6,23 @@
 
 // ===== Deeply nested structures =====
 
+struct NestedFields {
+    a: bool
+    b: i64?
+    c: string
+}
+
+struct Payload {
+    name: string
+    values: Array<i64>
+    nested: NestedFields
+}
+
+struct ActiveItem {
+    id: i64
+    active: bool
+}
+
 @test
 fn test_deep_nested_arrays() {
     var s = "[[[[[[[[[[42]]]]]]]]]]"
@@ -181,10 +198,10 @@ fn test_many_keys_object() {
 
 @test
 fn test_roundtrip_nested() {
-    var original = {
+    var original = Payload{
         name: "test",
         values: [1, 2, 3],
-        nested: { a: true, b: null, c: "hello" }
+        nested: NestedFields{ a: true, b: null, c: "hello" }
     }
     var s = JSON.stringify(original)
     var parsed = JSON.parseValue(s)
@@ -199,9 +216,9 @@ fn test_roundtrip_nested() {
 @test
 fn test_roundtrip_array_of_objects() {
     var original = [
-        { id: 1, active: true },
-        { id: 2, active: false },
-        { id: 3, active: true }
+        ActiveItem{ id: 1, active: true },
+        ActiveItem{ id: 2, active: false },
+        ActiveItem{ id: 3, active: true }
     ]
     var s = JSON.stringify(original)
     var parsed = JSON.parseValue(s)

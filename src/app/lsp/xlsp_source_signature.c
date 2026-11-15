@@ -45,7 +45,7 @@ static XrXirStatus signature_json(const XlspSourceSignature *signature,XrJsonVal
         !signature_adopt(result,"signatures",&signatures)||
         !signature_member(result,"activeSignature",xjson_new_number(0)))goto done;
     size_t active=signature->active_argument;
-    if(signature->variadic&&signature->parameter_count&&active>=signature->parameter_count)active=signature->parameter_count-1;
+    if(active!=SIZE_MAX&&signature->variadic&&signature->parameter_count&&active>=signature->parameter_count)active=signature->parameter_count-1;
     if(active<signature->parameter_count&&
         !signature_member(result,"activeParameter",xjson_new_number((double)active)))goto done;
     *out=result;result=NULL;status=XR_XIR_OK;
@@ -129,12 +129,12 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
         status=xlsp_source_signature(request->snapshots[i],&selection,&current);
         if(status!=XR_XIR_OK)goto done;
         XlspSourceLocation location={0};
-        if(!current.target_native_identity) {
+        if(!current.target_native_identity&&current.target_range.line>0) {
             status=xlsp_source_definition(request->snapshots[i],request->uri,request->uri_length,selection.call.callee.start,&location);
             if(status!=XR_XIR_OK)goto done;
         }
         if(accepted.label.text) {
-            if(!current.target_native_identity) {
+            if(!current.target_native_identity&&current.target_range.line>0) {
                 status=signature_target_equal(&target,&location);if(status!=XR_XIR_OK)goto done;
             }
             status=signature_equal(&accepted,&current);if(status!=XR_XIR_OK)goto done;

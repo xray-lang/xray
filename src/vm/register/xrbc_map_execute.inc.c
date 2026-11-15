@@ -34,6 +34,26 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_step(const XrRbcModule *module, XrRbcS
         !xr_rbc_aggregate_reserve(stack, &stack->frames[stack->depth - 1], f)) return XR_RBC_OUT_OF_MEMORY;
     const XrRbcArrayLocation *args = a.count ? f->array_operands + a.first : NULL;
     XrRbcRegister *result = a.operation == XR_RBC_ARRAY_GET ? NULL : xr_rbc_array_location(stack, frame, a.result);
+    if(a.operation==XR_RBC_MAP_LITERAL) {
+        XR_STATIC_ASSERT(sizeof(XrtMapLiteralInput)<=2*sizeof(XrRbcRegister),"Map input fits two scratch units");
+        const XrtMapLiteral *literal=&module->map_literals[a.cell-1];
+        size_t units=literal->count*2;
+        if(units>stack->array_argument_capacity) {
+            if(sizeof(XrRbcRegister)>SIZE_MAX/units)return XR_RBC_OUT_OF_MEMORY;
+            void *storage=xr_malloc(units*sizeof(XrRbcRegister));
+            if(!storage)return XR_RBC_OUT_OF_MEMORY;
+            xr_free(stack->array_arguments);stack->array_arguments=storage;stack->array_argument_capacity=units;
+        }
+        XrtMapLiteralInput *inputs=literal->count?stack->array_arguments:NULL;uint32_t operand=0;
+        for(size_t n=0;n<literal->count;++n) {
+            if(literal->items[n].kind)inputs[n]=(XrtMapLiteralInput){.source.spread=xr_rbc_array_location(stack,frame,args[operand++])->map};
+            else {
+                inputs[n].source.key=xr_rbc_array_location(stack,frame,args[operand++])->string;
+                inputs[n].value=xr_rbc_signed(xr_rbc_array_location(stack,frame,args[operand++])->bits);
+            }
+        }
+        result->map=xrt_map_string_i64_literal(literal,inputs,source);return XR_RBC_OK;
+    }
     if (a.operation == XR_RBC_ARRAY_NEW) {
         if (a.count > stack->array_argument_capacity) {
             if (sizeof(XrRbcRegister) > SIZE_MAX / a.count) return XR_RBC_OUT_OF_MEMORY;

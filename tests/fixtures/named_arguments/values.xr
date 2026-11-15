@@ -1,0 +1,15 @@
+fn mark(value: i64) -> i64 {
+    print(value)
+    return value
+}
+fn combine(a: i64, b: i64 = mark(2), c: i64 = mark(3)) -> i64 {
+    return a * 100 + b * 10 + c
+}
+print(combine(c: mark(9), a: mark(1)))
+fn choose<T>(a: T, b: T) -> T { return a }
+print(choose(b: mark(8), a: mark(7)))
+print(combine(...(mark(1), mark(2)), c: mark(9)))
+fn rest(a: i64, b: i64, ...tail: i64) -> i64 {
+    return a * 10 + b + len(tail)
+}
+print(rest(b: 2, a: 1))

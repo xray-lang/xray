@@ -182,6 +182,27 @@ TEST(value_format_numeric_range_panic_keeps_its_message) {
     ASSERT_TRUE(!memcmp(capture.bytes, expected, sizeof(expected) - 1));
 }
 
+TEST(value_format_collections_use_braces_and_set_construction) {
+    const FormatFixture fields[] = {
+        {.view={.kind=XR_VALUE_FORMAT_BYTES,.bytes=(const unsigned char *)"a",.size=1,.quote='"'}},
+        {.view={.kind=XR_VALUE_FORMAT_SIGNED,.signed_value=7}},
+    };
+    FormatFixture collection={.view={.kind=XR_VALUE_FORMAT_MAP,.children=2,.unsigned_value=1},.children=fields};
+    XrValueFormatReader reader={NULL,read_fixture,child_fixture};
+    FormatCapture capture={.capacity=sizeof(capture.bytes)};XrValueFormatSink sink={&capture,capture_bytes};
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&collection,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"{\"a\": 7}");
+    collection.view.kind=XR_VALUE_FORMAT_SET;collection.view.unsigned_value=2;capture.size=0;
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&collection,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"Set([\"a\", 7])");
+    collection.view.unsigned_value=0;capture.size=0;
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&collection,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"Set([])");
+    collection.view.kind=XR_VALUE_FORMAT_MAP;capture.size=0;
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&collection,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"{}");
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Value Format Core");
@@ -193,5 +214,6 @@ RUN_TEST(value_format_streams_long_and_embedded_zero_strings);
 RUN_TEST(value_format_names_are_spans_and_style_only_colors_labels);
 RUN_TEST(value_format_array_uses_original_count_and_depth_limits);
 RUN_TEST(value_format_numeric_range_panic_keeps_its_message);
+RUN_TEST(value_format_collections_use_braces_and_set_construction);
 
 TEST_MAIN_END()

@@ -31,7 +31,12 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
     if (status == XR_RBC_OK) return XR_CLI_EXIT_OK;
     XrtArithmeticPanic panic;
     const XrtLocationOwner *locations;
-    if (xr_rbc_outcome_arithmetic_panic(outcome, &panic, &locations)) {
+    uint32_t message_code=0,message_source=0;const char *message=NULL;size_t message_length=0;
+    if(xr_rbc_outcome_message_panic(outcome,&message_code,&message,&message_length,&message_source,&locations)) {
+        XrValueFormatSink sink={NULL,run_panic_write};
+        if(!xr_value_format_panic(sink,message_code,0,0,0,1,(const uint8_t *)message,message_length,0))
+            fputs("cannot render uncaught message panic\n",stderr);
+    } else if (xr_rbc_outcome_arithmetic_panic(outcome, &panic, &locations)) {
         XrValueFormatSink sink = {NULL, run_panic_write};
         if (!xr_value_format_panic(sink, panic.code, 0, 0, 0, 0, NULL, 0, 0))
             fputs("cannot render uncaught arithmetic panic\n", stderr);

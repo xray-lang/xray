@@ -1,6 +1,6 @@
 fn readScore() -> i64 {
-    var scores = #{"ada": 7, "lin": 9}
-    var seen: Set<string> = #["ada"]
+    var scores = {"ada": 7, "lin": 9}
+    var seen: Set<string> = Set(["ada"])
     var score = scores["ada"]
     scores.get("ada")
     scores.containsKey("lin")

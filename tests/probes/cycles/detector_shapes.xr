@@ -10,7 +10,7 @@
 // L0 的 Map 值边（G1）——修复前这类环根本不被标为候选
 class MapNode {
     peers: Map<string, MapNode>
-    init() { this.peers = #{} }
+    init() { this.peers = {} }
 }
 
 // 直接字段环

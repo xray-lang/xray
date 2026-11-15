@@ -52,7 +52,7 @@ static void weaken_authority_cases(void) {
     ids[2].module = ids[3].module = ids[5].module = 1;
     ids[3].promises = XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirLiteral literal = {"captured authority", 18};
-    XrXirDeclarations declarations = {modules, 2, ids, NULL, 0, &literal, 1, 0, 1, NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=ids, .slots=NULL, .slot_count=0, .literals=&literal, .literal_count=1, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};

@@ -9,7 +9,7 @@ class CollectionSnapshot {
     }
 }
 
-var original = CollectionSnapshot(#{"ada": 1}, #["ada"])
+var original = CollectionSnapshot({"ada": 1}, Set(["ada"]))
 var cloned = copy(original)
 cloned.scores.set("ada", 9)
 cloned.seen.delete("ada")

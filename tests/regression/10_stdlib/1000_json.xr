@@ -1,5 +1,10 @@
 // Core JSON namespace behavior.
 
+struct User {
+    name: string
+    age: i64
+}
+
 @test
 fn test_parse_primitives() {
     assertEqual(JSON.require<i64>(JSON.parseValue("42"), []), 42)
@@ -22,7 +27,7 @@ fn test_parse_collections() {
 
 @test
 fn test_stringify_structural_object() {
-    var user = { name: "Ada", age: 37 }
+    var user = User{ name: "Ada", age: 37 }
     assertEqual(JSON.stringify(user), "{\"name\":\"Ada\",\"age\":37}")
 }
 

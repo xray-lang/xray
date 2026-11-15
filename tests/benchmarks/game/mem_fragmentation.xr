@@ -6,20 +6,83 @@
 //
 // Usage: xray gc_fragmentation.xr -- [iterations]
 
+struct SmallItem {
+    kind: string
+    id: i64
+}
+
+struct MediumItem {
+    kind: string
+    id: i64
+    a: i64
+    b: i64
+    c: i64
+    d: i64
+}
+
+struct LargeItem {
+    kind: string
+    id: i64
+    a: i64
+    b: i64
+    c: i64
+    d: i64
+    e: i64
+    f: i64
+    g: i64
+    h: i64
+}
+
+struct FillItem {
+    round: i64
+    idx: i64
+    data: i64
+}
+
+struct ParentItem {
+    id: i64
+    children: Array<ChildItem>
+}
+
+struct ChildItem {
+    parent: i64
+    gen: i64
+    val: i64
+}
+
+struct TinyItem {
+    x: i64
+}
+
+struct Point3 {
+    x: i64
+    y: i64
+    z: i64
+}
+
+struct WideItem {
+    x: i64
+    a: i64
+    b: i64
+    c: i64
+    d: i64
+    e: i64
+}
+
 fn run(n: i64) {
     // Phase 1: Swiss cheese pattern
     // Allocate array of objects, then nil-out every other one
     // This creates maximum fragmentation for line-based allocators
-    var objects = []
+    var objects: Array<SmallItem | MediumItem | LargeItem | FillItem | null> = []
     var i = 0
     while (i < 2000) {
         // Varying sizes: small and medium objects interleaved
         if (i % 3 == 0) {
-            objects.push({ "type": "small", "id": i })
+            objects.push(SmallItem{ kind: "small", id: i })
         } else if (i % 3 == 1) {
-            objects.push({ "type": "medium", "id": i, "a": 1, "b": 2, "c": 3, "d": 4 })
+            objects.push(MediumItem{ kind: "medium", id: i, a: 1, b: 2, c: 3, d: 4 })
         } else {
-            objects.push({ "type": "large", "id": i, "a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8 })
+            objects.push(LargeItem{ kind: "large", id: i, a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8 })
         }
         i = i + 1
     }
@@ -41,8 +104,9 @@ fn run(n: i64) {
         i = 0
         while (i < 2000) {
             if (objects[i] == null) {
-                objects[i] = { "round": round, "idx": i, "data": round * 2000 + i }
-                checksum = checksum + objects[i].data
+                var fill = FillItem{round: round, idx: i, data: round * 2000 + i}
+                objects[i] = fill
+                checksum = checksum + fill.data
             }
             i = i + 1
         }
@@ -53,10 +117,10 @@ fn run(n: i64) {
     // Phase 2: Generational fragmentation
     // Keep some objects alive across many GC cycles (old gen)
     // while rapidly churning others (young gen)
-    var permanent = []
+    var permanent: Array<ParentItem> = []
     i = 0
     while (i < 200) {
-        permanent.push({ "id": i, "children": [] })
+        permanent.push(ParentItem{ id: i, children: [] })
         i = i + 1
     }
 
@@ -67,10 +131,10 @@ fn run(n: i64) {
         i = 0
         while (i < 200) {
             // Replace children each round
-            var kids = []
+            var kids: Array<ChildItem> = []
             var j = 0
             while (j < 5) {
-                kids.push({ "parent": i, "gen": round, "val": round * 5 + j })
+                kids.push(ChildItem{ parent: i, gen: round, val: round * 5 + j })
                 j = j + 1
             }
             permanent[i].children = kids
@@ -85,7 +149,7 @@ fn run(n: i64) {
     // Phase 3: Reallocate with different sizes
     // After fragmentation, allocate objects of different sizes
     // Tests whether the allocator can reuse fragmented space
-    var mixed = []
+    var mixed: Array<TinyItem | Point3 | WideItem | string> = []
     round = 0
     while (round < n) {
         mixed = []
@@ -93,11 +157,11 @@ fn run(n: i64) {
         while (i < 500) {
             // Alternate between tiny and larger objects
             if (i % 4 == 0) {
-                mixed.push({ "x": i })
+                mixed.push(TinyItem{ x: i })
             } else if (i % 4 == 1) {
-                mixed.push({ "x": i, "y": i * 2, "z": i * 3 })
+                mixed.push(Point3{ x: i, y: i * 2, z: i * 3 })
             } else if (i % 4 == 2) {
-                mixed.push({ "x": i, "a": 1, "b": 2, "c": 3, "d": 4, "e": 5 })
+                mixed.push(WideItem{ x: i, a: 1, b: 2, c: 3, d: 4, e: 5 })
             } else {
                 mixed.push("str_" + i + "_round_" + round)
             }

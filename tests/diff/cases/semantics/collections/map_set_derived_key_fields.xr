@@ -20,7 +20,7 @@ class Key {
     }
 }
 
-var m: Map<Key, i64> = #{}
+var m: Map<Key, i64> = {}
 m.set(Key(Color.Red, 1, "a"), 10)
 m.set(Key(Color.Green, 2, "b"), 20)
 m.set(Key(Color.Red, 1, "a"), 11)
@@ -35,7 +35,7 @@ m.delete(Key(Color.Green, 2, "b"))
 print(m.containsKey(Key(Color.Green, 2, "b")))
 print(len(m))
 
-var s: Set<Key> = #[]
+var s: Set<Key> = Set()
 s.add(Key(Color.Blue, 7, "x"))
 s.add(Key(Color.Blue, 7, "x"))
 s.add(Key(Color.Blue, 8, "x"))

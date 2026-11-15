@@ -80,7 +80,7 @@ static XrXirArtifact *struct_set_checked(const XrXirCompileContext *context, uns
         {.method_kind=XR_XIR_NON_MEMBER}};
     XrXirLiteral literals[] = {{"roots",5},{"replacement",11}};
     XrXirSlot slots[] = {{0,cell,1},{0,pair,0}};
-    XrXirDeclarations declarations = {&source,1,identities,slots,2,literals,2,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=slots, .slot_count=2, .literals=literals, .literal_count=2, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     if (invalid == 1) entry[5].args[0] = 1;
     if (invalid == 2) nominal.fields[0].flags = 0;

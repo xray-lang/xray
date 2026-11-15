@@ -8,6 +8,7 @@
 #ifndef XRAY_NATIVE_CALLABLE_H
 #define XRAY_NATIVE_CALLABLE_H
 #include "xray_native_pod.h"
+#include "xray_native_metadata.h"
 
 typedef enum XrtCallableValueKind {
     XRT_CALLABLE_SCALAR, XRT_CALLABLE_STRING, XRT_CALLABLE_ARRAY, XRT_CALLABLE_CONSTRUCTED,
@@ -24,6 +25,7 @@ typedef struct XrtCallableParameterSpec {
     bool escaping;
     const char *name;
     uint32_t name_length;
+    uint32_t field_flags;
 } XrtCallableParameterSpec;
 /* Dependencies name earlier receiving rows. Array families are I64, String,
  * U8 and U64. Shape metadata grants no executable address. */
@@ -34,8 +36,10 @@ typedef struct XrtCallableTypeSpec {
     const XrtCallableParameterSpec *parameters;
     uint32_t parameter_count;
     XrtCallableValueSpec result;
-    uint32_t flags; /* NoSuspend=1 and C_ABI=2. */
+    uint32_t flags; /* Signature: NoSuspend=1, C_ABI=2. Record: ModuleLiteral=2. */
     bool throws;
+    const char *module, *name;
+    uint32_t module_length, name_length, exported;
 } XrtCallableTypeSpec;
 typedef struct XrtCallableEntrySpec {
     uint32_t type;
@@ -45,11 +49,21 @@ typedef struct XrtCallableEntrySpec {
 /* Compiler-emitted image spans remain immutable and live for the process.
  * Canonical types and entry vectors are independently received by the root. */
 typedef struct XrtCallableImage {
+    XrtNativeMetadataHeader metadata;
     const XrtCallableTypeSpec *types;
     uint32_t type_count;
     const XrtCallableEntrySpec *entries;
     uint32_t entry_count;
 } XrtCallableImage;
+#define XRT_NATIVE_METADATA_HEADER(kind_, descriptor_) \
+    {XRT_NATIVE_METADATA_MAGIC, XRT_NATIVE_METADATA_SCHEMA, (kind_), sizeof(descriptor_), \
+     sizeof(XrtCallableTypeSpec), sizeof(XrtCallableParameterSpec), sizeof(XrtCallableEntrySpec), \
+     sizeof(XrtNativeMetadataHeader), 0}
+#define XRT_CALLABLE_IMAGE_HEADER XRT_NATIVE_METADATA_HEADER(XRT_NATIVE_METADATA_CALLABLE, XrtCallableImage)
+static inline bool xrt_callable_image_valid(const XrtCallableImage *image) {
+    const XrtNativeMetadataHeader expected=XRT_CALLABLE_IMAGE_HEADER;
+    return xrt_native_metadata_matches(image,&expected);
+}
 typedef struct XrtCallableScope {
     const XrtCallableImage *image;
     struct XrtCallableScope *parent;

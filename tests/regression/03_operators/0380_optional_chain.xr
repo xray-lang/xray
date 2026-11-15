@@ -4,16 +4,49 @@
 
 // ===== 基本可选链 =====
 
+struct Person {
+    name: string
+    age: i64
+}
+
+struct UserName {
+    name: string
+}
+
+struct Profile {
+    profile: UserName?
+}
+
+struct UserData {
+    user: Profile?
+}
+
+struct ItemData {
+    items: Array<i64>?
+}
+
+struct ValueData {
+    values: Array<i64>?
+}
+
+struct Theme {
+    theme: string
+}
+
+struct Config {
+    settings: Theme?
+}
+
 @test
 fn test_optional_property_access() {
-    var person = { name: "Alice", age: 25 }
+    var person = Person{ name: "Alice", age: 25 }
     var name = person?.name
     assertEqual(name, "Alice")
 }
 
 @test
 fn test_optional_on_null() {
-    var person = null
+    var person: Person? = null
     var name = person?.name
     assertEqual(name, null)
 }
@@ -22,9 +55,9 @@ fn test_optional_on_null() {
 
 @test
 fn test_nested_optional_chain() {
-    var data = {
-        user: {
-            profile: {
+    var data = UserData{
+        user: Profile{
+            profile: UserName{
                 name: "Bob"
             }
         }
@@ -35,7 +68,7 @@ fn test_nested_optional_chain() {
 
 @test
 fn test_nested_null_in_chain() {
-    var data = {
+    var data = UserData{
         user: null
     }
     var name = data?.user?.profile?.name
@@ -46,7 +79,7 @@ fn test_nested_null_in_chain() {
 
 @test
 fn test_optional_index_access() {
-    var data = {
+    var data = ItemData{
         items: [1, 2, 3]
     }
     var items = data?.items
@@ -55,7 +88,7 @@ fn test_optional_index_access() {
 
 @test
 fn test_optional_array_chain() {
-    var data = {
+    var data = ValueData{
         values: [10, 20, 30]
     }
     var vals = data?.values
@@ -74,14 +107,14 @@ fn test_optional_index_on_array() {
 
 @test
 fn test_optional_index_on_null() {
-    var arr = null
+    var arr: Array<string>? = null
     var val = arr?[0]
     assertEqual(val, null)
 }
 
 @test
 fn test_optional_index_nested() {
-    var data = {
+    var data = ItemData{
         items: [100, 200, 300]
     }
     var val = data?.items?[2]
@@ -90,7 +123,7 @@ fn test_optional_index_nested() {
 
 @test
 fn test_optional_index_null_nested() {
-    var data = {
+    var data = ItemData{
         items: null
     }
     var val = data?.items?[0]
@@ -99,7 +132,7 @@ fn test_optional_index_null_nested() {
 
 @test
 fn test_optional_index_with_nullish() {
-    var arr = null
+    var arr: Array<string>? = null
     var val = arr?[0] ?? "fallback"
     assertEqual(val, "fallback")
 }
@@ -108,7 +141,7 @@ fn test_optional_index_with_nullish() {
 
 @test
 fn test_optional_with_nullish() {
-    var config = {
+    var config = Config{
         settings: null
     }
     var theme = config?.settings?.theme ?? "default"
@@ -117,8 +150,8 @@ fn test_optional_with_nullish() {
 
 @test
 fn test_optional_value_with_nullish() {
-    var config = {
-        settings: {
+    var config = Config{
+        settings: Theme{
             theme: "dark"
         }
     }

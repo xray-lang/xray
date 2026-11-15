@@ -11,9 +11,15 @@
 #include "xray_native_callable.h"
 typedef struct XirNominalValue XrtBoxed;
 typedef struct XrtBoxedImage {
+    XrtNativeMetadataHeader metadata;
     const XrtCallableTypeSpec *types;
     uint32_t count;
 } XrtBoxedImage;
+#define XRT_BOXED_IMAGE_HEADER XRT_NATIVE_METADATA_HEADER(XRT_NATIVE_METADATA_BOXED, XrtBoxedImage)
+static inline bool xrt_boxed_image_valid(const XrtBoxedImage *image) {
+    const XrtNativeMetadataHeader expected=XRT_BOXED_IMAGE_HEADER;
+    return xrt_native_metadata_matches(image,&expected);
+}
 #ifdef __cplusplus
 extern "C" {
 #endif

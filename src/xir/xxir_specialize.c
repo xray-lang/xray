@@ -20,6 +20,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
 #include "xxir_constraint_proof_internal.h"
+#include "xxir_hashable_internal.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_comptime_pending_internal.h"
 #include "../base/xmalloc.h"
@@ -70,6 +71,8 @@ typedef struct SpecContext {
     bool evaluation_found;
     XrCompileRequestControl *control;
     uint32_t control_rows;
+    XrXirHashableWitness *hashable_witnesses;
+    uint32_t hashable_witness_count,hashable_witness_capacity,nominal_fields_next;
 } SpecContext;
 static bool spec_progress(SpecContext *c) {
     if (c->diagnostic.status!=XR_XIR_OK) return false;
@@ -211,7 +214,7 @@ static bool spec_type_push(SpecContext *c, uint32_t index, uint32_t *count) {
     SpecTypeFrame *frame = &c->type_stack[(*count)++];
     *frame = (SpecTypeFrame) {index, 0, c->source->types->nodes[index]};
     frame->node.parameter_span = 0;
-    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || frame->node.kind == XR_XIR_TYPE_TUPLE || frame->node.kind == XR_XIR_TYPE_UNION) {
+    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || frame->node.kind == XR_XIR_TYPE_TUPLE || frame->node.kind == XR_XIR_TYPE_UNION || frame->node.kind==XR_XIR_TYPE_DATA_UNION) {
         uint32_t n = frame->node.parameter_count;
         XrXirCallableParameter *parameters = spec_alloc(c, n, sizeof(*parameters));
         if (n && !parameters) return false;
@@ -240,7 +243,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
         uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
             source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 2 :
-            (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION) ? source->parameter_count :
+            (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION || source->kind==XR_XIR_TYPE_DATA_UNION) ? source->parameter_count :
             (source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) ? 2 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
@@ -250,7 +253,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         if ((source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) && frame->next)
             child = source->result;
         if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
-        if (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION) child = source->parameters[frame->next].type;
+        if (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION || source->kind==XR_XIR_TYPE_DATA_UNION) child = source->parameters[frame->next].type;
         if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next <= source->parameter_count)
             child = frame->next < source->parameter_count ? source->parameters[frame->next].type : source->result;
         if (!spec_type_ready(c, instance, child, &result)) {
@@ -264,7 +267,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
             ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
         else if ((source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) && frame->next)
             frame->node.result = result;
-        else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE && source->kind != XR_XIR_TYPE_UNION) frame->node.element = result;
+        else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE && source->kind != XR_XIR_TYPE_UNION && source->kind != XR_XIR_TYPE_DATA_UNION) frame->node.element = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next == source->parameter_count) frame->node.result = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next > source->parameter_count) frame->node.element = result;
         else {
@@ -572,6 +575,8 @@ static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     if (!source) return true;
     *result = *source;
     result->implementations = NULL;
+    result->hashable_witnesses=c->hashable_witnesses;
+    result->hashable_witness_count=c->hashable_witness_count;
     XrXirSourceModule *modules = spec_alloc(c, source->module_count, sizeof(*modules));
     if (!modules || !spec_progress(c)) return false;
     if (!spec_copy(c,modules,source->modules,(size_t)source->module_count*sizeof(*modules))) return false;
@@ -586,6 +591,19 @@ static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     }
     if (c->diagnostic.status != XR_XIR_OK) return false;
     result->slots = slots; result->modules = modules; result->functions = c->identities;
+    XrXirParameterNames *names=source->parameter_name_count?spec_alloc(c,c->count,sizeof(*names)):NULL;
+    if(source->parameter_name_count && !names)return false;
+    uint32_t name_count=0;
+    for(uint32_t f=0;f<c->count && source->parameter_name_count;++f) {
+        if(!spec_progress(c))return false;
+        const XrXirParameterNames *original=xr_xir_parameter_names_find(source,
+            XR_XIR_PARAMETER_FUNCTION,c->instances[f].declaration,0);
+        if(!original)continue;
+        names[name_count]=*original;names[name_count++].owner=f;
+    }
+    /* Requirements have been resolved to concrete functions. The synchronous
+     * receiving artifact copies every selected name before this owner retires. */
+    result->parameter_names=name_count?names:NULL;result->parameter_name_count=name_count;
     result->entry_function = c->ordinary[source->entry_function]; return true;
 }
 static XrXirStatus spec_nominal_projection(SpecContext *c) {
@@ -640,8 +658,9 @@ static XrXirStatus spec_nominal_seed(SpecContext *c) {
 }
 static XrXirStatus spec_nominal_fields(SpecContext *c) {
     const XrXirTypes *source = c->source->types;
-    if (!c->types.nominals) return XR_XIR_OK;
-    for (uint32_t i = 0; i < c->types.count; ++i) {
+    if (!c->types.nominals) {c->nominal_fields_next=c->types.count;return XR_XIR_OK;}
+    for (uint32_t i = c->nominal_fields_next; i < c->types.count; ++i) {
+        c->nominal_fields_next=i+1;
         if (!spec_progress(c)) return c->diagnostic.status;
         /* Field substitution can grow the pool; keep only independently owned edges. */
         XrXirTypeNode node = c->types.nodes[i];
@@ -658,7 +677,54 @@ static XrXirStatus spec_nominal_fields(SpecContext *c) {
         XrXirTypeNode *owned = (XrXirTypeNode *) c->types.nodes;
         owned[i].nominal.fields = fields; owned[i].nominal.field_count = d->field_count;
     }
-    return xr_xir_compile_nominal_field_graph_verify(&c->remaining, &c->types);
+    return XR_XIR_OK;
+}
+static bool spec_hashable_type(SpecContext *c,uint32_t type_index) {
+    const XrXirDeclarations *d=c->source->declarations;
+    if(!d || !d->hashable_witness_count)return true;
+    XrXirTypeNode node=c->types.nodes[type_index];
+    if(node.kind!=XR_XIR_TYPE_NOMINAL || node.parameter_span)return true;
+    uint32_t lo=0,hi=d->hashable_witness_count;
+    while(lo<hi) {
+        if(!spec_progress(c))return false;
+        uint32_t mid=lo+(hi-lo)/2;
+        const XrXirTypeNode *n=xr_xir_type_node(c->source->types,d->hashable_witnesses[mid].nominal_type);
+        if(n->nominal.declaration<node.nominal.declaration)lo=mid+1;else hi=mid;
+    }
+    if(lo==d->hashable_witness_count)return true;
+    const XrXirHashableWitness *row=&d->hashable_witnesses[lo];
+    const XrXirTypeNode *raw=xr_xir_type_node(c->source->types,row->nominal_type);
+    if(raw->nominal.declaration!=node.nominal.declaration)return true;
+    XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+type_index);
+    if(!raw->parameter_span) {
+        hi=d->hashable_witness_count;
+        while(lo<hi) {
+            if(!spec_progress(c))return false;
+            uint32_t mid=lo+(hi-lo)/2;
+            const XrXirTypeNode *n=xr_xir_type_node(c->source->types,d->hashable_witnesses[mid].nominal_type);
+            if(n->nominal.declaration<node.nominal.declaration ||
+                (n->nominal.declaration==node.nominal.declaration && d->hashable_witnesses[mid].nominal_type<type))lo=mid+1;
+            else hi=mid;
+        }
+        if(lo==d->hashable_witness_count || d->hashable_witnesses[lo].nominal_type!=type)return true;
+        row=&d->hashable_witnesses[lo];
+    }
+    uint32_t args=raw->parameter_span?node.nominal.argument_count:0;
+    const XrXirType *arguments=args?node.nominal.arguments:NULL;
+    uint32_t equals=spec_intern(c,row->equals_function,arguments,args);
+    uint32_t hash=spec_intern(c,row->hash_function,arguments,args);
+    if(c->diagnostic.status!=XR_XIR_OK)return false;
+    if(c->hashable_witness_count==c->hashable_witness_capacity) {
+        uint32_t capacity=c->hashable_witness_capacity?c->hashable_witness_capacity*2:8;
+        if(capacity<c->hashable_witness_capacity){c->diagnostic.status=XR_XIR_BUDGET;return false;}
+        XrXirHashableWitness *rows=spec_alloc(c,capacity,sizeof(*rows));
+        if(!rows)return false;
+        if(c->hashable_witness_count && !spec_copy(c,rows,c->hashable_witnesses,
+            (size_t)c->hashable_witness_count*sizeof(*rows)))return false;
+        c->hashable_witnesses=rows;c->hashable_witness_capacity=capacity;
+    }
+    c->hashable_witnesses[c->hashable_witness_count++]=(XrXirHashableWitness){type,equals,hash};
+    return true;
 }
 #include "xxir_specialize_lexical.inc.c"
 static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
@@ -742,6 +808,8 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     if (!c.effects && !c.source->defaults && !c.source->generics && !(c.source->types && c.source->types->interfaces) &&
         !(c.source->declarations && c.source->declarations->implementations)) {
         c.diagnostic.status = spec_nominal_fields(&c);
+        if (c.diagnostic.status == XR_XIR_OK)
+            c.diagnostic.status = xr_xir_compile_nominal_field_graph_verify(&c.remaining,&c.types);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
         XrXirModule specialized = *c.source;
         if (c.types.nominals) specialized.types = &c.types;
@@ -774,12 +842,22 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         }
     }
     if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
-    for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
+    uint32_t completed_calls=0,completed_hashable_types=0;
+    do {
+        for(;completed_calls<c.count;++completed_calls)if(!spec_calls(&c,completed_calls))goto done;
+        c.diagnostic.status=spec_nominal_fields(&c);
+        if(c.diagnostic.status!=XR_XIR_OK)goto done;
+        for(;completed_hashable_types<c.types.count;++completed_hashable_types)
+            if(!spec_hashable_type(&c,completed_hashable_types))goto done;
+    } while(completed_calls<c.count || c.nominal_fields_next<c.types.count);
+    c.diagnostic.status=xir_hashable_witnesses_sort(&c.remaining,&c.types,c.hashable_witnesses,
+        c.hashable_witness_count,c.control);
+    if(c.diagnostic.status!=XR_XIR_OK)goto done;
     if (pending) { pending->complete=true;goto done; }
     if (evaluation && !c.evaluation_found) { c.diagnostic.status=XR_XIR_BAD_TYPE;goto done; }
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
-    c.diagnostic.status = spec_nominal_fields(&c);
+    c.diagnostic.status = xr_xir_compile_nominal_field_graph_verify(&c.remaining,&c.types);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     XrXirModule specialized = {XR_XIR_CHECKED, c.functions, c.count, c.source->declarations ? &declarations : NULL, NULL, c.types.count || c.types.nominals ? &c.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirProvenance *provenance = NULL;

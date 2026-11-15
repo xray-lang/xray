@@ -27,7 +27,7 @@ static void library_construction_reject_rows(const XrXirModule *module,
     const XrXirConstructionRow *rows,uint32_t count,const XrXirSlotFacts *slots) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},slots,&bad, NULL)==XR_XIR_OK && bad);
+    CHECK(xr_xir_compile_construction_new_v6(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},slots,&bad, NULL)==XR_XIR_OK && bad);
     library_construction_reject(module,bad);
     xr_xir_compile_construction_free(bad);
     CHECK(source_live==blocks && source_bytes==bytes);
@@ -79,11 +79,11 @@ static void library_construction_attacks(const XrXirArtifact *artifact) {
     library_construction_reject(module,NULL);
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count-1},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v6(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count-1},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
     rows[owner].field_count=nominal->field_count-1;
-    CHECK(xr_xir_compile_construction_new_v5(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v6(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
     bad=(XrXirConstruction *)(uintptr_t)1;
-    CHECK(xr_xir_compile_construction_new_v5(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_construction_new_v6(library_context,module->types,&(XrXirConstructionSpec){.rows=rows,.count=count},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(bad==(XrXirConstruction *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
     free(fields);free(rows);
 }

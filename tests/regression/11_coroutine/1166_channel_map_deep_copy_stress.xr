@@ -5,7 +5,7 @@ var PRODUCERS = 4
 var SENDS_PER_PRODUCER = 5000
 
 fn producer(id: i64) -> i64 {
-    var m: Map<i64, i64> = #{}
+    var m: Map<i64, i64> = {}
     m.set(id, id + 1)
     m.set(id + 1000, id + 2)
 

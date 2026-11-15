@@ -4,7 +4,7 @@ import text
 
 @test
 fn test_translate_basic_ascii() {
-    var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
+    var COMP = {"A": "T", "T": "A", "C": "G", "G": "C"}
     assertEqual(text.translate("ACGT", COMP), "TGCA")
     assertEqual(text.translate("AAAA", COMP), "TTTT")
     assertEqual(text.translate("CCCC", COMP), "GGGG")
@@ -13,21 +13,21 @@ fn test_translate_basic_ascii() {
 
 @test
 fn test_translate_partial() {
-    var partial = #{"A": "X"}
+    var partial = {"A": "X"}
     assertEqual(text.translate("ABCD", partial), "XBCD")
     assertEqual(text.translate("AAAA", partial), "XXXX")
 }
 
 @test
 fn test_translate_unicode() {
-    var cnTable = #{"你": "我", "好": "坏"}
+    var cnTable = {"你": "我", "好": "坏"}
     assertEqual(text.translate("你好", cnTable), "我坏")
     assertEqual(text.translate("你好你", cnTable), "我坏我")
 }
 
 @test
 fn test_translate_empty_table() {
-    var empty: Map<string, string> = #{}
+    var empty: Map<string, string> = {}
     assertEqual(text.translate("ABC", empty), "ABC")
 }
 
@@ -35,7 +35,7 @@ fn test_translate_empty_table() {
 fn test_translate_with_reverse() {
     // Byte-level reverse used to live on String; now reverse() is
     // Unicode-aware and round-trips through translate for ASCII data.
-    var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
+    var COMP = {"A": "T", "T": "A", "C": "G", "G": "C"}
     assertEqual(text.translate(text.reverseRunes("ACGTACGT"), COMP), "ACGTACGT")
     assertEqual(text.translate(text.reverseRunes("AACC"), COMP), "GGTT")
 }

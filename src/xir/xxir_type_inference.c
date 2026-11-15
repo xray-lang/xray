@@ -167,7 +167,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
             from->nominal.argument_count != to->nominal.argument_count) { s->status = XR_XIR_BAD_TYPE; return; }
         for (uint32_t a = 0; a < from->nominal.argument_count && s->status == XR_XIR_OK; ++a)
             inference_enqueue(w,from->nominal.arguments[a],to->nominal.arguments[a],depth);
-    } else if (from->kind == XR_XIR_TYPE_CALLABLE || from->kind == XR_XIR_TYPE_TUPLE) {
+    } else if (from->kind == XR_XIR_TYPE_CALLABLE || from->kind == XR_XIR_TYPE_TUPLE || from->kind == XR_XIR_TYPE_DATA_UNION) {
         if (from->kind == XR_XIR_TYPE_CALLABLE) {
             inference_enqueue(w,from->result,to->result,depth);
             inference_enqueue(w,from->element,to->element,depth);
@@ -265,7 +265,7 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState 
         if (!node) continue;
         if (task->depth == UINT32_MAX) { s->status = XR_XIR_BUDGET; break; }
         uint32_t depth = task->depth+1;
-        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
+        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
                 inference_enqueue(&walk,node->result,XR_XIR_UNIT,depth);
                 inference_enqueue(&walk,node->element,XR_XIR_UNIT,depth);

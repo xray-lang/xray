@@ -881,17 +881,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             }
             break;
 
-        case AST_SET_LITERAL:
-            for (int i = 0; i < node->as.set_literal.count; i++)
-                canon_node(ctx, node->as.set_literal.elements[i]);
-            break;
-
-        case AST_OBJECT_LITERAL:
-            for (int i = 0; i < node->as.object_literal.count; i++) {
-                canon_node(ctx, node->as.object_literal.keys[i]);
-                canon_node(ctx, node->as.object_literal.values[i]);
-            }
-            break;
 
         case AST_STRUCT_LITERAL:
             canon_node(ctx, node->as.struct_literal.type_path);

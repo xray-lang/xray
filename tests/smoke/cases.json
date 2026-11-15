@@ -106,7 +106,7 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:50:1: module group requires I64 slot payloads is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:51:1: ASSERT_CONDITION is not supported by LIR lowering yet"
       }
     },
     {
@@ -134,7 +134,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F10",
-        "first_diagnostic": "demos/02-collections/json_processing.xr:27:0: error: record spread is not admitted"
+        "first_diagnostic": "demos/02-collections/json_processing.xr:42:1: error: name is not an initialized value"
       }
     },
     {
@@ -146,7 +146,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:34:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:14:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -254,7 +254,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M3",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:30:7: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:36:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -266,7 +266,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -479,7 +479,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -515,7 +515,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/log/log.xr:77:22: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/log/log.xr:257:5: error: method declaration contract is not admitted"
       }
     },
     {
@@ -868,7 +868,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:34:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:14:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -880,7 +880,7 @@
       "stdout": "tests/smoke/expected/variables.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:50:1: module group requires I64 slot payloads is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/variables.xr:51:1: ASSERT_CONDITION is not supported by LIR lowering yet"
       }
     },
     {
@@ -988,7 +988,7 @@
       "stdout_traces": "tests/smoke/expected/shared_data-traces.json",
       "gap": {
         "feature": "Task339 M3",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:30:7: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:36:7: module slot payload type is not supported by LIR lowering yet"
       }
     },
     {
@@ -1076,7 +1076,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F10",
-        "first_diagnostic": "demos/02-collections/json_processing.xr:27:0: error: record spread is not admitted"
+        "first_diagnostic": "demos/02-collections/json_processing.xr:42:1: error: name is not an initialized value"
       }
     },
     {
@@ -1100,7 +1100,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -1124,7 +1124,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:685:7: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -1160,7 +1160,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/log/log.xr:77:22: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/log/log.xr:257:5: error: method declaration contract is not admitted"
       }
     },
     {

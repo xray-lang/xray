@@ -43,14 +43,14 @@ static XrXirStatus parameter_hint_same_variable(ParameterHintsContext *ctx,const
     return lsp_equal(ctx->text->text+first.offset,name,length,same);
 }
 static XrXirStatus parameter_hint_emit(ParameterHintsContext *ctx,const XrXirSourceDeclaration *target,
-    const XrXirSourceDeclaration *parameter,const XlspSourceArgumentSyntax *argument,uint32_t mode) {
+    const char *name,const XlspSourceArgumentSyntax *argument,uint32_t mode) {
     if(type_hint_position_before(argument->range.start,ctx->range.start)||
         !type_hint_position_before(argument->range.start,ctx->range.end))return XR_XIR_OK;
-    bool same=false;XrXirStatus status=parameter_hint_same_variable(ctx,argument,parameter->name,&same);
+    bool same=false;XrXirStatus status=parameter_hint_same_variable(ctx,argument,name,&same);
     if(status!=XR_XIR_OK||same)return status;
     const XlspSourceSnapshot *s=ctx->snapshot;XlspSourceSignature provenance={0};
     status=signature_target(s,ctx->view,target,ctx->syntax,&provenance);if(status!=XR_XIR_OK)goto done;
-    LspHoverBuilder label={s,NULL,0,0,XR_XIR_OK};hover_text(&label,parameter->name);hover_text(&label,":");
+    LspHoverBuilder label={s,NULL,0,0,XR_XIR_OK};hover_text(&label,name);hover_text(&label,":");
     XlspSourceParameterHint hint={.position=argument->range.start,.label={label.text,label.length},.mode=mode,
         .target_identity=provenance.target_identity,.target_path=provenance.target_path,
         .target_fingerprint=provenance.target_fingerprint,.target_range=provenance.target_range,
@@ -71,37 +71,53 @@ hint_done:
 done:
     xlsp_source_signature_free(&provenance);return status;
 }
+typedef struct ParameterHintFormal {const char *name;uint32_t mode;} ParameterHintFormal;
 static XrXirStatus parameter_hint_parameters(ParameterHintsContext *ctx,const XrXirSourceDeclaration *target,
-    const XrXirSourceCallSignature *signature,const XlspSourceArgumentCall *call) {
-    uint32_t index=0;size_t explicit_count=0;bool variadic=false;
+    const XrXirSourceCall *observed,const XlspSourceArgumentCall *call) {
+    const XrXirSourceCallSignature *signature=&observed->signature;
     if(signature->parameter_count!=target->parameter_count)return XR_XIR_BAD_STRUCTURE;
-    for(uint32_t i=0;i<ctx->view->declaration_count;++i) {
-        XrXirStatus status;
-        const XrXirSourceDeclaration *parameter=&ctx->view->declarations[i];
-        if(parameter->kind!=XR_XIR_SOURCE_PARAMETER||parameter->parent!=target->id)continue;
-        if(index>=target->parameter_count||!target->parameters||!signature->parameters[index].known||
-            parameter->type.known!=target->parameters[index].known||parameter->type.type!=target->parameters[index].type||
-            parameter->type.generic_owner!=target->parameters[index].generic_owner)return XR_XIR_BAD_STRUCTURE;
-        const XrXirSourceDeclarationSyntax *fact=&ctx->syntax->declarations[i];
-        bool receiver=fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
-        if(receiver!=(index<signature->receiver_count))return XR_XIR_BAD_STRUCTURE;
-        uint32_t flags=signature->parameter_flags?signature->parameter_flags[index]:0;++index;
-        if(receiver)continue;
-        bool governed=fact->role==XR_XIR_SOURCE_SYNTAX_NONE&&target->kind==XR_XIR_SOURCE_MEMBER&&target->native_identity;
-        if(fact->role!=XR_XIR_SOURCE_SYNTAX_NAME&&!governed)return XR_XIR_UNSUPPORTED;
-        uint32_t mode=0;status=signature_parameter_mode(ctx->syntax,parameter,&mode);if(status!=XR_XIR_OK)return status;
-        size_t end=explicit_count<call->call.argument_count?explicit_count+1:explicit_count;
-        if(flags&XR_XIR_SOURCE_CALL_VARIADIC) {
-            if(index!=target->parameter_count)return XR_XIR_BAD_STRUCTURE;
-            variadic=true;end=call->call.argument_count;
+    if(!observed->argument_binding_known)return XR_XIR_OK;
+    if(observed->argument_count!=call->call.argument_count)return XR_XIR_BAD_STRUCTURE;
+    ParameterHintFormal *formals=NULL;
+    XrXirStatus status=signature->parameter_count?xir_compile_resource_status(xr_compile_resources_calloc(
+        ctx->snapshot->resources,signature->parameter_count,sizeof(*formals),(void **)&formals)):XR_XIR_OK;
+    if(status!=XR_XIR_OK)return status;
+    if(target->parameter_names) {
+        if(!target->parameter_modes){status=XR_XIR_BAD_STRUCTURE;goto done;}
+        for(uint32_t p=0;p<target->parameter_count;++p)
+            formals[p]=(ParameterHintFormal){target->parameter_names[p],target->parameter_modes[p]};
+    } else {
+        uint32_t index=0;
+        for(uint32_t i=0;i<ctx->view->declaration_count;++i) {
+            const XrXirSourceDeclaration *parameter=&ctx->view->declarations[i];
+            if(parameter->kind!=XR_XIR_SOURCE_PARAMETER||parameter->parent!=target->id)continue;
+            if(index>=target->parameter_count||!target->parameters||!signature->parameters[index].known||
+                parameter->type.known!=target->parameters[index].known||parameter->type.type!=target->parameters[index].type||
+                parameter->type.generic_owner!=target->parameters[index].generic_owner){status=XR_XIR_BAD_STRUCTURE;goto done;}
+            const XrXirSourceDeclarationSyntax *fact=&ctx->syntax->declarations[i];
+            bool receiver=fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
+            if(receiver!=(index<signature->receiver_count)){status=XR_XIR_BAD_STRUCTURE;goto done;}
+            uint32_t physical=index++;
+            if(receiver)continue;
+            bool governed=fact->role==XR_XIR_SOURCE_SYNTAX_NONE&&target->kind==XR_XIR_SOURCE_MEMBER&&target->native_identity;
+            if(fact->role!=XR_XIR_SOURCE_SYNTAX_NAME&&!governed){status=XR_XIR_UNSUPPORTED;goto done;}
+            formals[physical].name=parameter->name;
+            status=signature_parameter_mode(ctx->syntax,parameter,&formals[physical].mode);
+            if(status!=XR_XIR_OK)goto done;
         }
-        for(size_t a=explicit_count;a<end;++a) {
-            status=parameter_hint_emit(ctx,target,parameter,&call->arguments[a],mode);if(status!=XR_XIR_OK)return status;
-        }
-        ++explicit_count;
+        if(index!=target->parameter_count){status=XR_XIR_BAD_STRUCTURE;goto done;}
     }
-    return index!=target->parameter_count?XR_XIR_BAD_STRUCTURE:
-        call->call.argument_count>explicit_count&&!variadic?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
+    for(uint32_t a=0;a<observed->argument_count;++a) {
+        if(call->arguments[a].has_label)continue;
+        uint32_t formal=observed->argument_formals[a];
+        if(formal==UINT32_MAX)continue;
+        if(formal<signature->receiver_count||formal>=signature->parameter_count){status=XR_XIR_BAD_STRUCTURE;goto done;}
+        if(!formals[formal].name||!*formals[formal].name)continue;
+        status=parameter_hint_emit(ctx,target,formals[formal].name,&call->arguments[a],formals[formal].mode);
+        if(status!=XR_XIR_OK)goto done;
+    }
+done:
+    xr_compile_resources_free(formals);return status;
 }
 static XrXirStatus parameter_hint_call(ParameterHintsContext *ctx,const XlspSourceArgumentCall *call) {
     bool selected=false;
@@ -117,8 +133,8 @@ static XrXirStatus parameter_hint_call(ParameterHintsContext *ctx,const XlspSour
     const XrXirSourceDeclaration *declaration=&ctx->view->declarations[target-1];
     if(declaration->kind!=XR_XIR_SOURCE_FUNCTION&&declaration->kind!=XR_XIR_SOURCE_MEMBER&&
         declaration->kind!=XR_XIR_SOURCE_INTRINSIC)return XR_XIR_UNSUPPORTED;
-    const XrXirSourceCallSignature *signature=NULL;status=signature_call_observation(ctx->snapshot,&selection,target,&signature);
-    return status==XR_XIR_OK?parameter_hint_parameters(ctx,declaration,signature,call):status;
+    const XrXirSourceCall *observed=NULL;status=signature_call_observation(ctx->snapshot,&selection,target,&observed);
+    return status==XR_XIR_OK?parameter_hint_parameters(ctx,declaration,observed,call):status;
 }
 static XrXirStatus parameter_hints_sort(ParameterHintsContext *ctx) {
     for(size_t i=1;i<ctx->hints.count;++i) {

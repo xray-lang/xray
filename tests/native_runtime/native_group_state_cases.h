@@ -12,7 +12,7 @@ static void native_group_state(void) {
     for (uint32_t n = 0; n < 4; ++n)
         slots[n] = (XrtModuleSlotSpec){.flags=n == 2 ? 0 : XRT_MODULE_SLOT_MUTABLE,
             .offset=(uint64_t)n * 8, .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module,
         .module_count=1, .slots=slots, .slot_count=4, .payload_size=32,
         .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;

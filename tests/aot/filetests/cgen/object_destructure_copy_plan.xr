@@ -1,9 +1,13 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn describe(user: User) -> string {
-    var { name: localName, age } = user
+    var localName = user.name
+    var age = user.age
     return localName + ":" + string(age)
 }
 
-var user: User = { name: "Ada", age: 7 }
+var user: User = User{ name: "Ada", age: 7 }
 print(describe(user))

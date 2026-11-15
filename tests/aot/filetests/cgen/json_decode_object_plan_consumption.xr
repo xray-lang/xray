@@ -1,7 +1,10 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn main() -> JSON.Value {
-    var data: JSON.Value = JSON.value({ name: "ada", age: 1 })
+    var data: JSON.Value = JSON.value(User{ name: "ada", age: 1 })
     var user = JSON.decode<User>(data)
     return JSON.value(user!)
 }

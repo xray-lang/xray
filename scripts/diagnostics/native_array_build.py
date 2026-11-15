@@ -26,7 +26,7 @@ LIBRARY_NAMES = (
 PUBLIC_HEADERS = (
     "xray_native_runtime.h", "xray_native_state.h", "xray_native_array.h",
     "xray_native_view.h", "xray_native_pod.h", "xray_native_string.h",
-    "xray_native_callable.h", "xray_string_cursor.h", "xray_export.h",
+    "xray_native_callable.h", "xray_native_metadata.h", "xray_string_cursor.h", "xray_export.h",
 )
 
 

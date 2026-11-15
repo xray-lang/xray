@@ -8,7 +8,13 @@
 
 // === Rule 1: const (immutable cross-coroutine sharing) ===
 // Zero-copy reads from any coroutine
-const CONFIG = {
+struct WorkerConfig {
+    host: string
+    port: i64
+    maxRetries: i64
+}
+
+const CONFIG = WorkerConfig{
     host: "localhost",
     port: 8080,
     maxRetries: 3

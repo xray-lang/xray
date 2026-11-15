@@ -15,7 +15,7 @@ fn atInt(v: YamlValue, i: i64) -> i64 { return yaml.asInt(yaml.at(v, i)!) ?? -1 
 @test
 fn test_parse_basic() {
     var data = "name: Alice\nage: 30\nactive: true"
-    var obj = yaml.parse(data)
+    var obj = yaml.parse(data, strict: true)
     assertEqual(getStr(obj, "name"), "Alice")
     assertEqual(getInt(obj, "age"), 30)
     assertEqual(getBool(obj, "active"), true)
@@ -71,7 +71,9 @@ fn test_stringify() {
     var config = yaml.newMapping()
     yaml.mappingSet(ref config, "name", yaml.stringValue("xray"))
     yaml.mappingSet(ref config, "version", yaml.intValue(1))
-    var result = yaml.stringify(yaml.mappingValue(config))
+    var result = yaml.stringify(yaml.mappingValue(config), indent: 4)
+    assertEqual(yaml.stringify(yaml.mappingValue(config), indent: 0),
+                yaml.stringify(yaml.mappingValue(config)))
     assert(len(result) > 0)
     var reparsed = yaml.parse(result)
     assertEqual(getStr(reparsed, "name"), "xray")

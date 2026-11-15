@@ -145,7 +145,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 self.assertEqual("stdlib/types/array.xr", entry["source"])
                 self.assertEqual(member.receiver.lower(), entry["receiver"])
         self.assertEqual("(index: i64, value: T): ()", actual["set"]["signature"])
-        self.assertEqual("(fn: fn(item: T, index: i64) -> U): Array<U>", actual["map"]["signature"])
+        self.assertEqual("(callback: fn(item: T, index: i64) -> U): Array<U>", actual["map"]["signature"])
         self.assertEqual("(value: T, start?: i64, end?: i64): Array<T>", actual["fill"]["signature"])
         self.assertEqual("(): Array<(i64, T)>", actual["entries"]["signature"])
         self.assertEqual("(...arrays: Array<T>): Array<T>", actual["concat"]["signature"])

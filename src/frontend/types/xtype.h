@@ -42,8 +42,6 @@
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
 #define XR_TYPE_IS_NULLABLE(t) ((t)->is_nullable || ((t)->kind == XR_KIND_NULL))
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
-#define XR_TYPE_IS_STRUCT_OBJECT(t) ((t)->kind == XR_KIND_STRUCT_OBJECT)
-#define XR_TYPE_HAS_OBJECT_SHAPE(t) ((t) && xr_kind_has_object_shape((t)->kind))
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
 
@@ -140,7 +138,6 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
-        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -249,7 +246,6 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
-        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -305,7 +301,6 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
-        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -369,19 +364,11 @@ XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type);
 
-// API: Object types
+// API: JSON value domain
 XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
 /* Whether every value represented by this static type is already a member of
  * the Json value domain. This is deliberately narrower than encodability. */
 XR_FUNC bool xr_type_is_json_value(const XrType *type);
-XR_FUNC XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names,
-                                                      XrType **types, int count);
-XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
-                                               int count);
-XR_FUNC void xr_type_set_object_type_name(XrVMRuntime *X, XrType *type, const char *name);
-XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
-                                             int count);
-XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name);
 XR_FUNC XrType *xr_type_new_class(XrVMRuntime *X, const char *class_name);
 XR_FUNC XrType *xr_type_new_interface(XrVMRuntime *X, const char *interface_name);
 XR_FUNC XrType *xr_type_new_generic_interface(XrVMRuntime *X, const char *interface_name,
@@ -471,19 +458,6 @@ static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
     return t && t->kind == XR_KIND_JSON;
 }
 
-static inline bool xr_type_is_exact_struct_object(const XrType *type) {
-    return type && XR_TYPE_IS_STRUCT_OBJECT(type);
-}
-
-static inline bool xr_type_object_fields_are_closed(const XrType *type) {
-    return XR_TYPE_IS_STRUCT_OBJECT(type);
-}
-
-static inline bool xr_type_object_accepts_extra_fields(const XrType *type) {
-    (void) type;
-    return false;
-}
-
 // JSON.Value is a closed data-exchange value domain. Scalars widen implicitly;
 // composite Xray values cross through JSON.value so encoding stays explicit.
 static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
@@ -526,7 +500,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
 }
 
 // Check if a type is valid as an already-typed Json literal field value.
-// External structural object/Array/Map/Set/class values must cross through Json.encode.
+// External Array/Map/Set/class values must cross through Json.encode.
 static inline bool xr_type_is_json_field_compatible(XrType *type) {
     if (!type)
         return true;
@@ -558,13 +532,6 @@ XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, in
 XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
-/* Explain why `source` is not assignable to `target` when the root cause is a
- * structural object/object-shape field-set difference, possibly nested inside an invariant
- * container. Writes a reason such as "extra field 'z'", "missing field 'y'", or
- * "element: extra field 'z'" into `buf` and returns true. Returns false for
- * scalar or otherwise unstructured mismatches, so callers keep their plain
- * "not assignable" message. Only call after xr_type_assignable() has failed. */
-XR_FUNC bool xr_type_object_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n);
 // Classify a conversion between concrete numeric types.  This does not grant
 // contextual-literal or dynamic-cast semantics; the analyzer upgrades those
 // cases using the same XrConversionKind domain.
@@ -613,9 +580,6 @@ XR_FUNC bool xr_type_is_default_initializable(const XrType *type);
 // API: Immutability
 XR_FUNC bool xr_type_is_const(XrType *type);
 XR_FUNC XrType *xr_type_make_const(XrVMRuntime *X, XrType *base);
-
-// API: Structural compatibility (for JSON objects)
-XR_FUNC XrType *xr_type_object_get_field(XrType *type, const char *field_name);
 
 // API: Class inheritance
 XR_FUNC bool xr_type_satisfies_constraint(XrType *type, XrType *constraint);

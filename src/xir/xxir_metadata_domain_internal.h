@@ -14,6 +14,7 @@
 #ifndef XXIR_METADATA_DOMAIN_INTERNAL_H
 #define XXIR_METADATA_DOMAIN_INTERNAL_H
 #include "xxir_constraint_proof.h"
+#include "xxir_function_signature.h"
 
 /* All descriptor/declaration/signature priors belong to the same admitted
  * source. An owned material preserves these records and real ordinals; it
@@ -24,6 +25,8 @@ typedef struct XirMetadataDomain {
     const XrXirGeneric *generics;
     const XrXirDefaultTable *defaults;
     uint32_t function_count;
+    const void *signature_owner;
+    XirMetadataSignatureRead signature;
 } XirMetadataDomain;
 typedef struct XirMetadataProofContext {
     const XirMetadataDomain *domain;
@@ -42,7 +45,9 @@ typedef struct XirMetadataArguments {
 static inline XirMetadataDomain xir_metadata_domain_from_module(const XrXirModule *module) {
     if (!module) return (XirMetadataDomain){0};
     return (XirMetadataDomain){module->types,module->declarations,module->generics,module->defaults,
-        module->functions ? module->function_count : 0};
+        module->functions ? module->function_count : 0,
+        module->functions ? module : NULL,
+        module->functions ? xir_metadata_module_signature : NULL};
 }
 static inline XirMetadataProofContext xir_metadata_context_from_raw(
     const XrXirProofContext *raw,XirMetadataDomain *domain) {

@@ -19,6 +19,20 @@
 extern "C" {
 #endif
 typedef struct XrtMap XrtMap;
+typedef struct XrtMapLiteralOrigin { uint32_t kind,line,column; } XrtMapLiteralOrigin;
+typedef struct XrtMapLiteral {
+    /* NULL/zero preserves an unknown physical path for in-memory source. */
+    const char *path;
+    size_t path_length;
+    const XrtMapLiteralOrigin *items;
+    size_t count;
+} XrtMapLiteral;
+/* Kind zero consumes key/value; kind one consumes spread and ignores value.
+ * The descriptor and inputs are borrowed only through this synchronous call. */
+typedef struct XrtMapLiteralInput {
+    union { const XrtString *key; const XrtMap *spread; } source;
+    int64_t value;
+} XrtMapLiteralInput;
 typedef struct XrtMapRef {
     XrtMap **cell;
     XrtModuleAccess state;
@@ -29,6 +43,7 @@ typedef struct XrtMapRef {
  * exact String/I64 shape through the synchronous call. */
 XRAY_API XrtMap *xrt_map_string_i64_new(XrtString *const *keys, const int64_t *values,
     size_t count, uint32_t source);
+XRAY_API XrtMap *xrt_map_string_i64_literal(const XrtMapLiteral *,const XrtMapLiteralInput *,uint32_t source);
 XRAY_API XrtMap *xrt_map_retain(const XrtMap *, uint32_t source);
 XRAY_API void xrt_map_drop(XrtMap **);
 XRAY_API void xrt_map_owned_drop(XrtMap **);

@@ -11,7 +11,7 @@ static XrtModuleStatus fixed_state_layout(uint32_t count, bool mutable, XrtModul
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=mutable ? XRT_MODULE_SLOT_MUTABLE : 0,
         .size=count, .alignment=1};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=count,
         .payload_alignment=1, .byte_limit=UINT64_MAX};
     return xrt_module_layout_new(&spec, out);
@@ -28,7 +28,7 @@ static void fixed_state_values(void) {
         XrtModuleLayout *layout = NULL;
         XrtModuleState *state = NULL;
         OK(fixed_state_layout(count, true, &layout));
-        XrtModuleLayoutSpec owned;
+        XrtModuleLayoutSpec owned={.metadata=XRT_MODULE_LAYOUT_HEADER};
         OK(xrt_module_layout_view(layout, &owned));
         CHECK(owned.types[0].kind == XRT_MODULE_FIXED_U8 && owned.types[0].argument == count);
         CHECK(owned.slots[0].size == count && owned.slots[0].alignment == 1 &&
@@ -91,7 +91,7 @@ static void fixed_state_invalid_shapes(void) {
         XrtModuleTypeSpec type = {XRT_MODULE_FIXED_U8, 16};
         XrtModuleSpec module = {0};
         XrtModuleSlotSpec slot = {.size=16, .alignment=1};
-        XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module,
+        XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module,
             .module_count=1, .slots=&slot, .slot_count=1, .payload_size=16,
             .payload_alignment=2, .byte_limit=UINT64_MAX};
         if (scenario == 0) type.argument = 0;

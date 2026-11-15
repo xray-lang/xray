@@ -139,6 +139,19 @@ static bool query_declaration_extent(SourceQueryCopy *copy,const XrXirSourceView
         (source->parameter_count && !source->parameters)) {
         copy->status = XR_XIR_BAD_STRUCTURE; return false;
     }
+    if((!!source->parameter_names!=!!source->parameter_modes)||
+        (source->parameter_names&&(!source->parameter_count||
+            (source->kind!=XR_XIR_SOURCE_FUNCTION&&source->kind!=XR_XIR_SOURCE_MEMBER&&source->kind!=XR_XIR_SOURCE_INTRINSIC)))) {
+        copy->status=XR_XIR_BAD_STRUCTURE;return false;
+    }
+    for(uint32_t p=0;source->parameter_names&&p<source->parameter_count;++p) {
+        if(source->parameter_modes[p]!=XR_PARAM_READ&&source->parameter_modes[p]!=XR_PARAM_REF&&
+            source->parameter_modes[p]!=XR_PARAM_MOVE) {copy->status=XR_XIR_BAD_STRUCTURE;return false;}
+        if(source->parameter_names[p]&&query_length(copy,source->parameter_names[p])<2) {
+            if(copy->status==XR_XIR_OK)copy->status=XR_XIR_BAD_STRUCTURE;
+            return false;
+        }
+    }
     if(source->flags&XR_XIR_SOURCE_DECL_REST) {
         const XrXirSourceType *tail=&source->parameters[source->parameter_count-1];
         if(!tail->known||!xr_xir_type_is_array(view->types,tail->type)||
@@ -223,6 +236,13 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
     size_t offset = table_bytes;
     for (size_t i = 0; i < count && ((copy)->status == XR_XIR_OK); ++i) {
         query_declaration_place(copy, storage, &offset, &source->declarations[i], &declarations[i]);
+        const XrXirSourceDeclaration *original=&source->declarations[i];
+        const char **names=original->parameter_names?query_allocate(copy,original->parameter_count,sizeof(*names)):NULL;
+        declarations[i].parameter_names=names;
+        declarations[i].parameter_modes=query_copy(copy,original->parameter_modes,
+            original->parameter_modes?original->parameter_count:0,sizeof(*original->parameter_modes));
+        for(uint32_t p=0;names&&p<original->parameter_count&&copy->status==XR_XIR_OK;++p)
+            names[p]=query_string(copy,original->parameter_names[p]);
         declarations[i].generic_constraints = query_constraints(copy,
             source->declarations[i].generic_constraints, declarations[i].generic_parameter_count);
         declarations[i].type_parameter_kinds = query_copy(copy,

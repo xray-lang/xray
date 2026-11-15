@@ -69,8 +69,8 @@ static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValu
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
     XrXirType parameter=XR_XIR_I64;SourceValue count={0};uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,&parameter,repeat ? 1u : 0u,repeat ? 1u : 0u,
-        &count,&supplied,"owned string operation requires its exact ordinary declaration")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=repeat ? 1u : 0u,.maximum=repeat ? 1u : 0u,
+        .values=&count,.supplied=&supplied,.diagnostic="owned string operation requires its exact ordinary declaration",.native_owner=XR_NATIVE_DECLARATION_STRING})) return false;
     if (!repeat) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,XR_XIR_STRING,{receiver.id},{0},0,{0}},value);
     if (count.type!=XR_XIR_I64) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"string repeat count must be i64");
     return source_string_repeat(ctx,node,receiver,count,value);

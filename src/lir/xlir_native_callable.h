@@ -42,14 +42,27 @@ static inline XrLirStatus lir_native_callable_spec(const XrLirModule *module, Xr
     if (view.kind == XR_LIR_TYPE_RECORD) {
         const XrLirRecordField *fields;
         uint32_t count;
+        XrLirRecordIdentity identity;
         if (xr_lir_record_fields(module, type, &fields, &count) != XR_LIR_OK ||
-            count > capacity || (count && !parameters)) return XR_LIR_INVALID_ARGUMENT;
+            xr_lir_record_identity(module, type, &identity) != XR_LIR_OK ||
+            identity.argument_count > UINT32_MAX - count || count + identity.argument_count > capacity ||
+            ((count || identity.argument_count) && !parameters)) return XR_LIR_INVALID_ARGUMENT;
         spec.kind = XRT_CALLABLE_RECORD;
-        spec.parameters = count ? parameters : NULL;
-        spec.parameter_count = count;
+        spec.count = count;
+        spec.parameter_count = count + identity.argument_count;
+        spec.parameters = spec.parameter_count ? parameters : NULL;
+        spec.module = identity.module; spec.module_length = identity.module_length;
+        spec.name = identity.name; spec.name_length = identity.name_length;
+        spec.exported = identity.exported; spec.flags = identity.flags;
         for (uint32_t f = 0; f < count; ++f) {
-            parameters[f] = (XrtCallableParameterSpec){.name=fields[f].name, .name_length=fields[f].name_length};
+            parameters[f] = (XrtCallableParameterSpec){.name=fields[f].name, .name_length=fields[f].name_length,
+                .field_flags=fields[f].flags};
             if (!lir_native_callable_value(fields[f].type, 0, &parameters[f].value)) return XR_LIR_UNSUPPORTED;
+        }
+        for (uint32_t a = 0; a < identity.argument_count; ++a) {
+            parameters[count+a] = (XrtCallableParameterSpec){0};
+            if (!lir_native_callable_value(identity.arguments[a].type, identity.arguments[a].array_element,
+                &parameters[count+a].value)) return XR_LIR_UNSUPPORTED;
         }
     } else if (view.kind == XR_LIR_TYPE_CALLABLE) {
         XrLirCallableType signature;
@@ -89,5 +102,12 @@ static inline XrLirStatus lir_native_callable_spec(const XrLirModule *module, Xr
     }
     *output = spec;
     return XR_LIR_OK;
+}
+static inline uint32_t lir_native_record_parameters(const XrLirModule *module, XrLirType type) {
+    XrLirTypeView shape;
+    XrLirRecordIdentity identity;
+    if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_RECORD ||
+        xr_lir_record_identity(module, type, &identity) != XR_LIR_OK) return 0;
+    return shape.count + identity.argument_count;
 }
 #endif // XLIR_NATIVE_CALLABLE_H

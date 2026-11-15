@@ -14,7 +14,7 @@ static XrXirValue callable_cell_value(XrtCallableGroup *group, const XrtCaptured
 static XrtCapturedCell *callable_cell_scope_new(XrtCallableScope *scope, uint32_t type,
     const XrXirValue *initial, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || scope != root->callable_scope || scope->root != root || type >= scope->image->type_count)
+    if (!scope || scope != root->callable_scope || scope->root != root || !xrt_callable_image_valid(scope->image) || type >= scope->image->type_count)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
     XrXirType physical = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + type);
@@ -34,7 +34,7 @@ XRAY_API XrtCapturedCell *xrt_callable_cell_scope_new(XrtCallableScope *scope, u
 XRAY_API XrtCapturedCell *xrt_callable_cell_scope_map_new(XrtCallableScope *scope, uint32_t type,
     const struct XrtMap *initial, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!scope || scope != root->callable_scope || scope->root != root || type >= scope->image->type_count)
+    if (!scope || scope != root->callable_scope || scope->root != root || !xrt_callable_image_valid(scope->image) || type >= scope->image->type_count)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
     XrXirType expected;
@@ -49,7 +49,7 @@ XRAY_API XrtCapturedCell *xrt_callable_cell_scope_bind(XrtCallableScope *scope, 
     XrtValueRoot *root = xrt_value_root_current(source);
     XrtCallableScope *current = root->callable_scope;
     while (current && current != scope) current = current->parent;
-    if (!current || current->root != root || binding == UINT32_MAX || !cell)
+    if (!current || current->root != root || !xrt_callable_image_valid(current->image) || binding == UINT32_MAX || !cell)
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrtCallableScopeBody *body = callable_scope_body(scope, source);
     XrXirValue value = callable_cell_value(body->group, cell, source);

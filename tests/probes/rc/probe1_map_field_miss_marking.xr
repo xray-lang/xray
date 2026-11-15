@@ -43,7 +43,7 @@ class MapNode {
     tag: i64
 
     init(tag) {
-        this.children = #{}
+        this.children = {}
         this.tag = tag
     }
 }

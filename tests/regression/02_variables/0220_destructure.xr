@@ -3,6 +3,22 @@
 
 // ===== Array destructuring =====
 
+struct Person {
+    name: string
+    age: i64
+}
+
+struct InnerFields {
+    f1: i64
+    f2: i64
+}
+
+struct OuterFields {
+    d: i64
+    e: i64
+    f: InnerFields
+}
+
 @test
 fn test_array_basic() {
     var [a, b, c] = [1, 2, 3]
@@ -44,7 +60,8 @@ fn test_skip_multiple() {
 
 @test
 fn test_flat_nested_value() {
-    var [a, b, c] = [10, [11, 12], 13]
+    var values: Array<i64 | Array<i64>> = [10, [11, 12], 13]
+    var [a, b, c] = values
     assert(a is i64)
     assertEqual(a as i64, 10)
     assert(b is Array<i64>)
@@ -55,18 +72,23 @@ fn test_flat_nested_value() {
     assertEqual(c as i64, 13)
 }
 
-// ===== Object destructuring =====
+// ===== Named struct field projection =====
 
 @test
-fn test_object_basic() {
-    var { name, age } = { name: "Alice", age: 30 }
+fn test_struct_fields() {
+    var person = Person{name: "Alice", age: 30}
+    var name = person.name
+    var age = person.age
     assertEqual(name, "Alice")
     assertEqual(age, 30)
 }
 
 @test
-fn test_object_flat_nested_value() {
-    var { d, e, f } = { d: 100, e: 200, f: { f1: 300, f2: 400 } }
+fn test_struct_nested_fields() {
+    var fields = OuterFields{d: 100, e: 200, f: InnerFields{f1: 300, f2: 400}}
+    var d = fields.d
+    var e = fields.e
+    var f = fields.f
     assertEqual(d, 100)
     assertEqual(e, 200)
     assertEqual(f.f1, 300)
@@ -74,13 +96,14 @@ fn test_object_flat_nested_value() {
 }
 
 @test
-fn test_object_rename() {
-    var user = { name: "Alice", age: 30 }
-    var { name: localName, age } = user
+fn test_struct_field_rename() {
+    var user = Person{name: "Alice", age: 30}
+    var localName = user.name
+    var age = user.age
     assertEqual(localName, "Alice")
     assertEqual(age, 30)
 
     var otherName = ""
-    { name: otherName } = user
+    otherName = user.name
     assertEqual(otherName, "Alice")
 }

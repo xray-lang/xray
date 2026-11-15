@@ -14,6 +14,7 @@ static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
     switch (kind) {
     case XRT_MODULE_UNIT: case XRT_MODULE_BOOL: case XRT_MODULE_I64: case XRT_MODULE_F64:
         *payload = XR_RBC_BITS; return true;
+    case XRT_MODULE_SET_I64:*payload=XR_RBC_SET_I64;return true;
     case XRT_MODULE_MAP_STRING_I64: *payload = XR_RBC_MAP_STRING_I64; return true;
     case XRT_MODULE_STRING: *payload = XR_RBC_STRING; return true;
     case XRT_MODULE_ARRAY_I64: *payload = XR_RBC_ARRAY_I64; return true;
@@ -29,7 +30,7 @@ static bool xr_rbc_state_payload_kind(uint32_t kind) {
 }
 
 static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (module->state_layout) {
         if (xrt_module_layout_view(module->state_layout, &layout) != XR_XIR_VALUE_OK ||
             module->state_entry >= module->function_count || layout.type_count > UINT32_MAX / 2) return false;
@@ -68,7 +69,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, uint32_t word) {
     uint32_t op = word & 255, a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     uint32_t index = word >> 16;
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (!module->state_layout || !function->register_kinds || a >= function->register_count ||
         xrt_module_layout_view(module->state_layout, &layout) != XR_XIR_VALUE_OK) return false;
     if (op == XR_RBC_MODULE_BEGIN || op == XR_RBC_MODULE_READY)
@@ -105,7 +106,7 @@ static bool xr_rbc_state_instruction_valid(const XrRbcModule *module,
 }
 
 static uint32_t xr_rbc_state_shape(const XrRbcModule *module, uint32_t slot) {
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (xrt_module_layout_view(module->state_layout, &layout) != XR_XIR_VALUE_OK) return 0;
     XrtModuleSlotSpec row = layout.slots[slot];
     /* The complete owned type ordinal survives copies, joins and spills. */
@@ -113,7 +114,7 @@ static uint32_t xr_rbc_state_shape(const XrRbcModule *module, uint32_t slot) {
 }
 
 static uint32_t xr_rbc_state_kind(const XrRbcModule *module, uint32_t shape) {
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     uint32_t ordinal = (shape >> 1) - 1u;
     if (!shape || xrt_module_layout_view(module->state_layout, &layout) != XR_XIR_VALUE_OK ||
         ordinal >= layout.type_count) return XRT_MODULE_TYPE_INVALID;

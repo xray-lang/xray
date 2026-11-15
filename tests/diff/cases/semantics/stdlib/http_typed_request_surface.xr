@@ -1,12 +1,13 @@
 import http
-import { Headers, HttpMethod, HttpRequestOptions, HttpResponse, HttpVersion } from http
+import { Headers, HttpError, HttpMethod, HttpResponse, HttpVersion } from http
 
-fn acceptsOptions(options: HttpRequestOptions) -> bool {
-    return options.url == "http://example.com/"
+var rejected = false
+try {
+    http.request(url: "")
+} catch (HttpError.InvalidUrl { url: invalid }) {
+    rejected = invalid == ""
 }
-
-var options: HttpRequestOptions = { "url": "http://example.com/" }
-print(acceptsOptions(options))
+print(rejected)
 print(HttpMethod.get().token)
 print(http.parseMethod("propfind")!.token)
 print(http.parseMethod("bad method") == null)

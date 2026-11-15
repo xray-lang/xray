@@ -7,7 +7,9 @@
  * xhir_conversion.c - Complete contextual conversion checking before emission
  */
 #include "xhir_conversion.h"
+#include "../xir/xxir_json_domain.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_data_union.h"
 #include "../xir/xxir_class_hierarchy_internal.h"
 #include "../xir/xxir_pointer.h"
 #include "../xir/xxir_compile_memory.h"
@@ -88,7 +90,16 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
             }
         } else {
             node.target=expected;
-            if(xr_xir_class_is_subtype(context->types,input->actual,expected)) {
+            const XrXirTypeNode *target=xr_xir_type_node(context->types,expected);
+            if(expected==XR_XIR_JSON_VALUE) {
+                if(!xr_xir_json_implicit_scalar(input->actual))
+                    return conversion_failure(reason,XR_XIR_BAD_TYPE,"JSON composite conversion requires explicit JSON.value");
+                node.kind=XR_HIR_CONVERSION_JSON;node.selected_member=input->actual;
+            } else if(target && target->kind==XR_XIR_TYPE_DATA_UNION) {
+                status=xr_xir_data_union_select(context->types,input->actual,expected,&node.selected_member);
+                if(status!=XR_XIR_OK)return conversion_failure(reason,status,"expression has no unique admissible data-union member");
+                node.kind=XR_HIR_CONVERSION_DATA_UNION;
+            } else if(xr_xir_class_is_subtype(context->types,input->actual,expected)) {
                 node.kind=XR_HIR_CONVERSION_COPY;node.declared_bound=expected;
             } else if(xr_xir_type_is_nullable(context->types,expected) && xr_xir_nullable_element(context->types,expected)==input->actual) {
                 node.kind=XR_HIR_CONVERSION_NULLABLE;
@@ -122,10 +133,19 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
     *output=node;return XR_XIR_OK;
 }
 XR_FUNC XrXirInstruction xr_hir_conversion_instruction(const XrHirConversion *node,uint32_t operand) {
-    XR_CHECK(node && node->kind>XR_HIR_CONVERSION_IDENTITY && node->kind<=XR_HIR_CONVERSION_POINTER,
+    XR_CHECK(node && node->kind>XR_HIR_CONVERSION_IDENTITY && node->kind<=XR_HIR_CONVERSION_JSON,
         "conversion HIR must be fully typed before lowering");
     static const XrXirOp operations[]={XR_XIR_INVALID,XR_XIR_COPY,XR_XIR_NULLABLE_SOME,
-        XR_XIR_FUNCTION_WEAKEN,XR_XIR_ERROR_ERASE,XR_XIR_CONVERT_NUMBER,XR_XIR_PTR_READONLY};
+        XR_XIR_FUNCTION_WEAKEN,XR_XIR_ERROR_ERASE,XR_XIR_CONVERT_NUMBER,XR_XIR_PTR_READONLY,XR_XIR_DATA_UNION_INJECT,XR_XIR_JSON_VALUE_INJECT};
     uint32_t payload=node->kind==XR_HIR_CONVERSION_NULLABLE && node->source==XR_XIR_UNIT?0:operand;
     return (XrXirInstruction){operations[node->kind],node->target,{payload,0},{0},0,{0}};
+}
+
+XR_FUNC XrXirStatus xr_hir_json_null_check(XrHirConversionOrigin origin,bool expected,
+    XrXirType type,XrCompileRequestControl *control,XrXirInstruction *output,const char **reason) {
+    if(reason)*reason=NULL;
+    if(!output || !origin.node_id)return conversion_failure(reason,XR_XIR_BAD_STRUCTURE,"JSON null source identity is missing");
+    XrXirStatus status=conversion_poll(control,reason);if(status!=XR_XIR_OK)return status;
+    if(!expected || type!=XR_XIR_JSON_VALUE)return conversion_failure(reason,XR_XIR_BAD_TYPE,"JSON null requires its exact folded domain");
+    *output=(XrXirInstruction){.op=XR_XIR_JSON_NULL,.type=XR_XIR_JSON_VALUE};return XR_XIR_OK;
 }

@@ -96,7 +96,7 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
     }
     XrXirStatus status=xr_xir_compile_types_structure_verify(context,module->types);
     if (status==XR_XIR_OK) status=xr_xir_compile_declarations_verify(context,module->declarations,
-        module->types,module->function_count,module->linkage_kind);
+        module->types,module->function_count,module->linkage_kind, NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_generics_structure_verify(context,module);
     if (status==XR_XIR_OK) status=xr_xir_compile_implementations_verify(context,module);
     if (status==XR_XIR_OK) status=xr_xir_compile_defaults_verify(context,module);

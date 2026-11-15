@@ -38,7 +38,7 @@ static XrXirArtifact *interface_checked_fixture(const XrXirCompileContext *conte
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,&dependency,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{.exported=1},{0},{.module=1}};
-    XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
+    XrXirDeclarations program = {.modules=modules, .module_count=2, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xir_fixture_check(context, &module, &artifact, NULL) == XR_XIR_OK);

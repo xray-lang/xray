@@ -469,6 +469,37 @@ def _fneg_cases(args, root, results):
                     (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
 
 
+def _map_literal_cases(args, root, results):
+    for case, expected in [('map-literal', b'42'), ('map-literal-empty', b'0'),
+                           ('map-literal-duplicate', None)]:
+        for mode in ('before', 'after'):
+            work = root / (case + '-' + mode)
+            work.mkdir()
+            generated = work / 'generated.c'
+            producer = run([args.driver, case, mode, generated], work)
+            text = generated.read_text(encoding='ascii')
+            assert 'xrt_map_string_i64_literal(' in text and not re.search(r'\(\s*\{', text)
+            (work / 'gateway.c').write_text('#include "generated.c"\n', encoding='ascii')
+            (work / 'adapter.c').write_text('#include <stdint.h>\n#include <inttypes.h>\n#include <stdio.h>\n'
+                'extern int64_t xray_lir_entry(void);\n'
+                'int main(void) { printf("%" PRId64 "\\n", xray_lir_entry()); return 0; }\n', encoding='ascii')
+            _, objects, compiles, link, executable = _fneg_commands(args, work, True, 'strict')
+            compiled = [run(command, work) for command in compiles]
+            linked = run(link, work)
+            native = subprocess.run([str(executable)], cwd=work, capture_output=True, timeout=30)
+            if expected is None:
+                message = ('E0434: duplicate key "x" in Map literal (entries at '
+                    'map-é.xr:3:12 and map-é.xr:5:16)').encode('utf-8')
+                assert native.returncode and message in native.stderr and not native.stdout, native
+            else:
+                assert native.returncode == 0 and native.stdout.strip() == expected and not native.stderr, native
+            results.append({'case': case, 'mode': mode, 'producer': producer, 'compiles': compiled,
+                'link': linked, 'generatedSHA256': digest(generated), 'exit': native.returncode,
+                'stdoutHex': native.stdout.hex(), 'stderrHex': native.stderr.hex(),
+                'objects': [{'path': str(obj), 'sha256': digest(obj)} for obj in objects]})
+            (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--driver', type=Path, required=True)
@@ -595,6 +626,7 @@ def main():
             (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
     _f64_cases(args, root, results)
     _fneg_cases(args, root, results)
+    _map_literal_cases(args, root, results)
     print('Typed carriers and explicit target frontiers passed across separate native TUs', flush=True)
 
 

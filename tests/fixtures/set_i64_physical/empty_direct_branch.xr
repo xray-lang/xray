@@ -1,0 +1,7 @@
+fn size(flag: bool) -> i64 {
+    const values = Set<i64>()
+    if (flag) { return len(values) }
+    return 0
+}
+print(size(true))
+print(size(false))

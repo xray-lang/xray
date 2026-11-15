@@ -26,6 +26,10 @@ typedef struct XrtOutputFailure {
 typedef struct XrtArithmeticPanic {
     uint32_t code, source_id;
 } XrtArithmeticPanic;
+typedef struct XrtMessagePanic {
+    uint32_t code,source_id;
+    XrXirValue message;
+} XrtMessagePanic;
 
 typedef enum XrtHostClockReason {
     XRT_CLOCK_READ_FAILED, XRT_CLOCK_OUT_OF_RANGE
@@ -40,7 +44,8 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_TYPED_PANIC,
     XRT_FAILURE_HOST_CLOCK,
     XRT_FAILURE_VALUE,
-    XRT_FAILURE_NULL_UNWRAP
+    XRT_FAILURE_NULL_UNWRAP,
+    XRT_FAILURE_MESSAGE_PANIC
 } XrtExecutionFailureKind;
 
 typedef struct XrtExecutionFailure {
@@ -48,10 +53,17 @@ typedef struct XrtExecutionFailure {
     union {
         XrtOutputFailure output;
         XrtArithmeticPanic panic;
+        XrtMessagePanic message;
         XrtHostClockFailure clock;
         struct { XrXirValueStatus status; uint32_t source_id; } value;
     } detail;
 } XrtExecutionFailure;
+/* A message fault owns an independent canonical String after the root retires.
+ * Release it before overwriting that failure slot. Other facts own no payload. */
+XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
+/* The producer supplies an independently owned, non-private String. This
+ * transfer allocates nothing and consumes it before leaving the activation. */
+XR_FUNC XR_NORET void xrt_message_panic_take(XrXirValue *,uint32_t,uint32_t);
 
 typedef enum XrtExecutionStatus {
     XRT_EXECUTION_COMPLETED,

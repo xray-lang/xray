@@ -7,7 +7,7 @@ import { HttpError } from http
 fn test_empty_url() {
     var rejected = false
     try {
-        http.request({url: ""})
+        http.request(url: "")
     } catch (e: HttpError) {
         rejected = true
     }
@@ -17,7 +17,7 @@ fn test_empty_url() {
 fn test_invalid_domain() {
     var rejected = false
     try {
-        http.request({url: "http://invalid.nonexistent.domain.xray/"})
+        http.request(url: "http://invalid.nonexistent.domain.xray/")
     } catch (e: HttpError) {
         rejected = true
     }
@@ -25,7 +25,7 @@ fn test_invalid_domain() {
 }
 
 fn test_status_500() {
-    var resp = http.request({url: "http://httpbin.org/status/500"})
+    var resp = http.request(url: "http://httpbin.org/status/500")
     assertEqual(resp.status, 500)
     assertEqual(resp.isSuccess(), false)
 }

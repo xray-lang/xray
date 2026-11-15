@@ -10,8 +10,30 @@
  *   Validated numeric rows select fixed runtime operations. Every type context
  *   and dependency row remains alive through the retained layout owner.
  */
+static XrXirValueStatus module_layout_callable_bytes(const XrtModuleLayoutSpec *spec,uint64_t *bytes) {
+    if(!xrt_module_layout_spec_valid(spec))return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(!module_charge(bytes,spec->callable_type_count,sizeof(XrtCallableTypeSpec)))return XR_XIR_VALUE_OVERFLOW;
+    if(*bytes>spec->byte_limit)return XR_XIR_VALUE_MEMORY_LIMIT;
+    for(uint32_t t=0;t<spec->callable_type_count;++t) {
+        const XrtCallableTypeSpec *type=&spec->callable_types[t];
+        if((type->parameter_count!=0)!=(type->parameters!=NULL)||
+            (type->module_length!=0)!=(type->module!=NULL)||
+            (type->name_length!=0)!=(type->name!=NULL))return XR_XIR_VALUE_BAD_ARGUMENT;
+        if(!module_charge(bytes,type->parameter_count,sizeof(*type->parameters))||
+            !module_charge(bytes,type->module_length,1)||!module_charge(bytes,type->name_length,1))
+            return XR_XIR_VALUE_OVERFLOW;
+        if(*bytes>spec->byte_limit)return XR_XIR_VALUE_MEMORY_LIMIT;
+        for(uint32_t p=0;p<type->parameter_count;++p) {
+            const XrtCallableParameterSpec *field=&type->parameters[p];
+            if((field->name_length!=0)!=(field->name!=NULL))return XR_XIR_VALUE_BAD_ARGUMENT;
+            if(!module_charge(bytes,field->name_length,1))return XR_XIR_VALUE_OVERFLOW;
+            if(*bytes>spec->byte_limit)return XR_XIR_VALUE_MEMORY_LIMIT;
+        }
+    }
+    return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus module_layout_shape(const XrtModuleLayoutSpec *spec, uint64_t *bytes) {
-    if (!spec || !spec->module_count || !spec->modules ||
+    if (!xrt_module_layout_spec_valid(spec) || !spec->module_count || !spec->modules ||
         (spec->type_count != 0) != (spec->types != NULL) ||
         (spec->slot_count != 0) != (spec->slots != NULL) ||
         (spec->dependency_count != 0) != (spec->dependencies != NULL) ||
@@ -39,6 +61,11 @@ static XrXirValueStatus module_layout_shape(const XrtModuleLayoutSpec *spec, uin
         dependency += module.dependency_count;
     }
     if (dependency != spec->dependency_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=module_layout_callable_bytes(spec,bytes);
+    if(status!=XR_XIR_VALUE_OK)return status;
+    peak=*bytes;
+    if(!module_charge(&peak,spec->module_count,1+2*sizeof(uint32_t)))return XR_XIR_VALUE_OVERFLOW;
+    if(peak>spec->byte_limit)return XR_XIR_VALUE_MEMORY_LIMIT;
     return XR_XIR_VALUE_OK;
 }
 
@@ -110,12 +137,15 @@ XRAY_API void xrt_module_layout_drop(XrtModuleLayout **owner) {
     xr_xir_compile_type_arena_drop(layout->array_types);
     xr_xir_compile_type_arena_drop(layout->callable_types);
     xr_xir_compile_type_arena_drop(layout->map_types);
+    xr_xir_compile_type_arena_drop(layout->set_types);
     if (layout->view.callable_types) {
         for (uint32_t t = 0; t < layout->view.callable_type_count; ++t) {
             const XrtCallableTypeSpec *type = &layout->view.callable_types[t];
             for (uint32_t p = 0; type->parameters && p < type->parameter_count; ++p)
                 xr_free((void *)type->parameters[p].name);
             xr_free((void *)layout->view.callable_types[t].parameters);
+            xr_free((void *)type->module);
+            xr_free((void *)type->name);
         }
         xr_free((void *)layout->view.callable_types);
     }
@@ -143,44 +173,50 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
         (spec->dependency_count && !layout->view.dependencies) || (spec->slot_count && !layout->view.slots) ||
         !layout->slot_counts) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
     if (spec->callable_type_count) {
-        uint64_t callable_bytes = layout->bytes;
-        if (!module_charge(&callable_bytes, spec->callable_type_count, sizeof(XrtCallableTypeSpec))) {
-            xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OVERFLOW;
-        }
         XrtCallableTypeSpec *types = xr_calloc(spec->callable_type_count, sizeof(*types));
         if (!types) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
         layout->view.callable_types = types;
         for (uint32_t t = 0; t < spec->callable_type_count; ++t) {
             XrtCallableTypeSpec from = spec->callable_types[t];
-            if ((from.parameter_count != 0) != (from.parameters != NULL) ||
-                !module_charge(&callable_bytes, from.parameter_count, sizeof(*from.parameters))) {
+            if ((from.parameter_count != 0) != (from.parameters != NULL)) {
                 xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
             }
             types[t] = from;
+            types[t].module = NULL;
+            types[t].name = NULL;
             types[t].parameters = module_copy_array(from.parameters, from.parameter_count, sizeof(*from.parameters));
             if (from.parameter_count && !types[t].parameters) {
                 xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM;
             }
             XrtCallableParameterSpec *parameters = (XrtCallableParameterSpec *)types[t].parameters;
             for (uint32_t p = 0; p < from.parameter_count; ++p) parameters[p].name = NULL;
+            if ((from.module_length != 0) != (from.module != NULL) ||
+                (from.name_length != 0) != (from.name != NULL)) {
+                xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
+            }
+            types[t].module = module_copy_array(from.module, from.module_length, 1);
+            types[t].name = module_copy_array(from.name, from.name_length, 1);
+            if ((from.module_length && !types[t].module) || (from.name_length && !types[t].name)) {
+                xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM;
+            }
             for (uint32_t p = 0; p < from.parameter_count; ++p) {
                 XrtCallableParameterSpec field = from.parameters[p];
                 if (!field.name_length) {
                     if (field.name) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT; }
                     continue;
                 }
-                if (!field.name || !module_charge(&callable_bytes, field.name_length, 1)) {
+                if (!field.name) {
                     xrt_module_layout_drop(&layout); return XR_XIR_VALUE_BAD_ARGUMENT;
                 }
                 parameters[p].name = module_copy_array(field.name, field.name_length, 1);
                 if (!parameters[p].name) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
             }
         }
-        if (callable_bytes > spec->byte_limit) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT; }
-        layout->bytes = callable_bytes;
         uint64_t arena_bytes = 0;
-        status = xrt_callable_types_new_accounted(types, spec->callable_type_count,
-            spec->byte_limit - callable_bytes, &layout->callable_types, &arena_bytes);
+        const XrtCallableImage image={.metadata=XRT_CALLABLE_IMAGE_HEADER,
+            .types=types,.type_count=spec->callable_type_count};
+        status = xrt_callable_types_new_accounted(&image,
+            spec->byte_limit - layout->bytes, &layout->callable_types, &arena_bytes);
         if (status == XR_XIR_VALUE_OK && !module_charge(&layout->bytes, arena_bytes, 1))
             status = XR_XIR_VALUE_OVERFLOW;
         if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
@@ -225,12 +261,19 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
                 status = XR_XIR_VALUE_OVERFLOW;
             if (status != XR_XIR_VALUE_OK) { xrt_module_layout_drop(&layout); return status; }
         }
+        if(layout->types[slot->type].copy==module_set_copy && !layout->set_types) {
+            uint64_t arena_bytes=0;
+            status=xrt_set_types_new(spec->byte_limit-layout->bytes,&layout->set_types,&arena_bytes);
+            if(status==XR_XIR_VALUE_OK && !module_charge(&layout->bytes,arena_bytes,1))status=XR_XIR_VALUE_OVERFLOW;
+            if(status!=XR_XIR_VALUE_OK) {xrt_module_layout_drop(&layout);return status;}
+        }
         ++layout->slot_counts[slot->module];
         if (slot->size > layout->scratch_size) layout->scratch_size = slot->size;
     }
     for (uint32_t t = 0; t < spec->type_count; ++t)
         layout->types[t].arena = layout->types[t].kind == XRT_MODULE_CALLABLE || layout->types[t].kind == XRT_MODULE_BOXED ? layout->callable_types :
-            layout->types[t].kind == XRT_MODULE_MAP_STRING_I64 ? layout->map_types : layout->array_types;
+            layout->types[t].kind == XRT_MODULE_MAP_STRING_I64 ? layout->map_types :
+            layout->types[t].kind==XRT_MODULE_SET_I64?layout->set_types:layout->array_types;
     uint64_t peak = layout->bytes;
     if (!module_charge(&peak, spec->module_count, 1 + 2 * sizeof(uint32_t)) || peak > spec->byte_limit) {
         xrt_module_layout_drop(&layout); return XR_XIR_VALUE_MEMORY_LIMIT;
@@ -242,7 +285,7 @@ XRAY_API XrtModuleStatus xrt_module_layout_new(const XrtModuleLayoutSpec *spec, 
 }
 
 XRAY_API XrtModuleStatus xrt_module_layout_view(const XrtModuleLayout *layout, XrtModuleLayoutSpec *out) {
-    if (!layout || !out) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!layout || !xrt_module_layout_spec_valid(out)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *out = layout->view;
     return XR_XIR_VALUE_OK;
 }

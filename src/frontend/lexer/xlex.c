@@ -1136,11 +1136,11 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '#':
             if (peek(scanner) == '[') {
                 advance(scanner);
-                return make_token(scanner, TK_SET_START);
+                return error_token(scanner, "Set literal syntax was removed; use Set([...])");
             }
             if (peek(scanner) == '{') {
                 advance(scanner);
-                return make_token(scanner, TK_EMPTY_MAP_START);
+                return error_token(scanner, "Map prefix syntax was removed; use {...}");
             }
             return make_token(scanner, TK_HASH);
         case '!':
@@ -1346,8 +1346,6 @@ static const char *token_names[] = {
 
     // Syntax tokens
     [TK_AT] = "@",
-    [TK_EMPTY_MAP_START] = "#{",
-    [TK_SET_START] = "#[",
 
     // Literals
     [TK_LITERAL_INT] = "LITERAL_INT",

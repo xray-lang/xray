@@ -6,7 +6,7 @@
  *
  * xxir_source_function_inventory.inc.c - Complete nested Source function inventory
  */
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, helpers, comptime; bool yielded; } SourceClosureCount;
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, helpers, comptime; bool yielded; uint32_t nested_defaults; } SourceClosureCount;
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
@@ -41,6 +41,7 @@ static bool count_closures(AstNode *node, void *pointer) {
             if (scan->defaults == scan->ctx->compile.limits.functions)
                 return source_fail(scan->ctx, node, XR_XIR_BUDGET, "default argument function budget exhausted");
             ++scan->defaults;
+            if(node->type==AST_FUNCTION_DECL&&closure)++scan->nested_defaults;
         }
     }
     ++scan->depth;
@@ -62,7 +63,7 @@ static bool count_closures(AstNode *node, void *pointer) {
 /* Code after return, throw, break or continue never runs and has no control-flow edge, so it is dropped.
  * Closures in it are rejected because their declarations are counted ahead of lowering and must each be lowered. */
 static bool source_unreachable_statement(SourceContext *ctx, AstNode *node) {
-    SourceClosureCount scan = {ctx, 0, 2, 0, 0, 0, false};
+    SourceClosureCount scan = {ctx, 0, 2, 0, 0, 0, false, 0};
     if (!count_closures(node, &scan)) return false;
     if (scan.count || scan.comptime) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closures or comptime in unreachable statements are not admitted");
     return true;

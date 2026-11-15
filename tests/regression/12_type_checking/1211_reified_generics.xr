@@ -21,7 +21,7 @@ fn test_reified_generics() {
     var arr = [1, 2, 3]
     assertEqual(typeName(arr), "Array")
 
-    var map = #{"a": 1, "b": 2}
+    var map = {"a": 1, "b": 2}
     assertEqual(typeName(map), "Map")
 
     var set = Set<i64>()
@@ -64,7 +64,7 @@ fn test_reified_generics() {
     assertEqual(str_arr[0], "hello")
     assertEqual(bool_arr[0], true)
 
-    var typed_map: Map<string, i64> = #{"x": 1}
+    var typed_map: Map<string, i64> = {"x": 1}
     assertEqual(typeName(typed_map), "Map")
     assertEqual(typed_map["x"], 1)
 

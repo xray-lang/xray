@@ -1,9 +1,9 @@
 fn makeScores() -> Map<i64, i64> {
-    return #{}
+    return {}
 }
 
 fn makeSeen() -> Set<i64> {
-    return #[]
+    return Set()
 }
 
 fn mapSetTypedLocalReceiverPlan(value: i64) -> i64 {

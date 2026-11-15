@@ -82,7 +82,10 @@ fn test_union_types() {
     assertEqual(typeName(r), "string")
 
     // Test 9: JSON type alias as union member (non-union alias allowed)
-    type User = {id: i64, name: string}
+    struct User {
+        id: i64
+        name: string
+    }
     type Response = User | bool
     var resp: Response = true
     assertEqual(typeName(resp), "bool")

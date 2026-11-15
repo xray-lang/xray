@@ -6,25 +6,50 @@
 //
 // Usage: xray gc_producer_consumer.xr -- [iterations]
 
-// Ring buffer queue using array
-fn createQueue(capacity: i64) {
-    var data = []
-    var i = 0
-    while (i < capacity) {
-        data.push(null)
-        i = i + 1
+// A queue has shared mutable identity; its elements keep their declared value type.
+final class Queue<T> {
+    data: Array<T?>
+    head: i64
+    tail: i64
+    size: i64
+    capacity: i64
+
+    init(capacity: i64) {
+        this.data = Array<T?>(capacity, null)
+        this.head = 0
+        this.tail = 0
+        this.size = 0
+        this.capacity = capacity
     }
-    return { "data": data, "head": 0, "tail": 0, "size": 0, "capacity": capacity }
 }
 
-fn enqueue(q, item) {
+struct PayloadItem {
+    id: i64
+    payload: string
+}
+
+struct ValueItem {
+    v: i64
+}
+
+final class PartnerItem {
+    id: i64
+    partner: PartnerItem?
+
+    init(id: i64, partner: PartnerItem? = null) {
+        this.id = id
+        this.partner = partner
+    }
+}
+
+fn enqueue<T>(q: Queue<T>, item: T) {
     q.data[q.tail] = item
     q.tail = (q.tail + 1) % q.capacity
     q.size = q.size + 1
 }
 
-fn dequeue(q) {
-    var item = q.data[q.head]
+fn dequeue<T>(q: Queue<T>) -> T {
+    var item = q.data[q.head]!
     q.data[q.head] = null
     q.head = (q.head + 1) % q.capacity
     q.size = q.size - 1
@@ -36,12 +61,12 @@ fn run(n: i64) {
 
     // Phase 1: Steady-state producer-consumer
     // Queue is old, items are young → write barrier on every enqueue
-    var q = createQueue(queueSize)
+    var q = Queue<PayloadItem>(queueSize)
 
     // Fill queue initially
     var i = 0
     while (i < queueSize) {
-        enqueue(q, { "id": i, "payload": "data_" + i })
+        enqueue(q, PayloadItem{id: i, payload: "data_" + i})
         i = i + 1
     }
     print("Queue initialized: size=" + q.size)
@@ -52,21 +77,21 @@ fn run(n: i64) {
     while (i < n * 1000) {
         var old = dequeue(q)
         checksum = checksum + old.id
-        enqueue(q, { "id": i, "payload": "new_" + (i % 100) })
+        enqueue(q, PayloadItem{id: i, payload: "new_" + (i % 100)})
         i = i + 1
     }
     print("Phase 1 (steady state x" + (n * 1000) + "): checksum=" + checksum)
 
     // Phase 2: Burst producer (queue grows then shrinks)
     // Creates temporary spikes of young objects referenced by old queue
-    var burstQ = createQueue(5000)
+    var burstQ = Queue<ValueItem>(5000)
     var total = 0
     var round = 0
     while (round < n) {
         // Burst: produce 100 items
         i = 0
         while (i < 100) {
-            enqueue(burstQ, { "v": round * 100 + i })
+            enqueue(burstQ, ValueItem{v: round * 100 + i})
             i = i + 1
         }
         // Consume all
@@ -80,12 +105,12 @@ fn run(n: i64) {
 
     // Phase 3: Multiple queues with cross-references
     // Items in one queue point to items from another → complex reference graph
-    var q1 = createQueue(500)
-    var q2 = createQueue(500)
+    var q1 = Queue<PartnerItem>(500)
+    var q2 = Queue<PartnerItem>(500)
     i = 0
     while (i < 500) {
-        var item1 = { "id": i, "partner": null }
-        var item2 = { "id": i + 10000, "partner": item1 }
+        var item1 = PartnerItem(i)
+        var item2 = PartnerItem(i + 10000, item1)
         item1.partner = item2
         enqueue(q1, item1)
         enqueue(q2, item2)
@@ -97,9 +122,9 @@ fn run(n: i64) {
     while (i < n * 100) {
         var old1 = dequeue(q1)
         var old2 = dequeue(q2)
-        checksum = checksum + old1.id + old2.partner.id
-        var new1 = { "id": i, "partner": null }
-        var new2 = { "id": i + 10000, "partner": new1 }
+        checksum = checksum + old1.id + old2.partner!.id
+        var new1 = PartnerItem(i)
+        var new2 = PartnerItem(i + 10000, new1)
         new1.partner = new2
         enqueue(q1, new1)
         enqueue(q2, new2)

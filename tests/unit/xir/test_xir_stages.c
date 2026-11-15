@@ -536,7 +536,7 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0, NULL}};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,2,0}};
@@ -557,7 +557,7 @@ static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirCompi
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=2, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     return xir_fixture_verify(budget, &module, NULL);
 }
@@ -851,7 +851,7 @@ static void error_filter_guards(void) {
         uint32_t dependency = 0;
         XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"root", 4, &dependency, 1, 1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
         XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
-        XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2, NULL};
+        XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=1, .entry_function=2, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
         XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
         if (mode == 1) ops[2].args[0] = 1;
         if (mode == 2) { ops[1].targets[0] = 2; ops[1].targets[1] = 1; }

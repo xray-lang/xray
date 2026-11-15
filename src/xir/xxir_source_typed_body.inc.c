@@ -1,10 +1,31 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Actual Source declarations and emissions receive owned typed handles. */
+#include "xxir_source_call_names.inc.c"
+#include "xxir_source_parameter_names.inc.c"
+static XrXirStatus source_hir_declared_call_names(void *data,const XrHirSignatureInput *signature,
+    XrHirCallDeclarationNames *output) {
+    SourceContext *ctx=data;
+    if(!signature->declaration_binding.owner)return source_hir_call_names(data,signature,output);
+    uint32_t function=0,captures=0;
+    if(signature->family!=XR_HIR_CALL_INDIRECT||
+        !xr_hir_body_binding_function_info(ctx->typed_body,signature->declaration_binding,&function,&captures))
+        return XR_XIR_BAD_STRUCTURE;
+    XrHirSignatureInput physical=*signature;physical.family=XR_HIR_CALL_FUNCTION;
+    physical.function=function;physical.count=ctx->functions[function].parameter_count;
+    physical.parameter_offset=captures;physical.declaration_binding=(XrHirBodyBinding){0};
+    if(physical.count<captures||physical.count-captures!=signature->count)return XR_XIR_BAD_STRUCTURE;
+    XrHirCallDeclarationNames names={0};
+    XrXirStatus status=source_hir_call_names(data,&physical,&names);
+    if(status!=XR_XIR_OK)return status;
+    *output=(XrHirCallDeclarationNames){names.parameters?names.parameters+captures:NULL,names.count-captures};
+    return XR_XIR_OK;
+}
 static bool source_hir_body_begin(SourceContext *ctx) {
     XrXirStatus status=xr_hir_body_new(ctx->compile.resources,&ctx->types,&ctx->typed_body);
     if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"typed body allocation failed");
     XrHirBodyDeclarations declarations={&ctx->functions,&ctx->identities,&ctx->function_count,
-        &ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count};
+        &ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count,
+        source_hir_declared_call_names,ctx,&ctx->items};
     status=xr_hir_body_declarations(ctx->typed_body,&declarations);
     if(status!=XR_XIR_OK){xr_hir_body_end(ctx->typed_body);return source_fail(ctx,NULL,status,"typed declaration owner is missing");}
     status=xr_hir_body_nominal_modules(ctx->typed_body,&ctx->modules,&ctx->generics);
@@ -192,3 +213,39 @@ static bool source_hir_value_declared(SourceContext *ctx,AstNode *node,SourceNam
     return source_hir_binding_emitted(ctx,&action,&value,ctx->bodies[ctx->function].count);
 }
 #include "xxir_source_default_projection.inc.c"
+
+static bool source_hir_declared_function(SourceContext *ctx,AstNode *node,SourceName *symbol,SourceValue value) {
+    if(!node||node->type!=AST_FUNCTION_DECL)return true;
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    uint32_t parameters=ctx->functions[ctx->function].parameter_count;
+    if(value.id<parameters||value.id-parameters>=body->count||!body->typed_projections)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nested declaration has no actual closure producer");
+    XrXirInstruction recipe=body->recipes[value.id-parameters].instruction;
+    if(recipe.op!=XR_XIR_FUNCTION_REF||recipe.immediate<0||(uint64_t)recipe.immediate>=ctx->function_count)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nested declaration has no actual function reference");
+    XrXirStatus status=xr_hir_body_binding_function(ctx->typed_body,symbol->typed_binding,
+        body->typed_projections->use,(uint32_t)recipe.immediate,ctx->request);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"nested function declaration binding receive failed");
+    const SourceFunction *target_body=&ctx->bodies[(uint32_t)recipe.immediate];
+    uint32_t owner=target_body->call_declaration?target_body->call_declaration:target_body->declaration;
+    if(symbol->declaration&&symbol->declaration<=ctx->query.declaration_count&&
+        ctx->query.declarations[symbol->declaration-1].kind==XR_XIR_SOURCE_BINDING) {
+        if(!owner||owner>ctx->query.declaration_count||ctx->query.declarations[owner-1].kind!=XR_XIR_SOURCE_FUNCTION)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nested declaration display target has no function owner");
+        ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].target=owner;
+    }
+    body->typed_projections->instruction=true;body->typed_projections->recipe=value.id;
+    return true;
+}
+
+static bool source_hir_function_reference(SourceContext *ctx,AstNode *node,uint32_t target,SourceValue value) {
+    XrHirFunctionReferenceInput input={.types=&ctx->types,.origin=source_hir_origin(ctx,node,0),
+        .callable=value.type,.function=target,.value=value.id};
+    if(!source_hir_current_scope(ctx,&input.scope))return false;
+    XrHirBodyUse use={0};
+    XrXirStatus status=xr_hir_body_function_reference(ctx->typed_body,&input,ctx->request,&use);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"closure reference has no owned environment proof");
+    uint32_t count=ctx->bodies[ctx->function].count;
+    if(!count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"closure reference has no actual producer");
+    return source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},&value,count-1);
+}

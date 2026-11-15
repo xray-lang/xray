@@ -356,6 +356,8 @@ static XrXirStatus escape_record_uses(HirEscape *owner, uint32_t f, uint32_t i, 
     }
     case XR_XIR_GENERATOR_YIELD:
         return escape_use(owner, f, i, op->args[0], UINT32_MAX, "a task or generator");
+    case XR_XIR_JSON_VALUE_INJECT: return escape_use(owner, f, i, op->args[0], UINT32_MAX, "JSON value storage");
+    case XR_XIR_DATA_UNION_INJECT: return escape_use(owner, f, i, op->args[0], UINT32_MAX, "data-union storage");
     case XR_XIR_NULLABLE_SOME: return escape_use(owner, f, i, op->args[0], UINT32_MAX, "nullable storage");
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: {
         if (!owner->module->declarations) return XR_XIR_BAD_STRUCTURE;
@@ -386,7 +388,7 @@ static XrXirStatus escape_record_uses(HirEscape *owner, uint32_t f, uint32_t i, 
         op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_REQUIREMENT ||
         op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER ||
         op->op == XR_XIR_GO || op->op == XR_XIR_SCOPED_GO || op->op == XR_XIR_GENERATOR_NEW;
-    bool store = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_NEW ||
+    bool store = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_MAP_LITERAL ||
         op->op == XR_XIR_MAP_SET || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_STRUCT_NEW ||
         op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_ENUM_NEW ||
         op->op == XR_XIR_SLOT_GROUP_INIT;

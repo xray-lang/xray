@@ -3,18 +3,40 @@
 // VM/AOT: shorthand + rename bindings, retained nested values, function-return
 // sources, non-consumption of the source, and destructure into existing bindings.
 
-type Point = { x: i64, y: i64 }
-
-fn makePoint(a: i64, b: i64) -> Point {
-    return { x: a, y: b }
+struct User {
+    name: string
+    age: i64
+    tags: Array<string>
 }
 
-var { x, y } = makePoint(3, 4)
+struct InnerValue {
+    k: i64
+}
+
+struct OuterValue {
+    id: i64
+    inner: InnerValue
+}
+
+struct Point {
+    x: i64
+    y: i64
+}
+
+fn makePoint(a: i64, b: i64) -> Point {
+    return Point{ x: a, y: b }
+}
+
+var point = makePoint(3, 4)
+var x = point.x
+var y = point.y
 print(x)   // 3
 print(y)   // 4
 
-var user = { name: "Ada", age: 37, tags: ["a", "b"] }
-var { name: who, age, tags } = user
+var user = User{ name: "Ada", age: 37, tags: ["a", "b"] }
+var who = user.name
+var age = user.age
+var tags = user.tags
 print(who)     // Ada
 print(age)     // 37
 print(tags[0]) // a
@@ -27,12 +49,15 @@ print(user.age)  // 37
 // Destructure into existing bindings.
 var px = 0
 var py = 0
-{ x: px, y: py } = makePoint(10, 20)
+var reassigned = makePoint(10, 20)
+px = reassigned.x
+py = reassigned.y
 print(px)  // 10
 print(py)  // 20
 
 // Nested Object value is kept as-is, then its field is accessed.
-var outer = { id: 1, inner: { k: 99 } }
-var { id, inner } = outer
+var outer = OuterValue{ id: 1, inner: InnerValue{ k: 99 } }
+var id = outer.id
+var inner = outer.inner
 print(id)      // 1
 print(inner.k) // 99

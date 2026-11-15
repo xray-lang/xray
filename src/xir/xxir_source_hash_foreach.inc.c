@@ -16,14 +16,11 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, receiver_type);
     bool map = type->kind == XR_XIR_TYPE_MAP;
     XrXirType key = type->element, element = type->result;
-    SourceArrayCallbackShape shape = {{key, element}, map ? 2u : 1u, map ? 2u : 1u,
-        {true, XR_XIR_UNIT, false, false}, XR_XIR_UNIT};
     const XrNativeTypeDeclaration *native=source_hash_native(ctx,receiver_type);
     const XrNativeMemberDeclaration *member=native ? source_native_member(ctx,native,access->name) : NULL;
-    if (!member || member->operation!=XR_NATIVE_OPERATION_HASH_FOR_EACH ||
-        !source_native_callback_error(ctx,node,native,member,&shape.error_type)) return false;
-    SourceArrayCallback callback = {0};
-    if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback)) return false;
+    if (!member || member->operation!=XR_NATIVE_OPERATION_HASH_FOR_EACH)return false;
+    SourceArrayCallback callback={0};SourceValue initial={0};
+    if(!source_collection_callback_arguments(ctx,node,SOURCE_ARRAY_FOR_EACH,container,&callback,&initial))return false;
     SourceValue length = {0}, zero = {0};
     if (!source_recipe_record(ctx, (XrXirInstruction){XR_XIR_HASH_LEN, XR_XIR_I64, {container.id}, {0}, 0, {0}}, &length) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;

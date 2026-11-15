@@ -44,6 +44,12 @@ typedef struct XrXirSourceCall {
     /* Exact checked body for generic scope, including unnamed helpers.
      * This identity never grants a lexical caller or executable authority. */
     uint32_t body;
+    /* Original written arguments mapped by the accepted HIR call plan to this
+     * display signature's physical formal ordinals. A non-unique spread is
+     * UINT32_MAX. Unknown mappings stay absent rather than guessed by editors. */
+    const uint32_t *argument_formals;
+    uint32_t argument_count;
+    bool argument_binding_known;
 } XrXirSourceCall;
 typedef struct XrXirSourceFunctionRange {
     XrXirSourceRange range;

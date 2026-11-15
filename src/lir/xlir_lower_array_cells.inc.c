@@ -11,7 +11,7 @@
  *   remains at the original constructor and retires only on the selected path.
  */
 static bool lower_physical_cell(XrLirType type) {
-    return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL;
+    return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
 static bool lower_array_cells_inventory(LowerFunction *f) {
     Lower *c = f->owner;
@@ -41,7 +41,7 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
     XR_DCHECK(count == cells->count, "physical Cell inventory keeps one owner per constructor");
     for (uint32_t v = 0; v < function->value_count; ++v) {
         const XrLirInstructionView *op = xr_lir_internal_value_definition(function, v + 1);
-        if (op && (op->op == XR_LIR_ARRAY_BORROW || op->op == XR_LIR_MAP_BORROW))
+        if (op && (op->op == XR_LIR_ARRAY_BORROW || op->op == XR_LIR_MAP_BORROW || op->op == XR_LIR_SET_BORROW))
             cells->indices[v] = cells->indices[op->operands[0] - 1];
     }
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
@@ -108,7 +108,7 @@ static bool lower_array_cells_release(LowerFunction *f, uint32_t from,
         uint32_t owner = n - 1;
         if (!lower_array_cell_drop_edge(f, from, source, edge, owner)) continue;
         XrLirInstruction drop = {.op = lower_value_type(f, f->array_cells.owners[owner]) == XR_LIR_MAP_STRING_I64_CELL ?
-            XR_LIR_MAP_CELL_DROP : XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
+            XR_LIR_MAP_CELL_DROP : lower_value_type(f,f->array_cells.owners[owner])==XR_LIR_SET_I64_CELL?XR_LIR_SET_CELL_DROP:XR_LIR_ARRAY_CELL_DROP, .type = XR_LIR_UNIT,
             .operands = &f->array_cells.owners[owner], .operand_count = 1, .source = term->source};
         if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, block, &drop))) return false;
     }

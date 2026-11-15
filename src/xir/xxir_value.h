@@ -25,6 +25,8 @@
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING,
     XR_XIR_I8 = 5, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
     XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE, XR_XIR_NEVER, XR_XIR_BUFFER_STORAGE,
+    /* Folded seven-arm JSON type only; no physical Value carrier is admitted. */
+    XR_XIR_JSON_VALUE,
     /* Constructed and binder IDs inhabit the same published representation.
      * This bound makes their C++ enum loads defined; pool checks admit types. */
     XR_XIR_TYPE_ID_LAST = XR_XIR_TYPE_PARAMETER_LIMIT - 1 } XrXirType;
@@ -86,7 +88,8 @@ typedef enum XrXirValueStatus {
     XR_XIR_VALUE_OK, XR_XIR_VALUE_BAD_ARGUMENT, XR_XIR_VALUE_BAD_UTF8,
     XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT,
     XR_XIR_VALUE_BOUNDS, XR_XIR_VALUE_UNSUPPORTED,
-    XR_XIR_VALUE_MEMORY_LIMIT, XR_XIR_VALUE_OVERFLOW, XR_XIR_VALUE_IO
+    XR_XIR_VALUE_MEMORY_LIMIT, XR_XIR_VALUE_OVERFLOW, XR_XIR_VALUE_IO,
+    XR_XIR_VALUE_DUPLICATE_KEY
 } XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
 typedef struct XrXirTypeArena XrXirTypeArena;

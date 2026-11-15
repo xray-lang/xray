@@ -26,12 +26,13 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
     XrLirType *mapping = lir_allocate(target, count, sizeof(*mapping));
     XrLirCallableParameter *parameters = NULL;
     XrLirRecordField *fields = NULL;
+    XrLirRecordArgument *arguments = NULL;
     XrLirStatus status = target->failure;
     if (!needed || !mapping) goto done;
     memset(needed, 0, count * sizeof(*needed));
     memset(mapping, 0, count * sizeof(*mapping));
     needed[count - 1] = 1;
-    uint32_t largest = 0, largest_record = 0;
+    uint32_t largest = 0, largest_record = 0, largest_arguments = 0;
     for (uint32_t n = count; n-- > 0;) {
         if (!needed[n]) continue;
         const XrLirTypeData *data = &source->types[n];
@@ -39,6 +40,9 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         if (data->shape.kind == XR_LIR_TYPE_RECORD) {
             if (data->shape.count > largest_record) largest_record = data->shape.count;
             for (uint32_t f = 0; f < data->shape.count; ++f) lir_import_dependency(needed, data->fields[f].type);
+            if (data->record.argument_count > largest_arguments) largest_arguments = data->record.argument_count;
+            for (uint32_t a = 0; a < data->record.argument_count; ++a)
+                lir_import_dependency(needed, data->record.arguments[a].type);
         }
         if (data->shape.kind != XR_LIR_TYPE_CALLABLE) continue;
         if (data->callable.parameter_count > largest) largest = data->callable.parameter_count;
@@ -49,12 +53,15 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
     if (largest && !parameters) { status = target->failure; goto done; }
     fields = largest_record ? lir_allocate(target, largest_record, sizeof(*fields)) : NULL;
     if (largest_record && !fields) { status = target->failure; goto done; }
+    arguments = largest_arguments ? lir_allocate(target, largest_arguments, sizeof(*arguments)) : NULL;
+    if (largest_arguments && !arguments) { status = target->failure; goto done; }
     for (uint32_t n = 0; n < count && status == XR_LIR_OK; ++n) {
         if (!needed[n]) continue;
         const XrLirTypeData *data = &source->types[n];
         XrLirTypeView shape = data->shape;
         shape.element = lir_imported_dependency(mapping, shape.element);
         XrLirCallableType callable = data->callable;
+        XrLirRecordIdentity record = data->record;
         if (shape.kind == XR_LIR_TYPE_CALLABLE) {
             callable.result = shape.element;
             callable.parameters = callable.parameter_count ? parameters : NULL;
@@ -63,19 +70,27 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
                 parameters[p].type = lir_imported_dependency(mapping, parameters[p].type);
             }
         }
-        if (shape.kind == XR_LIR_TYPE_RECORD)
+        if (shape.kind == XR_LIR_TYPE_RECORD) {
             for (uint32_t f = 0; f < shape.count; ++f) {
                 fields[f] = data->fields[f];
                 fields[f].type = lir_imported_dependency(mapping, fields[f].type);
             }
+            record.arguments = record.argument_count ? arguments : NULL;
+            for (uint32_t a = 0; a < record.argument_count; ++a) {
+                arguments[a] = data->record.arguments[a];
+                arguments[a].type = lir_imported_dependency(mapping, arguments[a].type);
+            }
+        }
         status = lir_intern_type(target, shape,
             shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, data->cell_element,
-            shape.kind == XR_LIR_TYPE_RECORD && shape.count ? fields : NULL, &mapping[n]);
+            shape.kind == XR_LIR_TYPE_RECORD && shape.count ? fields : NULL,
+            shape.kind == XR_LIR_TYPE_RECORD ? &record : NULL, &mapping[n]);
     }
     if (status == XR_LIR_OK) *output = mapping[count - 1];
 done:
     xr_free(parameters);
     xr_free(fields);
+    xr_free(arguments);
     xr_free(mapping);
     xr_free(needed);
     return status;

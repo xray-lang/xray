@@ -22,7 +22,6 @@ typedef enum XrJsonValueKind {
     XR_JSON_VALUE_FLOAT = 4,
     XR_JSON_VALUE_STRING = 5,
     XR_JSON_VALUE_JSON = 6,
-    XR_JSON_VALUE_STRUCT_OBJECT = 7,
     XR_JSON_VALUE_ARRAY = 8,
     XR_JSON_VALUE_MAP = 9,
     XR_JSON_VALUE_ENUM = 10,
@@ -42,7 +41,7 @@ static inline bool xr_json_value_kind_is_nullable(uint8_t encoded) {
     return (encoded & XR_JSON_VALUE_NULLABLE) != 0;
 }
 
-/* VM/bytecode recursive construction contract. Object/class/enum nodes use
+/* VM/bytecode recursive construction contract. Nominal class/enum nodes use
  * target_descriptor; Array/Map nodes use child plus storage_type. */
 typedef struct XrJsonDecodeSchema {
     uint8_t value_kind;

@@ -558,7 +558,7 @@ static void module_state_cache_failure(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
     XrtModuleSpec owner = {0, 0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
         .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *storage = NULL;

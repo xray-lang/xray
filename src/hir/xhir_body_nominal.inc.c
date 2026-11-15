@@ -79,6 +79,7 @@ static void body_nominal_free(XrHirBody *body) {
     }
     for(uint32_t i=0;i<body->nominal_plans.count;++i) {
         HirBodyNominalPlan *row=&((HirBodyNominalPlan *)body->nominal_plans.items)[i];xr_compile_resources_free(row->values);xr_compile_resources_free(row->present);
+        xr_compile_resources_free(row->suppliers);
     }
     for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].nominal_values);
     xr_compile_resources_free(body->nominal_declarations.items);xr_compile_resources_free(body->nominals.items);
@@ -269,7 +270,7 @@ static bool body_nominal_type_defaultable(const XrHirBody *body,XrXirType type,c
     if(!node||node->kind!=XR_XIR_TYPE_NOMINAL||node->nominal.declaration>=body->nominal_declarations.count)return false;
     HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[node->nominal.declaration];
     const unsigned char *facts=available?available:body->nominal_available;
-    return !(row.flags&XR_XIR_NOMINAL_RECORD)&&row.kind!=XR_XIR_NOMINAL_CLASS&&(facts?facts[node->nominal.declaration]!=0:row.available);
+    return row.kind!=XR_XIR_NOMINAL_CLASS&&(facts?facts[node->nominal.declaration]!=0:row.available);
 }
 XR_FUNC bool xr_hir_body_nominal_defaultable(const XrHirBody *body,XrXirType type) {
     return body&&!body->ended&&body_nominal_type_defaultable(body,type,NULL);
@@ -299,7 +300,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
             if (status != XR_XIR_OK)
                 break;
             HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[d];
-            if((row.flags&XR_XIR_NOMINAL_RECORD)||row.imported||row.explicit_initializer||available[d]||
+            if(row.imported||row.explicit_initializer||available[d]||
                 body->types->nominals->declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
                 (row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
             bool ready=true;
@@ -327,7 +328,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
 XR_FUNC bool xr_hir_body_nominal_defaults(const XrHirBody *body,uint32_t declaration,XrHirNominalDefaults *out) {
     if(!body||body->ended||body->nominal_shape_only||!out||declaration>=body->nominal_declarations.count)return false;
     HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[declaration];
-    bool available=!(row.flags&XR_XIR_NOMINAL_RECORD)&&(body->nominal_available?body->nominal_available[declaration]!=0:row.available);
+    bool available=(body->nominal_available?body->nominal_available[declaration]!=0:row.available);
     *out=(XrHirNominalDefaults){row.constructor,available?row.constructor:0,row.count,row.field_functions,available,row.imported};return true;
 }
 static XrXirStatus body_nominal_function(const XrHirBody *body,uint32_t declaration,uint32_t function,
@@ -560,6 +561,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_get(XrHirBody *body,const XrHirNominalUs
     status=xr_hir_body_check(body,body->types,&typed,control,&use,reason);if(status!=XR_XIR_OK)return status;
     HirBodyUse *row=&body->uses[use.index];row->nominal=input->shape;row->nominal_variant=input->variant;row->nominal_field=input->field;
     row->required_instruction=true;row->has_operand=true;row->source_operand=input->receiver;
+    row->nominal_get=true;
     row->action.operation=info.kind==XR_XIR_NOMINAL_ENUM?XR_XIR_ENUM_GET:info.kind==XR_XIR_NOMINAL_CLASS?XR_XIR_CLASS_GET:XR_XIR_STRUCT_GET;
     *out=(XrHirNominalAction){.use=use,.shape=input->shape,.operation=row->action.operation,.type=field.type,.field=input->field,.variant=input->variant};return XR_XIR_OK;
 }
@@ -673,6 +675,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_find(const XrHirBody *body,XrHirNominalS
     }
     return body_nominal_failure(reason,XR_XIR_BAD_TYPE,"unknown struct field");
 }
+#include "xhir_body_nominal_composition.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_nominal_select(XrHirBody *body,XrHirNominalPlan plan,XrXirLiteral name,
     XrCompileRequestControl *control,uint32_t *out,const char **reason) {
     if(!body||body->ended||plan.owner!=body||plan.index>=body->nominal_plans.count||!out||!name.bytes)return XR_XIR_BAD_STRUCTURE;
@@ -685,6 +688,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_select(XrHirBody *body,XrHirNominalPlan 
             return status;
         if (!same)
             continue;
+        if(row.composed && row.suppliers[f].kind==XR_HIR_NOMINAL_DEFAULT)return XR_XIR_BAD_STRUCTURE;
         if(row.input.kind==XR_HIR_NOMINAL_STRUCT_LITERAL&&
             ((HirBodyScope *)body->scopes.items)[row.input.scope.index].nominal_owner!=info.declaration+1&&
             (info.fields[row.begin+f].flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED)))
@@ -699,6 +703,13 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_supply(XrHirBody *body,XrHirNominalPlan 
     if(!body||body->ended||plan.owner!=body||plan.index>=body->nominal_plans.count)return XR_XIR_BAD_STRUCTURE;
     HirBodyNominalPlan row=((HirBodyNominalPlan *)body->nominal_plans.items)[plan.index];
     if(!row.applied||row.complete||field>=row.count||(row.selected!=field&&row.selected!=UINT32_MAX)||row.present[field]==2)return XR_XIR_BAD_STRUCTURE;
+    if(row.composed) {
+        XrHirNominalSupplier supplier=row.suppliers[field];
+        if(supplier.kind==XR_HIR_NOMINAL_EXPLICIT_VALUE &&
+            (value.type!=supplier.type || value.value!=supplier.value))return XR_XIR_BAD_STRUCTURE;
+        if(supplier.kind==XR_HIR_NOMINAL_SPREAD_VALUE &&
+            !body_nominal_spread_producer(body,&row,&supplier,&value))return XR_XIR_BAD_STRUCTURE;
+    }
     if(!row.present[field]) {
         if(value.producer.owner!=body||value.producer.index>=body->count)return XR_XIR_BAD_STRUCTURE;
         HirBodyUse producer=body->uses[value.producer.index];XrHirNominalInfo expected={0},actual={0};

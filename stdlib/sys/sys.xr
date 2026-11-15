@@ -360,8 +360,8 @@ export class ThreadLocal<T, E: Error> {
 
     init(init: escaping nosuspend fn() throws(E) -> T) {
         this._lock = OsMutex()
-        this._values = #{}
-        this._initializing = #{}
+        this._values = {}
+        this._initializing = {}
         this._init = init
     }
 

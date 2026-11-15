@@ -19,7 +19,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 条件 | truthy / falsy | 条件必须是 `bool`；nullable 存在性须显式比较 `value != null`，i64/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 i64↔f64 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
+| 对象 | 动态字段 | `{key: value}` 为 Map；固定字段使用名义 struct，动态 JSON 使用 `JSON.Object` |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 
@@ -87,7 +87,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Conditions | truthy / falsy | conditions must be `bool`; nullable presence requires `value != null`; i64/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
+| Objects | dynamic fields | `{key: value}` is a Map; fixed fields use nominal structs and dynamic JSON uses `JSON.Object` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 

@@ -8,7 +8,7 @@ import { HttpMethod } from http
 print("Testing HTTPS...")
 
 try {
-    var resp = http.request({url: "https://httpbin.org/get", method: HttpMethod.get()})
+    var resp = http.request(url: "https://httpbin.org/get", method: HttpMethod.get())
     print("Success! Status: " + resp.status.toString())
     print("Body length: " + len(resp.body).toString())
 } catch (e) {

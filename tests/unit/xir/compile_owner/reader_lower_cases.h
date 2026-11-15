@@ -198,7 +198,7 @@ static XrXirStatus reader_lower_library(const XrXirCompileContext *context, XrXi
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&block,1,&init,1,NULL,0},function};
     const XrXirSourceModule source = {"reader/library",14,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[] = {{0},{.exported=1}};
-    const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    const XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=UINT32_MAX, .entry_function=UINT32_MAX, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule library = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     return xir_fixture_check(context, &library, output, NULL);
 }
@@ -383,7 +383,7 @@ static XrXirStatus reader_lower_take_unsupported(const XrXirCompileContext *cont
         {"worker",6,&parameter,1,XR_XIR_I64,&worker_block,1,worker,2,NULL,0}};
     const XrXirSourceModule source={"owner",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[]={{0},{.exported=1},{0}};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule built={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context,&built,output,NULL);
 }

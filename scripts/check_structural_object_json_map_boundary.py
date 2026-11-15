@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the exact structural-object and Map-backed JSON boundary."""
+"""Reject retired object identities while preserving nominal names and Map JSON."""
 
 from __future__ import annotations
 
@@ -55,6 +55,13 @@ class Rule:
 
 RULES = (
     Rule(
+        "DELETED_STRUCTURAL_OBJECT_IDENTITY",
+        re.compile(r"\b[A-Za-z_][A-Za-z_0-9]*STRUCT_OBJ[A-Za-z_0-9]*\b|"
+                   r"\b(?:AST_OBJECT_LITERAL|AST_OBJECT_PATTERN|AST_SET_LITERAL|"
+                   r"TK_HASH_LBRACE|TK_HASH_LBRACKET|XR_XIR_TYPE_RECORD)\b"),
+        ("src", "include", "xisa"),
+    ),
+    Rule(
         "PUBLIC_LEGACY_JSON_TYPE",
         re.compile(r"(?<![A-Za-z0-9_.])Json(?![A-Za-z0-9_])|@derive\(Json\)"),
         ("spec", "stdlib", "src/app", "demos"),
@@ -66,7 +73,7 @@ RULES = (
     ),
     Rule(
         "PUBLIC_RECORD_SURFACE",
-        re.compile(r"\bRecord\b|\bType\.record\b|\bTYPE_NAME_RECORD\b"),
+        re.compile(r"\bType\.record\b|\bTYPE_NAME_RECORD\b"),
         ("spec", "stdlib", "src/app", "src/frontend/analyzer", "demos", "tools"),
     ),
     Rule(

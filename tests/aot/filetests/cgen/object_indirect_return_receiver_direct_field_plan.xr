@@ -1,7 +1,10 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn makeObjectIndirectReturnPlan() -> User {
-    var user: User = { name: "ada", age: 7 }
+    var user: User = User{ name: "ada", age: 7 }
     return user
 }
 

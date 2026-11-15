@@ -6,6 +6,7 @@
  *
  * xxir_hash_value.inc.c - Budgeted typed Map and Set construction and lookup
  */
+#include "xxir_hash_literal.inc.c"
 static XrXirValueStatus hash_new(XrXirType type, const XrXirValue *keys,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!unit_value(output) || (count && !keys)) return XR_XIR_VALUE_BAD_ARGUMENT;

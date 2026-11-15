@@ -14,15 +14,15 @@
 typedef struct XrtCallableCode XrtCallableCode;
 enum { XRT_CALLABLE_PREFIX_COUNT = 5 };
 XR_FUNC const XrXirTypeArena *xrt_callable_map_catalog(const XrXirTypeArena *);
-XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *, const XrtCallableTypeSpec *, uint32_t count);
+XR_FUNC bool xrt_callable_specs_equal(const XrtCallableImage *, const XrtCallableImage *);
 
 XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec, uint32_t count, XrXirType *);
 /* One physical pool is projected into an independently owned canonical arena.
  * Throwing signatures remain unsupported until the complete error ABI exists.
  * The limit covers the temporary receiving workspace and retained type arena. */
-XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *, uint32_t count,
+XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableImage *,
     uint64_t limit, XrXirTypeArena **empty);
-XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *, uint32_t count,
+XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableImage *,
     uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes);
 
 typedef struct XrtCallableEntry {

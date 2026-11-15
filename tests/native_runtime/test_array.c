@@ -50,7 +50,7 @@ static void state_new(ArrayContext *context) {
     XrtModuleTypeSpec type = {context->string ? XRT_MODULE_ARRAY_STRING : XRT_MODULE_ARRAY_I64, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=context->immutable ? 0 : XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
     OK(xrt_module_layout_new(&spec, &layout));
@@ -298,7 +298,7 @@ static void state_allocation_sweep(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_STRING, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
     native_array_calls = 0;
@@ -375,10 +375,14 @@ static void allocation_sweep(XrtLocationOwner *owner, bool string) {
 #include "native_array_signed_rc_cases.h"
 
 #include "native_map_cases.h"
+#include "native_map_literal_cases.h"
+#include "native_set_cases.h"
 
 int main(void) {
     XrtLocationOwner *owner = locations();
     native_map_cases(owner);
+    native_map_literal_cases(owner);
+    native_set_cases(owner);
     native_view_cases(owner);
     native_signed_rc_cases(owner);
     array_reference_cases();

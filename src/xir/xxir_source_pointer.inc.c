@@ -50,8 +50,8 @@ static bool source_pointer_call(SourceContext *ctx,AstNode *node,SourceValue rec
     if (call->type_arg_count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"pointer member has no type parameters");
     if (source_text_same(ctx,node,name,"offset")) {
         XrXirType parameter=XR_XIR_I64;SourceValue argument={0};uint32_t count=0;
-        return source_native_read_arguments(ctx,node,&parameter,1,1,&argument,&count,
-            "pointer offset requires one exact i64") && source_recipe_record(ctx,
+        return source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=1,.maximum=1,
+        .values=&argument,.supplied=&count,.diagnostic="pointer offset requires one exact i64",.native_owner=0}) && source_recipe_record(ctx,
             (XrXirInstruction){.op=XR_XIR_PTR_OFFSET,.type=receiver.type,.args={receiver.id,argument.id}},value);
     }
     if (source_text_same(ctx,node,name,"deref")) {
@@ -66,8 +66,8 @@ static bool source_pointer_call(SourceContext *ctx,AstNode *node,SourceValue rec
         XrXirType read=XR_XIR_UNIT;
         if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_PTR,.element=XR_XIR_U8},&read)) return false;
         XrXirType parameters[]={read,XR_XIR_I64};SourceValue args[3]={receiver,{0},{0}};uint32_t count=0;
-        return source_native_read_arguments(ctx,node,parameters,2,2,args+1,&count,
-            "pointer copy requires a readonly byte pointer and exact i64 count") &&
+        return source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=2,.maximum=2,
+        .values=args+1,.supplied=&count,.diagnostic="pointer copy requires a readonly byte pointer and exact i64 count",.native_owner=0}) &&
             source_recipe_group(ctx,(XrXirInstruction){.op=XR_XIR_PTR_COPY},args,3,value);
     }
     return source_fail(ctx,node,XR_XIR_BAD_TYPE,"pointer member is not executable");

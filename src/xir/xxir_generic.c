@@ -25,13 +25,13 @@
 bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type) {
     if (!module || function >= module->function_count) return false;
     if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE) return true;
+        type == XR_XIR_JSON_VALUE || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE) return true;
     uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
     const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
     if (node) return (node->kind == XR_XIR_TYPE_FIXED_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
         node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
         node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
-        node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+        node->kind == XR_XIR_TYPE_DATA_UNION || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
         node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_SLICE ||
         (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR)) && node->parameter_span <= count;
     return (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type < XR_XIR_TYPE_PARAMETER_LIMIT &&

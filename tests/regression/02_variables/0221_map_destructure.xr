@@ -4,7 +4,7 @@
 
 @test
 fn test_map_destructure() {
-    var data = #{"name": "Alice", "age": 30, "city": "Beijing"}
+    var data: JSON.Object = {"name": "Alice", "age": 30, "city": "Beijing"}
     var n = data["name"]
     var a = data["age"]
     assert(n is string)
@@ -16,7 +16,7 @@ fn test_map_destructure() {
     assert(c is string)
     assertEqual(c as string, "Beijing")
 
-    var person = #{"first": "John", "last": "Doe", "id": 123}
+    var person: JSON.Object = {"first": "John", "last": "Doe", "id": 123}
     var firstName = person["first"]
     var lastName = person["last"]
     var userId = person["id"]

@@ -1,19 +1,26 @@
 // generic_type_alias.xr
 // VM/AOT differential coverage for generic type aliases.
 
-type Pair<T> = { first: T, second: T }
+struct PairValue<T> {
+    first: T
+    second: T
+}
+type Pair<T> = PairValue<T>
+type Box<T> = BoxValue<T>
 type Mapper<T, U> = fn(T) -> U
 type Vec<T> = Array<T>
 type Forward<T> = Box<T>
-type Box<T> = { value: T }
+struct BoxValue<T> {
+    value: T
+}
 
 fn apply(f: Mapper<i64, string>, value: i64) -> string {
     return f(value)
 }
 
-var p: Pair<i64> = { first: 11, second: 31 }
+var p: Pair<i64> = PairValue<i64>{ first: 11, second: 31 }
 var words: Vec<string> = ["x", "ray"]
-var box: Forward<f64> = { value: 3.5 }
+var box: Forward<f64> = BoxValue<f64>{ value: 3.5 }
 
 print(p.first + p.second)
 print(words[0] + words[1])

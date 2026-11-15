@@ -45,7 +45,28 @@ typedef struct XrLirRecordField {
     const char *name;
     uint32_t name_length;
     XrLirType type;
+    uint32_t flags;
 } XrLirRecordField;
+
+enum {
+    XR_LIR_RECORD_PRIVATE = 1u,
+    XR_LIR_RECORD_PROTECTED = 2u,
+    XR_LIR_RECORD_MUTABLE = 4u,
+    XR_LIR_RECORD_MODULE_LITERAL = 2u
+};
+
+typedef struct XrLirRecordArgument {
+    XrLirType type, array_element;
+} XrLirRecordArgument;
+
+/* Actual nominal arguments remain distinct even when they do not occupy a
+ * field. Byte spans and argument arrays are copied into the receiving module. */
+typedef struct XrLirRecordIdentity {
+    const char *module, *name;
+    uint32_t module_length, name_length;
+    const XrLirRecordArgument *arguments;
+    uint32_t argument_count, exported, flags;
+} XrLirRecordIdentity;
 
 /* Finished-module inventory. An unreadable module returns zero. Constructed
  * ordinals start at XR_LIR_TYPE_COUNT and follow their owned interning order. */
@@ -64,13 +85,16 @@ XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLir
 /* This physical Tuple family contains count I64 fields in logical order.
  * Other Tuple payload families require their own admitted exact layout. */
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *, uint32_t count, XrLirType *output);
-/* Structural fields are in canonical key order. The receiving module owns
- * every field name and exact dependency; no frontend metadata is borrowed.
+/* Fields retain declaration order. A real nominal identity is mandatory.
+ * The receiving module owns every name and exact dependency; no frontend metadata is borrowed.
  * String, I64, Bool, F64 and earlier boxed fields have complete transports. */
-XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordField *,
+XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordIdentity *, const XrLirRecordField *,
     uint32_t count, XrLirType *output);
 XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *, XrLirType,
     const XrLirRecordField **, uint32_t *count);
+/* The copied descriptor borrows only separately owned module storage, so
+ * growing the type vector does not invalidate its byte spans or arguments. */
+XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *, XrLirType, XrLirRecordIdentity *);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
 /* POD queries accept a live, unfailed construction or a finished module.
  * They preserve output on failure. Capabilities retain their dedicated ABI

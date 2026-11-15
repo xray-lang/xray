@@ -595,7 +595,7 @@ TEST(template_string_roundtrip) {
     setup();
     /* Modern syntax uses double quotes with ${} interpolation. */
     const char *src = "var name = \"world\"\n"
-                      "var m = #{\"k\": \"value\"}\n"
+                      "var m = {\"k\": \"value\"}\n"
                       "var s = \"hello ${name} ${\"literal\"} ${m[\"k\"]}\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
@@ -653,13 +653,13 @@ TEST(arrow_return_type_emitted) {
 
 TEST(arrow_literal_body_stays_parenthesized) {
     setup();
-    const char *source = "const object = (x: i64) => ({value: x})\n"
-                         "const map = (x: i64) => (#{\"value\": x})\n"
+    const char *source = "const variableKeys = (x: i64) => ({x: x})\n"
+                         "const map = (x: i64) => ({\"value\": x})\n"
                          "const block = (x: i64) => { var y = x; return y }\n";
     char *first = parse_and_format(source, "arrow_literals.xr");
     ASSERT_NOT_NULL(first);
     ASSERT_TRUE(contains(first, "=> ({"));
-    ASSERT_TRUE(contains(first, "=> (#{"));
+    ASSERT_FALSE(contains(first, "#{"));
     ASSERT_TRUE(contains(first, "=> {"));
     char *second = parse_and_format(first, "arrow_literals_formatted.xr");
     ASSERT_NOT_NULL(second);
@@ -790,14 +790,14 @@ TEST(deprecated_message_roundtrip) {
     teardown();
 }
 
-TEST(object_destructure_rename_roundtrip) {
+TEST(tuple_binding_names_roundtrip) {
     setup();
-    const char *src = "var { name: localName, age } = user\n"
-                      "{ name: otherName, age } = user\n";
+    const char *src = "var (localName, age) = user\n"
+                      "var (otherName, otherAge) = user\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "var {name: localName, age} = user"));
-    ASSERT_TRUE(contains(fmt1, "{name: otherName, age} = user"));
+    ASSERT_TRUE(contains(fmt1, "var (localName, age) = user"));
+    ASSERT_TRUE(contains(fmt1, "var (otherName, otherAge) = user"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -1402,7 +1402,7 @@ RUN_TEST(method_deprecated_attribute_roundtrip);
 RUN_TEST(inline_control_attributes_roundtrip);
 RUN_TEST(explicit_numeric_conversions_roundtrip);
 RUN_TEST(deprecated_message_roundtrip);
-RUN_TEST(object_destructure_rename_roundtrip);
+RUN_TEST(tuple_binding_names_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
 RUN_TEST(borrow_origin_sets_roundtrip);
 RUN_TEST(unknown_effect_attribute_rejected);

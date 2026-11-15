@@ -8,6 +8,6 @@ fn xray_no_alloc_map_foreach_callback_reject(values: Map<i64, i64>) {
     values.forEach(xray_no_alloc_map_foreach_allocating_callback)
 }
 
-var xray_no_alloc_map_foreach_values: Map<i64, i64> = #{}
+var xray_no_alloc_map_foreach_values: Map<i64, i64> = {}
 xray_no_alloc_map_foreach_values.set(1, 2)
 xray_no_alloc_map_foreach_callback_reject(xray_no_alloc_map_foreach_values)

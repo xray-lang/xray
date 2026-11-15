@@ -23,7 +23,7 @@ typedef struct XrHirConversionOrigin {
 typedef enum XrHirConversionKind {
     XR_HIR_CONVERSION_IDENTITY,XR_HIR_CONVERSION_COPY,XR_HIR_CONVERSION_NULLABLE,
     XR_HIR_CONVERSION_CALLABLE,XR_HIR_CONVERSION_ERROR,XR_HIR_CONVERSION_NUMBER,
-    XR_HIR_CONVERSION_POINTER
+    XR_HIR_CONVERSION_POINTER,XR_HIR_CONVERSION_DATA_UNION,XR_HIR_CONVERSION_JSON
 } XrHirConversionKind;
 typedef enum XrHirConversionRoot {
     XR_HIR_CONVERSION_ROOT_NONE,XR_HIR_CONVERSION_ROOT_FIXED,
@@ -35,6 +35,8 @@ typedef struct XrHirConversion {
     XrHirConversionKind kind;
     XrHirConversionRoot root;
     bool copy_nullable_element;
+    /* Exact active member after any numeric widening, before union injection. */
+    XrXirType selected_member;
 } XrHirConversion;
 typedef struct XrHirConversionInput {
     XrHirConversionOrigin origin;
@@ -55,6 +57,10 @@ typedef struct XrHirConversionContext {
 /* Failure preserves output and the first request failure. Reason is static. */
 XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *,
     const XrHirConversionInput *,XrHirConversion *,const char **reason);
+/* JSON null is a distinct typed constructor, never a Unit conversion or outer
+ * Nullable NONE. The target must be exactly the folded JSON atom. */
+XR_FUNC XrXirStatus xr_hir_json_null_check(XrHirConversionOrigin,bool,XrXirType,
+    XrCompileRequestControl *,XrXirInstruction *,const char **);
 /* Pure structural classification grants no value-flow or borrow authority. */
 XR_FUNC XrXirStatus xr_hir_conversion_contains_callable(const XrXirTypes *,XrXirType,
     XrCompileRequestControl *,bool *,const char **reason);

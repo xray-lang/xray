@@ -1,5 +1,20 @@
 // Roundtrip coverage for every JSON value family.
 
+struct ScoredUser {
+    name: string
+    scores: Array<i64>
+}
+
+struct Metadata {
+    version: i64
+    valid: bool
+}
+
+struct Payload {
+    users: Array<ScoredUser>
+    metadata: Metadata
+}
+
 @test
 fn test_primitive_roundtrip() {
     assertEqual(JSON.require<i64>(JSON.parseValue(JSON.stringify(42)), []), 42)
@@ -12,12 +27,12 @@ fn test_primitive_roundtrip() {
 
 @test
 fn test_nested_roundtrip() {
-    var original = {
+    var original = Payload{
         users: [
-            { name: "Alice", scores: [100, 95, 88] },
-            { name: "Bob", scores: [85, 90, 92] },
+            ScoredUser{ name: "Alice", scores: [100, 95, 88] },
+            ScoredUser{ name: "Bob", scores: [85, 90, 92] },
         ],
-        metadata: { version: 1, valid: true },
+        metadata: Metadata{ version: 1, valid: true },
     }
     var parsed = JSON.parseValue(JSON.stringify(original))
     assertEqual(JSON.require<string>(parsed, ["users", 0, "name"]), "Alice")

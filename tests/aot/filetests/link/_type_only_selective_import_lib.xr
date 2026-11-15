@@ -1,4 +1,4 @@
-export type TypeOnlyConfig = {
-    name: string,
-    count: i64,
+export struct TypeOnlyConfig {
+    name: string
+    count: i64
 }

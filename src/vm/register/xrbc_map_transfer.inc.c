@@ -44,6 +44,14 @@ static bool rbc_map_transfer(RbcStringAdmission *s, XrRbcArrayAccess a) {
         }
         if (!rbc_array_ref_state(source) || rbc_array_ref_payload(s, source, origin) != XR_RBC_MAP_STRING_I64)
             return false;
+    } else if(a.operation==XR_RBC_MAP_LITERAL) {
+        if(!rbc_array_destination(s,a.result))return false;
+        const XrtMapLiteral *literal=&s->module->map_literals[a.cell-1];uint32_t operand=0;
+        for(size_t n=0;n<literal->count;++n) {
+            if(!rbc_array_source(s,args[operand++]))return false;
+            if(!literal->items[n].kind && rbc_array_state(s,args[operand++])!=RBC_BITS)return false;
+        }
+        rbc_array_define(s,a.result,RBC_STRING_OWNED,0);return true;
     } else if (a.operation == XR_RBC_ARRAY_NEW) {
         if (!rbc_array_destination(s, a.result)) return false;
         for (uint32_t p = 0; p < a.count; ++p)

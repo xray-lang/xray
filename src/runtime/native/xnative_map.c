@@ -18,6 +18,9 @@
 #include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
 #include "base/xhash.h"
+#include "xnative_execution.h"
+#include "shared/xr_literal_quote_core.h"
+#include "shared/xr_utf8_core.h"
 #include <string.h>
 
 struct XrtMapOwner {
@@ -177,6 +180,7 @@ XRAY_API XrtMap *xrt_map_string_i64_new(XrtString *const *keys, const int64_t *v
     if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source);
     return xrt_map_publish_pending(source);
 }
+#include "xnative_map_literal.inc.c"
 XR_FUNC XrtMap *xrt_map_publish_pending(uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
     if (!map_shape(&root->pending)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);

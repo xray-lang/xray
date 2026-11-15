@@ -1,6 +1,6 @@
-// Guard: options are typed `XmlOptions`, not a schema-less JSON object.
+// Guard: a configuration Map cannot replace flat named parameters.
 import xml
 
-var opts: JSON.Object = JSON.parseObject("{\"preserveComments\":true}")
-var doc = xml.parse("<a/>", opts)
+var opts: Map<string, bool> = {"preserveComments": true}
+var doc = xml.parse("<a/>", options: opts)
 print(doc)

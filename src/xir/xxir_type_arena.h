@@ -25,6 +25,9 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
 XR_FUNC bool xr_xir_compile_type_arena_retain(XrXirTypeArena *arena);
 XR_FUNC void xr_xir_compile_type_arena_drop(XrXirTypeArena *arena);
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena);
+/* Key eligibility sealed by this arena's complete structural admission.
+ * This O(1) query creates no identity link to another arena or runtime value. */
+XR_FUNC bool xr_xir_compile_type_arena_key_eligible(const XrXirTypeArena *arena,XrXirType type);
 /* Complete enum Sendable semantics sealed before publication; no live query
  * allocates, traverses values or grants a worker or error-bound permission. */
 XR_FUNC bool xr_xir_compile_type_arena_enum_sendable(const XrXirTypeArena *arena,XrXirType type);

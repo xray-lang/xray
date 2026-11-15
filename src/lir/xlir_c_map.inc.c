@@ -11,6 +11,7 @@
  *   Generated calls use canonical runtime owners. Borrowed references carry
  *   the actual local or State binding without a retained payload snapshot.
  */
+static void c_path(LirC *,const XrLirSource *);
 static uint32_t c_map_role(LirC *c, const XrLirInstructionView *v) {
     XrLirIntrinsic entry;
     return v->op == XR_LIR_CALL_INTRINSIC &&
@@ -23,7 +24,7 @@ static bool c_map_captured_cell(const LirC *c, XrLirType type) {
         cell.payload == XR_LIR_MAP_STRING_I64;
 }
 static bool c_map_point(LirC *c, const XrLirInstructionView *v) {
-    return c_map_role(c, v) || v->op == XR_LIR_MAP_RETAIN || v->op == XR_LIR_MAP_BORROW ||
+    return c_map_role(c, v) || v->op == XR_LIR_MAP_LITERAL_NEW || v->op == XR_LIR_MAP_RETAIN || v->op == XR_LIR_MAP_BORROW ||
         v->op == XR_LIR_MAP_REF_READ || v->op == XR_LIR_MAP_REF_WRITE ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_MAP_STRING_I64_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_MAP_STRING_I64) ||
@@ -31,6 +32,39 @@ static bool c_map_point(LirC *c, const XrLirInstructionView *v) {
             c_map_captured_cell(c, c_value_type(c, v->operands[0]))));
 }
 static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if(v->op==XR_LIR_MAP_LITERAL_NEW) {
+        XrLirMapLiteral literal;
+        if(xr_lir_map_literal_view(c->request->module,(uint32_t)v->bits,&literal)!=XR_LIR_OK) {
+            c_error(c,XR_LIR_C_UNSUPPORTED,"Map literal has no owned provenance");return;
+        }
+        if(literal.count) {
+            c_format(c,"    static const XrtMapLiteralOrigin xrl_map_items%" PRIu32 "[] = {",v->result);
+            for(uint32_t n=0;n<literal.count;++n) {
+                XrLirMapLiteralOrigin origin=literal.items[n];
+                c_format(c,"%s{UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")}",
+                    n?", ":"",origin.kind,origin.line,origin.column);
+            }
+            c_text(c,"};\n");
+        }
+        c_format(c,"    static const XrtMapLiteral xrl_map%" PRIu32 " = {",v->result);
+        if(literal.path_length)c_path(c,&(XrLirSource){.path=literal.path,.path_length=literal.path_length});else c_text(c,"NULL");
+        c_format(c,", (size_t)%" PRIu32 ", ",literal.path_length);
+        if(literal.count)c_format(c,"xrl_map_items%" PRIu32,v->result);else c_text(c,"NULL");
+        c_format(c,", (size_t)%" PRIu32 "};\n    v%" PRIu32 " = xrt_map_string_i64_literal(&xrl_map%" PRIu32 ", ",literal.count,v->result,v->result);
+        if(!literal.count)c_text(c,"NULL");
+        else {
+            c_text(c,"(const XrtMapLiteralInput[]){");uint32_t operand=0;
+            for(uint32_t n=0;n<literal.count;++n) {
+                bool spread=literal.items[n].kind!=0;
+                c_format(c,"%s{{.%s = ",n?", ":"",spread?"spread":"key");
+                c_value(c,v->operands[operand++]);c_text(c,"}, ");
+                if(spread)c_text(c,"INT64_C(0)");else c_value(c,v->operands[operand++]);
+                c_text(c,"}");
+            }
+            c_text(c,"}");
+        }
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source);return;
+    }
     uint32_t role = c_map_role(c, v);
     if (role == XR_LIR_MAP_OP_NEW) {
         c_format(c, "    v%" PRIu32 " = xrt_map_string_i64_new(", v->result);

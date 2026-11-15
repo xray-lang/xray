@@ -192,13 +192,22 @@ XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee);
 XR_FUNC AstNode *xr_parse_call_with_types(Parser *, AstNode *, XrTypeRef **, int);
 XR_FUNC AstNode *xr_parse_call_argument(Parser *parser);
 XR_FUNC AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access);
+/* Common positional calls retain spans on the stack. Only unusually long
+ * lists need a temporary arena buffer before a first named argument appears. */
+typedef struct XrParsedCallLabels {
+    XrCallArgLabel *labels;
+    XrNameSpan inline_spans[8];
+    XrNameSpan *overflow_spans;
+    int capacity, span_capacity;
+} XrParsedCallLabels;
+XR_FUNC AstNode *xr_parse_labeled_call_argument(Parser *parser, XrCallArgAccess *access,
+                                               XrParsedCallLabels *labels, int index);
+XR_FUNC bool xr_parser_source_token(Parser *parser, const Token *token, Token *output);
 XR_FUNC AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee);
 XR_FUNC AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
                                                     XrTypeRef **type_args, int type_arg_count);
 XR_FUNC AstNode *xr_parse_array_literal(Parser *parser);
-XR_FUNC AstNode *xr_parse_object_literal(Parser *parser);
-XR_FUNC AstNode *xr_parse_empty_map_literal(Parser *parser);
-XR_FUNC AstNode *xr_parse_set_literal_new(Parser *parser);
+XR_FUNC AstNode *xr_parse_map_literal(Parser *parser);
 XR_FUNC AstNode *xr_parse_index_access(Parser *parser, AstNode *array);
 XR_FUNC AstNode *xr_parse_member_access(Parser *parser, AstNode *object);
 XR_FUNC AstNode *xr_parse_match_expr(Parser *parser);
@@ -356,7 +365,6 @@ XR_FUNC XrGenericParam **xr_parse_method_conditions(Parser *parser, int *out_cou
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser);
-XR_FUNC XrDestructurePattern *xr_parse_object_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser);
 XR_FUNC AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const);
 
@@ -364,8 +372,6 @@ XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(Parser *parser,
                                                                AstNode *array_literal);
 XR_FUNC XrDestructurePattern *convert_tuple_literal_to_pattern(Parser *parser,
                                                                AstNode *tuple_literal);
-XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(Parser *parser,
-                                                                AstNode *object_literal);
 
 /* ========== Coroutine Parsing ========== */
 

@@ -11,14 +11,14 @@ fn main() {
     print(E.B { value: "x" } == E.B { value: "y" })
     print(E.A { value: 1 } == E.C)
 
-    var m: Map<K, string> = #{}
+    var m: Map<K, string> = {}
     m[K.Id { id: 1 }] = "one"
     m[K.Id { id: 2 }] = "two"
     print(len(m))
     print(m[K.Id { id: 1 }])
     print(m[K.Id { id: 2 }])
 
-    var s: Set<K> = #[]
+    var s: Set<K> = Set()
     s.add(K.Id { id: 1 })
     s.add(K.Id { id: 2 })
     s.add(K.Id { id: 1 })

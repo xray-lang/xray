@@ -1,6 +1,6 @@
 var xs: Array<i64> = [1, 2]
-var scores: Map<string, i64> = #{"a": 1}
-var seen: Set<string> = #["x"]
+var scores: Map<string, i64> = {"a": 1}
+var seen: Set<string> = Set(["x"])
 
 print(42 is i64)
 print(3.5 is f64)

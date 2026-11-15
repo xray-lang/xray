@@ -73,21 +73,21 @@ if (cwdProc != null) {
 }
 
 var envProc = sys.Process.spawn("sh", ["-c", "test \"$XRAY_SYS_TEST_ENV\" = hello"],
-    ProcessOptions(null, #{"XRAY_SYS_TEST_ENV": "hello"}))
+    ProcessOptions(null, {"XRAY_SYS_TEST_ENV": "hello"}))
 print(envProc != null)
 if (envProc != null) {
     print(envProc!.wait())
 }
 
 var cwdEnvProc = sys.Process.spawn("sh", ["-c", "test -f sys_process_direct.xr && test \"$XRAY_SYS_TEST_ENV\" = cwd"],
-    ProcessOptions("tests/diff/cases/semantics/stdlib", #{"XRAY_SYS_TEST_ENV": "cwd"}))
+    ProcessOptions("tests/diff/cases/semantics/stdlib", {"XRAY_SYS_TEST_ENV": "cwd"}))
 print(cwdEnvProc != null)
 if (cwdEnvProc != null) {
     print(cwdEnvProc!.wait())
 }
 
 var invalidEnv = sys.Process.spawn("sh", ["-c", "exit 0"],
-    ProcessOptions(null, #{"BAD=KEY": "x"}))
+    ProcessOptions(null, {"BAD=KEY": "x"}))
 if (invalidEnv != null) {
     print(false)
     print(invalidEnv!.wait())

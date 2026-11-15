@@ -188,7 +188,7 @@ static bool rbc_callable_state_valid(const XrRbcModule *m, const XrRbcFunction *
         f->register_callables[access.window] != access.slot) return false;
     if (!construct && !initialize) return !access.destination && !access.result.index &&
         rbc_register_kind(f, access.source) == XR_RBC_STATE_REF;
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (xrt_module_layout_view(m->state_layout, &layout) || access.destination >= layout.slot_count ||
         rbc_register_kind(f, access.source) != XR_RBC_STATE) return false;
     XrtModuleSlotSpec slot = layout.slots[access.destination];

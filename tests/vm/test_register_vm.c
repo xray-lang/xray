@@ -1201,7 +1201,7 @@ static void test_module_capabilities(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
     XrtModuleSpec owner = {0, 0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
         .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *storage = NULL;
@@ -1266,6 +1266,7 @@ static void test_module_capabilities(void) {
 
 #include "register_state_cases.h"
 #include "register_array_cases.h"
+#include "register_set_cases.h"
 #include "register_array_display_cases.h"
 #include "register_array_unsigned_cases.h"
 #include "register_array_ref_cases.h"
@@ -1289,6 +1290,8 @@ int main(int argc, char **argv) {
     test_raw_fixed_calls();
     test_raw_fixed_no_value_callee();
     test_raw_arrays();
+    test_raw_sets();
+    test_raw_set_result();
     test_raw_array_display();
     test_raw_pod_display();
     test_raw_array_repeat();

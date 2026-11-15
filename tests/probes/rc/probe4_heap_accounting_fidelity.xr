@@ -22,12 +22,12 @@ import runtime
 @test
 fn test_map_churn_does_not_inflate_live_bytes() {
     for (var w = 0; w < 1000; w++) {
-        var warm = #{"k": w}
+        var warm = {"k": w}
     }
     var before = runtime.liveBytes()
 
     for (var i = 0; i < 200000; i++) {
-        var a = #{"k": i}
+        var a = {"k": i}
     }
 
     var after = runtime.liveBytes()
@@ -75,7 +75,7 @@ fn test_retained_maps_are_counted() {
 
     var keep: Array<Map<string, i64>> = []
     for (var i = 0; i < 20000; i++) {
-        keep.push(#{"k": i})
+        keep.push({"k": i})
     }
 
     var after = runtime.liveBytes()
@@ -104,7 +104,7 @@ fn test_grown_then_dropped_containers_refund_their_bytes() {
     var before = runtime.liveBytes()
 
     for (var round = 0; round < 200; round++) {
-        var m: Map<string, i64> = #{}
+        var m: Map<string, i64> = {}
         for (var i = 0; i < 200; i++) {
             m[string(i)] = i
         }

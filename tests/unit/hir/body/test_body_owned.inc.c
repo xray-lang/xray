@@ -21,7 +21,7 @@ static void declaration_owners(void) {
     XrXirFunction *function_view=functions;XrXirFunctionIdentity *identity_view=identities;
     uint32_t function_count=2,module_count=1,slot_count=0;XrXirSlot *slots=NULL;
     XrXirDefaultTable defaults={0};XrXirInterfaceTable interfaces={0};
-    XrHirBodyDeclarations views={&function_view,&identity_view,&function_count,&module_count,&defaults,&interfaces,&slots,&slot_count};
+    XrHirBodyDeclarations views={&function_view,&identity_view,&function_count,&module_count,&defaults,&interfaces,&slots,&slot_count,NULL,NULL,NULL};
     XrHirBody *body=NULL,*other=NULL;
     CHECK(xr_hir_body_new(resources,&types,&body)==XR_XIR_OK&&xr_hir_body_new(resources,&types,&other)==XR_XIR_OK);
     CHECK(xr_hir_body_declarations(body,&views)==XR_XIR_OK&&xr_hir_body_declarations(other,&views)==XR_XIR_OK);

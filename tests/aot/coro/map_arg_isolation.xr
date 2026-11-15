@@ -5,7 +5,7 @@ fn worker(m: Map<string, Array<i64>>) -> i64 {
     return len(xs)
 }
 
-var m: Map<string, Array<i64>> = #{"items": [1, 2]}
+var m: Map<string, Array<i64>> = {"items": [1, 2]}
 var task = go worker(copy(m))
 var child_len = await task
 print(child_len)

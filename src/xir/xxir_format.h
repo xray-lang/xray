@@ -25,7 +25,6 @@ typedef struct XrXirFormatCursor {
     const XrXirTypeArena *arena;
     XrXirType type;
     bool compact;
-    const XrXirLiteral *field_name;
 } XrXirFormatCursor;
 typedef struct XrXirFormatAggregate {
     XrXirLiteral name, member;
@@ -33,7 +32,7 @@ typedef struct XrXirFormatAggregate {
     bool array;
     uint32_t kind;
 } XrXirFormatAggregate;
-enum {XIR_FORMAT_ENUM, XIR_FORMAT_ARRAY, XIR_FORMAT_TUPLE, XIR_FORMAT_MAP, XIR_FORMAT_SET, XIR_FORMAT_RECORD};
+enum {XIR_FORMAT_ENUM, XIR_FORMAT_ARRAY, XIR_FORMAT_TUPLE, XIR_FORMAT_MAP, XIR_FORMAT_SET};
 typedef struct XrXirFormatContext {
     XrXirFormatCursor cursors[XR_VALUE_FORMAT_MAX_DEPTH + 1];
     /* Only an executing text conversion borrows this meter. Data observation

@@ -67,7 +67,7 @@ static bool rbc_view_module_valid(const XrRbcModule *m, const XrRbcFunction *f) 
     for (size_t n = 0; n < f->view_access_count; ++n) {
         const XrRbcViewAccess *row = &f->view_accesses[n];
         if (row->operation != XR_RBC_VIEW_CELL_CONSTRUCT) continue;
-        XrtModuleLayoutSpec layout = {0};
+        XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
         if (xrt_module_layout_view(m->state_layout, &layout) != XR_XIR_VALUE_OK ||
             row->bits >= layout.slot_count) return false;
         XrtModuleSlotSpec slot = layout.slots[row->bits];

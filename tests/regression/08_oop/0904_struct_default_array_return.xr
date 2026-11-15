@@ -1,6 +1,10 @@
 // Test: struct field defaults, Array element, and return value
 // Expected: defaults work, array stores structs, return preserves value
 
+struct FrameContainer {
+    frame: Frame
+}
+
 struct Config {
     width: i64 = 800
     height: i64 = 600
@@ -14,16 +18,16 @@ fn make_point(x: f64, y: f64) -> Point {
     return Point{x: x, y: y}
 }
 
-type Frame = {
+struct Frame {
     wire: Array<i64>?
     status: i64
 }
 
 fn take_frame(present: bool) -> Frame {
     if (present) {
-        return {wire: [17, 25], status: 42}
+        return Frame{wire: [17, 25], status: 42}
     }
-    return {wire: null, status: -1}
+    return Frame{wire: null, status: -1}
 }
 
 fn frame_total(frame: Frame) -> i64 {
@@ -69,7 +73,7 @@ fn test_struct_default_array_return() {
 }
 
 @test
-fn test_structural_object_nullable_array_return_and_copy() {
+fn test_struct_nullable_array_return_and_copy() {
     var i = 0
     while (i < 32) {
         var empty = take_frame(false)
@@ -84,25 +88,26 @@ fn test_structural_object_nullable_array_return_and_copy() {
 }
 
 @test
-fn test_structural_object_alias_keeps_one_root() {
+fn test_struct_assignment_keeps_independent_values() {
     var original = take_frame(true)
     var alias = original
     alias.status = 7
-    assert(frame_total(original) == 49)
+    assert(frame_total(original) == 84)
     var independent = copy(original)
     independent.status = 1
-    assert(frame_total(original) == 49)
+    assert(frame_total(original) == 84)
     assert(frame_total(independent) == 43)
 }
 
 @test
-fn test_structural_nested_copy_preserves_source_graph() {
-    var original = {frame: take_frame(true)}
+fn test_struct_nested_copy_preserves_source_values() {
+    var original = FrameContainer{frame: take_frame(true)}
     var independent = copy(original)
     var child = independent.frame
     child.status = 7
     var wire = child.wire
-    if (wire != null) { wire[0] = 99 }
+    if (wire != null) { wire[0] = 99; child.wire = wire }
+    independent.frame = child
     assert(frame_total(original.frame) == 84)
     assert(frame_total(independent.frame) == 131)
 }

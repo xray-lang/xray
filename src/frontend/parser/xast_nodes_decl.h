@@ -205,6 +205,7 @@ typedef struct NewExprNode {
     uint32_t class_symbol_id;
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
+    XrCallArgLabel *arg_labels;
     int arg_count;
     XrTypeRef **type_args;
     int type_arg_count;
@@ -221,6 +222,7 @@ typedef struct SuperCallNode {
     char *method_name;
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
+    XrCallArgLabel *arg_labels;
     int arg_count;
 } SuperCallNode;
 

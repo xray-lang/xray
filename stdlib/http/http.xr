@@ -1361,21 +1361,8 @@ export class Headers {
     }
 }
 
-// HttpRequestOptions is the closed typed configuration surface for request().
-// Optional fields use protocol-safe defaults inside the module.
-export type HttpRequestOptions = {
-    url: string,
-    method: HttpMethod?,
-    headers: Headers?,
-    body: Array<u8>?,
-    followRedirects: bool?,
-    maxRedirects: i64?,
-    timeoutMs: i64?,
-    version: HttpVersion?
-}
-
 fn _headersJson(headers: Headers) -> JSON.Object {
-    var out: JSON.Object = #{}
+    var out: JSON.Object = {}
     var pairs = headers.entries()
     for (var i = 0; i < len(pairs); i++) {
         out[pairs[i].0] = pairs[i].1
@@ -1660,7 +1647,7 @@ export class HttpRequest {
 
     jsonValue() -> JSON.Value { return JSON.parseValue(this.text()) }
 
-    jsonWithRest<T: JSON.Decodable & {}>() -> JSON.WithRest<T> {
+    jsonWithRest<T: JSON.Decodable>() -> JSON.WithRest<T> {
         return JSON.parseWithRest<T>(this.text())
     }
 }
@@ -1698,7 +1685,7 @@ export class HttpResponse {
 
     jsonValue() -> JSON.Value { return JSON.parseValue(this.text()) }
 
-    jsonWithRest<T: JSON.Decodable & {}>() -> JSON.WithRest<T> {
+    jsonWithRest<T: JSON.Decodable>() -> JSON.WithRest<T> {
         return JSON.parseWithRest<T>(this.text())
     }
 }
@@ -1859,36 +1846,6 @@ fn _httpRequestHostHeader(url: _HttpRequestUrl) -> string {
 
 fn _httpRequestUrlText(url: _HttpRequestUrl) -> string {
     return url.scheme + "://" + _httpRequestHostHeader(url) + url.path
-}
-
-fn _requestTimeout(options: HttpRequestOptions) -> i64 {
-    var raw = options.timeoutMs
-    if (raw == null) { return HTTP_DEFAULT_TIMEOUT_MS }
-    var t = raw!
-    if (t <= 0) { return HTTP_DEFAULT_TIMEOUT_MS }
-    return t
-}
-
-fn _requestMaxRedirects(options: HttpRequestOptions) -> i64 {
-    var raw = options.maxRedirects
-    if (raw == null) { return 5 }
-    var n = raw!
-    if (n < 0) { return 0 }
-    return n
-}
-
-fn _requestFollowRedirects(options: HttpRequestOptions) -> bool {
-    return options.followRedirects ?? true
-}
-
-fn _requestBody(options: HttpRequestOptions) -> Array<u8> {
-    if (options.body != null) { return copy options.body! }
-    return Array<u8>(0)
-}
-
-fn _requestHeaders(options: HttpRequestOptions) -> Headers {
-    if (options.headers != null) { return copy options.headers! }
-    return Headers()
 }
 
 fn _requestWireHeaders(headers: Headers, stripSensitive: bool = false) -> Headers {
@@ -2218,51 +2175,58 @@ fn _http2ToHttpError(e: Http2Error) -> HttpError {
 }
 
 
-export fn request(options: HttpRequestOptions) -> HttpResponse {
-    var current = _parseHttpRequestUrl(options.url)
-    if (current == null) { throw HttpError.InvalidUrl { url: options.url } }
+export fn request(
+    url: string,
+    method: HttpMethod = HttpMethod.get(),
+    headers: Headers = Headers(),
+    body: Array<u8> = Array<u8>(0),
+    followRedirects: bool = true,
+    maxRedirects: i64 = 5,
+    timeoutMs: i64 = HTTP_DEFAULT_TIMEOUT_MS,
+    version: HttpVersion = HttpVersion.Auto
+) -> HttpResponse {
+    var current = _parseHttpRequestUrl(url)
+    if (current == null) { throw HttpError.InvalidUrl { url: url } }
 
-    var method = options.method ?? HttpMethod.get()
-    var version = options.version ?? HttpVersion.Auto
-    var headers = _requestHeaders(options)
-    var body = _requestBody(options)
-    var timeoutMs = _requestTimeout(options)
-    var followRedirects = _requestFollowRedirects(options)
-    var maxRedirects = _requestMaxRedirects(options)
+    var currentMethod = method
+    var requestHeaders = copy headers
+    var currentBody = copy body
+    var requestTimeoutMs = timeoutMs <= 0 ? HTTP_DEFAULT_TIMEOUT_MS : timeoutMs
+    var redirectLimit = maxRedirects < 0 ? 0 : maxRedirects
     var redirects = 0
     var stripSensitive = false
 
     while (true) {
         var response = version == HttpVersion.Http2 ?
-            _singleHttp2Request(current!, method, headers, body, timeoutMs, stripSensitive) :
-            _singleRequest(current!, method, headers, body, timeoutMs, stripSensitive)
-        if (!followRedirects || !isRedirectStatus(response.status) || redirects >= maxRedirects) {
+            _singleHttp2Request(current!, currentMethod, requestHeaders, currentBody, requestTimeoutMs, stripSensitive) :
+            _singleRequest(current!, currentMethod, requestHeaders, currentBody, requestTimeoutMs, stripSensitive)
+        if (!followRedirects || !isRedirectStatus(response.status) || redirects >= redirectLimit) {
             return response
         }
 
         var location = _headersLocation(response.headers)
         if (location == null) { return response }
         var next = redirectDecision(response.status, _httpRequestUrlText(current!), location!,
-                                    method.token, stripSensitive)
+                                    currentMethod.token, stripSensitive)
         if (next == null) { return response }
 
         var nextUrl = _parseHttpRequestUrl(next!.url)
         if (nextUrl == null) { throw HttpError.InvalidUrl { url: next!.url } }
 
         current = nextUrl
-        method = HttpMethod(next!.method)
+        currentMethod = HttpMethod(next!.method)
         stripSensitive = next!.stripSensitiveHeaders
-        if (next!.dropBody) { body = Array<u8>(0) }
+        if (next!.dropBody) { currentBody = Array<u8>(0) }
         redirects = redirects + 1
     }
-    throw HttpError.InvalidUrl { url: options.url }
+    throw HttpError.InvalidUrl { url: url }
 }
 
 // get performs a GET request for the given URL and returns the response.
 // Transport failures throw HttpError exactly as request() does; an HTTP error
 // status is a completed exchange and is returned with its real status.
 export fn get(url: string) -> HttpResponse {
-    return request({ url: url })
+    return request(url: url)
 }
 
 // post performs a POST request carrying body under the given content type. A
@@ -2276,7 +2240,7 @@ export fn post(url: string, contentType: string, body: Array<u8>,
     if (len(authorization) > 0) {
         headers.set("Authorization", authorization)
     }
-    return request({ url: url, method: HttpMethod.post(), headers: headers, body: body })
+    return request(url: url, method: HttpMethod.post(), headers: headers, body: body)
 }
 
 // ResponseHead - Parsed HTTP/1.x response status line and headers.

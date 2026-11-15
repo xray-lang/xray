@@ -59,7 +59,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -67,9 +67,6 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
@@ -127,7 +124,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -137,11 +134,10 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
 
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 
 ArrowLambda ::= Identifier '=>' (Expression | Block)
               | '(' ArrowParams? ')' '=>' (Expression | Block)
@@ -157,10 +153,10 @@ MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
 
 `try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，后接 `scope` 时解析为 `TryScopeStmt`（§10.7），其余情况解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
@@ -177,6 +173,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
+         |  TuplePattern
+         |  ArrayPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
@@ -190,6 +188,9 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
 
 ### A.5 语句
@@ -285,8 +286,6 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
@@ -410,7 +409,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -418,9 +417,6 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
@@ -478,7 +474,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -488,11 +484,10 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
 
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 
 ArrowLambda ::= Identifier '=>' (Expression | Block)
               | '(' ArrowParams? ')' '=>' (Expression | Block)
@@ -508,10 +503,10 @@ MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
 
 When the next token after `try` is `{`, parse only `TryStmt`; before `scope`, parse `TryScopeStmt` (§10.7); otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
@@ -528,6 +523,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
+         |  TuplePattern
+         |  ArrayPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
@@ -541,6 +538,9 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
 
 ### A.5 Statements
@@ -637,8 +637,6 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'

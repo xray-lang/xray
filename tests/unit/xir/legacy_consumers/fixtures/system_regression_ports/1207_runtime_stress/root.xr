@@ -5,11 +5,34 @@
 
 import runtime
 
-type NamedValue = { val: i64, name: string }
-type BatchRecord = { c: i64, i: i64, s: string }
-type NestedValue = { nested: i64 }
-type MixedRecord = { arr: Array<i64 | string>, map_key: string }
-type ParentRecord = { id: i64, children: Array<string> }
+struct GarbageRecord {
+    garbage: i64
+}
+
+struct TemporaryRecord {
+    temp: i64
+}
+
+struct NamedValue {
+    val: i64
+    name: string
+}
+struct BatchRecord {
+    c: i64
+    i: i64
+    s: string
+}
+struct NestedValue {
+    nested: i64
+}
+struct MixedRecord {
+    arr: Array<i64 | string>
+    map_key: string
+}
+struct ParentRecord {
+    id: i64
+    children: Array<string>
+}
 
 // --- Test 1: String pool survival under memory pressure ---
 // Bug #4 pattern: interned strings must survive heavy allocation churn
@@ -42,7 +65,7 @@ fn test_string_pool_survival() {
 fn test_nested_string_key_survival() {
     var data: Array<NamedValue> = []
     for (var i = 0; i < 200; i++) {
-        var m: NamedValue = { val: i * 3, name: "field_" + string(i) }
+        var m: NamedValue = NamedValue{ val: i * 3, name: "field_" + string(i) }
         data.push(m)
     }
 
@@ -75,7 +98,7 @@ fn test_closure_upvalue_gc() {
 
     // Create garbage to push GC
     for (var j = 0; j < 300; j++) {
-        var tmp = { garbage: j }
+        var tmp = GarbageRecord{ garbage: j }
     }
 
 
@@ -93,7 +116,7 @@ fn test_rapid_alloc_collect() {
     for (var cycle = 0; cycle < 20; cycle++) {
         var batch: Array<BatchRecord> = []
         for (var i = 0; i < 50; i++) {
-            batch.push({ c: cycle, i: i, s: "v" + string(cycle) + "_" + string(i) })
+            batch.push(BatchRecord{ c: cycle, i: i, s: "v" + string(cycle) + "_" + string(i) })
         }
         // Keep last batch alive
         if (cycle >= 15) {
@@ -122,9 +145,9 @@ fn test_mixed_container_gc() {
 
     for (var i = 0; i < 100; i++) {
         arr.push([i, "a" + string(i)])
-        map["k" + string(i)] = { nested: i }
+        map["k" + string(i)] = NestedValue{ nested: i }
         var item_arr = [arr[i][0], arr[i][1]]
-        data.push({ arr: item_arr, map_key: "k" + string(i) })
+        data.push(MixedRecord{ arr: item_arr, map_key: "k" + string(i) })
     }
 
 
@@ -151,7 +174,7 @@ fn test_generational_cross_reference() {
     // Create long-lived container
     var long_lived: Array<ParentRecord> = []
     for (var i = 0; i < 50; i++) {
-        long_lived.push({ id: i, children: [] })
+        long_lived.push(ParentRecord{ id: i, children: [] })
     }
 
 
@@ -163,7 +186,7 @@ fn test_generational_cross_reference() {
 
         // Create garbage between rounds
         for (var j = 0; j < 100; j++) {
-            var tmp = { temp: j }
+            var tmp = TemporaryRecord{ temp: j }
         }
 
     }

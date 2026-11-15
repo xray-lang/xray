@@ -1,7 +1,17 @@
 // Task 260: typed parse reports the same stable path/kind errors in VM and AOT.
-type Geo = { lat: f64, verified: bool }
-type Address = { city: string, geo: Geo }
-type Profile = { name: string, age: i64, address: Address }
+struct Geo {
+    lat: f64
+    verified: bool
+}
+struct Address {
+    city: string
+    geo: Geo
+}
+struct Profile {
+    name: string
+    age: i64
+    address: Address
+}
 
 fn parseCase(label: string, text: string) {
     try {

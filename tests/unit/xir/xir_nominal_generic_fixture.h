@@ -26,7 +26,7 @@ static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context
     XrXirSourceModule module = {"alpha", 5, NULL, 0, 3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[4] = {{.exported=1}, {0}, {0}, {0}};
     identities[1].nominal_owner = 1; identities[1].method_kind = XR_XIR_MEMBER_HELPER;
-    XrXirDeclarations declarations = {&module, 1, identities, NULL, 0, NULL, 0, 0, 0, NULL};
+    XrXirDeclarations declarations = {.modules=&module, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     NominalFixture f; nominal_fixture(&f); f.table.count = 1;
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirTypeNode nodes[] = {built.types->nodes[0],

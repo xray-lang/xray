@@ -1,11 +1,22 @@
+struct Row {
+    name: string
+    score: i64
+}
+
+struct Envelope {
+    child: Row
+    ready: bool
+    ratio: f64
+}
+
 fn snapshot<T>(value:T)->T { return value }
-var current={name:"first",score:41}
+var current=Row{name:"first",score:41}
 const before=snapshot(current)
-current={name:"second",score:99}
+current=Row{name:"second",score:99}
 print(before.name)
 print(before.score)
 print(current.name)
-const nested={child:before,ready:true,ratio:1.25}
+const nested=Envelope{child:before,ready:true,ratio:1.25}
 const saved=snapshot(nested)
 print(saved.child.name)
 print(saved.ready)

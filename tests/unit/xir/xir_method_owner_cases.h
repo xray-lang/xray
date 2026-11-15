@@ -37,7 +37,7 @@ static void method_owner_cases(void) {
     XrXirFunctionIdentity identities[3] = {{0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0,1,XR_XIR_MEMBER_PRIVATE,0,0,XR_XIR_READ_METHOD, 0, 0,.native_callable=0}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0,NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     for (unsigned kind = 0; kind < 3; ++kind) {
         nominal[0].kind = kind;
@@ -122,7 +122,7 @@ static void method_owner_cases(void) {
         XrXirSlotFacts slots = {NULL, 0};
         XrXirConstruction *construction = NULL;
         CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);
-        CHECK(xr_xir_compile_construction_new_v5(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v6(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
         XrXirDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_check_v2(&stage_context, &module, construction, &checked, &diagnostic);
         xr_xir_compile_construction_free(construction);

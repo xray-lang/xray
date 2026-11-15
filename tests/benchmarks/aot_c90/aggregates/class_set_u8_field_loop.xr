@@ -2,7 +2,7 @@ class ByteSetBag {
     values: Set<u8>
 
     init() {
-        var values: Set<u8> = #[]
+        var values: Set<u8> = Set()
         this.values = values
     }
 

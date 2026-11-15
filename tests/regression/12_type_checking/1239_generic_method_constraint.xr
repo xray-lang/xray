@@ -67,13 +67,13 @@ class Counter {
 @test
 fn test_hashable_bound_on_instance_method() {
     var c = Counter()
-    var m: Map<string, i64> = #{"a": 1, "b": 2}
+    var m: Map<string, i64> = {"a": 1, "b": 2}
     assertEqual(c.sumValues<string>(m), 3)
 }
 
 @test
 fn test_hashable_bound_on_static_method() {
-    var m: Map<string, i64> = #{"a": 1, "b": 2, "c": 3}
+    var m: Map<string, i64> = {"a": 1, "b": 2, "c": 3}
     assertEqual(Counter.countKeys<string>(m), 3)
 }
 
@@ -161,7 +161,7 @@ class Box<T> {
 fn test_method_constraint_in_generic_class() {
     var box: Box<i64> = Box<i64>(10)
     assertEqual(box.get(), 10)
-    var m: Map<string, i64> = #{"x": 5, "y": 6}
+    var m: Map<string, i64> = {"x": 5, "y": 6}
     assertEqual(box.tag<string>("x", m), 11)
 }
 

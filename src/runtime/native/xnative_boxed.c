@@ -41,7 +41,10 @@ static void boxed_require(XrXirValueStatus status, uint32_t source) {
 }
 static bool boxed_record_type(const XrXirTypes *types, const XrXirTypeNode *node) {
     return node && node->kind == XR_XIR_TYPE_NOMINAL && types->nominals && types->nominals->identities &&
-        (types->nominals->identities[node->nominal.declaration].flags & XR_XIR_NOMINAL_RECORD) != 0;
+        node->nominal.declaration < types->nominals->count &&
+        types->nominals->identities[node->nominal.declaration].kind == XR_XIR_NOMINAL_STRUCT &&
+        !types->nominals->identities[node->nominal.declaration].native.native_id &&
+        !(types->nominals->identities[node->nominal.declaration].flags & ~XR_XIR_NOMINAL_MODULE_LITERAL);
 }
 static const XrXirTypeNode *boxed_leaf(const XrXirTypes *types, XrXirType type, bool *string) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -101,7 +104,7 @@ static XrtBoxed *boxed_publish(XrtValueRoot *root, uint32_t source) {
 }
 static XrXirTypeArena *boxed_catalog(const XrtBoxedImage *image, XrXirTypeArena *received, uint32_t source) {
     XrtValueRoot *root = xrt_value_root_current(source);
-    if (!image || (image->count && !image->types)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    if (!xrt_boxed_image_valid(image) || (image->count && !image->types)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     for (XrtBoxedCatalog *catalog = root->boxed_catalogs; catalog; catalog = catalog->next)
         if (catalog->image == image) {
             if (received && received != catalog->types) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
@@ -113,13 +116,16 @@ static XrXirTypeArena *boxed_catalog(const XrtBoxedImage *image, XrXirTypeArena 
     if (received) {
         if (!xr_xir_compile_type_arena_retain(received)) xrt_value_failure(XR_XIR_VALUE_REFCOUNT_LIMIT, source);
         catalog->types = received;
-    } else boxed_require(xrt_callable_types_new(image->types, image->count,
-        root->byte_limit ? root->byte_limit : UINT64_MAX, &catalog->types), source);
+    } else {
+        const XrtCallableImage physical={.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=image->types,.type_count=image->count};
+        boxed_require(xrt_callable_types_new(&physical,
+            root->byte_limit ? root->byte_limit : UINT64_MAX, &catalog->types), source);
+    }
     return catalog->types;
 }
 XRAY_API void xrt_boxed_state_prepare(XrtModuleState *state, const XrtBoxedImage *image, uint32_t source) {
-    if (!image) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
-    XrtCallableImage physical = {image->types, image->count, NULL, 0};
+    if (!xrt_boxed_image_valid(image)) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    const XrtCallableImage physical={.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=image->types,.type_count=image->count};
     XrXirTypeArena *types = xrt_module_state_callables(state, &physical);
     if (!types) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     (void)boxed_catalog(image, types, source);
@@ -154,7 +160,7 @@ XR_FUNC XrtBoxed *xrt_boxed_create(const XrXirTypeArena *arena, XrXirType type,
 }
 XRAY_API XrtBoxed *xrt_boxed_new(const XrtBoxedImage *image, uint32_t type,
     const uint64_t *fields, uint32_t count, uint32_t source) {
-    if (!image || type >= image->count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
+    if (!xrt_boxed_image_valid(image) || type >= image->count) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source);
     XrXirType exact = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + type);
     return xrt_boxed_create(boxed_catalog(image, NULL, source), exact, fields, count, source);
 }

@@ -37,7 +37,7 @@ static bool rbc_aggregate_reference_location(const XrRbcFunction *f, XrRbcArrayL
 }
 
 static bool rbc_aggregate_state_type(const XrRbcModule *module, uint32_t aggregate, uint32_t runtime) {
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (!module->state_layout || xrt_module_layout_view(module->state_layout, &layout) != 0) return false;
     while (aggregate < module->aggregate_type_count && runtime < layout.type_count) {
         XrPodType type = module->aggregate_types[aggregate];
@@ -89,7 +89,7 @@ static bool rbc_aggregate_state_valid(const XrRbcModule *module, const XrRbcFunc
     if (!construct && (access.result.index || access.result.spill)) return false;
     if (!construct && !initialize)
         return !access.slot && rbc_aggregate_reference_location(f, operand);
-    XrtModuleLayoutSpec layout = {0};
+    XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
     if (!module->state_layout || xrt_module_layout_view(module->state_layout, &layout) != 0 ||
         access.slot >= layout.slot_count || operand.spill ||
         rbc_register_kind(f, operand.index) != XR_RBC_STATE) return false;
@@ -161,7 +161,7 @@ static bool rbc_aggregate_metadata_valid(const XrRbcModule *module, const XrRbcF
             continue;
         }
         if (access.operation == XR_RBC_STATE_GROUP_INITIALIZE) {
-            XrtModuleLayoutSpec layout;
+            XrtModuleLayoutSpec layout={.metadata=XRT_MODULE_LAYOUT_HEADER};
             if (access.first || access.count || access.callee || access.window ||
                 access.result.index || access.result.spill || access.source >= f->register_count ||
                 rbc_register_kind(f, access.source) != XR_RBC_STATE ||

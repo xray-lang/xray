@@ -116,7 +116,7 @@ static void test_raw_array_reference_publication(void) {
         XrtModuleTypeSpec type = {XRT_MODULE_ARRAY_I64, 0};
         XrtModuleSpec owner = {0};
         XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
-        XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner, .module_count=1,
+        XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner, .module_count=1,
             .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX};
         XrtModuleLayout *storage = NULL;
         CHECK(xrt_module_layout_new(&layout, &storage) == 0);

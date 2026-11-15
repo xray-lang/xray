@@ -46,7 +46,7 @@ static XrXirArtifact *nominal_transport_fixture(const XrXirCompileContext *conte
         {"leaf",4,parameters,1,pair,&two,1,leaf,2,NULL,0,.error_type=XR_XIR_NEVER}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);

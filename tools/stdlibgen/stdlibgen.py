@@ -18,7 +18,7 @@ public surface, so an `.xr` semantic source can publish over it.
 
 Three spellings decide it, and they differ per kind on purpose:
 
-* `fn`, `const`, `handle`, `object` and `enum` default to internal when the
+* `fn`, `const`, `handle`, `struct` and `enum` default to internal when the
   name starts with `__`, because a leaf reached only from the module's own
   `.xr` body wants a name a caller cannot spell anyway. An explicit
   `visibility:` key overrides that default, which is how a shape that must
@@ -320,12 +320,11 @@ class StdlibHandleEntry:
 
 
 @dataclasses.dataclass(frozen=True)
-class StdlibObjectShapeEntry:
+class StdlibNominalStructEntry:
     module: str
     name: str
     doc: str
     fields: tuple[StdlibHandleFieldEntry, ...]
-    exact: bool
     visibility: str
     semantic_source: str = ""
     semantic_authority: str = "stdlib_def"
@@ -656,6 +655,29 @@ def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry,
     return tuple(fields)
 
 
+def parse_schema_struct_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry, ...]:
+    """Read declaration-ordered nominal fields without structural alias syntax."""
+    fields: list[StdlibHandleFieldEntry] = []
+    names: set[str] = set()
+    for line in raw.splitlines():
+        declaration = line.split("//", 1)[0].strip()
+        if not declaration:
+            continue
+        if declaration.endswith(","):
+            raise SystemExit(f"{context}: nominal struct fields are separated by newlines")
+        parsed = parse_handle_fields(declaration.rstrip(";"), context)
+        if len(parsed) != 1 or ";" in parsed[0].type:
+            raise SystemExit(f"{context}: each nominal struct field requires its own declaration")
+        field = parsed[0]
+        if field.name in names:
+            raise SystemExit(f"{context}: duplicate struct field {field.name!r}")
+        names.add(field.name)
+        fields.append(field)
+    if not fields:
+        raise SystemExit(f"{context}: nominal struct requires at least one field")
+    return tuple(fields)
+
+
 ENUM_VARIANT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$")
 
 
@@ -686,7 +708,7 @@ class CompilerModuleSchema:
 
     module: str
     semantic_source: str
-    object_shapes: tuple[StdlibObjectShapeEntry, ...]
+    nominal_structs: tuple[StdlibNominalStructEntry, ...]
     enums: tuple[StdlibEnumEntry, ...]
     intrinsic_methods: tuple[StdlibTypeMethodEntry, ...]
 
@@ -697,8 +719,8 @@ COMPILER_MODULE_RE = re.compile(
 COMPILER_ENUM_RE = re.compile(
     r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", re.MULTILINE
 )
-COMPILER_OBJECT_RE = re.compile(
-    r"^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{", re.MULTILINE
+COMPILER_STRUCT_RE = re.compile(
+    r"^\s*struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", re.MULTILINE
 )
 COMPILER_CLASS_RE = re.compile(
     r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{", re.MULTILINE
@@ -1021,7 +1043,7 @@ def parse_compiler_module_schemas(root: Path) -> list[CompilerModuleSchema]:
     """Parse Xray declarations that define compiler-owned module namespaces.
 
     A schema is selected by its own `@compiler-module` marker, not by a module
-    name embedded in this parser. Ordinary enums and structural aliases remain
+    name embedded in this parser. Ordinary enums and nominal structs remain
     Xray-owned declarations. Only class methods carrying a per-method
     `@compiler-intrinsic` marker cross into compiler-owned lowering.
     """
@@ -1035,29 +1057,30 @@ def parse_compiler_module_schemas(root: Path) -> list[CompilerModuleSchema]:
         if len(markers) != 1:
             raise SystemExit(f"{path}: compiler schema requires exactly one @compiler-module")
         module = markers[0].group(1)
+        if re.search(r"^\s*type\s+\w+\s*=\s*\{", text, re.MULTILINE):
+            raise SystemExit(f"{path}: structural object aliases were removed; declare a struct")
         semantic_source = path.resolve().relative_to(root.resolve()).as_posix()
-        object_shapes: list[StdlibObjectShapeEntry] = []
+        nominal_structs: list[StdlibNominalStructEntry] = []
         enums: list[StdlibEnumEntry] = []
         intrinsic_methods: list[StdlibTypeMethodEntry] = []
 
-        for match in COMPILER_OBJECT_RE.finditer(text):
+        for match in COMPILER_STRUCT_RE.finditer(text):
             name = match.group(1)
             open_index = text.find("{", match.start())
             line = source_line(text, match.start())
             close_index = matching_source_brace(
                 text, open_index, f"{path}:{line}: {module}.{name}"
             )
-            fields = parse_handle_fields(
-                " ".join(text[open_index + 1 : close_index].splitlines()),
+            fields = parse_schema_struct_fields(
+                text[open_index + 1 : close_index],
                 f"{path}:{line}: {module}.{name}",
             )
-            object_shapes.append(
-                StdlibObjectShapeEntry(
+            nominal_structs.append(
+                StdlibNominalStructEntry(
                     module=module,
                     name=name,
-                    doc=source_decl_doc(text, match.start(), name, "Exact object shape"),
+                    doc=source_decl_doc(text, match.start(), name, "Nominal struct"),
                     fields=fields,
-                    exact=True,
                     visibility="public",
                     semantic_source=semantic_source,
                     semantic_authority="xray_schema",
@@ -1094,13 +1117,13 @@ def parse_compiler_module_schemas(root: Path) -> list[CompilerModuleSchema]:
                 parse_compiler_intrinsic_methods(root, path, module, text, match)
             )
 
-        if not object_shapes and not enums and not intrinsic_methods:
+        if not nominal_structs and not enums and not intrinsic_methods:
             raise SystemExit(f"{path}: @compiler-module {module} declares no schema rows")
         schemas.append(
             CompilerModuleSchema(
                 module=module,
                 semantic_source=semantic_source,
-                object_shapes=tuple(object_shapes),
+                nominal_structs=tuple(nominal_structs),
                 enums=tuple(enums),
                 intrinsic_methods=tuple(intrinsic_methods),
             )
@@ -1114,7 +1137,7 @@ def parse_def_metadata(
     list[StdlibEntry],
     list[StdlibConstEntry],
     list[StdlibHandleEntry],
-    list[StdlibObjectShapeEntry],
+    list[StdlibNominalStructEntry],
     list[StdlibEnumEntry],
     list[StdlibTypeMethodEntry],
     list[StdlibNativeClassEntry],
@@ -1126,7 +1149,7 @@ def parse_def_metadata(
     entries: list[StdlibEntry] = []
     constants: list[StdlibConstEntry] = []
     handles: list[StdlibHandleEntry] = []
-    object_shapes: list[StdlibObjectShapeEntry] = []
+    nominal_structs: list[StdlibNominalStructEntry] = []
     enums: list[StdlibEnumEntry] = []
     type_methods: list[StdlibTypeMethodEntry] = []
     native_classes: list[StdlibNativeClassEntry] = []
@@ -1433,7 +1456,7 @@ def parse_def_metadata(
                     ),
                 )
             )
-        elif current_kind == "object":
+        elif current_kind == "struct":
             missing = [k for k in ("fields",) if k not in props]
             if missing:
                 names = ", ".join(missing)
@@ -1441,18 +1464,12 @@ def parse_def_metadata(
             fields = parse_handle_fields(
                 str(props["fields"]), f"{path}:{line_no}: {current_module}.{current_name}"
             )
-            exact = props.get("exact", True)
-            if not isinstance(exact, bool):
-                raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} exact must be boolean"
-                )
-            object_shapes.append(
-                StdlibObjectShapeEntry(
+            nominal_structs.append(
+                StdlibNominalStructEntry(
                     module=current_module,
                     name=current_name,
-                    doc=str(props.get("doc", "Native exact object shape")),
+                    doc=str(props.get("doc", "Nominal struct")),
                     fields=fields,
-                    exact=exact,
                     visibility=resolve_visibility(
                         props,
                         "internal" if current_name.startswith("__") else "public",
@@ -1655,11 +1672,11 @@ def parse_def_metadata(
                 current_name = m.group(1)
                 props = {}
                 continue
-            m = re.fullmatch(r"object\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            m = re.fullmatch(r"struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
             if m:
                 if current_module is None or current_kind is not None:
-                    raise SystemExit(f"{path}:{line_no}: object declaration outside module or nested object declaration")
-                current_kind = "object"
+                    raise SystemExit(f"{path}:{line_no}: struct declaration outside module or nested struct declaration")
+                current_kind = "struct"
                 current_name = m.group(1)
                 props = {}
                 continue
@@ -1804,19 +1821,19 @@ def parse_def_metadata(
     class_methods = [inherit(e, e.class_name) for e in class_methods]
     class_fields = [inherit(e, e.class_name) for e in class_fields]
 
-    object_keys = {(entry.module, entry.name) for entry in object_shapes}
+    struct_keys = {(entry.module, entry.name) for entry in nominal_structs}
     enum_keys = {(entry.module, entry.name) for entry in enums}
     intrinsic_keys = {(entry.module, entry.type_name, entry.name) for entry in type_methods}
     for schema in parse_compiler_module_schemas(root):
-        for entry in schema.object_shapes:
+        for entry in schema.nominal_structs:
             key = (entry.module, entry.name)
-            if key in object_keys:
+            if key in struct_keys:
                 raise SystemExit(
-                    f"{entry.semantic_source}:{entry.source_line}: duplicate object schema "
+                    f"{entry.semantic_source}:{entry.source_line}: duplicate nominal struct schema "
                     f"{entry.module}.{entry.name}"
                 )
-            object_keys.add(key)
-            object_shapes.append(entry)
+            struct_keys.add(key)
+            nominal_structs.append(entry)
         for entry in schema.enums:
             key = (entry.module, entry.name)
             if key in enum_keys:
@@ -1840,7 +1857,7 @@ def parse_def_metadata(
         entries,
         constants,
         handles,
-        object_shapes,
+        nominal_structs,
         enums,
         type_methods,
         native_classes,
@@ -1865,9 +1882,9 @@ def parse_handles(root: Path) -> list[StdlibHandleEntry]:
     return handles
 
 
-def parse_object_shapes(root: Path) -> list[StdlibObjectShapeEntry]:
-    _, _, _, object_shapes, _, _, _, _, _, _ = parse_def_metadata(root)
-    return object_shapes
+def parse_nominal_structs(root: Path) -> list[StdlibNominalStructEntry]:
+    _, _, _, nominal_structs, _, _, _, _, _, _ = parse_def_metadata(root)
+    return nominal_structs
 
 
 def parse_enums(root: Path) -> list[StdlibEnumEntry]:
@@ -2547,7 +2564,7 @@ def emit_defs_header(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     handles: list[StdlibHandleEntry],
-    object_shapes: list[StdlibObjectShapeEntry],
+    nominal_structs: list[StdlibNominalStructEntry],
     enums: list[StdlibEnumEntry],
     type_methods: list[StdlibTypeMethodEntry],
     native_classes: list[StdlibNativeClassEntry],
@@ -2625,14 +2642,13 @@ def emit_defs_header(
             "    uint16_t field_count;",
             "} XrStdlibHandleDefEntry;",
             "",
-            "typedef struct XrStdlibObjectShapeDefEntry {",
+            "typedef struct XrStdlibNominalStructDefEntry {",
             "    const char *module;",
             "    const char *name;",
             "    const char *doc;",
             "    const XrStdlibHandleFieldDefEntry *fields;",
             "    uint16_t field_count;",
-            "    bool exact;",
-            "} XrStdlibObjectShapeDefEntry;",
+            "} XrStdlibNominalStructDefEntry;",
             "",
             "typedef struct XrStdlibEnumVariantDefEntry {",
             "    const char *name;",
@@ -2751,29 +2767,29 @@ def emit_defs_header(
         lines, "XrStdlibConstDefEntry", "xr_stdlib_const_def_entries", rows,
         "XR_STDLIB_CONST_DEF_ENTRY_COUNT"
     )
-    for object_shape in object_shapes:
-        field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
+    for nominal_struct in nominal_structs:
+        field_array = f"xr_stdlib_nominal_struct_fields_{c_module_ident(nominal_struct.module)}_{nominal_struct.name}"
         rows = []
-        for field in object_shape.fields:
+        for field in nominal_struct.fields:
             rows.append(
                 "    {"
-                f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(field.name)}, "
+                f"{c_string(nominal_struct.module)}, {c_string(nominal_struct.name)}, {c_string(field.name)}, "
                 f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
                 "},"
             )
         emit_metadata_table(lines, "XrStdlibHandleFieldDefEntry", field_array, rows)
     rows = []
-    for object_shape in object_shapes:
-        field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
+    for nominal_struct in nominal_structs:
+        field_array = f"xr_stdlib_nominal_struct_fields_{c_module_ident(nominal_struct.module)}_{nominal_struct.name}"
         rows.append(
             "    {"
-            f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(object_shape.doc)}, "
-            f"{field_array}, {len(object_shape.fields)}, {'true' if object_shape.exact else 'false'}"
+            f"{c_string(nominal_struct.module)}, {c_string(nominal_struct.name)}, {c_string(nominal_struct.doc)}, "
+            f"{field_array}, {len(nominal_struct.fields)}"
             "},"
         )
     emit_metadata_table(
-        lines, "XrStdlibObjectShapeDefEntry", "xr_stdlib_object_shape_def_entries", rows,
-        "XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT"
+        lines, "XrStdlibNominalStructDefEntry", "xr_stdlib_nominal_struct_def_entries", rows,
+        "XR_STDLIB_NOMINAL_STRUCT_DEF_ENTRY_COUNT"
     )
     for enum in enums:
         enum_prefix = f"xr_stdlib_enum_{c_module_ident(enum.module)}_{enum.name}"
@@ -2926,7 +2942,7 @@ def output_paths(root: Path) -> dict[Path, str]:
         entries,
         constants,
         handles,
-        object_shapes,
+        nominal_structs,
         enums,
         type_methods,
         native_classes,

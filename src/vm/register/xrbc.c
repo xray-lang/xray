@@ -19,6 +19,7 @@
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_array.h"
 #include "runtime/native/xnative_map.h"
+#include "runtime/native/xnative_set.h"
 #include "runtime/native/xnative_boxed.h"
 #include "xray_native_view.h"
 #include "xir/xxir_value_internal.h"
@@ -54,6 +55,7 @@ typedef union {
     XrtModuleAccess *state_ref;
     XrtArray *array;
     XrtMap *map;
+    XrtSet *set;
 } XrRbcRegister;
 XR_STATIC_ASSERT(sizeof(XrRbcRegister) == 8, "physical register lanes occupy eight bytes");
 
@@ -196,7 +198,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
         (function->result_kind != XR_RBC_BITS && function->result_kind != XR_RBC_FUNCTION && function->result_kind != XR_RBC_SLICE_I64 &&
          !rbc_managed_kind(function->result_kind))) return false;
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_BOXED ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_SET_I64_REF ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -305,7 +307,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_RET:
         return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
             (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
-                function->result_kind == XR_RBC_BOXED || rbc_direct_managed_kind(function->result_kind));
+                function->result_kind == XR_RBC_BOXED || function->result_kind==XR_RBC_SET_I64 || rbc_direct_managed_kind(function->result_kind));
     case XR_RBC_RET0:
         return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
     default:
@@ -319,6 +321,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 #include "xrbc_string_admission.inc.c"
 
 static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
+    if(module->map_literal_count>UINT32_MAX || (module->map_literal_count && !module->map_literals))return XR_RBC_INVALID;
+    for(size_t n=0;n<module->map_literal_count;++n)
+        if(!xrt_map_literal_valid(&module->map_literals[n]))return XR_RBC_INVALID;
     XrRbcCodeLease lease = module->code_lease;
     if (lease.owner ? !lease.retain || !lease.release : lease.retain || lease.release)
         return XR_RBC_INVALID;
@@ -428,6 +433,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 static bool xr_rbc_captured_cell_value(const XrRbcModule *, const XrRbcStack *,
     XrRbcRegisterKind, uint64_t, XrXirType, XrXirValue *);
 #include "xrbc_map_execute.inc.c"
+#include "xrbc_set_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
 
 /* Keep computed-goto handlers on a stable cache-line boundary as cold code grows. */
@@ -556,6 +562,7 @@ static void xr_rbc_root(void *context) {
         execution->pending->locations, &execution->pending->value, execution->entries);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_STRING)
         execution->pending->value.string = xrt_string_root_take(execution->pending->value.string);
+    if(execution->pending->status==XR_RBC_OK && execution->pending->result_kind==XR_RBC_SET_I64)execution->pending->value.set=xrt_set_root_take(execution->pending->value.set);
     if (execution->pending->status == XR_RBC_OK && execution->pending->result_kind == XR_RBC_MAP_STRING_I64)
         execution->pending->value.map = xrt_map_root_take(execution->pending->value.map);
     if (execution->pending->status == XR_RBC_OK && rbc_array_kind(execution->pending->result_kind))
@@ -594,7 +601,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         xr_rbc_root, execution);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
-    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)
+    else if (status == XRT_EXECUTION_FAILURE && (outcome->failure.kind == XRT_FAILURE_TYPED_PANIC ||
+        outcome->failure.kind==XRT_FAILURE_MESSAGE_PANIC))
         outcome->status = XR_RBC_TYPED_PANIC;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_NULL_UNWRAP)
         outcome->status = XR_RBC_NULL_UNWRAP;
@@ -696,7 +704,7 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
 
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations) {
-    if (!outcome || outcome->status != XR_RBC_TYPED_PANIC || !facts || !borrowed_locations)
+    if (!outcome || outcome->status != XR_RBC_TYPED_PANIC || outcome->failure.kind!=XRT_FAILURE_TYPED_PANIC || !facts || !borrowed_locations)
         return false;
     *facts = outcome->failure.detail.panic;
     *borrowed_locations = outcome->locations;
@@ -709,6 +717,15 @@ XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     *source_id = outcome->failure.detail.panic.source_id;
     *borrowed_locations = outcome->locations;
     return true;
+}
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *outcome,uint32_t *code,const char **body,size_t *length,
+    uint32_t *source,const XrtLocationOwner **locations) {
+    if(!outcome || outcome->status!=XR_RBC_TYPED_PANIC || outcome->failure.kind!=XRT_FAILURE_MESSAGE_PANIC ||
+        !code || !body || !length || !source || !locations)return false;
+    const XrtMessagePanic *panic=&outcome->failure.detail.message;
+    const char *bytes=NULL;size_t size=0;
+    if(!xr_xir_string_view(&panic->message,&bytes,&size))return false;
+    *code=panic->code;*body=bytes;*length=size;*source=panic->source_id;*locations=outcome->locations;return true;
 }
 
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
@@ -724,9 +741,11 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     if (!outcome || !*outcome) return;
     XrRbcOutcome *owned = *outcome;
     *outcome = NULL;
+    xrt_execution_failure_drop(&owned->failure);
     xr_free(owned->aggregate_bytes);
     xr_free(owned->aggregate_types);
     if (owned->result_kind == XR_RBC_STRING) xrt_string_owned_drop(&owned->value.string);
+    if(owned->result_kind==XR_RBC_SET_I64)xrt_set_owned_drop(&owned->value.set);
     if (owned->result_kind == XR_RBC_MAP_STRING_I64) xrt_map_owned_drop(&owned->value.map);
     if (rbc_array_kind(owned->result_kind)) xrt_array_owned_drop(&owned->value.array);
     xrt_locations_release(owned->locations);

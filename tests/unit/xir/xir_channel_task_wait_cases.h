@@ -45,11 +45,11 @@ static void channel_task_new(ChannelTaskFixture *f) {
         {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,0,channel_task_main,NULL,NULL,0,0}};
     XrXirFunctionIdentity functions[4]={0};functions[1].exported=functions[2].exported=1;
     const XrXirSourceModule module={"channel-wait",12,NULL,0,0};
-    XrXirDeclarations declarations={&module,1,functions,NULL,0,NULL,0,0,3,NULL};
+    XrXirDeclarations declarations={.modules=&module, .module_count=1, .functions=functions, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=3, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirTypeNode nodes[]={ {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_I64} };
     const XrXirTypes program_types={nodes,2,NULL,NULL};
-    CHECK(xr_xir_compile_declarations_verify(&f->owner.context,&declarations,&program_types,4,XR_XIR_PROGRAM)==XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(&f->owner.context,&declarations,&program_types,4,XR_XIR_PROGRAM, NULL)==XR_XIR_OK);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         entries,4,&declarations,{&f->witness,channel_task_code_drop},
         &program_types,{0}};

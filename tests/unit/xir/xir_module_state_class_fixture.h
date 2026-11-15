@@ -85,7 +85,7 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
     f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected?0:3,f->class_type,rejected==2?0:1};
     f->literal=(XrXirLiteral){"x",1};
-    f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,&f->literal,1,3,4,NULL};
+    f->declarations=(XrXirDeclarations){.modules=f->modules, .module_count=4, .functions=f->identities, .slots=f->slots, .slot_count=4, .literals=&f->literal, .literal_count=1, .root_module=3, .entry_function=4, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,8,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};
 }
 static XrXirStatus state_class_build(const XrXirCompileContext *context,uint32_t scenario,

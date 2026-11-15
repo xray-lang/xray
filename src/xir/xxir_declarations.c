@@ -23,6 +23,8 @@
 #include "xxir_lower_control.h"
 #include "xxir_type_scratch_internal.h"
 #include "xxir_implementation.h"
+#include "xxir_constant_key.h"
+#include "xxir_hashable_internal.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"
 #include <limits.h>
@@ -41,6 +43,11 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
     if (identity->capture_count > module->functions[index].parameter_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirParameterNames *names=xr_xir_parameter_names_find(module->declarations,
+        XR_XIR_PARAMETER_FUNCTION,index,0);
+    if (names && (names->parameter_offset>module->functions[index].parameter_count ||
+        names->count!=module->functions[index].parameter_count-names->parameter_offset))
         return XR_XIR_BAD_STRUCTURE;
 
     if (identity->method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
@@ -66,8 +73,6 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
         return XR_XIR_BAD_STRUCTURE;
     uint32_t native_id=table->declarations?table->declarations[owner].native.native_id:table->identities[owner].native.native_id;
     if(native_id==XR_NATIVE_DECLARATION_FILE_STAT)return XR_XIR_BAD_TYPE;
-    uint32_t flags=table->declarations?table->declarations[owner].flags:table->identities[owner].flags;
-    if (flags & XR_XIR_NOMINAL_RECORD) return XR_XIR_BAD_TYPE;
     if (identity->native_callable) return xir_native_callable_verify(module,index);
     if(identity->method_kind==XR_XIR_CONSTRUCTOR_FIELDS)return xir_compile_class_stage_signature(module,index,NULL);
     if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;
@@ -212,7 +217,9 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind) {
+#include "xxir_map_literal_declarations.inc.c"
+#include "xxir_parameter_names.inc.c"
+XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind, XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
@@ -223,7 +230,9 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     const XrXirCompileContext *work = budget;
     uint64_t fixed = sizeof(*d) + (uint64_t) d->module_count * sizeof(*d->modules) +
         (uint64_t) functions * sizeof(*d->functions) + (uint64_t) d->slot_count * sizeof(*d->slots) +
-        (uint64_t) d->literal_count * sizeof(*d->literals);
+        (uint64_t) d->literal_count * sizeof(*d->literals) + (uint64_t)d->map_literal_count*sizeof(*d->map_literals) +
+        (uint64_t)d->parameter_name_count*sizeof(*d->parameter_names) +
+        (uint64_t)d->hashable_witness_count*sizeof(*d->hashable_witnesses);
     if ((fixed > SIZE_MAX) || (!(fixed <= SIZE_MAX)))
         return XR_XIR_BUDGET;
     if (!d->module_count || d->module_count > functions || !d->modules || !d->functions ||
@@ -251,6 +260,9 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role ||
         (d->functions[d->entry_function].promises & XR_XIR_FUNCTION_GENERATOR))) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions);
+    if(status==XR_XIR_OK)status=declaration_map_literals_verify(compile_context,d);
+    if(status==XR_XIR_OK)status=declaration_parameter_names_verify(compile_context,d,functions,types,true,control);
+    if(status==XR_XIR_OK)status=xir_hashable_witnesses_shape(compile_context,types,d,functions,control);
     if (status != XR_XIR_OK) return status;
     for (uint32_t m=0;m<d->module_count;++m) {
 
@@ -344,6 +356,9 @@ static void *declaration_copy(const XrXirCompileContext *compile_context, const 
 }
 void xr_xir_compile_declarations_free(XrXirDeclarations *d) {
     if (!d) return;
+    declaration_map_literals_free(d);
+    declaration_parameter_names_free(d);
+    xr_compile_resources_free((void *)d->hashable_witnesses);
     xr_xir_compile_implementations_free((XrXirImplementationTable *)d->implementations);
     if (d->modules) for (uint32_t i = 0; i < d->module_count; ++i) {
         xr_compile_resources_free((void *) d->modules[i].name);
@@ -359,6 +374,10 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
 
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!source) { *output = NULL; return XR_XIR_OK; }
+    allocation_status=declaration_map_literals_verify(compile_context,source);
+    if(allocation_status!=XR_XIR_OK)return allocation_status;
+    allocation_status=declaration_parameter_names_verify(compile_context,source,functions,NULL,false,control);
+    if(allocation_status!=XR_XIR_OK)return allocation_status;
 
     allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) return allocation_status;
     XrXirDeclarations *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
@@ -366,6 +385,14 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     *copy = *source;
     copy->implementations = NULL;
     copy->modules=NULL;copy->functions=NULL;copy->slots=NULL;copy->literals=NULL;
+    copy->map_literals=NULL;
+    copy->parameter_names=NULL;
+    copy->hashable_witnesses=NULL;
+    allocation_status=xir_hashable_witnesses_shape(compile_context,NULL,source,functions,control);
+    if(allocation_status!=XR_XIR_OK)goto failed;
+    copy->hashable_witnesses=declaration_copy(compile_context,source->hashable_witnesses,
+        (size_t)source->hashable_witness_count*sizeof(*source->hashable_witnesses),&allocation_status,control);
+    if(allocation_status!=XR_XIR_OK)goto failed;
     copy->modules = xir_compile_calloc(compile_context, source->module_count, sizeof(*source->modules), &allocation_status);
     copy->functions = declaration_copy(compile_context, source->functions, (size_t) functions * sizeof(*source->functions), &allocation_status,control);
     copy->slots = declaration_copy(compile_context, source->slots, (size_t) source->slot_count * sizeof(*source->slots), &allocation_status,control);
@@ -388,6 +415,35 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
         to->length = from->length;
         to->bytes = declaration_copy(compile_context, from->bytes, from->length, &allocation_status,control);
         if (from->length && !to->bytes) goto failed;
+    }
+    if(source->map_literal_count) {
+        XrXirMapLiteral *literals=xir_compile_calloc(compile_context,source->map_literal_count,sizeof(*literals),&allocation_status);
+        if(!literals)goto failed;
+        copy->map_literals=literals;
+        for(uint32_t n=0;n<source->map_literal_count;++n) {
+            XrXirMapLiteral from=source->map_literals[n];
+            literals[n].module=from.module;literals[n].count=from.count;literals[n].file.length=from.file.length;
+            literals[n].file.bytes=declaration_copy(compile_context,from.file.bytes,from.file.length,&allocation_status,control);
+            literals[n].items=declaration_copy(compile_context,from.items,(size_t)from.count*sizeof(*from.items),&allocation_status,control);
+            if(allocation_status!=XR_XIR_OK)goto failed;
+        }
+    }
+    if(source->parameter_name_count) {
+        XrXirParameterNames *rows=xir_compile_calloc(compile_context,source->parameter_name_count,sizeof(*rows),&allocation_status);
+        if(!rows)goto failed;
+        copy->parameter_names=rows;
+        for(uint32_t n=0;n<source->parameter_name_count;++n) {
+            const XrXirParameterNames *from=&source->parameter_names[n];
+            rows[n]=*from;rows[n].names=NULL;
+            XrXirLiteral *names=from->count?xir_compile_calloc(compile_context,from->count,sizeof(*names),&allocation_status):NULL;
+            if(from->count && !names)goto failed;
+            rows[n].names=names;
+            for(uint32_t p=0;p<from->count;++p) {
+                names[p].length=from->names[p].length;
+                names[p].bytes=declaration_copy(compile_context,from->names[p].bytes,from->names[p].length,&allocation_status,control);
+                if(allocation_status!=XR_XIR_OK)goto failed;
+            }
+        }
     }
     allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
     XrXirImplementationTable *implementations = NULL;

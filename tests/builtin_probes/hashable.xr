@@ -5,6 +5,6 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 fn keyed<K: Hashable>(m: Map<K, i64>) -> i64 { return len(m) }
-var m: Map<Token, i64> = #{}
+var m: Map<Token, i64> = {}
 m.set(Token(1), 9)
 print(keyed(m))

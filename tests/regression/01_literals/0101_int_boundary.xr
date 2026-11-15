@@ -3,6 +3,12 @@
 // Validates that integers near the sBx bias boundary
 // are correctly encoded and decoded without sign flips.
 
+struct Boundaries {
+    min: i64
+    max: i64
+    beyond: i64
+}
+
 @test
 fn test_sbx_boundary_positive() {
     // MAXARG_sBx = 32767, should use LOADI
@@ -67,7 +73,7 @@ fn test_large_constants() {
 @test
 fn test_sbx_in_json() {
     // The original bug manifested when -32768 appeared in an object literal.
-    var obj = {min: -32768, max: 32767, beyond: 32768}
+    var obj = Boundaries{min: -32768, max: 32767, beyond: 32768}
     assertEqual(obj.min, -32768)
     assertEqual(obj.max, 32767)
     assertEqual(obj.beyond, 32768)

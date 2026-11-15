@@ -71,7 +71,7 @@ fn test_same_quote_with_inner_brace() {
 
 @test
 fn test_same_quote_map_index() {
-    var m = #{"k": "value"}
+    var m = {"k": "value"}
     var s = "${m["k"]}"
     assertEqual(s, "value")
 }

@@ -68,7 +68,7 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
     };
     XrXirSourceModule source = {"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0},{.exported=1},{0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);

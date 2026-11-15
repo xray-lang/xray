@@ -8,9 +8,9 @@
 
 import { Counter, CounterStats } from "./modules/shared_class_lib"
 
-type CombinedStats = {
-    first: CounterStats,
-    second: CounterStats,
+struct CombinedStats {
+    first: CounterStats
+    second: CounterStats
 }
 
 var counter1 = Counter()
@@ -20,7 +20,7 @@ fn call_stats_nested() -> CombinedStats {
     fn inner() -> CombinedStats {
         var a = counter1.stats()
         var b = counter2.stats()
-        return { first: a, second: b }
+        return CombinedStats{ first: a, second: b }
     }
     return inner()
 }

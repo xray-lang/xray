@@ -29,6 +29,7 @@ typedef struct HirBodyUse {
     XrHirBodyProjection projection;
     uint32_t source_value,selector,field,next_argument,source_operand;
     uint32_t default_value,default_call;
+    uint32_t capture_function;
     XrXirOp default_conversion;
     XrHirBodySignature signature;
     XrHirBodyBinding binding;
@@ -38,12 +39,13 @@ typedef struct HirBodyUse {
     uint32_t *tuple_arguments;
     uint32_t tuple_argument_count;
     bool tuple_construct;
+    struct HirBodyCollection *collection;
     XrHirNominalShape nominal;
     XrHirNominalValue *nominal_values;
     uint32_t nominal_count,nominal_variant,nominal_field,nominal_function;
     uint32_t nominal_result,nominal_call;
     XrXirOp nominal_call_operation;
-    bool nominal_construct,nominal_helper,nominal_has_result,nominal_has_call,nominal_emitted;
+    bool nominal_construct,nominal_helper,nominal_get,nominal_has_result,nominal_has_call,nominal_emitted;
     bool initializes,index_group;
     bool has_second_operand,has_immediate;
     uint32_t second_operand;
@@ -58,6 +60,8 @@ typedef struct HirBodyBinding {
     uint32_t lexical_value;
     XirLexicalBindingRole lexical_role;
     bool materialized,is_declaration;
+    uint32_t declared_function;
+    XrHirBodyBinding capture_source;
 } HirBodyBinding;
 typedef struct HirBodyScope {XrHirBodyScope parent;XrHirBodyOrigin origin;uint32_t nominal_owner;} HirBodyScope;
 typedef struct HirBodyPlace {
@@ -74,9 +78,16 @@ typedef struct HirBodySignature {
     XrHirSignatureInput declaration;
     XrXirCallableParameter *parameters;
     XrXirType *default_types;
-    uint32_t default_type_count;
+    XrXirLiteral *parameter_names;
+    uint32_t *argument_formals, *formal_arguments;
+    uint32_t binding_count, binding_capacity, next_positional;
+    bool binding_open, binding_sealed, named_seen;
+    uint32_t default_type_count, default_owner, default_parameter_offset;
+    uint32_t native_member,native_owner;
+    bool native_variadic;
     unsigned char *accesses;
-    XrHirArrayCallbackShape callback;
+    unsigned char *native_optional;
+    XrHirNativeCallbackShape callback;
     XrHirScopeArgument group;
     uint32_t first_argument,last_argument,argument_count,access_count,callback_use;
     bool finished,callback_ready,callback_received,default_types_ready;
@@ -112,8 +123,9 @@ typedef struct HirBodyNominalPlan {
     XrHirNominalPlanInput input;
     XrHirNominalValue *values;
     unsigned char *present;
+    XrHirNominalSupplier *suppliers;
     uint32_t count,begin,selected;
-    bool complete,applied;
+    bool complete,applied,composed;
 } HirBodyNominalPlan;
 typedef struct HirBodyNominalFunctionSource {uint32_t function,declaration,field,origin;} HirBodyNominalFunctionSource;
 struct XrHirBody {
@@ -217,6 +229,7 @@ XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     if(!body)return;
     body_nominal_free(body);
     for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].tuple_arguments);
+    for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].collection);
     for(uint32_t i=0;i<body->tuples.count;++i)xr_compile_resources_free(((HirBodyTuple *)body->tuples.items)[i].fields);
     for(uint32_t i=0;i<body->tuple_contexts.count;++i)xr_compile_resources_free(((HirBodyTupleContext *)body->tuple_contexts.items)[i].fields);
     xr_compile_resources_free(body->tuples.items);xr_compile_resources_free(body->tuple_contexts.items);xr_compile_resources_free(body->tuple_map);
@@ -224,6 +237,9 @@ XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     for(uint32_t i=0;i<body->signatures.count;++i) {
         xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].parameters);
         xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].default_types);
+        xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].parameter_names);
+        xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].argument_formals);
+        xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].formal_arguments);
     }
     xr_compile_resources_free(body->signatures.items);
     xr_compile_resources_free(body->scope_index);
@@ -247,7 +263,7 @@ XR_FUNC XrXirStatus xr_hir_body_emit(XrHirBody *body,XrHirBodyUse handle,XrXirTy
     if(!body||body->ended||handle.owner!=body||handle.index>=body->count)return XR_XIR_BAD_STRUCTURE;
     HirBodyUse *use=&body->uses[handle.index];
     if(!use->consumed||use->retired||use->projected||use->action.target!=type)return XR_XIR_BAD_STRUCTURE;
-    if(use->nominal_helper) {
+    if(use->nominal_helper || use->nominal_get) {
         if (use->nominal_emitted)
             return XR_XIR_BAD_STRUCTURE;
         use->nominal_emitted = true;
@@ -441,10 +457,14 @@ static XrXirStatus body_narrowing(const XrHirBody *body,XrXirType original,XrXir
     return original==actual?XR_XIR_OK:XR_XIR_BAD_TYPE;
 }
 #include "xhir_body_binding.inc.c"
+#include "xhir_body_declared_function.inc.c"
 #include "xhir_body_place.inc.c"
 #include "xhir_body_default.inc.c"
 #include "xhir_body_tuple.inc.c"
+#include "xhir_body_collection.inc.c"
 #include "xhir_body_nominal.inc.c"
+#include "xhir_body_call_declaration.inc.c"
+#include "xhir_body_call_binding.inc.c"
 #include "xhir_body_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
     const XrHirBodyInput *input,XrCompileRequestControl *control,XrHirBodyUse *output,const char **reason) {
@@ -488,6 +508,13 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
         projection->function!=body->uses[use].origin.function||
         projection->type!=body->uses[use].action.target)return XR_XIR_BAD_STRUCTURE;
     HirBodyUse *row=&body->uses[use];
+    if(row->collection) {
+        XrXirStatus status=body_collection_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
+    }
+    if(row->capture_function) {
+        XrXirStatus status=body_declared_capture_projection(body,row,projection,control);
+        if(status!=XR_XIR_OK)return status;
+    }
     if(row->tuple.owner) {
         XrXirStatus status=body_tuple_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
     }
@@ -568,6 +595,16 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     }
     if(row->has_selector&&projection->source_operands[1]!=row->selector)return XR_XIR_BAD_STRUCTURE;
     if(row->has_field&&projection->immediate!=(int64_t)row->field)return XR_XIR_BAD_STRUCTURE;
+    if(row->binding.owner&&row->initializes&&body->bindings[row->binding.index].declared_function&&
+        row->binding_kind!=XR_HIR_BINDING_CAPTURE) {
+        uint32_t function=body->bindings[row->binding.index].declared_function-1;
+        XrXirStatus capture_status=body_declared_capture_projection(body,row,projection,control);
+        if(capture_status!=XR_XIR_OK)return capture_status;
+        if(!projection->has_instruction||projection->operation!=XR_XIR_FUNCTION_REF||
+            projection->immediate!=(int64_t)function||projection->source_argument_count!=
+                (*body->declarations.identities)[function].capture_count)
+            return body_projection_failure(reason,"named function binding lost its actual closure declaration");
+    }
     if (row->binding.owner && row->initializes) {
         HirBodyBinding *binding = &body->bindings[row->binding.index];
         binding->lexical_value = projection->has_value ? projection->value :
@@ -575,6 +612,7 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     }
     row->projection=*projection;row->projection.source_arguments=NULL;row->projection.source_value_map=NULL;
     row->projection.default_type_arguments=NULL;
+    row->projection.collection_declarations=NULL;
     row->projected=true;if(reason)*reason=NULL;return XR_XIR_OK;
 }
 XR_FUNC uint32_t xr_hir_body_use_count(const XrHirBody *body){return body?body->count:0;}

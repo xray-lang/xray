@@ -27,4 +27,5 @@ XR_FUNC XrXirValueStatus xrt_map_owned_copy(const XrtMap *, const XrXirTypeArena
 XR_FUNC XrtMap *xrt_map_root_take(XrtMap *);
 XR_FUNC XrtMap *xrt_map_publish_pending(uint32_t source);
 XR_FUNC void xrt_map_root_drain(XrtValueRoot *);
+XR_FUNC bool xrt_map_literal_valid(const XrtMapLiteral *);
 #endif // XNATIVE_MAP_H

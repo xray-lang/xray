@@ -39,18 +39,26 @@ XR_FUNC bool xrt_callable_type_id(XrtCallableValueSpec value, uint32_t count, Xr
     *output = type;
     return true;
 }
-XR_FUNC bool xrt_callable_specs_equal(const XrtCallableTypeSpec *left, const XrtCallableTypeSpec *right, uint32_t count) {
+XR_FUNC bool xrt_callable_specs_equal(const XrtCallableImage *left_image, const XrtCallableImage *right_image) {
+    if (!xrt_callable_image_valid(left_image) || !xrt_callable_image_valid(right_image) ||
+        left_image->type_count != right_image->type_count) return false;
+    uint32_t count=left_image->type_count;
+    const XrtCallableTypeSpec *left=left_image->types, *right=right_image->types;
     if (count && (!left || !right)) return false;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec a = left[t], b = right[t];
         if (a.kind != b.kind || a.element.kind != b.element.kind || a.element.type != b.element.type ||
             a.count != b.count || a.result.kind != b.result.kind || a.result.type != b.result.type ||
             a.flags != b.flags || a.throws != b.throws || a.parameter_count != b.parameter_count ||
+            a.module_length != b.module_length || a.name_length != b.name_length || a.exported != b.exported ||
+            (a.module_length && (!a.module || !b.module || memcmp(a.module,b.module,a.module_length))) ||
+            (a.name_length && (!a.name || !b.name || memcmp(a.name,b.name,a.name_length))) ||
             (a.parameter_count && (!a.parameters || !b.parameters))) return false;
         for (uint32_t p = 0; p < a.parameter_count; ++p) {
             XrtCallableParameterSpec x = a.parameters[p], y = b.parameters[p];
             if (x.value.kind != y.value.kind || x.value.type != y.value.type || x.mode != y.mode || x.escaping != y.escaping ||
-                x.name_length != y.name_length || (x.name_length && (!x.name || !y.name || memcmp(x.name, y.name, x.name_length))))
+                x.field_flags != y.field_flags || x.name_length != y.name_length ||
+                (x.name_length && (!x.name || !y.name || memcmp(x.name, y.name, x.name_length))))
                 return false;
         }
     }
@@ -65,16 +73,21 @@ static XrXirValueStatus callable_resource_status(XrCompileResourceStatus status)
 
 #include "xnative_record_types.inc.c"
 
-XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeSpec *specs, uint32_t count,
+XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableImage *image,
     uint64_t limit, XrXirTypeArena **empty, uint64_t *bytes) {
-    if (!empty || *empty || !bytes || (count && !specs)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!empty || *empty || !bytes || !xrt_callable_image_valid(image)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtCallableTypeSpec *specs=image->types;
+    uint32_t count=image->type_count;
+    if (count && !specs) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (count > XR_XIR_CONSTRUCTED_TYPE_LIMIT - XR_XIR_CONSTRUCTED_TYPE_BASE - XRT_CALLABLE_PREFIX_COUNT)
         return XR_XIR_VALUE_LIMIT;
     size_t parameter_count = 0;
     for (uint32_t t = 0; t < count; ++t) {
         XrtCallableTypeSpec spec = specs[t];
         if ((uint32_t)spec.kind > XRT_CALLABLE_RECORD || spec.parameter_count > 65536 ||
-            (spec.parameter_count && !spec.parameters)) return XR_XIR_VALUE_BAD_ARGUMENT;
+            ((spec.parameter_count != 0) != (spec.parameters != NULL)) ||
+            (spec.kind != XRT_CALLABLE_RECORD &&
+             (spec.module || spec.name || spec.module_length || spec.name_length || spec.exported))) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (spec.throws) return XR_XIR_VALUE_UNSUPPORTED;
         if (spec.parameter_count > SIZE_MAX - parameter_count) return XR_XIR_VALUE_OVERFLOW;
         parameter_count += spec.parameter_count;
@@ -129,7 +142,7 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
             for (uint32_t p = 0; p < spec.parameter_count; ++p) {
                 XrtCallableParameterSpec parameter = spec.parameters[p];
                 XrXirCallableParameter *received = &parameters[next++];
-                if (parameter.mode > (uint32_t)XR_PARAM_MOVE ||
+                if (parameter.name || parameter.name_length || parameter.field_flags || parameter.mode > (uint32_t)XR_PARAM_MOVE ||
                     !xrt_callable_type_id(parameter.value, t, &received->type)) {
                     status = XR_XIR_VALUE_BAD_ARGUMENT;
                     break;
@@ -201,8 +214,8 @@ XR_FUNC XrXirValueStatus xrt_callable_types_new_accounted(const XrtCallableTypeS
 XR_FUNC const XrXirTypeArena *xrt_callable_map_catalog(const XrXirTypeArena *types) {
     return xir_native_type_arena_string_i64_map_source(types, XR_XIR_CONSTRUCTED_TYPE_BASE + 4u);
 }
-XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableTypeSpec *specs, uint32_t count,
+XR_FUNC XrXirValueStatus xrt_callable_types_new(const XrtCallableImage *image,
     uint64_t limit, XrXirTypeArena **empty) {
     uint64_t bytes = 0;
-    return xrt_callable_types_new_accounted(specs, count, limit, empty, &bytes);
+    return xrt_callable_types_new_accounted(image, limit, empty, &bytes);
 }

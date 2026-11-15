@@ -80,7 +80,7 @@ fn test_null_to_bool() {
 @test
 fn test_array_unique() {
     var arr = [1, 2, 2, 3, 3, 3]
-    var s = #[1, 2, 3]  // 手动去重
+    var s = Set([1, 2, 3])  // 手动去重
     assertEqual(len(s), 3)
     assertEqual(s.contains(1), true)
     assertEqual(s.contains(2), true)

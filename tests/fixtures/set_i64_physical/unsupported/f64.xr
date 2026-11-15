@@ -1,0 +1,5 @@
+fn main() {
+    var values = Set<f64>()
+    print(len(values))
+}
+main()

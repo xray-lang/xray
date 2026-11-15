@@ -37,7 +37,7 @@ fn test_nested_allocations() {
         // 创建嵌套数据结构
         var data: Array<JSON.Value> = []
         for (var i = 0; i < 50; i++) {
-            var item = #{"id": i, "values": [i * 1, i * 2, i * 3], "name": "item_" + string(i)}
+            var item = {"id": i, "values": [i * 1, i * 2, i * 3], "name": "item_" + string(i)}
             data.push(item)
         }
         return len(data)

@@ -101,6 +101,7 @@ typedef XrCompileResourceStatus (*XrParseCallSyntaxFn)(void *, const XrParseCall
 typedef void (*XrParseArrowSyntaxFn)(void *, const Token *, bool value_arrow);
 typedef void (*XrParseMatchArmSyntaxFn)(void *, const Token *body_end);
 typedef void (*XrParseArrowErrorFn)(void *, const Token *, bool value_arrow);
+typedef bool (*XrParseSourceTokenFn)(void *, const Token *, Token *);
 
 /* ========== Parser State ==========
  *
@@ -136,6 +137,9 @@ struct Parser {
     /* Interpolation children borrow a synchronous reporter for original-file positions. */
     XrParseArrowErrorFn arrow_error_callback;
     void *arrow_error_data;
+    /* Synchronous mapping for syntax metadata retained by interpolation ASTs. */
+    XrParseSourceTokenFn source_token_callback;
+    void *source_token_data;
     int error_count;  // Number of errors collected
     int max_errors;   // Max errors before stopping (0 = unlimited)
 

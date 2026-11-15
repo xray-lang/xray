@@ -45,9 +45,10 @@ static void raw_boxed_init(RawBoxed *f, XrXirTypeArena *arena) {
 }
 static void test_raw_boxed(void) {
     XrtCallableParameterSpec field = {.value={XRT_CALLABLE_SCALAR, XR_POD_I64}, .name="score", .name_length=5};
-    XrtCallableTypeSpec type = {.kind=XRT_CALLABLE_RECORD, .parameters=&field, .parameter_count=1};
+    XrtCallableTypeSpec type = {.kind=XRT_CALLABLE_RECORD, .module="rbc-boxed", .module_length=9,
+        .name="Score", .name_length=5, .count=1, .parameters=&field, .parameter_count=1};
     XrXirTypeArena *arena = NULL;
-    CHECK(xrt_callable_types_new(&type, 1, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
+    CHECK(xrt_callable_types_new(&(XrtCallableImage){.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=&type,.type_count=1}, UINT64_MAX, &arena) == XR_XIR_VALUE_OK);
     RawBoxed f;
     raw_boxed_init(&f, arena);
     uint64_t result = 0;

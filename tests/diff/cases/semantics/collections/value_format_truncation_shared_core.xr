@@ -2,8 +2,8 @@
 // VM and AOT share the public truncation limit and ", ...(N more)" suffix.
 
 var xs: Array<i64> = []
-var m: Map<i64, i64> = #{}
-var s: Set<i64> = #[]
+var m: Map<i64, i64> = {}
+var s: Set<i64> = Set()
 
 for (i in 0..35) {
     xs.push(i)

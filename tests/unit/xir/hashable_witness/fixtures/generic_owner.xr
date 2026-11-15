@@ -1,0 +1,9 @@
+struct Token<T:Hashable> implements Hashable {
+ value:T
+ equals(other:Token<T>)->bool{return true}
+ hash()->i64{return 0}
+}
+fn keyed<K:Hashable>(value:K)->K{return value}
+var token=keyed(Token<i64>{value:7})
+var counts:Map<Token<i64>,i64>={}
+counts.set(token,99)

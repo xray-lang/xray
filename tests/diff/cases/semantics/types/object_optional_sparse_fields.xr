@@ -1,11 +1,11 @@
-type SparseOptions = {
-    required: string,
-    method: string?,
-    headers: i64?,
+struct SparseOptions {
+    required: string
+    method: string?
+    headers: i64?
     timeoutMs: i64?
 }
 
-var lateOnly: SparseOptions = {
+var lateOnly: SparseOptions = SparseOptions{
     required: "late",
     timeoutMs: 25
 }
@@ -14,7 +14,7 @@ print(lateOnly.method == null)
 print(lateOnly.headers == null)
 print(lateOnly.timeoutMs!)
 
-var middleOnly: SparseOptions = {
+var middleOnly: SparseOptions = SparseOptions{
     required: "middle",
     headers: 7
 }

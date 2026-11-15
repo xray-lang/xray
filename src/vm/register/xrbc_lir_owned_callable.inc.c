@@ -18,8 +18,9 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
         XrLirTypeView shape;
         xr_lir_type_view(input, XR_LIR_TYPE_COUNT + t, &shape);
         if (shape.kind == XR_LIR_TYPE_RECORD) {
-            if (shape.count > SIZE_MAX - parameter_count) { status = XR_RBC_COMPILE_LIMIT; goto done; }
-            parameter_count += shape.count;
+            uint32_t members = lir_native_record_parameters(input, XR_LIR_TYPE_COUNT + t);
+            if (members > SIZE_MAX - parameter_count) { status = XR_RBC_COMPILE_LIMIT; goto done; }
+            parameter_count += members;
         }
         if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + t, &signature) == XR_LIR_OK) {
             if (signature.parameter_count > SIZE_MAX - parameter_count) { status = XR_RBC_COMPILE_LIMIT; goto done; }
@@ -42,7 +43,10 @@ static XrRbcCompileStatus rbc_lir_owned_callable(const XrLirModule *input, const
     if (received) {
         if (!xr_xir_compile_type_arena_retain(received)) built = XR_XIR_VALUE_REFCOUNT_LIMIT;
         else program->module.closure_types = received;
-    } else built = xrt_callable_types_new(specs, count, UINT64_MAX, &program->module.closure_types);
+    } else {
+        const XrtCallableImage image={.metadata=XRT_CALLABLE_IMAGE_HEADER,.types=specs,.type_count=count};
+        built = xrt_callable_types_new(&image, UINT64_MAX, &program->module.closure_types);
+    }
     if (built != XR_XIR_VALUE_OK) {
         status = built == XR_XIR_VALUE_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
             built == XR_XIR_VALUE_LIMIT || built == XR_XIR_VALUE_MEMORY_LIMIT ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_UNSUPPORTED;

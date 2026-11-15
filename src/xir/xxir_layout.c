@@ -41,10 +41,10 @@ static XrXirStatus layout_function_bounds(const XrXirModule *module) {
     return XR_XIR_OK;
 }
 
-static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompileContext *context) {
+static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompileContext *context, XrCompileRequestControl *control) {
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, module->types);
     if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
-        module->declarations, module->types, module->function_count, module->linkage_kind);
+        module->declarations, module->types, module->function_count, module->linkage_kind, control);
     return status == XR_XIR_OK ? layout_function_bounds(module) : status;
 }
 
@@ -68,7 +68,7 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
         if (!op) return XR_XIR_BAD_STRUCTURE;
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op==XR_XIR_ITERATOR_NTH ? 1 :
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
-            op->op == XR_XIR_PRINT || op->op == XR_XIR_CHANNEL_SELECT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
+            op->op == XR_XIR_PRINT || op->op == XR_XIR_CHANNEL_SELECT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_MAP_LITERAL || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
         if(op->op==XR_XIR_SCOPED_GO) {
             uint32_t first=0;
@@ -236,7 +236,7 @@ XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileReques
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
     XrXirCompileContext *budget = &compile_state;
-    XrXirStatus status = layout_structure(&artifact->module, budget);
+    XrXirStatus status = layout_structure(&artifact->module, budget, control);
     if (status != XR_XIR_OK)
         return status;
     artifact->layouts = xir_compile_calloc(&artifact->context, artifact->module.function_count, sizeof(*artifact->layouts), &allocation_status);
@@ -294,7 +294,7 @@ XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact) {
             ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
     if (!artifact->layouts)
         return XR_XIR_BAD_LAYOUT;
-    XrXirStatus status = layout_structure(&artifact->module, budget);
+    XrXirStatus status = layout_structure(&artifact->module, budget, NULL);
     if (status != XR_XIR_OK)
         return status;
     return layout_match(artifact, budget);

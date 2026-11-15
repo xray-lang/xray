@@ -2,7 +2,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../toolchain/xcompiler_producer.cmake")
 add_library(xray_xir_admission STATIC xxir.c xxir_verify.c xxir_defaults.c xxir_effects.c xxir_storage_flow.c xxir_layout.c xxir_checked.c xxir_generic.c ../base/xsha256.c xxir_input_owned.c ../hir/xhir_escape.c)
 add_library(xray_xir STATIC xxir_specialize.c)
-add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_types.c xxir_view_affine.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
+add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_hashable.c xxir_types.c xxir_view_affine.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
 add_dependencies(xray_xir_declarations gen-native-type-defs gen-semantic-owners gen-target-query-registry gen-core-spec)
 target_include_directories(xray_xir_declarations PUBLIC ${PROJECT_SOURCE_DIR}/src)
 # Type/view operations use the borrow and effect validators that also consume
@@ -30,7 +30,7 @@ add_library(xray_xir_ctfe STATIC xxir_ctfe.c xxir_ctfe_instance.c)
 target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_source_failure.c xxir_type_inference.c xxir_library_catalog.c
-    ../hir/xhir_body.c ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c ../hir/xhir_boolean.c ../hir/xhir_cast.c ../hir/xhir_nullable.c)
+    ../hir/xhir_body.c ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_collection.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c ../hir/xhir_boolean.c ../hir/xhir_cast.c ../hir/xhir_nullable.c)
 target_sources(xray_xir_source PRIVATE
     ../module/xmodule_graph.c ../module/xmodule_position.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
     ../module/xmodule_identity_view.c ../module/xmodule_fingerprint.c

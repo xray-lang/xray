@@ -11,13 +11,16 @@ static XrXirStatus source_conversion_intern(void *owner,const XrXirTypeNode *nod
     SourceContext *ctx=owner;
     return source_intern_type(ctx,*node,type)?XR_XIR_OK:ctx->diagnostic.status;
 }
-static bool source_conversion_plan_bound(SourceContext *ctx,AstNode *site,XrXirType actual,
-    SourceExpectedType expected,bool argument_bound,XrHirConversion *output) {
+static XrXirStatus source_conversion_check_bound(SourceContext *ctx,AstNode *site,XrXirType actual,
+    SourceExpectedType expected,bool argument_bound,XrHirConversion *output,const char **reason) {
     AstNode *root=site;
     while(root && root->type==AST_GROUPING)root=root->as.grouping;
     if(root && root->type==AST_MOVE_EXPR && expected.present && actual!=expected.type &&
         xr_xir_class_is_subtype(&ctx->types,actual,expected.type))
-        return source_fail(ctx,site,XR_XIR_UNSUPPORTED,"move conversion has no owned transfer recipe");
+    {
+        if(reason)*reason="move conversion has no owned transfer recipe";
+        return XR_XIR_UNSUPPORTED;
+    }
     XrXirSourceRange range=source_query_range(ctx,site,NULL);
     XrHirConversionInput input={.origin={site?site->node_id:0,range.module,range.line,range.column,range.end_line,range.end_column},
         .actual=actual,.expected=expected.type,.has_expected=expected.present,
@@ -27,7 +30,11 @@ static bool source_conversion_plan_bound(SourceContext *ctx,AstNode *site,XrXirT
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     XrHirConversionContext context={&ctx->compile,&ctx->types,&proof,ctx->request,ctx,source_conversion_intern};
-    const char *reason=NULL;XrXirStatus status=xr_hir_conversion_check(&context,&input,output,&reason);
+    return xr_hir_conversion_check(&context,&input,output,reason);
+}
+static bool source_conversion_plan_bound(SourceContext *ctx,AstNode *site,XrXirType actual,
+    SourceExpectedType expected,bool argument_bound,XrHirConversion *output) {
+    const char *reason=NULL;XrXirStatus status=source_conversion_check_bound(ctx,site,actual,expected,argument_bound,output,&reason);
     return status==XR_XIR_OK || source_fail(ctx,site,status,reason);
 }
 static bool source_conversion_plan(SourceContext *ctx,AstNode *site,XrXirType actual,
@@ -41,6 +48,10 @@ static bool source_conversion_emit(SourceContext *ctx,const XrHirConversion *con
     if(conversion->copy_nullable_element) {
         if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,conversion->source,{value->id,0},{0},0,{0}},value))return false;
         ctx->bodies[ctx->function].recipes[value->id-ctx->functions[ctx->function].parameter_count].root.kind=1;
+    }
+    if(conversion->kind==XR_HIR_CONVERSION_DATA_UNION && conversion->selected_member!=conversion->source) {
+        if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONVERT_NUMBER,conversion->selected_member,
+            {value->id,0},{0},0,{0}},value))return false;
     }
     if(!source_recipe_record(ctx,xr_hir_conversion_instruction(conversion,value->id),value))return false;
     if(conversion->root!=XR_HIR_CONVERSION_ROOT_NONE) {

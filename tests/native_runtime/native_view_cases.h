@@ -18,7 +18,7 @@ static XrXirValueStatus native_view_state(NativeViewCase *context) {
     XrtModuleTypeSpec type = {ordinary ? XRT_MODULE_ARRAY_I64 : XRT_MODULE_CELL_ARRAY_I64, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=ordinary ? 8u : 16u, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=slot.size, .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
     XrXirValueStatus status = (XrXirValueStatus)xrt_module_layout_new(&spec, &layout);

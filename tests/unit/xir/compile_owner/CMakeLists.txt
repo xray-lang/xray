@@ -27,6 +27,7 @@ add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir_generic.c"
     "${XR_ROOT}/src/xir/xxir_specialize.c"
     "${XR_ROOT}/src/xir/xxir_declarations.c"
+    "${XR_ROOT}/src/xir/xxir_hashable.c"
     "${XR_ROOT}/src/xir/xxir_types.c"
     "${XR_ROOT}/src/xir/xxir_view_affine.c"
     "${XR_ROOT}/src/xir/xxir_constraints.c"

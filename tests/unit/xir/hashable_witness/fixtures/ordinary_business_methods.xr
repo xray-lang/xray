@@ -1,0 +1,8 @@
+struct Token {
+ value:i64
+ equals(other:i64)->i64{return other}
+ hash()->string{return "business"}
+}
+var token=Token{value:7}
+assert(token.equals(2)==2)
+assert(token.hash()=="business")

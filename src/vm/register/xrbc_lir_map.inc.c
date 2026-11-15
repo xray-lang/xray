@@ -20,7 +20,7 @@ static uint32_t rbc_lir_map_role(const XrLirModule *module, const XrLirInstructi
 
 static bool rbc_lir_map_point(RbcLirCompiler *c, const XrLirInstructionView *i) {
     if (rbc_lir_captured_cell_point(c->input, c->function, i)) return false;
-    if (rbc_lir_map_role(c->input, i)) return true;
+    if (rbc_lir_map_role(c->input, i) || i->op==XR_LIR_MAP_LITERAL_NEW) return true;
     if (i->op == XR_LIR_STATE_READ) return i->type == XR_LIR_MAP_STRING_I64;
     if (i->op == XR_LIR_STATE_WRITE) {
         XrLirType type = XR_LIR_TYPE_INVALID;
@@ -49,6 +49,7 @@ static bool rbc_lir_map_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
     case XR_LIR_MAP_OP_CLEAR: operation = XR_RBC_MAP_CLEAR; break;
     default:
         switch (i->op) {
+        case XR_LIR_MAP_LITERAL_NEW: operation = XR_RBC_MAP_LITERAL; break;
         case XR_LIR_STATE_READ: operation = XR_RBC_MAP_STATE_READ; break;
         case XR_LIR_STATE_WRITE: operation = XR_RBC_MAP_STATE_WRITE; break;
         case XR_LIR_MAP_RETAIN: operation = XR_RBC_ARRAY_RETAIN; break;
@@ -72,6 +73,7 @@ static bool rbc_lir_map_emit(RbcLirCompiler *c, const XrLirInstructionView *i) {
         if (operation == XR_RBC_MAP_CLEAR) operation = XR_RBC_MAP_REF_CLEAR;
     }
     XrRbcArrayAccess row = {.operation=operation, .kind=XR_RBC_MAP_STRING_I64, .count=i->operand_count};
+    if(operation==XR_RBC_MAP_LITERAL)row.cell=(uint32_t)i->bits;
     if (i->result) row.result = operation == XR_RBC_ARRAY_GET ?
         (XrRbcArrayLocation){c->aggregate_home[i->result], false} : rbc_lir_array_location(c, i->result);
     if (operation == XR_RBC_ARRAY_CELL_NEW) {

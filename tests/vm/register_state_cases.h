@@ -22,7 +22,7 @@ static void test_raw_state_deferred_publication(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_I64, 0};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, 8, 8};
-    XrtModuleLayoutSpec layout = {.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=8,
         .payload_alignment=8, .byte_limit=UINT64_MAX};
     XrtModuleLayout *storage = NULL;
@@ -80,7 +80,7 @@ static void raw_state_transport(RawStateTransport *f) {
         {0, 0, 0, 16, 8, 8},
         {0, 2, XRT_MODULE_SLOT_MUTABLE, 24, sizeof(void *), _Alignof(void *)}
     };
-    XrtModuleLayoutSpec layout = {.types=types, .type_count=3, .modules=&owner,
+    XrtModuleLayoutSpec layout = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=types, .type_count=3, .modules=&owner,
         .module_count=1, .slots=slots, .slot_count=4, .payload_size=32,
         .payload_alignment=8, .byte_limit=UINT64_MAX};
     CHECK(xrt_module_layout_new(&layout, &f->layout) == 0);
@@ -231,7 +231,7 @@ static void test_raw_fixed_state_frontier(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_FIXED_U8, 17};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {.size=17, .alignment=1};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&owner,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=17,
         .payload_alignment=1, .byte_limit=UINT64_MAX};
     XrtModuleLayout *layout = NULL;
@@ -263,7 +263,7 @@ static void test_raw_callable_state_requires_typed_transport(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_CALLABLE, 0};
     XrtModuleSpec owner = {0};
     XrtModuleSlotSpec slot = {.module=0, .type=0, .size=sizeof(void *), .alignment=_Alignof(void *)};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&owner, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&owner, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
         .byte_limit=UINT64_MAX, .callable_types=&callable, .callable_type_count=1};
     for (unsigned mutable = 0; mutable < 2; ++mutable) {

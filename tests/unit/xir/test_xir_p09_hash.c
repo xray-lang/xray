@@ -313,11 +313,17 @@ static void hash_string_i64_layout_case(XrXirDomain *domain) {
     xr_xir_value_drop(&map);
     xr_xir_compile_type_arena_drop(arena);
 }
+#include "p09_map_literal.h"
+#include "p09_enum_hash_cases.h"
+#include "p09_enum_hash_budget_cases.h"
 int main(int argc, char **argv) {
     XrXirTypeArena *arena = hash_test_arena(); XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000000, 1048576};
     hash_string_i64_layout_case(domain);
+    hash_literal_display(&admission);
+    hash_literal_cases(&admission);
+    hash_literal_foreign_strings(&admission);
     hash_dense_cases(&admission); hash_ieee_cases(&admission); hash_string_cases(&admission); hash_order_cases(&admission);
     hash_order_path_case(&admission);
     hash_order_collision_case(&admission);
@@ -326,6 +332,8 @@ int main(int argc, char **argv) {
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && !value_compile_live && !value_compile_bytes);
     hash_graph_cases();
+    enum_hash_receivers(argc==2&&!strcmp(argv[1],"full"));
+    enum_hash_budget_receivers();enum_hash_sealed_metadata_work();
     puts("Map/Set dense probe/delete, shared snapshots, IEEE keys, full bytes and final physical0 PASS");
     return 0;
 }

@@ -1,0 +1,17 @@
+{
+  "source_commit": "8c050f296b83bf551d0ef97f4669cf230621c564",
+  "headers": [
+    {
+      "path": "include/xray_native_callable.h",
+      "sha256": "ee96c195bb20468bf0e8f03875c28edccb095dc743c3ef4ae1fdd269c60fbad5"
+    },
+    {
+      "path": "include/xray_native_boxed.h",
+      "sha256": "1c6f97547143a39737d827d0959f885e70cd06a418cb1dafc01c853120263765"
+    },
+    {
+      "path": "include/xray_native_state.h",
+      "sha256": "18088fc632501ba593a56ff2bbb8daaf79e17b63842d17dd5aa174ca5b914720"
+    }
+  ]
+}

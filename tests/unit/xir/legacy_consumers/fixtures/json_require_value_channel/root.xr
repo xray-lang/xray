@@ -5,7 +5,7 @@ fn takes_bool(x: bool) {
 var dyn: JSON.Object = JSON.parseObject(
     "{\"goodBool\":true,\"badBool\":1,\"goodInt\":7,\"badInt\":3.5}"
 )
-var m: Map<bool, i64> = #{}
+var m: Map<bool, i64> = {}
 m.set(JSON.require<bool>(dyn, ["goodBool"]), JSON.require<i64>(dyn, ["goodInt"]))
 print("map=" + m.get(true)!.toString())
 

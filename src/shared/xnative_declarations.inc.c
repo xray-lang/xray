@@ -38,29 +38,29 @@ static const XrNativeParameter xr_native_array_parameters_18[] = {
     {"compareFn", "fn ( a : T , b : T ) -> i64", XR_NATIVE_TERM_UNADMITTED, true, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_19[] = {
-    {"fn", "fn ( item : T , index : i64 ) -> U", XR_NATIVE_TERM_CALLBACK_MAP, false, false, false},
+    {"callback", "fn ( item : T , index : i64 ) -> U", XR_NATIVE_TERM_CALLBACK_MAP, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_20[] = {
-    {"fn", "fn ( item : T , index : i64 ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE_INDEXED, false, false, false},
+    {"callback", "fn ( item : T , index : i64 ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE_INDEXED, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_21[] = {
-    {"fn", "fn ( acc : U , item : T ) -> U", XR_NATIVE_TERM_CALLBACK_REDUCE, false, false, false},
+    {"callback", "fn ( acc : U , item : T ) -> U", XR_NATIVE_TERM_CALLBACK_REDUCE, false, false, false},
     {"initial", "U", XR_NATIVE_TERM_RESULT_VARIABLE, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_22[] = {
-    {"fn", "fn ( item : T , index : i64 )", XR_NATIVE_TERM_CALLBACK_VISIT, false, false, false},
+    {"callback", "fn ( item : T , index : i64 )", XR_NATIVE_TERM_CALLBACK_VISIT, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_23[] = {
-    {"fn", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
+    {"callback", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_24[] = {
-    {"fn", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
+    {"callback", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_25[] = {
-    {"fn", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
+    {"callback", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_26[] = {
-    {"fn", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
+    {"callback", "fn ( item : T ) -> bool", XR_NATIVE_TERM_CALLBACK_PREDICATE, false, false, false},
 };
 static const XrNativeParameter xr_native_array_parameters_27[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false, false},
@@ -94,14 +94,14 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {17, "join", "(separator?: string) -> string", "string", 39, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_JOIN, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_16, 1, XR_NATIVE_TERM_STRING},
     {18, "reverse", "() -> Array<T>", "Array < T >", 41, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_REVERSE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
     {19, "sort", "(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>", "Array < T >", 43, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_SORT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_18, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {20, "map", "(fn: fn(item: T, index: i64) -> U) -> Array<U>", "Array < U >", 46, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_MAP, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_19, 1, XR_NATIVE_TERM_ARRAY_RESULT},
-    {21, "filter", "(fn: fn(item: T, index: i64) -> bool) -> Array<T>", "Array < T >", 48, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FILTER, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_20, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {22, "reduce", "(fn: fn(acc: U, item: T) -> U, initial: U) -> U", "U", 50, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_REDUCE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_21, 2, XR_NATIVE_TERM_RESULT_VARIABLE},
-    {23, "forEach", "(fn: fn(item: T, index: i64)) -> ()", "( )", 52, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_array_parameters_22, 1, XR_NATIVE_TERM_UNIT},
-    {24, "find", "(fn: fn(item: T) -> bool) -> T?", "T ?", 54, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FIND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_23, 1, XR_NATIVE_TERM_NULLABLE_ELEMENT},
-    {25, "findIndex", "(fn: fn(item: T) -> bool) -> i64", "i64", 56, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FIND_INDEX, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_24, 1, XR_NATIVE_TERM_I64},
-    {26, "every", "(fn: fn(item: T) -> bool) -> bool", "bool", 58, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_EVERY, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_25, 1, XR_NATIVE_TERM_BOOL},
-    {27, "some", "(fn: fn(item: T) -> bool) -> bool", "bool", 60, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_SOME, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_26, 1, XR_NATIVE_TERM_BOOL},
+    {20, "map", "(callback: fn(item: T, index: i64) -> U) -> Array<U>", "Array < U >", 46, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_MAP, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_19, 1, XR_NATIVE_TERM_ARRAY_RESULT},
+    {21, "filter", "(callback: fn(item: T, index: i64) -> bool) -> Array<T>", "Array < T >", 48, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FILTER, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_20, 1, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {22, "reduce", "(callback: fn(acc: U, item: T) -> U, initial: U) -> U", "U", 50, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_REDUCE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_21, 2, XR_NATIVE_TERM_RESULT_VARIABLE},
+    {23, "forEach", "(callback: fn(item: T, index: i64)) -> ()", "( )", 52, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_array_parameters_22, 1, XR_NATIVE_TERM_UNIT},
+    {24, "find", "(callback: fn(item: T) -> bool) -> T?", "T ?", 54, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FIND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_23, 1, XR_NATIVE_TERM_NULLABLE_ELEMENT},
+    {25, "findIndex", "(callback: fn(item: T) -> bool) -> i64", "i64", 56, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FIND_INDEX, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_24, 1, XR_NATIVE_TERM_I64},
+    {26, "every", "(callback: fn(item: T) -> bool) -> bool", "bool", 58, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_EVERY, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_25, 1, XR_NATIVE_TERM_BOOL},
+    {27, "some", "(callback: fn(item: T) -> bool) -> bool", "bool", 60, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_SOME, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_26, 1, XR_NATIVE_TERM_BOOL},
     {28, "fill", "(value: T, start?: i64, end?: i64) -> Array<T>", "Array < T >", 62, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_FILL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_27, 3, XR_NATIVE_TERM_ARRAY_ELEMENT},
     {29, "appendFrom", "(src: Slice<u8>) -> Array<u8>", "Array < u8 >", 65, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_BYTE_APPEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_28, 1, XR_NATIVE_TERM_ARRAY_U8},
     {30, "repeatFrom", "(distance: i64, count: i64) -> Array<u8>", "Array < u8 >", 67, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_BYTE_REPEAT, XR_NATIVE_ALLOCATION_MAY_HEAP, "bounds,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_array_parameters_29, 2, XR_NATIVE_TERM_ARRAY_U8},
@@ -113,7 +113,7 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
 static const char *const xr_native_array_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_array = {
     1, XR_NATIVE_DECLARATION_VALUE, "Array", xr_native_array_type_parameters, 1,
-    "stdlib/types/array.xr", "xray-native:prelude/Array", {{189, 57, 213, 68, 107, 91, 117, 219, 136, 23, 166, 121, 135, 141, 8, 22, 146, 21, 28, 248, 115, 70, 35, 85, 13, 28, 84, 74, 158, 77, 194, 183}},
+    "stdlib/types/array.xr", "xray-native:prelude/Array", {{81, 169, 61, 151, 48, 72, 185, 186, 47, 222, 41, 165, 133, 247, 7, 219, 199, 255, 47, 24, 154, 183, 25, 53, 114, 163, 153, 18, 108, 33, 131, 192}},
     3, 8, xr_native_array_members, 34
 };
 
@@ -571,7 +571,7 @@ static const XrNativeParameter xr_native_map_parameters_4[] = {
     {"key", "K", XR_NATIVE_TERM_KEY, false, false, false},
 };
 static const XrNativeParameter xr_native_map_parameters_9[] = {
-    {"fn", "fn ( key : K , value : V )", XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT, false, false, false},
+    {"callback", "fn ( key : K , value : V )", XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT, false, false, false},
 };
 static const XrNativeMemberDeclaration xr_native_map_members[] = {
     {1, "get", "(key: K) -> V?", "V ?", 4, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_MAP_GET, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_map_parameters_0, 1, XR_NATIVE_TERM_NULLABLE_VALUE},
@@ -583,7 +583,7 @@ static const XrNativeMemberDeclaration xr_native_map_members[] = {
     {7, "keys", "() -> Array<K>", "Array < K >", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_KEYS, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY},
     {8, "values", "() -> Array<V>", "Array < V >", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_VALUE},
     {9, "entries", "() -> Array<(K, V)>", "Array < ( K , V ) >", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_MAP_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY_VALUE},
-    {10, "forEach", "(fn: fn(key: K, value: V)) -> ()", "( )", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_map_parameters_9, 1, XR_NATIVE_TERM_UNIT},
+    {10, "forEach", "(callback: fn(key: K, value: V)) -> ()", "( )", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_map_parameters_9, 1, XR_NATIVE_TERM_UNIT},
     {11, "iterator", "() -> Iterator<K>", "Iterator < K >", 26, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {12, "entriesIterator", "() -> Iterator<(K, V)>", "Iterator < ( K , V ) >", 27, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {13, "toString", "() -> string", "string", 28, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
@@ -591,7 +591,7 @@ static const XrNativeMemberDeclaration xr_native_map_members[] = {
 static const char *const xr_native_map_type_parameters[] = {"K", "V"};
 static const XrNativeTypeDeclaration xr_native_map = {
     10, XR_NATIVE_DECLARATION_VALUE, "Map", xr_native_map_type_parameters, 2,
-    "stdlib/types/map.xr", "xray-native:prelude/Map", {{7, 205, 207, 26, 190, 240, 87, 252, 155, 109, 47, 130, 189, 179, 143, 53, 159, 173, 55, 158, 1, 109, 0, 84, 223, 215, 224, 233, 231, 95, 92, 22}},
+    "stdlib/types/map.xr", "xray-native:prelude/Map", {{152, 174, 173, 227, 99, 139, 237, 69, 198, 150, 124, 119, 177, 10, 253, 197, 55, 146, 149, 229, 204, 81, 66, 104, 73, 204, 54, 161, 33, 167, 78, 252}},
     2, 8, xr_native_map_members, 13
 };
 
@@ -605,7 +605,7 @@ static const XrNativeParameter xr_native_set_parameters_2[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_5[] = {
-    {"fn", "fn ( value : T )", XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT, false, false, false},
+    {"callback", "fn ( value : T )", XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT, false, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_6[] = {
     {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false, false},
@@ -631,7 +631,7 @@ static const XrNativeMemberDeclaration xr_native_set_members[] = {
     {3, "delete", "(value: T) -> bool", "bool", 8, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_DELETE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_2, 1, XR_NATIVE_TERM_BOOL},
     {4, "clear", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_CLEAR, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
     {5, "values", "() -> Array<T>", "Array < T >", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {6, "forEach", "(fn: fn(value: T)) -> ()", "( )", 14, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_set_parameters_5, 1, XR_NATIVE_TERM_UNIT},
+    {6, "forEach", "(callback: fn(value: T)) -> ()", "( )", 14, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_set_parameters_5, 1, XR_NATIVE_TERM_UNIT},
     {7, "union", "(other: Set<T>) -> Set<T>", "Set < T >", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_UNION, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_6, 1, XR_NATIVE_TERM_SET_ELEMENT},
     {8, "intersection", "(other: Set<T>) -> Set<T>", "Set < T >", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_INTERSECTION, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_7, 1, XR_NATIVE_TERM_SET_ELEMENT},
     {9, "difference", "(other: Set<T>) -> Set<T>", "Set < T >", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_DIFFERENCE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_8, 1, XR_NATIVE_TERM_SET_ELEMENT},
@@ -645,7 +645,7 @@ static const XrNativeMemberDeclaration xr_native_set_members[] = {
 static const char *const xr_native_set_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_set = {
     11, XR_NATIVE_DECLARATION_VALUE, "Set", xr_native_set_type_parameters, 1,
-    "stdlib/types/set.xr", "xray-native:prelude/Set", {{123, 253, 12, 27, 203, 126, 49, 112, 15, 54, 28, 130, 136, 221, 119, 80, 130, 127, 115, 181, 58, 252, 208, 72, 33, 232, 57, 5, 97, 185, 161, 156}},
+    "stdlib/types/set.xr", "xray-native:prelude/Set", {{249, 114, 41, 96, 14, 174, 192, 182, 48, 182, 202, 94, 153, 82, 97, 198, 198, 200, 168, 12, 171, 26, 137, 211, 165, 171, 116, 179, 18, 122, 44, 59}},
     2, 8, xr_native_set_members, 15
 };
 

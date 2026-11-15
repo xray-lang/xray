@@ -88,6 +88,14 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
         }
         const XrXirTypeNode *n=hover_node(v,f->type);
         if(!n){b->status=XR_XIR_BAD_TYPE;break;}
+        if(n->kind==XR_XIR_TYPE_ITERATOR) {
+            if(!f->stage) {
+                hover_text(b,"Iterator<");f->stage=1;next=n->element;push=true;
+            } else if(f->stage==1&&n->result!=XR_XIR_NEVER) {
+                hover_text(b,", ");f->stage=2;next=n->result;push=true;
+            } else {hover_text(b,">");--count;}
+            continue;
+        }
         if(n->kind==XR_XIR_TYPE_ARRAY||n->kind==XR_XIR_TYPE_CELL||n->kind==XR_XIR_TYPE_ATOMIC||n->kind==XR_XIR_TYPE_TASK||n->kind==XR_XIR_TYPE_NULLABLE) {
             if(!f->stage) {
                 if(n->kind==XR_XIR_TYPE_NULLABLE) {

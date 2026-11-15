@@ -91,6 +91,7 @@ static void nominal_resource_receivers(void) {
     uint32_t added=77,failed=UINT32_MAX;CHECK(xr_hir_body_nominal_schedule(body,1,2,NULL,&added,&failed)==XR_XIR_OK&&added==1);
     xr_hir_body_end(body);xr_hir_body_free(body);xr_compile_resources_release(resources);CHECK(!physical_live&&!physical_bytes);
 }
+#include "test_body_nominal_composition.inc.c"
 static void nominal_literal_receivers(XrHirBody *body,const XrHirNominalPool *pool,XrHirNominalShape shape) {
     XrHirNominalInfo info={0};CHECK(xr_hir_body_nominal_info(body,shape,&info));XrXirType pair=info.type;
     XrHirNominalValue values[]={{.type=XR_XIR_I64,.value=0},{.type=XR_XIR_I64,.value=1}};XrHirNominalAction action={0};
@@ -99,9 +100,10 @@ static void nominal_literal_receivers(XrHirBody *body,const XrHirNominalPool *po
     XrHirNominalPlan plan={0};XrHirNominalPlanInput planned={.shape=shape,.scope=scope,.count=2,.kind=(XrHirNominalPlanKind)99};
     CHECK(xr_hir_body_nominal_begin(body,&planned,NULL,&plan,NULL)==XR_XIR_BAD_STRUCTURE);
     planned.kind=XR_HIR_NOMINAL_STRUCT_LITERAL;CHECK(xr_hir_body_nominal_begin(body,&planned,NULL,&plan,NULL)==XR_XIR_OK);
+    nominal_composition_receivers(body,pool,plan,shape);
     CHECK(xr_hir_body_finish(body,NULL)==XR_XIR_BAD_STRUCTURE);uint32_t selected=77;
     CHECK(xr_hir_body_nominal_select(body,plan,(XrXirLiteral){"left",4},NULL,&selected,NULL)==XR_XIR_OK&&selected==0);
-    CHECK(xr_hir_body_nominal_supply(body,plan,pool,selected,(XrHirNominalValue){.type=XR_XIR_BOOL},NULL)==XR_XIR_BAD_TYPE);
+    CHECK(xr_hir_body_nominal_supply(body,plan,pool,selected,(XrHirNominalValue){.type=XR_XIR_BOOL},NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(xr_hir_body_nominal_supply(body,plan,pool,selected,values[0],NULL)==XR_XIR_OK);
     CHECK(xr_hir_body_nominal_select(body,plan,(XrXirLiteral){"left",4},NULL,&selected,NULL)==XR_XIR_BAD_TYPE);
     CHECK(xr_hir_body_nominal_select(body,plan,(XrXirLiteral){"right",5},NULL,&selected,NULL)==XR_XIR_OK&&selected==1);
@@ -112,7 +114,24 @@ static void nominal_literal_receivers(XrHirBody *body,const XrHirNominalPool *po
         .source_arguments=operands,.source_argument_count=2,.source_value_map=map,.source_value_count=7};
     CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_OK&&xr_hir_body_finish(body,NULL)==XR_XIR_OK);
 }
+static void nominal_retired_identity(void) {
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext compile={.resources=resources,.limits=xr_xir_compile_default_limits()};
+    XrXirNominalDeclaration declaration={.module={"m",1},.name={"Record",6},.kind=XR_XIR_NOMINAL_STRUCT};
+    XrXirNominalIdentity identity={.module={"m",1},.name={"Record",6},.kind=XR_XIR_NOMINAL_STRUCT};
+    XrXirNominalTable table={.declarations=&declaration,.count=1};XrXirTypes types={.nominals=&table};
+    CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_OK);
+    declaration.flags=4u;
+    CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_BAD_STRUCTURE);
+    table.declarations=NULL;table.identities=&identity;
+    CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_OK);
+    identity.flags=4u;
+    CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_BAD_STRUCTURE);
+    xr_compile_resources_release(resources);CHECK(!physical_live && !physical_bytes);
+}
 static void nominal_receivers(void) {
+    nominal_retired_identity();
     XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial={0},before={0},after={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);

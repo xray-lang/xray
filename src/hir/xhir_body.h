@@ -11,6 +11,8 @@
 #include "../xir/xxir.h"
 #include "../base/xcompile_request.h"
 #include "../shared/xr_param_mode.h"
+#include "xhir_collection.h"
+#include "xhir_items.h"
 
 typedef struct XrHirBody XrHirBody;
 typedef struct XrHirBodyUse {const XrHirBody *owner;uint32_t index;} XrHirBodyUse;
@@ -22,6 +24,24 @@ typedef struct XrHirBodyOrigin {
     uint32_t function,module,node,binding;
     int line,column,end_line,end_column;
 } XrHirBodyOrigin;
+
+typedef struct XrHirCollectionValue {XrXirType type;uint32_t value;} XrHirCollectionValue;
+typedef struct XrHirCollectionConstructInput {
+    const XrXirCompileContext *compile;
+    const XrXirTypes *types;
+    XrHirBodyScope scope;
+    XrHirBodyOrigin origin;
+    XrHirCollectionInput literal;
+    const XrHirCollectionValue *values;
+    uint32_t count,ordinal;
+    XrXirType result;
+    const XrXirMapLiteral *provenance;
+} XrHirCollectionConstructInput;
+/* Receives actual operands and provenance into the body owner. Projection
+ * authenticates the emitted instruction against this immutable snapshot.
+ * Array spread recipes use a typed empty seed and ordinary loop operations. */
+XR_FUNC XrXirStatus xr_hir_body_collection_construct(XrHirBody *,const XrHirCollectionConstructInput *,
+    XrCompileRequestControl *,XrHirBodyUse *,XrHirCollectionError *);
 typedef enum XrHirBodyRule {XR_HIR_BODY_IDENTITY,XR_HIR_BODY_EQUAL,XR_HIR_BODY_PROJECTION} XrHirBodyRule;
 typedef enum XrHirBodyStorage {
     XR_HIR_BODY_TEMPORARY,XR_HIR_BODY_LOCAL,XR_HIR_BODY_SLOT,XR_HIR_BODY_UNIT_LOCAL,
@@ -86,6 +106,16 @@ typedef struct XrHirBindingAction {
 /* These views are the real surrounding construction's descriptors. They are
  * synchronous borrows and close with the type view; no numeric revision grants
  * declaration authority. Owned scopes and signatures snapshot received facts. */
+struct XrHirSignatureInput;
+typedef struct XrHirCallDeclarationNames {
+    const XrXirLiteral *parameters;
+    uint32_t count;
+} XrHirCallDeclarationNames;
+/* The declaration owner resolves a verified signature identity, never a call's
+ * supplied labels. Returned bytes are borrowed only during the receive. */
+typedef XrXirStatus (*XrHirCallNamesFn)(void *, const struct XrHirSignatureInput *,
+                                     XrHirCallDeclarationNames *);
+
 typedef struct XrHirBodyDeclarations {
     XrXirFunction *const *functions;
     XrXirFunctionIdentity *const *identities;
@@ -94,6 +124,9 @@ typedef struct XrHirBodyDeclarations {
     const XrXirInterfaceTable *interfaces;
     XrXirSlot *const *slots;
     const uint32_t *slot_count;
+    XrHirCallNamesFn call_names;
+    void *call_names_data;
+    XrHirItems *const *items;
 } XrHirBodyDeclarations;
 typedef enum XrHirPlaceKind {
     XR_HIR_PLACE_ROOT,XR_HIR_PLACE_BORROW_ROOT,XR_HIR_PLACE_TEMPORARY,XR_HIR_PLACE_MEMBER,XR_HIR_PLACE_CONSTRUCTOR,
@@ -123,13 +156,13 @@ typedef struct XrHirPlaceAction {
 } XrHirPlaceAction;
 typedef enum XrHirCallFamily {
     XR_HIR_CALL_FUNCTION,XR_HIR_CALL_REQUIREMENT,XR_HIR_CALL_CONSTRUCTOR,
-    XR_HIR_CALL_INDIRECT,XR_HIR_CALL_NATIVE,XR_HIR_CALL_VARIADIC_READ,XR_HIR_CALL_ARRAY
+    XR_HIR_CALL_INDIRECT,XR_HIR_CALL_NATIVE,XR_HIR_CALL_VARIADIC_READ,XR_HIR_CALL_NATIVE_CALLBACK
 } XrHirCallFamily;
-typedef struct XrHirArrayCallbackShape {
+typedef struct XrHirNativeCallbackShape {
     XrXirType parameters[2],result,error;
     uint32_t minimum,maximum;
     bool has_result;
-} XrHirArrayCallbackShape;
+} XrHirNativeCallbackShape;
 typedef struct XrHirSignatureInput {
     const XrXirTypes *types;
     XrHirBodyScope scope;
@@ -140,10 +173,38 @@ typedef struct XrHirSignatureInput {
     const XrXirType *native_parameters;
     const XrCallArgAccess *constructor_accesses;
     uint32_t constructor_argument_count;
-    XrXirType array,accumulator,callback_error;
-    const struct XrNativeMemberDeclaration *array_member;
-    uint32_t array_value;
+    XrXirType collection_type,accumulator,callback_error;
+    const struct XrNativeMemberDeclaration *native_member;
+    uint32_t native_owner;
+    uint32_t collection_value;
+    XrHirBodyBinding declaration_binding;
 } XrHirSignatureInput;
+typedef enum XrHirCallBindingFailure {
+    XR_HIR_CALL_BIND_OK, XR_HIR_CALL_BIND_INDIRECT, XR_HIR_CALL_BIND_UNKNOWN,
+    XR_HIR_CALL_BIND_DUPLICATE, XR_HIR_CALL_BIND_POSITIONAL_AFTER_NAMED,
+    XR_HIR_CALL_BIND_NAMED_REST, XR_HIR_CALL_BIND_NAMED_SPREAD,
+    XR_HIR_CALL_BIND_TOO_MANY, XR_HIR_CALL_BIND_MISSING
+} XrHirCallBindingFailure;
+typedef struct XrHirCallBindingError {
+    XrHirCallBindingFailure kind;
+    uint32_t argument, formal, previous_argument;
+} XrHirCallBindingError;
+/* Immutable views after seal, owned by the signature until the body closes. */
+typedef struct XrHirCallBinding {
+    const uint32_t *argument_formals, *formal_arguments;
+    uint32_t argument_count, parameter_count;
+} XrHirCallBinding;
+XR_FUNC XrXirStatus xr_hir_body_call_bind_open(XrHirBody *, XrHirBodySignature,
+    XrCompileRequestControl *, XrHirCallBindingError *);
+XR_FUNC XrXirStatus xr_hir_body_call_bind_argument(XrHirBody *, XrHirBodySignature,
+    const char *, uint32_t, uint32_t, bool, XrCompileRequestControl *, uint32_t *, XrHirCallBindingError *);
+XR_FUNC XrXirStatus xr_hir_body_call_bind_seal(XrHirBody *, XrHirBodySignature,
+    XrCompileRequestControl *, XrHirCallBinding *, XrHirCallBindingError *);
+XR_FUNC bool xr_hir_body_call_binding(const XrHirBody *, XrHirBodySignature, XrHirCallBinding *);
+XR_FUNC bool xr_hir_body_call_default_owner(const XrHirBody *, XrHirBodySignature, uint32_t *);
+XR_FUNC XrXirStatus xr_hir_body_array_accumulator(XrHirBody *, XrHirBodySignature,
+    XrXirType, XrCompileRequestControl *);
+
 typedef enum XrHirCallUseKind {XR_HIR_CALL_PLAN,XR_HIR_CALL_ACCESS,XR_HIR_CALL_VALUE,XR_HIR_CALL_EXACT,XR_HIR_CALL_FINAL,XR_HIR_CALL_SPREAD} XrHirCallUseKind;
 typedef struct XrHirCallUseInput {
     const XrXirTypes *types;
@@ -170,11 +231,14 @@ XR_FUNC XrXirStatus xr_hir_body_call_scope(XrHirBody *,XrHirBodySignature,XrHirS
 /* Bind an already checked declaration call to its real captured method value. */
 XR_FUNC XrXirStatus xr_hir_body_call_method(XrHirBody *,XrHirBodySignature,
     XrXirType,uint32_t,XrCompileRequestControl *);
+/* Display-only provenance from actual FINAL uses; no parameter names are matched. */
+XR_FUNC XrXirStatus xr_hir_body_call_argument_formals(const XrHirBody *,XrHirBodySignature,
+    XrCompileRequestControl *,uint32_t *,uint32_t);
 XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *,XrHirBodySignature,
     const XrXirInstruction *,XrCompileRequestControl *,XrHirBodyUse *,XrHirBodyAction *);
 XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *,XrHirBodySignature,
     const XrHirCallUseInput *,XrCompileRequestControl *,XrHirBodyUse *,XrHirBodyAction *);
-XR_FUNC XrXirStatus xr_hir_body_array_context(const XrHirBody *,XrHirBodySignature,XrXirType,uint32_t,XrHirArrayCallbackShape *);
+XR_FUNC XrXirStatus xr_hir_body_callback_context(const XrHirBody *,XrHirBodySignature,XrXirType,uint32_t,XrHirNativeCallbackShape *);
 typedef struct XrHirBodyProjection {
     uint32_t function,instruction,block,argument;
     uint32_t value,source_value,formal,source_operands[2];
@@ -197,6 +261,7 @@ typedef struct XrHirBodyProjection {
     uint32_t default_type_argument_count;
     bool has_default;
     bool has_instruction,has_value;
+    const XrXirDeclarations *collection_declarations;
 } XrHirBodyProjection;
 /* The actual pool descriptor belongs to the same construction owner and may
  * grow. End closes every read before that owner replaces or retires the pool.
@@ -219,6 +284,23 @@ XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *,XrHirBodyScope,
  * than supplying fresh mutability, storage or parameter-mode assertions. */
 XR_FUNC XrXirStatus xr_hir_body_binding_find(const XrHirBody *,XrHirBindingKey,
     XrCompileRequestControl *,XrHirBodyBinding *,bool *);
+typedef struct XrHirFunctionReferenceInput {
+    const XrXirTypes *types;
+    XrHirBodyScope scope;
+    XrHirBodyOrigin origin;
+    XrXirType callable;
+    uint32_t function,value;
+} XrHirFunctionReferenceInput;
+XR_FUNC XrXirStatus xr_hir_body_function_reference(XrHirBody *,const XrHirFunctionReferenceInput *,
+    XrCompileRequestControl *,XrHirBodyUse *);
+/* Declaration eligibility belongs to the initialized binding and its actual
+ * FUNCTION_REF projection. Captures inherit only through a verified capture use. */
+XR_FUNC XrXirStatus xr_hir_body_binding_function(XrHirBody *,XrHirBodyBinding,
+    XrHirBodyUse,uint32_t,XrCompileRequestControl *);
+XR_FUNC XrXirStatus xr_hir_body_binding_capture_function(XrHirBody *,XrHirBodyBinding,
+    XrHirBodyBinding,XrHirBodyUse,XrCompileRequestControl *);
+XR_FUNC bool xr_hir_body_binding_function_info(const XrHirBody *,XrHirBodyBinding,
+    uint32_t *,uint32_t *);
 XR_FUNC bool xr_hir_body_binding_info(const XrHirBody *,XrHirBodyBinding,XrHirBindingInput *);
 XR_FUNC XrXirStatus xr_hir_body_binding_instance(XrHirBody *,XrHirBodyBinding,
     XrHirBodyScope,XrCompileRequestControl *,XrHirBodyBinding *);

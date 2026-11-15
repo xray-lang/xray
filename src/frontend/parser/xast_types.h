@@ -138,9 +138,7 @@ typedef enum {
     AST_MEMBER_ACCESS,  // arr.length, arr.push
 
     // Data structure literals
-    AST_OBJECT_LITERAL,  // {a: 1, b: 2} - static structure
     AST_MAP_LITERAL,     // {"a"=> 1, "b"=> 2} - dynamic container
-    AST_SET_LITERAL,     // #[1, 2, 3] - set
     AST_TUPLE_LITERAL,   // (a, b, c) - fixed-arity heterogeneous tuple (incl. () unit, (a,) unary)
 
     // OOP nodes
@@ -189,7 +187,6 @@ typedef enum {
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
     AST_PATTERN_ADT,       // Shape.Circle { radius } — named ADT variant destructure
-    AST_PATTERN_OBJECT,    // { x, y } / { x: sub } — object field destructure
     AST_PATTERN_ARRAY,     // [a, b, ..rest] — array element destructure with optional rest
     AST_PATTERN_TYPE,      // is T  /  is T name — runtime type check with optional binding
 
@@ -253,7 +250,6 @@ typedef enum {
 // Destructuring pattern types (flat only, no nesting)
 typedef enum {
     PATTERN_ARRAY,       // [a, b, c]
-    PATTERN_OBJECT,      // {name, age}
     PATTERN_TUPLE,       // (a, b, c) — fixed-arity positional, lowered to .0/.1/...
     PATTERN_IDENTIFIER,  // x
     PATTERN_SKIP         // _

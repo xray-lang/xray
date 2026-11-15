@@ -517,7 +517,7 @@ Full token table (by category):
 | Token | Use |
 |--|--|
 | `(` `)` | grouping, calls, parameter lists |
-| `{` `}` | blocks, object literals |
+| `{` `}` | blocks, Maps and type-prefixed struct literals |
 | `[` `]` | array literals, indexing |
 | `,` | separator |
 | `.` | member access |
@@ -577,18 +577,13 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 
 `!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
 
-#### 1.7.9 Collection-literal Starters
+#### 1.7.9 Collection Literal Boundaries
 
-| Token | Use |
-|--|--|
-| `#{` | empty Map literal |
-| `#[` | Set literal start |
+Arrays use `[` and `]`. Maps use ordinary `{` and `}` without a prefix token. Sets use ordinary named construction. Statement braces and braces after a value arrow begin blocks; Map expression contexts follow §3.10.
 
-Examples:
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
 
 #### 1.7.10 Patterns
@@ -615,7 +610,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Distinct Optional layers**: `T?` denotes the language item `Optional<T>`; every layer keeps its own presence tag without decomposing into a union with null.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Three type domains with distinct responsibilities**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is structural and exact in ordinary type positions, while generic constraint positions may require a minimum field set; `JSON.Value` is the schema-less recursive data-exchange domain. JSON scalars widen without materialization, while typed composites require explicit `JSON.value` encoding.
+5. **Nominal types and dynamic data**: class, struct and interface compatibility follows nominal identity, with explicit interface implementation. Structs provide fixed fields and unlabeled tuples may provide multiple returns. Maps provide dynamic keys; JSON.Value is the schema-less recursive exchange domain. Existing JSON scalar widening and explicit JSON.value composite encoding remain.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -1001,36 +996,36 @@ Current implementation qualification of complete type and operation families is 
 
 #### 2.4.3 `Map<K, V>`
 
-Hash table that **preserves insertion order**. See §14.8.
+An insertion-ordered hash dictionary. A literal is `{key: value}`; every key is an expression, and a bare identifier reads its binding. Quote string keys. Empty `{}` requires a `Map<K, V>` or `JSON.Object` context. A statement-leading brace and a brace directly after `=>` begin blocks (§3.10).
 
-**Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
-
-```xray
-var m: Map<string, i64> = #{"a": 1, "b": 2}
-var m2 = #{"a": 1, "b": 2}
-var empty = #{}                                     // empty Map
-
-m["c"] = 3                                          // insert / update
-var v = m["a"]                                      // lookup; a missing key panics with E0431
-var maybe = m.get("missing")                        // safe lookup; returns null if absent
+```xray @check
+var m: Map<string, i64> = {"a": 1, "b": 2}
+var m2 = {"a": 1, "b": 2}
+var empty: Map<string, i64> = {}
+m["c"] = 3
+var v = m["a"]
+var maybe = m.get("missing")
 ```
 
-| Literal form | Type | Purpose |
-|---|---|---|
-| `{ key: value }` (no prefix) | exact `structural object` | see §2.4.7 |
-| `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
-| `#{}` | `Map<K, V>` (empty) | explicit empty Map |
-| `[]` | `Array<T>` | array |
-| `#[]` | `Set<T>` | set |
+Without an expected type, all keys must have one type K and all values one type V; inference does not silently create a union. Two explicit entries must not have equivalent keys. A statically determined duplicate is E0325; other duplicates panic with E0434 during construction. Map spreads overwrite in written order; duplicate checking applies only between explicit entries (§3.10).
 
-`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `equals(other: T) -> bool` and `hash() -> i64` (the parameter type of `equals` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+| Form | Type |
+|---|---|
+| `{"a": 1}` | `Map<string, i64>` |
+| `{}` (with context) | The expected Map type |
+| `[1, 2]` | `Array<i64>` |
+| `Set([1, 2])` | `Set<i64>` |
+| `Point{x: 1, y: 2}` | Nominal struct `Point` |
+
+Keys obey the existing `Hashable` capability and key equivalence (§9.2). These rules do not change numeric conversions or explicit user-type implementations. Evaluate entries in written order, each key before its value, once each.
 
 #### 2.4.4 `Set<T>`
 
-Deduplicated collection. See §14.9.
+A deduplicating collection, constructed with `Set([...])`. Write `Set<T>()` for an empty set, or `Set()` with an expected type. Elements use the existing key equivalence. `#[]` is not language syntax.
 
-```xray
-var s: Set<i64> = #[1, 2, 3]
+```xray @check
+var s: Set<i64> = Set([1, 2, 3])
+var empty = Set<i64>()
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -1050,75 +1045,30 @@ var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
+#### 2.4.7 Fixed-Field Data and the JSON Value Domain
 
-A bare object literal always forms a static structural object with an exact field set. It is used for ordinary business objects, options, and multi-field returns. Runtime-unknown keys belong to `Map`; the canonical JSON-object spelling `JSON.Object` is a pure alias of `Map<string, JSON.Value>`. `JSON` is a prelude namespace that needs no import, not a value type.
+Declare fixed fields in a nominal `struct` or `class`; an unlabeled tuple also serves multiple returns. The language has no anonymous structural objects, object-shape types, structural identity, or width constraints. `type X = {...}` and `T: { field: Type }` are not type syntax. Interfaces require explicit `implements`.
 
-The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
+`JSON.Object` is a transparent alias of `Map<string, JSON.Value>` and uses the same `{key: value}` literal. `JSON` is a prelude namespace. Use structs as fixed-field typed JSON decoding targets. `JSON.value` / `JSON.stringify` still require `JSON.Encodable`; arbitrary values are not implicitly encoded.
 
-```xray
-// Structural-object literal: identifier or static string key + colon ':'
-var user = { name: "Bob", age: 25 }       // exact object shape
-typeName(user)                            // "object"
-user.name              // type: string; direct ordinal
-user["name"]           // exactly equivalent to user.name; same direct ordinal
-
-// Field shorthand: when a field name matches a variable name
-var name = "Alice"
-var age = 30
-var user = { name, age }                  // equivalent to { name: name, age: age }
-
-// Map literal: `#{}` prefix + `:`
-var m = #{"k1": 1, "k2": 2}           // type: Map<string, i64>
-var data: JSON.Object = #{"name": "Alice", "age": 30}
-data["traceId"] = "req-1"               // only Map has dynamic keys
-```
-
-**Comparison**:
-
-| Form | Type | Notes |
-|---|---|---|
-| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
-| `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
-| `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
-| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
-| `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
-
-**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
-
-```xray
-type User = { name: string, age: i64 }
-
-var u: User = { name: "Alice", age: 30 }
-print(u.name)         // OK
-// u.extra = "x"      // compile error: sealed type User has no field 'extra'
-
-var u2 = { name: "Alice", age: 30 }      // exact object shape
-// u2.extra = "x"     // compile error
-
-type Named = { name: string }
-fn showName<T: Named>(value: T) {
-    print(value.name)                     // the constraint exposes declared fields only
-    print(value["name"])                  // identical to .name
-    // print(value.age)                    // compile error: hidden field
+```xray @check
+struct User {
+    name: string
+    age: i64
 }
-showName(u)                               // OK: u has a wider concrete exact shape
-
-var j: JSON.Object = #{"name": "Alice", "age": 30}
-j["extra"] = "x"                        // OK: a Map dynamic key
-var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
+var user = User{name: "Alice", age: 30}
+var data: JSON.Object = {"name": "Alice", "age": 30}
+data["traceId"] = "req-1"
 ```
 
-**Responsibilities of product types**:
+| Type | Identity and fields | Purpose |
+|---|---|---|
+| `struct` | Nominal identity, declared fields, value semantics, methods | Fixed fields, mathematical data, FFI aggregates |
+| `class` | Nominal identity, declared fields, reference semantics, inheritance | Identity, encapsulation, reference relationships |
+| tuple | Unlabeled, positional access | Small multiple returns |
+| `Map` / `JSON.Object` | Runtime keys and Map APIs; no field access | Dynamic data and JSON objects |
 
-| | Identity | Field set | User-defined methods | Use for |
-|---|---|---|---|---|
-| object shape | structural | exact; a generic constraint may require a minimum field set | **no** | options, multi-field returns, ordinary business data |
-| `JSON.Object` | Map alias | arbitrary string keys resolved at run time | Map API | schema-less JSON objects |
-| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
-| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
-
-Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
+A bare Map key reads a variable; `{name: value}` is not named-field construction. Maps have no `.name` field access. For fixed fields, write `User{name: value, age: 30}`. For named call arguments, write `request(url: value)` (§5.2.2).
 
 #### 2.4.8 `BigInt`
 
@@ -1189,7 +1139,7 @@ var y: i64? = 42        // OK
 var z: i64 = null       // compile error: null is not i64
 ```
 
-`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
+`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a struct with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1314,11 +1264,12 @@ main()
 
 ### 2.8 Type Aliases
 
-```xray
+```xray @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
-type Point = { x: f64, y: f64 }
-type Pair<T> = { first: T, second: T }
+struct Point { x: f64; y: f64 }
+type Position = Point
+type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
 
@@ -1327,14 +1278,14 @@ runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
 ```xray @fragment
-var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
+var p: Pair<i64> = (1, 2)                 // equivalent to (i64, i64)
 var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
 part of type-alias syntax. Put constraints on the generic function, class /
 struct / enum / interface that uses the alias. Aliases may be forward
-referenced, but cyclic aliases, including recursive object aliases, are compile
+referenced, but cyclic aliases, including recursive tuple aliases, are compile
 errors.
 
 **Function-type syntax.** A function type is led by `fn`, written
@@ -1396,13 +1347,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 See §7.4 for details. In summary:
 
-```xray @fragment
+```xray @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
-var m = #{"a": 1}    // m: Map<string, i64>
-var p = { name: "A" }   // p: { name: string } — structured object type
+var m = {"a": 1}    // m: Map<string, i64>
+struct Named { name: string }
+var p = Named{name: "A"} // p: Named
 var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
 
@@ -1426,22 +1378,8 @@ var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred re
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| exact object shape with a different field set | exact object shape | ❌ an exact target requires an exact field set |
-| exact object shape | generic constraint `T: { a: A }` | ✅ constraint satisfaction; not an ordinary assignment conversion |
 
-> **Exact / width-constraint rule**: an ordinary type position requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. A structural type in generic constraint position means "contains at least these fields", with invariant types for common fields. It creates neither a runtime width object nor a dynamic dictionary.
-> ```xray
-> type User = { name: string }
-> var full = { name: "A", age: 18 }
-> // var u: User = full            // compile error E0352: extra field 'age'
-> fn nameOf<T: User>(value: T) -> string { return value.name }
-> print(nameOf(full))              // OK: T retains full's concrete exact shape
->
-> type Opt = { name: string, age: i64? }
-> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
-> ```
-
-> **Static objects and the dynamic JSON boundary**: known schemas use exact targets and `JSON.parse<T>`; schema-less objects use `JSON.Object` / Map. Typed composites are encoded explicitly with `JSON.value(value)`, and a dynamically processed object is validated back to a typed target with `JSON.decodeObject<T>(object)`.
+Fixed-field types convert by nominal identity. Matching field sets grant neither an implicit conversion nor an interface implementation. Typed JSON boundaries use structs and explicit `JSON.parse<T>` / `JSON.decodeObject<T>`; schema-less data uses `JSON.Object`.
 
 #### 2.10.2 Explicit `as`
 
@@ -1709,9 +1647,9 @@ main()
 
 Maps and Sets:
 
-```xray
+```xray @run
 fn main() {
-    var scores = #{"alice": 95, "bob": 88}
+    var scores = {"alice": 95, "bob": 88}
     scores.set("carol", 77)
     print(scores.get("alice") ?? 0)   // prints 95
     print(len(scores))                 // prints 3
@@ -1725,6 +1663,13 @@ fn main() {
 }
 
 main()
+```
+
+```output
+95
+3
+2
+true
 ```
 
 Nullable types with `??`:
@@ -2125,88 +2070,76 @@ Allowed in the following positions only:
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
 - Array spread uses the exact element-type contract of ordinary `Array<T>` concatenation. Under an expected `Array<T>`, a spread source must be that same `Array<T>`; ordinary elements use the existing `T` context, without an implicit conversion of a whole `Array<U>`. Without an expected type, existing literal inference determines `T`. Evaluate every ordinary element and spread source once at its written position and retain owned value snapshots before constructing the result. Later rebinding or mutation does not replace earlier snapshots. Suspension, errors and failed cleanup use ordinary call and ownership rules; failure publishes no partial result and does not roll back completed effects. Inputs and the result can be modified independently, nested values copy by value, and class/synchronization identities copy references only. Source array capacity is not preserved by contract.
-- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Map spread**: `{...base, "x": 1}` overwrites in written order. **Struct spread**: `T{...src, field: value}` checks a fixed nominal target and gives explicit fields priority. See §3.10.
 
-```xray
+```xray @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 Literal Construction
 
-#### Array `[...]`
+An expression-leading `{` begins a Map literal. A statement-leading brace or a brace immediately after `=>` begins a block; return a Map directly with `x => ({"key": x})`. A struct literal requires its type-name prefix, and field names are not evaluated as variables. Hash-prefixed Map/Set literals, anonymous structural objects, and field shorthand are not syntax.
 
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
 
-```xray
+```xray @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // type Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
 
-#### Map `#{k: v, ...}` and `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+```xray @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
 
-```xray
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // empty Map
+```xray @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
 
-**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```xray @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
 
-```xray
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### Keys, Context, and Duplicates
 
-#### Object (structured object) `{ field: value, ... }`
+- Every Map key is an expression. Evaluate each key before its value, and all entries and spread sources once in written order. A bare identifier reads its binding. An undefined bare key receives a note suggesting a quoted string key such as `"name"`.
+- Empty Arrays, Maps, and Set construction without type arguments require an expected type. Without context, Array elements need one type, and Map keys and values each need one type; inference does not silently form unions. Existing contextual conversions apply, including scalar widening into JSON.Value in a JSON.Object literal.
+- Two explicit keys equivalent under existing key equivalence are duplicates. The syntactically defined compile-time classes are string, integer, rune and bool literals, payload-free enum variants, comptime expressions, and const bindings initialized directly or transitively from these forms. Duplicates in these classes report `E0325: duplicate key "name" in Map literal`, at the later key, with `the key first appears here` at the first key.
+- Other duplicates panic with E0434 during construction. The message includes the key and both explicit-entry positions, for example `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`. Reuse the insertion probe's hit result without another lookup; the constructor owns provenance storage and failure cleanup.
+- Map spreads overwrite in written order. Overwriting between a spread and an explicit entry is allowed. Two explicit entries must remain distinct even when a spread separates them.
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` merges fields
-```
+#### Struct Spread
 
-```xray
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+In `T{...src, field: value}`, every source must be a struct whose fields all occur in T with identical names and types. Reject classes, Maps, tuples, and sources with extra fields. Each target field comes from an explicit field or one unique source. Explicit fields override all sources regardless of position. Multiple sources for a field without an explicit override are errors. A field with neither an explicit value nor a source follows the existing declaration-default and nullable-field omission rules in §5.4; a required field still lacking a value is an error. Evaluate every source and explicit expression once in written order.
 
-- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
-- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
-- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+This is field-by-field construction of a named target, not structural identity, width subtyping, implicit interface implementation, or struct destructuring. Existing struct field-omission rules remain unchanged.
 
-#### Array<u8> `Array<u8>(...)`
+#### Heterogeneous Literal Diagnostics
 
-See §2.4.6 and §14.5.
+If a context-free literal cannot obtain one type, report one E0326 at the first value differing from the first value's type, with a note at the first value. For example, `Map literal values have different types: string and i64`, followed by `the first value is string; without a declared Map type, every value must be string`.
 
-#### Channel `Channel<T>(buf?)`
+Offer repairs in order and only when applicable: a struct declaration and literal when every key is a string literal spelling a legal identifier (capitalize the binding name, or use Record without a binding); JSON.Object when all values enter JSON.Value; an explicit Map<K, A | B> when the types form a legal union. Omit inapplicable notes. Incompatible keys use `Map literal keys have different types: ...` with only a declared Map<K, V> repair. Arrays use `Array literal elements have different types: ...`, suggesting a tuple for a fixed element count and an explicit Array<A | B> only for a legal union.
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-See §10.5.
+Array<u8> and Channel construction follow §2.4.6 and §10.5.
 
 ### 3.11 Calls / Member Access / Indexing / Slicing
 
@@ -2215,13 +2148,16 @@ See §10.5.
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= Identifier ':' ('ref' | 'move')? Expression
+          | ('ref' | 'move')? Expression
+          | '...' Expression
 ```
 
-- Arguments are passed positionally; named arguments are not supported.
-- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
-- A rest parameter collects extra arguments into an array.
-- Argument-count mismatch → compile error `E0307` / `E0450`.
+A call may use `f(a, name: value)`. Positional arguments precede named arguments. Names come from the directly called named function, method, or constructor declaration. Unknown names, duplicate bindings (including a parameter already supplied positionally), and positional arguments after named arguments are E0327. Rest arguments are positional only. Function values have no parameter names, including const aliases of named functions.
+
+Evaluate the receiver or callee first, every explicit argument once in written order, and omitted defaults afterwards in declaration order. Binding does not reorder evaluation. Expected types and generic inference use the mapped formal position. Place `ref` / `move` before the value, as in `swap(left: ref a, right: ref b)`; existing place, lifetime and mode permissions remain. Parameter names are exported API and retain their declaration spelling across modules.
+
+Static tuple spread and a real rest parameter's final Array spread follow §3.9. Spreading grants no named rest form and does not relax the final-position rule for dynamic Array spread. Missing required parameters remain errors; only declared defaults permit omission.
 
 #### Member access
 
@@ -2411,9 +2347,10 @@ var m = Map<string, i64>()
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
-```xray
+```xray @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // equivalent to Array<i64>() + push
-var m = #{}                    // equivalent to Map<...>()
+var m: Map<string, i64> = {}    // an empty Map requires a type context
 var p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -2858,8 +2795,6 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `var` — mutable binding
@@ -2910,7 +2845,7 @@ These are language contracts. See §17 for current new XIR implementation qualif
 
 #### 5.1.3 Destructuring bindings
 
-```xray
+```xray @fragment
 // array destructuring
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // skip elements
@@ -2918,16 +2853,12 @@ var [first, , third] = [10, 20, 30]         // skip elements
 // tuple destructuring (multi-return)
 var (q, r) = divmod(17, 5)
 
-// object destructuring (extract by field name; local binding may be renamed)
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
-- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
 
-The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
 
 ### 5.2 `fn` function declaration
 
@@ -2983,7 +2914,7 @@ Top-level statements of the entry file and module-state initializers implicitly 
 
 Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
-#### 5.2.2 Default parameter values
+#### 5.2.2 Default Values and Named Arguments
 
 ```xray
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
@@ -3007,6 +2938,20 @@ connect("localhost", 443, true)
 
 - Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
 - Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
+
+##### Named Argument Binding
+
+Positional arguments must precede named arguments. Each formal is bound at most once. Unknown names, duplicates, naming a parameter already supplied positionally, and positional arguments after named arguments report E0327. Rest arguments remain positional. Direct named-function, method and constructor calls use the called declaration's parameter names. Function values, including const aliases of named functions, accept no labels.
+
+```xray @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+
+Evaluate the receiver/callee first, explicit arguments in written order, then omitted defaults in declaration order. Reorder already evaluated values into formal slots, never expressions. Expected types and generic evidence use the bound formal positions; defaults provide no extra caller inference evidence. Place `ref` or `move` after the label and before the value. Parameter names are exported API and retain their names across modules. See §3.11.
 
 #### 5.2.3 Multiple return values
 
@@ -3997,22 +3942,23 @@ TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @check
 type Outcome = i64 | string                          // union alias
 type Mapper = fn(i64) -> i64                           // function-type alias
-type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
-type Pair<T> = { first: T, second: T }                // generic alias
+struct Point { x: f64; y: f64 }
+type Position = Point                              // alias of the same nominal type
+type Pair<T> = (T, T)                               // generic alias of an unlabeled tuple
 ```
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
 - A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
 - Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
-- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- An alias of a nominal type preserves its declaration identity. Equal field sets do not make distinct structs equal. An anonymous object shape is not a valid alias RHS.
 - `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
-See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
+See §2.4.7 and [§2.8](#28-type-aliases).
 
 ### 5.8 `import` / `export`
 
@@ -4215,26 +4161,18 @@ match (http_status) {
 
 ### 6.9 Destructuring Patterns
 
-```xray
-var [a, b, c] = some_array
-var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
+Array and tuple bindings follow §5.1.3. Anonymous-object destructuring, object patterns and struct destructuring are not syntax. Named payload-field patterns of ADT variants remain governed by §6.3 and are unaffected by removing structural objects.
 
 ```xray @fragment
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
 match (p) {
-    { x, y } => print(x, y),             // object field destructure (shorthand binding)
-    { name: n, age } => print(n, age),    // field rename + shorthand mixed
-    [a, b, ..rest,] => print(a, b, rest), // array destructure; `..rest` captures the tail as a new array
-    [_, mid, _] => print(mid),           // element-position wildcards
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
 
-- An object pattern matches an exact structural object whose static type contains the named fields. For schema-less JSON, first commit the structure with `JSON.get/require` or `JSON.decodeObject<T>`. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
-- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
-- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
+Array patterns match length: exactly the element count without `..rest`, and at least that count with a rest. Non-rest entries are bindings or wildcards; use guards for value tests. Maps provide no field pattern. Use nominal structs and ordinary field access for fixed fields. This change does not introduce or-pattern `|`.
 
 ### 6.10 Exhaustiveness and Match Failure
 
@@ -5071,7 +5009,7 @@ TypeArgs   ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @check
 // Generic function
 fn identity<T>(x: T) -> T {
     return x
@@ -5105,7 +5043,7 @@ interface Comparable<T> {
 }
 
 // Generic type alias: transparent syntax substitution, not a new type
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
 
 Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
@@ -5119,6 +5057,8 @@ monomorphization instance, or AOT branch; cyclic aliases are rejected.
 Methods may declare their own type parameters, such as `map<U>(value: U)` inside `struct Box<T>`. Enclosing and method parameters have distinct declaration identities; method parameters cannot duplicate or shadow enclosing type parameters. In `Box<i64>.make<string>(value)`, the first argument group belongs to the type and the second to the static method. An instance call `box.map<string>(value)` obtains enclosing arguments from the receiver type. Explicit method function values use the same grouping: `Box<i64>.make<string>` and `box.map<string>`. Explicit lists must be complete; partial explicit lists are not filled automatically and one group cannot substitute for another. Wholly omitted call lists infer through original signatures and type evidence under §9.3. Contextual inference of method function values remains part of the later complete target.
 
 Ordinary generic method signatures, bodies, defaults and nested closures are checked against both declared constraint scopes at definition time, even when unused; future arguments grant no additional capabilities. Defaults and captures inherit their original type-parameter identities and authority. Specialization substitutes only Checked parameters and rechecks before Lowered; ordinary instances exist before Program sealing. An instance method value evaluates and saves its receiver once, while a static value has no receiver. Both retain the full indirect-call signature and ordinary value ownership, effect, suspension and failure-cleanup rules.
+
+Anonymous object shapes are not generic constraints. Declare a named interface for member capabilities and require the argument type to implement it explicitly. Existing built-in predicates and other constraint rules remain.
 
 Xray's constraint syntax uses a colon `:` uniformly, with multiple constraints joined by `&` (read as "must satisfy simultaneously"). It **does not use** Java/TS `extends` / `implements` as constraint keywords.
 
@@ -5164,7 +5104,7 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `equals(other: T) -> bool` and `hash() -> i64`. The parameter type of `equals` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
-```xray
+```xray @check
 class Token implements Hashable {
     value: i64
 
@@ -5176,7 +5116,7 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
 
@@ -5301,41 +5241,22 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 | Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
 | Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
-### 9.5 Protocols (Duck Typing) vs. Nominal Typing
+### 9.5 Nominal Types and Explicit Interfaces
 
-#### Nominal typing dominates
+Matching fields or methods grant neither type compatibility nor interface conformance. A named interface requires explicit `implements`; generic member capabilities follow declared constraints. Object shapes and `T: { field: Type }` are removed, so anonymous field sets grant no member access.
 
-Xray's interface implementations require **explicit `implements`** — unlike Go's "implicit interface implementation".
-
-```xray
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // explicit implements required
-    draw() { print("square") }
+```xray @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // compile error: Wrong is not Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
 
-#### Structural objects
-
-Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK: exact field set
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
-describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
-```
+Field-subset checks for struct spread construct an explicitly named target; they establish neither width subtyping nor implicit interface conformance.
 
 ### 9.6 Variance
 
@@ -5344,7 +5265,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
-**Why not in this round**: variance states rules *on top of* the subtype relation, so it has a prerequisite — the width direction for structural types must be settled first (see the exact-field-set rule in §2.10.1). Introducing declaration-site variance while the subtype relation itself has not converged multiplies an undecided semantics by another layer, and it cannot be patched backward-compatibly afterwards. Invariance is the safe, AOT-friendly starting point, and it can be relaxed at any time.
+Declaration-site variance remains an independent unimplemented capability. Removing structural objects changes neither container invariance nor existing function-type rules; matching field sets grant no new subtype relation.
 
 ### 9.6.1 Higher-Kinded Types (HKT)
 
@@ -6449,7 +6370,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | insertion-order traversal with exact `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
+**Map literal**: `{"k1": v1, "k2": v2}`; empty `{}` needs an expected type. Keys are expressions. See §3.10 for duplicate explicit keys and spread.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -6476,7 +6397,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `forEach(fn)` | insertion-order traversal with exact `fn(T)->()` |
 | `iterator()` | iteration protocol |
 
-**Set literal**: `#[1, 2, 3]` or `#[]`.
+**Set construction**: `Set([1, 2, 3])`. Use `Set<T>()` for an empty set, or `Set()` with an expected type.
 
 `values()` returns `Array<T>` under the same zero-argument READ and owned-snapshot rules, preserving first insertion order. Adding an existing element preserves its position; deleting and adding it again places it last.
 
@@ -6509,7 +6430,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | Static function | Description |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | constructs a typed value directly; unknown fields default to `Reject`, with explicit `JSON.UnknownFields.Ignore` available |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root without a structural-object intermediate |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root returning JSON.Object or JSON.Value directly |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
 | `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
@@ -6524,8 +6445,9 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 `JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
-```xray
-type Request = { action: string, userId: i64 }
+```xray @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // unknown fields reject by default
 var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
@@ -6536,7 +6458,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly with an explicit `JSON.Value` target. Structs, arrays and other composites still require explicit `JSON.value(...)` encoding. `{"name": "alice"}` is a Map literal; under `JSON.Object`, keys are strings and values use existing scalar widening into JSON.Value. Fixed-field typed decoding targets are structs.
 
 ### 14.12 `Range`
 
@@ -8349,6 +8271,9 @@ Ordinary entries follow the header; the error-signature numbers below are regist
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Two statically determined explicit Map literal keys are equivalent |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | A context-free collection literal has incompatible element, key or value types |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | Invalid named argument binding: unknown, duplicate, order, rest or indirect call |
 
 #### Error-signature diagnostics (registered numbers, implementation pending)
 
@@ -8445,6 +8370,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Duplicate explicit Map literal keys during construction; message includes both source locations |
 
 #### System, Calls, Coroutines, and Stdlib
 
@@ -8557,7 +8483,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8565,9 +8491,6 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
@@ -8625,7 +8548,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -8635,11 +8558,10 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
 
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 
 ArrowLambda ::= Identifier '=>' (Expression | Block)
               | '(' ArrowParams? ')' '=>' (Expression | Block)
@@ -8655,10 +8577,10 @@ MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
 
 When the next token after `try` is `{`, parse only `TryStmt`; before `scope`, parse `TryScopeStmt` (§10.7); otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
@@ -8675,6 +8597,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
+         |  TuplePattern
+         |  ArrayPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
@@ -8688,6 +8612,9 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
 
 ### A.5 Statements
@@ -8784,8 +8711,6 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
@@ -8992,7 +8917,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Conditions | truthy / falsy | conditions must be `bool`; nullable presence requires `value != null`; i64/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
+| Objects | dynamic fields | `{key: value}` is a Map; fixed fields use nominal structs and dynamic JSON uses `JSON.Object` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 

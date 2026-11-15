@@ -1,7 +1,7 @@
-// Test http request options object construction
+// Test HTTP named request controls and binary framing.
 
 import http
-import { Headers, HttpError, HttpMethod, HttpRequestOptions } from http
+import { Headers, HttpError, HttpMethod } from http
 import net
 import { NetConn, NetListener } from net
 
@@ -116,10 +116,10 @@ fn assert_binary_response(framing: string) {
     defer { net.close(lst) }
     go serve_binary_response(lst, framing)
 
-    var resp = http.request({
+    var resp = http.request(
         url: "http://127.0.0.1:" + string(net.port(lst)) + "/binary",
         timeoutMs: 1000
-    })
+    )
 
     assert(resp.isSuccess())
     assertEqual(len(resp.body), 3)
@@ -129,22 +129,17 @@ fn assert_binary_response(framing: string) {
 }
 
 @test
-fn test_request_options_object() {
+fn test_request_named_arguments_reject_invalid_url() {
     var headers = Headers()
     headers.add("Content-Type", "application/json")
-    headers.add("X-Custom-Header", "test-value")
-    var options: HttpRequestOptions = {
-        url: "http://127.0.0.1:19998/test",
-        method: HttpMethod.post(),
-        headers: headers,
-        body: "{\"key\": \"value\"}".copyBytes(),
-        timeoutMs: 5000
+    var rejected = false
+    try {
+        http.request(timeoutMs: 5000, body: "{}".copyBytes(),
+                     headers: headers, method: HttpMethod.post(), url: "")
+    } catch (HttpError.InvalidUrl { url: invalid }) {
+        rejected = invalid == ""
     }
-    assertEqual(options.url, "http://127.0.0.1:19998/test")
-    assertEqual(options.method!.token, "POST")
-    assertEqual(options.headers!.get("Content-Type")!, "application/json")
-    assertEqual(string.fromUtf8(options.body![:]), "{\"key\": \"value\"}")
-    assertEqual(options.timeoutMs!, 5000)
+    assert(rejected)
 }
 
 @test
@@ -154,7 +149,7 @@ fn test_request_api_exists() {
 
 fn rejects_url(url: string) -> bool {
     try {
-        http.request({url: url})
+        http.request(url: url)
     } catch (e: HttpError) {
         return true
     }
@@ -187,10 +182,10 @@ fn test_request_preserves_custom_method_token() {
     defer { lines.close() }
     go capture_request_line(lst, lines)
 
-    var resp = http.request({
+    var resp = http.request(
         url: "http://127.0.0.1:" + string(net.port(lst)) + "/custom",
         method: HttpMethod("propfind")
-    })
+    )
 
     var line = recv_line(lines)
     assert(resp.isSuccess())
@@ -207,9 +202,9 @@ fn test_request_defaults_identity_accept_encoding() {
     defer { requests.close() }
     go capture_request_raw(lst, requests)
 
-    var resp = http.request({
+    var resp = http.request(
         url: "http://127.0.0.1:" + string(net.port(lst)) + "/encoding"
-    })
+    )
 
     var raw = recv_line(requests)
     assert(resp.isSuccess())
@@ -228,9 +223,9 @@ fn test_request_ignores_no_body_status_payload() {
         "HTTP/1.1 204 No Content\r\nConnection: keep-alive\r\n\r\nignored"
     )
 
-    var resp = http.request({
+    var resp = http.request(
         url: "http://127.0.0.1:" + string(net.port(lst)) + "/empty"
-    })
+    )
 
     assert(resp.isSuccess())
     assertEqual(resp.status, 204)
@@ -265,13 +260,13 @@ fn test_request_body_is_written_as_bytes() {
     var headers = Headers()
     headers.add("Content-Type", "application/octet-stream")
 
-    var resp = http.request({
+    var resp = http.request(
         url: "http://127.0.0.1:" + string(net.port(lst)) + "/bytes",
         method: HttpMethod.post(),
         headers: headers,
         body: Array<u8>([0x78, 0x72]),
         timeoutMs: 1000
-    })
+    )
 
     var raw = recv_line(requests)
     assert(resp.isSuccess())

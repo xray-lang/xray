@@ -39,5 +39,12 @@
     "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2"
   },
   "qualification": "NOT_RUN",
-  "scope": "Complete positive original programs; no source prefix, no mocked compiler, no inherited execution PASS."
+  "scope": "Complete positive original programs; no source prefix, no mocked compiler, no inherited execution PASS.",
+  "task342_migration": {
+    "manifest": "tests/aot/task342_structural_responsibilities.json",
+    "preserve_original_inputs": true,
+    "current_source_scope": "Explicit nominal field/nullable/JSON/typed view inputs; removed object-destructure syntax is retired.",
+    "qualification": "INDEPENDENT_VALUE_OBSERVATIONS_ONLY_NOT_PRODUCT_PASS",
+    "preexisting_failures": "Historical authority mismatches and frozen xxir_value.h snapshot mismatch remain FAIL; no archive or digest refresh."
+  }
 }

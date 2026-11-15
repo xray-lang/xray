@@ -65,6 +65,23 @@ typedef struct XrHirNominalDefaults {
     bool available,imported;
 } XrHirNominalDefaults;
 typedef struct XrHirNominalValue {XrXirType type;uint32_t value;XrHirBodyUse producer;} XrHirNominalValue;
+typedef enum XrHirNominalSupplierKind {
+    XR_HIR_NOMINAL_DEFAULT, XR_HIR_NOMINAL_EXPLICIT_VALUE, XR_HIR_NOMINAL_SPREAD_VALUE
+} XrHirNominalSupplierKind;
+typedef struct XrHirNominalComponent {
+    XrXirLiteral name;
+    XrHirNominalShape shape;
+    XrXirType type;
+    uint32_t value;
+    XrHirNominalSupplierKind kind;
+} XrHirNominalComponent;
+/* Owned ordinals and values survive component buffers and shape-vector growth. */
+typedef struct XrHirNominalSupplier {
+    XrHirNominalShape shape;
+    XrXirType type;
+    uint32_t component,value,field;
+    XrHirNominalSupplierKind kind;
+} XrHirNominalSupplier;
 typedef enum XrHirNominalPlanKind {XR_HIR_NOMINAL_STRUCT_LITERAL,XR_HIR_NOMINAL_ENUM_LITERAL} XrHirNominalPlanKind;
 typedef struct XrHirNominalPlanInput {
     XrHirNominalShape shape;
@@ -110,6 +127,8 @@ XR_FUNC bool xr_hir_body_nominal_info(const XrHirBody *,XrHirNominalShape,XrHirN
 XR_FUNC XrXirStatus xr_hir_body_nominal_field(XrHirBody *,XrHirNominalShape,const XrHirNominalPool *,uint32_t,XrHirNominalField *,const char **);
 XR_FUNC XrXirStatus xr_hir_body_nominal_begin(XrHirBody *,const XrHirNominalPlanInput *,XrCompileRequestControl *,XrHirNominalPlan *,const char **);
 XR_FUNC XrXirStatus xr_hir_body_nominal_apply(XrHirBody *,XrHirNominalPlan,XrHirNominalShape,XrCompileRequestControl *,const char **);
+XR_FUNC XrXirStatus xr_hir_body_nominal_compose(XrHirBody *,XrHirNominalPlan,const XrHirNominalPool *,
+    const XrHirNominalComponent *,uint32_t,const XrHirNominalSupplier **,const char **);
 XR_FUNC XrXirStatus xr_hir_body_nominal_find(const XrHirBody *,XrHirNominalShape,XrXirLiteral,XrCompileRequestControl *,uint32_t *,const char **);
 XR_FUNC XrXirStatus xr_hir_body_nominal_select(XrHirBody *,XrHirNominalPlan,XrXirLiteral,XrCompileRequestControl *,uint32_t *,const char **);
 XR_FUNC XrXirStatus xr_hir_body_nominal_supply(XrHirBody *,XrHirNominalPlan,const XrHirNominalPool *,uint32_t,XrHirNominalValue,const char **);

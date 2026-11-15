@@ -122,3 +122,6 @@ tests/fixtures/xir_class_inheritance/classes.expected.txt text eol=lf
 
 # Array Source and stdout witnesses keep their authored bytes across checkouts.
 tests/fixtures/lir_cli/array_lower/* text eol=lf
+
+# Exact pre-cutover native metadata headers are an independent negative producer.
+tests/native_runtime/metadata_abi/old_headers/*.h text eol=lf

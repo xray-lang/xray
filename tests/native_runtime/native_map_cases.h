@@ -233,7 +233,7 @@ static void native_map_cases(XrtLocationOwner *locations) {
     XrtModuleTypeSpec type = {XRT_MODULE_MAP_STRING_I64, 0};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {.flags=XRT_MODULE_SLOT_MUTABLE, .size=8, .alignment=8};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=8, .payload_alignment=8, .byte_limit=UINT64_MAX};
     native_map_layout_budget(spec);
     XrtModuleLayout *layout = NULL;

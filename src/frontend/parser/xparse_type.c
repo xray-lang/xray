@@ -316,24 +316,6 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
                 } while (0);
             return xr_tref_tuple(parser->compiler_session, elems, count);
         }
-        case XR_TREF_OBJECT: {
-            XrTypeRef *fields[256];
-            int count = src->nchildren;
-            for (int i = 0; xr_parser_healthy(parser) && (i < count); i++)
-                do {
-                    fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            XrTypeRef *obj = xr_tref_object(parser->compiler_session, src->field_names, fields,
-                                            src->field_readonly, count);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (src->name)
-                do {
-                    obj->name = ast_strdup(parser->compiler_session, src->name);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            return obj;
-        }
         case XR_TREF_FIXED_ARRAY: {
             XrTypeRef *elem = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
                                                                         subst_alias, type_args)
@@ -773,115 +755,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 #include "../../shared/xr_exact_scalar_registry.def"
 #undef XR_EXACT_SCALAR
 
-    /* Exact struct type literal: { x: float, y: float }. */
-    if (xr_parser_match(parser, TK_LBRACE)) {
-        int capacity = 16;
-        int field_count = 0;
-        const char **fnames = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(const char *));
-        if (!xr_parser_healthy(parser)) return NULL;
-        XrTypeRef **ftypes = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(XrTypeRef *));
-        if (!xr_parser_healthy(parser)) return NULL;
-        bool *freadonly = ast_alloc(parser->compiler_session, (size_t) capacity * sizeof(bool));
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        if (!fnames || !ftypes || !freadonly) return NULL;
-
-        while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-            if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
-                do {
-                    xr_parser_error(parser,
-                                "structural object types are exact; express width with a generic "
-                                "constraint such as `<T: { name: string }>`");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                do {
-                    xr_parser_match(parser, TK_COMMA);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                continue;
-            }
-            if (field_count >= capacity) {
-                int new_cap = xr_parser_grow_capacity(parser, capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-                do {
-                    fnames = ast_array_grow(parser->compiler_session, fnames, sizeof(const char *), (size_t) capacity, (size_t) new_cap);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                if (!fnames) return NULL;
-                do {
-                    ftypes = ast_array_grow(parser->compiler_session, ftypes, sizeof(XrTypeRef *), (size_t) capacity, (size_t) new_cap);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                if (!ftypes) return NULL;
-                do {
-                    freadonly = ast_array_grow(parser->compiler_session, freadonly, sizeof(bool), (size_t) capacity, (size_t) new_cap);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                if (!freadonly) return NULL;
-                capacity = new_cap;
-            }
-            bool is_const = xr_parser_match(parser, TK_CONST);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (!xr_parser_check(parser, TK_NAME)) {
-                do {
-                    xr_parser_error(parser, "expected field name");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                break;
-            }
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                fnames[field_count] = ast_strndup(parser->compiler_session, parser->previous.start, parser->previous.length);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-            bool is_optional = xr_parser_match(parser, TK_QUESTION);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (is_optional)
-                do {
-                    xr_parser_error(parser,
-                                "object field `?` suffix was removed; write the nullable type "
-                                "after `:`, for example `age: i64?`");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            if (!xr_parser_match(parser, TK_COLON)) {
-                do {
-                    xr_parser_error(parser, "expected ':'");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-
-                break;
-            }
-            XrTypeRef *ftype = xr_parse_type_annotation(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (is_optional)
-                do {
-                    ftype = xr_tref_optional(parser->compiler_session, ftype);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            ftypes[field_count] = ftype;
-            freadonly[field_count] = is_const;
-            field_count++;
-            do {
-                xr_parser_match(parser, TK_COMMA);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        }
-        do {
-            xr_parser_consume(parser, TK_RBRACE, "expected '}'");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        XrTypeRef *result =
-            xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly, field_count);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-
-
-        return result;
+    if (xr_parser_check(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(parser, "structural object types were removed; declare a struct or interface");
+        return NULL;
     }
 
     /* Function type: `fn` `(` ParamTypeList? `)` (`->` Type)?. The `fn` keyword
@@ -1210,6 +1086,16 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
          * this path for Value/Object/Path rather than introducing a source
          * type named `JSON`. */
         if (xr_parser_match(parser, TK_DOT)) {
+            /* A lexical alias (including a generic binder) denotes a type,
+             * never a namespace. Resolve the root before joining the spelling;
+             * looking up only `root.member` loses this scope fact. */
+            XrTypeAlias *root_alias=parser->type_scope?
+                xr_type_scope_lookup(parser->type_scope,temp_name):NULL;
+            if(!xr_parser_healthy(parser))return NULL;
+            if(root_alias) {
+                xr_parser_error_at_previous(parser,"type alias cannot be used as a namespace in a qualified type name");
+                return xr_tref_error(parser->compiler_session);
+            }
             if (!xr_parser_check(parser, TK_NAME)) {
                 do {
                     xr_parser_error(parser, "expected type name after '.'");

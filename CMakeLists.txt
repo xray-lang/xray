@@ -1348,9 +1348,10 @@ string(APPEND _native_link_header "};\n#endif\n")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_native_link_paths.h" CONTENT "${_native_link_header}")
 install(FILES include/xray_native_runtime.h include/xray_native_state.h include/xray_native_array.h
     include/xray_native_map.h
+    include/xray_native_set.h
     include/xray_native_boxed.h
     include/xray_native_view.h include/xray_native_pod.h include/xray_native_string.h
-    include/xray_string_cursor.h include/xray_native_callable.h include/xray_export.h
+    include/xray_string_cursor.h include/xray_native_callable.h include/xray_native_metadata.h include/xray_export.h
     DESTINATION lib/xray/native/include COMPONENT XrayRuntime)
 
 if(BUILD_TESTS)
@@ -2119,6 +2120,11 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+    add_test(NAME object_boundary_guard_controls COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/test_object_boundary_guard.py)
+    set_tests_properties(object_boundary_guard_controls PROPERTIES
+        LABELS "frontend;syntax;metadata;unit" PROCESSORS 1 TIMEOUT 30)
+
 
     add_test(
         NAME string_surface_residue
@@ -3034,6 +3040,29 @@ if(BUILD_TESTS)
             --binary $<TARGET_FILE:xray>)
     set_tests_properties(test_value_arrow_syntax PROPERTIES
         LABELS "frontend;syntax;vm;native" TIMEOUT 120)
+
+    add_test(NAME test_collection_literal_syntax
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_collection_syntax.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(test_collection_literal_syntax PROPERTIES
+        LABELS "frontend;syntax;format" TIMEOUT 120)
+    add_test(NAME test_map_literal_semantics
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_map_literals.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(test_map_literal_semantics PROPERTIES
+        LABELS "frontend;hir;syntax;vm;native" TIMEOUT 120)
+
+    add_test(NAME test_named_arguments
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_named_arguments.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(test_named_arguments PROPERTIES
+        LABELS "frontend;hir;syntax;vm;native" TIMEOUT 120)
+
+    add_test(NAME test_declared_closure_named_arguments
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_declared_closure_named_arguments.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(test_declared_closure_named_arguments PROPERTIES
+        LABELS "frontend;hir;syntax;vm;native" TIMEOUT 120)
 
     # The matcher every compile-error case is judged by. A regression in it
     # would not turn one case red -- it would turn all of them silently green,
@@ -4113,19 +4142,17 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # The only gate that judges the language spec's examples with the real
-    # compiler. It existed, fully written, with zero callers in 153 root
-    # add_test entries, 85 unit entries, three workflows and every script --
-    # so its baseline could only rot in silence, and two of its four rows had
-    # in fact gone dead. Both spec files are gated; they are separate fence
-    # sets with separate baselines.
+    # Explicit frontend receipts preserve the former admission regression scope.
+    # Runtime and complete G13 certification have separate strict reports.
     add_test(
         NAME spec_snippets_en
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+        COMMAND ${XRAY_PYTHON} -X utf8
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_frontend_admission.py
                 --xray $<TARGET_FILE:xray>
-                --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC.md
-                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_en.txt
+                --manifest ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_frontend_admission_cases.json
+                --language en
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --report ${CMAKE_CURRENT_BINARY_DIR}/spec_frontend_admission_en.json
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(spec_snippets_en PROPERTIES
@@ -4136,11 +4163,13 @@ if(BUILD_TESTS)
 
     add_test(
         NAME spec_snippets_cn
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+        COMMAND ${XRAY_PYTHON} -X utf8
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_frontend_admission.py
                 --xray $<TARGET_FILE:xray>
-                --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md
-                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
+                --manifest ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_frontend_admission_cases.json
+                --language cn
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --report ${CMAKE_CURRENT_BINARY_DIR}/spec_frontend_admission_cn.json
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(spec_snippets_cn PROPERTIES
@@ -4148,6 +4177,63 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 60
     )
+    add_test(NAME spec_frontend_admission_controls COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/test_spec_frontend_admission.py)
+    set_tests_properties(spec_frontend_admission_controls PROPERTIES
+        LABELS "spec;docs;frontend;unit" PROCESSORS 1 TIMEOUT 30)
+    add_custom_target(report_spec_g13_execution
+        COMMAND ${XRAY_PYTHON} -X utf8
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+            --xray $<TARGET_FILE:xray>
+            --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md
+            --peer-spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC.md
+            --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
+            --report ${CMAKE_CURRENT_BINARY_DIR}/spec_g13_execution.json
+        DEPENDS xray VERBATIM)
+    add_test(NAME spec_snippet_runner COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/test_spec_snippet_runner.py --xray $<TARGET_FILE:xray>)
+    set_tests_properties(spec_snippet_runner PROPERTIES
+        LABELS "spec;docs;frontend;unit" PROCESSORS 1 TIMEOUT 90)
+    add_test(NAME spec_map_named_arguments COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+        --xray $<TARGET_FILE:xray>
+        --spec ${CMAKE_CURRENT_SOURCE_DIR}/spec/source/sections
+        --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
+        --ids "002-1-lexical-structure.md:480,types-map,types-set,types-json-object,types-alias,003-2-type-system.md:674,types-inference,types-map-set-usage,expr-spread-collections,expr-array-lit,expr-map-lit,expr-set-lit,expr-struct-lit,expr-literal-constructor-relation,decl-destructuring,decl-named-arguments,decl-nominal-type-aliases,007-6-patterns.md:181,generics-basic,generics-hashable-contract,generics-nominal-interface"
+        --report ${CMAKE_CURRENT_BINARY_DIR}/spec_map_named_arguments.json)
+    set_tests_properties(spec_map_named_arguments PROPERTIES
+        LABELS "spec;docs;frontend;syntax" PROCESSORS 1 TIMEOUT 120)
+    # The typed JSON codec example remains a separately reported dependency.
+    add_custom_target(report_json_codec_spec_dependency
+        COMMAND ${XRAY_PYTHON} -X utf8
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py
+            --xray $<TARGET_FILE:xray>
+            --spec ${CMAKE_CURRENT_SOURCE_DIR}/spec/source/sections
+            --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
+            --ids json-boundary-and-path
+            --report ${CMAKE_CURRENT_BINARY_DIR}/json_codec_spec_dependency.json
+        DEPENDS xray VERBATIM)
+
+    add_test(NAME task342_structural_retirement_inventory COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/task342_nominal_products.py --inventory-only)
+    set_tests_properties(task342_structural_retirement_inventory PROPERTIES
+        LABELS "syntax;frontend;inventory" PROCESSORS 1 TIMEOUT 30)
+    add_test(NAME task342_nominal_struct_products COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/task342_nominal_products.py --compiler $<TARGET_FILE:xray>)
+    set_tests_properties(task342_nominal_struct_products PROPERTIES
+        LABELS "syntax;frontend;vm;native" PROCESSORS 1 TIMEOUT 180)
+    add_test(NAME nominal_struct_carriers COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_native_structural_object_carrier.py --compiler $<TARGET_FILE:xray>)
+    set_tests_properties(nominal_struct_carriers PROPERTIES
+        LABELS "frontend;vm;native;ownership" PROCESSORS 1 TIMEOUT 120)
+    add_test(NAME set_i64_source_products COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_set_i64_physical.py
+        --root ${CMAKE_CURRENT_SOURCE_DIR} --xray $<TARGET_FILE:xray>)
+    set_tests_properties(set_i64_source_products PROPERTIES
+        LABELS "frontend;vm;native;ownership" PROCESSORS 1 TIMEOUT 180)
+
+
+
 
     # The ordinary differential net compares programs that TERMINATE, which is
     # why a progress divergence -- VM finishes, AOT spins forever -- survived

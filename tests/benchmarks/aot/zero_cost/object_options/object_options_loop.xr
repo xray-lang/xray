@@ -1,3 +1,13 @@
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct User {
+    name: string
+    age: i64
+}
+
 fn endpoint(host: string, port: i64 = 80, tls: bool = false) -> i64 {
     if (tls) {
         return port + len(host)
@@ -6,15 +16,15 @@ fn endpoint(host: string, port: i64 = 80, tls: bool = false) -> i64 {
 }
 
 fn run(n: i64) -> i64 {
-    var base = { x: 1, y: 2 }
+    var base = Point{ x: 1, y: 2 }
     var i = 0
     var sum = 0
     while (i < n) {
-        var user = { name: "ada", age: i % 97 }
-        var merged = { ...base, y: i % 11 }
+        var user = User{ name: "ada", age: i % 97 }
+        var merged = Point{ ...base, y: i % 11 }
         sum = sum + user.age + merged.x + merged.y
-        sum = sum + endpoint("api", 443, true)
-        sum = sum + endpoint("local")
+        sum = sum + endpoint("api", tls: true, port: 443)
+        sum = sum + endpoint(host: "local")
         i = i + 1
     }
     return sum

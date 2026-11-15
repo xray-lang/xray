@@ -1,6 +1,9 @@
 // JSON is a prelude namespace; JSON.Value and JSON.Object are its public data types.
 
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 @test
 fn test_parse_and_stringify() {

@@ -5,6 +5,21 @@
 
 // ===== reduce nested findIndex =====
 
+struct ScoredUser {
+    name: string
+    scores: Array<i64>
+}
+
+struct CategoryValues {
+    category: string
+    values: Array<i64>
+}
+
+struct GroupedItem {
+    group: string
+    item: string
+}
+
 @test
 fn test_reduce_nested_findIndex() {
     var data = [[10, 20, 30], [40, 50, 60], [70, 80, 90]]
@@ -48,9 +63,9 @@ fn test_findIndex_with_nested_every() {
 @test
 fn test_map_then_reduce_nested() {
     var students = [
-        { name: "Alice", scores: [85, 90, 95] },
-        { name: "Bob", scores: [70, 75, 80] },
-        { name: "Carol", scores: [90, 92, 94] }
+        ScoredUser{ name: "Alice", scores: [85, 90, 95] },
+        ScoredUser{ name: "Bob", scores: [70, 75, 80] },
+        ScoredUser{ name: "Carol", scores: [90, 92, 94] }
     ]
     // Calculate average score per student, then find max average
     var averages = students.map(fn(s) {
@@ -73,10 +88,10 @@ fn test_map_then_reduce_nested() {
 @test
 fn test_filter_map_reduce_pipeline() {
     var data = [
-        { category: "A", values: [1, 2, 3] },
-        { category: "B", values: [10, 20] },
-        { category: "A", values: [4, 5] },
-        { category: "B", values: [30] }
+        CategoryValues{ category: "A", values: [1, 2, 3] },
+        CategoryValues{ category: "B", values: [10, 20] },
+        CategoryValues{ category: "A", values: [4, 5] },
+        CategoryValues{ category: "B", values: [30] }
     ]
     // Sum all values from category "A"
     var totalA = data.filter(fn(d) {
@@ -147,13 +162,13 @@ fn test_every_with_nested_filter() {
 @test
 fn test_reduce_build_nested_map() {
     var entries = [
-        { group: "fruit", item: "apple" },
-        { group: "veg", item: "carrot" },
-        { group: "fruit", item: "banana" },
-        { group: "veg", item: "pea" }
+        GroupedItem{ group: "fruit", item: "apple" },
+        GroupedItem{ group: "veg", item: "carrot" },
+        GroupedItem{ group: "fruit", item: "banana" },
+        GroupedItem{ group: "veg", item: "pea" }
     ]
     // Group by category
-    var seed: Map<string, Array<string>> = #{}
+    var seed: Map<string, Array<string>> = {}
     var grouped = entries.reduce(fn(acc, e) {
         var next = copy(acc)
         var items = next.get(e.group)

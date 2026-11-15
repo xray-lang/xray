@@ -9,7 +9,7 @@ fn test_is_operator() {
     var d = true
     var e = null
     var arr = [1, 2, 3]
-    var map = #{"a": 1}
+    var map = {"a": 1}
     // Test basic types
     print(a is i64)
     // true

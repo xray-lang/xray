@@ -3,5 +3,5 @@ fn xray_no_alloc_map_set_reject(scores: ref Map<i64, i64>, key: i64, value: i64)
     return len(scores)
 }
 
-var scores: Map<i64, i64> = #{}
+var scores: Map<i64, i64> = {}
 print(xray_no_alloc_map_set_reject(ref scores, 1, 10))

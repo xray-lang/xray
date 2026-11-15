@@ -83,10 +83,27 @@ static void typed_owners(void) {
 #include "test_body_owned.inc.c"
 #include "test_body_receivers.inc.c"
 #include "test_body_defaults.inc.c"
+#include "test_body_call_binding.inc.c"
 #include "test_body_tuples.inc.c"
 #include "test_body_nominals.inc.c"
+#include "test_body_map_metadata.inc.c"
+#include "test_body_collection.inc.c"
+#include "test_body_collection_control.inc.c"
+#include "test_body_set_construct.inc.c"
+#include "test_body_array_named.inc.c"
+#include "test_body_native_names.inc.c"
+#include "test_body_collection_projection.inc.c"
+#include "test_body_declared_closures.inc.c"
 int main(void) {
-    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();default_receivers();tuple_receivers();nominal_receivers();write_bytes("control.xr",body_control,sizeof(body_control)-1);
+    declared_closure_receivers();
+    call_binding_receivers();
+    collection_receivers();
+    collection_control_receivers();
+    set_construct_receivers();
+    array_named_receivers();
+    native_named_source_receivers();
+    collection_projection_receivers();
+    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();default_receivers();tuple_receivers();nominal_receivers();map_literal_metadata_owners();write_bytes("control.xr",body_control,sizeof(body_control)-1);
     write_bytes("control.out",body_expected,sizeof(body_expected)-1);
     write_bytes("original.out",body_original_expected,sizeof(body_original_expected)-1);
     write_bytes("uses.xr",body_uses,sizeof(body_uses)-1);write_bytes("uses.out",body_uses_expected,sizeof(body_uses_expected)-1);

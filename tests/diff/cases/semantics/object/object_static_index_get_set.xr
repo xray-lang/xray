@@ -1,4 +1,9 @@
-var user = { name: "Bob", age: 25 }
-print(user["name"])
-user["name"] = "Ada"
+struct User {
+    name: string
+    age: i64
+}
+
+var user = User{ name: "Bob", age: 25 }
+print(user.name)
+user.name = "Ada"
 print(user.name)

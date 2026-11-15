@@ -60,7 +60,7 @@ static XrXirArtifact *state_failure_fixture(const XrXirCompileContext *context,u
         {.module=0},{.module=1},{.module=2},{.module=3},{.module=3,.exported=true}};
     const XrXirSlot slot={0,scenario==2?XR_XIR_I64:XR_XIR_STRING,false};
     const XrXirLiteral literals[]={{"module-owned-text",17},{"module initializer assertion",28}};
-    const XrXirDeclarations declarations={modules,4,identities,&slot,1,literals,2,3,4,NULL};
+    const XrXirDeclarations declarations={.modules=modules, .module_count=4, .functions=identities, .slots=&slot, .slot_count=1, .literals=literals, .literal_count=2, .root_module=3, .entry_function=4, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule module={XR_XIR_BUILT,functions,5,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};

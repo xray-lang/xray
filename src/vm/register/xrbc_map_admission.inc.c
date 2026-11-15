@@ -17,6 +17,7 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
     XrRbcRegisterKind result = XR_RBC_MAP_STRING_I64, receiver = XR_RBC_MAP_STRING_I64;
     bool output = true;
     switch (a.operation) {
+    case XR_RBC_MAP_LITERAL: if(!a.cell || a.count>131072)return false;count=a.count;break;
     case XR_RBC_ARRAY_NEW: if (a.count % 2) return false; count = a.count; break;
     case XR_RBC_ARRAY_LEN: result = XR_RBC_BITS; break;
     case XR_RBC_ARRAY_GET: count = 2; break;
@@ -50,10 +51,11 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
     } else if (a.result.index || a.result.spill) return false;
     if (a.operation == XR_RBC_ARRAY_CELL_NEW) {
         if (!f->cell_kinds || a.cell >= f->cell_count || f->cell_kinds[a.cell] != XR_RBC_MAP_STRING_I64) return false;
-    } else if (a.operation != XR_RBC_ARRAY_BORROW && a.cell) return false;
+    } else if (a.operation != XR_RBC_ARRAY_BORROW && a.operation != XR_RBC_MAP_LITERAL && a.cell) return false;
     for (uint32_t p = 0; p < a.count; ++p) {
         XrRbcArrayLocation location = f->array_operands[a.first + p];
         if (!rbc_array_location_valid(f, location)) return false;
+        if(a.operation==XR_RBC_MAP_LITERAL)continue;
         XrRbcRegisterKind kind = rbc_array_location_kind(f, location), expected = receiver;
         if (a.operation == XR_RBC_ARRAY_NEW) expected = p % 2 ? XR_RBC_BITS : XR_RBC_STRING;
         else if (p) expected = a.operation == XR_RBC_ARRAY_CELL_WRITE || a.operation == XR_RBC_ARRAY_REF_WRITE ||
@@ -77,6 +79,18 @@ static bool rbc_map_access_valid(const XrRbcFunction *f, XrRbcArrayAccess a) {
 static bool rbc_map_module_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     for (size_t n = 0; n < f->array_access_count; ++n) {
         XrRbcArrayAccess a = f->array_accesses[n];
+        if(a.kind==XR_RBC_MAP_STRING_I64 && a.operation==XR_RBC_MAP_LITERAL) {
+            if(!a.cell || a.cell>module->map_literal_count)return false;
+            const XrtMapLiteral *literal=&module->map_literals[a.cell-1];uint32_t operand=0;
+            for(size_t p=0;p<literal->count;++p) {
+                bool spread=literal->items[p].kind!=0;uint32_t width=spread?1u:2u;
+                if(operand>a.count || width>a.count-operand ||
+                    rbc_array_location_kind(f,f->array_operands[a.first+operand])!=(spread?XR_RBC_MAP_STRING_I64:XR_RBC_STRING) ||
+                    (!spread && rbc_array_location_kind(f,f->array_operands[a.first+operand+1])!=XR_RBC_BITS))return false;
+                operand+=width;
+            }
+            if(operand!=a.count)return false;
+        }
         if (a.kind == XR_RBC_MAP_STRING_I64 && a.operation == XR_RBC_ARRAY_BORROW && a.cell &&
             !rbc_captured_map_type(module, (XrXirType)a.cell)) return false;
         if (a.kind != XR_RBC_MAP_STRING_I64 || a.operation != XR_RBC_ARRAY_GET) continue;

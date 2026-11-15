@@ -54,8 +54,6 @@ typedef enum {
     XR_TREF_FUNCTION,    /* (P1,..) -> R — children[0..n-2] = params,
                             children[n-1] = return type       */
     XR_TREF_TUPLE,       /* (T1, T2, ...) — children[0..n-1] */
-    XR_TREF_OBJECT,      /* { f1: T1, ... } — field_names +
-                            children as field types            */
     XR_TREF_FIXED_ARRAY, /* [T; N] — fixed_length_expr + children[0] */
     XR_TREF_TYPE_PARAM,  /* generic type parameter (T, U, ...)  */
 } XrTypeRefKind;
@@ -87,8 +85,6 @@ typedef struct XrTypeRef {
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
     const char *name;                  /* NAMED / GENERIC: type name
                                           (arena-allocated, NUL-terminated) */
-    const char **field_names;          /* OBJECT: per-field names         */
-    bool *field_readonly;
     XrParamMode *function_param_modes; /* FUNCTION: per-param modes       */
     const char **function_param_names; /* FUNCTION: optional source names */
     XrBorrowOriginSyntaxState borrow_origin_syntax;
@@ -152,10 +148,6 @@ XR_FUNC XrTypeRef *xr_tref_function_signature(struct XrCompilerSession *session,
 /* Tuple: (T1, T2, ...) */
 XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count);
 
-/* Exact object / struct type literal: { f1: T1, f2: T2 }. */
-XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names,
-                                  XrTypeRef **field_types, const bool *field_readonly, int count);
-
 /* Fixed-length array: [T; N] */
 XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,
                                        int length);
@@ -199,12 +191,5 @@ XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const X
  * publishes a complete terminated result. A full buffer truncates as before. */
 XR_FUNC int xr_compile_tref_to_string_buf(XrCompileState *state, const XrTypeRef *t,
                                             char *buf, int cap);
-
-/* Like xr_compile_tref_to_string_buf, but expands a named structural-object type into its field
- * structure instead of printing its name. Only the outermost ref is expanded.
- * For the right-hand side of `type Name = { ... }`, where printing the name
- * would emit the self-referential `type Name = Name`. */
-XR_FUNC int xr_compile_tref_to_string_structural(XrCompileState *state, const XrTypeRef *t,
-                                                   char *buf, int cap);
 
 #endif  // XTYPE_REF_H

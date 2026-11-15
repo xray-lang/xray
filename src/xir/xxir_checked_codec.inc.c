@@ -291,6 +291,51 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         if (c->reading) literals[i] = literal;
     }
     checked_implementations(c, d);
+    uint32_t map_count=checked_count(c,d->map_literal_count,&c->structural.instructions,12);
+    XrXirMapLiteral *maps=checked_array(c,d->map_literals,map_count,sizeof(*maps),12);
+    if(c->reading){d->map_literals=maps;d->map_literal_count=maps?map_count:0;}
+    for(uint32_t n=0;maps && n<map_count && c->status==XR_XIR_OK;++n) {
+        XrXirMapLiteral literal=maps[n];
+        literal.file.bytes=checked_blob(c,literal.file.bytes,&literal.file.length);
+        if(c->reading)maps[n]=literal;
+        literal.module=checked_u32(c,literal.module);
+        uint32_t count=checked_count(c,literal.count,&c->structural.parameters,12);
+        XrXirMapLiteralOrigin *items=checked_array(c,literal.items,count,sizeof(*items),12);
+        literal.items=items;literal.count=items?count:0;
+        if(c->reading)maps[n]=literal;
+        for(uint32_t p=0;p<literal.count && c->status==XR_XIR_OK;++p) {
+            XrXirMapLiteralOrigin origin=items[p];
+            origin.kind=checked_u32(c,origin.kind);origin.line=checked_u32(c,origin.line);origin.column=checked_u32(c,origin.column);
+            if(c->reading)items[p]=origin;
+        }
+    }
+    uint32_t names_count=checked_count(c,d->parameter_name_count,&c->structural.instructions,20);
+    XrXirParameterNames *rows=checked_array(c,d->parameter_names,names_count,sizeof(*rows),20);
+    if(c->reading){d->parameter_names=rows;d->parameter_name_count=rows?names_count:0;}
+    for(uint32_t n=0;rows && n<names_count && c->status==XR_XIR_OK;++n) {
+        XrXirParameterNames row=rows[n];
+        row.kind=checked_u32(c,row.kind);row.owner=checked_u32(c,row.owner);
+        row.member=checked_u32(c,row.member);row.parameter_offset=checked_u32(c,row.parameter_offset);
+        uint32_t count=checked_count(c,row.count,&c->structural.parameters,4);
+        XrXirLiteral *names=checked_array(c,row.names,count,sizeof(*names),4);
+        row.names=names;row.count=names?count:0;
+        if(c->reading)rows[n]=row;
+        for(uint32_t p=0;p<row.count && c->status==XR_XIR_OK;++p) {
+            XrXirLiteral name=names[p];
+            name.bytes=checked_blob(c,name.bytes,&name.length);
+            if(c->reading)names[p]=name;
+        }
+    }
+    uint32_t witness_count=checked_count(c,d->hashable_witness_count,&c->structural.instructions,12);
+    XrXirHashableWitness *witnesses=checked_array(c,d->hashable_witnesses,witness_count,sizeof(*witnesses),12);
+    if(c->reading){d->hashable_witnesses=witnesses;d->hashable_witness_count=witnesses?witness_count:0;}
+    for(uint32_t n=0;witnesses && n<witness_count && c->status==XR_XIR_OK;++n) {
+        XrXirHashableWitness row=witnesses[n];
+        row.nominal_type=(XrXirType)checked_u32(c,(uint32_t)row.nominal_type);
+        row.equals_function=checked_u32(c,row.equals_function);
+        row.hash_function=checked_u32(c,row.hash_function);
+        if(c->reading)witnesses[n]=row;
+    }
 }
 static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     const XrXirInterfaceApplication *source, uint32_t *count) {
@@ -486,7 +531,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.parameter_count=checked_u32(c,s.parameter_count);
             if(s.element!=XR_XIR_U8 || !s.parameter_count || s.parameter_count>65535)
                 c->status=XR_XIR_BAD_TYPE;
-        } else if ((s.kind == XR_XIR_TYPE_TUPLE || s.kind == XR_XIR_TYPE_UNION)) {
+        } else if ((s.kind == XR_XIR_TYPE_TUPLE || s.kind == XR_XIR_TYPE_UNION || s.kind==XR_XIR_TYPE_DATA_UNION)) {
             s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 4);
             XrXirCallableParameter *fields = checked_array(c, s.parameters, s.parameter_count, sizeof(*fields), 4);
             s.parameters = fields;
@@ -558,6 +603,9 @@ static void checked_slot_facts(CheckedCursor *c,const XrXirModule *module,XrXirC
         row.name=checked_blob(c,row.name,&row.name_length);
         if (c->reading) rows[s]=row;
         row.exported=checked_u32(c,row.exported);
+        row.constant_key.kind=(XrXirConstantKeyKind)checked_u32(c,row.constant_key.kind);
+        row.constant_key.bits=checked_integer(c,row.constant_key.bits,8);
+        row.constant_key.string.bytes=checked_blob(c,row.constant_key.string.bytes,&row.constant_key.string.length);
         if (c->reading) rows[s]=row;
         if (c->status==XR_XIR_OK && (row.slot!=s || row.exported>1 || !row.name_length))
             c->status=XR_XIR_BAD_STRUCTURE;

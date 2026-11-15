@@ -23,7 +23,7 @@
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
                                              "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64", "string_ref", "function_scope",
-                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref"};
+                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref", "set_i64", "set_i64_cell", "set_i64_ref"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -138,6 +138,19 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
+        case XR_LIR_MAP_LITERAL_NEW: {
+            if(v->type!=XR_LIR_MAP_STRING_I64 || !v->bits || v->bits>m->map_literal_count)return false;
+            const XrLirMapLiteral *literal=&m->map_literals[v->bits-1];uint32_t operand=0;
+            for(uint32_t n=0;n<literal->count;++n) {
+                bool spread=literal->items[n].kind!=0;
+                uint32_t width=spread?1u:2u;
+                if(operand>v->operand_count || width>v->operand_count-operand ||
+                    f->values[v->operands[operand]-1].type!=(XrLirType)(spread?XR_LIR_MAP_STRING_I64:XR_LIR_STRING) ||
+                    (!spread && f->values[v->operands[operand+1]-1].type!=XR_LIR_I64))return false;
+                operand+=width;
+            }
+            return operand==v->operand_count;
+        }
         case XR_LIR_VALUE_RETAIN:
             return v->type == a && xr_lir_boxed_type(m, a);
         case XR_LIR_VALUE_DROP:
@@ -213,6 +226,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
                 (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING) ||
                 (v->type == XR_LIR_MAP_STRING_I64_CELL && a == XR_LIR_MAP_STRING_I64) ||
+                (v->type == XR_LIR_SET_I64_CELL && a == XR_LIR_SET_I64) ||
                 (v->type == XR_LIR_ARRAY_CELL && a == XR_LIR_ARRAY);
         }
         case XR_LIR_CELL_READ: {
@@ -222,6 +236,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
                 (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL) ||
                 (v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64_CELL) ||
+                (v->type == XR_LIR_SET_I64 && a == XR_LIR_SET_I64_CELL) ||
                 (v->type == XR_LIR_ARRAY && a == XR_LIR_ARRAY_CELL);
         }
         case XR_LIR_CELL_WRITE: {
@@ -232,8 +247,23 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
                 (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING) ||
                 (a == XR_LIR_MAP_STRING_I64_CELL && b == XR_LIR_MAP_STRING_I64) ||
+                (a == XR_LIR_SET_I64_CELL && b == XR_LIR_SET_I64) ||
                 (a == XR_LIR_ARRAY_CELL && b == XR_LIR_ARRAY));
         }
+        case XR_LIR_SET_NEW:return v->type==XR_LIR_SET_I64;
+        case XR_LIR_SET_LEN:return v->type==XR_LIR_I64 && a==XR_LIR_SET_I64;
+        case XR_LIR_SET_CONTAINS:return v->type==XR_LIR_I1 && a==XR_LIR_SET_I64 && b==XR_LIR_I64;
+        case XR_LIR_SET_ADD:case XR_LIR_SET_REMOVE:
+            return v->type==(XrLirType)(v->op==XR_LIR_SET_ADD?XR_LIR_UNIT:XR_LIR_I1) &&
+                (a==XR_LIR_SET_I64_CELL || a==XR_LIR_SET_I64_REF) && b==XR_LIR_I64;
+        case XR_LIR_SET_CLEAR:return v->type==XR_LIR_UNIT && (a==XR_LIR_SET_I64_CELL || a==XR_LIR_SET_I64_REF);
+        case XR_LIR_SET_RETAIN:return v->type==XR_LIR_SET_I64 && a==XR_LIR_SET_I64;
+        case XR_LIR_SET_DROP:return v->type==XR_LIR_UNIT && a==XR_LIR_SET_I64;
+        case XR_LIR_SET_CELL_DROP:return v->type==XR_LIR_UNIT && a==XR_LIR_SET_I64_CELL;
+        case XR_LIR_SET_BORROW:return v->type==XR_LIR_SET_I64_REF && (a==XR_LIR_SET_I64_CELL ||
+            (a==XR_LIR_STATE_REF && f->values[v->operands[0]-1].state_reference.payload==XR_LIR_SET_I64 && f->values[v->operands[0]-1].state_reference.mutable));
+        case XR_LIR_SET_REF_READ:return v->type==XR_LIR_SET_I64 && a==XR_LIR_SET_I64_REF;
+        case XR_LIR_SET_REF_WRITE:return v->type==XR_LIR_UNIT && a==XR_LIR_SET_I64_REF && b==XR_LIR_SET_I64;
         case XR_LIR_MAP_RETAIN: return v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64;
         case XR_LIR_MAP_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64;
         case XR_LIR_MAP_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64_CELL;
@@ -376,7 +406,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_RECORD_FIELD &&
-        v->op != XR_LIR_STATE_GROUP_INITIALIZE && !lir_view_operation(v->op) && v->bits)
+        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_MAP_LITERAL_NEW && !lir_view_operation(v->op) && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
@@ -539,7 +569,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                 v->op == XR_LIR_FUNCTION_BIND;
             scope_count += v->op == XR_LIR_FUNCTION_SCOPE_ENTER;
             if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_ARRAY_CELL &&
-                v->type != XR_LIR_MAP_STRING_I64_CELL)
+                v->type != XR_LIR_MAP_STRING_I64_CELL && v->type != XR_LIR_SET_I64_CELL)
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
             bool terminal = xr_lir_internal_terminal(v->op);
@@ -729,7 +759,7 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
 
 static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
     if (f->result == XR_LIR_FUNCTION_SCOPE || f->result == XR_LIR_MAP_STRING_I64_CELL ||
-        f->result == XR_LIR_MAP_STRING_I64_REF) return false;
+        f->result == XR_LIR_MAP_STRING_I64_REF || f->result == XR_LIR_SET_I64_CELL || f->result == XR_LIR_SET_I64_REF) return false;
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(m, f->result, true) ||
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_REF || f->result == XR_LIR_STRING_CELL ||
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
@@ -789,10 +819,10 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
 }
 
 static bool lir_managed_value(XrLirType type) {
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64;
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type==XR_LIR_SET_I64;
 }
 static bool lir_managed_cell(XrLirType type) {
-    return type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL;
+    return type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
 
 static bool lir_frame_cell_owner(const XrLirFunctionData *f, uint32_t id) {
@@ -867,7 +897,8 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
         managed |= lir_managed_value(f->values[i].type) || lir_managed_cell(f->values[i].type);
         cells |= f->values[i].type == XR_LIR_STRING_CELL;
         array_cells |= f->values[i].type == XR_LIR_ARRAY_CELL || f->values[i].type == XR_LIR_ARRAY_REF ||
-            f->values[i].type == XR_LIR_MAP_STRING_I64_CELL || f->values[i].type == XR_LIR_MAP_STRING_I64_REF;
+            f->values[i].type == XR_LIR_MAP_STRING_I64_CELL || f->values[i].type == XR_LIR_MAP_STRING_I64_REF ||
+            f->values[i].type == XR_LIR_SET_I64_CELL || f->values[i].type == XR_LIR_SET_I64_REF;
         string_references |= f->values[i].type == XR_LIR_STRING_REF;
     }
     if (string_references) {
@@ -909,7 +940,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
                     (!value->parameter || value->block) && !owned[id - 1])
                     return xr_lir_internal_error(d, "Managed use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
             }
-            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_MAP_DROP ||
+            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_MAP_DROP || v->op==XR_LIR_SET_DROP ||
                 xr_lir_string_role(m, v) == XR_LIR_STRING_OP_APPEND_OWNED ||
                 (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(f->result))) {
                 uint32_t id = v->operands[0];
@@ -959,7 +990,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid LIR module");
     if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
-    if (!xr_lir_internal_types_valid(m))
+    if (!xr_lir_internal_types_valid(m) || !xr_lir_internal_map_literals_valid(m))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "constructed type pool is invalid");
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_DISPLAY] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
@@ -971,14 +1002,14 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
             (entry->parameter_count && !entry->parameters))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic signature is invalid");
         bool array = xr_lir_internal_array_type(entry->result);
-        if (!entry->operation && (entry->result == XR_LIR_MAP_STRING_I64_REF || entry->result == XR_LIR_STRING_REF || entry->result == XR_LIR_VIEW_FRAME ||
+        if (!entry->operation && (entry->result == XR_LIR_MAP_STRING_I64_REF || entry->result == XR_LIR_SET_I64_REF || entry->result == XR_LIR_STRING_REF || entry->result == XR_LIR_VIEW_FRAME ||
             entry->result == XR_LIR_VIEW_CELL || entry->result == XR_LIR_SLICE_I64))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot produce a view capability");
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
             if (!xr_lir_internal_type_valid(m, entry->parameters[p], false))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
-            if (!entry->operation && (entry->parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry->parameters[p] == XR_LIR_STRING_REF || entry->parameters[p] == XR_LIR_VIEW_FRAME ||
+            if (!entry->operation && (entry->parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry->parameters[p] == XR_LIR_SET_I64_REF || entry->parameters[p] == XR_LIR_STRING_REF || entry->parameters[p] == XR_LIR_VIEW_FRAME ||
                 entry->parameters[p] == XR_LIR_VIEW_CELL || entry->parameters[p] == XR_LIR_SLICE_I64))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot receive a view capability");
         }

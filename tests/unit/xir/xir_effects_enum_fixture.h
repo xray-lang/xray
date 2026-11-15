@@ -44,7 +44,7 @@ static XrXirArtifact *effect_enum_ops_checked(const XrXirCompileContext *context
     XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirLiteral literal = {"constructed",11};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=&literal, .literal_count=1, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (wrong_variant) {
         entry[2].immediate = 0; entry[2].args[1] = 0; entry[8].args[0] = 0;
@@ -112,7 +112,7 @@ static XrXirArtifact *effect_enum_generic_checked(const XrXirCompileContext *con
         {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0}};
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"beta",4,&dependency,1,3, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=1, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (mode == 1 || mode == 5) function_constraint.markers = 0;

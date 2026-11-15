@@ -68,7 +68,7 @@ print(rev[1])             // 2
 print(rev[2])             // 1
 
 // --- Map methods ---
-var m = #{"a": 1, "b": 2, "c": 3}
+var m = {"a": 1, "b": 2, "c": 3}
 var keys = m.keys()
 print(len(keys))        // 3
 
@@ -82,7 +82,7 @@ m.delete("b")
 print(m.containsKey("b"))         // false
 
 // --- Set methods ---
-var st: Set<i64> = #[]
+var st: Set<i64> = Set()
 st.add(1)
 st.add(2)
 st.add(1)

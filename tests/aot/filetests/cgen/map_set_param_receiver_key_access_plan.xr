@@ -18,6 +18,6 @@ fn mapSetParamReceiverPlan(scores: ref Map<i64, i64>, seen: ref Set<i64>, value:
     return 0
 }
 
-var scores: Map<i64, i64> = #{}
-var seen: Set<i64> = #[]
+var scores: Map<i64, i64> = {}
+var seen: Set<i64> = Set()
 print(mapSetParamReceiverPlan(ref scores, ref seen, 7))

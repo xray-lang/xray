@@ -62,7 +62,7 @@ fn test_cdata_preserve() {
 @test
 fn test_cdata_as_text() {
     var doc = xml.parse("<root><![CDATA[content]]></root>",
-        { preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true })
+        preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true)
     var child = xml.children(doc)[0]
     assertEqual(nodeKind(child), "text")
     assertEqual(xml.nodeText(child) ?? "", "content")
@@ -139,7 +139,7 @@ fn test_create_document() {
 @test
 fn test_stringify_roundtrip() {
     var doc = xml.parse("<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>")
-    var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
+    var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
     var doc2 = xml.parse(str)
     assertEqual(xml.tag(doc2) ?? "", "root")
     var kids = xml.children(doc2)
@@ -191,7 +191,7 @@ fn test_whitespace_stripped_by_default() {
 @test
 fn test_whitespace_preserved() {
     var doc = xml.parse("<root> text </root>",
-        { preserveWhitespace: true, preserveComments: false, preserveCData: true, validateEntities: true })
+        preserveWhitespace: true, preserveComments: false, preserveCData: true, validateEntities: true)
     // Should preserve whitespace-only text nodes
     assertEqual(len(xml.children(doc)), 1)
 }
@@ -216,7 +216,7 @@ fn test_skip_doctype_with_internal_subset() {
 @test
 fn test_stringify_escapes_text() {
     var doc = xml.parse("<p>&lt;script&gt;</p>")
-    var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
+    var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
     assertEqual(str, "<p>&lt;script&gt;</p>")
 }
 

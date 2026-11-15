@@ -2,7 +2,7 @@ class IntSetBag {
     values: Set<i64>
 
     init() {
-        var values: Set<i64> = #[]
+        var values: Set<i64> = Set()
         this.values = values
     }
 

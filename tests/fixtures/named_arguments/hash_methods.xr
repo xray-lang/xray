@@ -1,0 +1,16 @@
+fn markKey()->string { print(7); return "b" }
+fn markValue()->i64 { print(8); return 2 }
+fn scenario() {
+    var values={"a":1}
+    values.set(value:markValue(),key:markKey())
+    print(values.get(key:"b")!)
+    print(values.containsKey(key:"a"))
+    print(values.containsKey(key:"missing"))
+    print(values.delete(key:"a"))
+    print(len(values))
+    values.set(key:"c",value:3)
+    print(values["c"])
+    print(values.delete(key:"c"))
+    print(len(values))
+}
+scenario()

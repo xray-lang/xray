@@ -95,15 +95,14 @@ const char *xfmt_compound_op(XrTokenType type) {
 // Type
 // ----------------------------------------------------------------------------
 
-static void fmt_type_text(XrFmtContext *ctx, XrTypeRef *type, bool structural) {
+static void fmt_type_text(XrFmtContext *ctx, XrTypeRef *type) {
     if (!xfmt_healthy(ctx)) return;
     if (!type || !xfmt_healthy(ctx)) return;
     size_t capacity = 256;
     void *scratch = NULL;
     while ( xfmt_healthy(ctx)) {
         if (xr_compile_state_resize(ctx->state, &scratch, capacity) != XR_COMPILE_RESOURCE_OK) break;
-        int length = structural ? xr_compile_tref_to_string_structural(ctx->state, type, scratch, (int)capacity) :
-            xr_compile_tref_to_string_buf(ctx->state, type, scratch, (int)capacity);
+        int length = xr_compile_tref_to_string_buf(ctx->state, type, scratch, (int)capacity);
         if (length < 0 || !xfmt_healthy(ctx)) break;
         if ((size_t)length < capacity - 1) {
             xfmt_write_bytes(ctx, scratch, (size_t)length);
@@ -126,14 +125,8 @@ XR_FUNC void xfmt_emit_throws_clause(XrFmtContext *ctx, const XrThrowsClause *cl
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *type) {
     if (!xfmt_healthy(ctx))
         return;
-    fmt_type_text(ctx, type, false);
+    fmt_type_text(ctx, type);
 }
-XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *type) {
-    if (!xfmt_healthy(ctx))
-        return;
-    fmt_type_text(ctx, type, true);
-}
-
 XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
     if (!xfmt_healthy(ctx)) return;
     if (!tref)
@@ -225,27 +218,6 @@ XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern)
             if (pattern->as.array.element_count == 1)
                 xfmt_write_char(ctx, ',');
             xfmt_write_char(ctx, ')');
-            break;
-
-        case PATTERN_OBJECT:
-            xfmt_write_char(ctx, '{');
-            for (int i = 0; xfmt_healthy(ctx) && (i < pattern->as.object.field_count); i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                const char *field =
-                    pattern->as.object.field_names ? pattern->as.object.field_names[i] : NULL;
-                XrDestructurePattern *sub = pattern->as.object.patterns[i];
-                if (field && sub && sub->type == PATTERN_IDENTIFIER && sub->as.identifier.name &&
-                    xfmt_compare(ctx, field, sub->as.identifier.name) == 0) {
-                    xfmt_write_str(ctx, field);
-                } else {
-                    if (field)
-                        xfmt_write_str(ctx, field);
-                    xfmt_write_str(ctx, ": ");
-                    xfmt_emit_pattern(ctx, sub);
-                }
-            }
-            xfmt_write_char(ctx, '}');
             break;
 
         case PATTERN_SKIP:

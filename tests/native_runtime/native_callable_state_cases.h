@@ -14,7 +14,7 @@ static void callable_state_values(void) {
     XrtModuleTypeSpec type = {XRT_MODULE_CALLABLE, 1};
     XrtModuleSpec module = {0};
     XrtModuleSlotSpec slot = {0, 0, XRT_MODULE_SLOT_MUTABLE, 0, sizeof(void *), _Alignof(void *)};
-    XrtModuleLayoutSpec spec = {.types=&type, .type_count=1, .modules=&module, .module_count=1,
+    XrtModuleLayoutSpec spec = {.metadata=XRT_MODULE_LAYOUT_HEADER,.types=&type, .type_count=1, .modules=&module, .module_count=1,
         .slots=&slot, .slot_count=1, .payload_size=sizeof(void *), .payload_alignment=_Alignof(void *),
         .byte_limit=UINT64_MAX, .callable_types=callables, .callable_type_count=3};
     XrtModuleLayout *layout = NULL;

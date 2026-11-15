@@ -2,7 +2,7 @@ class ScoreBag {
     scores: Map<string, i64>
 
     init() {
-        var scores: Map<string, i64> = #{}
+        var scores: Map<string, i64> = {}
         this.scores = scores
     }
 

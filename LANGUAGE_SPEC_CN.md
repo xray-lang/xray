@@ -427,7 +427,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。字段标识符和 C literal 仍遵守各自的无 NUL 限制。
 - `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
@@ -518,7 +518,7 @@ var decimal = re"\d+\.\d+"
 | Token | 用途 |
 |--|--|
 | `(` `)` | 分组、调用、参数列表 |
-| `{` `}` | 块、对象字面量 |
+| `{` `}` | 块、Map 与带类型名的 struct 字面量 |
 | `[` `]` | 数组字面量、索引 |
 | `,` | 分隔符 |
 | `.` | 成员访问 |
@@ -578,18 +578,13 @@ var decimal = re"\d+\.\d+"
 
 `!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
 
-#### 1.7.9 集合字面量起始符
+#### 1.7.9 集合字面量边界
 
-| Token | 用途 |
-|--|--|
-| `#{` | 空 Map 字面量 |
-| `#[` | Set 字面量起始 |
+Array 使用 `[` 与 `]`；Map 使用普通 `{` 与 `}`，不添加前缀 token；Set 使用普通具名构造。语句位置及值箭头后的 `{` 是块，Map 表达式的上下文规则见 §3.10。
 
-例：
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
 
 #### 1.7.10 模式
@@ -616,7 +611,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Optional 层独立**：`T?` 是语言项 `Optional<T>` 的写法；每层保留独立的存在标签，不拆成含 null 的 union。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
+5. **名义类型与动态数据**：`class` / `struct` / `interface` 按名义身份兼容，interface 必须显式 implements；固定字段使用 struct，多字段返回也可使用无标签 tuple。动态键使用 Map，`JSON.Value` 是 schema-less 递归数据交换值域；JSON 标量按既有规则 widening，复合 typed value 通过 `JSON.value` 显式编码。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -989,36 +984,36 @@ tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验
 
 #### 2.4.3 `Map<K, V>`
 
-哈希字典，**保持插入顺序**。详见 §14.8。
+保持插入顺序的哈希字典。字面量写 `{key: value}`，键是任意表达式；裸标识符取其绑定的值。字符串键必须加引号。空 `{}` 需要 `Map<K, V>` 或 `JSON.Object` 上下文；语句开头及 `=>` 后的 `{` 是块（§3.10）。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
-
-```xray
-var m: Map<string, i64> = #{"a": 1, "b": 2}
-var m2 = #{"a": 1, "b": 2}
-var empty = #{}                                     // 空 Map
-
-m["c"] = 3                                          // 添加/修改
-var v = m["a"]                                      // 取值；键不存在时 panic E0431
-var maybe = m.get("missing")                        // 安全查询；不存在返回 null
+```xray @check
+var m: Map<string, i64> = {"a": 1, "b": 2}
+var m2 = {"a": 1, "b": 2}
+var empty: Map<string, i64> = {}
+m["c"] = 3
+var v = m["a"]
+var maybe = m.get("missing")
 ```
 
-| 字面量形式 | 类型 | 用途 |
-|---|---|---|
-| `{ key: value }`（无前缀） | exact `structural object` | 见 §2.4.7 |
-| `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
-| `#{}` | `Map<K, V>`（空） | 显式空 Map |
-| `[]` | `Array<T>` | 数组 |
-| `#[]` | `Set<T>` | 集合 |
+没有类型上下文时，全部键须取得同一类型 K，全部值须取得同一类型 V；不自动推为联合类型。两个显式项的键不得在键等价关系下相同；静态可确定的重复报 E0325，其余重复在构造时 panic E0434。Map 展开按书写顺序覆盖，只有两个显式项之间做重复检查（§3.10）。
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `equals(other: T) -> bool` 与 `hash() -> i64` 的自定义类型（`equals` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+| 写法 | 类型 |
+|---|---|
+| `{"a": 1}` | `Map<string, i64>` |
+| `{}`（带上下文） | 上下文中的 Map 类型 |
+| `[1, 2]` | `Array<i64>` |
+| `Set([1, 2])` | `Set<i64>` |
+| `Point{x: 1, y: 2}` | 名义 struct `Point` |
+
+键必须满足现行 `Hashable` 与键等价关系（§9.2）；本任务不改变这些能力、数值转换或用户类型的显式实现规则。字面量键和值按书写顺序、先键后值各求值一次。
 
 #### 2.4.4 `Set<T>`
 
-去重集合。详见 §14.9。
+去重集合，使用 `Set([...])` 构造；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。元素沿用既有键等价关系。`#[]` 不属于语言语法。
 
-```xray
-var s: Set<i64> = #[1, 2, 3]
+```xray @check
+var s: Set<i64> = Set([1, 2, 3])
+var empty = Set<i64>()
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -1038,75 +1033,30 @@ var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
+#### 2.4.7 固定字段数据与 JSON 值域
 
-裸对象字面量永远形成字段集精确的静态结构对象，用于普通业务对象、options 和多字段返回值。运行期未知键由 `Map` 承担；JSON object 的标准拼写 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名。`JSON` 是无需 import 的 prelude 命名空间，不是值类型。
+固定字段数据声明为名义 `struct` 或 `class`；多字段返回值也可以使用无标签 tuple。语言没有匿名结构对象、对象形状类型、结构化身份或宽度约束。`type X = {...}` 与 `T: { field: Type }` 不属于类型语法。interface 必须显式 `implements`。
 
-**对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
+`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，使用相同的 `{key: value}` 字面量；`JSON` 是 prelude 命名空间。固定字段的类型化 JSON 解码目标使用 struct。`JSON.value` / `JSON.stringify` 仍要求 `JSON.Encodable`，不是任意值的隐式编码。
 
-```xray
-// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
-var user = { name: "Bob", age: 25 }       // exact 对象形状
-typeName(user)                            // "object"
-user.name              // 类型: string；direct ordinal
-user["name"]           // 与 user.name 完全等价；同一 direct ordinal
-
-// 字段简写：当字段名与变量名相同
-var name = "Alice"
-var age = 30
-var user = { name, age }                  // 等价 { name: name, age: age }
-
-// Map 字面量：`#{}` 前缀 + `:`
-var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, i64>
-var data: JSON.Object = #{"name": "Alice", "age": 30}
-data["traceId"] = "req-1"               // 动态键只属于 Map
-```
-
-**对照表**：
-
-| 写法 | 类型 | 备注 |
-|---|---|---|
-| `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
-| `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
-| `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
-| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
-| `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
-
-**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
-
-```xray
-type User = { name: string, age: i64 }
-
-var u: User = { name: "Alice", age: 30 }
-print(u.name)         // OK
-// u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
-
-var u2 = { name: "Alice", age: 30 }      // exact 对象形状
-// u2.extra = "x"     // 编译错误
-
-type Named = { name: string }
-fn showName<T: Named>(value: T) {
-    print(value.name)                     // 约束只暴露已声明字段
-    print(value["name"])                  // 与 .name 相同
-    // print(value.age)                    // 编译错误：隐藏字段不可见
+```xray @check
+struct User {
+    name: string
+    age: i64
 }
-showName(u)                               // OK：u 的 concrete exact shape 更宽
-
-var j: JSON.Object = #{"name": "Alice", "age": 30}
-j["extra"] = "x"                        // OK：Map 动态键
-var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
+var user = User{name: "Alice", age: 30}
+var data: JSON.Object = {"name": "Alice", "age": 30}
+data["traceId"] = "req-1"
 ```
 
-**乘积类型的职责划分**：
+| 类型 | 身份与字段 | 用途 |
+|---|---|---|
+| `struct` | 名义身份、声明的字段、值语义，可声明方法 | 固定字段、数学数据、FFI 聚合 |
+| `class` | 名义身份、声明的字段、引用语义，可继承 | 身份、封装与引用关系 |
+| tuple | 无标签、按位置访问 | 小型多值返回 |
+| `Map` / `JSON.Object` | 运行期键、Map API，不提供字段访问 | 动态数据与 JSON object |
 
-| | 身份 | 字段集 | 用户可定义方法 | 用途 |
-|---|---|---|---|---|
-| 对象形状 | 结构化 | exact；泛型约束可要求最小字段集 | **否** | options、多字段返回值、普通业务数据 |
-| `JSON.Object` | Map 别名 | 任意字符串键，运行期确定 | Map API | schema-less JSON object |
-| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
-| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
-
-结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
+Map 的裸标识符键是变量值，不能把 `{name: value}` 当作命名字段构造。Map 不支持 `.name` 字段访问。需要固定字段时写 `User{name: value, age: 30}`；需要命名调用参数时写 `request(url: value)`（§5.2.2）。
 
 #### 2.4.8 `BigInt`
 
@@ -1177,7 +1127,7 @@ var y: i64? = 42        // OK
 var z: i64 = null       // 编译错误：null 不是 i64
 ```
 
-`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 struct。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -1302,22 +1252,23 @@ main()
 
 ### 2.8 类型别名
 
-```xray
+```xray @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
-type Point = { x: f64, y: f64 }
-type Pair<T> = { first: T, second: T }
+struct Point { x: f64; y: f64 }
+type Position = Point
+type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
 ```xray @fragment
-var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
+var p: Pair<i64> = (1, 2)                 // 等价于 (i64, i64)
 var f: Mapper2<i64, string> = (n) => string(n)
 ```
 
-泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归 tuple 别名）是编译错误。
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
@@ -1368,13 +1319,14 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
 
 详见 §7.4。简述：
 
-```xray @fragment
+```xray @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
-var m = #{"a": 1}    // m: Map<string, i64>
-var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
+var m = {"a": 1}    // m: Map<string, i64>
+struct Named { name: string }
+var p = Named{name: "A"} // p: Named
 var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
 
@@ -1398,22 +1350,8 @@ var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回�
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 字段集不同的 exact 对象形状 | exact 对象形状 | ❌ exact target 要求精确字段集 |
-| exact 对象形状 | 泛型约束 `T: { a: A }` | ✅ 约束满足关系；不是普通赋值转换 |
 
-> **exact / width-constraint 规则**：普通类型位置要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。泛型约束位置的结构类型表示“至少包含这些字段”，同名字段类型保持不变；它不产生运行时宽度对象或动态字典。
-> ```xray
-> type User = { name: string }
-> var full = { name: "A", age: 18 }
-> // var u: User = full            // 编译错误 E0352：extra field 'age'
-> fn nameOf<T: User>(value: T) -> string { return value.name }
-> print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
->
-> type Opt = { name: string, age: i64? }
-> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
-> ```
-
-> **静态对象与 JSON 动态边界**：已知 schema 使用 exact target 与 `JSON.parse<T>`；schema-less object 使用 `JSON.Object` / Map。typed 复合值通过 `JSON.value(value)` 显式编码，动态 object 通过 `JSON.decodeObject<T>(object)` 显式验证回 typed target。
+固定字段类型按名义身份转换；字段集合相同不产生隐式转换或 interface 实现。JSON 的类型化边界显式使用 struct 与 `JSON.parse<T>` / `JSON.decodeObject<T>`；schema-less 数据使用 `JSON.Object`。
 
 #### 2.10.2 显式 `as`
 
@@ -1681,9 +1619,9 @@ main()
 
 Map 与 Set：
 
-```xray
+```xray @run
 fn main() {
-    var scores = #{"alice": 95, "bob": 88}
+    var scores = {"alice": 95, "bob": 88}
     scores.set("carol", 77)
     print(scores.get("alice") ?? 0)   // 输出：95
     print(len(scores))                 // 输出：3
@@ -1697,6 +1635,13 @@ fn main() {
 }
 
 main()
+```
+
+```output
+95
+3
+2
+true
 ```
 
 可空类型与 `??`：
@@ -2097,88 +2042,76 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 - tuple 展开在其书写位置单次求值，按源 tuple 的静态字段顺序接入结果；普通元素和每个展开字段仍按其结果位置执行既有上下文类型检查与转换。嵌套的 tuple 字面量展开可以消费外层对应位置的上下文，不能靠运行期值决定字段数。`()` 展开零个字段，但其求值副作用保留；一个普通 `()` 元素仍占一个 Unit 字段。展开后的总字段数须与期望 tuple 精确匹配；零字段结果为 Unit，单字段结果仍是单元素 tuple。值复制、class/同步身份、挂起、错误及失败清理沿普通规则，不发布部分结果或撤销此前副作用；无约束泛型不能凭实例化实参假设自己是 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
 - 数组展开沿普通 `Array<T>` 拼接的精确元素类型合同；期望 `Array<T>` 时，展开源须为同一 `Array<T>`，普通元素按既有 `T` 上下文检查，不隐式转换整个 `Array<U>`。没有期望类型时沿既有字面量推导规则确定 `T`。所有普通元素与展开源先在其书写位置各求值一次并保存拥有式值快照，再构造结果；后续表达式的重绑或写入不替换先前快照。挂起、错误和失败清理使用普通调用与所有权规则，失败不发布部分结果且不撤销已完成的副作用。结果与输入可独立修改，嵌套值按值复制，class/同步身份只复制引用；不承诺保留源数组容量。
-- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+- **Map 展开**：`{...base, "x": 1}` 按书写顺序覆盖；**struct 展开**：`T{...src, field: value}` 按固定目标字段检查，显式字段优先。具体规则见 §3.10。
 
-```xray
+```xray @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 字面量构造
 
-#### Array `[...]`
+表达式位置的 `{` 开始 Map 字面量；语句开头及 `=>` 后紧跟的 `{` 开始块。直接返回 Map 写 `x => ({"key": x})`。struct 字面量必须有类型名前缀，字段名不作变量求值。`#{}`、`#[]`、匿名结构对象及字段简写均不属于语言语法。
 
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
 
-```xray
+```xray @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // 类型 Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
 
-#### Map `#{k: v, ...}` 与 `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
+```xray @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
 
-```xray
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // 空 Map
+```xray @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
 
-**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```xray @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
 
-```xray
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### 键、上下文与重复
 
-#### Object（结构化对象）`{ field: value, ... }`
+- Map 键是任意表达式，先求键、再求值；条目与展开源按书写顺序各求值一次。裸标识符取其绑定的值。未定义的裸键附提示：若想写字符串键，使用 `"name"`。
+- 空 Array、Map 与无类型实参的 Set 构造需要类型上下文。没有上下文时，Array 元素须有同一类型，Map 的键和值分别须有同一类型；不自动生成联合类型。有上下文时沿用该类型的转换规则；`JSON.Object` 中标量值按已有 JSON widening 进入 `JSON.Value`。
+- 两个显式键在既有键等价关系下相同就是重复。字符串、整数、rune、bool 字面量、无载荷 enum 变体、`comptime` 表达式，以及初值直接或传递地属于这些形式的 const 绑定，是由语法确定的编译期键；这类键的重复报 `E0325: duplicate key "name" in Map literal`。主位置在后一个键，note `the key first appears here` 指向前一个。
+- 其他重复在构造时 panic E0434，消息含键及两个显式项的位置，例如 `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`。检查复用插入时已有的命中结果，不额外查询；来源位置的存储与失败清理由构造器负责。
+- Map 展开按书写顺序覆盖。展开项与显式项相互覆盖不触发重复错误；两个显式项即使被展开隔开也必须互不相同。
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` 合并字段
-```
+#### struct 展开
 
-```xray
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+`T{...src, field: value}` 中来源必须是 struct。来源的每个字段须为 T 中同名、同类型的字段；class、Map、tuple 或含额外字段的来源被拒绝。T 的每个字段来自显式字段或唯一一个提供它的来源；显式字段优先于全部来源，与书写先后无关。两个来源提供同一字段且没有显式字段覆盖时报错；没有显式值或来源的字段按 §5.4 的既有声明默认值与可空字段缺省规则处理，仍未得到值的必需字段报错。所有来源与显式表达式仍按书写顺序各求值一次。
 
-- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
-- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
+这只是目标类型写明的逐字段构造，不产生结构化身份、宽度子类型、隐式 interface 实现或 struct 解构，也不改变 struct 已有的字段缺省规则。
 
-#### Array<u8> `Array<u8>(...)`
+#### 类型不一致的诊断
 
-详见 §2.4.6 与 §14.5。
+无上下文且无法取得同一类型时，报一个 E0326，主位置为第一个与首值不一致的值；note 指向首值。例如 `Map literal values have different types: string and i64`，附 `the first value is string; without a declared Map type, every value must be string`。
 
-#### Channel `Channel<T>(buf?)`
+修法按条件依次给出：所有键均为合法标识符的字符串字面量时，建议声明 struct 并使用其字面量（名字取绑定名首字母大写，无绑定名用 Record）；全部值可进入 JSON.Value 时建议标注 JSON.Object；各类型可组成合法 union 时建议显式 Map<K, A | B>。不满足条件的 note 不出现。键类型不一致使用 `Map literal keys have different types: ...`，修法只提示声明 Map<K, V>。数组使用 `Array literal elements have different types: ...`，固定元素数时提示 tuple，可组成合法 union 时提示显式 Array<A | B>。
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-详见 §10.5。
+Array<u8> 与 Channel 构造沿用 §2.4.6、§10.5。
 
 ### 3.11 调用 / 成员访问 / 索引 / 切片
 
@@ -2187,13 +2120,16 @@ const ch: Channel<i64> = Channel<i64>(10)
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= Identifier ':' ('ref' | 'move')? Expression
+          | ('ref' | 'move')? Expression
+          | '...' Expression
 ```
 
-- 参数按位置传递；不支持命名参数。
-- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
-- rest 参数收集多余参数到数组。
-- 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
+调用可写 `f(a, name: value)`。位置实参在前，命名实参在后；名字取自直接调用的具名函数、方法或构造器声明。未知名字、重复绑定（包括先按位置给出）、命名实参后的普通位置实参，均报 E0327。rest 只能按位置给出。函数值调用没有参数名，即使值来自具名函数的 const 别名，也不能用命名实参。
+
+接收者或被调表达式先求值；所有显式实参按书写顺序各求值一次，再按声明顺序计算省略的默认值。参数映射不重排求值，泛型推导与期望类型按映射后的形参位置取得证据。`ref` / `move` 写在值之前，如 `swap(left: ref a, right: ref b)`；真实 place、借用存活与模式权限沿用原规则。参数名是导出 API 的一部分，跨模块调用使用同一声明参数名。
+
+静态 tuple 展开与真实 rest 的末尾 Array 展开沿 §3.9；展开不能为 rest 参数引入命名形式，也不改变动态 Array 展开必须位于末尾的规则。缺失的必需参数仍是错误，只有声明了默认值的参数可以省略。
 
 #### 成员访问
 
@@ -2383,9 +2319,10 @@ var m = Map<string, i64>()
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
-```xray
+```xray @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // 等价 Array<i64>() + push
-var m = #{}                    // 等价 Map<...>()
+var m: Map<string, i64> = {}    // 空 Map 需要类型上下文
 var p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -2828,8 +2765,6 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `var` — 可变绑定
@@ -2880,7 +2815,7 @@ print(len(snapshot))        // 3
 
 #### 5.1.3 解构绑定
 
-```xray
+```xray @fragment
 // 数组解构
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // 跳过元素
@@ -2888,16 +2823,12 @@ var [first, , third] = [10, 20, 30]         // 跳过元素
 // 元组解构（多返回值）
 var (q, r) = divmod(17, 5)
 
-// 对象解构（按字段名提取，可重命名本地绑定）
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
-- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
 
-当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
 
 ### 5.2 `fn` 函数声明
 
@@ -2953,7 +2884,7 @@ fn runAll() throws { /* body omitted */ }
 
 可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
-#### 5.2.2 默认参数值
+#### 5.2.2 默认参数值与命名实参
 
 ```xray
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
@@ -2965,18 +2896,32 @@ connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
 
-- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 默认值在**调用点**求值：省略已声明默认值的参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
 - 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
 - 有默认值的参数必须在尾部连续出现。
 - 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
 - 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
-- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
 - 函数的 `throws(E)` 只约束函数体，不包含调用方执行的参数默认表达式。调用的错误包含被调声明的错误，以及本次实际执行的默认表达式逃逸的错误；显式实参不承担被跳过默认表达式的错误。按实际泛型实参替换后再检查这一规则，不把所有默认值的错误无条件并入函数签名。
 - 默认表达式中的抛错调用仍须在声明处有自己的传播标记，调用方的外层 `try` 不能代替它。例如 `fn f(x: i64 = try read()) {}` 可有不抛错的函数体；省略参数的 `try f()` 承担默认值错误，显式 `f(1)` 不承担。遗漏默认表达式内的 `try` 或省略参数时缺少所需的调用点标记均报错；`try { } catch` 区域仍按 §8 的普通规则处理。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
 - 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
 - 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
+##### 命名实参与参数绑定
+
+位置实参必须在命名实参之前；每个形参至多绑定一次，未知名字、重复名字、按位置给出后再命名、命名之后的位置实参均报 E0327。rest 只能按位置传递。直接调用具名函数、方法和构造器使用被调声明的参数名；函数值调用不能使用标签，包括具名函数的 const 别名。
+
+```xray @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+
+接收者/被调表达式先求值，显式实参按书写顺序求值，省略的默认值按声明顺序求值。按形参顺序排列的是已经求出的值，不得重排表达式。期望类型与泛型证据按绑定后的形参位置取得；默认值不补充新的调用方推导证据。`ref`、`move` 位于标签后的值之前；参数名属于导出 API，跨模块保持同一名字。参见 §3.11。
 
 #### 5.2.3 多返回值
 
@@ -3552,7 +3497,7 @@ b.x = 99.0
 // q.x 仍为 3.0
 ```
 
-**聚合字面量的字段规则**（与 sealed structural object 一致）：
+**聚合字面量的字段规则**（名义 struct 的声明字段）：
 
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
@@ -3976,22 +3921,23 @@ TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @check
 type Outcome = i64 | string                          // union 别名
 type Mapper = fn(i64) -> i64                              // 函数类型别名
-type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
-type Pair<T> = { first: T, second: T }                // 泛型别名
+struct Point { x: f64; y: f64 }
+type Position = Point                              // 同一名义类型的别名
+type Pair<T> = (T, T)                               // 无标签 tuple 的泛型别名
 ```
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
 - 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
 - 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
-- `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
+- 名义类型的别名保留原声明身份；字段集合相同不会使不同 struct 相等。匿名对象形状不是合法的别名 RHS。
 - `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
 - 别名可前向引用，但**禁止循环别名**。
 
-详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
+详见 §2.4.7 与 [§2.8](#28-类型别名)。
 
 ### 5.8 `import` / `export`
 
@@ -4194,26 +4140,18 @@ match (http_status) {
 
 ### 6.9 解构模式
 
-```xray
-var [a, b, c] = some_array
-var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
+数组与 tuple 绑定沿 §5.1.3；匿名对象解构、对象模式和 struct 解构不属于语言语法。ADT 变体的具名 payload 字段模式仍按 §6.3，不受删除对象族的影响。
 
 ```xray @fragment
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
 match (p) {
-    { x, y } => print(x, y),             // 对象字段解构（簡寫绑定）
-    { name: n, age } => print(n, age),    // 对象字段重命名 + 簡寫混用
-    [a, b, ..rest,] => print(a, b, rest), // 数组解构，`..rest` 捕获尾部为新数组
-    [_, mid, _] => print(mid),           // 元素位通配
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
 
-- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
-- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
-- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
+数组模式按长度匹配：没有 `..rest` 时长度必须等于元素数，有 rest 时长度至少为元素数。非 rest 元素只能是绑定或通配；按值判断使用守卫。Map 不提供字段模式；静态字段数据使用名义 struct 并通过普通字段访问取得值。or-pattern `|` 不在本任务引入。
 
 ### 6.10 穷举性与匹配失败
 
@@ -5036,7 +4974,7 @@ TypeArgs   ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
-```xray
+```xray @check
 // 泛型函数
 fn identity<T>(x: T) -> T {
     return x
@@ -5070,16 +5008,18 @@ interface Comparable<T> {
 }
 
 // 泛型 type alias：透明语法替换，不产生新类型
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
 
-`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `(i64, i64)`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
 方法可声明自己的类型参数，例如 `struct Box<T>` 中的 `map<U>(value: U)`。外层类型参数与方法参数按声明身份区分；方法参数不得重复或遮蔽外层类型参数。`Box<i64>.make<string>(value)` 的前一组实参属于类型，后一组属于静态方法；实例方法 `box.map<string>(value)` 从接收者类型取得外层实参。显式方法函数值使用同样的分组，例如 `Box<i64>.make<string>` 和 `box.map<string>`。显式列表必须完整，部分显式实参不自动补齐，也不允许把一组用于另一组。整体省略调用列表时按 §9.3 从原签名和类型证据推断；方法函数值的上下文推断属于同一完整目标的后续阶段。
 
 普通泛型方法的签名、体、默认参数和嵌套闭包在定义处按两层已声明约束检查，即使方法未使用；不从未来实参增加能力。默认参数与捕获继承原声明的类型参数身份和权限。特化仅替换已Checked的参数，复验后进入Lowered，普通实例在Program封存前形成。实例方法函数值只求值并保存接收者一次；静态函数值没有接收者。两者沿用完整间接调用签名、值所有权、效应、挂起和失败清理规则。
+
+匿名对象形状不再是泛型约束；需要成员能力时声明具名 interface，并由实参类型显式 implements。既有内置类型谓词及其余约束规则保持不变。
 
 xray 的约束语法统一用冒号 `:`，多个约束用 `&` 连接（读作“同时满足”）。**不使用** Java/TS 的 `extends` / `implements` 作为约束关键字。
 
@@ -5122,7 +5062,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `equals(other: T) -> bool` 与 `hash() -> i64`。`equals` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
-```xray
+```xray @check
 class Token implements Hashable {
     value: i64
 
@@ -5134,7 +5074,7 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
 
@@ -5259,41 +5199,22 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 | 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
 | 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
-### 9.5 协议（duck typing）与名义类型
+### 9.5 名义类型与显式 interface 实现
 
-#### 名义类型为主
+字段或方法集合相同不会产生类型兼容或 interface 实现。具名 interface 由声明显式 `implements`；泛型成员能力按声明的约束取得。对象形状与 `T: { field: Type }` 已删除，不能通过匿名字段集获得成员权限。
 
-xray 的接口实现需**显式 `implements`**——这与 Go 的"隐式接口实现"不同。
-
-```xray
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // 必须显式 implements
-    draw() { print("square") }
+```xray @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // 编译错误：Wrong 不是 Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
 
-#### 结构化对象
-
-仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
-describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
-```
+struct 展开的字段子集检查只用于构造一个写明类型的目标，不建立宽度子类型或隐式 interface 实现。
 
 ### 9.6 方差（Variance）
 
@@ -5302,7 +5223,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
-**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+声明点方差仍是独立的未实现能力，本任务只删除结构对象，不改变容器不变性或既有函数类型规则；不能通过字段集合相同推导新的子类型关系。
 
 ### 9.6.1 高阶类型（HKT）
 
@@ -6396,7 +6317,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
+**Map 字面量**：`{"k1": v1, "k2": v2}`，空 `{}` 需要类型上下文。键为表达式；重复显式键与展开规则见 §3.10。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -6421,7 +6342,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(T)->()` |
 | `iterator()` | 迭代协议 |
 
-**Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+**Set 构造**：`Set([1, 2, 3])`；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。
 
 `values()` 以同样的零参数 READ 和拥有式快照规则返回 `Array<T>`，按首次插入顺序排列；重复添加不改变位置，删除后重新添加位于末尾。
 
@@ -6454,7 +6375,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | 静态函数 | 说明 |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，直接返回 JSON.Object 或 JSON.Value |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
 | `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
@@ -6469,8 +6390,9 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
-```xray
-type Request = { action: string, userId: i64 }
+```xray @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
 var payload = JSON.parseObject(body)          // JSON.Object，即 Map
@@ -6481,7 +6403,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；struct、数组和其他复合值仍通过 `JSON.value(...)` 显式编码。`{"name": "alice"}` 是 Map 字面量；在 `JSON.Object` 上下文中，键为 string，值按现有标量规则进入 JSON.Value。固定字段的类型化解码目标使用 struct。
 
 ### 14.12 `Range`
 
@@ -8124,6 +8046,9 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Map 字面量中静态可确定的两个显式键重复 |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | 无上下文的集合字面量无法取得同一元素、键或值类型 |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | 命名实参绑定错误：未知、重复、顺序、rest 或间接调用 |
 
 #### 错误签名诊断（编号已登记，实现待接通）
 
@@ -8220,6 +8145,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Map 字面量构造时发现两个显式键重复；消息含两处源位置 |
 
 #### 系统、调用、coroutine 与 stdlib
 
@@ -8332,7 +8258,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8340,9 +8266,6 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
@@ -8400,7 +8323,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -8410,11 +8333,10 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
 
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 
 ArrowLambda ::= Identifier '=>' (Expression | Block)
               | '(' ArrowParams? ')' '=>' (Expression | Block)
@@ -8430,10 +8352,10 @@ MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
 
 `try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，后接 `scope` 时解析为 `TryScopeStmt`（§10.7），其余情况解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
@@ -8450,6 +8372,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
+         |  TuplePattern
+         |  ArrayPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
@@ -8463,6 +8387,9 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
 
 ### A.5 语句
@@ -8558,8 +8485,6 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
@@ -8766,7 +8691,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 条件 | truthy / falsy | 条件必须是 `bool`；nullable 存在性须显式比较 `value != null`，i64/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 i64↔f64 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
+| 对象 | 动态字段 | `{key: value}` 为 Map；固定字段使用名义 struct，动态 JSON 使用 `JSON.Object` |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 

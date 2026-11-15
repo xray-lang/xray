@@ -33,7 +33,7 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirFunctionIdentity identities[]={
         {0},{.exported=1},{.nominal_owner=1,.method_kind=XR_XIR_MATERIALIZER},
         {.exported=1,.nominal_owner=1,.method_kind=XR_XIR_STATIC_METHOD}};
-    XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirNominalField fields[]={{{"a",1},XR_XIR_I64,XR_XIR_FIELD_PRIVATE},{{"b",1},XR_XIR_I64,XR_XIR_FIELD_PRIVATE}};
     XrXirNominalDeclaration nominal={{"alpha",5},{"Pair",4},1,NULL,0,fields,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
     XrXirNominalTable table={&nominal,1,NULL};
@@ -45,9 +45,9 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,&types,&evidence,XR_XIR_PROGRAM,NULL};
     uint32_t defaults[2]={0};XrXirConstructionRow row={0,defaults,2};
     XrXirMaterializationBinding edge={1,0,2,0};XrXirConstructionSpec input={&row,1,&edge,1,NULL,NULL};
-    XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v5(context,&types,&input,&(XrXirSlotFacts){NULL,0},&owner, NULL)==XR_XIR_OK);
+    XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v6(context,&types,&input,&(XrXirSlotFacts){NULL,0},&owner, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
-    CHECK(xr_xir_compile_declarations_verify(context,&declarations,&types,4,XR_XIR_PROGRAM)==XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(context,&declarations,&types,4,XR_XIR_PROGRAM, NULL)==XR_XIR_OK);
     CHECK(xir_construction_verify(context,&built,owner,NULL)==XR_XIR_OK);
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_check_v2(context,&built,owner,&checked,&diagnostic);

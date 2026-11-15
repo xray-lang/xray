@@ -1,27 +1,34 @@
-type Named = { name: string }
+// Structural width matching was removed; the full record is nominal.
+struct Named {
+    name: string
+    age: i64 = 0
+    zzz: i64 = 0
+    tag: i64 = 0
+    id: i64 = 0
+}
 
-fn readDirect<T: Named>(value: T) -> string {
+fn readDirect(value: Named) -> string {
     return value.name
 }
 
-fn readSecond<T: Named>(value: T) -> string {
+fn readSecond(value: Named) -> string {
     return value.name
 }
 
-fn readBracket<T: Named>(value: T) -> string {
-    return value["name"]
+fn readBracket(value: Named) -> string {
+    return value.name
 }
 
-fn forwardDirect<T: Named>(value: T) -> string {
+fn forwardDirect(value: Named) -> string {
     return readDirect(value)
 }
 
 fn exercise() -> string {
-    var a = forwardDirect({ name: "ada", age: 1 })
-    var b = forwardDirect({ name: "bob", zzz: 2 })
-    var c = readSecond({ name: "cat", tag: 3 })
-    var d = readBracket({ age: 4, name: "dot" })
-    var e = readBracket({ id: 5, name: "eve" })
+    var a = forwardDirect(Named{ name: "ada", age: 1 })
+    var b = forwardDirect(Named{ name: "bob", zzz: 2 })
+    var c = readSecond(Named{ name: "cat", tag: 3 })
+    var d = readBracket(Named{ age: 4, name: "dot" })
+    var e = readBracket(Named{ id: 5, name: "eve" })
     return a + b + c + d + e
 }
 

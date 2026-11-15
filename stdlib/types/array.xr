@@ -43,21 +43,21 @@ struct Array<T> {
     ref sort(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>
     // U is inferred only from the checked callback signature, not a receiver type parameter.
     // @native-operation ARRAY_MAP allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    map(fn: fn(item: T, index: i64) -> U) -> Array<U>
+    map(callback: fn(item: T, index: i64) -> U) -> Array<U>
     // @native-operation ARRAY_FILTER allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    filter(fn: fn(item: T, index: i64) -> bool) -> Array<T>
+    filter(callback: fn(item: T, index: i64) -> bool) -> Array<T>
     // @native-operation ARRAY_REDUCE allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U
+    reduce(callback: fn(acc: U, item: T) -> U, initial: U) -> U
     // @native-operation ARRAY_FOR_EACH allocation=may_heap failures=allocation,retain,limit,callback ownership=unit
-    forEach(fn: fn(item: T, index: i64)) -> ()
+    forEach(callback: fn(item: T, index: i64)) -> ()
     // @native-operation ARRAY_FIND allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    find(fn: fn(item: T) -> bool) -> T?
+    find(callback: fn(item: T) -> bool) -> T?
     // @native-operation ARRAY_FIND_INDEX allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    findIndex(fn: fn(item: T) -> bool) -> i64
+    findIndex(callback: fn(item: T) -> bool) -> i64
     // @native-operation ARRAY_EVERY allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    every(fn: fn(item: T) -> bool) -> bool
+    every(callback: fn(item: T) -> bool) -> bool
     // @native-operation ARRAY_SOME allocation=may_heap failures=allocation,retain,limit,callback ownership=owned
-    some(fn: fn(item: T) -> bool) -> bool
+    some(callback: fn(item: T) -> bool) -> bool
     // @native-operation ARRAY_FILL allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref fill(value: T, start?: i64, end?: i64) -> Array<T>
     // Byte bulk operations require an exact Array<u8> receiver.

@@ -1,0 +1,7 @@
+var x = 1               // x: i64
+var y = 1.5             // y: f64
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
+var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
+var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断

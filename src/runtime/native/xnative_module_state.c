@@ -14,6 +14,7 @@
 #include "xnative_string.h"
 #include "xnative_array.h"
 #include "xnative_map.h"
+#include "xnative_set.h"
 #include "xnative_module_cell.h"
 #include "xnative_callable.h"
 #include "xnative_boxed.h"
@@ -49,6 +50,7 @@ struct XrtModuleLayout {
     XrXirTypeArena *array_types;
     XrXirTypeArena *callable_types;
     XrXirTypeArena *map_types;
+    XrXirTypeArena *set_types;
 };
 enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
 enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
@@ -185,6 +187,15 @@ static void module_callable_drop(const XrtModuleType *type, void *storage) {
     }
 }
 
+static XrXirValueStatus module_set_copy(const XrtModuleType *type,const void *source,void *empty) {
+    if(!source)return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrtSet *set=NULL;XrtSet *copy=NULL;memcpy(&set,source,sizeof(set));
+    XrXirValueStatus status=xrt_set_owned_copy(set,type->arena,&copy);
+    if(status==XR_XIR_VALUE_OK)memcpy(empty,&copy,sizeof(copy));return status;
+}
+static void module_set_drop(const XrtModuleType *type,void *storage) {
+    (void)type;XrtSet *set=NULL;memcpy(&set,storage,sizeof(set));memset(storage,0,sizeof(set));xrt_set_owned_drop(&set);
+}
 static XrXirValueStatus module_map_copy(const XrtModuleType *type, const void *source, void *empty) {
     if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrtMap *map = NULL; XrtMap *copy = NULL;
@@ -248,6 +259,8 @@ static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, Xrt
     case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
         type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
         type->copy = module_array_copy; type->drop = module_array_drop; return true;
+    case XRT_MODULE_SET_I64:
+        type->size=sizeof(XrtSet *);type->alignment=_Alignof(XrtSet *);type->copy=module_set_copy;type->drop=module_set_drop;return true;
     case XRT_MODULE_MAP_STRING_I64:
         type->size = sizeof(XrtMap *); type->alignment = _Alignof(XrtMap *);
         type->copy = module_map_copy; type->drop = module_map_drop; return true;
@@ -312,8 +325,10 @@ XR_FUNC XrXirTypeArena *xrt_module_callable_catalog(const XrtModuleLayout *layou
     return layout ? layout->callable_types : NULL;
 }
 XR_FUNC XrXirTypeArena *xrt_module_state_callables(const XrtModuleState *state, const XrtCallableImage *image) {
-    if (!state || !image || image->type_count != state->layout->view.callable_type_count ||
-        !xrt_callable_specs_equal(image->types, state->layout->view.callable_types, image->type_count)) return NULL;
+    if (!xrt_callable_image_valid(image) || !state) return NULL;
+    const XrtCallableImage received={.metadata=XRT_CALLABLE_IMAGE_HEADER,
+        .types=state->layout->view.callable_types,.type_count=state->layout->view.callable_type_count};
+    if (!xrt_callable_specs_equal(image,&received)) return NULL;
     return state->layout->callable_types;
 }
 

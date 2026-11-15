@@ -102,7 +102,7 @@ typedef struct {
     size_t aggregate_access_count, aggregate_access_capacity, aggregate_operand_count, aggregate_operand_capacity;
     RbcLirImmediate *immediates;
     uint32_t *view_constants;
-    uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits, temporary_refs, temporary_maps;
+    uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits, temporary_refs, temporary_maps, temporary_sets;
     uint32_t temporary_arrays[XR_RBC_ARRAY_FAMILY_COUNT];
     bool typed_spills;
     uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
@@ -128,7 +128,7 @@ typedef struct {
     size_t patch_count, patch_capacity;
     XrRbcCompileDiagnostic *diagnostic;
     XrRbcCompileStatus status;
-    bool map_scratch, string_scratch, control_scratch, state_scratch, state_ref_scratch, binding_scratch;
+    bool map_scratch, set_scratch, string_scratch, control_scratch, state_scratch, state_ref_scratch, binding_scratch;
     bool array_scratch[XR_RBC_ARRAY_FAMILY_COUNT];
     bool view_scratch[3], has_views;
 } RbcLirCompiler;
@@ -259,6 +259,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
 static bool rbc_lir_boxed_take(RbcLirCompiler *, uint32_t, uint32_t);
 #include "xrbc_lir_array.inc.c"
 #include "xrbc_lir_map.inc.c"
+#include "xrbc_lir_set.inc.c"
 #include "xrbc_lir_view.inc.c"
 #include "xrbc_lir_aggregate.inc.c"
 #include "xrbc_lir_boxed.inc.c"
@@ -472,7 +473,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
                 return false;
             }
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
-        (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && v->result != XR_LIR_MAP_STRING_I64 &&
+        (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && v->result != XR_LIR_MAP_STRING_I64 && v->result!=XR_LIR_SET_I64 &&
          v->result != XR_LIR_SLICE_I64 &&
          !xr_lir_boxed_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -502,6 +503,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
              type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 && type != XR_LIR_FUNCTION_SCOPE &&
              type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
+             type!=XR_LIR_SET_I64 && type!=XR_LIR_SET_I64_CELL && type!=XR_LIR_SET_I64_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
              !xr_lir_boxed_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
@@ -589,8 +591,12 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         return rbc_lir_map_role(input, i) || xr_lir_range_point(input, i) || xr_lir_string_role(input, i) || xr_lir_display_point(input, i) || rbc_lir_view_role(input, i) ||
             (xr_lir_array_intrinsic_view(input, i->intrinsic, &shape) == XR_LIR_OK && shape.id);
     }
-    case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
+    case XR_LIR_MAP_LITERAL_NEW: case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
+    case XR_LIR_SET_NEW: case XR_LIR_SET_LEN: case XR_LIR_SET_CONTAINS:
+    case XR_LIR_SET_ADD: case XR_LIR_SET_REMOVE: case XR_LIR_SET_CLEAR:
+    case XR_LIR_SET_RETAIN: case XR_LIR_SET_DROP: case XR_LIR_SET_CELL_DROP:
+    case XR_LIR_SET_BORROW: case XR_LIR_SET_REF_READ: case XR_LIR_SET_REF_WRITE: return true;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
     case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
     case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return true;
@@ -736,6 +742,9 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
         return XR_RBC_CAPTURED_CELL;
     }
     if (xr_lir_boxed_type(c->input, type)) return XR_RBC_BOXED;
+    if(type==XR_LIR_SET_I64)return XR_RBC_SET_I64;
+    if(type==XR_LIR_SET_I64_CELL)return XR_RBC_SET_I64_CELL;
+    if(type==XR_LIR_SET_I64_REF)return XR_RBC_SET_I64_REF;
     if (type == XR_LIR_MAP_STRING_I64) return XR_RBC_MAP_STRING_I64;
     if (type == XR_LIR_MAP_STRING_I64_CELL) return XR_RBC_MAP_STRING_I64_CELL;
     if (type == XR_LIR_MAP_STRING_I64_REF) return XR_RBC_MAP_STRING_I64_REF;
@@ -760,6 +769,7 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
 static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind) {
     if (kind == XR_RBC_MAP_STRING_I64)
         return c->slot_count + (c->typed_spills ? c->temporary_strings + (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) : 12u);
+    if(kind==XR_RBC_SET_I64)return c->slot_count+(c->typed_spills?c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT)+c->temporary_maps:13u);
     if (kind == XR_RBC_I64_BINDING)
         return c->slot_count + (c->typed_spills ? c->scratch_count - 1 : 11u);
     uint32_t family = xr_rbc_array_family(kind);
@@ -771,7 +781,7 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
     }
     if (c->typed_spills) {
         if ((kind == XR_RBC_STRING && !c->temporary_strings) ||
-            (kind == XR_RBC_STATE_REF && !c->temporary_refs) ||
+            (kind == XR_RBC_STATE_REF && !c->temporary_refs) || (kind==XR_RBC_SET_I64 && !c->temporary_sets) ||
             (family < XR_RBC_ARRAY_FAMILY_COUNT && !c->temporary_arrays[family]) ||
             (kind == XR_RBC_BITS && !c->temporary_bits && !c->control_scratch)) {
             rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy has no matching typed scratch");
@@ -780,7 +790,7 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
         uint32_t arrays = (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT);
         offset = kind == XR_RBC_STRING ? 0u : family < XR_RBC_ARRAY_FAMILY_COUNT ?
             c->temporary_strings + (uint32_t)rbc_lir_array_temporaries(c, family) :
-            kind == XR_RBC_STATE_REF ? c->temporary_strings + arrays + c->temporary_maps : c->temporary_strings + arrays + c->temporary_maps + c->temporary_refs;
+            kind == XR_RBC_STATE_REF ? c->temporary_strings + arrays + c->temporary_maps + c->temporary_sets : c->temporary_strings + arrays + c->temporary_maps + c->temporary_sets + c->temporary_refs;
         if (kind == XR_RBC_STATE) offset += c->temporary_bits + (c->control_scratch ? 1u : 0u);
         if (offset >= c->scratch_count) {
             rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy exceeds typed scratch budget");
@@ -806,6 +816,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     if(rbc_lir_value_type(c,value)==XR_LIR_ARRAY) {
                         uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,value,XR_LIR_ARRAY));
                         if(!c->temporary_arrays[family])c->temporary_arrays[family]=1;
+                    } else if(rbc_lir_value_type(c,value)==XR_LIR_SET_I64) {
+                        if(!c->temporary_sets)c->temporary_sets=1;
                     } else if (rbc_lir_value_type(c, value) == XR_LIR_MAP_STRING_I64) {
                         if (!c->temporary_maps) c->temporary_maps = 1;
                     } else if (rbc_lir_value_type(c, value) == XR_LIR_STRING) {
@@ -814,30 +826,32 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                         if (!c->temporary_bits) c->temporary_bits = 1;
                     }
                 }
-            uint64_t strings=0,bits=0,refs=0,maps=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
-            if (rbc_lir_callable_scope_point(&i) || xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_map_point(c, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
+            uint64_t strings=0,bits=0,refs=0,maps=0,sets=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
+            if (rbc_lir_callable_scope_point(&i) || xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_view_role(c->input, &i) || rbc_lir_i64set_point(c,&i) || rbc_lir_map_point(c, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
             for(uint32_t a=0;a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
-                    type==XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_MAP_STRING_I64_REF || type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF || type==XR_LIR_STRING_REF ||
+                    type==XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_MAP_STRING_I64_REF || type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF || type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF || type==XR_LIR_STRING_REF ||
                     type==XR_LIR_I64_CELL || type==XR_LIR_STATE ||
                     type==XR_LIR_VIEW_FRAME || type==XR_LIR_VIEW_CELL || type==XR_LIR_SLICE_I64 || type>=XR_LIR_TYPE_COUNT)continue;
-                if(type==XR_LIR_MAP_STRING_I64)++maps;else if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
+                if(type==XR_LIR_SET_I64)++sets;else if(type==XR_LIR_MAP_STRING_I64)++maps;else if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
                 else if(type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,v,type))];else ++bits;
             }
             if(i.result && !c->output.literals[i.result] && !c->output.lengths[i.result]) {
-                if(i.type==XR_LIR_MAP_STRING_I64)++maps;
+                if(i.type==XR_LIR_SET_I64)++sets;else if(i.type==XR_LIR_MAP_STRING_I64)++maps;
                 else if(i.type==XR_LIR_STRING)++strings;
                 else if(i.type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type))];
                 else if(i.type==XR_LIR_STATE_REF)++refs;
-                else if(i.type!=XR_LIR_MAP_STRING_I64_CELL && i.type!=XR_LIR_MAP_STRING_I64_REF && i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF && i.type!=XR_LIR_STRING_REF &&
+                else if(i.type!=XR_LIR_MAP_STRING_I64_CELL && i.type!=XR_LIR_MAP_STRING_I64_REF && i.type!=XR_LIR_SET_I64_CELL && i.type!=XR_LIR_SET_I64_REF && i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF && i.type!=XR_LIR_STRING_REF &&
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
                     i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
             if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8) ++bits;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
+            if(sets>UINT32_MAX)return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"Set temporaries exceed index space");
+            if(c->temporary_sets<sets)c->temporary_sets=(uint32_t)sets;
             if(c->temporary_maps<maps)c->temporary_maps=(uint32_t)maps;
             if(c->temporary_strings<strings)c->temporary_strings=(uint32_t)strings;
             if(c->temporary_bits<bits)c->temporary_bits=(uint32_t)bits;
@@ -891,6 +905,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                         if (c->view_scratch[v]) count = 9u + v;
                     if (c->binding_scratch) count = 12;
                     if (c->map_scratch) count = 13;
+                    if(c->set_scratch)count=14;
                     if (c->scratch_count < count) c->scratch_count = count;
                 }
             }
@@ -955,11 +970,14 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
                 c->register_kinds[c->slot_count+c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,a)+r]=xr_rbc_array_kind_at(a);
         for(uint32_t r=0;r<c->temporary_maps;++r)
             c->register_kinds[c->slot_count+c->temporary_strings+arrays+r]=XR_RBC_MAP_STRING_I64;
+        for(uint32_t r=0;r<c->temporary_sets;++r)
+            c->register_kinds[c->slot_count+c->temporary_strings+arrays+c->temporary_maps+r]=XR_RBC_SET_I64;
         for(uint32_t r=0;r<c->temporary_refs;++r)
-            c->register_kinds[c->slot_count+c->temporary_strings+arrays+c->temporary_maps+r]=XR_RBC_STATE_REF;
+            c->register_kinds[c->slot_count+c->temporary_strings+arrays+c->temporary_maps+c->temporary_sets+r]=XR_RBC_STATE_REF;
         if(c->state_scratch)c->register_kinds[c->slot_count+c->scratch_count-1-(c->has_views?3u:0u)-c->binding_scratch]=XR_RBC_STATE;
     } else {
         if(c->map_scratch)c->register_kinds[c->slot_count+12]=XR_RBC_MAP_STRING_I64;
+        if(c->set_scratch)c->register_kinds[c->slot_count+13]=XR_RBC_SET_I64;
         if(c->string_scratch)c->register_kinds[c->slot_count+1]=XR_RBC_STRING;
         if(c->state_scratch)c->register_kinds[c->slot_count+2]=XR_RBC_STATE;
         if(c->state_ref_scratch)c->register_kinds[c->slot_count+3]=XR_RBC_STATE_REF;
@@ -1142,7 +1160,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         if (i->type == XR_LIR_U8) {
             uint32_t temporary = c->slot_count;
             if (c->typed_spills) temporary += c->temporary_strings +
-                (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) + c->temporary_maps + c->temporary_refs + c->temporary_bits - 1;
+                (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) + c->temporary_maps + c->temporary_sets + c->temporary_refs + c->temporary_bits - 1;
             return rbc_lir_emit(c, XR_RBC_LOADI, temporary, 0, 0, UINT8_MAX) &&
                 rbc_lir_emit(c, XR_RBC_AND, result, c->slots[i->operands[0]], temporary, 0);
         }
@@ -1243,8 +1261,12 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
                     c->slots[i->operands[n]], 0, 0)) return false;
         if (!rbc_lir_emit(c, XR_RBC_CALL, destination, 0, 0,
                 c->functions[i->callee - 1] - 1)) return false;
-        return !i->result || rbc_lir_array_move(c,
-            rbc_lir_register_kind(c,i->result,i->type), result, destination);
+        if(i->result&&!rbc_lir_array_move(c,
+            rbc_lir_register_kind(c,i->result,i->type), result, destination))return false;
+        /* The receiving scope owns a returned callable independently of its
+         * scratch lane. Retire that alias before a differently sized call
+         * window or loop edge reuses the lane. */
+        return !rbc_lir_callable_type(c->input,i->type)||rbc_lir_constant(c,destination,0);
     }
     default: {
         uint32_t selected = rbc_lir_immediate_operand(c, i);
@@ -1282,12 +1304,12 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     }
 }
 
-typedef struct RbcLirTemporaryUse { uint32_t strings, arrays[XR_RBC_ARRAY_FAMILY_COUNT], references, maps, bits; } RbcLirTemporaryUse;
+typedef struct RbcLirTemporaryUse { uint32_t strings, arrays[XR_RBC_ARRAY_FAMILY_COUNT], references, maps, sets, bits; } RbcLirTemporaryUse;
 
 static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemporaryUse *use) {
     XrLirType type=rbc_lir_value_type(c,value);
     uint32_t arrays=(uint32_t)rbc_lir_array_temporaries(c,XR_RBC_ARRAY_FAMILY_COUNT);
-    uint32_t *used = &use->bits, offset = c->temporary_strings + arrays + c->temporary_maps + c->temporary_refs;
+    uint32_t *used = &use->bits, offset = c->temporary_strings + arrays + c->temporary_maps + c->temporary_sets + c->temporary_refs;
     uint32_t capacity = c->temporary_bits;
     if (type == XR_LIR_STRING) {
         used = &use->strings; offset = 0; capacity = c->temporary_strings;
@@ -1297,8 +1319,10 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
         capacity=c->temporary_arrays[family];
     } else if (type == XR_LIR_MAP_STRING_I64) {
         used=&use->maps; offset=c->temporary_strings+arrays; capacity=c->temporary_maps;
+    } else if(type==XR_LIR_SET_I64) {
+        used=&use->sets;offset=c->temporary_strings+arrays+c->temporary_maps;capacity=c->temporary_sets;
     } else if (type == XR_LIR_STATE_REF) {
-        used = &use->references; offset = c->temporary_strings+arrays+c->temporary_maps; capacity = c->temporary_refs;
+        used = &use->references; offset = c->temporary_strings+arrays+c->temporary_maps+c->temporary_sets; capacity = c->temporary_refs;
     }
     if (type == XR_LIR_STATE || *used >= capacity) {
         rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "spill exceeds its typed temporary registers");
@@ -1315,6 +1339,7 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
     if (rbc_lir_aggregate_point(i)) return rbc_lir_aggregate_emit(c, i);
     if (rbc_lir_aggregate_state(c->input, c->function, i)) return rbc_lir_aggregate_state_emit(c, i);
     if (rbc_lir_view_role(c->input, i)) return rbc_lir_view_emit(c, i);
+    if(rbc_lir_i64set_point(c,i))return rbc_lir_i64set_emit(c,i);
     if(rbc_lir_map_point(c,i))return rbc_lir_map_emit(c,i);
     if(rbc_lir_array_point(c,i))return rbc_lir_array_emit(c,i);
     if (i->op == XR_LIR_CONST &&
@@ -1585,7 +1610,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .array_accesses=c->array_accesses,.array_access_count=c->array_access_count,
         .array_operands=c->array_operands,.array_operand_count=c->array_operand_count,
         .reference_spill_kinds=c->reference_spill_kinds,.reference_spill_kind_count=c->reference_spill_count,
-        .result_kind=xr_lir_boxed_type(c->input, c->view.result) ? XR_RBC_BOXED : c->view.result == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 : c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
+        .result_kind=xr_lir_boxed_type(c->input, c->view.result) ? XR_RBC_BOXED : c->view.result==XR_LIR_SET_I64?XR_RBC_SET_I64:c->view.result == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 : c->view.result == XR_LIR_STRING ? XR_RBC_STRING : c->view.result==XR_LIR_ARRAY ?
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
             c->view.result == XR_LIR_SLICE_I64 ? XR_RBC_SLICE_I64 :
             rbc_lir_callable_type(c->input, c->view.result) ? XR_RBC_FUNCTION : XR_RBC_BITS,
@@ -1641,6 +1666,11 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     for (size_t i = 0; i < program->module.literal_count; ++i)
         xr_free((void *)program->module.literals[i].bytes);
     xr_free((void *)program->module.literals);
+    for(size_t n=0;n<program->module.map_literal_count;++n) {
+        xr_free((void *)program->module.map_literals[n].path);
+        xr_free((void *)program->module.map_literals[n].items);
+    }
+    xr_free((void *)program->module.map_literals);
     xr_free((void *)program->module.aggregate_types);
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
@@ -1839,6 +1869,7 @@ static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
 
 #include "xrbc_lir_callable_types.inc.c"
 #include "xrbc_lir_owned_callable.inc.c"
+#include "xrbc_lir_map_literals.inc.c"
 
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
@@ -1867,7 +1898,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     for (uint32_t i = 0; i < root.parameter_count; ++i)
         if (root.parameter_types[i] >= XR_LIR_TYPE_COUNT ||
             root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
-            root.parameter_types[i] == XR_LIR_MAP_STRING_I64 || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_CELL || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_REF || root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
+            root.parameter_types[i] == XR_LIR_MAP_STRING_I64 || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_CELL || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_REF ||
+            root.parameter_types[i]==XR_LIR_SET_I64 || root.parameter_types[i]==XR_LIR_SET_I64_CELL || root.parameter_types[i]==XR_LIR_SET_I64_REF || root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
             root.parameter_types[i]==XR_LIR_ARRAY_CELL || root.parameter_types[i]==XR_LIR_ARRAY_REF ||
             root.parameter_types[i]==XR_LIR_STRING_REF)
             return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -1888,6 +1920,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     ids[0] = entry.id;
     mapping[entry.id - 1] = 1;
     status = rbc_lir_aggregate_types(input, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    status = rbc_lir_map_literals(input,p,d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_callable_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;

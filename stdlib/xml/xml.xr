@@ -176,30 +176,17 @@ export enum XmlError {
 
 // ===== Options =====
 
-export type XmlOptions = {
-    preserveWhitespace: bool,
-    preserveComments: bool,
-    preserveCData: bool,
+struct _XmlParseConfig {
+    preserveWhitespace: bool
+    preserveComments: bool
+    preserveCData: bool
     validateEntities: bool
 }
 
-export type XmlWriteOptions = {
-    indent: i64,
-    declaration: bool,
+struct _XmlWriteConfig {
+    indent: i64
+    declaration: bool
     encoding: string
-}
-
-export const XML_DEFAULT_OPTIONS: XmlOptions = {
-    preserveWhitespace: false,
-    preserveComments: false,
-    preserveCData: true,
-    validateEntities: true
-}
-
-export const XML_DEFAULT_WRITE_OPTIONS: XmlWriteOptions = {
-    indent: 0,
-    declaration: true,
-    encoding: "UTF-8"
 }
 
 export class XmlParseReport {
@@ -489,7 +476,7 @@ class XmlParser {
     root: XmlNode?
     hasRoot: bool
 
-    init(data: string, options: XmlOptions) {
+    init(data: string, options: _XmlParseConfig) {
         this.data = data
         this.pos = 0
         this.line = 1
@@ -846,7 +833,7 @@ class XmlParser {
     }
 }
 
-fn _parse(data: string, options: XmlOptions) -> XmlParser {
+fn _parse(data: string, options: _XmlParseConfig) -> XmlParser {
     var parser = XmlParser(data, options)
     parser.parseDocument()
     return parser
@@ -854,7 +841,7 @@ fn _parse(data: string, options: XmlOptions) -> XmlParser {
 
 // ===== Serializer =====
 
-fn _serializeChildren(kids: Array<XmlNode>, config: XmlWriteOptions, level: i64, depth: i64) -> string {
+fn _serializeChildren(kids: Array<XmlNode>, config: _XmlWriteConfig, level: i64, depth: i64) -> string {
     var out = ""
     for (var i = 0; i < len(kids); i++) {
         out += _serializeNode(kids[i], config, level, depth + 1)
@@ -863,7 +850,7 @@ fn _serializeChildren(kids: Array<XmlNode>, config: XmlWriteOptions, level: i64,
 }
 
 fn _serializeElement(name: XmlName, attrs: Array<XmlAttribute>, kids: Array<XmlNode>,
-                     config: XmlWriteOptions, level: i64, depth: i64) -> string {
+                     config: _XmlWriteConfig, level: i64, depth: i64) -> string {
     var tag = _qualifiedName(name)
     if (len(tag) == 0) { return "" }
     var out = ""
@@ -903,7 +890,7 @@ fn _serializeElement(name: XmlName, attrs: Array<XmlAttribute>, kids: Array<XmlN
     return out
 }
 
-fn _serializeText(value: string, config: XmlWriteOptions, level: i64) -> string {
+fn _serializeText(value: string, config: _XmlWriteConfig, level: i64) -> string {
     var out = ""
     out += _indentText(level, config.indent)
     out += _escapeText(value)
@@ -911,7 +898,7 @@ fn _serializeText(value: string, config: XmlWriteOptions, level: i64) -> string 
     return out
 }
 
-fn _serializeComment(value: string, config: XmlWriteOptions, level: i64) -> string {
+fn _serializeComment(value: string, config: _XmlWriteConfig, level: i64) -> string {
     var out = ""
     out += _indentText(level, config.indent)
     out += "<!--"
@@ -921,7 +908,7 @@ fn _serializeComment(value: string, config: XmlWriteOptions, level: i64) -> stri
     return out
 }
 
-fn _serializeCData(value: string, config: XmlWriteOptions, level: i64) -> string {
+fn _serializeCData(value: string, config: _XmlWriteConfig, level: i64) -> string {
     var out = ""
     out += _indentText(level, config.indent)
     out += "<![CDATA["
@@ -931,7 +918,7 @@ fn _serializeCData(value: string, config: XmlWriteOptions, level: i64) -> string
     return out
 }
 
-fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions,
+fn _serializePI(instructionTarget: string, data: string, config: _XmlWriteConfig,
                 level: i64) -> string {
     var out = ""
     out += _indentText(level, config.indent)
@@ -946,7 +933,7 @@ fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions
     return out
 }
 
-fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64) -> string {
+fn _serializeNode(node: XmlNode, config: _XmlWriteConfig, level: i64, depth: i64) -> string {
     if (depth > XML_MAX_DEPTH) { return "" }
     return match (node) {
         XmlNode.Document { children: kids }                          => _serializeChildren(kids, config, level, depth),
@@ -963,8 +950,16 @@ fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64
 
 // parse is strict: any recoverable diagnostic or a missing root element enters
 // the typed error channel via `throw XmlError.Parse { diagnostic: value }`.
-export fn parse(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
-    var parser = _parse(data, options)
+export fn parse(data: string, preserveWhitespace: bool = false,
+                      preserveComments: bool = false,
+                      preserveCData: bool = true,
+                      validateEntities: bool = true) -> XmlNode {
+    var parser = _parse(data, _XmlParseConfig{
+        preserveWhitespace: preserveWhitespace,
+        preserveComments: preserveComments,
+        preserveCData: preserveCData,
+        validateEntities: validateEntities
+    })
     if (len(parser.errors) > 0) {
         throw XmlError.Parse { diagnostic: parser.errors[0] }
     }
@@ -977,29 +972,46 @@ export fn parse(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlN
 
 // parseReport opts into recovery and returns any partial document together with
 // the typed diagnostics collected during parsing.
-export fn parseReport(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlParseReport {
-    var parser = _parse(data, options)
+export fn parseReport(data: string, preserveWhitespace: bool = false,
+                      preserveComments: bool = false,
+                      preserveCData: bool = true,
+                      validateEntities: bool = true) -> XmlParseReport {
+    var parser = _parse(data, _XmlParseConfig{
+        preserveWhitespace: preserveWhitespace,
+        preserveComments: preserveComments,
+        preserveCData: preserveCData,
+        validateEntities: validateEntities
+    })
     var doc: XmlNode? = null
     if (parser.hasRoot) { doc = parser.root }
     return XmlParseReport(doc, parser.errors)
 }
 
-export fn parseFile(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
+export fn parseFile(path: Path, preserveWhitespace: bool = false,
+                      preserveComments: bool = false,
+                      preserveCData: bool = true,
+                      validateEntities: bool = true) -> XmlNode {
     var content = io.readFile(path)
     if (content == null) {
         throw XmlError.Io { message: "Failed to read file" }
     }
-    return parse(content!, options)
+    return parse(content!, preserveWhitespace: preserveWhitespace, preserveComments: preserveComments, preserveCData: preserveCData, validateEntities: validateEntities)
 }
 
-export fn stringify(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> string {
-    var config = options
+export fn stringify(node: XmlNode, indent: i64 = 0,
+                      declaration: bool = true,
+                      encoding: string = "UTF-8") -> string {
+    var config = _XmlWriteConfig{
+        indent: indent,
+        declaration: declaration,
+        encoding: encoding
+    }
     var out = ""
     if (config.declaration) {
-        var encoding = config.encoding
-        if (len(encoding) == 0) { encoding = "UTF-8" }
+        var resolvedEncoding = config.encoding
+        if (len(resolvedEncoding) == 0) { resolvedEncoding = "UTF-8" }
         out += "<?xml version=\"1.0\" encoding=\""
-        out += encoding
+        out += resolvedEncoding
         out += "\"?>"
         if (config.indent > 0) { out += "\n" }
     }
@@ -1007,8 +1019,10 @@ export fn stringify(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_
     return out
 }
 
-export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> bool {
-    return io.writeFile(path, stringify(node, options))
+export fn writeFile(path: Path, node: XmlNode, indent: i64 = 0,
+                      declaration: bool = true,
+                      encoding: string = "UTF-8") -> bool {
+    return io.writeFile(path, stringify(node, indent: indent, declaration: declaration, encoding: encoding))
 }
 
 // ===== Builders =====

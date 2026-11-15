@@ -80,7 +80,7 @@ XrParseStatus xr_parser_scan_arrow_syntax(Parser *parser, XrParseArrowSyntaxFn c
         if (type == TK_CLASS || type == TK_STRUCT || type == TK_INTERFACE ||
             type == TK_ENUM || type == TK_UNION) pending_declaration = true;
         else if (type == TK_MATCH || type == TK_SELECT) pending_declaration = false;
-        if (type == TK_LBRACE || type == TK_EMPTY_MAP_START) {
+        if (type == TK_LBRACE) {
             scopes[scope_count++] = (XrArrowScope){type == TK_LBRACE && pending_declaration, paren_count};
             pending_declaration = false;
         } else if (type == TK_RBRACE) {

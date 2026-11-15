@@ -389,88 +389,76 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 - tuple 展开在其书写位置单次求值，按源 tuple 的静态字段顺序接入结果；普通元素和每个展开字段仍按其结果位置执行既有上下文类型检查与转换。嵌套的 tuple 字面量展开可以消费外层对应位置的上下文，不能靠运行期值决定字段数。`()` 展开零个字段，但其求值副作用保留；一个普通 `()` 元素仍占一个 Unit 字段。展开后的总字段数须与期望 tuple 精确匹配；零字段结果为 Unit，单字段结果仍是单元素 tuple。值复制、class/同步身份、挂起、错误及失败清理沿普通规则，不发布部分结果或撤销此前副作用；无约束泛型不能凭实例化实参假设自己是 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
 - 数组展开沿普通 `Array<T>` 拼接的精确元素类型合同；期望 `Array<T>` 时，展开源须为同一 `Array<T>`，普通元素按既有 `T` 上下文检查，不隐式转换整个 `Array<U>`。没有期望类型时沿既有字面量推导规则确定 `T`。所有普通元素与展开源先在其书写位置各求值一次并保存拥有式值快照，再构造结果；后续表达式的重绑或写入不替换先前快照。挂起、错误和失败清理使用普通调用与所有权规则，失败不发布部分结果且不撤销已完成的副作用。结果与输入可独立修改，嵌套值按值复制，class/同步身份只复制引用；不承诺保留源数组容量。
-- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+- **Map 展开**：`{...base, "x": 1}` 按书写顺序覆盖；**struct 展开**：`T{...src, field: value}` 按固定目标字段检查，显式字段优先。具体规则见 §3.10。
 
-```xray @id=expr-spread-collections
+```xray @id=expr-spread-collections @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 字面量构造
 
-#### Array `[...]`
+表达式位置的 `{` 开始 Map 字面量；语句开头及 `=>` 后紧跟的 `{` 开始块。直接返回 Map 写 `x => ({"key": x})`。struct 字面量必须有类型名前缀，字段名不作变量求值。`#{}`、`#[]`、匿名结构对象及字段简写均不属于语言语法。
 
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
 
-```xray @id=expr-array-lit
+```xray @id=expr-array-lit @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // 类型 Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
 
-#### Map `#{k: v, ...}` 与 `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
+```xray @id=expr-map-lit @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
 
-```xray @id=expr-map-lit
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // 空 Map
+```xray @id=expr-set-lit @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
 
-**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```xray @id=expr-struct-lit @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
 
-```xray @id=expr-set-lit
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### 键、上下文与重复
 
-#### Object（结构化对象）`{ field: value, ... }`
+- Map 键是任意表达式，先求键、再求值；条目与展开源按书写顺序各求值一次。裸标识符取其绑定的值。未定义的裸键附提示：若想写字符串键，使用 `"name"`。
+- 空 Array、Map 与无类型实参的 Set 构造需要类型上下文。没有上下文时，Array 元素须有同一类型，Map 的键和值分别须有同一类型；不自动生成联合类型。有上下文时沿用该类型的转换规则；`JSON.Object` 中标量值按已有 JSON widening 进入 `JSON.Value`。
+- 两个显式键在既有键等价关系下相同就是重复。字符串、整数、rune、bool 字面量、无载荷 enum 变体、`comptime` 表达式，以及初值直接或传递地属于这些形式的 const 绑定，是由语法确定的编译期键；这类键的重复报 `E0325: duplicate key "name" in Map literal`。主位置在后一个键，note `the key first appears here` 指向前一个。
+- 其他重复在构造时 panic E0434，消息含键及两个显式项的位置，例如 `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`。检查复用插入时已有的命中结果，不额外查询；来源位置的存储与失败清理由构造器负责。
+- Map 展开按书写顺序覆盖。展开项与显式项相互覆盖不触发重复错误；两个显式项即使被展开隔开也必须互不相同。
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` 合并字段
-```
+#### struct 展开
 
-```xray @id=expr-object-lit
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+`T{...src, field: value}` 中来源必须是 struct。来源的每个字段须为 T 中同名、同类型的字段；class、Map、tuple 或含额外字段的来源被拒绝。T 的每个字段来自显式字段或唯一一个提供它的来源；显式字段优先于全部来源，与书写先后无关。两个来源提供同一字段且没有显式字段覆盖时报错；没有显式值或来源的字段按 §5.4 的既有声明默认值与可空字段缺省规则处理，仍未得到值的必需字段报错。所有来源与显式表达式仍按书写顺序各求值一次。
 
-- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
-- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
+这只是目标类型写明的逐字段构造，不产生结构化身份、宽度子类型、隐式 interface 实现或 struct 解构，也不改变 struct 已有的字段缺省规则。
 
-#### Array<u8> `Array<u8>(...)`
+#### 类型不一致的诊断
 
-详见 §2.4.6 与 §14.5。
+无上下文且无法取得同一类型时，报一个 E0326，主位置为第一个与首值不一致的值；note 指向首值。例如 `Map literal values have different types: string and i64`，附 `the first value is string; without a declared Map type, every value must be string`。
 
-#### Channel `Channel<T>(buf?)`
+修法按条件依次给出：所有键均为合法标识符的字符串字面量时，建议声明 struct 并使用其字面量（名字取绑定名首字母大写，无绑定名用 Record）；全部值可进入 JSON.Value 时建议标注 JSON.Object；各类型可组成合法 union 时建议显式 Map<K, A | B>。不满足条件的 note 不出现。键类型不一致使用 `Map literal keys have different types: ...`，修法只提示声明 Map<K, V>。数组使用 `Array literal elements have different types: ...`，固定元素数时提示 tuple，可组成合法 union 时提示显式 Array<A | B>。
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-详见 §10.5。
+Array<u8> 与 Channel 构造沿用 §2.4.6、§10.5。
 
 ### 3.11 调用 / 成员访问 / 索引 / 切片
 
@@ -479,13 +467,16 @@ const ch: Channel<i64> = Channel<i64>(10)
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= Identifier ':' ('ref' | 'move')? Expression
+          | ('ref' | 'move')? Expression
+          | '...' Expression
 ```
 
-- 参数按位置传递；不支持命名参数。
-- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
-- rest 参数收集多余参数到数组。
-- 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
+调用可写 `f(a, name: value)`。位置实参在前，命名实参在后；名字取自直接调用的具名函数、方法或构造器声明。未知名字、重复绑定（包括先按位置给出）、命名实参后的普通位置实参，均报 E0327。rest 只能按位置给出。函数值调用没有参数名，即使值来自具名函数的 const 别名，也不能用命名实参。
+
+接收者或被调表达式先求值；所有显式实参按书写顺序各求值一次，再按声明顺序计算省略的默认值。参数映射不重排求值，泛型推导与期望类型按映射后的形参位置取得证据。`ref` / `move` 写在值之前，如 `swap(left: ref a, right: ref b)`；真实 place、借用存活与模式权限沿用原规则。参数名是导出 API 的一部分，跨模块调用使用同一声明参数名。
+
+静态 tuple 展开与真实 rest 的末尾 Array 展开沿 §3.9；展开不能为 rest 参数引入命名形式，也不改变动态 Array 展开必须位于末尾的规则。缺失的必需参数仍是错误，只有声明了默认值的参数可以省略。
 
 #### 成员访问
 
@@ -675,9 +666,10 @@ var m = Map<string, i64>()
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
-```xray @id=expr-literal-constructor-relation
+```xray @id=expr-literal-constructor-relation @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // 等价 Array<i64>() + push
-var m = #{}                    // 等价 Map<...>()
+var m: Map<string, i64> = {}    // 空 Map 需要类型上下文
 var p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -1108,88 +1100,76 @@ Allowed in the following positions only:
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
 - Array spread uses the exact element-type contract of ordinary `Array<T>` concatenation. Under an expected `Array<T>`, a spread source must be that same `Array<T>`; ordinary elements use the existing `T` context, without an implicit conversion of a whole `Array<U>`. Without an expected type, existing literal inference determines `T`. Evaluate every ordinary element and spread source once at its written position and retain owned value snapshots before constructing the result. Later rebinding or mutation does not replace earlier snapshots. Suspension, errors and failed cleanup use ordinary call and ownership rules; failure publishes no partial result and does not roll back completed effects. Inputs and the result can be modified independently, nested values copy by value, and class/synchronization identities copy references only. Source array capacity is not preserved by contract.
-- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Map spread**: `{...base, "x": 1}` overwrites in written order. **Struct spread**: `T{...src, field: value}` checks a fixed nominal target and gives explicit fields priority. See §3.10.
 
-```xray @id=expr-spread-collections
+```xray @id=expr-spread-collections @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
 
 ### 3.10 Literal Construction
 
-#### Array `[...]`
+An expression-leading `{` begins a Map literal. A statement-leading brace or a brace immediately after `=>` begins a block; return a Map directly with `x => ({"key": x})`. A struct literal requires its type-name prefix, and field names are not evaluated as variables. Hash-prefixed Map/Set literals, anonymous structural objects, and field shorthand are not syntax.
 
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
 
-```xray @id=expr-array-lit
+```xray @id=expr-array-lit @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // type Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
 
-#### Map `#{k: v, ...}` and `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+```xray @id=expr-map-lit @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
 
-```xray @id=expr-map-lit
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // empty Map
+```xray @id=expr-set-lit @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
 
-**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```xray @id=expr-struct-lit @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
 
-```xray @id=expr-set-lit
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### Keys, Context, and Duplicates
 
-#### Object (structured object) `{ field: value, ... }`
+- Every Map key is an expression. Evaluate each key before its value, and all entries and spread sources once in written order. A bare identifier reads its binding. An undefined bare key receives a note suggesting a quoted string key such as `"name"`.
+- Empty Arrays, Maps, and Set construction without type arguments require an expected type. Without context, Array elements need one type, and Map keys and values each need one type; inference does not silently form unions. Existing contextual conversions apply, including scalar widening into JSON.Value in a JSON.Object literal.
+- Two explicit keys equivalent under existing key equivalence are duplicates. The syntactically defined compile-time classes are string, integer, rune and bool literals, payload-free enum variants, comptime expressions, and const bindings initialized directly or transitively from these forms. Duplicates in these classes report `E0325: duplicate key "name" in Map literal`, at the later key, with `the key first appears here` at the first key.
+- Other duplicates panic with E0434 during construction. The message includes the key and both explicit-entry positions, for example `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`. Reuse the insertion probe's hit result without another lookup; the constructor owns provenance storage and failure cleanup.
+- Map spreads overwrite in written order. Overwriting between a spread and an explicit entry is allowed. Two explicit entries must remain distinct even when a spread separates them.
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` merges fields
-```
+#### Struct Spread
 
-```xray @id=expr-object-lit
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+In `T{...src, field: value}`, every source must be a struct whose fields all occur in T with identical names and types. Reject classes, Maps, tuples, and sources with extra fields. Each target field comes from an explicit field or one unique source. Explicit fields override all sources regardless of position. Multiple sources for a field without an explicit override are errors. A field with neither an explicit value nor a source follows the existing declaration-default and nullable-field omission rules in §5.4; a required field still lacking a value is an error. Evaluate every source and explicit expression once in written order.
 
-- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
-- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
-- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+This is field-by-field construction of a named target, not structural identity, width subtyping, implicit interface implementation, or struct destructuring. Existing struct field-omission rules remain unchanged.
 
-#### Array<u8> `Array<u8>(...)`
+#### Heterogeneous Literal Diagnostics
 
-See §2.4.6 and §14.5.
+If a context-free literal cannot obtain one type, report one E0326 at the first value differing from the first value's type, with a note at the first value. For example, `Map literal values have different types: string and i64`, followed by `the first value is string; without a declared Map type, every value must be string`.
 
-#### Channel `Channel<T>(buf?)`
+Offer repairs in order and only when applicable: a struct declaration and literal when every key is a string literal spelling a legal identifier (capitalize the binding name, or use Record without a binding); JSON.Object when all values enter JSON.Value; an explicit Map<K, A | B> when the types form a legal union. Omit inapplicable notes. Incompatible keys use `Map literal keys have different types: ...` with only a declared Map<K, V> repair. Arrays use `Array literal elements have different types: ...`, suggesting a tuple for a fixed element count and an explicit Array<A | B> only for a legal union.
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-See §10.5.
+Array<u8> and Channel construction follow §2.4.6 and §10.5.
 
 ### 3.11 Calls / Member Access / Indexing / Slicing
 
@@ -1198,13 +1178,16 @@ See §10.5.
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= Identifier ':' ('ref' | 'move')? Expression
+          | ('ref' | 'move')? Expression
+          | '...' Expression
 ```
 
-- Arguments are passed positionally; named arguments are not supported.
-- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
-- A rest parameter collects extra arguments into an array.
-- Argument-count mismatch → compile error `E0307` / `E0450`.
+A call may use `f(a, name: value)`. Positional arguments precede named arguments. Names come from the directly called named function, method, or constructor declaration. Unknown names, duplicate bindings (including a parameter already supplied positionally), and positional arguments after named arguments are E0327. Rest arguments are positional only. Function values have no parameter names, including const aliases of named functions.
+
+Evaluate the receiver or callee first, every explicit argument once in written order, and omitted defaults afterwards in declaration order. Binding does not reorder evaluation. Expected types and generic inference use the mapped formal position. Place `ref` / `move` before the value, as in `swap(left: ref a, right: ref b)`; existing place, lifetime and mode permissions remain. Parameter names are exported API and retain their declaration spelling across modules.
+
+Static tuple spread and a real rest parameter's final Array spread follow §3.9. Spreading grants no named rest form and does not relax the final-position rule for dynamic Array spread. Missing required parameters remain errors; only declared defaults permit omission.
 
 #### Member access
 
@@ -1394,9 +1377,10 @@ var m = Map<string, i64>()
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
-```xray @id=expr-literal-constructor-relation
+```xray @id=expr-literal-constructor-relation @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // equivalent to Array<i64>() + push
-var m = #{}                    // equivalent to Map<...>()
+var m: Map<string, i64> = {}    // an empty Map requires a type context
 var p = Point{x: 1, y: 2}      // struct literal
 ```
 
