@@ -1,0 +1,27 @@
+fn snapshot<T>(value:T)->T { return value }
+fn some<T>(value:T)->T? { return value }
+fn none_like<T>(value:T)->T? { return null }
+fn local(seed:i64)->i64 {
+    const value=some({score:seed})
+    const nested=some(snapshot(value))
+    return nested!!.score
+}
+var current=some({score:17})
+const saved=snapshot(current)
+current=some({score:42})
+print(current!.score)
+print(saved!.score)
+current=null
+print(current==null ? 1 : 0)
+const empty_inner=some(snapshot(current))
+print(empty_inner==null ? 0 : 1)
+print(empty_inner! == null ? 1 : 0)
+const nested=some(snapshot(saved))
+print(nested!!.score)
+const empty_outer=none_like(snapshot(saved))
+print(empty_outer==null ? 1 : 0)
+print(none_like({score:23})==null ? 1 : 0)
+print(some({score:29})!.score)
+current=some({score:63})
+print(snapshot(current)!.score)
+print(local(9))
