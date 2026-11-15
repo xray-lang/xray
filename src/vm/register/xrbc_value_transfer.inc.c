@@ -62,7 +62,7 @@ static bool rbc_value_flow_reference(RbcStringAdmission *state, const XrRbcValue
     uint32_t value, XrtValueKind kind, bool write) {
     RbcValueEdgeState incoming;
     return rbc_value_flow_read(state,code,value,&incoming) && incoming.value.state==RBC_STATE_REFERENCE &&
-        xr_rbc_state_kind(state->module,incoming.value.origin)==kind &&
+        xr_rbc_state_kind(state->module,incoming.value.origin)==(uint32_t)kind &&
         (!write || (incoming.value.origin&1u));
 }
 static bool rbc_value_flow_binding(RbcStringAdmission *state,const XrRbcValueCode *code,uint32_t value,bool write) {
