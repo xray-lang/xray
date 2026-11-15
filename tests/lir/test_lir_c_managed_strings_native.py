@@ -258,10 +258,18 @@ def main():
     run([args.faults.resolve(), '--managed-state', generated], root)
     assert not compile_run('mixed-state', '#include ' + json.dumps(generated.as_posix()) +
                            '\nint main(void) { return xray_lir_entry() != 3311; }\n').stdout
+    for name, text, expected in [
+        ('format', 'print("n=${42}")\n', b'n=42\n'),
+        ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n', b'2\n'),
+    ]:
+        source, generated = root / (name + '.xr'), root / (name + '.c')
+        source.write_text(text, encoding='utf-8')
+        run([args.driver.resolve(), source, generated], root)
+        normal = compile_run(name, '#include ' + json.dumps(generated.as_posix()) +
+                             '\nint main(void) { (void)xray_lir_entry(); return 0; }\n')
+        assert (normal.stdout, normal.stderr) == (expected, b'')
     for name, text in [
-        ('format', 'print("n=${42}")\n'),
         ('cell', 'fn work(){var text="local"\nprint(len(text))}\nwork()\n'),
-        ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n'),
     ]:
         source, generated = root / (name + '.xr'), root / (name + '.c')
         source.write_text(text, encoding='utf-8')

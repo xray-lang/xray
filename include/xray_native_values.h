@@ -38,6 +38,10 @@ _Noreturn XRAY_API void xrt_native_managed_failure(XrtManagedStatus, uint32_t so
  * the original status and source id. Bytes are borrowed until return only. */
 XRAY_API void xrt_native_string_create(XrtManagedFrame *, size_t slot,
     const char *bytes, size_t length, uint32_t source_id);
+/* Format the admitted scalar with the shared integer text kernel and publish
+ * one complete String in the true-empty stable destination slot. */
+XRAY_API void xrt_native_string_i64_create(XrtManagedFrame *, size_t slot,
+    int64_t value, uint32_t source_id);
 /* Inputs are live admitted String borrows, including aliases. The destination
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
