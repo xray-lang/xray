@@ -119,9 +119,11 @@ def main():
     for name in ('local_loop', 'values', 'snapshots', 'strings', 'repeat_strings', 'loop_carry'):
         source = arrays / (name + '.xr')
         cases['array-' + name] = (source, source.with_suffix('.out').read_bytes())
-    for name in ('record_values', 'record_lifetimes'):
+    for name in ('record_values', 'record_lifetimes', 'record_nullable', 'nullable_managed'):
         source = arrays / (name + '.xr')
         cases[name] = (source, source.with_suffix('.out').read_bytes())
+    readme = Path(__file__).resolve().parents[1] / 'fixtures/xir_records/readme.xr'
+    cases['readme-record-nullable'] = (readme, readme.with_suffix('.out').read_bytes())
     map_operations = arrays / 'map_fixed_operations.xr'
     cases['map-fixed-operations'] = (map_operations, map_operations.with_suffix('.out').read_bytes())
     cases['module-order'] = ('var first=3\nvar second=first+4\n'
