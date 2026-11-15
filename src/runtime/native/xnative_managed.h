@@ -71,8 +71,12 @@ XR_FUNC void xrt_billing_owner_close(XrtBillingOwner *);
 XR_FUNC void xrt_billing_owner_fail_after(XrtBillingOwner *, size_t);
 XR_FUNC XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *);
 
-/* This leaf physical schema contains only sorted, nonoverlapping owned child
- * pointer fields. It does not express a recursive graph of type plans. A zero
+/* This leaf physical schema contains sorted, nonoverlapping owned child pointer
+ * fields in its fixed prefix and in each capacity row after fixed_size. A row
+ * uses stride bytes; its owned offsets are relative to that row. Every allocated
+ * owned slot holds a real reference or NULL, including holes and unused rows.
+ * Length and initialization progress never bound ownership traversal. This does
+ * not express a recursive graph of type plans. A zero
  * stride selects fixed_size; otherwise extent is fixed_size + capacity*stride,
  * with an aligned size_t capacity at capacity_offset within the fixed payload.
  * drop_payload clears additional payload only: it may not fail, longjmp, free the
@@ -85,6 +89,8 @@ typedef struct XrtRuntimeTypeSpec {
     size_t child_count;
     void (*drop_payload)(XrtManagedHeader *, void *);
     XrtManagedLease code;
+    const size_t *tail_child_offsets;
+    size_t tail_child_count;
 } XrtRuntimeTypeSpec;
 XR_FUNC XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *,
     const XrtRuntimeTypeSpec *, XrtRuntimeTypePlan **);
@@ -99,10 +105,13 @@ XR_FUNC bool xrt_managed_ops_retain(XrtManagedOps *);
 XR_FUNC void xrt_managed_ops_drop(XrtManagedOps *);
 
 /* A pending token is a move-only owner, not persistent object metadata. Prepare
- * zeroes the payload and sets the checked capacity from its actual allocation.
+ * zeroes the payload, installs true NULL in every declared fixed/tail slot and
+ * sets the checked capacity from its actual allocation.
  * A caller may move real child owners into the declared zero-initialized fields.
  * Commit checks physical extent before publishing. Failure preserves both output
  * and pending; abort uses the token's real extent even after a rejected payload.
+ * Retirement restores the physical capacity before the payload callback, which
+ * observes cleared declared child slots even after a rejected capacity.
  * Root/unwind integration is deliberately absent: callers must close this token. */
 typedef struct XrtManagedPending {
     XrtManagedHeader *value;
