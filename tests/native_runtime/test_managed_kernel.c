@@ -12,12 +12,13 @@
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
 #define OK(c) CHECK((c) == XRT_MANAGED_OK)
 
 typedef struct Audit {
-    _Atomic(size_t) bytes, blocks, finalized, callbacks, fail_after;
+    _Atomic(size_t) bytes, blocks, finalized, callbacks, fail_after, allocation_calls;
     _Atomic(bool) reenter;
     XrtBillingOwner *owner;
     XrtRuntimeTypePlan *plan;
@@ -57,6 +58,7 @@ static void provider_drop(void *context) {
 }
 static void *provider_allocate(void *context, size_t bytes) {
     Audit *audit = ((Provider *)context)->audit;
+    atomic_fetch_add(&audit->allocation_calls, 1);
     size_t budget = atomic_load(&audit->fail_after);
     while (budget != SIZE_MAX) {
         if (!budget) return NULL;
@@ -328,6 +330,185 @@ static void deep_chain_retirement(void) {
     puts("deep managed chain passed");
 }
 
+typedef struct RetireNode {
+    XrtManagedHeader header;
+    size_t serial, charge;
+    XrtManagedHeader *first;
+    uint64_t gap[3];
+    XrtManagedHeader *second;
+    size_t capacity;
+    uint64_t gap_after;
+    XrtManagedHeader *third;
+} RetireNode;
+typedef struct RetirementAudit {
+    Audit provider;
+    XrtBillingOwner *owner;
+    XrtBillingStats metadata;
+    size_t bytes, blocks, callbacks, allocations, provider_allocations;
+    XrtManagedHeader *shared;
+} RetirementAudit;
+static const uint32_t payload_flags = UINT32_C(0x12345678);
+
+static void retirement_callback(XrtManagedHeader *value, void *context) {
+    Provider *provider = context;
+    RetirementAudit *audit = (RetirementAudit *)provider->audit;
+    RetireNode *node = (RetireNode *)value;
+    CHECK(xr_signed_rc_read(&value->references) == 0 && value->flags == payload_flags);
+    CHECK(!node->first && !node->second && !node->third);
+    CHECK(node->gap[0] == UINT64_C(0x123456789abcdef0) &&
+        node->gap[1] == node->serial && node->gap[2] == ~node->serial &&
+        node->gap_after == UINT64_C(0xfedcba9876543210));
+    CHECK(node->serial == audit->callbacks);
+    if (audit->shared && !node->serial) {
+        CHECK(xr_signed_rc_read(&audit->shared->references) == 1 &&
+            audit->shared->flags == payload_flags);
+    }
+    if (value == audit->shared) audit->shared = NULL;
+    XrtBillingStats stats = xrt_billing_owner_stats(audit->owner);
+    CHECK(stats.closed && !stats.fail_after && stats.allocations == audit->allocations);
+    CHECK(atomic_load(&audit->provider.allocation_calls) == audit->provider_allocations);
+    CHECK(stats.bytes == audit->metadata.bytes + audit->bytes &&
+        stats.blocks == audit->metadata.blocks + audit->blocks);
+    CHECK(atomic_load(&audit->provider.bytes) == stats.bytes + sizeof(*provider) &&
+        atomic_load(&audit->provider.blocks) == stats.blocks + 1);
+    CHECK(audit->bytes >= node->charge && audit->blocks > 0);
+    audit->bytes -= node->charge;
+    --audit->blocks;
+    ++audit->callbacks;
+}
+static XrtRuntimeTypeSpec retirement_spec(Provider *provider, size_t count) {
+    static const size_t fields[] = {offsetof(RetireNode, first),
+        offsetof(RetireNode, second), offsetof(RetireNode, third)};
+    CHECK(count <= 3);
+    return (XrtRuntimeTypeSpec){sizeof(RetireNode), alignof(RetireNode),
+        offsetof(RetireNode, capacity), 3, fields, count, retirement_callback,
+        {provider, provider_retain, provider_drop}};
+}
+static void retirement_prepare(XrtManagedOps *ops, size_t serial, XrtManagedPending *pending) {
+    size_t bytes = sizeof(RetireNode) + (7 + serial % 11) * 3;
+    OK(xrt_managed_prepare(ops, bytes, pending));
+    RetireNode *node = (RetireNode *)pending->value;
+    CHECK(!node->first && !node->second && !node->third);
+    node->header.flags = payload_flags;
+    node->serial = serial; node->charge = bytes;
+    node->gap[0] = UINT64_C(0x123456789abcdef0);
+    node->gap[1] = serial; node->gap[2] = ~serial;
+    node->gap_after = UINT64_C(0xfedcba9876543210);
+}
+static XrtManagedHeader *retirement_node(XrtManagedOps *ops, size_t serial,
+    XrtManagedHeader *first, XrtManagedHeader *second, XrtManagedHeader *third) {
+    XrtManagedPending pending = {0};
+    retirement_prepare(ops, serial, &pending);
+    RetireNode *node = (RetireNode *)pending.value;
+    node->first = first; node->second = second; node->third = third;
+    XrtManagedHeader *value = NULL;
+    OK(xrt_managed_commit(&pending, &value));
+    return value;
+}
+static void retirement_begin(RetirementAudit *audit, size_t count) {
+    XrtBillingStats stats = xrt_billing_owner_stats(audit->owner);
+    audit->bytes = stats.bytes - audit->metadata.bytes;
+    audit->blocks = stats.blocks - audit->metadata.blocks;
+    audit->allocations = stats.allocations;
+    audit->provider_allocations = atomic_load(&audit->provider.allocation_calls);
+    CHECK(audit->blocks == count && stats.allocations == audit->metadata.allocations + count);
+    xrt_billing_owner_fail_after(audit->owner, 0);
+    atomic_store(&audit->provider.fail_after, 0);
+    xrt_billing_owner_close(audit->owner);
+}
+
+/* Two different parents consume the shared leaf's two real references. The
+ * first parent's callback precedes that leaf's last release through the other. */
+static void sparse_dag_retirement(void) {
+    RetirementAudit audit = {0};
+    Provider *provider = provider_new(&audit.provider);
+    XrtManagedAllocator allocator = allocator_for(provider);
+    OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &audit.owner));
+    const size_t counts[] = {0, 1, 3};
+    XrtRuntimeTypePlan *plans[3] = {0};
+    XrtManagedOps *ops[3] = {0};
+    for (size_t i = 0; i < 3; ++i) {
+        XrtRuntimeTypeSpec spec = retirement_spec(provider, counts[i]);
+        OK(xrt_runtime_type_plan_new(audit.owner, &spec, &plans[i]));
+        OK(xrt_managed_ops_bind(audit.owner, plans[i], &ops[i]));
+    }
+    audit.metadata = xrt_billing_owner_stats(audit.owner);
+    XrtManagedHeader *shared = retirement_node(ops[0], 2, NULL, NULL, NULL);
+    CHECK(xrt_managed_retain(shared) && xr_signed_rc_read(&shared->references) == 2);
+    audit.shared = shared;
+    XrtManagedHeader *left = retirement_node(ops[1], 0, shared, NULL, NULL);
+    XrtManagedHeader *leaf = retirement_node(ops[0], 1, NULL, NULL, NULL);
+    XrtManagedHeader *right = retirement_node(ops[2], 3, leaf, shared, NULL);
+    leaf = NULL; shared = NULL;
+    XrtManagedHeader *root = retirement_node(ops[2], 4, left, NULL, right);
+    left = NULL; right = NULL;
+    retirement_begin(&audit, 5);
+    xrt_managed_drop(root);
+    CHECK(audit.callbacks == 5 && !audit.bytes && !audit.blocks && !audit.shared);
+    XrtBillingStats final = xrt_billing_owner_stats(audit.owner);
+    CHECK(final.bytes == audit.metadata.bytes && final.blocks == audit.metadata.blocks &&
+        final.allocations == audit.allocations);
+    for (size_t i = 0; i < 3; ++i) {
+        xrt_managed_ops_drop(ops[i]); xrt_runtime_type_plan_drop(plans[i]);
+    }
+    xrt_billing_owner_drop(audit.owner); provider_drop(provider);
+    balanced(&audit.provider);
+    CHECK(atomic_load(&audit.provider.allocation_calls) == audit.provider_allocations);
+    puts("sparse owned schemas and shared DAG passed");
+}
+
+static void deep_branch_retirement(bool abort_pending) {
+    const size_t count = 100000;
+    RetirementAudit audit = {0};
+    Provider *provider = provider_new(&audit.provider);
+    XrtManagedAllocator allocator = allocator_for(provider);
+    OK(xrt_billing_owner_new(&allocator, SIZE_MAX, &audit.owner));
+    XrtRuntimeTypeSpec spec = retirement_spec(provider, 2);
+    XrtRuntimeTypePlan *plan = NULL;
+    XrtManagedOps *ops = NULL;
+    OK(xrt_runtime_type_plan_new(audit.owner, &spec, &plan));
+    OK(xrt_managed_ops_bind(audit.owner, plan, &ops));
+    audit.metadata = xrt_billing_owner_stats(audit.owner);
+    XrtManagedHeader *head = NULL;
+    size_t bytes = 0;
+    for (size_t i = 0; i < count; ++i) {
+        XrtManagedPending pending = {0};
+        retirement_prepare(ops, i, &pending);
+        bytes += pending.allocation_bytes;
+        ((RetireNode *)pending.value)->first = head;
+        head = NULL;
+        OK(xrt_managed_commit(&pending, &head));
+    }
+    size_t actual = 0;
+    for (RetireNode *node = (RetireNode *)head; node; node = (RetireNode *)node->first) {
+        CHECK(++actual <= count && node->serial == count - actual &&
+            !node->second && !node->third && node->header.flags == payload_flags &&
+            xr_signed_rc_read(&node->header.references) == 1);
+    }
+    CHECK(actual == count && xrt_billing_owner_stats(audit.owner).bytes == audit.metadata.bytes + bytes);
+    XrtManagedPending pending = {0};
+    if (abort_pending) {
+        retirement_prepare(ops, count, &pending);
+        ((RetireNode *)pending.value)->first = head;
+        head = NULL;
+        ((RetireNode *)pending.value)->capacity = SIZE_MAX;
+        CHECK(xrt_managed_commit(&pending, &head) == XRT_MANAGED_ARGUMENT && !head && pending.value);
+    }
+    retirement_begin(&audit, count + (abort_pending ? 1 : 0));
+    xrt_managed_ops_drop(ops); xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_drop(audit.owner); provider_drop(provider);
+    CHECK(!atomic_load(&audit.provider.finalized));
+    if (abort_pending) {
+        xrt_managed_abort(&pending);
+        CHECK(!pending.value && !pending.allocation_bytes);
+    } else xrt_managed_drop(head);
+    CHECK(audit.callbacks == count + (abort_pending ? 1 : 0) && !audit.bytes && !audit.blocks);
+    balanced(&audit.provider);
+    CHECK(atomic_load(&audit.provider.allocation_calls) == audit.provider_allocations);
+    puts(abort_pending ? "pending abort with deep published child passed" :
+        "100000 two-child nodes with NULL second edges passed");
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "deep-chain")) {
         deep_chain_retirement();
@@ -339,6 +520,10 @@ int main(int argc, char **argv) {
     failure_atomicity();
     reentrant_binding();
     concurrent_final_free();
+    deep_chain_retirement();
+    sparse_dag_retirement();
+    deep_branch_retirement(false);
+    deep_branch_retirement(true);
     puts("managed kernel passed");
     return 0;
 }

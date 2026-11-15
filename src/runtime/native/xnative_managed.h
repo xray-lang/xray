@@ -20,6 +20,7 @@ typedef struct XrtRuntimeTypePlan XrtRuntimeTypePlan;
 typedef struct XrtManagedOps XrtManagedOps;
 typedef struct XrtManagedHeader {
     _Atomic(int32_t) references;
+    /* The high bit is reserved for dead-only retirement continuation state. */
     uint32_t flags;
     const XrtManagedOps *ops;
 } XrtManagedHeader;
@@ -44,8 +45,8 @@ typedef struct XrtManagedLease {
 
 /* NULL selects the static xr_malloc/xr_free provider without a synthetic lease.
  * A supplied provider owns its context/code through lease and supports concurrent
- * free. Callbacks run without an index lock. Allocate reports failure only by
- * returning NULL; it must not leave its reservation through a nonlocal exit.
+ * calls to every callback. Callbacks run without an index lock. Allocate reports
+ * failure only by returning NULL; it must not leave its reservation through a nonlocal exit.
  * Successful storage has malloc/max_align_t alignment and remains valid until
  * the matching deallocate call. */
 typedef struct XrtManagedAllocator {
@@ -111,5 +112,9 @@ XR_FUNC XrtManagedStatus xrt_managed_prepare(XrtManagedOps *, size_t bytes, XrtM
 XR_FUNC XrtManagedStatus xrt_managed_commit(XrtManagedPending *, XrtManagedHeader **);
 XR_FUNC void xrt_managed_abort(XrtManagedPending *);
 XR_FUNC bool xrt_managed_retain(XrtManagedHeader *);
+/* Declared owned edges retire iteratively in child-first order. Only LAST
+ * objects reuse their child storage, restored before their payload callback.
+ * Callbacks may drop independently owned values, but may not inspect or retain
+ * dead ancestors. Arbitrary callback recursion is not made stack-independent. */
 XR_FUNC void xrt_managed_drop(XrtManagedHeader *);
 #endif // XNATIVE_MANAGED_H
