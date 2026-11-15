@@ -13,6 +13,7 @@
 #include "xnative_values.h"
 #include "xray_native_values.h"
 #include "xnative_string_backing.h"
+#include "xnative_array_ops.h"
 #include "xnative_status.h"
 #include "base/xchecks.h"
 #include <string.h>
@@ -123,6 +124,48 @@ XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *frame, size_t slo
         status = xrt_string_backing_concat_create(frame, slot, types,
             (const XrtStringBacking *)left, (const XrtStringBacking *)right, 0);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+
+XRAY_API void xrt_native_array_create(XrtManagedFrame *frame, size_t slot,
+    const XrtArrayInput *input, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = input ? xrt_native_values_backings(xrt_value_root_current(source_id),&types) : XRT_MANAGED_ARGUMENT;
+    if (status == XRT_MANAGED_OK) {
+        switch (input->kind) {
+        case XRT_BACKING_ARRAY_I64: status=xrt_array_backing_i64_create(frame,slot,types,input->values,input->count,input->count); break;
+        case XRT_BACKING_ARRAY_STRING: status=xrt_array_backing_string_create(frame,slot,types,input->values,input->count,input->count); break;
+        case XRT_BACKING_ARRAY_U8: status=xrt_array_backing_u8_create(frame,slot,types,input->values,input->count,input->count); break;
+        case XRT_BACKING_ARRAY_U64: status=xrt_array_backing_u64_create(frame,slot,types,input->values,input->count,input->count); break;
+        default: status=XRT_MANAGED_ARGUMENT; break;
+        }
+    }
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_array_repeat(XrtManagedFrame *frame, size_t slot,
+    const XrtArrayItem *item, int64_t length, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status==XRT_MANAGED_OK) status=xrt_array_backing_repeat_create(frame,slot,types,item,length);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_array_get(const XrtManagedHeader *array, XrtBackingArrayKind kind,
+    int64_t index, XrtArrayItem *output, uint32_t source_id) {
+    XrtManagedStatus status=xrt_array_backing_get((const XrtArrayBacking *)array,kind,index,output);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_array_display(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *array, XrtBackingArrayKind kind, uint32_t source_id) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status==XRT_MANAGED_OK) status=xrt_array_backing_display_create(frame,slot,types,(const XrtArrayBacking *)array,kind);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
+    XrtManagedFrame *frame, size_t workspace, const XrtArrayUpdate *update, uint32_t source_id) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status==XRT_MANAGED_OK) status=xrt_array_update_place(binding,kind,frame,workspace,types,update);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
 
 XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
