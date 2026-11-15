@@ -26,32 +26,59 @@ XR_FUNC bool xr_lir_callable_accepts(const XrLirModule *module, XrLirType expect
         xr_lir_callable_type_view(module, actual, &b) == XR_LIR_OK && lir_callable_result_matches(&a, &b);
 }
 
-/* Follow explicit producers and declaration contracts. Unresolved block
- * parameters preserve the closed receiving boundary for escaping values. */
+static bool lir_callable_parameter_persistent(const XrLirFunctionData *f, uint32_t parameter,
+    uint32_t *ordered) {
+    if (parameter < f->closure.capture_count) return true;
+    uint32_t first = 0, count = f->callable_parameter_count;
+    if (ordered) {
+        first = *ordered;
+        while (first < count && f->callable_parameters[first].parameter < parameter) ++first;
+        *ordered = first;
+    } else
+        while (count) {
+            uint32_t middle = first + count / 2;
+            if (f->callable_parameters[middle].parameter < parameter) {
+                count -= middle - first + 1;
+                first = middle + 1;
+            } else count = middle - first;
+        }
+    return first < f->callable_parameter_count &&
+        f->callable_parameters[first].parameter == parameter && f->callable_parameters[first].contract.escaping;
+}
+
+/* One seed rule serves validation and the constructor's memoized snapshot.
+ * parameter is one-based, zero requests discovery, UINT32_MAX excludes a formal.
+ * An alias returns false plus next; a terminal seed returns next=0. */
+static bool lir_callable_persistence_seed(const XrLirFunctionData *f, uint32_t value,
+    uint32_t parameter, uint32_t *next) {
+    *next = 0;
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, value);
+    if (!definition) {
+        if (!parameter)
+            for (uint32_t p = 0; p < f->parameter_count; ++p)
+                if (f->parameters[p] == value) { parameter = p + 1; break; }
+        return parameter && parameter != UINT32_MAX && parameter <= f->parameter_count &&
+            lir_callable_parameter_persistent(f, parameter - 1, NULL);
+    }
+    if (definition->op == XR_LIR_FUNCTION_REF)
+        return definition->bits == XR_LIR_CLOSURE_OWNED || !definition->operand_count;
+    if (definition->op == XR_LIR_CALL || definition->op == XR_LIR_CALL_INDIRECT ||
+        definition->op == XR_LIR_STATE_READ) return true;
+    if (definition->op == XR_LIR_FUNCTION_WEAKEN) *next = definition->operands[0];
+    else if ((definition->op == XR_LIR_FUNCTION_BIND || definition->op == XR_LIR_FUNCTION_SCOPE_LEAVE) &&
+             definition->operand_count == 2) *next = definition->operands[1];
+    return false;
+}
+
+/* Unresolved block arguments keep the existing closed escaping boundary. */
 XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *m,
     const XrLirFunctionData *f, uint32_t value) {
     (void)m;
     for (uint32_t steps = 0; value && value <= f->value_count && steps < f->value_count; ++steps) {
-        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, value);
-        if (!definition) {
-            for (uint32_t p = 0; p < f->parameter_count; ++p) {
-                if (f->parameters[p] != value) continue;
-                if (p < f->closure.capture_count) return true;
-                for (uint32_t c = 0; c < f->callable_parameter_count; ++c)
-                    if (f->callable_parameters[c].parameter == p)
-                        return f->callable_parameters[c].contract.escaping;
-                return false;
-            }
-            return false;
-        }
-        if (definition->op == XR_LIR_FUNCTION_REF)
-            return definition->bits == XR_LIR_CLOSURE_OWNED || !definition->operand_count;
-        if (definition->op == XR_LIR_CALL || definition->op == XR_LIR_CALL_INDIRECT ||
-            definition->op == XR_LIR_STATE_READ) return true;
-        if (definition->op == XR_LIR_FUNCTION_WEAKEN) value = definition->operands[0];
-        else if ((definition->op == XR_LIR_FUNCTION_BIND || definition->op == XR_LIR_FUNCTION_SCOPE_LEAVE) &&
-                 definition->operand_count == 2) value = definition->operands[1];
-        else return false;
+        uint32_t next = 0;
+        bool persistent = lir_callable_persistence_seed(f, value, 0, &next);
+        if (!next) return persistent;
+        value = next;
     }
     return false;
 }

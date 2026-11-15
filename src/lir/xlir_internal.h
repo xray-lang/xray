@@ -25,6 +25,7 @@
 #include "xlir_range.h"
 #include "xlir_map.h"
 #include "xlir_ownership.h"
+#include "xlir_callable_facts.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
@@ -102,6 +103,7 @@ struct XrLirModule {
     XrLirStateLayout state_layout;
     uint32_t state_entry;
     bool state_layout_set;
+    XrLirCallableFacts *callable_facts;
 };
 
 XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *);
@@ -134,6 +136,9 @@ XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *, cons
 XR_FUNC bool xr_lir_internal_callable_instruction(const XrLirModule *,
     const XrLirFunctionData *, const XrLirInstructionView *);
 XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *, const XrLirFunctionData *, uint32_t);
+/* The constructor receives facts from the same scope-verification pass. This
+ * is not an alternate admission path or a caller-selectable trust flag. */
+XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *, XrLirDiagnostic *);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {

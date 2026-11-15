@@ -171,6 +171,7 @@ static void lir_function_free(XrLirFunctionData *f) {
 XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     if (!m)
         return;
+    xr_lir_callable_facts_destroy(m->callable_facts);
     for (uint32_t i = 0; i < m->function_count; ++i)
         lir_function_free(&m->functions[i]);
     for (uint32_t i = 0; i < m->intrinsic_count; ++i)
@@ -736,7 +737,7 @@ XR_FUNC XrLirStatus xr_lir_module_finish(XrLirModule *m, XrLirDiagnostic *diagno
                 return lir_failure_details(m, XR_LIR_VERIFY_ERROR, result, NULL);
             }
     }
-    status = xr_lir_verify(m, result);
+    status = xr_lir_internal_finish_verify(m, result);
     if (status != XR_LIR_OK)
         return lir_failure_details(m, status, result, NULL);
     m->finished = true;

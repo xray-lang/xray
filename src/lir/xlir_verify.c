@@ -983,9 +983,10 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
     return XR_LIR_OK;
 }
 
+#include "xlir_callable_facts.inc.c"
 #include "xlir_callable_scope_verify.inc.c"
 
-static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
+static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts) {
     if (d)
         memset(d, 0, sizeof(*d));
     if (!m || m->failure != XR_LIR_OK || m->function_count > m->function_capacity ||
@@ -1069,8 +1070,11 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         for (uint32_t value = 0; value < f->value_count; ++value)
             if (!xr_lir_internal_type_valid(m, f->values[value].type, true))
                 return xr_lir_internal_error(d, "SSA value type is invalid", index + 1, 0, 0, NULL);
-        if (f->kind == XR_LIR_FUNCTION_EXTERNAL)
+        if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
+            XrLirStatus status = lir_callable_facts_capture(m, f, index + 1, (LirCallableGeometry){0}, facts);
+            if (status != XR_LIR_OK) return lir_status_error(d, status, "callable description allocation failed");
             continue;
+        }
         uint8_t *seen = f->value_count ? xr_malloc(f->value_count) : NULL;
         if (f->value_count && !seen)
             return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "LIR verifier allocation failed");
@@ -1093,7 +1097,9 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (status == XR_LIR_OK)
             status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
         if (status == XR_LIR_OK && scopes)
-            status = lir_callable_scopes(m, f, index + 1, &graph, d);
+            status = lir_callable_scopes(m, f, index + 1, &graph, d, facts);
+        else if (status == XR_LIR_OK)
+            status = lir_callable_facts_capture(m, f, index + 1, (LirCallableGeometry){0}, facts);
         xr_free(seen);
         if (status == XR_LIR_OK) {
             lir_graph_dominators(&graph);
@@ -1113,5 +1119,15 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
 }
 
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
-    return lir_verify(m, d);
+    return lir_verify(m, d, NULL);
+}
+
+XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *m, XrLirDiagnostic *d) {
+    if (!m || m->finished || m->callable_facts)
+        return lir_status_error(d, XR_LIR_INVALID_STATE, "callable construction is already published");
+    XrLirCallableFacts *pending = NULL;
+    XrLirStatus status = lir_verify(m, d, &pending);
+    if (status == XR_LIR_OK) m->callable_facts = pending;
+    else xr_lir_callable_facts_destroy(pending);
+    return status;
 }
