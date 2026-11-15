@@ -345,7 +345,32 @@ static void deep_metadata(void) {
     same_bill(&f,baseline); fixture_done(&f);
     puts("100000 immutable metadata dependencies retired iteratively on the default stack");
 }
+static void empty_record_storage(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,false);
+    XrtBillingStats baseline=xrt_billing_owner_stats(f.billing);
+    XrtValuePlan *record=NULL;
+    XrtValuePlanSpec spec={.kind=XRT_VALUE_RECORD,.size=1,.alignment=1};
+    OK(xrt_value_plan_new(f.billing,&spec,&record));
+    XrtValuePlanSpec view={0}; OK(xrt_value_plan_view(record,&view));
+    CHECK(view.size==1 && view.alignment==1 && !view.field_count && !view.owned_count);
+    unsigned char source=37,copy=91;
+    OK(xrt_value_copy_empty(record,&source,&copy)); CHECK(copy==37 && source==37);
+    OK(xrt_value_move_empty(record,&source,&copy)); CHECK(copy==37 && !source);
+    xrt_value_drop(record,&copy); CHECK(!copy);
+    XrtValuePlan *nullable=new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_NULLABLE,
+        .size=2,.alignment=1,.nullable={0,1,record}});
+    unsigned char present[2]={1,0},received[2]={0};
+    OK(xrt_value_copy_empty(nullable,present,received)); CHECK(received[0]==1 && !received[1]);
+    xrt_value_drop(nullable,received); CHECK(!received[0] && !received[1]);
+    XrtValuePlan *invalid=NULL;
+    spec.size=0; STATUS(xrt_value_plan_new(f.billing,&spec,&invalid),XRT_MANAGED_ARGUMENT);
+    CHECK(!invalid);
+    xrt_value_plan_drop(record); xrt_value_plan_drop(nullable);
+    same_bill(&f,baseline); fixture_done(&f);
+    puts("empty records keep a shared one-byte C11 home without logical fields or owners");
+}
 int main(void) {
+    empty_record_storage();
     inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code();
     failures_and_admission(); deep_metadata();
     puts("immutable ValuePlan and inline ownership kernel passed");

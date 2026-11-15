@@ -100,6 +100,9 @@ static bool capture_type(const XrtValuePlan *plan) {
         kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_CELL;
 }
 static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *slots, size_t count, bool record) {
+    /* Portable C has no empty structure. Its one private padding byte carries
+     * no language field and is shared with bytecode's physical home. */
+    if (record && !count) return spec->size == 1 && spec->alignment == 1 && !spec->owned_count;
     size_t end = 0, alignment = 1, owned = 0;
     for (size_t i = 0; i < count; ++i) {
         XrtValueSlotSpec field = slots[i];

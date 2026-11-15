@@ -80,7 +80,9 @@ typedef struct XrtValuePlanSpec {
  * An entry ordinal describes metadata and grants no executable address.
  * Plans describe the admitted subset; they grant no new language admission,
  * escaping permission, exclusive mutation authority or reference-cycle support.
- * Metadata references remain in the shared counter band. */
+ * An empty record has one private C11 padding byte, alignment one and no owned
+ * leaves; its logical field count stays zero. Metadata references remain in
+ * the shared counter band. */
 XR_FUNC XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *, const XrtValuePlanSpec *, XrtValuePlan **empty);
 XR_FUNC bool xrt_value_plan_retain(XrtValuePlan *);
 XR_FUNC void xrt_value_plan_drop(XrtValuePlan *);
