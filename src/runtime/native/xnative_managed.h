@@ -72,6 +72,13 @@ XR_FUNC void xrt_billing_owner_close(XrtBillingOwner *);
 XR_FUNC void xrt_billing_owner_fail_after(XrtBillingOwner *, size_t);
 XR_FUNC XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *);
 
+/* Cold immutable metadata uses the same reservation, quota and failure policy.
+ * The caller owns a strong billing reference through the matching exact-size
+ * free. These primitives neither retain nor release that reference. Provider
+ * callbacks run outside the reservation lock and must return normally. */
+XR_FUNC XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *, size_t, void **empty);
+XR_FUNC void xrt_managed_metadata_free(XrtBillingOwner *, void *, size_t);
+
 /* This leaf physical schema contains sorted, nonoverlapping owned child pointer
  * fields in its fixed prefix and in each capacity row after fixed_size. A row
  * uses stride bytes; its owned offsets are relative to that row. Every allocated

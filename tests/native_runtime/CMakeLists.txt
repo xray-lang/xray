@@ -1,3 +1,23 @@
+add_executable(test_native_value_plan test_value_plan.c
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c")
+target_include_directories(test_native_value_plan PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_value_plan PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_value_plan PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_value_plan PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_definitions(test_native_value_plan PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_options(test_native_value_plan PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_value_plan COMMAND test_native_value_plan)
+set_tests_properties(native_value_plan PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+
 add_executable(test_native_managed_status test_managed_status.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"

@@ -140,6 +140,15 @@ static void billing_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
     XR_CHECK(blocks > 1 && held >= bytes + sizeof(*owner), "every allocation refunds its original billing owner");
 }
 
+XR_FUNCDEF XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *owner, size_t bytes, void **empty) {
+    if (!owner || !bytes || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    return billing_allocate(owner, bytes, empty);
+}
+XR_FUNCDEF void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
+    XR_CHECK(owner && memory && bytes, "metadata free consumes its exact allocation under a live billing reference");
+    billing_free(owner, memory, bytes);
+}
+
 static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     if (!spec || spec->fixed_size < sizeof(XrtManagedHeader) || spec->alignment < alignof(XrtManagedHeader) ||
         spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
