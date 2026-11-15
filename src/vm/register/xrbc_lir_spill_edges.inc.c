@@ -19,6 +19,7 @@ static bool rbc_lir_edge_spill_homes(RbcLirCompiler *c, bool managed) {
         xr_lir_block_view(c->input, block, &view);
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             uint32_t value = view.parameters[p];
+            if (rbc_lir_common_value(c, value)) continue;
             XrLirType type = rbc_lir_value_type(c, value);
             if (!rbc_lir_spill_edge_type(c, value) ||
                 ((type == XR_LIR_MAP_STRING_I64 || type==XR_LIR_SET_I64 || type == XR_LIR_STRING || type == XR_LIR_ARRAY) != managed)) continue;

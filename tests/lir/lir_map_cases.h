@@ -58,7 +58,10 @@ static void map_receiving_owners(void) {
         const XrRbcModule *owned = xr_rbc_program_view(program);
         const XrRbcValueCode *code = xr_rbc_module_value_code(owned, 0);
         CHECK(code && code->homes->owned_frame_needed);
-        if (n == 3) CHECK(code->homes->frame.slot_count >= 300);
+        if (n == 3) {
+            CHECK(code->homes->frame.slot_count >= 300);
+            CHECK(!owned->functions[0].reference_spill_count);
+        }
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);

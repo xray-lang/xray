@@ -103,7 +103,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         memcpy(parameters,c->view.parameters,(size_t)code->parameter_count * sizeof(*parameters));
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
-        if (c->homes->values[v].owner_count || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || (c->homes->bindings && c->homes->bindings[v].type)) continue;
+        if (rbc_lir_common_value(c, v)) continue;
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX)
             locations[v] = (XrRbcValueLocation){XR_RBC_VALUE_AGGREGATE,c->aggregate_home[v]};
         else if (c->spill_home[v] != UINT32_MAX)
