@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -182,6 +183,24 @@ class CleanupTests(unittest.TestCase):
         report, _ = self.run_cleanup(True, [unrelated, current])
         self.assertEqual(report["deletedFiles"], 5)
 
+    def test_native_images_and_unrelated_host_wrappers(self):
+        paths = self.three()
+        wrapper = {"ProcessId": 3, "Name": "powershell.exe", "ExecutablePath": "C:/Windows/powershell.exe",
+                   "CommandLine": "powershell -Command cleanup --root " + str(self.root)}
+        for name in ("native-O2.exe", "run.exe", "fib.exe", "branch.exe"):
+            native = {"ProcessId": 2, "Name": name, "ExecutablePath": str(paths[0] / name), "CommandLine": None}
+            report, _ = self.run_cleanup(True, [wrapper, native])
+            self.assertEqual(report["status"], "BUSY", name)
+            self.assertEqual(len(report["busy"]), 1)
+            self.assertTrue((paths[0] / "products/test.exe").exists())
+        inaccessible = {"ProcessId": 4, "Name": "native-O2.exe", "ExecutablePath": None,
+                        "CommandLine": str(paths[0] / "native-O2.exe")}
+        report, _ = self.run_cleanup(True, [wrapper, inaccessible])
+        self.assertEqual(report["status"], "BUSY")
+        self.assertEqual(len(report["busy"]), 1)
+        report, _ = self.run_cleanup(True, [wrapper])
+        self.assertEqual(report["deletedFiles"], 5)
+
     def test_policy_rejects_escape_overlap_and_unsafe_retention(self):
         for marker in ("../outside.json", "/outside.json", "C:/outside.json", "folder\\result.json"):
             self.data["roots"][0]["receipt"]["path"] = marker
@@ -293,6 +312,26 @@ class CleanupTests(unittest.TestCase):
             reasons = cleanup.busy_reasons(self.policy())
             self.assertTrue(any(f"process {child.pid}:" in reason for reason in reasons), reasons)
         finally:
+            child.stdin.close()
+            child.wait(timeout=10)
+            child.stdout.close()
+            child.stderr.close()
+        self.assertEqual(child.returncode, 0)
+
+    @unittest.skipUnless(os.name == "nt", "actual Windows native image inventory")
+    def test_actual_renamed_native_image_is_busy(self):
+        binary = self.root / "native-O2.exe"
+        shutil.copyfile(Path(os.environ["SystemRoot"]) / "System32" / "cmd.exe", binary)
+        child = subprocess.Popen([str(binary), "/d", "/q", "/c", "set /p cleanup_wait=ready"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            self.assertIsNone(child.poll())
+            processes = cleanup.windows_processes()
+            native = next(item for item in processes if item["ProcessId"] == child.pid)
+            self.assertTrue(cleanup.process_path_match(native["ExecutablePath"], [str(self.root)]))
+            self.assertTrue(cleanup.relevant_process(native, [str(self.root)]))
+        finally:
+            child.stdin.write(b"done\r\n")
             child.stdin.close()
             child.wait(timeout=10)
             child.stdout.close()
