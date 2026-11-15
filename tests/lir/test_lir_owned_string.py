@@ -5,12 +5,85 @@ import json
 import os
 import re
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
+
+
+def _retire_native_products(work, current):
+    """Retain the latest complete pass and reclaim only registered older products."""
+    work, current = Path(work).resolve(), Path(current)
+    if current.parent.resolve() != work:
+        print('Native products retained: current pass is outside its work root', file=sys.stderr)
+        return
+    current = work / current.name
+    current_order = None
+    for previous in [current, *sorted(path for path in work.iterdir()
+                                     if path != current and path.name.startswith('owned-string-'))]:
+        try:
+            manifest, result = previous / 'native-products.txt', previous / 'result.json'
+            metadata = [path.lstat() for path in (previous, manifest, result)]
+            if any(stat.S_ISLNK(info.st_mode) or
+                   getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0)
+                   for info in metadata):
+                raise ValueError('reparse point in pass metadata')
+            if not stat.S_ISDIR(metadata[0].st_mode) or not all(
+                    stat.S_ISREG(info.st_mode) for info in metadata[1:]):
+                raise ValueError('pass metadata is not regular files in a directory')
+            receipt = json.loads(result.read_text(encoding='utf-8'))
+            if not isinstance(receipt, dict) or receipt.get('state') != 'PASS' or not all(
+                    isinstance(receipt.get(name), list) for name in ('cases', 'libraries', 'systemLibraries')):
+                raise ValueError('no complete PASS receipt')
+            names = manifest.read_text(encoding='utf-8').splitlines()
+            if not names or len(names) != len(set(names)):
+                raise ValueError('empty or duplicate product registration')
+            products = []
+            for name in names:
+                relative = Path(name)
+                if relative.is_absolute() or relative.drive or '..' in relative.parts or not name or (
+                        relative.as_posix() != name):
+                    raise ValueError('product registration is not a relative canonical path')
+                if relative.suffix not in ('.exe', '.pdb', '.obj', '.o') and relative.name not in (
+                        'native-Od', 'native-O1', 'native-O2', 'native-Ox', 'normal-frame-observer'):
+                    raise ValueError('registration includes a non-binary product')
+                product = previous
+                for part in relative.parts:
+                    product /= part
+                    try:
+                        info = product.lstat()
+                    except FileNotFoundError:
+                        continue
+                    if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(
+                            stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0):
+                        raise ValueError('reparse point in product path')
+                if not product.resolve().is_relative_to(previous) or (
+                        product.exists() and not product.is_file()):
+                    raise ValueError('product is outside its pass directory or is not a file')
+                products.append(product)
+            order = (metadata[2].st_mtime_ns, previous.name)
+            if previous == current:
+                if not all(product.is_file() for product in products):
+                    raise ValueError('current PASS products are incomplete')
+                current_order = order
+                continue
+        except (OSError, ValueError, TypeError) as error:
+            print(f'Native products retained in {previous}: {error}', file=sys.stderr)
+            if previous == current:
+                return
+            continue
+        if order >= current_order:
+            continue
+        for product in products:
+            try:
+                product.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                print(f'Native product retained at {product}: {error}', file=sys.stderr)
 
 
 def main():
@@ -32,6 +105,7 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='owned-string-', dir=args.work)).resolve()
     records = []
+    products = set()
 
     def run(label, command, directory=root, stdout=subprocess.PIPE):
         command = list(map(str, command))
@@ -75,6 +149,9 @@ def main():
         assert linked.returncode == 0, folder
         ran = run('native-' + optimization, [executable], folder)
         assert (ran.returncode, ran.stdout, ran.stderr) == (0, expected, b''), folder
+        products.update([*objects, executable])
+        if args.kind == 'msvc' and executable.with_suffix('.pdb').is_file():
+            products.add(executable.with_suffix('.pdb'))
 
     def frame_observer(folder, generated, expected, drops, string_result=False, expected_result=0):
         lines = generated.read_text(encoding='ascii').splitlines()
@@ -133,6 +210,9 @@ def main():
         result = run('normal-frame-link',link,folder);assert result.returncode==0,folder
         result = run('normal-frame-run',[exe],folder)
         assert (result.returncode,result.stdout,result.stderr)==(0,expected*2,b''),folder
+        products.update([obj, exe])
+        if args.kind == 'msvc' and exe.with_suffix('.pdb').is_file():
+            products.add(exe.with_suffix('.pdb'))
         records.append({'case':'normal-frame-observer','folder':str(folder),'explicitCellDropsPerEntry':drops,
                         'sites':sites,'preDrainOwnerEmpty':True,'stringResultTransferred':string_result,'result':'PASS'})
 
@@ -366,9 +446,17 @@ def main():
         'int main(void){return xray_lir_entry()!=0;}\n', encoding='ascii')
     for optimization in ('Od', 'O2'):
         compile_run(root, generated, main, optimization, b'1\n')
-    (root / 'result.json').write_text(json.dumps({'state': 'PASS', 'cases': records,
-        'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
-        'systemLibraries': args.runtime_system_libraries}, indent=2) + '\n')
+    with (root / 'native-products.txt').open('w', encoding='utf-8') as stream:
+        stream.write(''.join(path.relative_to(root).as_posix() + '\n' for path in sorted(products)))
+        stream.flush()
+        os.fsync(stream.fileno())
+    with (root / 'result.json').open('w', encoding='utf-8') as stream:
+        stream.write(json.dumps({'state': 'PASS', 'cases': records,
+            'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.runtime_archives],
+            'systemLibraries': args.runtime_system_libraries}, indent=2) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    _retire_native_products(args.work, root)
     print('PASS: owned String complete Source/RBC/C/native', root)
 
 
