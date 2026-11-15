@@ -10,19 +10,6 @@
  *   Typed thunks keep function pointers callable without casts. The separate
  *   environment and owner fields cannot create a code address from raw data.
  */
-static void c_callable_type(LirC *c, XrLirType type) {
-    XrLirCallableType signature;
-    if (xr_lir_callable_type_view(c->request->module, type, &signature) != XR_LIR_OK) {
-        c_error(c, XR_LIR_C_INVALID_LIR, "callable type has no owned signature");
-        return;
-    }
-    const char *name = c_type(c, type);
-    c_format(c, "typedef struct %s { %s (*invoke)(void *", name, c_type(c, signature.result));
-    for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p)
-        c_format(c, ", %s", c_type(c, signature.parameters[p].type));
-    c_format(c, "); void *environment; void *owner; } %s;\n", name);
-}
-
 static bool c_callable_frame_target(LirC *c, const XrLirInstructionView *instruction) {
     XrLirClosureTarget target = {0};
     XrLirFunctionView function = {0};

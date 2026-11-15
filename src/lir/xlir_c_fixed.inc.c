@@ -35,100 +35,22 @@ static void c_prepare_types(LirC *c) {
         count, sizeof(*c->constructed_types), &memory))) return;
     c->constructed_types = memory;
     c->constructed_count = count;
-    bool cells = false;
     for (uint32_t n = 0; n < count && c_request_poll(c); ++n) {
         XrLirType type = XR_LIR_TYPE_COUNT + n;
         LirCConstructedType *owned = &c->constructed_types[n];
         owned->pod_index = UINT32_MAX;
-        XrLirCellType cell;
-        if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)) {
-            cells = true;
-            xr_lir_type_view(module, type, &owned->shape);
-            owned->layout = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
-            snprintf(owned->name, sizeof(owned->name), "XrlCell_%" PRIu32, type);
-            continue;
-        }
-        if (xr_lir_type_view(module, type, &owned->shape) == XR_LIR_OK &&
-            owned->shape.kind == XR_LIR_TYPE_CALLABLE) {
-            owned->layout = (XrLirTypeLayout){24, 8, 0, true};
-            snprintf(owned->name, sizeof(owned->name), "XrlFn_%" PRIu32, type);
-            XrLirCallableType signature;
-            if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) {
-                c_error(c, XR_LIR_C_INVALID_LIR, "callable signature is unavailable");
-                return;
-            }
-            c_scalar(c, signature.result);
-            for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p) {
-                if (signature.parameters[p].escaping)
-                    c_error(c, XR_LIR_C_UNSUPPORTED, "escaping callable parameters require owned environment transport");
-                c_scalar(c, signature.parameters[p].type);
-            }
-            continue;
-        }
-        if (xr_lir_boxed_type(module, type)) {
-            c->boxed = c->runtime = true;
-            xr_lir_type_view(module, type, &owned->shape);
-            xr_lir_type_layout(module, type, &owned->layout);
-            snprintf(owned->name, sizeof(owned->name), "XrlValue_%" PRIu32, type);
-            continue;
-        }
-        if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK ||
-            xr_lir_type_layout(module, type, &owned->layout) != XR_LIR_OK ||
-            (owned->shape.kind != XR_LIR_TYPE_FIXED_ARRAY && owned->shape.kind != XR_LIR_TYPE_NULLABLE &&
-             owned->shape.kind != XR_LIR_TYPE_TUPLE) ||
-            owned->layout.managed) {
-            c_error(c, XR_LIR_C_UNSUPPORTED, "constructed physical types have no native implementation");
+        if (xr_lir_type_view(module, type, &owned->shape) != XR_LIR_OK) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "constructed type has no receiving shape");
             return;
         }
-        snprintf(owned->name, sizeof(owned->name), owned->shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? "XrlFixed_%" PRIu32 :
-            owned->shape.kind == XR_LIR_TYPE_TUPLE ? "XrlTuple_%" PRIu32 : "XrlNullable_%" PRIu32, type);
-        owned->pod_index = c->pod_count++;
-    }
-    for (uint32_t f = 0; cells && f < xr_lir_function_count(module) && c_request_poll(c); ++f) {
-        XrLirFunction function;
-        XrLirFunctionView view;
-        xr_lir_function_at(module, f, &function);
-        xr_lir_function_view(module, function, &view);
-        if (!lir_definition_cell_captures(module, function, &view))
-            c_error(c, XR_LIR_C_UNSUPPORTED, "owned Cells require an actual hidden capture parameter");
+        /* Names admit the selected closure before its receiving projection.
+         * The common producer alone supplies every emitted physical layout. */
+        snprintf(owned->name, sizeof(owned->name), "XrlType_%" PRIu32, type);
     }
 }
 
 static void c_constructed_types(LirC *c) {
-    for (uint32_t n = 0; n < c->constructed_count && c_request_poll(c); ++n) {
-        const LirCConstructedType *type = &c->constructed_types[n];
-        if (xr_lir_boxed_type(c->request->module, XR_LIR_TYPE_COUNT + n)) {
-            c_format(c, "typedef XrtBoxed *%s;\n", type->name);
-        } else if (type->shape.kind == XR_LIR_TYPE_CELL) {
-            c_format(c, "typedef XrtCapturedCell *%s;\n", type->name);
-        } else if (type->shape.kind == XR_LIR_TYPE_CALLABLE) {
-            c_callable_type(c, XR_LIR_TYPE_COUNT + n);
-        } else if (type->shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
-            c_format(c, "typedef struct %s { uint8_t bytes[%" PRIu32 "]; } %s;\n",
-                type->name, type->shape.count, type->name);
-        } else if (type->shape.kind == XR_LIR_TYPE_TUPLE) {
-            c_format(c, "typedef struct %s { int64_t fields[%" PRIu32 "]; } %s;\n",
-                type->name, type->shape.count, type->name);
-        } else {
-            XrLirTypeLayout payload;
-            if (xr_lir_type_layout(c->request->module, type->shape.element, &payload) != XR_LIR_OK) {
-                c_error(c, XR_LIR_C_INVALID_LIR, "nullable payload layout is unavailable");
-                return;
-            }
-            c_format(c, "typedef struct %s { uint8_t tag;", type->name);
-            if (payload.alignment > 1) c_format(c, " uint8_t pad[%" PRIu32 "];", payload.alignment - 1);
-            if (type->shape.element != XR_LIR_UNIT) c_format(c, " %s payload;",
-                type->shape.element == XR_LIR_F32 ? "float" : c_type(c, type->shape.element));
-            c_format(c, " } %s;\n", type->name);
-            if (type->shape.element != XR_LIR_UNIT)
-                c_format(c, "_Static_assert(offsetof(%s, payload) == %u, \"nullable payload offset\");\n",
-                    type->name, payload.alignment);
-        }
-        c_format(c, "_Static_assert(sizeof(%s) == UINT64_C(%" PRIu64 "), \"aggregate size\");\n",
-            type->name, type->layout.size);
-        c_format(c, "_Static_assert(_Alignof(%s) == UINT32_C(%" PRIu32 "), \"aggregate alignment\");\n",
-            type->name, type->layout.alignment);
-    }
+    c_values_emit_types(c);
 }
 
 static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {

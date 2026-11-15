@@ -20,6 +20,7 @@ static size_t c_edge_event_hash(uint32_t block, uint32_t edge, uint32_t target) 
     return (size_t)(key ^ (key >> 29));
 }
 static void c_edge_events_prepare(LirC *c, const XrLirValueHomes *homes, LirCEdgeEvents *events) {
+    if (!c_request_poll(c)) return;
     events->homes = homes;
     size_t count = 0;
     for (size_t i = 0; i < homes->event_count && c_request_poll(c); ++i)
@@ -187,6 +188,12 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
     c_format(c, "    return xrt_place_edge_move(owners, %zu, &publication);\n}\n", owners);
 }
 
+static void c_value_landing(LirC *c, const XrLirValueHomes *homes) {
+    c_format(c, "typedef struct XrlLanding_%" PRIu32 " {\n", homes->source_function);
+    c_text(c, "    XrtManagedFrame *frame;\n    size_t first_owner, temporary_first_owner;\n");
+    c_format(c, "    XrlValue_%" PRIu32 " *destination, *temporary;\n} XrlLanding_%" PRIu32 ";\n",
+        homes->result_type, homes->source_function);
+}
 static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
     bool declared = false;
     for (size_t i = 0; i < homes->event_count && c_request_poll(c); ++i) {
@@ -199,10 +206,7 @@ static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
         }
         uint32_t f = homes->source_function, b = event->block, n = event->instruction;
         if (!declared) {
-            c_format(c, "typedef struct XrlLanding_%" PRIu32 " {\n", f);
-            c_text(c, "    XrtManagedFrame *frame;\n    size_t first_owner, temporary_first_owner;\n");
-            c_format(c, "    XrlValue_%" PRIu32 " *destination, *temporary;\n} XrlLanding_%" PRIu32 ";\n",
-                homes->result_type, f);
+            c_value_landing(c, homes);
             declared = true;
         }
         c_format(c, "typedef struct XrlReturn_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " {\n", f, b, n);

@@ -1,0 +1,33 @@
+fn leaf(text: string) -> string { return text + "!" }
+fn middle(text: string) -> string { return leaf(text) }
+fn top(text: string) -> string { return middle(text) }
+fn choose(n: i64) -> string { return n > 3 ? "é\0big" : "small" }
+fn walk(n: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < n) {
+        text = choose(i)
+        i = i + 1
+    }
+    return text
+}
+fn twice(text: string) -> string { return text + text }
+fn grow(n: i64) -> string {
+    var text = "x"
+    var i = 0
+    while (i < n) {
+        text = twice(text)
+        i = i + 1
+    }
+    return text
+}
+fn measure(text: string) -> i64 { return len(text) }
+print(top("value"))
+print(choose(9))
+print(choose(1))
+print(walk(0))
+print(walk(8))
+print(twice("é\0"))
+print(measure("Aé中"))
+print(measure(""))
+print(measure(grow(14)))
