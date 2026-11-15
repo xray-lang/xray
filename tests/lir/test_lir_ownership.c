@@ -20,6 +20,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
+#include "lir_record_fixture.h"
 
 static uint32_t count_kind(const XrLirOwnershipPlan *plan, XrLirOwnershipFactKind kind) {
     uint32_t count = 0;
@@ -49,7 +50,7 @@ static void arrays(XrLirType element) {
     XrLirModule *m = NULL;
     XrLirOwnershipPlan *plan = NULL;
     OK(array_fixture_create(element, &m));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     CHECK(xr_lir_ownership_function_count(plan) == 3);
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) == 2);
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_RETURN_TRANSFER) == 1);
@@ -79,7 +80,7 @@ static void arrays(XrLirType element) {
         edges[0].block == 1 && edges[0].target_block == 2);
     uint64_t before = digest(plan);
     XrLirOwnershipPlan *saved = plan;
-    CHECK(xr_lir_ownership_plan_create(m, &plan, NULL) == XR_LIR_INVALID_ARGUMENT && plan == saved);
+    CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL) == XR_LIR_INVALID_ARGUMENT && plan == saved);
     xr_lir_module_destroy(m);
     CHECK(digest(plan) == before);
     XrLirOwnershipFact fact;
@@ -96,7 +97,7 @@ static void copies(void) {
         XrLirModule *m = NULL;
         XrLirOwnershipPlan *plan = NULL;
         OK(ownership_fixture(types[t], false, 2, &m));
-        OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+        OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
         CHECK(count_kind(plan, XR_LIR_OWNERSHIP_PARAMETER_BORROW) == 2 &&
             count_kind(plan, XR_LIR_OWNERSHIP_RESULT_OWNER) == 2 &&
             count_kind(plan, XR_LIR_OWNERSHIP_RELEASE) == 1 &&
@@ -105,7 +106,7 @@ static void copies(void) {
             XrLirModule *elided = NULL;
             XrLirOwnershipPlan *final = NULL;
             OK(xr_lir_string_elide(m, &elided));
-            OK(xr_lir_ownership_plan_create(elided, &final, NULL));
+            OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=elided}, &final, NULL));
             CHECK(count_kind(final, XR_LIR_OWNERSHIP_RESULT_OWNER) == 1 &&
                 count_kind(final, XR_LIR_OWNERSHIP_RETURN_TRANSFER) == 1 &&
                 !count_kind(final, XR_LIR_OWNERSHIP_RELEASE));
@@ -120,7 +121,7 @@ static void copies(void) {
     XrLirModule *m = NULL;
     XrLirOwnershipPlan *plan = NULL;
     OK(ownership_fixture(XR_LIR_STRING, true, 2, &m));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_APPEND_TRANSFER) == 1 &&
         count_kind(plan, XR_LIR_OWNERSHIP_OPERAND_BORROW) == 2 &&
         !count_kind(plan, XR_LIR_OWNERSHIP_RELEASE));
@@ -128,7 +129,7 @@ static void copies(void) {
     xr_lir_ownership_plan_destroy(plan);
     m = NULL; plan = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &m));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_RESULT_OWNER) == 24 &&
         count_kind(plan, XR_LIR_OWNERSHIP_RELEASE) == 23);
     uint64_t before = digest(plan);
@@ -141,7 +142,7 @@ static void other_shapes(void) {
     XrLirModule *m = NULL;
     XrLirOwnershipPlan *plan = NULL;
     OK(array_ref_fixture(XR_LIR_U8, &m));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     XrLirOwnershipFunction view;
     OK(xr_lir_ownership_function_at(plan, 2, &view));
     CHECK(view.unmodeled == XR_LIR_OWNERSHIP_UNMODELED_REFERENCE);
@@ -149,7 +150,7 @@ static void other_shapes(void) {
     xr_lir_ownership_plan_destroy(plan);
     m = NULL; plan = NULL;
     OK(array_repeat_fixture(XR_LIR_U64, &m));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_ARRAY_OPERATION) == 1);
     for (uint32_t i = 0; i < xr_lir_ownership_fact_count(plan); ++i) {
         XrLirOwnershipFact fact;
@@ -196,7 +197,7 @@ static void rebuilt_fact_identity(void) {
         OK(xr_lir_set_terminator(input, blocks[i], &instruction));
     }
     OK(xr_lir_module_finish(input, NULL));
-    OK(xr_lir_ownership_plan_create(input, &old, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input}, &old, NULL));
     CHECK(count_kind(old, XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) == 2 &&
         count_kind(old, XR_LIR_OWNERSHIP_RETURN_TRANSFER) == 2);
     uint32_t old_owner = owned.id, old_return = parameters[1].id;
@@ -205,7 +206,7 @@ static void rebuilt_fact_identity(void) {
     CHECK(rebuilt && rebuilt != input);
     xr_lir_module_destroy(input);
     CHECK(digest(old) == old_digest);
-    OK(xr_lir_ownership_plan_create(rebuilt, &final, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=rebuilt}, &final, NULL));
     OK(xr_lir_function_at(rebuilt, 0, &function));
     XrLirFunctionView shape;
     OK(xr_lir_function_view(rebuilt, function, &shape));
@@ -258,7 +259,7 @@ static void reject(const XrLirModule *m) {
     XrLirOwnershipPlan *plan = NULL;
     XrLirDiagnostic direct, captured;
     CHECK(xr_lir_verify(m, &direct) == XR_LIR_VERIFY_ERROR);
-    CHECK(xr_lir_ownership_plan_create(m, &plan, &captured) == XR_LIR_VERIFY_ERROR && !plan);
+    CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, &captured) == XR_LIR_VERIFY_ERROR && !plan);
     CHECK(direct.function == captured.function && direct.block == captured.block &&
         direct.instruction == captured.instruction && !strcmp(direct.message, captured.message));
 }
@@ -267,12 +268,12 @@ static void malformed(void) {
     XrLirModule *m = NULL;
     XrLirOwnershipPlan *plan = NULL;
     OK(xr_lir_module_create(NULL, &m));
-    CHECK(xr_lir_ownership_plan_create(m, &plan, NULL) == XR_LIR_INVALID_ARGUMENT && !plan);
+    CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL) == XR_LIR_INVALID_ARGUMENT && !plan);
     xr_lir_module_destroy(m);
     m = NULL;
     OK(xr_lir_module_create(NULL, &m));
     OK(xr_lir_module_finish(m, NULL));
-    OK(xr_lir_ownership_plan_create(m, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
     CHECK(!xr_lir_ownership_function_count(plan) && !xr_lir_ownership_fact_count(plan));
     XrLirOwnershipFunction view;
     CHECK(xr_lir_ownership_function_at(plan, 1, &view) == XR_LIR_INVALID_ARGUMENT && !view.fact_count);
@@ -310,10 +311,77 @@ static void malformed(void) {
     xr_lir_ownership_plan_destroy(NULL);
 }
 
+static void boxed_lifetimes(void) {
+    XrLirFunction root={0};
+    XrLirModule *m=record_fixture(&root);
+    XrLirFunctionData *f=&m->functions[root.id-1];
+    XrLirInstructionView *field=&f->blocks[0].instructions[8].view;
+    CHECK(field->op==XR_LIR_RECORD_FIELD);
+    uint32_t *operand=(uint32_t *)field->operands, saved=*operand;
+    *operand=f->blocks[0].instructions[4].view.result;
+    XrLirDiagnostic diagnostic;
+    CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR &&
+        strstr(diagnostic.message,"Managed use follows release"));
+    *operand=saved; OK(xr_lir_verify(m,NULL));
+    XrLirFunctionData *helper=&m->functions[1];
+    XrLirInstructionView *ret=&helper->blocks[0].instructions[1].view;
+    CHECK(ret->op==XR_LIR_RET);
+    operand=(uint32_t *)ret->operands; saved=*operand; *operand=helper->parameters[0];
+    CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR &&
+        strstr(diagnostic.message,"Managed transfer requires an owned reference"));
+    *operand=saved; OK(xr_lir_verify(m,NULL));
+    XrLirOwnershipPlan *plan=NULL;
+    CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m},&plan,&diagnostic)==XR_LIR_INVALID_ARGUMENT &&
+        !plan && strstr(diagnostic.message,"constructed ownership facts are missing"));
+    xr_lir_module_destroy(m);
+    puts("boxed use-after-release and borrowed return reject in the common verifier");
+}
+
+static void boxed_selected_edges(void) {
+    XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
+    XrLirType type; XrLirRecordField field={"value",5,XR_LIR_STRING};
+    OK(xr_lir_record_type(m,&field,1,&type));
+    XrLirType parameters[]={type,XR_LIR_I1};
+    XrLirFunction function={0}; XrLirFunctionSpec spec={.name="record_edges",.name_length=12,
+        .parameters=parameters,.parameter_count=2,.result=type};
+    OK(xr_lir_declare_function(m,&spec,&function)); OK(xr_lir_define_function(m,function));
+    XrLirBlock blocks[3]={{0}}; XrLirValue input={0},condition={0},owners[2]={{0}};
+    OK(xr_lir_add_block(m,function,NULL,0,&blocks[0]));
+    OK(xr_lir_set_entry(m,function,blocks[0]));
+    OK(xr_lir_function_parameter(m,function,0,&input)); OK(xr_lir_function_parameter(m,function,1,&condition));
+    for (uint32_t i=0;i<2;++i) {
+        XrLirInstruction copy={.op=XR_LIR_VALUE_RETAIN,.type=type,.operands=&input,.operand_count=1};
+        OK(xr_lir_emit_value(m,blocks[0],&copy,&owners[i]));
+    }
+    XrLirType block_types[]={type,type};
+    for (uint32_t i=1;i<3;++i) {
+        XrLirValue first={0},second={0};
+        OK(xr_lir_add_block(m,function,block_types,2,&blocks[i]));
+        OK(xr_lir_block_parameter(m,blocks[i],0,&first)); OK(xr_lir_block_parameter(m,blocks[i],1,&second));
+        XrLirInstruction drop={.op=XR_LIR_VALUE_DROP,.type=XR_LIR_UNIT,.operands=&first,.operand_count=1};
+        OK(xr_lir_emit_effect(m,blocks[i],&drop));
+        XrLirInstruction ret={.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&second,.operand_count=1};
+        OK(xr_lir_set_terminator(m,blocks[i],&ret));
+    }
+    XrLirValue reverse[]={owners[1],owners[0]};
+    XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,.edge_count=2,
+        .edges={{blocks[1],owners,2},{blocks[2],reverse,2}}};
+    OK(xr_lir_set_terminator(m,blocks[0],&branch)); OK(xr_lir_module_finish(m,NULL));
+    XrLirInstructionView *term=&m->functions[0].blocks[0].instructions[2].view;
+    uint32_t *arguments=(uint32_t *)term->edges[0].arguments, saved=arguments[1]; arguments[1]=arguments[0];
+    XrLirDiagnostic diagnostic;
+    CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR&&strstr(diagnostic.message,"edge duplicates"));
+    arguments[1]=saved;
+    arguments=(uint32_t *)term->edges[1].arguments; saved=arguments[0]; arguments[0]=input.id;
+    CHECK(xr_lir_verify(m,&diagnostic)==XR_LIR_VERIFY_ERROR&&strstr(diagnostic.message,"edge requires a distinct owned reference"));
+    arguments[0]=saved; OK(xr_lir_verify(m,NULL)); xr_lir_module_destroy(m);
+    puts("boxed selected edges preserve distinct real owners and reject borrowed transfers");
+}
+
 int main(void) {
     XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t i = 0; i < 4; ++i) arrays(elements[i]);
-    copies(); other_shapes(); rebuilt_fact_identity(); malformed();
+    copies(); other_shapes(); rebuilt_fact_identity(); malformed(); boxed_lifetimes(); boxed_selected_edges();
     puts("LIR ownership snapshots passed");
     return 0;
 }

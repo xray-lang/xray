@@ -53,7 +53,25 @@ typedef struct XrLirOwnershipFunction {
     bool external;
 } XrLirOwnershipFunction;
 
-/* Only direct String, Array and Map references are modeled. Other lifetime
+/* The common receiving value-layout producer supplies these exact final-module
+ * Record/Nullable facts from its sealed ValuePlan owned-leaf inventory. Core
+ * ownership collection does not infer physical layouts or count child leaves.
+ * Rows are strictly ordered by type; every used Record/Nullable requires a row,
+ * including POD rows whose has_owned is false. */
+typedef struct XrLirOwnershipTypeFact {
+    XrLirType type;
+    bool has_owned;
+} XrLirOwnershipTypeFact;
+typedef struct XrLirOwnershipRequest {
+    const XrLirModule *module;
+    const XrLirOwnershipTypeFact *types;
+    uint32_t type_count;
+} XrLirOwnershipRequest;
+
+/* Direct String, Array, Map and described Record/Nullable owners are modeled.
+ * Known POD values emit no RC events. The current boxed IR's explicit value
+ * lifetime is still verified even for a target inline POD representation.
+ * Other lifetime
  * verifiers still run, and their presence is reported per function. Facts do
  * not establish owner origins, runtime slots, coalescing, disjoint parameters,
  * mutation invalidation or cross-function summaries. An operand borrow is an
@@ -66,7 +84,7 @@ typedef struct XrLirOwnershipFunction {
  * does not authorize applying a plan to another or rebuilt module.
  * Output must be NULL. Failure publishes nothing and preserves input/output.
  * Diagnostics borrow the input's source paths, as in xr_lir_verify. */
-XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirModule *,
+XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *,
     XrLirOwnershipPlan **, XrLirDiagnostic *);
 XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *);
 XR_FUNC uint32_t xr_lir_ownership_function_count(const XrLirOwnershipPlan *);
