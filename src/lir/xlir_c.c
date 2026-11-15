@@ -331,7 +331,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
+    if (v->op == XR_LIR_STRING_F64 ||
         xr_lir_string_role(c->request->module, v) || c_display_point(c, v)) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "String operation has no target execution binding");
         return;
