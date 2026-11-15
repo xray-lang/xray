@@ -510,6 +510,32 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
                 return XR_RBC_INVALID;
             status=xrt_managed_slot_take(activation->frame,home->first_owner,stack->value_result);
         }
+    } else if (home && home->type) {
+        RbcValuePayload input;
+        status=rbc_value_payload(module,stack,(RbcValueOrigin){activation,access.source},&input);
+        if (status!=XRT_MANAGED_OK) return XR_RBC_INVALID;
+        XrRbcAggregateLayout physical;
+        if (!xr_rbc_aggregate_layout(input.packed,&physical)) return XR_RBC_INVALID;
+        if (depth>1) {
+            uint8_t *output=NULL;
+            if (activation->receiving_call) {
+                RbcValueActivation *caller=activation->previous; RbcValuePayload destination;
+                if (!caller || caller->depth!=depth-1 || rbc_value_payload(module,stack,
+                    (RbcValueOrigin){caller,frame.destination},&destination)!=XRT_MANAGED_OK || destination.size!=input.size)
+                    return XR_RBC_INVALID;
+                output=destination.address;
+            } else {
+                const XrRbcFrame *caller=&stack->frames[depth-2];
+                const XrRbcFunction *receiver=&module->functions[caller->function];
+                if (frame.destination>=receiver->aggregate_value_count) return XR_RBC_INVALID;
+                output=xr_rbc_aggregate_value(stack,caller,receiver->aggregate_values[frame.destination]);
+            }
+            memmove(output,input.address,physical.size);
+        } else {
+            if (!stack->aggregate_result) return XR_RBC_INVALID;
+            xr_rbc_aggregate_pack(input.packed,input.address,stack->aggregate_result);
+            stack->slots[0]=(XrRbcRegister){0};
+        }
     } else {
         uint64_t bits=0;
         if (access.source) {
@@ -538,6 +564,17 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
 }
 #include "xrbc_value_array_execute.inc.c"
 #include "xrbc_value_map_execute.inc.c"
+static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
+    RbcValuePayload payload;
+    XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,access.source),&payload);
+    const XrtBackingTypes *types=NULL;
+    if (status==XRT_MANAGED_OK) status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+    const XrLirValueHome *result=rbc_value_home(activation->code,access.result);
+    if (status==XRT_MANAGED_OK) status=xrt_string_backing_pod_display_create(activation->frame,result->temporary_first_owner,
+        types,&activation->code->displays[access.index],payload.address);
+    return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+}
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
@@ -575,6 +612,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);
     else return XR_RBC_INVALID;
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     stack->frames[stack->depth-1].pc=pc;

@@ -1,0 +1,2 @@
+const values = #{"present":7}
+print(values["missing"])
