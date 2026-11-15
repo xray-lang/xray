@@ -102,8 +102,8 @@ def main() -> None:
         if status:
             continue
         assert "({" not in generated.read_text(encoding="utf-8")
-        if name in ("large", "large_string"):
-            assert "UINT32_C(300)" in generated.read_text(encoding="utf-8")
+        # The original large-case oracles check both length and element 299.
+        # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):
             executable = work / (name + f"-{ordinal}" + (".exe" if os.name == "nt" else ""))
             command = [binary, "build", source, "-o", executable]
