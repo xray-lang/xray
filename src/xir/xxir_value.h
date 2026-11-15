@@ -13,6 +13,7 @@
 #ifndef XXIR_VALUE_H
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
+#include "../shared/xr_value_status.h"
 
 #define XR_XIR_VALUE_ABI_VERSION 31u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
@@ -82,12 +83,6 @@ typedef struct XrXirValue {
     uint32_t type, reserved;
     int64_t payload;
 } XrXirValue;
-typedef enum XrXirValueStatus {
-    XR_XIR_VALUE_OK, XR_XIR_VALUE_BAD_ARGUMENT, XR_XIR_VALUE_BAD_UTF8,
-    XR_XIR_VALUE_OOM, XR_XIR_VALUE_LIMIT, XR_XIR_VALUE_REFCOUNT_LIMIT,
-    XR_XIR_VALUE_BOUNDS, XR_XIR_VALUE_UNSUPPORTED,
-    XR_XIR_VALUE_MEMORY_LIMIT, XR_XIR_VALUE_OVERFLOW, XR_XIR_VALUE_IO
-} XrXirValueStatus;
 typedef struct XrXirDomain XrXirDomain;
 typedef struct XrXirTypeArena XrXirTypeArena;
 typedef struct XrXirDomainStats {
