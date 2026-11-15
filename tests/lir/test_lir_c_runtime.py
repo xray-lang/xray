@@ -119,6 +119,20 @@ def main():
     for name in ('local_loop', 'values', 'snapshots', 'strings', 'repeat_strings', 'loop_carry'):
         source = arrays / (name + '.xr')
         cases['array-' + name] = (source, source.with_suffix('.out').read_bytes())
+    cases['map-fixed-operations'] = (
+        'var state=#{"same":1,"other":7,"same":42}\n'
+        'fn snapshot(items:Map<string,i64>)->Map<string,i64>{return items}\n'
+        'fn add(items:ref Map<string,i64>,key:string,value:i64){items.set(key,value)}\n'
+        'fn local()->Map<string,i64>{var items=#{"x":2}\nconst saved=items\n'
+        'add(ref items,"x",99)\nprint(saved["x"])\nreturn snapshot(items)}\n'
+        'const old=snapshot(state)\nadd(ref state,"same",50)\n'
+        'print(old["same"])\nprint(state.get("same")!)\nprint(state.get("missing") ?? -1)\n'
+        'print(len(state))\nprint(state.containsKey("other") ? 1 : 0)\n'
+        'print(state.delete("other") ? 1 : 0)\nprint(state.delete("absent") ? 1 : 0)\n'
+        'const changed=local()\nprint(changed["x"])\nstate.clear()\nprint(len(state))\nprint(len(old))\n'
+        'fn replace_key()->string{state=#{"fresh":17}\nreturn "after"}\n'
+        'state.set(replace_key(),42)\nprint(state["fresh"])\nprint(state["after"])\n',
+        b'42\n50\n-1\n2\n1\n1\n0\n2\n99\n0\n2\n17\n42\n')
     cases['module-order'] = ('var first=3\nvar second=first+4\n'
         'fn adjust(n:i64)->i64{first=first+n\nsecond=second+first\nreturn second}\n'
         'print(first)\nprint(second)\nprint(adjust(2))\nprint(first)\nprint(second)\n',
