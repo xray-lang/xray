@@ -94,6 +94,8 @@ def main():
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/O2', '/W4', '/WX', crt,
                        '/I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(binary)]
+            if args.compiler.name.lower() in ('cl', 'cl.exe'):
+                command.insert(1, '/experimental:c11atomics')
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower(): command += ['/clang:-fsanitize=undefined']
