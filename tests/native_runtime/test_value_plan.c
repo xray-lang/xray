@@ -13,6 +13,7 @@
 #include "runtime/native/xnative_value_plan.h"
 #include "runtime/native/xnative_value_image.h"
 #include "runtime/native/xnative_string_backing.h"
+#include "xray_native_function.h"
 #include "base/xmalloc.h"
 #include "base/xmax_align.h"
 #include <limits.h>
@@ -253,8 +254,8 @@ static void typed_metadata_and_code(void) {
         .owned_offsets=&pointer_offset,.owned_count=1,.element=map});
     char argument[]="value", capture[]="cache";
     XrtValueParameterSpec parameter={integer,XR_PARAM_READ,false,argument,5};
-    size_t function_owner=16;
-    XrtValuePlan *signature = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,
+    size_t function_owner=offsetof(XrtFunction,owner);
+    XrtValuePlan *signature = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),
         .owned_offsets=&function_owner,.owned_count=1,.signature={&parameter,1,integer,XRT_VALUE_NO_SUSPEND,false}});
     CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
     XrtValueSlotSpec captures[]={{integer,0,NULL,0},{cell,8,capture,5},{signature,16,NULL,0}};
@@ -288,6 +289,53 @@ static void typed_metadata_and_code(void) {
     xrt_runtime_type_plan_drop(physical);
     CHECK(atomic_load(&audit.finalized)==1 && atomic_load(&audit.drops)==2 && atomic_load(&f.audit.finalized)==1);
     puts("typed captures, signature copies and independent CodeOwner/provider retirement passed");
+}
+static void function_shape_admission(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,false);
+    size_t owner_bytes=xrt_billing_owner_stats(f.billing).bytes;
+    XrtValuePlan *integer=scalar(&f,XRT_VALUE_I64,8,8), *empty=NULL;
+    size_t offset=offsetof(XrtFunction,owner);
+    CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
+    XrtValuePlanSpec function={.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),
+        .owned_offsets=&offset,.owned_count=1,.signature={.result=integer},.code={code,code_retain,code_drop}};
+    XrtBillingStats baseline=xrt_billing_owner_stats(f.billing);
+    size_t calls=atomic_load(&f.audit.calls);
+    for (unsigned fault=0;fault<6;++fault) {
+        XrtValuePlanSpec rejected=function; size_t wrong=0;
+        switch (fault) {
+        case 0: rejected.size-=alignof(XrtFunction); break;
+        case 1: rejected.size+=alignof(XrtFunction); break;
+        case 2: rejected.alignment=alignof(XrtFunction)/2; break;
+        case 3: wrong=offsetof(XrtFunction,entry); rejected.owned_offsets=&wrong; break;
+        case 4: wrong=offsetof(XrtFunction,environment); rejected.owned_offsets=&wrong; break;
+        default: rejected.owned_count=0; rejected.owned_offsets=NULL; break;
+        }
+        STATUS(xrt_value_plan_new(f.billing,&rejected,&empty),XRT_MANAGED_ARGUMENT);
+        CHECK(!empty && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    }
+    CHECK(atomic_load(&f.audit.calls)==calls && !atomic_load(&audit.retains));
+    atomic_store(&f.audit.remaining,0);
+    STATUS(xrt_value_plan_new(f.billing,&function,&empty),XRT_MANAGED_OOM);
+    CHECK(!empty && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    atomic_store(&f.audit.remaining,SIZE_MAX);
+    audit.reject=true;
+    STATUS(xrt_value_plan_new(f.billing,&function,&empty),XRT_MANAGED_REFCOUNT);
+    CHECK(!empty); same_bill(&f,baseline); audit.reject=false;
+    xrt_billing_owner_fail_after(f.billing,0);
+    STATUS(xrt_value_plan_new(f.billing,&function,&empty),XRT_MANAGED_OOM);
+    CHECK(!empty && atomic_load(&code->references)==1); same_bill(&f,baseline);
+    xrt_billing_owner_fail_after(f.billing,SIZE_MAX);
+    OK(xrt_value_plan_new(f.billing,&function,&empty));
+    XrtValuePlanSpec received; OK(xrt_value_plan_view(empty,&received));
+    CHECK(received.size==sizeof(XrtFunction) && received.alignment==alignof(XrtFunction) &&
+        received.owned_offsets[0]==offsetof(XrtFunction,owner));
+    code_drop(code); xrt_value_plan_drop(integer);
+    audit.billing=f.billing; audit.final_bytes=owner_bytes;
+    fixture_retire(&f); CHECK(!atomic_load(&audit.finalized) && !atomic_load(&f.audit.finalized));
+    /* The plan's physical refund precedes the code callback and billing drop. */
+    xrt_value_plan_drop(empty);
+    CHECK(atomic_load(&audit.finalized)==1 && atomic_load(&f.audit.finalized)==1);
+    puts("canonical callable shape: malformed storage rejection, OOM/lease rollback and independent code lifetime passed");
 }
 static void failures_and_admission(void) {
     Fixture f; fixture_init(&f,8192,false);
@@ -369,7 +417,7 @@ typedef struct RawImageFixture {
 static void raw_image_fixture(RawImageFixture *raw) {
     *raw=(RawImageFixture){0};
     memcpy(raw->names,"leftrightnumbervalue",20);
-    raw->owned[0]=0; raw->owned[1]=8; raw->owned[2]=8; raw->owned[3]=16; raw->owned[4]=16;
+    raw->owned[0]=0; raw->owned[1]=8; raw->owned[2]=8; raw->owned[3]=16; raw->owned[4]=offsetof(XrtFunction,owner);
     raw->slots[0]=(XrtValueImageSlot){2,0,0,4};
     raw->slots[1]=(XrtValueImageSlot){2,8,4,5};
     raw->slots[2]=(XrtValueImageSlot){1,16,9,6};
@@ -381,7 +429,7 @@ static void raw_image_fixture(RawImageFixture *raw) {
     raw->types[3]=(XrtValueImageType){.kind=XRT_VALUE_NULLABLE,.size=32,.alignment=8,
         .first_owned=2,.owned_count=2,.nullable_element=3,.nullable_payload=8};
     raw->types[4]=(XrtValueImageType){.kind=XRT_VALUE_RECORD,.size=1,.alignment=1};
-    raw->types[5]=(XrtValueImageType){.kind=XRT_VALUE_FUNCTION,.size=24,.alignment=8,
+    raw->types[5]=(XrtValueImageType){.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),
         .first_owned=4,.owned_count=1,.parameter_count=1,.result=1,.flags=XRT_VALUE_NO_SUSPEND};
     raw->types[6]=(XrtValueImageType){.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,
         .first_capture=3,.capture_count=1,.entry_ordinal=42,.entry_signature=6};
@@ -435,7 +483,7 @@ static void raw_image_failures(void) {
     CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
     XrtManagedLease lease={code,code_retain,code_drop};
     XrtValueImagePlans *set=NULL;
-    for (unsigned fault=0;fault<8;++fault) {
+    for (unsigned fault=0;fault<10;++fault) {
         raw_image_fixture(&raw);
         switch (fault) {
         case 0: raw.types[2].first_field=UINT32_MAX; break;
@@ -445,7 +493,9 @@ static void raw_image_failures(void) {
         case 4: raw.image.name_bytes=1; break;
         case 5: raw.owned[0]=SIZE_MAX; break;
         case 6: raw.types[6].alignment=3; break;
-        default: raw.image.types=NULL; break;
+        case 7: raw.image.types=NULL; break;
+        case 8: raw.types[5].size+=alignof(XrtFunction); break;
+        default: raw.owned[4]=offsetof(XrtFunction,environment); break;
         }
         STATUS(xrt_value_image_bind(f.billing,&raw.image,lease,&set),XRT_MANAGED_ARGUMENT);
         CHECK(!set && atomic_load(&code->references)==1); same_bill(&f,baseline);
@@ -585,7 +635,7 @@ int main(void) {
     raw_image_retirement(); raw_image_failures();
     empty_record_storage();
     inline_frame_replacement();
-    inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code();
+    inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code(); function_shape_admission();
     failures_and_admission(); deep_metadata();
     puts("immutable ValuePlan and inline ownership kernel passed");
     return 0;

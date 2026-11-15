@@ -11,6 +11,7 @@
  *   leaves before publication; physical object retirement stays in the kernel.
  */
 #include "xnative_value_plan.h"
+#include "xray_native_function.h"
 #include "base/xchecks.h"
 #include "base/xmax_align.h"
 #include <stdalign.h>
@@ -169,7 +170,9 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
             spec->owned_count == 1 && !spec->owned_offsets[0] &&
             (spec->kind != XRT_VALUE_CELL || (spec->element &&
                 (spec->element->view.kind == XRT_VALUE_I64 || spec->element->view.kind == XRT_VALUE_MAP_STRING_I64)));
-    if (spec->kind == XRT_VALUE_FUNCTION) return spec->owned_count == 1 && signature_valid(&spec->signature);
+    if (spec->kind == XRT_VALUE_FUNCTION) return spec->size == sizeof(XrtFunction) &&
+        spec->alignment == alignof(XrtFunction) && spec->owned_count == 1 &&
+        spec->owned_offsets[0] == offsetof(XrtFunction, owner) && signature_valid(&spec->signature);
     if (spec->kind == XRT_VALUE_RECORD) return layout_slots(spec, spec->fields, spec->field_count, true);
     if (spec->kind == XRT_VALUE_NULLABLE) return nullable_valid(spec);
     if (spec->kind == XRT_VALUE_ENVIRONMENT) return spec->entry.signature &&

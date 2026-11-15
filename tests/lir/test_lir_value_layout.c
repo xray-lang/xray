@@ -9,6 +9,7 @@
 #include "lir/xlir_value_layout.h"
 #include "lir/xlir_internal.h"
 #include "runtime/native/xnative_string_backing.h"
+#include "xray_native_function.h"
 #include "base/xmalloc.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -210,7 +211,7 @@ static void failures_and_boundaries(void) {
         CHECK(after.bytes == baseline.bytes && after.blocks == baseline.blocks);
     }
     xrt_billing_owner_fail_after(owner.billing, SIZE_MAX);
-    const XrLirType unsupported[] = {t.function, t.cell, XR_LIR_STATE, XR_LIR_STATE_REF, XR_LIR_PTR, XR_LIR_FUNCTION_SCOPE};
+    const XrLirType unsupported[] = {t.cell, XR_LIR_STATE, XR_LIR_STATE_REF, XR_LIR_PTR, XR_LIR_FUNCTION_SCOPE};
     for (size_t i = 0; i < sizeof(unsupported) / sizeof(*unsupported); ++i) {
         key.type = unsupported[i];
         CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
@@ -254,8 +255,100 @@ static void inline_overflow(void) {
     CHECK(xr_lir_value_layouts_create(module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_OVERFLOW && !set);
     owner_drop(&owner); CHECK(atomic_load(&owner.audit.final) == 1); xr_lir_module_destroy(module);
 }
+static void callable_layouts(void) {
+    XrLirModule *module = NULL; LIR(xr_lir_module_create(NULL, &module));
+    XrLirType callback = 0, c_callback = 0, record = 0, optional = 0, outer = 0, array_result = 0, unit = 0, cell_ref = 0;
+    XrLirCallableParameter input = {.type=XR_LIR_I64, .mode=XR_PARAM_READ};
+    XrLirCallableType signature = {&input, 1, XR_LIR_I64, 0, XR_LIR_CALLABLE_NO_SUSPEND, false};
+    LIR(xr_lir_callable_type(module, &signature, &callback));
+    signature.flags |= XR_LIR_CALLABLE_C_ABI;
+    LIR(xr_lir_callable_type(module, &signature, &c_callback));
+    XrLirRecordField fields[] = {{"name",4,XR_LIR_STRING}, {"score",5,XR_LIR_I64}};
+    LIR(xr_lir_record_type(module, fields, 2, &record));
+    LIR(xr_lir_nullable_type(module, record, &optional));
+    XrLirCallableParameter parameters[] = {
+        {callback,0,XR_PARAM_READ,true}, {c_callback,0,XR_PARAM_READ,false},
+        {XR_LIR_ARRAY,XR_LIR_STRING,XR_PARAM_MOVE,false}, {XR_LIR_ARRAY,XR_LIR_I64,XR_PARAM_READ,false},
+        {XR_LIR_ARRAY,XR_LIR_U8,XR_PARAM_READ,false}, {XR_LIR_ARRAY,XR_LIR_U64,XR_PARAM_READ,false},
+        {record,0,XR_PARAM_READ,false}, {optional,0,XR_PARAM_READ,false}};
+    signature = (XrLirCallableType){parameters,8,callback,0,0,false};
+    LIR(xr_lir_callable_type(module, &signature, &outer));
+    signature = (XrLirCallableType){.result=XR_LIR_ARRAY,.result_element=XR_LIR_STRING};
+    LIR(xr_lir_callable_type(module, &signature, &array_result));
+    signature = (XrLirCallableType){.result=XR_LIR_UNIT};
+    LIR(xr_lir_callable_type(module, &signature, &unit));
+    input = (XrLirCallableParameter){.type=XR_LIR_I64_CELL,.mode=XR_PARAM_REF};
+    signature = (XrLirCallableType){.parameters=&input,.parameter_count=1,.result=XR_LIR_UNIT};
+    LIR(xr_lir_callable_type(module, &signature, &cell_ref));
+    memset(parameters, 0xa5, sizeof(parameters)); memset(&input, 0xa5, sizeof(input));
+    LIR(xr_lir_module_finish(module, NULL));
+    Owner owner; owner_new(&owner, SIZE_MAX);
+    XrLirValueLayoutKey roots[] = {{outer,0},{array_result,0},{unit,0}};
+    XrLirValueLayouts *set = NULL;
+    XrtBillingStats baseline = xrt_billing_owner_stats(owner.billing);
+    LAYOUT(xr_lir_value_layouts_create(module, roots, 3, owner.billing, &set));
+    size_t allocations = xrt_billing_owner_stats(owner.billing).allocations - baseline.allocations;
+    const XrtValuePlan *plan = get(set, outer); XrtValuePlanSpec spec = view(plan);
+    CHECK(spec.kind == XRT_VALUE_FUNCTION && spec.size == sizeof(XrtFunction) && spec.alignment == alignof(XrtFunction));
+    CHECK(spec.owned_count == 1 && spec.owned_offsets[0] == offsetof(XrtFunction, owner));
+    CHECK(spec.signature.parameter_count == 8 && !spec.signature.flags && !spec.signature.throws);
+    CHECK(spec.signature.result == get(set, callback));
+    CHECK(spec.signature.parameters[0].type == get(set, callback) && spec.signature.parameters[0].escaping);
+    CHECK(spec.signature.parameters[1].type == get(set, c_callback) && !spec.signature.parameters[1].escaping);
+    CHECK(spec.signature.parameters[2].mode == XR_PARAM_MOVE && spec.signature.parameters[3].mode == XR_PARAM_READ);
+    for (size_t i = 0; i < spec.signature.parameter_count; ++i)
+        CHECK(!spec.signature.parameters[i].name && !spec.signature.parameters[i].name_length);
+    const XrtValueKind arrays[] = {XRT_VALUE_ARRAY_STRING,XRT_VALUE_ARRAY_I64,XRT_VALUE_ARRAY_U8,XRT_VALUE_ARRAY_U64};
+    for (size_t i = 0; i < 4; ++i) CHECK(view(spec.signature.parameters[i + 2].type).kind == arrays[i]);
+    CHECK(view(spec.signature.parameters[6].type).kind == XRT_VALUE_RECORD &&
+        view(spec.signature.parameters[7].type).kind == XRT_VALUE_NULLABLE);
+    CHECK(view(get(set, callback)).signature.flags == XRT_VALUE_NO_SUSPEND);
+    CHECK(view(get(set, c_callback)).signature.flags == (XRT_VALUE_NO_SUSPEND | XRT_VALUE_C_ABI));
+    CHECK(view(view(get(set, array_result)).signature.result).kind == XRT_VALUE_ARRAY_STRING);
+    XrtValuePlanSpec empty = view(get(set, unit));
+    CHECK(!empty.signature.parameter_count && !empty.signature.parameters && view(empty.signature.result).kind == XRT_VALUE_UNIT);
+    const XrtValuePlan *seen[32]; size_t count = xr_lir_value_layouts_count(set); CHECK(count <= 32);
+    for (size_t i = 0; i < count; ++i) {
+        XrLirValueLayoutKey key; const XrtValuePlan *current;
+        LAYOUT(xr_lir_value_layouts_at(set, i, &key, &current)); seen[i] = current;
+        XrtValuePlanSpec row = view(current);
+        if (row.kind != XRT_VALUE_FUNCTION) continue;
+        for (size_t p = 0; p <= row.signature.parameter_count; ++p) {
+            const XrtValuePlan *child = p == row.signature.parameter_count ? row.signature.result : row.signature.parameters[p].type;
+            size_t before = 0; while (before < i && seen[before] != child) ++before;
+            CHECK(before < i);
+        }
+    }
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)plan));
+    xr_lir_value_layouts_destroy(set); set = NULL;
+    XrtBillingStats held = xrt_billing_owner_stats(owner.billing);
+    for (size_t allowed = 0; allowed < allocations; ++allowed) {
+        xrt_billing_owner_fail_after(owner.billing, allowed);
+        CHECK(xr_lir_value_layouts_create(module, roots, 3, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_OOM && !set);
+        XrtBillingStats after = xrt_billing_owner_stats(owner.billing);
+        CHECK(after.bytes == held.bytes && after.blocks == held.blocks);
+    }
+    xrt_billing_owner_fail_after(owner.billing, SIZE_MAX);
+    XrLirValueLayoutKey rejected = {cell_ref,0};
+    CHECK(xr_lir_value_layouts_create(module, &rejected, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
+    xr_lir_module_destroy(module);
+    spec = view(plan);
+    CHECK(spec.signature.parameter_count == 8 && view(spec.signature.result).signature.flags == XRT_VALUE_NO_SUSPEND);
+    static const unsigned char entry = 0;
+    int64_t environment = 42;
+    XrtFunction borrowed = {&entry,(uintptr_t)&environment,NULL}, copied = {0};
+    size_t calls = xrt_billing_owner_stats(owner.billing).allocations;
+    MANAGED(xrt_value_copy_empty(plan, &borrowed, &copied));
+    CHECK(copied.entry == &entry && copied.environment == (uintptr_t)&environment && !copied.owner);
+    xrt_value_drop(plan, &copied);
+    CHECK(!copied.entry && !copied.environment && !copied.owner && environment == 42);
+    CHECK(xrt_billing_owner_stats(owner.billing).allocations == calls);
+    owner_drop(&owner); CHECK(!atomic_load(&owner.audit.final));
+    xrt_value_plan_drop((XrtValuePlan *)plan); CHECK(atomic_load(&owner.audit.final) == 1);
+    printf("callable signatures: exact contracts, independent dependencies and %zu allocation rollback sites passed\n", allocations);
+}
 int main(void) {
-    natural_layouts(); creator_retirement(); failures_and_boundaries(); inline_overflow();
+    natural_layouts(); creator_retirement(); failures_and_boundaries(); inline_overflow(); callable_layouts();
     puts("Admitted LIR value layouts: natural offsets, independent plans, billed rollback and real inline owners passed");
     return 0;
 }
