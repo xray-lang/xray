@@ -14,7 +14,7 @@ struct XrLirOwnershipPlan {
     uint32_t type_count;
 };
 
-static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirOwnershipPlan *);
+static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *);
 
 static void *lir_plan_allocate(size_t count, size_t size) {
     return size && count && count <= SIZE_MAX / size ? xr_calloc(count, size) : NULL;
@@ -112,6 +112,80 @@ static bool lir_plan_value(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
         .type=f->values[value - 1].type, .array_element=f->values[value - 1].array_element});
 }
 
+/* Both lifetime checking and event collection consume this transfer identity. */
+static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLirFunctionData *f,
+    const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(m,f->result))
+        return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
+    if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
+    if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
+        v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP) return XR_LIR_OWNERSHIP_RELEASE;
+    return 0;
+}
+/* The verifier establishes ownership once. This one deterministic producer
+ * records already checked positions without rebuilding graphs or owner sets. */
+static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan, XrLirDiagnostic *d) {
+    for (uint32_t function = 1; function <= m->function_count; ++function) {
+        const XrLirFunctionData *f = &m->functions[function - 1];
+        if (!lir_plan_function(plan,m,f,function)) {
+            lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"constructed ownership facts are missing");
+            if (d) d->function = function;
+            return XR_LIR_INVALID_ARGUMENT;
+        }
+        if (f->kind == XR_LIR_FUNCTION_EXTERNAL) continue;
+        for (uint32_t p = 0; p < f->parameter_count; ++p)
+            if (lir_managed_value(m,f->parameter_types[p]) && !lir_plan_value(plan,f,
+                XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
+        for (uint32_t b = 0; b < f->block_count; ++b) {
+            const XrLirBlockData *block = &f->blocks[b];
+            for (uint32_t p = 0; p < block->parameter_count; ++p)
+                if (lir_managed_value(m,f->values[block->parameters[p] - 1].type) && !lir_plan_value(plan,f,
+                    XR_LIR_OWNERSHIP_BLOCK_OWNER,function,b + 1,0,block->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
+            for (uint32_t i = 0; i < block->instruction_count; ++i) {
+                const XrLirInstructionView *v = &block->instructions[i].view;
+                XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
+                for (uint32_t a = 0; a < v->operand_count; ++a) {
+                    uint32_t id = v->operands[a];
+                    if (lir_managed_value(m,f->values[id - 1].type) && !(a == 0 && transfer) &&
+                        !lir_plan_value(plan,f,XR_LIR_OWNERSHIP_OPERAND_BORROW,function,b + 1,i + 1,id,a))
+                        return XR_LIR_OUT_OF_MEMORY;
+                }
+                if (transfer && !lir_plan_value(plan,f,transfer,function,b + 1,i + 1,v->operands[0],0))
+                    return XR_LIR_OUT_OF_MEMORY;
+                if (v->result && lir_managed_value(m,v->type) && !lir_plan_value(plan,f,
+                    XR_LIR_OWNERSHIP_RESULT_OWNER,function,b + 1,i + 1,v->result,0)) return XR_LIR_OUT_OF_MEMORY;
+                if (v->op == XR_LIR_CALL_INTRINSIC) {
+                    const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m,v->intrinsic);
+                    if (shape) {
+                        bool constructor = shape->operation == XR_LIR_ARRAY_OP_NEW || shape->operation == XR_LIR_ARRAY_OP_REPEAT;
+                        uint32_t receiver = constructor ? 0 : v->operands[0];
+                        if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_ARRAY_OPERATION,
+                            .function=function,.block=b + 1,.instruction=i + 1,.value=receiver,
+                            .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
+                            .array_element=constructor ? shape->result_element : shape->parameter_elements[0],
+                            .array_operation=shape->operation})) return XR_LIR_OUT_OF_MEMORY;
+                    }
+                }
+            }
+            const XrLirInstructionView *term = lir_terminator(f,b);
+            for (uint32_t e = 0; e < term->edge_count; ++e) {
+                const XrLirEdgeView *edge = &term->edges[e];
+                for (uint32_t a = 0; a < edge->argument_count; ++a) {
+                    uint32_t id = edge->arguments[a];
+                    if (lir_managed_value(m,f->values[id - 1].type) &&
+                        !lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
+                            .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
+                            .argument=a,.edge=e + 1,.target_block=edge->target,
+                            .target_value=f->blocks[edge->target - 1].parameters[a],
+                            .type=f->values[id - 1].type,.array_element=f->values[id - 1].array_element}))
+                        return XR_LIR_OUT_OF_MEMORY;
+                }
+            }
+        }
+    }
+    return XR_LIR_OK;
+}
+
 XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     if (!plan) return;
     xr_free(plan->facts);
@@ -120,7 +194,7 @@ XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     xr_free(plan);
 }
 
-XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *request,
+XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipRequest *request,
     XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
     if (d) memset(d, 0, sizeof(*d));
     const XrLirModule *m = request ? request->module : NULL;
@@ -154,13 +228,22 @@ XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *re
             return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "ownership plan allocation failed");
         }
     }
-    XrLirStatus status = lir_verify(m, d, plan);
+    XrLirStatus status = lir_plan_collect(m, plan, d);
     if (status != XR_LIR_OK) {
         xr_lir_ownership_plan_destroy(plan);
+        if (d && d->status == XR_LIR_OK) lir_status_error(d,status,"ownership event collection failed");
         return status;
     }
     *output = plan;
     return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *request,
+    XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
+    if (d) memset(d,0,sizeof(*d));
+    if (!request || !output || *output || !xr_lir_module_is_readable(request->module))
+        return lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"invalid ownership plan request");
+    XrLirStatus status = lir_verify(request->module,d);
+    return status == XR_LIR_OK ? xr_lir_internal_ownership_collect(request,output,d) : status;
 }
 
 XR_FUNC uint32_t xr_lir_ownership_function_count(const XrLirOwnershipPlan *plan) {
