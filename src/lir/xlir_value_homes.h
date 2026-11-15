@@ -20,6 +20,9 @@ typedef struct XrLirValueHome {
      * common value-layout enumeration and its receiving raw image. */
     uint32_t type, parameter;
     size_t offset, size, first_owner, owner_count;
+    /* Every verified owned result/block owner has disjoint true-empty staging
+     * for whole-value replacement, including a reused call/return landing.
+     * Borrowed formals never reserve it. POD block parameters only stage bytes. */
     size_t temporary_offset, temporary_first_owner;
     size_t first_bytes, byte_count;
 } XrLirValueHome;
