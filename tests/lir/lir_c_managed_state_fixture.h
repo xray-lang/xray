@@ -35,10 +35,10 @@ static XrLirModule *managed_state_fixture(XrLirFunction *root) {
     CHECK(xr_lir_set_state_entry(m, *root) == XR_LIR_OK && xr_lir_define_function(m, *root) == XR_LIR_OK);
     XrLirBlock entry = {0}, loop = {0}, done = {0};
     CHECK(xr_lir_add_block(m, *root, NULL, 0, &entry) == XR_LIR_OK && xr_lir_set_entry(m, *root, entry) == XR_LIR_OK);
-    XrLirValue state; CHECK(xr_lir_function_parameter(m, *root, 0, &state) == XR_LIR_OK);
+    XrLirValue state = {0}; CHECK(xr_lir_function_parameter(m, *root, 0, &state) == XR_LIR_OK);
     managed_state_effect(m, entry, XR_LIR_MODULE_BEGIN, &state, 1, 0);
     XrLirValue refs[3];
-    XrLirLiteral literal; CHECK(xr_lir_add_literal(m, (const uint8_t *)"kept", 4, &literal) == XR_LIR_OK);
+    XrLirLiteral literal = {0}; CHECK(xr_lir_add_literal(m, (const uint8_t *)"kept", 4, &literal) == XR_LIR_OK);
     for (uint32_t slot = 0; slot < 3; ++slot) {
         XrLirValue value = slot < 2 ? managed_state_value(m, entry, XR_LIR_CONST, XR_LIR_I64, NULL, 0, 11 * (slot + 1)) :
             managed_state_value(m, entry, XR_LIR_STRING_LITERAL, XR_LIR_STRING, NULL, 0, literal.id);
@@ -64,7 +64,7 @@ static XrLirModule *managed_state_fixture(XrLirFunction *root) {
     XrLirValue initial[] = {refs[0], refs[1], snapshot, managed_state_value(m, entry, XR_LIR_CONST, XR_LIR_I64, NULL, 0, 5)};
     CHECK(xr_lir_set_terminator(m, entry, &(XrLirInstruction){.op=XR_LIR_BR, .type=XR_LIR_UNIT,
         .edge_count=1, .edges={{loop, initial, 4}}}) == XR_LIR_OK);
-    XrLirValue zero = managed_state_value(m, loop, XR_LIR_CONST, XR_LIR_I64, NULL, 0, 0), condition;
+    XrLirValue zero = managed_state_value(m, loop, XR_LIR_CONST, XR_LIR_I64, NULL, 0, 0), condition = {0};
     XrLirValue comparison[] = {carried[3], zero};
     CHECK(xr_lir_emit_value(m, loop, &(XrLirInstruction){.op=XR_LIR_ICMP, .type=XR_LIR_I1,
         .operands=comparison, .operand_count=2, .predicate=XR_LIR_GT}, &condition) == XR_LIR_OK);
