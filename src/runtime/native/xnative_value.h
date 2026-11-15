@@ -4,88 +4,34 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnative_value.h - One execution owner for native managed values
+ * xnative_value.h - One execution owner for stable managed values
  *
  * KEY CONCEPT:
- *   The caller owns this mutable state across the synchronous execution's
- *   setjmp boundary. Normal return and failure drain the same physical owners.
+ *   The outer caller owns this control object across setjmp. Guest owners live
+ *   only in managed frames or actual State bindings, never a guest-count table.
  */
 #ifndef XNATIVE_VALUE_H
 #define XNATIVE_VALUE_H
-#include "xray_native_runtime.h"
-#include "xir/xxir_value.h"
-
-typedef struct XrtStringOwner XrtStringOwner;
-typedef struct XrtStringLiteral XrtStringLiteral;
-typedef struct XrtArrayOwner XrtArrayOwner;
-typedef struct XrtMapOwner XrtMapOwner;
-typedef struct XrtSetOwner XrtSetOwner;
-typedef struct XrtViewRegistry XrtViewRegistry;
-typedef struct XrtCallableRegistry XrtCallableRegistry;
-typedef struct XrtCallableScope XrtCallableScope;
-typedef struct XrtBoxedOwner XrtBoxedOwner;
-typedef struct XrtBoxedCatalog XrtBoxedCatalog;
+#include "base/xdefs.h"
+#include "shared/xr_value_status.h"
 
 typedef struct XrtValueRoot {
-    XrXirDomain *domain;
-    XrtStringOwner *table;
-    XrtStringLiteral *literals;
-    uint64_t held;
-    uint32_t table_capacity, table_count, literal_capacity, literal_count;
-    uint64_t byte_limit; // Zero selects the ordinary unbounded runtime policy.
-    XrXirTypeArena *types;
-    XrtArrayOwner *arrays;
-    uint32_t array_capacity, array_count;
-    uint64_t array_held;
-    XrXirTypeArena *map_types;
-    XrtMapOwner *maps;
-    uint32_t map_capacity, map_count;
-    uint64_t map_held;
-    XrXirTypeArena *set_types;
-    XrtSetOwner *sets;
-    uint32_t set_capacity,set_count;
-    uint64_t set_held;
-    XrXirValue pending;
-    XrtViewRegistry *views;
-    XrtCallableRegistry *callables;
-    XrtCallableScope *callable_scope;
-    uint64_t callable_identity;
-    XrtBoxedOwner *boxed;
-    XrtBoxedCatalog *boxed_catalogs;
-    void *boxed_scratch;
-    size_t boxed_scratch_size;
+    uint64_t byte_limit; /* Zero selects the ordinary unbounded policy. */
     struct XrtNativeValues *managed;
     bool draining;
 } XrtValueRoot;
+typedef struct XrtValueBinding { XrtValueRoot *root; size_t sources; } XrtValueBinding;
 
-typedef struct XrtValueBinding {
-    XrtValueRoot *root;
-    size_t sources;
-} XrtValueBinding;
-
-/* Binding borrows this thread's active execution and source-map extent.
- * The returned previous binding is restored on every execution exit. */
-XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding);
-XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id);
-XR_FUNC void xrt_value_root_drain(XrtValueRoot *root);
-XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id);
+/* One synchronous thread binding is restored on every normal or failed exit. */
+XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding);
 XR_FUNC XrtValueRoot *xrt_value_root_active(void);
-XR_FUNC XrXirDomain *xrt_value_root_domain(XrtValueRoot *, uint32_t source_id);
-/* The caller owns this mutable root outside its setjmp function. Retirement
- * runs under the execution's cleanup boundary and never invokes guest code. */
+XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id);
+XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus, uint32_t source_id);
+XR_FUNC void xrt_value_root_drain(XrtValueRoot *);
 XR_FUNC void xrt_native_values_drain(XrtValueRoot *);
-/* Only a constructor-produced cold context, with no activation or guest values,
- * is eligible to enter an execution after explicit prebinding setup. */
 XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *);
 static inline bool xrt_value_root_storage_empty(const XrtValueRoot *root) {
-    return !root->domain && !root->table && !root->literals && !root->held &&
-        !root->table_capacity && !root->table_count && !root->literal_capacity && !root->literal_count &&
-        !root->types && !root->arrays && !root->array_capacity && !root->array_count &&
-        !root->array_held && !root->map_types && !root->maps && !root->map_capacity &&
-        !root->map_count && !root->map_held && !root->set_types && !root->sets &&
-        !root->set_capacity && !root->set_count && !root->set_held && !root->views && !root->callables && !root->callable_scope &&
-        !root->pending.type && !root->pending.reserved && !root->pending.payload &&
-        !root->boxed && !root->boxed_catalogs && !root->boxed_scratch && !root->boxed_scratch_size && !root->draining;
+    return root && !root->draining;
 }
 static inline bool xrt_value_root_empty(const XrtValueRoot *root) {
     return xrt_value_root_storage_empty(root) && !root->managed;

@@ -12,10 +12,13 @@
  */
 #include "xnative_execution.h"
 #include "xnative_module_state.h"
+#include "xnative_status.h"
+#include "xnative_values.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
 #include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
+#include "shared/xr_range_core.h"
 #include "xir/xxir_scalar.h"
 #include "xir/xxir_value_internal.h"
 #include <setjmp.h>
@@ -122,21 +125,25 @@ static void state_root_invoke(void *context) {
 XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousStateRoot root,
     void *context, const XrtModuleLayoutSpec *spec) {
     XR_CHECK(root && spec && source_map_valid(map), "A state root requires a prepared map and layout");
+    XrtValueRoot values = {0};
+    XrtBillingOwner *billing = NULL;
     XrtModuleLayout *layout = NULL;
     XrtModuleState *state = NULL;
-    XrtModuleStatus status = xrt_module_layout_new(spec, &layout);
-    if (!status) status = xrt_module_state_new(layout, spec->byte_limit, &state);
+    XrtModuleStatus status = xrt_native_values_prepare(&values, &billing);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_module_layout_new(billing, spec, (XrtManagedLease){0}, &layout);
+    if (status == XRT_MANAGED_OK) status = xrt_module_state_new(layout, billing, &state);
     xrt_module_layout_drop(&layout);
     XrtExecutionFailure failure = {0};
-    if (status) {
+    if (status != XRT_MANAGED_OK) {
         xrt_module_state_drop(&state);
+        xrt_value_root_drain(&values);
         failure.kind = XRT_FAILURE_VALUE;
-        failure.detail.value.status = (XrXirValueStatus)status;
+        failure.detail.value.status = xrt_managed_value_status(status);
         native_failure_exit(map, &failure);
     }
-    XrtValueRoot strings = {0};
     XrtStateInvocation invocation = {root, context, state};
-    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &strings);
+    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values);
     xrt_module_state_drop(&state);
     if (result == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);
 }
@@ -216,7 +223,7 @@ XRAY_API_NORET void xrt_null_unwrap(uint32_t source_id) {
 }
 
 XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32_t source_id) {
-    if (!xr_xir_range_valid(start, end, length)) xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
+    if (!xr_range_valid(start, end, length)) xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
 }
 
 XRAY_API_NORET void xrt_typed_panic(uint32_t code, uint32_t source_id) {

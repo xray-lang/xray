@@ -15,6 +15,7 @@
 #define XXIR_SCALAR_H
 
 #include "../base/xdefs.h"
+#include "../shared/xr_range_core.h"
 #include <string.h>
 
 #include "xxir_value.h"
@@ -76,11 +77,6 @@ XR_FUNC XrXirRunStatus xr_xir_integer_compare(XrXirIntegerFormat format,
     int64_t left, int64_t right, int *result);
 XR_FUNC XrXirRunStatus xr_xir_integer_convert(XrXirIntegerFormat source,
     XrXirIntegerFormat target, int64_t value, int64_t *result);
-
-/* Half-open ranges use direct comparisons so endpoint checks cannot overflow. */
-static inline bool xr_xir_range_valid(int64_t start, int64_t end, int64_t length) {
-    return start >= 0 && start <= end && end <= length;
-}
 
 static inline bool xr_xir_scalar_step(XrXirRunContext *context) {
     if (!context->steps)

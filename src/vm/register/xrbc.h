@@ -20,10 +20,8 @@
 #include "base/xdefs.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
-#include "runtime/native/xnative_callable.h"
-#include "xray_native_array.h"
+#include "xray_native_values.h"
 #include "xray_native_map.h"
-#include "xray_native_set.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -105,6 +103,7 @@
     X(STATE_WRITE, ABK8)                                                                            \
     X(ARRAY_ACCESS, ABX)                                                                            \
     X(AGGREGATE_ACCESS, ABX)                                                                        \
+    X(VALUE_ACCESS, ABX)                                                                            \
     X(VIEW_ACCESS, ABX)
 
 typedef enum {
@@ -261,8 +260,6 @@ typedef struct {
     uint32_t aggregate_result_type;
     const uint32_t *aggregate_arguments;
     size_t aggregate_argument_count;
-    const XrRbcViewAccess *view_accesses;
-    size_t view_access_count;
     /* Signature ordinals plus one, zero for every non-function register.
      * These rows authenticate transports independently of untagged bits. */
     const uint32_t *register_callables;
@@ -276,11 +273,6 @@ typedef struct {
     bool state_capture;
     const XrRbcEnvironment *environments;
     uint32_t environment_count, environment_size;
-    /* Exact canonical identities for boxed registers and the ordinary result.
-     * Zero denotes every register outside this managed physical family. */
-    const uint32_t *register_boxed_types;
-    size_t register_boxed_type_count;
-    uint32_t result_boxed_type;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -344,9 +336,9 @@ typedef struct {
     // Immutable bytes share the same borrowed lifetime as code/descriptors.
     const XrRbcLiteral *literals;
     size_t literal_count;
-    // One immutable owned layout supplies this module's capability identity.
-    // Preparation retains it separately from code. Each execution owns a distinct state.
-    XrtModuleLayout *state_layout;
+    // Raw physical descriptions share the code lifetime. Preparation receives
+    // independent billed plans and storage; code never owns a runtime Layout.
+    const XrtModuleLayoutSpec *state_spec;
     uint32_t state_entry;
     // Physical aggregate shapes have module-local ordinals. Programs own this
     // projection; externally supplied modules borrow it with their code.
@@ -355,16 +347,8 @@ typedef struct {
     const XrRbcCallableType *callable_types;
     size_t callable_type_count;
     // An authentic code owner extends code bytes and immutable descriptors,
-    // excluding state_layout. An empty lease preserves borrowed code-buffer lifetimes.
+    // including raw state_spec. An empty lease preserves borrowed code-buffer lifetimes.
     XrRbcCodeLease code_lease;
-    // Owned closures use a canonical receiving pool and dense authenticated
-    // target directory. Every target is an actual function in this module.
-    XrXirTypeArena *closure_types;
-    const XrtCallableEntry *closure_entries;
-    const uint32_t *closure_targets;
-    size_t closure_entry_count;
-    const XrXirType *closure_signatures;
-    size_t closure_signature_count;
     const uint32_t *callable_results;
     size_t callable_result_count;
     // A scope cap projects into this owned directory, outside scalar registers.
@@ -439,10 +423,10 @@ XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     XrPodType *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *,
     uint32_t ordinal, XrPodType *type);
-XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
-XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
-XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtArray **borrowed);
-XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtArray **empty);
+XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtManagedHeader **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtManagedHeader **output);
+XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtManagedHeader **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtManagedHeader **empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,

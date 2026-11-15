@@ -45,11 +45,11 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
     }
     case XR_RBC_STATE_READ:
         xr_rbc_entry_read(state, b);
-        writes = c != XRT_MODULE_UNIT;
+        writes = c != XRT_VALUE_UNIT;
         break;
     case XR_RBC_STATE_WRITE:
         xr_rbc_entry_read(state, a);
-        if (c != XRT_MODULE_UNIT) xr_rbc_entry_read(state, b);
+        if (c != XRT_VALUE_UNIT) xr_rbc_entry_read(state, b);
         break;
     case XR_RBC_LOADK: case XR_RBC_LOADI: case XR_RBC_STRING_LITERAL: case XR_RBC_RELOAD:
         writes = true;

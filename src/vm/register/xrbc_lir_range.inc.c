@@ -4,22 +4,17 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrbc_lir_string_library.inc.c - Typed String binding locations
+ * xrbc_lir_range.inc.c - Range validation over ordinary physical locations
  */
-static bool rbc_lir_string_library(RbcLirCompiler *c, const XrLirInstructionView *v) {
+static bool rbc_lir_range_emit(RbcLirCompiler *c, const XrLirInstructionView *v) {
     if (c->aggregate_operand_count > UINT32_MAX - v->operand_count)
-        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "String operands exceed bytecode indices");
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "Range operands exceed bytecode indices");
     void *storage = c->aggregate_operands;
     if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
         c->aggregate_operand_count + v->operand_count, sizeof(*c->aggregate_operands))) return false;
     c->aggregate_operands = storage;
-    XrRbcAggregateAccess access = {.operation=XR_RBC_STRING_LIBRARY,
-        .first=(uint32_t)c->aggregate_operand_count, .count=v->operand_count,
-        .slot=xr_lir_string_role(c->input, v)};
-    if (xr_lir_range_point(c->input, v)) {
-        access.operation = XR_RBC_RANGE_CHECK;
-        access.slot = 0;
-    }
+    XrRbcAggregateAccess access = {.operation=XR_RBC_RANGE_CHECK,
+        .first=(uint32_t)c->aggregate_operand_count, .count=v->operand_count};
     for (uint32_t n = 0; n < v->operand_count; ++n)
         c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, v->operands[n]);
     if (v->result) access.result = rbc_lir_array_location(c, v->result);

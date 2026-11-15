@@ -23,7 +23,6 @@ static void c_prepare_types(LirC *c) {
         c_error(c, XR_LIR_C_INVALID_LIR, "C emission requires a finished physical type pool");
         return;
     }
-    c->state_type_base = LIR_STATE_CONSTRUCTED_BASE;
     uint32_t count = xr_lir_constructed_type_count(module);
     if (!count) return;
     if (sizeof(*c->constructed_types) > SIZE_MAX / count) {

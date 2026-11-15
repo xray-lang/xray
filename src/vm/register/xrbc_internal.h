@@ -10,19 +10,6 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
-#include "xir/xxir_types.h"
-
-static inline bool rbc_captured_map_type(const XrRbcModule *module, XrXirType type) {
-    if (!module->closure_types || !xrt_callable_map_catalog(module->closure_types)) return false;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(module->closure_types);
-    const XrXirTypeNode *node = xr_xir_type_node(types, xr_xir_cell_element(types, type));
-    return node && node->kind == XR_XIR_TYPE_MAP && node->element == XR_XIR_STRING && node->result == XR_XIR_I64;
-}
-static inline bool rbc_captured_cell_type(const XrRbcModule *module, XrXirType type) {
-    return module->closure_types && (xr_xir_cell_element(xr_xir_compile_type_arena_types(module->closure_types),
-        type) == XR_XIR_I64 || rbc_captured_map_type(module, type));
-}
-
 static inline bool xr_rbc_aggregate_return_word(const XrRbcAggregateAccess *accesses,
     size_t count, uint32_t word) {
     return (word & 255) == XR_RBC_AGGREGATE_ACCESS && accesses && (word >> 16) < count &&
@@ -109,7 +96,7 @@ static inline uint32_t xr_rbc_array_family(XrRbcRegisterKind kind) {
     return XR_RBC_ARRAY_FAMILY_COUNT;
 }
 static inline bool xr_rbc_state_array(uint32_t kind) {
-    return kind >= XRT_MODULE_ARRAY_I64 && kind <= XRT_MODULE_ARRAY_U64;
+    return kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64;
 }
 static inline XrRbcRegisterKind xr_rbc_array_ref_at(uint32_t family) {
     static const XrRbcRegisterKind kinds[] = {

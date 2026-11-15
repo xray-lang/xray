@@ -4,45 +4,30 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_state_projection.h - Physical module catalog projections
+ * xlir_state_projection.h - One physical module-slot projection for C and RBC
+ *
+ * KEY CONCEPT:
+ *   Logical slot ordinals survive while their storage uses the same receiving
+ *   value plans and one-based image ids as function homes and typed C values.
  */
 #ifndef XLIR_STATE_PROJECTION_H
 #define XLIR_STATE_PROJECTION_H
-#include "xlir_pod.h"
 #include "xlir_state.h"
-#include "xlir_callable.h"
-#include "shared/xr_pod_state.h"
+#include "xlir_value_layout.h"
+#include "xray_native_state.h"
 
-static inline XrtModuleTypeKind lir_state_payload_kind(XrLirType type, XrLirType element) {
-    if (type == XR_LIR_VIEW_CELL) return XRT_MODULE_CELL_ARRAY_I64;
-    if (type == XR_LIR_STRING) return XRT_MODULE_STRING;
-    if(type==XR_LIR_SET_I64)return XRT_MODULE_SET_I64;
-    if (type == XR_LIR_MAP_STRING_I64) return XRT_MODULE_MAP_STRING_I64;
-    if (type == XR_LIR_ARRAY) {
-        switch (element) {
-        case XR_LIR_I64: return XRT_MODULE_ARRAY_I64;
-        case XR_LIR_STRING: return XRT_MODULE_ARRAY_STRING;
-        case XR_LIR_U8: return XRT_MODULE_ARRAY_U8;
-        case XR_LIR_U64: return XRT_MODULE_ARRAY_U64;
-        default: return XRT_MODULE_TYPE_INVALID;
-        }
-    }
-    if (type == XR_LIR_UNIT || type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64)
-        return xr_pod_module_kind(lir_pod_scalar(type));
-    return XRT_MODULE_TYPE_INVALID;
-}
-
-enum { LIR_STATE_CONSTRUCTED_BASE = XRT_MODULE_FIXED_U8 - XRT_MODULE_UNIT + 1 };
-static inline bool lir_state_has_view_cells(const XrLirStateLayout *layout) {
-    for (uint32_t s = 0; s < layout->slot_count; ++s)
-        if (layout->slots[s].payload == XR_LIR_VIEW_CELL) return true;
-    return false;
-}
-static inline bool lir_state_has_callables(const XrLirModule *module, const XrLirStateLayout *layout) {
-    for (uint32_t s = 0; s < layout->slot_count; ++s) {
-        XrLirCallableType signature;
-        if (xr_lir_callable_type_view(module, layout->slots[s].payload, &signature) == XR_LIR_OK) return true;
-    }
-    return false;
-}
+typedef struct XrLirStateProjection XrLirStateProjection;
+/* The module is already admitted. Its legacy transport offsets are not the
+ * physical layout. The set supplies all field layouts and ids; this producer
+ * only aligns complete State slots. The raw image must be serialized from that
+ * exact set and stay alive through the projection's final borrow. CodeImage
+ * owns both raw owners, never the set, runtime plans, Layout or State. C emits
+ * both static descriptors from these same facts. All copied slot/module rows
+ * and dependencies use one billed allocation and a real provider lease.
+ * No module or plan pointer survives. An absent State succeeds without an
+ * allocation and leaves *empty NULL. Fn/Cell/View slots remain unsupported. */
+XR_FUNC XrLirValueLayoutStatus xr_lir_state_projection_create(const XrLirModule *,
+    const XrLirValueLayouts *, const XrtValueImage *, XrtBillingOwner *, XrLirStateProjection **empty);
+XR_FUNC const XrtModuleLayoutSpec *xr_lir_state_projection_view(const XrLirStateProjection *);
+XR_FUNC void xr_lir_state_projection_destroy(XrLirStateProjection *);
 #endif // XLIR_STATE_PROJECTION_H

@@ -4,601 +4,478 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnative_module_state.c - Independently owned typed module values
+ * xnative_module_state.c - Stable fixed-value bindings under one execution owner
  *
  * KEY CONCEPT:
- *   A state retains immutable type operations and owns successful copies.
- *   Empty scratch makes replacement atomic even when reference copying fails.
+ *   Value plans describe actual inline bytes and real Header owners. A complete
+ *   replacement is published before any previous owner can run its destructor.
  */
 #include "xnative_module_state.h"
-#include "xnative_string.h"
-#include "xnative_array.h"
-#include "xnative_map.h"
-#include "xnative_set.h"
-#include "xnative_module_cell.h"
-#include "xnative_callable.h"
-#include "xnative_boxed.h"
-#include "xnative_value.h"
-#include "xir/xxir_type_arena_internal.h"
-#include "xir/xxir_types.h"
-#include "xir/xxir_value_internal.h"
+#include "xray_native_values.h"
 #include "base/xchecks.h"
-#include "base/xmalloc.h"
-#include "xray_native_pod.h"
+#include "base/xsigned_rc.h"
+#include "base/xmax_align.h"
+#include <stdalign.h>
 #include <stdatomic.h>
 #include <string.h>
 
-typedef struct XrtModuleType XrtModuleType;
-typedef XrXirValueStatus (*XrtModuleCopy)(const XrtModuleType *, const void *, void *);
-typedef void (*XrtModuleDrop)(const XrtModuleType *, void *);
-struct XrtModuleType {
-    XrtModuleTypeKind kind;
-    uint32_t size, alignment;
-    XrtModuleCopy copy;
-    XrtModuleDrop drop;
-    const XrXirTypeArena *arena;
-    XrXirType callable;
-    const XrtModuleType *element;
-};
+typedef struct ModuleType {
+    const XrtValuePlan *plan;
+    XrtValuePlanSpec spec;
+    size_t depth;
+    bool supported;
+} ModuleType;
 struct XrtModuleLayout {
-    atomic_size_t references;
-    XrtModuleLayoutSpec view;
-    XrtModuleType *types;
+    _Atomic(int32_t) references;
+    XrtBillingOwner *billing;
+    size_t bytes, scratch_size, max_leaves, depth;
+    XrtValueImagePlans *plans;
+    XrtModuleLayoutView view;
+    ModuleType *types;
     uint32_t *slot_counts;
-    uint64_t bytes;
-    uint32_t scratch_size;
-    XrXirTypeArena *array_types;
-    XrXirTypeArena *callable_types;
-    XrXirTypeArena *map_types;
-    XrXirTypeArena *set_types;
 };
 enum { MODULE_EMPTY, MODULE_INITIALIZING, MODULE_READY };
 enum { SLOT_CONSTRUCTED = 1u, SLOT_PUBLISHED = 2u };
-struct XrtModuleRef {
-    XrtModuleState *state;
-    uint32_t slot;
-    uint8_t required_flags;
-};
+struct XrtModuleRef { XrtModuleState *state; uint32_t slot; uint8_t required_flags; };
+typedef struct ModuleValidation {
+    XrtValuePlanSpec spec;
+    uint8_t *value;
+    size_t next;
+} ModuleValidation;
 struct XrtModuleState {
     XrtModuleLayout *layout;
+    XrtBillingOwner *billing;
+    size_t bytes;
     uint8_t *payload, *scratch, *flags, *modules;
     uint32_t *construction, *publication, *remaining;
     XrtModuleRef *initializers, *published;
+    ModuleValidation *validation;
+    XrtExternalOwner *destinations, *sources;
+    XrtPlaceEdge *edges;
+    XrtManagedRoot *temporary_root;
+    XrtManagedFrame *temporary_frame;
     uint32_t construction_count, publication_count;
-    uint32_t allocation_alignment;
-    uint64_t bytes, byte_limit;
-    uint8_t unit;
+    bool busy, scratch_busy;
 };
 
-static XrXirValueStatus module_scalar_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!type->size) return XR_XIR_VALUE_OK;
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (type->kind == XRT_MODULE_BOOL && *(const uint8_t *)source > 1) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (type->kind == XRT_MODULE_RUNE) {
-        int64_t rune;
-        memcpy(&rune, source, sizeof(rune));
-        if (!xr_xir_rune_payload_valid(rune)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    }
-    memcpy(empty, source, type->size);
-    return XR_XIR_VALUE_OK;
-}
-
-static void module_scalar_drop(const XrtModuleType *type, void *value) {
-    if (type->size) memset(value, 0, type->size);
-}
-
-static XrXirValueStatus module_string_copy(const XrtModuleType *type, const void *source, void *empty) {
-    (void)type;
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtString *string;
-    memcpy(&string, source, sizeof(string));
-    XrtString *owned = NULL;
-    XrXirValueStatus status = xrt_string_owned_copy(string, &owned);
-    if (status == XR_XIR_VALUE_OK) memcpy(empty, &owned, sizeof(owned));
-    return status;
-}
-
-static void module_string_drop(const XrtModuleType *type, void *value) {
-    (void)type;
-    XrtString *owned;
-    memcpy(&owned, value, sizeof(owned));
-    memset(value, 0, sizeof(owned));
-    xrt_string_owned_drop(&owned);
-}
-
-static XrXirValueStatus module_array_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtArray *array = NULL;
-    memcpy(&array, source, sizeof(array));
-    XrtArray *owned = NULL;
-    XrtArrayElement element;
-    switch (type->kind) {
-    case XRT_MODULE_ARRAY_I64: element = XRT_ARRAY_I64; break;
-    case XRT_MODULE_ARRAY_STRING: element = XRT_ARRAY_STRING; break;
-    case XRT_MODULE_ARRAY_U8: element = XRT_ARRAY_U8; break;
-    case XRT_MODULE_ARRAY_U64: element = XRT_ARRAY_U64; break;
-    default: return XR_XIR_VALUE_BAD_ARGUMENT;
-    }
-    XrXirValueStatus status = xrt_array_owned_copy(array, type->arena, element, &owned);
-    if (status == XR_XIR_VALUE_OK) memcpy(empty, &owned, sizeof(owned));
-    return status;
-}
-static void module_array_drop(const XrtModuleType *type, void *value) {
-    (void)type;
-    XrtArray *array = NULL;
-    memcpy(&array, value, sizeof(array));
-    memset(value, 0, sizeof(array));
-    xrt_array_owned_drop(&array);
-}
-
-static XrXirValueStatus module_nullable_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtModuleType *current = type;
-    const uint8_t *input = source;
-    uint8_t *output = empty;
-    memset(empty, 0, type->size);
-    while (current->kind == XRT_MODULE_NULLABLE) {
-        if (*input > 1) { memset(empty, 0, type->size); return XR_XIR_VALUE_BAD_ARGUMENT; }
-        if (!*input) return XR_XIR_VALUE_OK;
-        *output = 1;
-        input += current->element->alignment;
-        output += current->element->alignment;
-        current = current->element;
-    }
-    XrXirValueStatus status = current->copy(current, input, output);
-    if (status != XR_XIR_VALUE_OK) memset(empty, 0, type->size);
-    return status;
-}
-
-static XrXirValueStatus module_cell_copy(const XrtModuleType *, const void *, void *);
-static void module_cell_drop(const XrtModuleType *, void *);
-
-static bool module_callable_charge(void *owner, uint64_t amount) {
-    uint64_t *remaining = owner;
-    if (amount > *remaining) return false;
-    *remaining -= amount;
+static bool module_extent(size_t *bytes, size_t count, size_t stride) {
+    if (stride && count > (SIZE_MAX - *bytes) / stride) return false;
+    *bytes += count * stride;
     return true;
 }
-static XrXirValueStatus module_callable_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XirObject *object = NULL;
-    memcpy(&object, source, sizeof(object));
-    if (!object) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValue value = {.type=(uint32_t)object->type, .payload=(int64_t)(intptr_t)object};
-    uint64_t work = UINT64_MAX;
-    if (xr_xir_value_arena(&value) != type->arena ||
-        !xr_xir_value_argument(&value, type->arena, (XrXirType)value.type) ||
-        xr_xir_callable_weakening_admit(xr_xir_compile_type_arena_types(type->arena),
-            (XrXirType)value.type, type->callable, &work, module_callable_charge) != XR_XIR_OK ||
-        !xr_xir_function_binding(&value)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValue received = {0};
-    XrXirValueStatus status = xr_xir_value_copy(&value, &received);
-    if (status == XR_XIR_VALUE_OK) memcpy(empty, &object, sizeof(object));
-    return status;
+static bool module_align(size_t *bytes, size_t alignment) {
+    if (!alignment || (alignment & (alignment - 1)) || *bytes > SIZE_MAX - (alignment - 1)) return false;
+    *bytes = (*bytes + alignment - 1) & ~(alignment - 1);
+    return true;
 }
-static void module_callable_drop(const XrtModuleType *type, void *storage) {
-    (void)type;
-    XirObject *object = NULL;
-    memcpy(&object, storage, sizeof(object));
-    memset(storage, 0, sizeof(object));
-    if (object) {
-        XrXirValue value = {.type=(uint32_t)object->type, .payload=(int64_t)(intptr_t)object};
-        xr_xir_value_drop(&value);
-    }
+static bool module_part(uint8_t *base, size_t *offset, size_t count, size_t stride,
+    size_t alignment, void **output) {
+    if (!module_align(offset, alignment)) return false;
+    if (base && output) *output = base + *offset;
+    return module_extent(offset, count, stride);
 }
-
-static XrXirValueStatus module_set_copy(const XrtModuleType *type,const void *source,void *empty) {
-    if(!source)return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtSet *set=NULL;XrtSet *copy=NULL;memcpy(&set,source,sizeof(set));
-    XrXirValueStatus status=xrt_set_owned_copy(set,type->arena,&copy);
-    if(status==XR_XIR_VALUE_OK)memcpy(empty,&copy,sizeof(copy));return status;
-}
-static void module_set_drop(const XrtModuleType *type,void *storage) {
-    (void)type;XrtSet *set=NULL;memcpy(&set,storage,sizeof(set));memset(storage,0,sizeof(set));xrt_set_owned_drop(&set);
-}
-static XrXirValueStatus module_map_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtMap *map = NULL; XrtMap *copy = NULL;
-    memcpy(&map, source, sizeof(map));
-    XrXirValueStatus status = xrt_map_owned_copy(map, type->arena, &copy);
-    if (status == XR_XIR_VALUE_OK) memcpy(empty, &copy, sizeof(copy));
-    return status;
-}
-static void module_map_drop(const XrtModuleType *type, void *storage) {
-    (void)type;
-    XrtMap *map = NULL;
-    memcpy(&map, storage, sizeof(map)); memset(storage, 0, sizeof(map));
-    xrt_map_owned_drop(&map);
-}
-static XrXirValueStatus module_boxed_copy(const XrtModuleType *type, const void *source, void *empty) {
-    if (!source) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrtBoxed *value = NULL, *received = NULL;
-    memcpy(&value, source, sizeof(value));
-    XrXirValueStatus status = xrt_boxed_owned_copy(value, type->arena, type->callable, &received);
-    if (status == XR_XIR_VALUE_OK) memcpy(empty, &received, sizeof(received));
-    return status;
-}
-static void module_boxed_drop(const XrtModuleType *type, void *storage) {
-    (void)type;
-    XrtBoxed *value = NULL;
-    memcpy(&value, storage, sizeof(value));
-    memset(storage, 0, sizeof(value));
-    xrt_boxed_owned_drop(&value);
-}
-static bool module_type(const XrtModuleLayoutSpec *layout, uint32_t ordinal, XrtModuleType *types) {
-    const XrtModuleTypeSpec *spec = &layout->types[ordinal];
-    XrtModuleType *type = &types[ordinal];
-    if (spec->kind != XRT_MODULE_FIXED_U8 && spec->kind != XRT_MODULE_NULLABLE &&
-        spec->kind != XRT_MODULE_CALLABLE && spec->kind != XRT_MODULE_TUPLE_I64 && spec->kind != XRT_MODULE_BOXED && spec->argument) return false;
-    XrtModuleTypeKind kind = spec->kind;
-    *type = (XrtModuleType){.kind=kind, .copy=module_scalar_copy, .drop=module_scalar_drop};
-    switch (kind) {
-    case XRT_MODULE_BOXED:
-        if (spec->argument >= layout->callable_type_count ||
-            (layout->callable_types[spec->argument].kind != XRT_CALLABLE_RECORD &&
-             layout->callable_types[spec->argument].kind != XRT_CALLABLE_NULLABLE)) return false;
-        type->size = sizeof(void *); type->alignment = _Alignof(void *);
-        type->copy = module_boxed_copy; type->drop = module_boxed_drop;
-        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + spec->argument);
-        return true;
-    case XRT_MODULE_TUPLE_I64:
-        if (!spec->argument || spec->argument > UINT32_MAX / 8) return false;
-        type->size = spec->argument * 8; type->alignment = 8; return true;
-    case XRT_MODULE_UNIT: type->alignment = 1; return true;
-    case XRT_MODULE_BOOL: case XRT_MODULE_I8: case XRT_MODULE_U8:
-        type->size = type->alignment = 1; return true;
-    case XRT_MODULE_I16: case XRT_MODULE_U16: type->size = type->alignment = 2; return true;
-    case XRT_MODULE_I32: case XRT_MODULE_U32: case XRT_MODULE_F32:
-        type->size = type->alignment = 4; return true;
-    case XRT_MODULE_RUNE: case XRT_MODULE_I64: case XRT_MODULE_U64: case XRT_MODULE_F64:
-        type->size = type->alignment = 8; return true;
-    case XRT_MODULE_STRING:
-        type->size = sizeof(XrtString *); type->alignment = _Alignof(XrtString *);
-        type->copy = module_string_copy; type->drop = module_string_drop; return true;
-    case XRT_MODULE_ARRAY_I64: case XRT_MODULE_ARRAY_STRING:
-    case XRT_MODULE_ARRAY_U8: case XRT_MODULE_ARRAY_U64:
-        type->size = sizeof(XrtArray *); type->alignment = _Alignof(XrtArray *);
-        type->copy = module_array_copy; type->drop = module_array_drop; return true;
-    case XRT_MODULE_SET_I64:
-        type->size=sizeof(XrtSet *);type->alignment=_Alignof(XrtSet *);type->copy=module_set_copy;type->drop=module_set_drop;return true;
-    case XRT_MODULE_MAP_STRING_I64:
-        type->size = sizeof(XrtMap *); type->alignment = _Alignof(XrtMap *);
-        type->copy = module_map_copy; type->drop = module_map_drop; return true;
-    case XRT_MODULE_NULLABLE: {
-        if (spec->argument >= ordinal) return false;
-        const XrtModuleType *element = &types[spec->argument];
-        if (element->copy != module_scalar_copy && element->copy != module_nullable_copy) return false;
-        XrPodLayout payload = {element->size, element->alignment, 0}, shape;
-        if (!xr_pod_nullable_layout(payload, &shape)) return false;
-        type->size = shape.size; type->alignment = shape.alignment;
-        type->copy = module_nullable_copy; type->element = element;
-        return true;
-    }
-    case XRT_MODULE_CELL_ARRAY_I64:
-        type->size = sizeof(XrXirValue); type->alignment = _Alignof(XrXirValue);
-        type->copy = module_cell_copy; type->drop = module_cell_drop;
-        return true;
-    case XRT_MODULE_CALLABLE:
-        if (spec->argument >= layout->callable_type_count ||
-            layout->callable_types[spec->argument].kind != XRT_CALLABLE_SIGNATURE) return false;
-        type->size = sizeof(void *); type->alignment = _Alignof(void *);
-        type->copy = module_callable_copy; type->drop = module_callable_drop;
-        type->callable = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + XRT_CALLABLE_PREFIX_COUNT + spec->argument);
-        return true;
-    case XRT_MODULE_FIXED_U8:
-        if (!spec->argument || spec->argument > 65535) return false;
-        type->size = spec->argument;
-        type->alignment = 1;
-        return true;
-    default: return false;
-    }
-}
-
-static bool module_charge(uint64_t *bytes, uint64_t count, size_t size) {
-    if (size && count > (UINT64_MAX - *bytes) / size) return false;
-    *bytes += count * size;
-    return *bytes <= SIZE_MAX;
-}
-
-static void *module_copy_array(const void *source, uint32_t count, size_t size) {
-    if (!count) return NULL;
-    void *copy = xr_malloc((size_t)count * size);
-    if (copy) memcpy(copy, source, (size_t)count * size);
-    return copy;
-}
-
 #include "xnative_module_layout.inc.c"
 
+static const ModuleType *module_slot_type(const XrtModuleState *state, uint32_t slot) {
+    return &state->layout->types[state->layout->view.slots[slot].type - 1];
+}
 static void *module_payload(const XrtModuleState *state, uint32_t slot) {
-    uint64_t offset = state->layout->view.slots[slot].offset;
-    return state->payload ? state->payload + (size_t)offset : (void *)&state->unit;
+    return state->payload + state->layout->view.slots[slot].offset;
 }
-XR_FUNC bool xrt_module_callable_signature(const XrtModuleLayout *layout, uint32_t type,
-    const XrXirTypeArena **arena, XrXirType *signature) {
-    if (!layout || type >= layout->view.type_count || !arena || !signature ||
-        layout->types[type].kind != XRT_MODULE_CALLABLE) return false;
-    *arena = layout->types[type].arena;
-    *signature = layout->types[type].callable;
-    return true;
-}
-XR_FUNC XrXirTypeArena *xrt_module_callable_catalog(const XrtModuleLayout *layout) {
-    return layout ? layout->callable_types : NULL;
-}
-XR_FUNC XrXirTypeArena *xrt_module_state_callables(const XrtModuleState *state, const XrtCallableImage *image) {
-    if (!xrt_callable_image_valid(image) || !state) return NULL;
-    const XrtCallableImage received={.metadata=XRT_CALLABLE_IMAGE_HEADER,
-        .types=state->layout->view.callable_types,.type_count=state->layout->view.callable_type_count};
-    if (!xrt_callable_specs_equal(image,&received)) return NULL;
-    return state->layout->callable_types;
-}
-
-static const XrtModuleType *module_slot_type(const XrtModuleState *state, uint32_t slot) {
-    return &state->layout->types[state->layout->view.slots[slot].type];
-}
-
 static bool module_reference_valid(const XrtModuleRef *reference) {
-    if (!reference || !reference->state || !reference->state->layout) return false;
+    if (!reference || !reference->state || !reference->state->layout ||
+        reference->slot >= reference->state->layout->view.slot_count) return false;
     XrtModuleState *state = reference->state;
-    if (reference->slot >= state->layout->view.slot_count) return false;
     return (reference == &state->initializers[reference->slot] && reference->required_flags == SLOT_CONSTRUCTED) ||
         (reference == &state->published[reference->slot] && reference->required_flags == SLOT_PUBLISHED);
 }
+static bool module_reference_ready(const XrtModuleRef *reference) {
+    return module_reference_valid(reference) &&
+        (reference->state->flags[reference->slot] & reference->required_flags) == reference->required_flags;
+}
+static XrtManagedStatus module_binding_guard(void *context, XrtPlaceAction action) {
+    const XrtModuleRef *reference = context;
+    if (!module_reference_ready(reference) || action == XRT_PLACE_MOVE_FROM) return XRT_MANAGED_ARGUMENT;
+    if (action == XRT_PLACE_REPLACE &&
+        !(reference->state->layout->view.slots[reference->slot].flags & XRT_MODULE_SLOT_MUTABLE))
+        return XRT_MANAGED_ARGUMENT;
+    return XRT_MANAGED_OK;
+}
+XRAY_API XrtModuleStatus xrt_module_external_owner(const XrtModuleRef *reference, size_t leaf,
+    XrtExternalOwner *out) {
+    if (!out || !module_reference_valid(reference)) return XRT_MANAGED_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    const XrtValuePlanSpec *spec = &module_slot_type(state, reference->slot)->spec;
+    if (leaf >= spec->owned_count) return XRT_MANAGED_ARGUMENT;
+    *out = (XrtExternalOwner){(XrtManagedHeader **)((uint8_t *)module_payload(state, reference->slot) +
+        spec->owned_offsets[leaf]), &state->busy, module_binding_guard, (void *)reference};
+    return XRT_MANAGED_OK;
+}
 
+/* Traverse retained plans with a bounded, preallocated stack. No recursive
+ * callbacks, compiler pool queries or independent physical layout are needed. */
+static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType *type, void *value) {
+    size_t depth = 1;
+    state->validation[0] = (ModuleValidation){type->spec, value, 0};
+    while (depth) {
+        ModuleValidation *top = &state->validation[depth - 1];
+        XrtValuePlanSpec *spec = &top->spec;
+        const XrtValuePlan *child = NULL;
+        uint8_t *payload = NULL;
+        if (spec->kind == XRT_VALUE_RECORD) {
+            if (top->next < spec->field_count) {
+                const XrtValueSlotSpec *field = &spec->fields[top->next++];
+                child = field->type; payload = top->value + field->offset;
+            }
+        } else if (spec->kind == XRT_VALUE_NULLABLE && !top->next++) {
+            uint8_t tag = top->value[spec->nullable.tag_offset];
+            if (tag > 1) return XRT_MANAGED_ARGUMENT;
+            if (tag) { child = spec->nullable.element; payload = top->value + spec->nullable.payload_offset; }
+            else {
+                for (size_t i = 0; i < spec->owned_count; ++i) {
+                    XrtManagedHeader *owner;
+                    memcpy(&owner, top->value + spec->owned_offsets[i], sizeof(owner));
+                    if (owner) return XRT_MANAGED_ARGUMENT;
+                }
+                memset(top->value, 0, spec->size);
+                for (size_t i = 0; i < spec->owned_count; ++i)
+                    *(XrtManagedHeader **)(top->value + spec->owned_offsets[i]) = NULL;
+            }
+        } else if (spec->kind == XRT_VALUE_BOOL && *top->value > 1) return XRT_MANAGED_ARGUMENT;
+        else if (spec->kind == XRT_VALUE_RUNE) {
+            int64_t rune; memcpy(&rune, top->value, sizeof(rune));
+            if (rune < 0 || rune > 0x10ffff || (rune >= 0xd800 && rune <= 0xdfff)) return XRT_MANAGED_ARGUMENT;
+        } else if (spec->kind >= XRT_VALUE_STRING && spec->kind <= XRT_VALUE_MAP_STRING_I64) {
+            XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
+            if (!owner) return XRT_MANAGED_ARGUMENT;
+        }
+        if (child) {
+            XR_CHECK(depth < state->layout->depth, "the earlier-row type DAG bounds validation depth");
+            ModuleValidation *next = &state->validation[depth++];
+            next->value = payload; next->next = 0;
+            XR_CHECK(xrt_value_plan_view(child, &next->spec) == XRT_MANAGED_OK,
+                "the retained module layout owns every child plan");
+        } else --depth;
+    }
+    return XRT_MANAGED_OK;
+}
+static bool module_overlaps(const void *a, size_t as, const void *b, size_t bs) {
+    uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
+    return (x <= y ? y - x < as : x - y < bs) && as && bs;
+}
+static XrtManagedStatus module_prepare_copy(XrtModuleState *state, const ModuleType *type, const void *value) {
+    const XrtValuePlanSpec *spec = &type->spec;
+    if ((!value && spec->size) || (value && (uintptr_t)value % spec->alignment) ||
+        module_overlaps(value, spec->size, state->scratch, state->layout->scratch_size)) return XRT_MANAGED_ARGUMENT;
+    if (spec->size) memcpy(state->scratch, value, spec->size);
+    XrtManagedStatus status = module_validate(state, type, state->scratch);
+    size_t retained = 0;
+    if (status == XRT_MANAGED_OK) {
+        for (; retained < spec->owned_count; ++retained) {
+            XrtManagedHeader *owner;
+            memcpy(&owner, state->scratch + spec->owned_offsets[retained], sizeof(owner));
+            if (owner && !xrt_managed_retain(owner)) { status = XRT_MANAGED_REFCOUNT; break; }
+        }
+    }
+    if (status != XRT_MANAGED_OK) {
+        for (size_t i = 0; i < retained; ++i) {
+            XrtManagedHeader *owner;
+            memcpy(&owner, state->scratch + spec->owned_offsets[i], sizeof(owner));
+            xrt_managed_drop(owner);
+        }
+        xrt_value_zero(type->plan, state->scratch);
+    }
+    return status;
+}
+static void module_nonowners(const XrtValuePlanSpec *spec, uint8_t *to, const uint8_t *from) {
+    size_t previous = 0;
+    for (size_t i = 0; i <= spec->owned_count; ++i) {
+        size_t end = i == spec->owned_count ? spec->size : spec->owned_offsets[i];
+        if (from) memcpy(to + previous, from + previous, end - previous);
+        else memset(to + previous, 0, end - previous);
+        previous = end + sizeof(XrtManagedHeader *);
+    }
+}
+typedef struct ModulePublication { XrtModuleState *state; const ModuleType *type; void *destination; } ModulePublication;
+static void module_publish_bytes(void *context) {
+    ModulePublication *publication = context;
+    module_nonowners(&publication->type->spec, publication->destination, publication->state->scratch);
+    module_nonowners(&publication->type->spec, publication->state->scratch, NULL);
+}
+static XrtManagedStatus module_scratch_guard(void *context, XrtPlaceAction action) {
+    (void)context;
+    return action == XRT_PLACE_MOVE_FROM ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
+XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void *value) {
+    if (!module_reference_ready(reference) || reference->state->busy ||
+        !(reference->state->layout->view.slots[reference->slot].flags & XRT_MODULE_SLOT_MUTABLE)) return XRT_MANAGED_ARGUMENT;
+    XrtModuleState *state = reference->state;
+    const ModuleType *type = module_slot_type(state, reference->slot);
+    state->busy = true;
+    XrtManagedStatus status = module_prepare_copy(state, type, value);
+    state->busy = false;
+    if (status != XRT_MANAGED_OK) return status;
+    for (size_t i = 0; i < type->spec.owned_count; ++i) {
+        xrt_module_external_owner(reference, i, &state->destinations[i]);
+        state->sources[i] = (XrtExternalOwner){(XrtManagedHeader **)(state->scratch + type->spec.owned_offsets[i]),
+            &state->scratch_busy, module_scratch_guard, state};
+        state->edges[i] = (XrtPlaceEdge){.destination={.external=&state->destinations[i], .nulls=XRT_PLACE_NULLABLE},
+            .source={.external=&state->sources[i], .nulls=XRT_PLACE_NULLABLE},
+            .temporary={.frame=state->temporary_frame, .slot=i, .nulls=XRT_PLACE_NULLABLE}};
+    }
+    ModulePublication context = {state, type, module_payload(state, reference->slot)};
+    XrtPlacePublication publication = {module_publish_bytes, &context};
+    if (!type->spec.owned_count) state->busy = true;
+    status = xrt_place_edge_move(state->edges, type->spec.owned_count, &publication);
+    if (!type->spec.owned_count) state->busy = false;
+    state->busy = true;
+    xrt_value_drop(type->plan, state->scratch);
+    state->busy = false;
+    return status;
+}
+
+static bool module_state_storage(XrtModuleState *state, const XrtModuleLayout *layout, size_t *bytes) {
+    uint8_t *base = (uint8_t *)state;
+    void *part = NULL;
+    *bytes = sizeof(XrtModuleState);
+#define MODULE_PART(field,n,t,a) do { \
+    if (!module_part(base, bytes, (n), sizeof(t), (a), &part)) return false; \
+    if (state) state->field = part; \
+} while (0)
+    size_t payload = layout->view.payload_size ? layout->view.payload_size : 1;
+    size_t scratch = layout->scratch_size ? layout->scratch_size : 1;
+    MODULE_PART(payload, payload, uint8_t, alignof(XrMaxAlignment));
+    MODULE_PART(scratch, scratch, uint8_t, alignof(XrMaxAlignment));
+    MODULE_PART(flags, layout->view.slot_count, uint8_t, alignof(uint8_t));
+    MODULE_PART(modules, layout->view.module_count, uint8_t, alignof(uint8_t));
+    MODULE_PART(construction, layout->view.slot_count, uint32_t, alignof(uint32_t));
+    MODULE_PART(publication, layout->view.slot_count, uint32_t, alignof(uint32_t));
+    MODULE_PART(remaining, layout->view.module_count, uint32_t, alignof(uint32_t));
+    MODULE_PART(initializers, layout->view.slot_count, XrtModuleRef, alignof(XrtModuleRef));
+    MODULE_PART(published, layout->view.slot_count, XrtModuleRef, alignof(XrtModuleRef));
+    MODULE_PART(validation, layout->depth, ModuleValidation, alignof(ModuleValidation));
+    MODULE_PART(destinations, layout->max_leaves, XrtExternalOwner, alignof(XrtExternalOwner));
+    MODULE_PART(sources, layout->max_leaves, XrtExternalOwner, alignof(XrtExternalOwner));
+    MODULE_PART(edges, layout->max_leaves, XrtPlaceEdge, alignof(XrtPlaceEdge));
+#undef MODULE_PART
+    return true;
+}
+XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *layout, XrtBillingOwner *billing,
+    XrtModuleState **out) {
+    if (!layout || !billing || !out || *out) return XRT_MANAGED_ARGUMENT;
+    size_t bytes;
+    if (!module_state_storage(NULL, layout, &bytes)) return XRT_MANAGED_OVERFLOW;
+    if (!xrt_module_layout_retain(layout)) return XRT_MANAGED_REFCOUNT;
+    if (!xrt_billing_owner_retain(billing)) { xrt_module_layout_drop(&layout); return XRT_MANAGED_REFCOUNT; }
+    void *memory = NULL;
+    XrtManagedStatus status = xrt_managed_metadata_allocate(billing, bytes, &memory);
+    if (status != XRT_MANAGED_OK) {
+        xrt_module_layout_drop(&layout); xrt_billing_owner_drop(billing); return status;
+    }
+    memset(memory, 0, bytes);
+    XrtModuleState *state = memory;
+    *state = (XrtModuleState){.layout=layout, .billing=billing, .bytes=bytes};
+    bool valid = module_state_storage(state, layout, &bytes);
+    XR_CHECK(valid && bytes == state->bytes, "state vectors match their reserved extent");
+    memcpy(state->remaining, layout->slot_counts, (size_t)layout->view.module_count * sizeof(uint32_t));
+    for (uint32_t s = 0; s < layout->view.slot_count; ++s) {
+        state->initializers[s] = (XrtModuleRef){state, s, SLOT_CONSTRUCTED};
+        state->published[s] = (XrtModuleRef){state, s, SLOT_PUBLISHED};
+        xrt_value_zero(module_slot_type(state, s)->plan, module_payload(state, s));
+    }
+    if (layout->max_leaves) {
+        status = xrt_managed_root_new(billing, &state->temporary_root);
+        if (status == XRT_MANAGED_OK)
+            status = xrt_managed_frame_enter(state->temporary_root, layout->max_leaves, &state->temporary_frame);
+    }
+    if (status != XRT_MANAGED_OK) { xrt_module_state_drop(&state); return status; }
+    *out = state;
+    return XRT_MANAGED_OK;
+}
 XRAY_API void xrt_module_state_clear(XrtModuleState *state) {
-    if (!state || !state->layout) return;
+    if (!state || state->busy) return;
+    state->busy = true;
     while (state->construction_count) {
         uint32_t slot = state->construction[--state->construction_count];
         if (state->flags[slot] == SLOT_CONSTRUCTED) {
-            const XrtModuleType *type = module_slot_type(state, slot);
-            type->drop(type, module_payload(state, slot));
             state->flags[slot] = 0;
+            xrt_value_drop(module_slot_type(state, slot)->plan, module_payload(state, slot));
         }
     }
     while (state->publication_count) {
         uint32_t slot = state->publication[--state->publication_count];
-        const XrtModuleType *type = module_slot_type(state, slot);
-        type->drop(type, module_payload(state, slot));
         state->flags[slot] = 0;
+        xrt_value_drop(module_slot_type(state, slot)->plan, module_payload(state, slot));
     }
-    if (state->modules) memset(state->modules, 0, state->layout->view.module_count);
-    if (state->remaining) memcpy(state->remaining, state->layout->slot_counts,
-        (size_t)state->layout->view.module_count * sizeof(*state->remaining));
+    memset(state->modules, 0, state->layout->view.module_count);
+    memcpy(state->remaining, state->layout->slot_counts,
+        (size_t)state->layout->view.module_count * sizeof(uint32_t));
+    state->busy = false;
 }
-
 XRAY_API void xrt_module_state_drop(XrtModuleState **owner) {
-    if (!owner || !*owner) return;
+    if (!owner || !*owner || (*owner)->busy) return;
     XrtModuleState *state = *owner;
     *owner = NULL;
     xrt_module_state_clear(state);
-    xr_free_aligned(state->payload, state->allocation_alignment);
-    xr_free_aligned(state->scratch, state->allocation_alignment);
-    xr_free(state->flags); xr_free(state->modules);
-    xr_free(state->construction); xr_free(state->publication); xr_free(state->remaining);
-    xr_free(state->initializers); xr_free(state->published);
+    state->busy = true;
+    XrtBillingOwner *billing = state->billing;
+    size_t bytes = state->bytes;
+    xrt_managed_root_destroy(&state->temporary_root);
     xrt_module_layout_drop(&state->layout);
-    xr_free(state);
+    xrt_managed_metadata_free(billing, state, bytes);
+    xrt_billing_owner_drop(billing);
 }
-
-static XrXirValueStatus module_state_allocate(XrtModuleState *state) {
-    const XrtModuleLayoutSpec *layout = &state->layout->view;
-    uint32_t slots = layout->slot_count, modules = layout->module_count;
-    state->allocation_alignment = layout->payload_alignment < sizeof(void *) ?
-        (uint32_t)sizeof(void *) : layout->payload_alignment;
-    if (layout->payload_size) state->payload = xr_malloc_aligned((size_t)layout->payload_size, state->allocation_alignment);
-    if (state->layout->scratch_size) state->scratch = xr_malloc_aligned(state->layout->scratch_size, state->allocation_alignment);
-    if (slots) {
-        state->flags = xr_calloc(slots, 1);
-        state->construction = xr_malloc((size_t)slots * sizeof(*state->construction));
-        state->publication = xr_malloc((size_t)slots * sizeof(*state->publication));
-        state->initializers = xr_calloc(slots, sizeof(*state->initializers));
-        state->published = xr_calloc(slots, sizeof(*state->published));
-    }
-    state->modules = xr_calloc(modules, 1);
-    state->remaining = xr_malloc((size_t)modules * sizeof(*state->remaining));
-    if ((layout->payload_size && !state->payload) || (state->layout->scratch_size && !state->scratch) ||
-        (slots && (!state->flags || !state->construction || !state->publication || !state->initializers || !state->published)) ||
-        !state->modules || !state->remaining) return XR_XIR_VALUE_OOM;
-    if (state->payload) memset(state->payload, 0, (size_t)layout->payload_size);
-    if (state->scratch) memset(state->scratch, 0, state->layout->scratch_size);
-    memcpy(state->remaining, state->layout->slot_counts, (size_t)modules * sizeof(*state->remaining));
-    for (uint32_t s = 0; s < slots; ++s) {
-        state->initializers[s] = (XrtModuleRef){state, s, SLOT_CONSTRUCTED};
-        state->published[s] = (XrtModuleRef){state, s, SLOT_PUBLISHED};
-    }
-    return XR_XIR_VALUE_OK;
-}
-
-XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *layout, uint64_t limit, XrtModuleState **out) {
-    if (!layout || !out || *out) return XR_XIR_VALUE_BAD_ARGUMENT;
-    uint64_t bytes = layout->bytes;
-    uint32_t slots = layout->view.slot_count, modules = layout->view.module_count;
-    uint32_t alignment = layout->view.payload_alignment < sizeof(void *) ?
-        (uint32_t)sizeof(void *) : layout->view.payload_alignment;
-    if (!module_charge(&bytes, 1, sizeof(XrtModuleState)) ||
-        !module_charge(&bytes, layout->view.payload_size, 1) ||
-        !module_charge(&bytes, layout->scratch_size, 1) ||
-        !module_charge(&bytes, 2, alignment - 1) ||
-        !module_charge(&bytes, slots, 1 + 2 * sizeof(uint32_t) + 2 * sizeof(XrtModuleRef)) ||
-        !module_charge(&bytes, modules, 1 + sizeof(uint32_t))) return XR_XIR_VALUE_OVERFLOW;
-    if (bytes > limit) return XR_XIR_VALUE_MEMORY_LIMIT;
-    if (!xrt_module_layout_retain(layout)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
-    XrtModuleState *state = xr_calloc(1, sizeof(*state));
-    if (!state) { xrt_module_layout_drop(&layout); return XR_XIR_VALUE_OOM; }
-    state->layout = layout;
-    state->bytes = bytes;
-    state->byte_limit = limit;
-    XrXirValueStatus status = module_state_allocate(state);
-    if (status != XR_XIR_VALUE_OK) { xrt_module_state_drop(&state); return status; }
-    *out = state;
-    return XR_XIR_VALUE_OK;
-}
-
 XRAY_API XrtModuleStatus xrt_module_begin(XrtModuleState *state, uint32_t module) {
-    if (!state || module >= state->layout->view.module_count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (state->modules[module] != MODULE_EMPTY) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || state->busy || module >= state->layout->view.module_count ||
+        state->modules[module] != MODULE_EMPTY) return XRT_MANAGED_ARGUMENT;
     XrtModuleSpec spec = state->layout->view.modules[module];
     for (uint32_t d = 0; d < spec.dependency_count; ++d)
         if (state->modules[state->layout->view.dependencies[spec.first_dependency + d]] != MODULE_READY)
-            return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus shared = xrt_value_root_share_types(state->layout->array_types);
-    if (shared != XR_XIR_VALUE_OK) return shared;
+            return XRT_MANAGED_ARGUMENT;
     state->modules[module] = MODULE_INITIALIZING;
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
 XRAY_API XrtModuleStatus xrt_module_ready(XrtModuleState *state, uint32_t module) {
-    if (!state || module >= state->layout->view.module_count ||
-        state->modules[module] != MODULE_INITIALIZING || state->remaining[module]) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || state->busy || module >= state->layout->view.module_count ||
+        state->modules[module] != MODULE_INITIALIZING || state->remaining[module]) return XRT_MANAGED_ARGUMENT;
     state->modules[module] = MODULE_READY;
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
-static XrXirValueStatus module_initial_copy(XrtModuleState *state, uint32_t slot, const void *value) {
-    const XrtModuleType *type = module_slot_type(state, slot);
-    return type->copy(type, value, module_payload(state, slot));
+static XrtManagedStatus module_initial_copy(XrtModuleState *state, uint32_t slot, const void *value) {
+    const ModuleType *type = module_slot_type(state, slot);
+    state->busy = true;
+    XrtManagedStatus status = module_prepare_copy(state, type, value);
+    if (status == XRT_MANAGED_OK) {
+        if (type->spec.size) memcpy(module_payload(state, slot), state->scratch, type->spec.size);
+        xrt_value_zero(type->plan, state->scratch);
+    }
+    state->busy = false;
+    return status;
 }
-
-static XrtModuleStatus module_construct_value(XrtModuleState *state, uint32_t slot,
+XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t slot,
     const void *value, XrtModuleRef **out) {
-    if (!state || !out || *out || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || state->busy || !out || *out || slot >= state->layout->view.slot_count) return XRT_MANAGED_ARGUMENT;
     const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
     if (!(spec->flags & XRT_MODULE_SLOT_MUTABLE) || state->flags[slot] ||
-        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status = module_initial_copy(state, slot, value);
-    if (status != XR_XIR_VALUE_OK) return status;
+        state->modules[spec->module] != MODULE_INITIALIZING) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = module_initial_copy(state, slot, value);
+    if (status != XRT_MANAGED_OK) return status;
     state->flags[slot] = SLOT_CONSTRUCTED;
     state->construction[state->construction_count++] = slot;
     *out = &state->initializers[slot];
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
-XRAY_API XrtModuleStatus xrt_module_construct(XrtModuleState *state, uint32_t slot,
-    const void *value, XrtModuleRef **out) {
-    if (!state || slot >= state->layout->view.slot_count ||
-        module_slot_type(state, slot)->kind == XRT_MODULE_CELL_ARRAY_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
-    return module_construct_value(state, slot, value, out);
-}
-
-#include "xnative_module_cell.inc.c"
-
 XRAY_API XrtModuleStatus xrt_module_publish(XrtModuleRef *reference) {
-    if (!module_reference_valid(reference) || reference->required_flags != SLOT_CONSTRUCTED)
-        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!module_reference_ready(reference) || reference->state->busy || reference->required_flags != SLOT_CONSTRUCTED)
+        return XRT_MANAGED_ARGUMENT;
     XrtModuleState *state = reference->state;
     uint32_t slot = reference->slot;
     const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
-    if (state->flags[slot] != SLOT_CONSTRUCTED || !(spec->flags & XRT_MODULE_SLOT_MUTABLE) ||
-        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (state->flags[slot] != SLOT_CONSTRUCTED || state->modules[spec->module] != MODULE_INITIALIZING)
+        return XRT_MANAGED_ARGUMENT;
     state->flags[slot] |= SLOT_PUBLISHED;
     state->publication[state->publication_count++] = slot;
     --state->remaining[spec->module];
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
 XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *state, uint32_t slot, const void *value) {
-    if (!state || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || state->busy || slot >= state->layout->view.slot_count) return XRT_MANAGED_ARGUMENT;
     const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
     if ((spec->flags & XRT_MODULE_SLOT_MUTABLE) || state->flags[slot] ||
-        state->modules[spec->module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status = module_initial_copy(state, slot, value);
-    if (status != XR_XIR_VALUE_OK) return status;
+        state->modules[spec->module] != MODULE_INITIALIZING) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = module_initial_copy(state, slot, value);
+    if (status != XRT_MANAGED_OK) return status;
     state->flags[slot] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
     state->publication[state->publication_count++] = slot;
     --state->remaining[spec->module];
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
-XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state,
-    uint32_t first, uint32_t count, const int64_t *values) {
-    if (!state || !count || !values || first >= state->layout->view.slot_count ||
-        count > state->layout->view.slot_count - first) return XR_XIR_VALUE_BAD_ARGUMENT;
+XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state, uint32_t first,
+    uint32_t count, const int64_t *values) {
+    if (!state || state->busy || !count || !values || first >= state->layout->view.slot_count ||
+        count > state->layout->view.slot_count - first) return XRT_MANAGED_ARGUMENT;
     uint32_t module = state->layout->view.slots[first].module;
-    if (state->modules[module] != MODULE_INITIALIZING) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (state->modules[module] != MODULE_INITIALIZING) return XRT_MANAGED_ARGUMENT;
     bool initialize = false;
     for (uint32_t n = 0; n < count; ++n) {
         uint32_t slot = first + n;
         const XrtModuleSlotSpec *spec = &state->layout->view.slots[slot];
-        uint8_t required = (spec->flags & XRT_MODULE_SLOT_MUTABLE) ? SLOT_CONSTRUCTED : 0;
-        if (spec->module != module || module_slot_type(state, slot)->kind != XRT_MODULE_I64 ||
-            state->flags[slot] != required) return XR_XIR_VALUE_BAD_ARGUMENT;
+        uint8_t required = spec->flags & XRT_MODULE_SLOT_MUTABLE ? SLOT_CONSTRUCTED : 0;
+        if (spec->module != module || module_slot_type(state, slot)->spec.kind != XRT_VALUE_I64 ||
+            state->flags[slot] != required) return XRT_MANAGED_ARGUMENT;
         initialize |= !(spec->flags & XRT_MODULE_SLOT_MUTABLE);
     }
-    if (initialize) {
-        if (sizeof(*values) > SIZE_MAX / count) return XR_XIR_VALUE_OVERFLOW;
-        size_t bytes = (size_t)count * sizeof(*values);
-        if (bytes > state->byte_limit - state->bytes) return XR_XIR_VALUE_MEMORY_LIMIT;
-        int64_t *prepared = xr_malloc(bytes);
-        if (!prepared) return XR_XIR_VALUE_OOM;
-        memcpy(prepared, values, bytes);
+    /* Sources may alias any mutable binding: snapshot the entire group before
+     * publishing an immutable member. Reservation failure changes no slot. */
+    size_t bytes = 0;
+    if (!module_extent(&bytes, count, sizeof(*values))) return XRT_MANAGED_OVERFLOW;
+    state->busy = true;
+    void *prepared = NULL;
+    XrtManagedStatus status = initialize ? xrt_managed_metadata_allocate(state->billing, bytes, &prepared) : XRT_MANAGED_OK;
+    if (status == XRT_MANAGED_OK) {
+        if (initialize) memcpy(prepared, values, bytes);
         for (uint32_t n = 0; n < count; ++n)
             if (!(state->layout->view.slots[first + n].flags & XRT_MODULE_SLOT_MUTABLE))
-                memcpy(module_payload(state, first + n), &prepared[n], sizeof(prepared[n]));
-        xr_free(prepared);
+                memcpy(module_payload(state, first + n), (int64_t *)prepared + n, sizeof(*values));
+        for (uint32_t n = 0; n < count; ++n) {
+            state->flags[first + n] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
+            state->publication[state->publication_count++] = first + n;
+        }
+        state->remaining[module] -= count;
+        if (initialize) xrt_managed_metadata_free(state->billing, prepared, bytes);
     }
-    for (uint32_t n = 0; n < count; ++n) {
-        state->flags[first + n] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
-        state->publication[state->publication_count++] = first + n;
-    }
-    state->remaining[module] -= count;
-    return XR_XIR_VALUE_OK;
+    state->busy = false;
+    return status;
 }
-
 XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *state, uint32_t slot, XrtModuleRef **out) {
-    if (!state || !out || *out || slot >= state->layout->view.slot_count ||
-        !(state->flags[slot] & SLOT_PUBLISHED)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || state->busy || !out || *out || slot >= state->layout->view.slot_count ||
+        !(state->flags[slot] & SLOT_PUBLISHED)) return XRT_MANAGED_ARGUMENT;
     *out = &state->published[slot];
-    return XR_XIR_VALUE_OK;
+    return XRT_MANAGED_OK;
 }
-
 XRAY_API XrtModuleStatus xrt_module_borrow(const XrtModuleRef *reference, const void **out) {
-    if (!out || !module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrtModuleState *state = reference->state;
-    if ((state->flags[reference->slot] & reference->required_flags) != reference->required_flags)
-        return XR_XIR_VALUE_BAD_ARGUMENT;
-    *out = module_payload(state, reference->slot);
-    return XR_XIR_VALUE_OK;
+    if (!out || !module_reference_ready(reference) || reference->state->busy) return XRT_MANAGED_ARGUMENT;
+    *out = module_payload(reference->state, reference->slot);
+    return XRT_MANAGED_OK;
 }
-
-XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void *value) {
-    if (!module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
+XRAY_API XrtModuleStatus xrt_module_copy(const XrtModuleRef *reference, void *empty) {
+    if (!module_reference_ready(reference) || reference->state->busy) return XRT_MANAGED_ARGUMENT;
     XrtModuleState *state = reference->state;
-    uint32_t slot = reference->slot;
-    if (!(state->layout->view.slots[slot].flags & XRT_MODULE_SLOT_MUTABLE) ||
-        (state->flags[slot] & reference->required_flags) != reference->required_flags)
-        return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrtModuleType *type = module_slot_type(state, slot);
-    if (type->kind == XRT_MODULE_CELL_ARRAY_I64) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status = type->copy(type, value, state->scratch);
-    if (status != XR_XIR_VALUE_OK) return status;
-    void *payload = module_payload(state, slot);
-    type->drop(type, payload);
-    if (type->size) { memcpy(payload, state->scratch, type->size); memset(state->scratch, 0, type->size); }
-    return XR_XIR_VALUE_OK;
+    const ModuleType *type = module_slot_type(state, reference->slot);
+    if ((!empty && type->spec.size) || (uintptr_t)empty % type->spec.alignment ||
+        module_overlaps(empty, type->spec.size, state, state->bytes)) return XRT_MANAGED_ARGUMENT;
+    for (size_t i = 0; i < type->spec.owned_count; ++i) {
+        XrtManagedHeader *owner;
+        memcpy(&owner, (uint8_t *)empty + type->spec.owned_offsets[i], sizeof(owner));
+        if (owner) return XRT_MANAGED_ARGUMENT;
+    }
+    state->busy = true;
+    XrtManagedStatus status = module_prepare_copy(state, type, module_payload(state, reference->slot));
+    if (status == XRT_MANAGED_OK) {
+        if (type->spec.size) memcpy(empty, state->scratch, type->spec.size);
+        xrt_value_zero(type->plan, state->scratch);
+    }
+    state->busy = false;
+    return status;
 }
-
 XRAY_API XrtModuleStatus xrt_module_reference_cache(const XrtModuleRef *reference, XrtModuleAccess *out) {
-    if (!out || !module_reference_valid(reference)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!out || !module_reference_valid(reference)) return XRT_MANAGED_ARGUMENT;
     XrtModuleState *state = reference->state;
-    uint32_t slot = reference->slot;
-    const XrtModuleType *type = module_slot_type(state, slot);
-    *out = (XrtModuleAccess){.reference=(XrtModuleRef *)reference, .payload=module_payload(state, slot),
-        .flags=&state->flags[slot], .required_flags=reference->required_flags,
-        .size=type->size, .alignment=type->alignment, .kind=type->kind,
-        .is_mutable=(state->layout->view.slots[slot].flags & XRT_MODULE_SLOT_MUTABLE) != 0};
-    return XR_XIR_VALUE_OK;
+    const XrtModuleSlotSpec *slot = &state->layout->view.slots[reference->slot];
+    const ModuleType *type = module_slot_type(state, reference->slot);
+    *out = (XrtModuleAccess){.reference=(XrtModuleRef *)reference, .payload=module_payload(state, reference->slot),
+        .flags=&state->flags[reference->slot], .required_flags=reference->required_flags,
+        .size=type->spec.size, .alignment=type->spec.alignment, .type=slot->type, .kind=type->spec.kind,
+        .is_mutable=(slot->flags & XRT_MODULE_SLOT_MUTABLE) != 0};
+    return XRT_MANAGED_OK;
 }
-
 XRAY_API XrtModuleStatus xrt_module_cache(const XrtModuleState *state, uint32_t slot, XrtModuleAccess *out) {
-    if (!state || slot >= state->layout->view.slot_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!state || !state->layout || slot >= state->layout->view.slot_count) return XRT_MANAGED_ARGUMENT;
     return xrt_module_reference_cache(&state->published[slot], out);
 }
-
 XRAY_API void xrt_module_require(XrtModuleStatus status, uint32_t source_id) {
-    if (!status) return;
-    XR_CHECK(status <= XR_XIR_VALUE_IO, "Module errors preserve a shared value status");
-    xrt_value_failure((XrXirValueStatus)status, source_id);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
-
 XRAY_API_NORET void xrt_module_uninitialized(uint32_t source_id) {
-    xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+    xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
 }

@@ -51,6 +51,10 @@ XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_at(const XrLirValueLayouts *
     XrLirValueLayoutKey *, const XrtValuePlan **);
 XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_get(const XrLirValueLayouts *,
     XrLirValueLayoutKey, const XrtValuePlan **);
+/* The same primary row supplies its one-based image id in constant time. Both
+ * outputs remain unchanged on rejection; consumers never search enumeration. */
+XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_lookup(const XrLirValueLayouts *,
+    XrLirValueLayoutKey, const XrtValuePlan **, uint32_t *type_id);
 /* Only generated Record/Nullable rows occur here, including false for inline
  * POD. These facts are copied from the receiving plans' actual owned_count,
  * not inferred again by the lifetime verifier or either execution backend. */

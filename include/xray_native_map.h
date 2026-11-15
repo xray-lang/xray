@@ -1,73 +1,49 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_native_map.h - Closed String/I64 Map values and synchronous binding references
+ * xray_native_map.h - Fixed String/I64 Map storage with real key owners
  *
  * KEY CONCEPT:
- *   Each value owns one canonical Map reference. Borrowed references name the
- *   actual local, module or captured Cell binding inside its synchronous call.
+ *   Each capacity row owns one key or NULL. Bucket, order and rank indexes
+ *   encode lookup and insertion order without another ownership relation.
  */
 #ifndef XRAY_NATIVE_MAP_H
 #define XRAY_NATIVE_MAP_H
-#include "xray_native_runtime.h"
-#include "xray_native_state.h"
-#ifdef __cplusplus
-extern "C" {
-#endif
-typedef struct XrtMap XrtMap;
-typedef struct XrtMapLiteralOrigin { uint32_t kind,line,column; } XrtMapLiteralOrigin;
+#include "xray_native_string_value.h"
+typedef struct XrtMapBackingRow XrtMapBackingRow;
+typedef struct XrtMapBacking XrtMapBacking;
+typedef struct XrtMapLiteralOrigin { uint32_t kind, line, column; } XrtMapLiteralOrigin;
 typedef struct XrtMapLiteral {
-    /* NULL/zero preserves an unknown physical path for in-memory source. */
     const char *path;
     size_t path_length;
     const XrtMapLiteralOrigin *items;
     size_t count;
 } XrtMapLiteral;
-/* Kind zero consumes key/value; kind one consumes spread and ignores value.
- * The descriptor and inputs are borrowed only through this synchronous call. */
-typedef struct XrtMapLiteralInput {
-    union { const XrtString *key; const XrtMap *spread; } source;
+#ifndef __cplusplus
+struct XrtMapBackingRow {
+    XrtStringBacking *key;
     int64_t value;
-} XrtMapLiteralInput;
-typedef struct XrtMapRef {
-    XrtMap **cell;
-    XrtModuleAccess state;
-    struct XirCell *captured;
-} XrtMapRef;
-
-/* Each result owns one real canonical reference. Parameters borrow their
- * exact String/I64 shape through the synchronous call. */
-XRAY_API XrtMap *xrt_map_string_i64_new(XrtString *const *keys, const int64_t *values,
-    size_t count, uint32_t source);
-XRAY_API XrtMap *xrt_map_string_i64_literal(const XrtMapLiteral *,const XrtMapLiteralInput *,uint32_t source);
-XRAY_API XrtMap *xrt_map_retain(const XrtMap *, uint32_t source);
-XRAY_API void xrt_map_drop(XrtMap **);
-XRAY_API void xrt_map_owned_drop(XrtMap **);
-XRAY_API void xrt_map_assign(XrtMap **, const XrtMap *, uint32_t source);
-XRAY_API int64_t xrt_map_length(const XrtMap *, uint32_t source);
-/* A miss writes zero and returns false. Failure publishes no result. */
-XRAY_API bool xrt_map_string_i64_get(const XrtMap *, const XrtString *, int64_t *value, uint32_t source);
-XRAY_API int64_t xrt_map_string_i64_index(const XrtMap *, const XrtString *, uint32_t source);
-XRAY_API bool xrt_map_string_i64_contains(const XrtMap *, const XrtString *, uint32_t source);
-XRAY_API void xrt_map_string_i64_set(XrtMap **, const XrtString *, int64_t value, uint32_t source);
-XRAY_API bool xrt_map_string_i64_remove(XrtMap **, const XrtString *, uint32_t source);
-XRAY_API void xrt_map_clear(XrtMap **, uint32_t source);
-
-/* References borrow the actual local, module or captured Cell binding, with no retained
- * payload snapshot. They cannot be stored, returned or used after that call. */
-XRAY_API XrtMapRef xrt_map_ref_local(XrtMap **, uint32_t source);
-XRAY_API XrtMapRef xrt_map_ref_state(XrtModuleRef *, uint32_t source);
-XRAY_API XrtMapRef xrt_map_ref_captured(struct XirCell *, uint32_t source);
-XRAY_API XrtMap *xrt_map_ref_read(XrtMapRef, uint32_t source);
-XRAY_API void xrt_map_ref_write(XrtMapRef, const XrtMap *, uint32_t source);
-XRAY_API void xrt_map_ref_string_i64_set(XrtMapRef, const XrtString *, int64_t value, uint32_t source);
-XRAY_API bool xrt_map_ref_string_i64_remove(XrtMapRef, const XrtString *, uint32_t source);
-XRAY_API void xrt_map_ref_clear(XrtMapRef, uint32_t source);
-#ifdef __cplusplus
-}
+    uint64_t hash;
+    size_t entry_order, bucket, order, rank;
+};
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4200) /* C11 flexible array member */
+#endif
+struct XrtMapBacking {
+    XrtManagedHeader managed;
+    size_t length, capacity, order_count;
+    XrtMapBackingRow rows[];
+};
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+_Static_assert(offsetof(XrtMapBacking, length) == 16 && offsetof(XrtMapBacking, capacity) == 24 &&
+    offsetof(XrtMapBacking, order_count) == 32 && offsetof(XrtMapBacking, rows) == 40 &&
+    sizeof(XrtMapBacking) == 40 && sizeof(XrtMapBackingRow) == 56 && offsetof(XrtMapBackingRow, key) == 0,
+    "Map has a fixed prefix and one owner in each repeated row");
 #endif
 #endif // XRAY_NATIVE_MAP_H

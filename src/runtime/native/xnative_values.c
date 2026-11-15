@@ -22,6 +22,25 @@ struct XrtNativeValues {
     XrtManagedRoot *root;
     XrtBackingTypes backings;
 };
+static XR_THREAD_LOCAL XrtValueBinding value_binding;
+XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding) {
+    XrtValueBinding previous = value_binding;
+    value_binding = binding;
+    return previous;
+}
+XR_FUNC XrtValueRoot *xrt_value_root_active(void) { return value_binding.root; }
+XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id) {
+    XR_CHECK(value_binding.root && source_id <= value_binding.sources,
+        "value operations require an active execution and its source id");
+    return value_binding.root;
+}
+XR_FUNC void xrt_value_root_drain(XrtValueRoot *owner) {
+    if (!owner || owner->draining) return;
+    uint64_t limit = owner->byte_limit;
+    owner->draining = true;
+    xrt_native_values_drain(owner);
+    *owner = (XrtValueRoot){.byte_limit=limit};
+}
 
 XRAY_API_NORET void xrt_native_managed_failure(XrtManagedStatus status, uint32_t source_id) {
     XR_CHECK(status != XRT_MANAGED_OK, "managed failure preserves a real failing kernel result");
@@ -60,6 +79,15 @@ XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *owner) {
     return owner && xrt_value_root_storage_empty(owner) &&
         (!owner->managed || (!owner->managed->root && !owner->managed->backings.string));
 }
+XR_FUNC XrtManagedStatus xrt_native_values_backings(XrtValueRoot *owner, const XrtBackingTypes **output) {
+    if (!output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtBillingOwner *billing = NULL;
+    XrtManagedStatus status = xrt_native_values_prepare(owner,&billing);
+    if (status == XRT_MANAGED_OK && !owner->managed->backings.string)
+        status = xrt_backing_types_init(billing,&owner->managed->backings);
+    if (status == XRT_MANAGED_OK) *output = &owner->managed->backings;
+    return status;
+}
 
 static struct XrtNativeValues *native_values(uint32_t source_id) {
     XrtValueRoot *owner = xrt_value_root_current(source_id);
@@ -80,21 +108,19 @@ XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id) {
 
 XRAY_API void xrt_native_string_create(XrtManagedFrame *frame, size_t slot,
     const char *bytes, size_t length, uint32_t source_id) {
-    struct XrtNativeValues *values = native_values(source_id);
-    XrtManagedStatus status = XRT_MANAGED_OK;
-    if (!values->backings.string) status = xrt_backing_types_init(values->billing, &values->backings);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id),&types);
     if (status == XRT_MANAGED_OK)
-        status = xrt_string_backing_create(frame, slot, &values->backings, bytes, length, 0);
+        status = xrt_string_backing_create(frame, slot, types, bytes, length, 0);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *frame, size_t slot,
     const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id) {
-    struct XrtNativeValues *values = native_values(source_id);
-    XrtManagedStatus status = XRT_MANAGED_OK;
-    if (!values->backings.string) status = xrt_backing_types_init(values->billing, &values->backings);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id),&types);
     if (status == XRT_MANAGED_OK)
-        status = xrt_string_backing_concat_create(frame, slot, &values->backings,
+        status = xrt_string_backing_concat_create(frame, slot, types,
             (const XrtStringBacking *)left, (const XrtStringBacking *)right, 0);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }

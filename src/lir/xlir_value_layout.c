@@ -20,6 +20,7 @@ enum { VALUE_ARRAY_KINDS = 4 };
 typedef struct LayoutRow {
     XrLirValueLayoutKey key;
     XrtValuePlan *plan;
+    uint32_t id;
     bool needed;
 } LayoutRow;
 #if defined(_MSC_VER)
@@ -211,6 +212,7 @@ static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *s
     XR_CHECK(leaves == spec->owned_count, "every transitive owner leaf has one physical offset");
 }
 static XrLirValueLayoutStatus build_row(const XrLirModule *module, XrLirValueLayouts *set, size_t row) {
+    if (set->count >= UINT32_MAX) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
     XrtValuePlanSpec spec = {0};
     size_t scratch_bytes = 0, zero = 0;
     XrLirValueLayoutStatus status = row < XR_LIR_TYPE_COUNT || row >= XR_LIR_TYPE_COUNT + set->constructed ?
@@ -226,7 +228,10 @@ static XrLirValueLayoutStatus build_row(const XrLirModule *module, XrLirValueLay
     else if (spec.owned_count) spec.owned_offsets = &zero;
     status = memory_status(xrt_value_plan_new(set->billing, &spec, &set->values[row].plan));
     if (scratch) xrt_managed_metadata_free(set->billing, scratch, scratch_bytes);
-    if (status == XR_LIR_VALUE_LAYOUT_OK) set->ordered[set->count++] = &set->values[row];
+    if (status == XR_LIR_VALUE_LAYOUT_OK) {
+        set->values[row].id = (uint32_t)set->count + 1;
+        set->ordered[set->count++] = &set->values[row];
+    }
     return status;
 }
 XR_FUNCDEF void xr_lir_value_layouts_destroy(XrLirValueLayouts *set) {
@@ -290,12 +295,18 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_ownership(const XrLirValu
 }
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_get(const XrLirValueLayouts *set,
     XrLirValueLayoutKey key, const XrtValuePlan **output) {
-    if (!set || !output) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    uint32_t id;
+    return xr_lir_value_layouts_lookup(set, key, output, &id);
+}
+XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_lookup(const XrLirValueLayouts *set,
+    XrLirValueLayoutKey key, const XrtValuePlan **output, uint32_t *id) {
+    if (!set || !output || !id) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     size_t index = 0;
     XrLirValueLayoutStatus status = key_index(set, key, &index);
     if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
     if (!set->values[index].plan) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *output = set->values[index].plan;
+    *id = set->values[index].id;
     return XR_LIR_VALUE_LAYOUT_OK;
 }
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_at(const XrLirValueLayouts *set, size_t ordinal,

@@ -155,7 +155,7 @@ static bool rbc_lir_aggregate_append(RbcLirCompiler *c, XrRbcAggregateAccess acc
     return rbc_lir_emit(c, XR_RBC_AGGREGATE_ACCESS, 0, 0, 0, (int64_t)c->aggregate_access_count++);
 }
 
-#include "xrbc_lir_string_library.inc.c"
+#include "xrbc_lir_range.inc.c"
 
 static bool rbc_lir_nullable_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
     XrRbcAggregateAccess access = {0};

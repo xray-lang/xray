@@ -14,22 +14,7 @@
 #define XNATIVE_ARRAY_BACKING_H
 #include "xnative_string_backing.h"
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4200) /* C11 flexible array member */
-#endif
-typedef struct XrtArrayBacking {
-    XrtManagedHeader managed;
-    size_t length, capacity;
-    unsigned char elements[];
-} XrtArrayBacking;
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-_Static_assert(offsetof(XrtArrayBacking, length) == 16 &&
-    offsetof(XrtArrayBacking, capacity) == 24 && offsetof(XrtArrayBacking, elements) == 32 &&
-    sizeof(XrtArrayBacking) == 32 && 32 % _Alignof(uint64_t) == 0 &&
-    32 % _Alignof(XrtManagedHeader *) == 0, "all four Array tails share one aligned prefix");
+#include "xray_native_array.h"
 
 /* Capacity counts elements and is derived by prepare from the actual extent.
  * Typed factories select only their setup's descriptor. Inputs remain borrowed;

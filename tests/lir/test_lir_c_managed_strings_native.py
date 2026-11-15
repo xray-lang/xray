@@ -91,6 +91,66 @@ int main(void) {
 }
 '''
 
+STATE_RECOVERY = r'''
+#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_values.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "GENERATED"
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
+typedef struct StateRun { XrtModuleState *state; int64_t result; unsigned after; } StateRun;
+static volatile unsigned scalar_mode = SCALAR_MODE, panic_mode = PANIC_MODE;
+static void execute(void *context) {
+    StateRun *call = context;
+    xrl_invoke(&call->result, call->state);
+    if (scalar_mode) CHECK(xrt_native_values_prepared(xrt_value_root_active()));
+    ++call->after;
+}
+int main(void) {
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(xrt_standalone_source_map.locations,
+        xrt_standalone_source_map.count, &locations) == XRT_LOCATION_OK);
+    unsigned limits = 0, ooms = 0, successes = 0, panics = 0;
+    for (unsigned mode = 0; mode < 2; ++mode) for (unsigned point = 0; point < (mode ? 40u : 17u); ++point) {
+        XrtValueRoot owner = {0}; XrtExecutionFailure failure = {0}; StateRun call = {0};
+        XrtModuleLayout *layout = NULL; XrtBillingOwner *billing = NULL;
+        owner.byte_limit = mode ? 0 : UINT64_C(1) << point;
+        XrtManagedStatus status = xrt_native_values_prepare(&owner, &billing);
+        bool kept_billing = status == XRT_MANAGED_OK;
+        if (kept_billing) CHECK(xrt_billing_owner_retain(billing));
+        if (status == XRT_MANAGED_OK)
+            status = xrt_module_layout_new(billing, &xrl_state_spec, (XrtManagedLease){0}, &layout);
+        if (status == XRT_MANAGED_OK) status = xrt_module_state_new(layout, billing, &call.state);
+        if (status == XRT_MANAGED_OK) {
+            if (mode) xrt_billing_owner_fail_after(billing, point);
+            XrtExecutionStatus result = xrt_run_embedded_owned(locations, &failure, execute, &call, &owner);
+            CHECK(xrt_value_root_empty(&owner));
+            if (result == XRT_EXECUTION_FAILURE) {
+                CHECK(!call.after);
+                if (failure.kind == XRT_FAILURE_VALUE) {
+                    CHECK(failure.detail.value.status == (mode ? XR_XIR_VALUE_OOM : XR_XIR_VALUE_MEMORY_LIMIT));
+                    if (mode) ++ooms; else ++limits;
+                } else {
+                    CHECK(panic_mode && failure.kind == XRT_FAILURE_TYPED_PANIC && failure.detail.panic.code == 420);
+                    ++panics;
+                }
+            } else CHECK(!panic_mode && result == XRT_EXECUTION_COMPLETED && call.after == 1 && ++successes);
+            if (scalar_mode && mode) CHECK(result == XRT_EXECUTION_COMPLETED && call.after == 1);
+        } else {
+            CHECK(!mode && status == XRT_MANAGED_LIMIT); ++limits;
+        }
+        xrt_module_state_drop(&call.state); xrt_module_layout_drop(&layout);
+        xrt_value_root_drain(&owner); CHECK(xrt_value_root_empty(&owner));
+        if (kept_billing) {
+            CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+            xrt_billing_owner_drop(billing);
+        }
+    }
+    CHECK(limits && (scalar_mode || ooms) && (panic_mode ? panics : successes));
+    xrt_locations_release(locations); return 0;
+}
+'''
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -172,8 +232,33 @@ def main():
     generated = root / 'escaped-generated.c'
     run([args.faults.resolve(), '--managed-string', generated], root)
     assert not compile_run('escaped', ESCAPED.replace('GENERATED', generated.name)).stdout
+    state_cases = [
+        ('managed-state-scalar', True, False, b'17\n42\n47\n'),
+        ('managed-state-string', False, False, 'seed\né\0next\né\0next\né\0next!!!\nseed\n'.encode()),
+        ('managed-state-panic', False, True, b''),
+    ]
+    for name, scalar, panic, expected_state in state_cases:
+        generated = root / (name + '-generated.c')
+        run([args.driver.resolve(), programs / (name + '.xr'), generated], root)
+        emitted = generated.read_text(encoding='ascii')
+        assert 'XrtValueImage xrl_value_image' in emitted and 'XrtModuleTypeSpec' not in emitted
+        if scalar:
+            assert 'xrt_native_managed_root(' not in emitted and 'xrt_managed_frame_enter' not in emitted
+        else:
+            assert 'xrt_module_external_owner(' in emitted and 'xrt_place_copy_replace(' in emitted
+            assert 'xrt_string_retain(' not in emitted
+        if not panic:
+            normal = compile_run(name, '#include ' + json.dumps(generated.as_posix()) +
+                                 '\nint main(void) { return xray_lir_entry() != 0; }\n')
+            assert (normal.stdout, normal.stderr) == (expected_state, b'')
+        observer = STATE_RECOVERY.replace('GENERATED', generated.name).replace(
+            'SCALAR_MODE', str(int(scalar))).replace('PANIC_MODE', str(int(panic)))
+        assert not compile_run(name + '-recovery', observer, private=True).stderr
+    generated = root / 'mixed-state-generated.c'
+    run([args.faults.resolve(), '--managed-state', generated], root)
+    assert not compile_run('mixed-state', '#include ' + json.dumps(generated.as_posix()) +
+                           '\nint main(void) { return xray_lir_entry() != 3311; }\n').stdout
     for name, text in [
-        ('state', 'var text="kept"\nfn read()->string{return text}\nprint(read())\n'),
         ('format', 'print("n=${42}")\n'),
         ('cell', 'fn work(){var text="local"\nprint(len(text))}\nwork()\n'),
         ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n'),

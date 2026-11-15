@@ -1,0 +1,11 @@
+var text = "seed"
+fn read() -> string { return text }
+fn write(value: string) { text = value }
+const before = read()
+write("next")
+fn fail(divisor: i64) {
+    const snapshot = read()
+    print(len(snapshot))
+    print(9 / divisor)
+}
+fail(0)

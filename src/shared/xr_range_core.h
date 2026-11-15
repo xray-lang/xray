@@ -39,6 +39,11 @@ typedef struct XrRangeCoreMaterializePlan {
     int64_t length;
 } XrRangeCoreMaterializePlan;
 
+/* Direct comparisons keep half-open endpoint checks free from overflow. */
+static inline bool xr_range_valid(int64_t start, int64_t end, int64_t length) {
+    return start >= 0 && start <= end && end <= length;
+}
+
 static inline XrRangeCore xr_range_core_make(int64_t start, int64_t end, int64_t step) {
     return (XrRangeCore) {start, end, step, false};
 }
