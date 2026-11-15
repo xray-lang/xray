@@ -151,7 +151,7 @@ static void unsupported_targets(void) {
     XrLirFunction root; XrLirModule *module = record_fixture(&root);
     XrRbcProgram *program = NULL; XrRbcCompileDiagnostic diagnostic = {0};
     CHECK(xr_rbc_compile(module,root,&program,&diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    CHECK(strstr(diagnostic.message,"fixed callable and boxed"));
+    CHECK(strcmp(diagnostic.message,"owned callable, Cell, boxed and View execution plans are not available") == 0);
     xr_lir_module_destroy(module);
 }
 int main(void) {
