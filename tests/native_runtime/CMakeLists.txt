@@ -148,6 +148,13 @@ set_tests_properties(native_backing PROPERTIES LABELS "unit;native-runtime;owner
 
 add_executable(test_native_managed_kernel test_managed_kernel.c)
 target_link_libraries(test_native_managed_kernel PRIVATE xray_native_runtime)
+if(WIN32)
+    target_sources(test_native_managed_kernel PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c")
+else()
+    target_sources(test_native_managed_kernel PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/thread_unix.c")
+    target_link_libraries(test_native_managed_kernel PRIVATE Threads::Threads)
+    target_compile_definitions(test_native_managed_kernel PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
 target_include_directories(test_native_managed_kernel PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_managed_kernel PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
