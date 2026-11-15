@@ -10,12 +10,16 @@
  *   External ownership survives longjmp without consulting abandoned C activations.
  */
 #include "runtime/native/xnative_managed_root.h"
+#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_string_backing.h"
+#include "xray_native_values.h"
 #include "base/xmalloc.h"
 #include "base/xmax_align.h"
 #include <setjmp.h>
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
 #define OK(c) CHECK((c) == XRT_MANAGED_OK)
@@ -598,6 +602,117 @@ static void inline_payload_jump(void) {
     fixture_finish(&fixture);
     puts("inline frame longjmp: stable pending aborted before real aggregate owners PASS");
 }
+
+typedef struct ExecutionValues {
+    Fixture *fixture;
+    XrtLocationOwner *locations;
+    XrtValueRoot *owner;
+    XrtManagedRoot *outer_root;
+    bool fail, nested;
+    size_t after;
+} ExecutionValues;
+
+static void fixed_require(XrtManagedStatus status) {
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 1);
+}
+
+static void fixed_execution_root(void *context) {
+    ExecutionValues *call = context;
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    CHECK(root && root == xrt_native_managed_root(1) && call->owner->managed);
+    CHECK(root != call->outer_root);
+    XrtManagedFrame *parent = NULL, *child = NULL;
+    fixed_require(xrt_managed_frame_enter(root, 2, &parent));
+    XrtManagedHeader *value = make_value(call->fixture, 70);
+    OK(xrt_managed_slot_adopt(parent, 0, &value)); CHECK(!value);
+    xrt_native_string_create(parent, 1, "fixed\0text", 10, 1);
+    XrtManagedHeader *header = NULL;
+    OK(xrt_managed_slot_borrow(parent, 1, &header));
+    const XrtStringBacking *text = (const XrtStringBacking *)header;
+    CHECK(text->length == 10 && text->runes == 10 && !memcmp(text->bytes, "fixed\0text", 10));
+    if (call->nested) {
+        XrtValueRoot inner_owner = {0}; XrtExecutionFailure inner_failure = {0};
+        ExecutionValues inner = {.fixture=call->fixture, .locations=call->locations,
+            .owner=&inner_owner, .outer_root=root};
+        CHECK(xrt_run_embedded_owned(call->locations, &inner_failure, fixed_execution_root,
+            &inner, &inner_owner) == XRT_EXECUTION_COMPLETED);
+        CHECK(inner.after == 1 && xrt_value_root_empty(&inner_owner));
+        CHECK(xrt_native_managed_root(1) == root);
+    }
+    if (call->fail) {
+        fixed_require(xrt_managed_frame_enter(root, 1, &child));
+        Payload *pending = prepare_value(call->fixture, child, 0, 71);
+        XrtManagedHeader *parent_owner = NULL;
+        OK(xrt_managed_slot_borrow(parent, 0, &parent_owner));
+        CHECK(xrt_managed_retain(parent_owner)); pending->child = parent_owner;
+        static const unsigned char invalid[] = {0xff};
+        xrt_native_string_create(parent, 1, (const char *)invalid, sizeof(invalid), 1);
+        CHECK(false);
+    }
+    ++call->after;
+}
+
+static void explicit_managed_failure(void *context) {
+    XrtManagedStatus *status = context;
+    xrt_native_managed_failure(*status, 1);
+}
+
+static void fixed_scalar_root(void *context) {
+    ExecutionValues *call = context;
+    CHECK(!call->owner->managed && !call->owner->draining);
+    ++call->after;
+}
+
+static void fixed_execution_boundary(void) {
+    Fixture fixture; fixture_init(&fixture);
+    XrtSourceLocation location = {"fixed-values.xr", 15, 7, 4, 7, 5};
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(&location, 1, &locations) == XRT_LOCATION_OK);
+    XrtValueRoot owner = {0}; XrtExecutionFailure failure = {0};
+    ExecutionValues call = {.fixture=&fixture, .locations=locations, .owner=&owner};
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner) == XRT_EXECUTION_COMPLETED);
+    CHECK(call.after == 1 && xrt_value_root_empty(&owner));
+    CHECK(fixture.audit.count == 1 && fixture.audit.events[0] == 70);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    call.after = 0; call.fail = true;
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner) == XRT_EXECUTION_FAILURE);
+    CHECK(!call.after && xrt_value_root_empty(&owner));
+    CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_UTF8);
+    CHECK(failure.detail.value.source_id == 1 && fixture.audit.count == 3);
+    CHECK(fixture.audit.events[1] == 71 && fixture.audit.events[2] == 70);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    call.fail = false; call.nested = true;
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner) == XRT_EXECUTION_COMPLETED);
+    CHECK(call.after == 1 && xrt_value_root_empty(&owner));
+    CHECK(fixture.audit.count == 5);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    XrtManagedStatus status = XRT_MANAGED_OOM;
+    CHECK(xrt_run_embedded_owned(locations, &failure, explicit_managed_failure, &status, &owner) == XRT_EXECUTION_FAILURE);
+    CHECK(failure.detail.value.status == XR_XIR_VALUE_OOM && failure.detail.value.source_id == 1);
+    CHECK(xrt_value_root_empty(&owner));
+    owner.byte_limit = 1;
+    call.after = 0;
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner) == XRT_EXECUTION_FAILURE);
+    CHECK(!call.after && xrt_value_root_empty(&owner) && owner.byte_limit == 1);
+    CHECK(failure.detail.value.status == XR_XIR_VALUE_MEMORY_LIMIT);
+    call.nested = false;
+    for (uint64_t limit = 64; limit <= 4096; limit *= 2) {
+        owner.byte_limit = limit; call.after = 0;
+        XrtExecutionStatus result = xrt_run_embedded_owned(locations, &failure, fixed_execution_root, &call, &owner);
+        CHECK(xrt_value_root_empty(&owner) && owner.byte_limit == limit);
+        if (result == XRT_EXECUTION_FAILURE) {
+            CHECK(!call.after && failure.kind == XRT_FAILURE_VALUE);
+            CHECK(failure.detail.value.status == XR_XIR_VALUE_MEMORY_LIMIT);
+        } else CHECK(result == XRT_EXECUTION_COMPLETED && call.after == 1);
+        same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    }
+    owner.byte_limit = 1; call.after = 0;
+    CHECK(xrt_run_embedded_owned(locations, &failure, fixed_scalar_root, &call, &owner) == XRT_EXECUTION_COMPLETED);
+    CHECK(call.after == 1 && xrt_value_root_empty(&owner));
+    xrt_locations_release(locations); fixture_finish(&fixture);
+    puts("fixed execution: normal, nested and failing roots drain actual stable owners PASS");
+}
 int main(void) {
     aliases_and_return();
     independent_taken_owner();
@@ -610,6 +725,7 @@ int main(void) {
     inline_payload_homes();
     inline_payload_rejection();
     inline_payload_jump();
+    fixed_execution_boundary();
     puts("Stable managed Root/Frame: real aliases, publication, extent rollback and longjmp drain PASS");
     return 0;
 }

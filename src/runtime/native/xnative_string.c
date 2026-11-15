@@ -23,6 +23,7 @@
 #include "xnative_array.h"
 #include "xnative_map.h"
 #include "xnative_view.h"
+#include "xnative_values.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_float.h"
 #include "base/xchecks.h"
@@ -303,6 +304,8 @@ XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id) 
     return (int64_t)string->runes;
 }
 XR_FUNC void xrt_value_root_drain(XrtValueRoot *root) {
+    root->draining = true;
+    xrt_native_values_drain(root);
     xrt_callable_root_drain(root);
     xrt_boxed_root_drain(root);
     xrt_view_root_drain(root);

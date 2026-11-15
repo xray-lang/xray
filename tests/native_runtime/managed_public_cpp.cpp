@@ -7,6 +7,7 @@
  * managed_public_cpp.cpp - Opaque C-owned atomic storage with real C linkage
  */
 #include "xray_native_managed.h"
+#include "xray_native_values.h"
 #include "xray_native_managed_root.h"
 #include "xray_native_place.h"
 #include <type_traits>
