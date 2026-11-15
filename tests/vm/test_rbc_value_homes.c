@@ -104,8 +104,9 @@ static void real_compiler_and_root(void) {
         else if (callee->values[v].type != 0) local = v;
     }
     CHECK(formal && local && callee->values[formal].offset == SIZE_MAX && callee->values[formal].first_owner == SIZE_MAX);
+    CHECK(callee->values[formal].temporary_offset == SIZE_MAX && callee->values[formal].temporary_first_owner == SIZE_MAX);
     CHECK(callee->values[formal].type == homes->values[actual].type && callee->result_type == callee->values[local].type);
-    CHECK(callee->owned_frame_needed && callee->frame.slot_count == 1 && callee->frame.payload_size == sizeof(Record));
+    CHECK(callee->owned_frame_needed && callee->frame.slot_count == 2 && callee->frame.payload_size == 2 * sizeof(Record));
     uint32_t record = homes->calls[0].result;
     const XrLirValueHome *home = &homes->values[record];
     CHECK(home->size == sizeof(Record) && home->owner_count == 1);
@@ -285,11 +286,144 @@ static void pod_needs_no_owner_frame(void) {
     const XrLirValueHomes *homes = xr_rbc_program_view(program)->functions[0].value_homes;
     CHECK(homes && !homes->owned_frame_needed && !homes->frame.slot_count && !homes->event_count);
     CHECK(homes->values[record.id].size == sizeof(int64_t) && homes->values[record.id].byte_count == 1);
+    CHECK(homes->values[record.id].temporary_offset == SIZE_MAX && homes->values[record.id].temporary_first_owner == SIZE_MAX);
     CHECK(run(program) == 17); xr_rbc_program_destroy(program); CHECK(!home_live);
+}
+typedef struct MultiReturn { OptionalString first; int64_t score; OptionalString second; } MultiReturn;
+typedef struct ReturnWatch {
+    MultiReturn *destination, *source;
+    XrtManagedHeader *old[2], *expected[2];
+    size_t observed, leases;
+    int64_t score;
+    bool active;
+} ReturnWatch;
+static bool return_retain(void *context) { ++((ReturnWatch *)context)->leases; return true; }
+static void return_drop(void *context) { ReturnWatch *watch = context; CHECK(watch->leases); --watch->leases; }
+static void *return_allocate(void *context, size_t bytes) { (void)context; return xr_malloc(bytes); }
+static void return_free(void *context, void *memory, size_t bytes) {
+    (void)bytes; ReturnWatch *watch = context;
+    if (watch->active && (memory == watch->old[0] || memory == watch->old[1])) {
+        CHECK(watch->destination->first.tag == 1 && watch->destination->second.tag == 1);
+        CHECK(watch->destination->first.payload == watch->expected[0] && watch->destination->second.payload == watch->expected[1]);
+        CHECK(watch->destination->score == watch->score);
+        CHECK(!watch->source->first.tag && !watch->source->second.tag && !watch->source->score);
+        CHECK(!watch->source->first.payload && !watch->source->second.payload);
+        ++watch->observed;
+    }
+    xr_free(memory);
+}
+typedef struct ReturnPublication {
+    const XrLirValueHomes *homes;
+    const XrLirValueHome *home;
+    unsigned char *source, *temporary, *destination;
+    size_t published;
+} ReturnPublication;
+static void return_publish(void *context) {
+    ReturnPublication *publication = context;
+    for (size_t i = 0; i < publication->home->byte_count; ++i) {
+        XrLirHomeBytes span = publication->homes->bytes[publication->home->first_bytes + i];
+        memcpy(publication->destination + span.offset, publication->temporary + span.offset, span.size);
+        memset(publication->source + span.offset, 0, span.size);
+    }
+    ++publication->published;
+}
+static XrRbcProgram *multi_return_fixture(void) {
+    XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
+    XrLirType optional, record; OK(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
+    XrLirRecordField fields[] = {{"first",5,optional}, {"score",5,XR_LIR_I64}, {"second",6,optional}};
+    OK(xr_lir_record_type(module, fields, 3, &record));
+    XrLirFunction root, helper; XrLirFunctionSpec spec = {.name="return_root", .name_length=11, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(module, &spec, &root));
+    spec = (XrLirFunctionSpec){.name="return_copy", .name_length=11, .parameters=&record, .parameter_count=1, .result=record};
+    OK(xr_lir_declare_function(module, &spec, &helper)); OK(xr_lir_define_function(module, helper));
+    XrLirBlock body; OK(xr_lir_add_block(module, helper, NULL, 0, &body)); OK(xr_lir_set_entry(module, helper, body));
+    XrLirValue argument; OK(xr_lir_function_parameter(module, helper, 0, &argument));
+    XrLirValue copy = record_fixture_value(module, body, XR_LIR_VALUE_RETAIN, record, &argument, 1, 0, (XrLirFunction){0});
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&copy, .operand_count=1};
+    OK(xr_lir_set_terminator(module, body, &ret)); OK(xr_lir_define_function(module, root));
+    OK(xr_lir_add_block(module, root, NULL, 0, &body)); OK(xr_lir_set_entry(module, root, body));
+    XrLirValue some[2];
+    for (uint32_t i = 0; i < 2; ++i) {
+        XrLirLiteral literal = {0}; OK(xr_lir_add_literal(module, "ab", i + 1, &literal));
+        XrLirValue text = record_fixture_value(module, body, XR_LIR_STRING_LITERAL, XR_LIR_STRING, NULL, 0, literal.id, (XrLirFunction){0});
+        some[i] = record_fixture_value(module, body, XR_LIR_NULLABLE_SOME, optional, &text, 1, 0, (XrLirFunction){0});
+        record_fixture_drop(module, body, XR_LIR_STRING_DROP, text);
+    }
+    XrLirValue args[] = {some[0], record_fixture_value(module, body, XR_LIR_CONST, XR_LIR_I64, NULL, 0, 42, (XrLirFunction){0}), some[1]};
+    XrLirValue initial = record_fixture_value(module, body, XR_LIR_RECORD_NEW, record, args, 3, 0, (XrLirFunction){0});
+    for (uint32_t i = 0; i < 2; ++i) record_fixture_drop(module, body, XR_LIR_VALUE_DROP, some[i]);
+    copy = record_fixture_value(module, body, XR_LIR_CALL, record, &initial, 1, 0, helper);
+    record_fixture_drop(module, body, XR_LIR_VALUE_DROP, initial);
+    XrLirValue score = record_fixture_value(module, body, XR_LIR_RECORD_FIELD, XR_LIR_I64, &copy, 1, 1, (XrLirFunction){0});
+    record_fixture_drop(module, body, XR_LIR_VALUE_DROP, copy);
+    ret.operands = &score; OK(xr_lir_set_terminator(module, body, &ret)); OK(xr_lir_module_finish(module, NULL));
+    XrRbcProgram *program = compile(module, root); xr_lir_module_destroy(module); return program;
+}
+static void complete_multi_leaf_return(void) {
+    XrRbcProgram *program = multi_return_fixture(); CHECK(run(program) == 42);
+    const XrRbcModule *code = xr_rbc_program_view(program);
+    const XrLirValueHomes *caller = code->functions[0].value_homes, *callee = code->functions[1].value_homes;
+    uint32_t result = caller->calls[0].result, returned = 0;
+    for (size_t i = 0; i < callee->event_count; ++i)
+        if (callee->events[i].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER) returned = callee->events[i].source;
+    CHECK(returned && caller->values[result].owner_count == 2 && callee->values[returned].owner_count == 2);
+    CHECK(caller->values[result].temporary_offset != SIZE_MAX && callee->values[returned].temporary_offset != SIZE_MAX);
+    ReturnWatch watch = {.leases=1};
+    XrtManagedAllocator provider = {&watch, return_allocate, return_free, {&watch, return_retain, return_drop}};
+    XrtBillingOwner *billing = NULL; XrtManagedRoot *root = NULL; XrtManagedFrame *destination = NULL, *source = NULL;
+    XrtBackingTypes types = {0}; MANAGED(xrt_billing_owner_new(&provider, SIZE_MAX, &billing));
+    MANAGED(xrt_backing_types_init(billing, &types)); MANAGED(xrt_managed_root_new(billing, &root));
+    MANAGED(xr_rbc_value_homes_enter(caller, root, &destination)); MANAGED(xr_rbc_value_homes_enter(callee, root, &source));
+    XrRbcHomeLocation incoming = {callee, source, returned, false}, landing = {caller, destination, result, false};
+    XrRbcHomeLocation staging = {callee, source, returned, true};
+    void *source_bytes = NULL, *destination_bytes = NULL, *temporary_bytes = NULL;
+    MANAGED(xr_rbc_value_home_address(incoming, &source_bytes)); MANAGED(xr_rbc_value_home_address(landing, &destination_bytes));
+    MANAGED(xr_rbc_value_home_address(staging, &temporary_bytes));
+    watch.source = source_bytes; watch.destination = destination_bytes;
+    XrtPlaceEdge edge[2];
+    for (size_t i = 0; i < 2; ++i) {
+        MANAGED(xr_rbc_value_home_place(incoming, i, XRT_PLACE_NONNULL, &edge[i].source));
+        MANAGED(xr_rbc_value_home_place(landing, i, XRT_PLACE_NONNULL, &edge[i].destination));
+        MANAGED(xr_rbc_value_home_place(staging, i, XRT_PLACE_NONNULL, &edge[i].temporary));
+        MANAGED(xrt_string_backing_create(destination, edge[i].destination.slot, &types, "old", 3, 0));
+    }
+    watch.destination->first.tag = watch.destination->second.tag = 1; watch.destination->score = -1;
+    ReturnPublication publication = {callee, &callee->values[returned], source_bytes, temporary_bytes, destination_bytes, 0};
+    XrtPlacePublication hook = {return_publish, &publication};
+    for (unsigned iteration = 0; iteration < 2; ++iteration) {
+        for (size_t i = 0; i < 2; ++i) {
+            MANAGED(xrt_string_backing_create(source, edge[i].source.slot, &types, "next", i + 1, 0));
+            watch.old[i] = i ? watch.destination->second.payload : watch.destination->first.payload;
+            watch.expected[i] = i ? watch.source->second.payload : watch.source->first.payload;
+        }
+        watch.source->first.tag = watch.source->second.tag = 1; watch.source->score = watch.score = 900 + iteration;
+        for (size_t i = 0; i < publication.home->byte_count; ++i) {
+            XrLirHomeBytes span = callee->bytes[publication.home->first_bytes + i];
+            memcpy(publication.temporary + span.offset, publication.source + span.offset, span.size);
+        }
+        XrtManagedHeader *pending = NULL;
+        MANAGED(xrt_managed_slot_prepare(source, edge[0].source.slot, types.string, sizeof(XrtStringBacking) + 1, &pending));
+        CHECK(xrt_place_edge_move(edge, 2, &hook) == XRT_MANAGED_ARGUMENT);
+        CHECK(watch.destination->first.payload == watch.old[0] && watch.destination->second.payload == watch.old[1]);
+        CHECK(publication.published == iteration && watch.destination->score == (iteration ? 900 : -1));
+        MANAGED(xrt_managed_slot_abort(source, edge[0].source.slot));
+        watch.active = true; size_t observed = watch.observed;
+        xrt_billing_owner_fail_after(billing, 0);
+        MANAGED(xrt_place_edge_move(edge, 2, &hook));
+        xrt_billing_owner_fail_after(billing, SIZE_MAX); watch.active = false;
+        CHECK(watch.observed == observed + 2 && publication.published == iteration + 1);
+        for (size_t i = 0; i < 2; ++i) {
+            XrtManagedHeader *empty = NULL; MANAGED(xrt_managed_slot_borrow(source, edge[i].temporary.slot, &empty)); CHECK(!empty);
+        }
+    }
+    MANAGED(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&types); xrt_billing_owner_drop(billing);
+    return_drop(&watch); CHECK(!watch.leases); xr_rbc_program_destroy(program); CHECK(!home_live);
+    puts("multi-leaf return: reused landing, complete publication before old callbacks and pending rejection passed");
 }
 int main(void) {
     scalar_zero_frame(); real_compiler_and_root(); state_snapshots_and_ref_boundaries(); selected_edge_sources();
     common_home_allocation_failures(); pod_needs_no_owner_frame(); CHECK(!home_live);
+    complete_multi_leaf_return();
     puts("RBC raw homes: shared plans, borrowed formals, stable Header fields and zero scalar frames passed");
     return 0;
 }

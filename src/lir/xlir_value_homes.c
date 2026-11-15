@@ -113,6 +113,14 @@ static bool lir_home_byte_spans(LirHomeBuilder *b, XrLirValueHome *home, const X
     home->byte_count = b->bytes.count - home->first_bytes;
     return true;
 }
+static bool lir_home_temporary(LirHomeBuilder *b, XrLirValueHome *home) {
+    if (home->temporary_offset != SIZE_MAX) return true;
+    const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key; XrtValuePlanSpec spec;
+    if (xr_lir_value_layouts_at(b->layouts, home->type - 1, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
+        xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK)
+        return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned temporary lost its receiving layout");
+    return lir_home_reserve(b, &spec, &home->temporary_offset, &home->temporary_first_owner);
+}
 static bool lir_home_values(LirHomeBuilder *b) {
     LirHomeCompiler *c = &b->compiler;
     size_t count = (size_t)c->view.value_count + 1;
@@ -144,12 +152,8 @@ static bool lir_home_values(LirHomeBuilder *b) {
         xr_lir_block_at(c->input, c->function, block, &id); xr_lir_block_view(c->input, id, &view);
         for (uint32_t p = 0; p < view.parameter_count; ++p) {
             XrLirValueHome *home = &values[view.parameters[p]];
-            if (home->type == 0) continue;
-            const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key; XrtValuePlanSpec spec;
-            if (xr_lir_value_layouts_at(b->layouts, home->type - 1, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
-                xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK)
-                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "edge temporary lost its receiving layout");
-            if (!lir_home_reserve(b, &spec, &home->temporary_offset, &home->temporary_first_owner)) return false;
+            if (home->type == 0 || home->owner_count) continue;
+            if (!lir_home_temporary(b, home)) return false;
         }
     }
     XrLirValueLayoutKey key; XrtValuePlanSpec result;
@@ -205,16 +209,24 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
     b->homes->source_function = b->compiler.function.id;
     b->homes->value_count = b->compiler.view.value_count;
     b->homes->unmodeled = function.unmodeled;
-    if (!lir_home_values(b) || !lir_home_positions(b)) return false;
+    if (!lir_home_values(b)) return false;
     for (uint32_t i = 0; i < function.fact_count; ++i) {
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(ownership, function.fact_offset + i, &fact) != XR_LIR_OK)
             return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "ownership event disappeared during projection");
+        if (fact.kind == XR_LIR_OWNERSHIP_RESULT_OWNER || fact.kind == XR_LIR_OWNERSHIP_BLOCK_OWNER) {
+            if (!fact.value || fact.value > b->homes->value_count)
+                return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owner event has no receiving value");
+            XrLirValueHome *home = &((XrLirValueHome *)b->homes->values)[fact.value];
+            if (home->owner_count && home->parameter)
+                return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "borrowed parameter cannot become an implicit owner");
+            if (home->owner_count && !lir_home_temporary(b, home)) return false;
+        }
         XrLirHomeEvent row = {(uint32_t)fact.kind, fact.block, fact.instruction, fact.value,
             fact.argument, fact.edge, fact.target_block, fact.target_value, (uint32_t)fact.array_operation};
         if (!lir_home_append(b, &b->events, &row)) return false;
     }
-    return true;
+    return lir_home_positions(b);
 }
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHomesRequest *request,
     XrLirValueHomes **output) {
