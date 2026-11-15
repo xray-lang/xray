@@ -14,7 +14,7 @@
 #define XNATIVE_EXECUTION_H
 #include "xnative_locations.h"
 #include "os/os_native_output.h"
-#include "xnative_string.h"
+#include "xnative_value.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
 typedef struct XrtOutputFailure {
