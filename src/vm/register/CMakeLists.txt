@@ -1,6 +1,7 @@
 # Keep the scalar interpreter independent of the retired execution libraries.
 add_library(xray_register_vm STATIC
     ${PROJECT_SOURCE_DIR}/src/vm/register/xrbc.c
+    ${PROJECT_SOURCE_DIR}/src/vm/register/xrbc_code_owner.c
     ${PROJECT_SOURCE_DIR}/src/vm/register/xrbc_value_homes.c
     ${PROJECT_SOURCE_DIR}/src/vm/register/xrbc_encode.c)
 target_include_directories(xray_register_vm PUBLIC ${PROJECT_SOURCE_DIR}/src)
