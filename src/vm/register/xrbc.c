@@ -421,7 +421,7 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
     XrRbcFrame *frame;
     XrRbcRegister *registers;
     size_t pc;
-    uint32_t instruction, op, a, b, c;
+    uint32_t instruction, op;
     // Dispatch mechanics follow the existing register interpreter: each
     // handler owns its next fetch on compilers supporting labels as values.
 #include "xrbc_dispatch.inc.c"
