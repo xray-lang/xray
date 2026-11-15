@@ -64,6 +64,7 @@ static void *resize(void *memory, size_t bytes) {
 #define xr_calloc(count, bytes) allocate_zero(count, bytes)
 #define xr_realloc(memory, bytes) resize(memory, bytes)
 #define xr_free(memory) release(memory)
+#include "runtime/native/xnative_managed.c"
 #include "runtime/native/xnative_locations.c"
 #include "runtime/native/xnative_module_state.c"
 #include "vm/register/xrbc.c"
@@ -143,7 +144,7 @@ static void prepared_after_program(unsigned kind) {
     CHECK(execution->module != &program->module && execution->module == &execution->module_snapshot);
     watched_program = program; watched_layout = execution->layout;
     program_freed = layout_freed = false;
-    if (watched_layout) CHECK(atomic_load(&execution->layout->references) == 2);
+    if (watched_layout) CHECK(atomic_load(&execution->layout->references) == -2);
     xr_rbc_program_destroy(program);
     CHECK(program_freed && (!watched_layout || !layout_freed));
     check_result(&execution, kind);
@@ -181,9 +182,9 @@ static void raw_borrow_and_refusal(void) {
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_VALUE_FAILURE && !execution);
     atomic_store(&image->code.references, 1); CHECK(tracked_live == baseline);
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
-    atomic_store(&execution->layout->references, INT32_MAX);
+    atomic_store(&execution->layout->references, -INT32_MAX);
     CHECK(!xrt_module_layout_retain(execution->layout));
-    atomic_store(&execution->layout->references, 2);
+    atomic_store(&execution->layout->references, -2);
     xr_rbc_execution_free(&execution);
     CHECK(tracked_live == baseline && atomic_load(&image->code.references) == 1);
     XrRbcModule raw = program->module;
