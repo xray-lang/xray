@@ -357,3 +357,103 @@ XR_FUNCDEF void xrt_value_drop(const XrtValuePlan *plan, void *payload) {
     }
     XR_CHECK(xrt_value_zero(plan, payload) == XRT_MANAGED_OK, "retired inline values have no hidden owners");
 }
+static bool inline_spec_valid(const XrtInlineValueSpec *spec) {
+    if (!spec || !spec->alignment || (spec->alignment & (spec->alignment - 1)) ||
+        (spec->owned_count && !spec->owned_offsets)) return false;
+    size_t previous = 0;
+    for (size_t i = 0; i < spec->owned_count; ++i) {
+        size_t offset = spec->owned_offsets[i];
+        if (offset < previous || offset % _Alignof(XrtManagedHeader *) || offset > spec->size ||
+            sizeof(XrtManagedHeader *) > spec->size - offset) return false;
+        previous = offset + sizeof(XrtManagedHeader *);
+    }
+    return true;
+}
+static bool inline_overlaps(const void *left, const void *right, size_t size) {
+    uintptr_t a = (uintptr_t)left, b = (uintptr_t)right;
+    return size && (a < b ? b - a : a - b) < size;
+}
+static bool inline_within(const void *payload, size_t extent, const void *value, size_t size) {
+    uintptr_t begin = (uintptr_t)payload, address = (uintptr_t)value;
+    return address >= begin && address - begin <= extent && size <= extent - (address - begin);
+}
+static void inline_nonowners(const XrtInlineValueSpec *spec, void *to, const void *from) {
+    size_t previous = 0;
+    for (size_t i = 0; i <= spec->owned_count; ++i) {
+        size_t end = i == spec->owned_count ? spec->size : spec->owned_offsets[i];
+        if (end > previous) {
+            if (from) memcpy((unsigned char *)to + previous, (const unsigned char *)from + previous, end - previous);
+            else memset((unsigned char *)to + previous, 0, end - previous);
+        }
+        if (i < spec->owned_count) previous = end + sizeof(XrtManagedHeader *);
+    }
+}
+static XrtManagedStatus inline_home_check(const XrtInlineValueHome *home, const XrtInlineValueSpec *spec, bool *domain) {
+    void *payload = NULL; size_t extent = 0;
+    XrtManagedStatus status = xrt_managed_frame_payload(home->frame, &payload, &extent);
+    if (status != XRT_MANAGED_OK || !inline_within(payload, extent, home->value, spec->size) ||
+        !inline_within(payload, extent, home->temporary, spec->size) ||
+        home->first_owner > SIZE_MAX - spec->owned_count || home->temporary_first_owner > SIZE_MAX - spec->owned_count)
+        return XRT_MANAGED_ARGUMENT;
+    for (size_t i = 0; i < spec->owned_count; ++i) {
+        XrtManagedSlotLocation value = {0}, temporary = {0};
+        status = xrt_managed_slot_location(home->frame, home->first_owner + i, &value);
+        if (status == XRT_MANAGED_OK)
+            status = xrt_managed_slot_location(home->frame, home->temporary_first_owner + i, &temporary);
+        if (status != XRT_MANAGED_OK || value.busy != domain || temporary.busy != domain ||
+            (const void *)value.owner != (const unsigned char *)home->value + spec->owned_offsets[i] ||
+            (const void *)temporary.owner != (const unsigned char *)home->temporary + spec->owned_offsets[i] ||
+            !value.pending || !temporary.pending || value.pending->value || value.pending->allocation_bytes ||
+            temporary.pending->value || temporary.pending->allocation_bytes || *temporary.owner)
+            return XRT_MANAGED_ARGUMENT;
+    }
+    return XRT_MANAGED_OK;
+}
+XRAY_API XrtManagedStatus xrt_inline_value_replace(const XrtInlineValueHome *home,
+    const XrtInlineValueSpec *spec, const void *source) {
+    if (!home || !inline_spec_valid(spec) || (spec->size && (!home->value ||
+        (uintptr_t)home->value % spec->alignment))) return XRT_MANAGED_ARGUMENT;
+    if (!spec->owned_count) {
+        if (spec->size) {
+            if (source) memmove(home->value, source, spec->size);
+            else memset(home->value, 0, spec->size);
+        }
+        return XRT_MANAGED_OK;
+    }
+    if (!home->temporary || (uintptr_t)home->temporary % spec->alignment ||
+        inline_overlaps(home->value, home->temporary, spec->size) ||
+        (source && inline_overlaps(source, home->temporary, spec->size))) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlotLocation first = {0};
+    XrtManagedStatus status = xrt_managed_slot_location(home->frame, home->first_owner, &first);
+    if (status != XRT_MANAGED_OK || !first.busy || *first.busy) return XRT_MANAGED_ARGUMENT;
+    *first.busy = true;
+    status = inline_home_check(home, spec, first.busy);
+    size_t retained = 0;
+    if (status == XRT_MANAGED_OK) {
+        inline_nonowners(spec, home->temporary, source);
+        for (; retained < spec->owned_count; ++retained) {
+            size_t offset = spec->owned_offsets[retained];
+            XrtManagedHeader *child = source ? payload_child(source, offset) : NULL;
+            if (child && !xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
+            memcpy((unsigned char *)home->temporary + offset, &child, sizeof(child));
+        }
+        if (status == XRT_MANAGED_OK) {
+            for (size_t i = 0; i < spec->owned_count; ++i) {
+                size_t offset = spec->owned_offsets[i];
+                XrtManagedHeader *next = payload_child(home->temporary, offset), *old = payload_child(home->value, offset);
+                memcpy((unsigned char *)home->value + offset, &next, sizeof(next));
+                memcpy((unsigned char *)home->temporary + offset, &old, sizeof(old));
+            }
+            inline_nonowners(spec, home->value, home->temporary);
+        }
+        inline_nonowners(spec, home->temporary, NULL);
+        for (size_t i = 0; i < retained; ++i) {
+            size_t offset = spec->owned_offsets[i];
+            XrtManagedHeader *discard = payload_child(home->temporary, offset);
+            payload_clear(home->temporary, offset);
+            xrt_managed_drop(discard);
+        }
+    }
+    *first.busy = false;
+    return status;
+}
