@@ -95,19 +95,43 @@ def signature(info: os.stat_result) -> tuple:
             getattr(info, "st_file_attributes", 0))
 
 
+def same_metadata(left: tuple, right: tuple) -> bool:
+    # Windows enumeration has zero IDs, no executable-mode heuristic and no
+    # directory index size. Full directory/candidate identities stay strict.
+    if os.name != "nt" or (left[3] and right[3] and left[4] and right[4]):
+        return left == right
+    same_size = left[1] == right[1] or (stat.S_ISDIR(left[0]) and stat.S_ISDIR(right[0]))
+    return ((left[0] & ~0o111) == (right[0] & ~0o111) and same_size and
+            left[2] == right[2] and left[5:] == right[5:])
+
+
 def tree_snapshot(root: Path, attempt: Path) -> dict[str, tuple]:
     """Inspect every entry without following a directory link."""
-    snapshot = {}
-    pending = [attempt]
+    contained(root, attempt)
+    initial = attempt.lstat()
+    if is_reparse(initial) or not stat.S_ISDIR(initial.st_mode):
+        raise UnsafeAttempt(f"attempt is not an ordinary directory: {attempt}")
+    snapshot = {".": signature(initial)}
+    pending = [(attempt, signature(initial))]
     while pending:
-        path = pending.pop()
-        contained(root, path)
-        info = path.lstat()
-        if is_reparse(info) or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
-            raise UnsafeAttempt(f"nonregular entry: {path}")
-        snapshot[path.relative_to(attempt).as_posix()] = signature(info)
-        if stat.S_ISDIR(info.st_mode):
-            pending.extend(path.iterdir())
+        directory, expected = pending.pop()
+        contained(root, directory)
+        before = directory.lstat()
+        if is_reparse(before) or not stat.S_ISDIR(before.st_mode) or not same_metadata(signature(before), expected):
+            raise UnsafeAttempt(f"directory changed before enumeration: {directory}")
+        snapshot[directory.relative_to(attempt).as_posix()] = signature(before)
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                path = Path(entry.path)
+                if is_reparse(info) or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+                    raise UnsafeAttempt(f"reparse or nonregular entry: {path}")
+                snapshot[path.relative_to(attempt).as_posix()] = signature(info)
+                if stat.S_ISDIR(info.st_mode):
+                    pending.append((path, signature(info)))
+        contained(root, directory)
+        if signature(directory.lstat()) != signature(before):
+            raise UnsafeAttempt(f"directory changed during enumeration: {directory}")
     return snapshot
 
 
@@ -139,7 +163,8 @@ class Attempt:
 
 
 def collect_attempt(root: Path, path: Path, rule: dict) -> Attempt:
-    snapshot = tree_snapshot(root, path)
+    # Missing or rejected completion proof must not trigger a large tree walk.
+    contained(root, path)
     choices = rule["receipt"] if isinstance(rule["receipt"], list) else [rule["receipt"]]
     for choice in choices:
         sealed = choice.get("kind", "key") == "sealed"
@@ -149,12 +174,15 @@ def collect_attempt(root: Path, path: Path, rule: dict) -> Attempt:
         marker = approval["marker"] if sealed else choice["path"]
         receipt_path = path / relative_path(marker)
         receipt_name = receipt_path.relative_to(path).as_posix()
-        if receipt_name not in snapshot:
+        try:
+            receipt_info = receipt_path.lstat()
+        except FileNotFoundError:
             continue
-        if not stat.S_ISREG(snapshot[receipt_name][0]):
+        contained(root, receipt_path)
+        if not stat.S_ISREG(receipt_info.st_mode):
             raise UnsafeAttempt("completion receipt is not a regular file")
         receipt = receipt_path.read_bytes()
-        if signature(receipt_path.lstat()) != snapshot[receipt_name]:
+        if signature(receipt_path.lstat()) != signature(receipt_info):
             raise UnsafeAttempt("receipt changed while reading")
         if sealed:
             if hashlib.sha256(receipt).hexdigest() != approval["sha256"]:
@@ -164,6 +192,11 @@ def collect_attempt(root: Path, path: Path, rule: dict) -> Attempt:
         break
     else:
         raise UnsafeAttempt("no completion receipt or external sealed approval")
+    snapshot = tree_snapshot(root, path)
+    if (not same_metadata(snapshot[receipt_name], signature(receipt_info)) or
+            signature(receipt_path.lstat()) != signature(receipt_info) or receipt_path.read_bytes() != receipt):
+        raise UnsafeAttempt("completion receipt changed during tree discovery")
+    snapshot[receipt_name] = signature(receipt_info)
     if any(stat.S_ISREG(info[0]) and info[2] > snapshot[receipt_name][2] for info in snapshot.values()):
         raise UnsafeAttempt("regular file is newer than completion marker")
     if any(Path(name).name in {"CMakeCache.txt", "build.ninja", ".ninja_deps"} for name in snapshot):
@@ -177,6 +210,10 @@ def collect_attempt(root: Path, path: Path, rule: dict) -> Attempt:
         if any(word in item.name.lower() for word in ("command", "stdout", "stderr", "exit")):
             continue
         if item.suffix.lower() in PRODUCT_SUFFIXES or (not item.suffix and name in native):
+            identity = signature((path / item).lstat())
+            if not same_metadata(identity, info):
+                raise UnsafeAttempt(f"candidate changed during tree discovery: {path / item}")
+            snapshot[name] = identity
             candidates.append(path / item)
     return Attempt(root, path, snapshot, receipt_path, receipt, sorted(candidates),
                    max(item[2] for item in snapshot.values()), snapshot[receipt_name][2], rule.get("_seal") if sealed else None)
@@ -195,8 +232,13 @@ def verify_receipt(attempt: Attempt) -> None:
 
 
 def revalidate(attempt: Attempt) -> None:
-    if tree_snapshot(attempt.root, attempt.path) != attempt.snapshot:
+    current = tree_snapshot(attempt.root, attempt.path)
+    if current.keys() != attempt.snapshot.keys() or any(
+            not same_metadata(info, current[name]) for name, info in attempt.snapshot.items()):
         raise UnsafeAttempt("attempt metadata changed after discovery")
+    for path in attempt.candidates:
+        if signature(path.lstat()) != attempt.snapshot[path.relative_to(attempt.path).as_posix()]:
+            raise UnsafeAttempt(f"candidate identity changed after discovery: {path}")
     verify_receipt(attempt)
 
 
