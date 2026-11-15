@@ -262,7 +262,7 @@ def main():
         ('format', 'print("n=${42}")\n', b'n=42\n'),
         ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n', b'2\n'),
     ]:
-        source, generated = root / (name + '.xr'), root / (name + '.c')
+        source, generated = root / (name + '.xr'), root / (name + '-generated.c')
         source.write_text(text, encoding='utf-8')
         run([args.driver.resolve(), source, generated], root)
         normal = compile_run(name, '#include ' + json.dumps(generated.as_posix()) +
