@@ -85,6 +85,9 @@ static void c_values_prepare(LirC *c) {
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
         XrLirType payload = c->state_layout.slots[slot].payload;
+        if (c_callable_type(c,payload,NULL) || payload == XR_LIR_I64_CELL) {
+            c_error(c,XR_LIR_C_UNSUPPORTED,"callable State requires owned code and environment transport"); break;
+        }
         if (payload == XR_LIR_ARRAY) c_values_array_mark(needed,type_count,c->state_layout.slots[slot].array_element);
         if (!c_scalar(c, payload) || !c_value_mark(c, needed, type_count, payload)) break;
     }
