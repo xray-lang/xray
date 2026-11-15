@@ -24,6 +24,7 @@
 #include "xlir_string.h"
 #include "xlir_range.h"
 #include "xlir_map.h"
+#include "xlir_ownership.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
@@ -148,6 +149,12 @@ XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *,
 XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirModule *, const XrLirStateLayout *);
 XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *, XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
+/* Cold backend collection immediately follows successful verification of this
+ * exact unchanged finished module. Public plan_create still revalidates all IR.
+ * This internal entry copies events only; it grants no admission or trust flag.
+ * The supplied constructed facts still come from the common value producer. */
+XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipRequest *,
+    XrLirOwnershipPlan **empty, XrLirDiagnostic *);
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *, uint32_t function,
                                                       const XrLirInstructionView *,
                                                       XrLirDiagnostic *);

@@ -33,6 +33,27 @@ static uint32_t count_kind(const XrLirOwnershipPlan *plan, XrLirOwnershipFactKin
     }
     return count;
 }
+static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOwnershipPlan *public_plan) {
+    XrLirOwnershipPlan *internal = NULL;
+    OK(xr_lir_internal_ownership_collect(request,&internal,NULL));
+    CHECK(xr_lir_ownership_function_count(internal) == xr_lir_ownership_function_count(public_plan));
+    CHECK(xr_lir_ownership_fact_count(internal) == xr_lir_ownership_fact_count(public_plan));
+    for (uint32_t i = 1; i <= xr_lir_ownership_function_count(internal); ++i) {
+        XrLirOwnershipFunction a, b;
+        OK(xr_lir_ownership_function_at(internal,i,&a)); OK(xr_lir_ownership_function_at(public_plan,i,&b));
+        CHECK(a.fact_offset == b.fact_offset && a.fact_count == b.fact_count &&
+            a.unmodeled == b.unmodeled && a.external == b.external);
+    }
+    for (uint32_t i = 0; i < xr_lir_ownership_fact_count(internal); ++i) {
+        XrLirOwnershipFact a, b;
+        OK(xr_lir_ownership_fact_at(internal,i,&a)); OK(xr_lir_ownership_fact_at(public_plan,i,&b));
+        CHECK(a.kind == b.kind && a.function == b.function && a.block == b.block && a.instruction == b.instruction &&
+            a.value == b.value && a.argument == b.argument && a.edge == b.edge && a.target_block == b.target_block &&
+            a.target_value == b.target_value && a.type == b.type && a.array_element == b.array_element &&
+            a.array_operation == b.array_operation);
+    }
+    xr_lir_ownership_plan_destroy(internal);
+}
 
 static uint64_t digest(const XrLirOwnershipPlan *plan) {
     uint64_t hash = 0;
@@ -84,6 +105,9 @@ static void arrays(XrLirType element) {
     XrLirOwnershipPlan *plan = NULL;
     OK(array_fixture_create(element, &m));
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
+    XrLirType forbidden = 0;
+    CHECK(xr_lir_nullable_type(m,XR_LIR_I64,&forbidden) == XR_LIR_INVALID_STATE && !forbidden);
+    compare_internal(&(XrLirOwnershipRequest){.module=m},plan);
     CHECK(xr_lir_ownership_function_count(plan) == 3);
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER) == 2);
     CHECK(count_kind(plan, XR_LIR_OWNERSHIP_RETURN_TRANSFER) == 1);
@@ -131,6 +155,7 @@ static void copies(void) {
         XrLirOwnershipPlan *plan = NULL;
         OK(ownership_fixture(types[t], false, 2, &m));
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, NULL));
+        compare_internal(&(XrLirOwnershipRequest){.module=m},plan);
         CHECK(count_kind(plan, XR_LIR_OWNERSHIP_PARAMETER_BORROW) == 2 &&
             count_kind(plan, XR_LIR_OWNERSHIP_RESULT_OWNER) == 2 &&
             count_kind(plan, XR_LIR_OWNERSHIP_RELEASE) == 1 &&
