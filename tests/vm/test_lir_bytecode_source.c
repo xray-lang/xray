@@ -14,7 +14,7 @@
 #include "lir/xlir_sccp.h"
 #include "vm/register/xrbc_lir.h"
 #include "f64_family_vectors.h"
-#include "xray_native_backing.h"
+#include "xray_native_string_value.h"
 #include <fenv.h>
 #if defined(XR_ARCH_X86_64)
 #include <xmmintrin.h>
