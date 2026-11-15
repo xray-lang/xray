@@ -50,7 +50,7 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
         CHECK(a.kind == b.kind && a.function == b.function && a.block == b.block && a.instruction == b.instruction &&
             a.value == b.value && a.argument == b.argument && a.edge == b.edge && a.target_block == b.target_block &&
             a.target_value == b.target_value && a.type == b.type && a.array_element == b.array_element &&
-            a.array_operation == b.array_operation);
+            a.array_operation == b.array_operation && a.map_operation == b.map_operation);
     }
     xr_lir_ownership_plan_destroy(internal);
 }
@@ -62,7 +62,7 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
         OK(xr_lir_ownership_fact_at(plan, i, &f));
         uint32_t fields[] = {(uint32_t)f.kind, f.function, f.block, f.instruction,
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
-            f.array_element, (uint32_t)f.array_operation};
+            f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }

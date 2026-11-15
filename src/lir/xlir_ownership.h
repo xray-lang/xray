@@ -9,6 +9,7 @@
 #ifndef XLIR_OWNERSHIP_H
 #define XLIR_OWNERSHIP_H
 #include "xlir_array.h"
+#include "xlir_map.h"
 
 typedef struct XrLirOwnershipPlan XrLirOwnershipPlan;
 
@@ -21,7 +22,13 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_APPEND_TRANSFER,
     XR_LIR_OWNERSHIP_RETURN_TRANSFER,
     XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
-    XR_LIR_OWNERSHIP_ARRAY_OPERATION
+    XR_LIR_OWNERSHIP_ARRAY_OPERATION,
+    XR_LIR_OWNERSHIP_BINDING_NEW,
+    XR_LIR_OWNERSHIP_BINDING_RELEASE,
+    XR_LIR_OWNERSHIP_BINDING_BORROW,
+    XR_LIR_OWNERSHIP_BINDING_READ,
+    XR_LIR_OWNERSHIP_BINDING_WRITE,
+    XR_LIR_OWNERSHIP_MAP_OPERATION
 } XrLirOwnershipFactKind;
 
 /* Positions and SSA IDs belong to the exact input module: function, block,
@@ -30,13 +37,18 @@ typedef enum XrLirOwnershipFactKind {
  * Zero means inapplicable for all other IDs. An edge fact
  * describes that edge only, not simultaneous transfers along both branches.
  * ARRAY_OPERATION records a verified catalog operation and exact element.
- * NEW and REPEAT have no receiver; their value/type fields are zero. */
+ * NEW and REPEAT have no receiver; their value/type fields are zero.
+ * MAP_OPERATION uses map_operation instead of array_operation. BINDING facts
+ * name the actual Cell/Ref in value. target_value is the initializer, snapshot,
+ * replacement, or BORROW source; RELEASE has no target. These are positions
+ * already checked by the independent Cell/Ref CFG verifier, not permissions. */
 typedef struct XrLirOwnershipFact {
     XrLirOwnershipFactKind kind;
     uint32_t function, block, instruction, value, argument, edge;
     uint32_t target_block, target_value;
     XrLirType type, array_element;
     XrLirArrayOperation array_operation;
+    XrLirMapOperation map_operation;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

@@ -37,6 +37,20 @@ typedef struct XrLirHomeCall {
     size_t first, count;
 } XrLirHomeCall;
 
+typedef enum XrLirHomeBindingKind {
+    XR_LIR_HOME_BINDING_NONE, XR_LIR_HOME_BINDING_LOCAL, XR_LIR_HOME_BINDING_PARAMETER,
+    XR_LIR_HOME_BINDING_CELL_BORROW, XR_LIR_HOME_BINDING_STATE_BORROW
+} XrLirHomeBindingKind;
+typedef struct XrLirHomeBinding {
+    XrLirHomeBindingKind kind;
+    uint32_t type, parameter, source;
+    size_t offset, first_owner;
+} XrLirHomeBinding;
+typedef struct XrLirHomeWorkspace {
+    uint32_t block, instruction, type;
+    size_t offset, first_owner;
+} XrLirHomeWorkspace;
+
 /* These are copied producer positions, not another lifetime analysis. Kind and
  * operation preserve the common ownership fact ordinals; source/target are SSA
  * IDs in this function. Each edge describes only its selected branch. */
@@ -60,6 +74,17 @@ typedef struct XrLirValueHomes {
     size_t call_count, argument_count;
     XrtManagedFrameSpec frame;
     bool owned_frame_needed;
+    /* SSA indexed, including zero. type names the exact payload image row,
+     * not a heap Cell. Only LOCAL owns a real Header slot. Other rows borrow
+     * a logical parameter (one-based) or an actual source SSA; their offset
+     * and first_owner are SIZE_MAX. Ordinary values[CELL/REF] remain type zero.
+     * These rows confer no aliasing, mutation or escaping authority. */
+    const XrLirHomeBinding *bindings;
+    /* Real instruction-local pending owners for allocating mutators, including
+     * Unit/scalar results. Positions are one-based and do not invent SSA ids.
+     * Every slot starts at true NULL under the existing Frame initialization. */
+    const XrLirHomeWorkspace *workspaces;
+    size_t workspace_count;
 } XrLirValueHomes;
 
 typedef struct XrLirValueHomesRequest {
