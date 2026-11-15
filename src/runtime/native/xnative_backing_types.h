@@ -14,10 +14,7 @@
 #define XNATIVE_BACKING_TYPES_H
 #include "xnative_managed_root.h"
 
-typedef enum XrtBackingArrayKind {
-    XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING,
-    XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64, XRT_BACKING_ARRAY_COUNT
-} XrtBackingArrayKind;
+#include "xray_native_array.h"
 
 static inline size_t xrt_backing_array_stride(XrtBackingArrayKind kind) {
     static const size_t strides[] = {sizeof(int64_t), sizeof(XrtManagedHeader *), sizeof(uint8_t), sizeof(uint64_t)};

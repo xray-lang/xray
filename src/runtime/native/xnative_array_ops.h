@@ -15,24 +15,6 @@
 #include "xnative_array_backing.h"
 #include "xnative_place.h"
 
-typedef struct XrtArrayItem {
-    XrtBackingArrayKind kind;
-    union {
-        int64_t i64;
-        XrtStringBacking *string;
-        uint8_t u8;
-        uint64_t u64;
-    } value;
-} XrtArrayItem;
-typedef enum XrtArrayUpdateKind {
-    XRT_ARRAY_UPDATE_SET, XRT_ARRAY_UPDATE_PUSH
-} XrtArrayUpdateKind;
-typedef struct XrtArrayUpdate {
-    XrtArrayUpdateKind operation;
-    int64_t index;
-    XrtArrayItem item;
-} XrtArrayUpdate;
-
 /* The caller has already admitted the exact Array kind and separately owns
  * mutation authority for its current binding. These borrows establish neither
  * permission nor a new owner. All source and RHS borrows survive until return.
