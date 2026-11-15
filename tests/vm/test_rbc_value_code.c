@@ -9,6 +9,7 @@
 #include "lir/xlir_builder.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
+#include "xray_native_string_value.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -237,13 +238,44 @@ static void scalar_body_calls(void) {
     }
     puts("typed scalar bodies: ordinary calls lazily enter and return to scalar and typed callers passed");
 }
+static void string_outcome_lifetime(void) {
+    static const uint8_t bytes[] = {'A',0xc3,0xa9,0,0xe4,0xb8,0xad};
+    XrLirModule *module = NULL; CHECK(xr_lir_module_create(NULL,&module) == XR_LIR_OK);
+    XrLirFunction root = {0};
+    XrLirFunctionSpec spec = {.name="string_result",.name_length=13,.result=XR_LIR_STRING};
+    CHECK(xr_lir_declare_function(module,&spec,&root) == XR_LIR_OK && xr_lir_define_function(module,root) == XR_LIR_OK);
+    XrLirBlock block = {0}; CHECK(xr_lir_add_block(module,root,NULL,0,&block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module,root,block) == XR_LIR_OK);
+    XrLirLiteral literal = {0}; CHECK(xr_lir_add_literal(module,bytes,sizeof(bytes),&literal) == XR_LIR_OK);
+    XrLirValue value = managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+    CHECK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&value,.operand_count=1}) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module,NULL) == XR_LIR_OK);
+    XrRbcProgram *program = compile(module,root);
+    xr_lir_module_destroy(module);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution) == XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution); CHECK(!execution);
+    const XrtManagedHeader *borrowed = NULL;
+    CHECK(xr_rbc_outcome_string(outcome,&borrowed) && borrowed);
+    const XrtStringBacking *text = (const XrtStringBacking *)borrowed;
+    CHECK(text->length == sizeof(bytes) && text->runes == 4 && text->capacity >= text->length);
+    CHECK(!memcmp(text->bytes,bytes,sizeof(bytes)) && !text->bytes[text->length]);
+    const XrtManagedHeader *again = NULL;
+    CHECK(xr_rbc_outcome_string(outcome,&again) && again == borrowed);
+    xr_rbc_outcome_free(&outcome); CHECK(!outcome && !live);
+    puts("String outcome: fixed UTF-8 backing survives compiler, program and execution retirement passed");
+}
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
     const XrRbcValueCode *callee = xr_rbc_module_value_code(xr_rbc_program_view(program),1);
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
-    allocation_failures(); scalar_state(); scalar_body_calls(); CHECK(!live);
+    allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime(); CHECK(!live);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
