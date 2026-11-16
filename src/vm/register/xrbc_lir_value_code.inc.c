@@ -164,7 +164,7 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
         uint32_t pair[] = {edge.arguments[p],target.parameters[p]};
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
     }
-    return rbc_lir_string_binding_metadata(c,&access) && rbc_lir_value_append(c,access);
+    return rbc_lir_value_append(c,access);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);

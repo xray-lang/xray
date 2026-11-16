@@ -95,7 +95,21 @@ static XrLirValue string_binding_role(XrLirModule *module,XrLirBlock block,XrLir
 static void string_binding_return(XrLirModule *module,XrLirBlock block,XrLirValue value) {
     OK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1}));
 }
-static XrLirModule *string_binding_fixture(bool state,XrLirFunction *root) {
+static XrLirFunction string_binding_state_writer(XrLirModule *module) {
+    XrLirType parameters[]={XR_LIR_STRING,XR_LIR_STATE}; XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="binding_state_write",.name_length=19,
+        .parameters=parameters,.parameter_count=2,.result=XR_LIR_STRING};
+    OK(xr_lir_declare_function(module,&spec,&function)); OK(xr_lir_define_function(module,function));
+    XrLirBlock block={0}; OK(xr_lir_add_block(module,function,NULL,0,&block)); OK(xr_lir_set_entry(module,function,block));
+    XrLirValue incoming={0},state={0};
+    OK(xr_lir_function_parameter(module,function,0,&incoming)); OK(xr_lir_function_parameter(module,function,1,&state));
+    XrLirValue reference=managed_state_value(module,block,XR_LIR_STATE_REFERENCE,XR_LIR_STATE_REF,&state,1,0);
+    XrLirValue write[]={reference,incoming}; managed_state_effect(module,block,XR_LIR_STATE_WRITE,write,2,0);
+    XrLirValue snapshot=managed_state_value(module,block,XR_LIR_STATE_READ,XR_LIR_STRING,&reference,1,0);
+    string_binding_return(module,block,snapshot); return function;
+}
+static XrLirModule *string_binding_fixture(uint32_t mode,XrLirFunction *root) {
+    bool state=mode!=0;
     XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
     OK(xr_lir_string_catalog_install(module,false,false,false));
     XrLirType parameters[]={XR_LIR_STRING_CELL,XR_LIR_STRING_REF,XR_LIR_STRING};
@@ -133,6 +147,8 @@ static XrLirModule *string_binding_fixture(bool state,XrLirFunction *root) {
         XrLirStateLayout layout={.modules=&owner,.module_count=1,.slots=&slot,.slot_count=1,.payload_size=8,.payload_alignment=8};
         OK(xr_lir_set_state_layout(module,&layout)); OK(xr_lir_set_state_entry(module,*root));
     }
+    XrLirFunction writer={0};
+    if (mode==2) writer=string_binding_state_writer(module);
     XrLirBlock block={0}; OK(xr_lir_add_block(module,*root,NULL,0,&block)); OK(xr_lir_set_entry(module,*root,block));
     XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,(const uint8_t *)"cell\0\xc3\xa9",7,&literal));
     XrLirValue seed=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id),result={0};
@@ -150,6 +166,17 @@ static XrLirModule *string_binding_fixture(bool state,XrLirFunction *root) {
         args[0]=borrowed; (void)string_binding_role(module,block,XR_LIR_STRING_OP_APPEND_REF,XR_LIR_UNIT,args,2);
         result=managed_state_value(module,block,XR_LIR_STATE_READ,XR_LIR_STRING,&reference,1,0);
         args[0]=reference; managed_state_effect(module,block,XR_LIR_STATE_WRITE,args,2,0);
+        if (mode==2) {
+            literal=(XrLirLiteral){0}; OK(xr_lir_add_literal(module,(const uint8_t *)"written",7,&literal));
+            XrLirValue incoming=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
+            XrLirValue call_args[]={incoming,owner},written={0};
+            OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_STRING,
+                .callee=writer,.operands=call_args,.operand_count=2},&written));
+            managed_state_effect(module,block,XR_LIR_STRING_DROP,&incoming,1,0);
+            XrLirValue parts[]={result,written},joined=managed_state_value(module,block,XR_LIR_STRING_CONCAT,XR_LIR_STRING,parts,2,0);
+            managed_state_effect(module,block,XR_LIR_STRING_DROP,&result,1,0);
+            managed_state_effect(module,block,XR_LIR_STRING_DROP,&written,1,0); result=joined;
+        }
         managed_state_effect(module,block,XR_LIR_STRING_DROP,&snapshot,1,0);
     } else {
         XrLirValue cell=managed_state_value(module,block,XR_LIR_CELL_NEW,XR_LIR_STRING_CELL,&seed,1,0);
@@ -170,8 +197,12 @@ static XrLirModule *string_binding_fixture(bool state,XrLirFunction *root) {
     string_binding_return(module,block,result); OK(xr_lir_module_finish(module,NULL)); return module;
 }
 static void string_binding_retirement(void) {
-    for (uint32_t state=0;state<2;++state) {
-        XrLirFunction root={0}; XrLirModule *input=string_binding_fixture(state!=0,&root);
+    static const size_t expected_stages[]={3,0,1},expected_caps[]={0,1,2};
+    static const size_t lengths[]={12,21,28},runes[]={11,18,25};
+    static const char *const expected[]={"cell\0\xc3\xa9!!!!!", "cell\0\xc3\xa9" "cell\0\xc3\xa9" "cell\0\xc3\xa9",
+        "cell\0\xc3\xa9" "cell\0\xc3\xa9" "cell\0\xc3\xa9written"};
+    for (uint32_t state=0;state<3;++state) {
+        XrLirFunction root={0}; XrLirModule *input=string_binding_fixture(state,&root);
         attempts=0; XrRbcProgram *program=compile(input,root); size_t sites=attempts;
         xr_rbc_program_destroy(program); program=NULL;
         for (size_t point=1;point<=sites;++point) {
@@ -181,29 +212,34 @@ static void string_binding_retirement(void) {
         }
         failure=SIZE_MAX; program=compile(input,root); check_receiving(program);
         const XrRbcModule *module=xr_rbc_program_view(program);
-        size_t stages=0,appends=0,self_caps=0;
+        size_t stages=0,appends=0,self_caps=0,state_stages=0;
         for (uint32_t f=0;f<module->function_count;++f) {
             const XrRbcValueCode *code=xr_rbc_module_value_code(module,f); CHECK(code && code->string_binding_setup);
             for (size_t n=0;n<code->access_count;++n) {
                 XrRbcValueAccess a=code->accesses[n];
                 appends+=a.operation==XR_RBC_VALUE_STRING_APPEND_BINDING;
                 stages+=(a.operation==XR_RBC_VALUE_BINDING_NEW || a.operation==XR_RBC_VALUE_BINDING_WRITE) && a.window!=UINT32_MAX;
+                if (state==2 && a.operation==XR_RBC_VALUE_BINDING_WRITE && a.window!=UINT32_MAX) {
+                    const XrLirHomeBinding *binding=&code->homes->bindings[a.source];
+                    const XrLirValueHome *incoming=&code->homes->values[a.other];
+                    CHECK(binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==a.source &&
+                        incoming->parameter==1 && incoming->offset==SIZE_MAX && incoming->first_owner==SIZE_MAX);
+                    ++state_stages;
+                }
             }
             for (uint32_t v=1;v<=code->value_count;++v) if (code->homes->bindings &&
                 code->homes->bindings[v].kind==XR_LIR_HOME_BINDING_STATE_BORROW && code->homes->bindings[v].source==v) {
                 CHECK(code->locations[v].kind==XR_RBC_VALUE_REGISTER || code->locations[v].kind==XR_RBC_VALUE_SPILL); ++self_caps;
             }
         }
-        CHECK(appends==2 && stages==(state ? 0u : 3u) && self_caps==(state ? 1u : 0u));
+        CHECK(appends==2 && stages==expected_stages[state] && self_caps==expected_caps[state] && state_stages==(state==2 ? 1u : 0u));
         xr_lir_module_destroy(input); XrRbcExecution *execution=NULL;
         CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK); xr_rbc_program_destroy(program);
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
         CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK); xr_rbc_execution_free(&execution);
         const XrtManagedHeader *owner=NULL; CHECK(xr_rbc_outcome_string(outcome,&owner));
         const XrtStringBacking *text=(const XrtStringBacking *)owner;
-        const char *expected=state ? "cell\0\xc3\xa9" "cell\0\xc3\xa9" "cell\0\xc3\xa9" : "cell\0\xc3\xa9!!!!!";
-        size_t length=state ? 21u : 12u;
-        CHECK(text && text->length==length && text->runes==(state ? 18u : 11u) && !memcmp(text->bytes,expected,length));
+        CHECK(text && text->length==lengths[state] && text->runes==runes[state] && !memcmp(text->bytes,expected[state],lengths[state]));
         xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
     }
     puts("String bindings: borrowed stages, actual aliases, State capabilities and retired creators passed");
