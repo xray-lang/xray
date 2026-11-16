@@ -51,6 +51,11 @@ typedef struct XrLirSliceIntrinsic {
  * BIND(parent), LEN(view), GET(view,index), COPY(view), END(view) have their
  * natural typed signatures. No explicit slot is a language operand. */
 XR_FUNC XrLirStatus xr_lir_slice_catalog_install(XrLirModule *);
+enum XrLirSliceLibraryFlags {
+    XR_LIR_SLICE_LIBRARY_DISPLAY = 1u, XR_LIR_SLICE_LIBRARY_STRING = 2u,
+    XR_LIR_SLICE_LIBRARY_RANGE = 4u, XR_LIR_SLICE_LIBRARY_MAP = 8u
+};
+XR_FUNC XrLirStatus xr_lir_slice_library_catalog_install(XrLirModule *, uint32_t flags);
 XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *, XrLirSliceOperation,
     XrLirType element, XrLirType binding_type, uint32_t *id);
 /* This is a cold copied role/element projection. Equality of numeric ids, type

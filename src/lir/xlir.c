@@ -132,12 +132,13 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
 }
 
 enum {LIR_LIBRARY_VIEW=1, LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8,
-    LIR_LIBRARY_RANGE=16, LIR_LIBRARY_MAP=32};
+    LIR_LIBRARY_RANGE=16, LIR_LIBRARY_MAP=32, LIR_LIBRARY_SLICE=64};
 static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
 #include "xlir_view.inc.c"
+#include "xlir_slice.inc.c"
 #include "xlir_display.inc.c"
 #include "xlir_callable_target.inc.c"
 #include "xlir_string.inc.c"
@@ -214,14 +215,15 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             !xr_lir_internal_type_valid(m, entry.result, true))
             return XR_LIR_UNSUPPORTED;
         if (entry.operation && !xr_lir_internal_view_intrinsic_valid(&entry) &&
+            !xr_lir_internal_slice_intrinsic_valid(m, &entry) &&
             !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry) &&
             !xr_lir_range_intrinsic_valid(&entry) && !xr_lir_map_intrinsic_valid(m, &entry))
             return XR_LIR_UNSUPPORTED;
-        if (!entry.operation && (entry.result == XR_LIR_MAP_STRING_I64_REF || entry.result == XR_LIR_STRING_REF || entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
+        if (!entry.operation && (xr_lir_internal_slice_type(m, entry.result) || entry.result == XR_LIR_MAP_STRING_I64_REF || entry.result == XR_LIR_STRING_REF || entry.result == XR_LIR_STATE || entry.result == XR_LIR_STATE_REF ||
             entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))
             return XR_LIR_UNSUPPORTED;
         for (uint32_t p = 0; p < entry.parameter_count; ++p)
-            if (!entry.operation && (entry.parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry.parameters[p] == XR_LIR_STRING_REF || entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
+            if (!entry.operation && (xr_lir_internal_slice_type(m, entry.parameters[p]) || entry.parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry.parameters[p] == XR_LIR_STRING_REF || entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
                 entry.parameters[p] == XR_LIR_VIEW_FRAME || entry.parameters[p] == XR_LIR_VIEW_CELL ||
                 entry.parameters[p] == XR_LIR_SLICE_I64))
                 return XR_LIR_UNSUPPORTED;
