@@ -58,29 +58,31 @@ static void ownership_free(void *memory) {
 static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
     XrLirOwnershipRequest request={input,types,type_count};
-    CHECK(!live && !live_bytes);
+    size_t input_count = live, input_bytes = live_bytes;
+    CHECK(input_count && input_bytes);
     attempt = 0;
     OK(xr_lir_verify(input, NULL));
     size_t verification = attempt;
-    CHECK(!live && !live_bytes);
+    CHECK(live == input_count && live_bytes == input_bytes);
     attempt = 0;
     OK(xr_lir_ownership_plan_create(&request, &output, NULL));
     size_t count = attempt;
-    CHECK(count > verification && live && live_bytes);
+    CHECK(count > verification && live > input_count && live_bytes > input_bytes);
     xr_lir_ownership_plan_destroy(output); output = NULL;
-    CHECK(!live && !live_bytes);
+    CHECK(live == input_count && live_bytes == input_bytes);
     for (size_t point = 0; point < count; ++point) {
         attempt = 0; fail_at = point;
         XrLirDiagnostic diagnostic;
         CHECK(xr_lir_ownership_plan_create(&request, &output, &diagnostic) == XR_LIR_OUT_OF_MEMORY);
         CHECK(!output && diagnostic.status == XR_LIR_OUT_OF_MEMORY && attempt > point &&
-            !live && !live_bytes);
+            live == input_count && live_bytes == input_bytes);
         fail_at = SIZE_MAX;
         OK(xr_lir_verify(input, NULL));
-        CHECK(!live && !live_bytes);
+        CHECK(live == input_count && live_bytes == input_bytes);
     }
     OK(xr_lir_ownership_plan_create(&request, &output, NULL));
     size_t occupied_count = live, occupied_bytes = live_bytes;
+    CHECK(occupied_count > input_count && occupied_bytes > input_bytes);
     XrLirOwnershipPlan *saved = output;
     attempt = 0; fail_at = 0;
     CHECK(xr_lir_ownership_plan_create(&request, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
@@ -89,7 +91,8 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
     xr_lir_module_destroy(input);
     XrLirOwnershipFact fact;
     OK(xr_lir_ownership_fact_at(output, 0, &fact));
-    CHECK(fact.kind && live == occupied_count && live_bytes == occupied_bytes);
+    CHECK(fact.kind && live == occupied_count - input_count &&
+        live_bytes == occupied_bytes - input_bytes);
     xr_lir_ownership_plan_destroy(output);
     CHECK(!live && !live_bytes);
     printf("ownership snapshot failure points: %zu (verifier %zu)\n", count, verification);
@@ -98,6 +101,8 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
 static void rejected_after_collection(void) {
     XrLirModule *m = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 2, &m));
+    size_t input_count = live, input_bytes = live_bytes;
+    CHECK(input_count && input_bytes);
     XrLirInstructionView *ret = &m->functions[0].blocks[0].instructions[3].view;
     uint32_t *operand = (uint32_t *)ret->operands;
     uint32_t saved = *operand;
@@ -105,9 +110,10 @@ static void rejected_after_collection(void) {
     XrLirOwnershipPlan *plan = NULL;
     XrLirDiagnostic diagnostic;
     CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=m}, &plan, &diagnostic) == XR_LIR_VERIFY_ERROR &&
-        !plan && !live && !live_bytes);
+        !plan && live == input_count && live_bytes == input_bytes);
     *operand = saved;
     OK(xr_lir_verify(m, NULL));
+    CHECK(live == input_count && live_bytes == input_bytes);
     xr_lir_module_destroy(m);
     CHECK(!live && !live_bytes);
 }
