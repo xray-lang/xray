@@ -81,7 +81,9 @@ static void managed_home_shape(Eval *e, const XrRbcModule *module, uint32_t func
         const XrLirValueHome *home = &homes->values[n + 1];
         if (!home->type) { CHECK(!home->owner_count); continue; }
         CHECK(home->type <= image->type_count);
-        if (!home->owner_count) continue;
+        /* String formals borrow the caller's normalized home. Their declared
+         * leaves do not reserve any physical slots in this activation. */
+        if (home->parameter || !home->owner_count) continue;
         const XrtValueImageType *type = &image->types[home->type - 1];
         if (type->kind != XRT_VALUE_STRING) continue;
         CHECK(!home->parameter && home->owner_count == 1 && type->owned_count == 1 &&
