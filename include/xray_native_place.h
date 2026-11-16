@@ -67,16 +67,23 @@ XRAY_API XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace 
 XRAY_API XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
     const XrtPlacePublication *);
 
-/* One selected edge, not a sequence of pairwise swaps. All sources/destinations
- * are unique within their own list; overlap between these lists is allowed.
- * Temporary places are distinct empty Root slots, disjoint from both lists.
- * After complete preflight, all sources move into stable temporaries first,
- * then every destination is published, then all replaced owners are retired.
+typedef enum XrtPlaceTransfer {
+    XRT_PLACE_TRANSFER_COPY = 1, XRT_PLACE_TRANSFER_MOVE
+} XrtPlaceTransfer;
+/* One selected edge, not a sequence of pairwise swaps. Destinations are unique;
+ * a source may have any number of COPY rows and at most one MOVE row. Sources
+ * and destinations may overlap. Temporary places are distinct empty Root slots,
+ * disjoint from both lists. Zero is not an admitted transfer operation.
+ * After complete preflight, every COPY retains into its temporary. A failed
+ * retain rolls back all such references without changing sources/destinations.
+ * Only then do MOVE rows consume their sources into temporaries. All incoming
+ * owners and non-owning bytes publish before any replaced owner retires.
  * Lists/descriptors remain unchanged throughout this allocation-free call. */
 typedef struct XrtPlaceEdge {
     XrtPlace destination, source, temporary;
+    XrtPlaceTransfer transfer;
 } XrtPlaceEdge;
-XRAY_API XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *, size_t count,
+XRAY_API XrtManagedStatus xrt_place_edge_transfer(const XrtPlaceEdge *, size_t count,
     const XrtPlacePublication *);
 #ifdef __cplusplus
 }

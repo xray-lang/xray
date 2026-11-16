@@ -154,10 +154,13 @@ static void edge_unlock(const XrtPlaceEdge *edges, size_t nodes) {
 }
 static XrtManagedStatus edge_preflight(const XrtPlaceEdge *edges, size_t count) {
     for (size_t n = 0; n < count; ++n) {
+        if (edges[n].transfer != XRT_PLACE_TRANSFER_COPY && edges[n].transfer != XRT_PLACE_TRANSFER_MOVE)
+            return XRT_MANAGED_ARGUMENT;
         PlaceLocation source = edge_location(edges, n * 3), destination = edge_location(edges, n * 3 + 1);
         PlaceLocation temporary = edge_location(edges, n * 3 + 2);
         if (!edges[n].temporary.frame || *temporary.slot.owner) return XRT_MANAGED_ARGUMENT;
-        XrtManagedStatus status = place_check(source, XRT_PLACE_MOVE_FROM);
+        XrtManagedStatus status = place_check(source,
+            edges[n].transfer == XRT_PLACE_TRANSFER_COPY ? XRT_PLACE_COPY_FROM : XRT_PLACE_MOVE_FROM);
         if (status == XRT_MANAGED_OK) status = place_check(destination, XRT_PLACE_REPLACE);
         if (status == XRT_MANAGED_OK) status = place_check(temporary, XRT_PLACE_REPLACE);
         if (status != XRT_MANAGED_OK) return status;
@@ -166,13 +169,39 @@ static XrtManagedStatus edge_preflight(const XrtPlaceEdge *edges, size_t count) 
         for (size_t p = 0; p < count * 3; ++p) {
             PlaceLocation other = edge_location(edges, p);
             if (p != n * 3 + 2 && temporary.slot.owner == other.slot.owner) return XRT_MANAGED_ARGUMENT;
-            if (p < n * 3 && ((p % 3 == 0 && source.slot.owner == other.slot.owner) ||
+            if (p < n * 3 && ((p % 3 == 0 && source.slot.owner == other.slot.owner &&
+                    edges[n].transfer == XRT_PLACE_TRANSFER_MOVE && edges[p / 3].transfer == XRT_PLACE_TRANSFER_MOVE) ||
                 (p % 3 == 1 && destination.slot.owner == other.slot.owner))) return XRT_MANAGED_ARGUMENT;
         }
     }
     return XRT_MANAGED_OK;
 }
-XRAY_API XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t count,
+static void edge_copy_rollback(const XrtPlaceEdge *edges, size_t count) {
+    while (count) {
+        size_t n = --count;
+        if (edges[n].transfer != XRT_PLACE_TRANSFER_COPY) continue;
+        PlaceLocation temporary = edge_location(edges, n * 3 + 2);
+        XrtManagedHeader *value = *temporary.slot.owner;
+        *temporary.slot.owner = NULL;
+        xrt_managed_drop(value);
+    }
+}
+static XrtManagedStatus edge_stage_copies(const XrtPlaceEdge *edges, size_t count) {
+    /* A COPY may read a MOVE source, so every fallible retain precedes any
+     * source consumption and keeps rollback backed by the original owners. */
+    for (size_t n = 0; n < count; ++n) {
+        if (edges[n].transfer != XRT_PLACE_TRANSFER_COPY) continue;
+        PlaceLocation source = edge_location(edges, n * 3), temporary = edge_location(edges, n * 3 + 2);
+        XrtManagedHeader *value = *source.slot.owner;
+        if (value && !xrt_managed_retain(value)) {
+            edge_copy_rollback(edges, n);
+            return XRT_MANAGED_REFCOUNT;
+        }
+        *temporary.slot.owner = value;
+    }
+    return XRT_MANAGED_OK;
+}
+XRAY_API XrtManagedStatus xrt_place_edge_transfer(const XrtPlaceEdge *edges, size_t count,
     const XrtPlacePublication *publication) {
     if ((count && !edges) || (publication && !publication->publish)) return XRT_MANAGED_ARGUMENT;
     if (count > SIZE_MAX / 3) return XRT_MANAGED_OVERFLOW;
@@ -193,8 +222,10 @@ XRAY_API XrtManagedStatus xrt_place_edge_move(const XrtPlaceEdge *edges, size_t 
         }
     }
     XrtManagedStatus status = edge_preflight(edges, count);
+    if (status == XRT_MANAGED_OK) status = edge_stage_copies(edges, count);
     if (status == XRT_MANAGED_OK) {
         for (size_t n = 0; n < count; ++n) {
+            if (edges[n].transfer != XRT_PLACE_TRANSFER_MOVE) continue;
             PlaceLocation source = edge_location(edges, n * 3), temporary = edge_location(edges, n * 3 + 2);
             *temporary.slot.owner = *source.slot.owner;
             *source.slot.owner = NULL;
