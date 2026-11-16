@@ -28,9 +28,21 @@ static ScopedCellFixture scoped_cell_fixture(bool map, unsigned attack) {
     OK(xr_lir_function_parameter(f.c.module,f.target,0,&formal));
     XrLirValue inner = callable_fixture_scope(&f.c,body,(XrLirValue){0});
     XrLirValue kept = callable_fixture_leave(&f.c,body,inner,formal,f.cell);
-    XrLirValue answer = scoped_cell_read(&f,body,kept);
-    if (map) answer = ca_constant(&f.c,body,42);
-    ca_return(&f.c,body,answer);
+    (void)scoped_cell_read(&f,body,kept);
+    XrLirBlock formal_join = {0}; XrLirType joined_types[] = {f.cell,f.cell};
+    OK(xr_lir_add_block(f.c.module,f.target,joined_types,2,&formal_join));
+    XrLirValue incoming[] = {formal,formal};
+    XrLirInstruction formal_jump = {.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,
+        .edges={{.target=formal_join,.arguments=incoming,.argument_count=2}}};
+    OK(xr_lir_set_terminator(f.c.module,body,&formal_jump));
+    XrLirValue first_formal = {0}, second_formal = {0};
+    OK(xr_lir_block_parameter(f.c.module,formal_join,0,&first_formal));
+    OK(xr_lir_block_parameter(f.c.module,formal_join,1,&second_formal));
+    (void)scoped_cell_read(&f,formal_join,formal);
+    (void)scoped_cell_read(&f,formal_join,first_formal);
+    XrLirValue answer = scoped_cell_read(&f,formal_join,second_formal);
+    if (map) answer = ca_constant(&f.c,formal_join,42);
+    ca_return(&f.c,formal_join,answer);
     OK(xr_lir_declare_function(f.c.module,&(XrLirFunctionSpec){.name="cells",.name_length=5,.result=XR_LIR_I64},&f.function));
     OK(xr_lir_define_function(f.c.module,f.function));
     XrLirBlock entry = {0}, join = {0};
@@ -99,6 +111,13 @@ static void scoped_cell_projection(bool map) {
         formal->offset == SIZE_MAX && formal->first_owner == SIZE_MAX && formal->temporary_offset == SIZE_MAX &&
         formal->temporary_first_owner == SIZE_MAX && formal->byte_count == 1 &&
         formals->bytes[formal->first_bytes].offset == 0 && formals->bytes[formal->first_bytes].size == sizeof(void *));
+    CHECK(formals->transfer_count == 2);
+    for (size_t n = 0; n < formals->transfer_count; ++n) {
+        const XrLirHomeTransfer *edge = &formals->transfers[n];
+        CHECK(edge->source == 1 && edge->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY &&
+            formals->values[edge->target].cell_transport == XR_LIR_CELL_TRANSPORT_OWNED &&
+            formals->values[edge->target].owner_count == 1 && formals->values[edge->target].temporary_first_owner != SIZE_MAX);
+    }
     bool bound = false, kept = false, borrowed_keep = false;
     for (size_t n = 0; n < homes->event_count; ++n) {
         const XrLirHomeEvent *e = &homes->events[n];
