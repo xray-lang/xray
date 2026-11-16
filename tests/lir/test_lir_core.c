@@ -20,8 +20,8 @@ static void slice_callable_captures(void) {
         XrLirModule *m=slice_callable_fixture((SliceCallableCase)shape);
         bool safe=shape==SLICE_CALLABLE_DIRECT || shape==SLICE_CALLABLE_INDIRECT ||
             shape==SLICE_CALLABLE_ALIAS || shape==SLICE_CALLABLE_INDIRECT_ARGUMENT;
-        bool conflicting=shape==SLICE_CALLABLE_ARRAY || shape==SLICE_CALLABLE_DIRECT_LOCAL_WRITE ||
-            shape==SLICE_CALLABLE_INDIRECT_LOCAL_WRITE || shape==SLICE_CALLABLE_CAPTURE_CONTEXTS;
+        bool conflicting=shape==SLICE_CALLABLE_STATE_WRITE || shape==SLICE_CALLABLE_DIRECT_STATE_WRITE ||
+            shape==SLICE_CALLABLE_INDIRECT_STATE_WRITE;
         XrLirStatus expected=safe?XR_LIR_OK:conflicting?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
         const char *expected_message=conflicting?"Array binding write":"captured binding effect facts";
         XrLirDiagnostic diagnostic={0};
