@@ -178,9 +178,14 @@ static void scoped_cells(void) {
     scoped_cell_capture_lifetimes();
     for (unsigned attack = 1; attack < 4; ++attack) {
         ScopedCellFixture f = scoped_cell_fixture(attack == 3,attack); XrLirDiagnostic diagnostic;
-        CHECK(xr_lir_module_finish(f.c.module,&diagnostic) == XR_LIR_VERIFY_ERROR &&
-            strstr(diagnostic.message,"Cell") && !strcmp(diagnostic.message,attack == 1 ?
-                "Cell edge follows release or precedes ownership" : "Cell use follows release or precedes ownership"));
+        XrLirStatus status = xr_lir_module_finish(f.c.module,&diagnostic);
+        const char *expected = attack == 1 ? "Cell edge follows release or precedes ownership" :
+            "Cell use follows release or precedes ownership";
+        if (status != XR_LIR_VERIFY_ERROR || !diagnostic.message || strcmp(diagnostic.message,expected))
+            fprintf(stderr,"Cell lifetime attack=%u status=%u function=%u block=%u instruction=%u: %s; expected: %s\n",
+                attack,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,
+                diagnostic.message ? diagnostic.message : "(none)",expected);
+        CHECK(status == XR_LIR_VERIFY_ERROR && diagnostic.message && !strcmp(diagnostic.message,expected));
         xr_lir_module_destroy(f.c.module);
     }
 }
