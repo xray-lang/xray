@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_effect_analysis_owner.h"
 #include "xir/xxir_effects.c"
@@ -1701,7 +1702,7 @@ int main(int argc, char **argv) {
         !strcmp(argv[1], "--source-storage") || !strcmp(argv[1], "--lexical") ||
         !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion") ||
         !strcmp(argv[1], "--module-borrows") || !strcmp(argv[1], "--module-export") ||
-        !strcmp(argv[1], "--preparation-locations"))));
+        !strcmp(argv[1], "--preparation-locations") || !strcmp(argv[1], "--entry-footprint"))));
     effect_case_begin();
     if (argc==2 && !strcmp(argv[1],"--preparation-locations")) {
         preparation_failure_locations(); effect_case_end(); return 0;
@@ -1766,19 +1767,27 @@ int main(int argc, char **argv) {
         {control_summary_kernel,true},
     };
     bool control_only = argc==2 && !strcmp(argv[1],"--control-summary");
+    bool entry_only = argc==2 && !strcmp(argv[1],"--entry-footprint");
     const char *progress_setting=getenv("XR_TEST_PROGRESS");
     bool progress=progress_setting && !strcmp(progress_setting,"1");
     for (size_t p=0;p<sizeof(probes)/sizeof(probes[0]);++p)
-        if (argc==1 || probes[p].control==control_only) {
+        if (entry_only ? probes[p].run==entry_footprint_ownership :
+            argc==1 || probes[p].control==control_only) {
+            clock_t started=0;
             if (progress) {
-                fprintf(stderr,"[xir-test] probe[%zu/%zu] BEGIN control=%u\n",p,
-                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control);
+                started=clock();
+                fprintf(stderr,"[xir-test] probe[%zu/%zu] BEGIN control=%u ticks=%lld clock_rate=%lld\n",p,
+                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control,
+                    (long long)started,(long long)CLOCKS_PER_SEC);
                 fflush(stderr);
             }
             probes[p].run();
             if (progress) {
-                fprintf(stderr,"[xir-test] probe[%zu/%zu] END control=%u\n",p,
-                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control);
+                clock_t finished=clock();
+                long long elapsed=started!=(clock_t)-1 && finished!=(clock_t)-1 && finished>=started ?
+                    (long long)(finished-started) : -1;
+                fprintf(stderr,"[xir-test] probe[%zu/%zu] END control=%u ticks=%lld elapsed_ticks=%lld\n",p,
+                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control,(long long)finished,elapsed);
                 fflush(stderr);
             }
         }
