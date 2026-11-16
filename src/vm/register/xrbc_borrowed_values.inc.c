@@ -52,7 +52,7 @@ static bool rbc_borrowed_home_ranges(const XrRbcModule *module,const XrRbcValueC
 }
 static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbcFunction *function,
     const XrRbcValueCode *code) {
-    if (code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
+    if (code->string_binding_setup || code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
         (code->parameter_count && !code->parameters) || code->access_count>65536 ||
         (code->access_count && !code->accesses) || (code->argument_count && !code->arguments) ||
         code->scope_count!=rbc_function_scopes(module,function).count ||

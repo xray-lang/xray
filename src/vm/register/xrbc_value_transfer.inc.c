@@ -36,7 +36,10 @@ static bool rbc_value_flow_read(RbcStringAdmission *state, const XrRbcValueCode 
         *output=(RbcValueEdgeState){.value={rbc_value_signature(state->module,code,value),RBC_FUNCTION},.scope=live.storage};
         return true;
     }
-    if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) || rbc_value_binding(code,value)) { *output=(RbcValueEdgeState){0}; return true; }
+    const XrLirHomeBinding *binding=rbc_value_binding(code,value);
+    bool state_cap=rbc_value_binding_state_cap(code,value);
+    if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) ||
+        (binding && !state_cap)) { *output=(RbcValueEdgeState){0}; return true; }
     XrRbcValueLocation location=code->locations[value];
     if (location.kind==XR_RBC_VALUE_AGGREGATE) {
         if (location.index>=state->function->aggregate_value_count || !state->aggregates[location.index]) return false;
@@ -63,7 +66,10 @@ static bool rbc_value_flow_write(RbcStringAdmission *state, const XrRbcValueCode
         functions[value]=(RbcFunctionFlow){rbc_scope_current(state),(uint8_t)incoming.scope};
         return true;
     }
-    if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) || rbc_value_binding(code,value)) return true;
+    const XrLirHomeBinding *binding=rbc_value_binding(code,value);
+    bool state_cap=rbc_value_binding_state_cap(code,value);
+    if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) ||
+        (binding && !state_cap)) return true;
     XrRbcValueLocation location=code->locations[value];
     if (location.kind==XR_RBC_VALUE_AGGREGATE) {
         if (location.index>=state->function->aggregate_value_count) return false;
@@ -161,6 +167,9 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_read(state,code,access.other,&incoming) &&
             rbc_value_flow_write(state,code,access.result,incoming);
+    case XR_RBC_VALUE_STRING_APPEND_BINDING:
+        return rbc_value_flow_binding(state,code,access.source,true) &&
+            rbc_value_flow_read(state,code,access.other,&incoming);
     case XR_RBC_VALUE_SLICE: {
         if (access.index==XR_LIR_SLICE_OP_CLEANUP) return true;
         const uint32_t *args=code->arguments+access.first;
@@ -271,9 +280,11 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_transfer(state,code,access);
     case XR_RBC_VALUE_MAP: return rbc_value_map_transfer(state,code,access);
-    case XR_RBC_VALUE_BINDING_NEW: return true;
-    case XR_RBC_VALUE_BINDING_READ: return rbc_value_flow_binding(state,code,access.source,false);
-    case XR_RBC_VALUE_BINDING_WRITE: return rbc_value_flow_binding(state,code,access.source,true);
+    case XR_RBC_VALUE_BINDING_NEW: return rbc_value_flow_read(state,code,access.source,&incoming);
+    case XR_RBC_VALUE_BINDING_READ: return rbc_value_flow_binding(state,code,access.source,false) &&
+        rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_BINDING_WRITE: return rbc_value_flow_binding(state,code,access.source,true) &&
+        rbc_value_flow_read(state,code,access.other,&incoming);
     case XR_RBC_VALUE_BINDING_DROP: return rbc_value_flow_binding(state,code,access.source,false);
     case XR_RBC_VALUE_STRING_LITERAL: case XR_RBC_VALUE_STRING_CONCAT:
     case XR_RBC_VALUE_COPY: case XR_RBC_VALUE_MOVE:

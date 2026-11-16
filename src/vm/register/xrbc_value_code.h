@@ -36,7 +36,7 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_NULLABLE_SOME, XR_RBC_VALUE_NULLABLE_IS_SOME, XR_RBC_VALUE_NULLABLE_UNWRAP,
     XR_RBC_VALUE_FUNCTION_NEW, XR_RBC_VALUE_FUNCTION_CALL, XR_RBC_VALUE_FUNCTION_ALIAS,
     XR_RBC_VALUE_FUNCTION_SCOPE_EXIT, XR_RBC_VALUE_SLICE, XR_RBC_VALUE_STRING_APPEND_OWNED,
-    XR_RBC_VALUE_CELL, XR_RBC_VALUE_MAP_LITERAL
+    XR_RBC_VALUE_CELL, XR_RBC_VALUE_MAP_LITERAL, XR_RBC_VALUE_STRING_APPEND_BINDING
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -58,6 +58,10 @@ typedef struct XrRbcValueAccess {
      * readers and materialization. Natural bytes never carry a keeper owner. */
     /* STRING_APPEND_OWNED index is its one-based APPEND_TRANSFER event.
      * source moves, other borrows, and result has its own real staging slot. */
+    /* String BINDING accesses and STRING_APPEND_BINDING index their exact
+     * common event. A writing access uses window=UINT32_MAX without a stage,
+     * otherwise the zero-based independent VALUE workspace ordinal. Append
+     * always has that candidate; a borrowed String formal copy uses its stage. */
     /* CELL index is its exact one-based common Cell event. Aliases use other
      * for a physical scope capability; operation hooks keep their normal SSA
      * operands. Scope exit and RELEASE never read retired natural bytes. */
@@ -70,6 +74,10 @@ typedef struct XrRbcValueCode {
     uint32_t value_count;
     const uint32_t *parameters; /* Logical LIR parameter SSA ids, in order. */
     uint32_t parameter_count;
+    /* Common String bindings need cold setup before any checked operand borrow.
+     * The compiler projects this bit once; ordinary scalar functions never
+     * acquire a typed activation or execute a new dispatch path. */
+    bool string_binding_setup;
     const XrRbcValueAccess *accesses;
     size_t access_count;
     const uint32_t *arguments;

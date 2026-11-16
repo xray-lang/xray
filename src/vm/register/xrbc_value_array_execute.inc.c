@@ -86,9 +86,31 @@ static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcSt
     if (access.operation==XR_RBC_VALUE_BINDING_DROP) return xrt_managed_slot_drop(place.frame,place.slot);
     bool read=access.operation==XR_RBC_VALUE_BINDING_READ;
     uint32_t value=read ? access.result : access.operation==XR_RBC_VALUE_BINDING_NEW ? access.source : access.other;
+    if (!read && rbc_value_kind(module,activation->code,binding)==XRT_VALUE_STRING && access.window!=UINT32_MAX) {
+        const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
+        const XrtStringBacking *borrowed=NULL;
+        status=rbc_value_string_borrow(activation,value,&borrowed);
+        if (status==XRT_MANAGED_OK) status=xrt_backing_slot_copy(activation->frame,workspace->first_owner,&borrowed->managed);
+        if (status!=XRT_MANAGED_OK) return status;
+        XrtPlace stage={.frame=activation->frame,.slot=workspace->first_owner,.nulls=XRT_PLACE_NONNULL};
+        status=xrt_place_move_replace(place,stage,NULL);
+        XrtManagedStatus cleanup=xrt_managed_slot_drop(activation->frame,workspace->first_owner);
+        return status==XRT_MANAGED_OK ? cleanup : status;
+    }
     RbcValueOrigin from=read ? (RbcValueOrigin){activation,value} : rbc_value_origin(activation,value);
     status=rbc_value_place(from,false,0,&other);
     return status==XRT_MANAGED_OK ? xrt_place_copy_replace(read ? other : place,read ? place : other,NULL) : status;
+}
+static XrtManagedStatus rbc_value_string_binding_append(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
+    XrtExternalOwner external; XrtPlace place;
+    XrtManagedStatus status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,access.source),&external,&place);
+    const XrtStringBacking *suffix=NULL;
+    if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&suffix);
+    if (status!=XRT_MANAGED_OK) return status;
+    const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
+    xrt_native_string_append_place(place,activation->frame,workspace->first_owner,suffix,source);
+    return XRT_MANAGED_OK;
 }
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {

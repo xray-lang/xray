@@ -30,7 +30,8 @@ static bool rbc_lir_value_call(RbcLirCompiler *c,const XrLirInstructionView *ins
     for (size_t p=0;p<row->count;++p) {
         uint32_t value=c->homes->arguments[row->first+p];
         typed|=(c->homes->values[value].type && c->value_code->locations[value].kind==XR_RBC_VALUE_NOWHERE) ||
-            (c->homes->bindings && c->homes->bindings[value].type);
+            (c->homes->bindings && c->homes->bindings[value].type &&
+             !(c->homes->bindings[value].kind==XR_LIR_HOME_BINDING_STATE_BORROW && c->homes->bindings[value].source==value));
     }
     if (!typed) return false;
     XrLirFunctionView callee;
@@ -55,7 +56,8 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     XrLirClosureTarget target={0};
     if (xr_lir_closure_target_view(c->input,c->function,&target)==XR_LIR_OK && target.callable) return true;
     for (uint32_t v = 1; v <= c->view.value_count; ++v)
-        if (rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,v)) || rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
+        if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v}) ||
+            rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,v)) || rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
             rbc_lir_value_type(c,v) == XR_LIR_ARRAY_CELL || rbc_lir_value_type(c,v) == XR_LIR_ARRAY_REF ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64 || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_REF) return true;
@@ -114,6 +116,8 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         memcpy(parameters,c->view.parameters,(size_t)code->parameter_count * sizeof(*parameters));
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
+        code->string_binding_setup |= c->homes->owned_frame_needed &&
+            xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v});
         if (rbc_lir_common_value(c, v)) continue;
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX)
             locations[v] = (XrRbcValueLocation){XR_RBC_VALUE_AGGREGATE,c->aggregate_home[v]};
@@ -160,7 +164,7 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
         uint32_t pair[] = {edge.arguments[p],target.parameters[p]};
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
     }
-    return rbc_lir_value_append(c,access);
+    return rbc_lir_string_binding_metadata(c,&access) && rbc_lir_value_append(c,access);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);
@@ -200,6 +204,43 @@ static bool rbc_lir_slice_access(RbcLirCompiler *c, const XrLirInstructionView *
         uint32_t value=construct ? instruction->result : instruction->operands[0];
         access->window=rbc_lir_callable_event(c,construct ? XR_LIR_OWNERSHIP_VIEW_VALUE : XR_LIR_OWNERSHIP_VIEW_END,value);
         if (!access->window) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice operation lost its common loan event");
+    }
+    return true;
+}
+static bool rbc_lir_string_binding_operation(RbcLirCompiler *c,uint32_t role,XrRbcValueAccess *access) {
+    if (role==XR_LIR_STRING_OP_READ_REF) access->operation=XR_RBC_VALUE_BINDING_READ;
+    else if (role==XR_LIR_STRING_OP_WRITE_REF) access->operation=XR_RBC_VALUE_BINDING_WRITE;
+    else if (role==XR_LIR_STRING_OP_APPEND_CELL || role==XR_LIR_STRING_OP_APPEND_STATE || role==XR_LIR_STRING_OP_APPEND_REF) {
+        access->operation=XR_RBC_VALUE_STRING_APPEND_BINDING;
+        access->index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_STRING_OPERATION,access->source);
+        if (!access->index) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"String binding append lost its common event");
+    } else return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"String operation has no fixed binding receiver");
+    return true;
+}
+static bool rbc_lir_string_binding_metadata(RbcLirCompiler *c,XrRbcValueAccess *access) {
+    bool binding=access->operation>=XR_RBC_VALUE_BINDING_NEW && access->operation<=XR_RBC_VALUE_BINDING_DROP;
+    uint32_t receiver=access->operation==XR_RBC_VALUE_BINDING_NEW ? access->result : access->source;
+    if ((binding && xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,receiver})) ||
+        access->operation==XR_RBC_VALUE_STRING_APPEND_BINDING) {
+        if (binding) {
+            XrLirOwnershipFactKind kind=access->operation==XR_RBC_VALUE_BINDING_NEW ? XR_LIR_OWNERSHIP_BINDING_NEW :
+                access->operation==XR_RBC_VALUE_BINDING_READ ? XR_LIR_OWNERSHIP_BINDING_READ :
+                access->operation==XR_RBC_VALUE_BINDING_WRITE ? XR_LIR_OWNERSHIP_BINDING_WRITE : XR_LIR_OWNERSHIP_BINDING_RELEASE;
+            access->index=rbc_lir_callable_event(c,kind,receiver);
+            if (!access->index) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"String binding lost its common access event");
+        }
+        if (access->operation!=XR_RBC_VALUE_BINDING_READ && access->operation!=XR_RBC_VALUE_BINDING_DROP) {
+            access->window=UINT32_MAX;
+            for (size_t w=0;w<c->homes->workspace_count;++w) {
+                const XrLirHomeWorkspace *workspace=&c->homes->workspaces[w];
+                if (workspace->block!=c->diagnostic->block || workspace->instruction!=c->diagnostic->instruction ||
+                    workspace->kind!=XR_LIR_HOME_WORKSPACE_VALUE || workspace->value!=receiver) continue;
+                if (w>=UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"String workspace ordinal exceeds typed code");
+                access->window=(uint32_t)w; break;
+            }
+            if (access->operation==XR_RBC_VALUE_STRING_APPEND_BINDING && access->window==UINT32_MAX)
+                return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"String binding append lost its pending workspace");
+        }
     }
     return true;
 }
@@ -250,7 +291,8 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_PRINT: access.operation = XR_RBC_VALUE_STRING_PRINT; break;
     case XR_LIR_STRING_LEN: access.operation = XR_RBC_VALUE_STRING_LENGTH; break;
     case XR_LIR_MAP_BORROW: case XR_LIR_ARRAY_BORROW: *handled=true; return true;
-    case XR_LIR_MAP_CELL_DROP: case XR_LIR_ARRAY_CELL_DROP: access.operation=XR_RBC_VALUE_BINDING_DROP; break;
+    case XR_LIR_MAP_CELL_DROP: case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_STRING_CELL_DROP:
+        access.operation=XR_RBC_VALUE_BINDING_DROP; break;
     case XR_LIR_MAP_REF_READ: case XR_LIR_ARRAY_REF_READ: access.operation=XR_RBC_VALUE_BINDING_READ; break;
     case XR_LIR_MAP_REF_WRITE: case XR_LIR_ARRAY_REF_WRITE: access.operation=XR_RBC_VALUE_BINDING_WRITE; break;
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE: {
@@ -261,7 +303,15 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     }
     case XR_LIR_CALL_INTRINSIC: {
-        if (xr_lir_string_role(c->input,i)==XR_LIR_STRING_OP_APPEND_OWNED) {
+        uint32_t string_role=xr_lir_string_role(c->input,i);
+        if (string_role && string_role!=XR_LIR_STRING_OP_APPEND_OWNED) {
+            if (string_role==XR_LIR_STRING_OP_BORROW_CELL || string_role==XR_LIR_STRING_OP_BORROW_STATE) {
+                *handled=true; return true;
+            }
+            if (!rbc_lir_string_binding_operation(c,string_role,&access)) return false;
+            break;
+        }
+        if (string_role==XR_LIR_STRING_OP_APPEND_OWNED) {
             access.operation=XR_RBC_VALUE_STRING_APPEND_OWNED;
             access.index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_APPEND_TRANSFER,access.source);
             if (!access.index) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"String append lost its common transfer event");
@@ -311,6 +361,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     }
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: {
+        if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,access.source})) {
+            access.operation=i->op==XR_LIR_STATE_READ ? XR_RBC_VALUE_BINDING_READ : XR_RBC_VALUE_BINDING_WRITE;
+            break;
+        }
         XrLirStateReference shape = {0};
         xr_lir_state_reference_view(c->input,(XrLirValue){c->input,c->function.id,access.source},&shape);
         if (shape.payload != XR_LIR_STRING && shape.payload != XR_LIR_ARRAY && shape.payload != XR_LIR_MAP_STRING_I64 &&
@@ -338,5 +392,5 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     default: return true;
     }
     *handled = true;
-    return rbc_lir_value_append(c,access);
+    return rbc_lir_string_binding_metadata(c,&access) && rbc_lir_value_append(c,access);
 }
