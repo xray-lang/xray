@@ -44,6 +44,7 @@ static void ca_return(CArrayFixture *c, XrLirBlock block, XrLirValue value) {
 }
 #include "lir_callable_fixture.h"
 #include "lir_callable_bytecode_cases.h"
+#include "lir_callable_construction_fixture.h"
 
 static XrRbcProgram *compile(XrLirModule *module, XrLirFunction root) {
     XrRbcProgram *program = NULL;
@@ -124,6 +125,24 @@ static void direct_weakened_formal(void) {
     ca_return(&c,block,result); OK(xr_lir_module_finish(c.module,NULL));
     XrRbcProgram *program=compile(c.module,root);
     xr_lir_module_destroy(c.module); execute(program,42);
+}
+static void frame_construction_proofs(void) {
+    for (unsigned shape=0;shape<4;++shape) {
+        XrLirModule *module=NULL; XrLirFunction root={0}; XrLirValue reference={0};
+        callable_construction_fixture(shape,&module,&root,&reference);
+        XrRbcProgram *program=NULL; XrRbcCompileDiagnostic diagnostic={0};
+        XrRbcCompileStatus status=xr_rbc_compile(module,root,&program,&diagnostic);
+        if (shape>=2) {
+            CHECK(status==XR_RBC_COMPILE_UNSUPPORTED && !program);
+            CHECK(strstr(diagnostic.message,"single activation construction"));
+            xr_lir_module_destroy(module); continue;
+        }
+        CHECK(status==XR_RBC_COMPILE_OK && program);
+        xr_lir_module_destroy(module);
+        CallableRawFixture raw=callable_raw_fixture(program);
+        callable_raw_positive(&raw,program); callable_raw_free(&raw);
+        execute(program,42);
+    }
 }
 static void owned_zero_capture(void) {
     CArrayFixture c={0};
@@ -412,6 +431,7 @@ static void scope_receiving(void) {
 
 int main(void) {
     pure_captures();
+    frame_construction_proofs();
     direct_weakened_formal();
     owned_zero_capture();
     supported_and_rejected_captures();

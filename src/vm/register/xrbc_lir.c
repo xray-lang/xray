@@ -671,11 +671,12 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
 
 static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *mapping,
     uint32_t *count, XrRbcCompileDiagnostic *d) {
+    XrLirCallableFacts *facts = NULL;
     for (uint32_t index = 0; index < *count; ++index) {
         XrLirFunction f = {input, ids[index]};
         XrLirFunctionView v;
         RbcLirOutputValues output={0};
-        bool entry_once = false;
+        XrLirCallableFunctionFacts callable = {0};
         if (xr_lir_function_view(input, f, &v) != XR_LIR_OK ||
             !rbc_lir_admit(input, f, &v, d, &output)) goto rejected;
         for (uint32_t b = 0; b < v.block_count; ++b) {
@@ -689,20 +690,27 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 d->block = block.id;
                 d->instruction = n + 1;
                 if (i.op == XR_LIR_FUNCTION_REF && i.bits==XR_LIR_CLOSURE_FRAME && i.operand_count) {
-                    if (block.id != v.entry) goto frame_rejected;
-                    if (!entry_once) {
-                        for (uint32_t p = 0; p < v.block_count; ++p) {
-                            XrLirBlock predecessor;
-                            XrLirBlockView pv;
-                            XrLirInstructionView end;
-                            xr_lir_block_at(input, f, p, &predecessor);
-                            xr_lir_block_view(input, predecessor, &pv);
-                            xr_lir_instruction_view(input, predecessor, pv.instruction_count - 1, &end);
-                            for (uint32_t e = 0; e < end.edge_count; ++e)
-                                if (end.edges[e].target == v.entry) goto frame_rejected;
+                    if (!facts) {
+                        XrLirStatus status=xr_lir_callable_facts_create(input,&facts);
+                        if (status!=XR_LIR_OK) {
+                            rbc_lir_error(d,status==XR_LIR_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY :
+                                XR_RBC_COMPILE_INVALID,"cannot receive final Frame construction facts",i.source);
+                            goto rejected;
                         }
-                        entry_once = true;
                     }
+                    if (!facts || (!callable.values && xr_lir_callable_facts_function(facts,f.id,&callable)!=XR_LIR_OK))
+                        goto frame_unproven;
+                    if (!callable.values || !i.result || i.result>callable.value_count) goto frame_unproven;
+                    const XrLirCallableValueFact *row=&callable.values[i.result];
+                    if (row->kind!=XR_LIR_SCOPED_VALUE_FUNCTION || row->operation!=XR_LIR_FUNCTION_REF ||
+                        row->type!=i.type || row->block!=block.id || row->instruction!=n+1 ||
+                        row->known_target!=i.callee || row->constructor_storage!=XR_LIR_CLOSURE_FRAME ||
+                        row->capture_count!=i.operand_count || row->first_capture>callable.capture_count ||
+                        row->capture_count>callable.capture_count-row->first_capture || !callable.captures)
+                        goto frame_unproven;
+                    for (uint32_t p=0;p<i.operand_count;++p)
+                        if (callable.captures[row->first_capture+p]!=i.operands[p]) goto frame_unproven;
+                    if (row->constructor_may_repeat) goto frame_rejected;
                 }
                 if (!rbc_lir_operation(input, f, &i, &output)) {
                     rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -738,13 +746,19 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
         }
         rbc_lir_output_free(&output);
         continue;
+frame_unproven:
+        rbc_lir_error(d, XR_RBC_COMPILE_INVALID,
+            "Frame constructor has no exact common construction proof", (XrLirSource){0});
+        goto rejected;
 frame_rejected:
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "frame environments require a single activation construction", (XrLirSource){0});
 rejected:
         rbc_lir_output_free(&output);
+        xr_lir_callable_facts_destroy(facts);
         return false;
     }
+    xr_lir_callable_facts_destroy(facts);
     return true;
 }
 
