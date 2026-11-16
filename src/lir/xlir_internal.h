@@ -115,6 +115,16 @@ XR_FUNC const XrLirIntrinsic *xr_lir_internal_slice_intrinsic(const XrLirModule 
  * preserves all existing definitions while restoring the intended position. */
 XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_insert(XrLirModule *, XrLirBlock,
     uint32_t ordinal, XrLirValue target, const XrLirSource *);
+typedef struct XrLirSliceCleanupInsertion {
+    XrLirBlock block;
+    uint32_t ordinal;
+    XrLirValue target;
+    XrLirSource source;
+} XrLirSliceCleanupInsertion;
+/* Input positions refer to the unchanged body and are ordered within each
+ * block. Each block is merged once after the normal emitter owns its effects. */
+XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_batch(XrLirModule *, XrLirFunction,
+    const XrLirSliceCleanupInsertion *, size_t count);
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *, XrLirType);
 
 /* Operand validation may reach a later block before its shape is checked. */

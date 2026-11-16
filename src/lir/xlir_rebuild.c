@@ -18,6 +18,7 @@
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
 #include "xlir_callable_copy.h"
+#include "xlir_slice_copy.h"
 #include "xlir_types.h"
 #include "xlir_map.h"
 #include "base/xchecks.h"
@@ -36,6 +37,7 @@ typedef struct {
     XrLirValue *values, *arguments;
     XrLirType *types;
     const XrLirCopyPlan *plan;
+    LirSliceCopyCleanups cleanups;
 } Rebuild;
 
 static void *rebuild_storage(size_t count, size_t size) {
@@ -103,6 +105,7 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
 }
 
 static void rebuild_function_free(Rebuild *c) {
+    xr_free(c->cleanups.items); c->cleanups = (LirSliceCopyCleanups){0};
     xr_free(c->blocks); c->blocks = NULL;
     xr_free(c->stack); c->stack = NULL;
     xr_free(c->values); c->values = NULL;
@@ -192,6 +195,8 @@ static XrLirStatus rebuild_arguments(Rebuild *c, const uint32_t *ids, uint32_t c
 
 static XrLirStatus rebuild_instruction(Rebuild *c, XrLirBlock block,
     const XrLirInstructionView *source, bool terminal) {
+    if (source->op == XR_LIR_SLICE_CLEANUP)
+        return lir_slice_copy_cleanup_record(&c->cleanups, c->output, block, source);
     XR_DCHECK(source->edge_count <= 2, "Verified scalar control flow has at most two successors");
     XrLirInstruction instruction = {.op = source->op, .type = source->type,
         .predicate = source->predicate, .bits = source->bits, .intrinsic = source->intrinsic,
@@ -284,6 +289,24 @@ static XrLirStatus rebuild_body(Rebuild *c) {
     return XR_LIR_OK;
 }
 
+static XrLirStatus rebuild_cleanups(Rebuild *c) {
+    size_t kept = 0;
+    for (size_t n = 0; n < c->cleanups.count; ++n) {
+        XrLirSliceCleanupInsertion item = c->cleanups.items[n];
+        uint32_t old = item.target.id;
+        if (!old || old > c->view.value_count) return XR_LIR_VERIFY_ERROR;
+        if (!c->values[old].id) {
+            const XrLirFunctionData *source = &c->input->functions[c->source.id - 1];
+            uint32_t block = source->values[old - 1].block;
+            if (!c->plan || !block || c->plan->keep_block(c->plan->context, block)) return XR_LIR_VERIFY_ERROR;
+            continue;
+        }
+        c->cleanups.items[kept++] = item;
+    }
+    c->cleanups.count = kept;
+    return lir_slice_copy_cleanup_finish(&c->cleanups, c->output, c->functions[c->source.id], c->values, c->view.value_count);
+}
+
 XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule **output,
     const XrLirCopyPlan *plan) {
     if (!output || *output || !xr_lir_module_is_readable(input)) return XR_LIR_INVALID_ARGUMENT;
@@ -304,6 +327,7 @@ XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule *
         if (status == XR_LIR_OK) status = rebuild_function_storage(&c);
         if (status == XR_LIR_OK) status = rebuild_parameters(&c);
         if (status == XR_LIR_OK) status = rebuild_body(&c);
+        if (status == XR_LIR_OK) status = rebuild_cleanups(&c);
         rebuild_function_free(&c);
         if (plan) plan->end(plan->context);
     }

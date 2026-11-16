@@ -118,6 +118,9 @@ static void slice_conditional_cleanup(XrLirType element, bool malformed) {
     }
     OK(xr_lir_emit_effect(c.module, join, &cleanup));
     slice_write(&c, join, binding, false); ca_return(&c, join, ca_constant(&c, join, 42));
+    XrLirSliceCleanupInsertion insertions[] = {{.block=join,.ordinal=0,.target=value},
+        {.block=loan,.ordinal=0,.target=value}};
+    OK(xr_lir_internal_slice_cleanup_batch(c.module, fn, insertions, 2));
     OK(xr_lir_module_finish(c.module, NULL));
     XrLirInstructionView *sealed = &c.module->functions[fn.id - 1].blocks[join.id - 1].instructions[0].view;
     sealed->edge_count = 1; sealed->edges[0].target = join.id;

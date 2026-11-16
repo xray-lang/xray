@@ -731,6 +731,71 @@ XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_insert(XrLirModule *m, XrLirBl
             ++f->values[n].instruction;
     return XR_LIR_OK;
 }
+XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_batch(XrLirModule *m, XrLirFunction function,
+    const XrLirSliceCleanupInsertion *items, size_t count) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK || !count) return status;
+    if (!items || function.module != m || !function.id || function.id > m->function_count)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirFunctionData *f = &m->functions[function.id - 1];
+    size_t block_extent = f->block_count;
+    if (block_extent == SIZE_MAX) return lir_fail(m, XR_LIR_UNSUPPORTED);
+    ++block_extent;
+    size_t *starts = lir_allocate(m, block_extent, sizeof(*starts));
+    size_t *cursor = lir_allocate(m, f->block_count, sizeof(*cursor));
+    size_t *order = lir_allocate(m, count, sizeof(*order));
+    if (!starts || !cursor || !order) { status = m->failure; goto done; }
+    memset(starts, 0, block_extent * sizeof(*starts));
+    for (size_t n = 0; n < count; ++n) {
+        XrLirBlock handle = items[n].block;
+        if (handle.module != m || handle.function != function.id || !handle.id || handle.id > f->block_count ||
+            !lir_value_handle_valid(m, function.id, items[n].target)) { status = XR_LIR_INVALID_ARGUMENT; goto done; }
+        XrLirBlockData *block = &f->blocks[handle.id - 1];
+        if (items[n].ordinal > block->instruction_count || (block->terminated && items[n].ordinal == block->instruction_count)) {
+            status = XR_LIR_INVALID_ARGUMENT; goto done;
+        }
+        ++starts[handle.id];
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) starts[b + 1] += starts[b];
+    memcpy(cursor, starts, (size_t)f->block_count * sizeof(*cursor));
+    for (size_t n = 0; n < count; ++n) order[cursor[items[n].block.id - 1]++] = n;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        size_t first = starts[b], added = starts[b + 1] - first;
+        if (!added) continue;
+        XrLirBlockData *block = &f->blocks[b]; uint32_t original = block->instruction_count;
+        if (added > UINT32_MAX - original) { status = XR_LIR_UNSUPPORTED; goto done; }
+        for (size_t n = first + 1; n < first + added; ++n)
+            if (items[order[n]].ordinal < items[order[n - 1]].ordinal) { status = XR_LIR_INVALID_ARGUMENT; goto done; }
+        uint32_t total = original + (uint32_t)added;
+        XrLirInstructionData *merged = lir_allocate(m, total, sizeof(*merged));
+        if (!merged) { status = m->failure; goto done; }
+        bool terminated = block->terminated; block->terminated = false;
+        for (size_t n = first; n < first + added; ++n) {
+            const XrLirSliceCleanupInsertion *item = &items[order[n]];
+            XrLirInstruction cleanup = {.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=item->target.id,.source=item->source};
+            status = xr_lir_emit_effect(m, item->block, &cleanup);
+            if (status != XR_LIR_OK) break;
+        }
+        block = &f->blocks[b]; block->terminated = terminated;
+        if (status != XR_LIR_OK) { xr_free(merged); goto done; }
+        uint32_t input = 0, output = 0;
+        for (size_t n = 0; n < added; ++n) {
+            uint32_t position = items[order[first + n]].ordinal;
+            while (input < position) merged[output++] = block->instructions[input++];
+            merged[output++] = block->instructions[original + (uint32_t)n];
+        }
+        while (input < original) merged[output++] = block->instructions[input++];
+        XR_DCHECK(output == total, "Every original instruction and cleanup is published once");
+        xr_free(block->instructions); block->instructions = merged; block->instruction_capacity = total;
+        for (uint32_t n = 0; n < total; ++n) {
+            uint32_t result = merged[n].view.result;
+            if (result) f->values[result - 1].instruction = n;
+        }
+    }
+done:
+    xr_free(starts); xr_free(cursor); xr_free(order);
+    return status == XR_LIR_OK ? status : lir_fail(m, status);
+}
 XR_FUNC XrLirStatus xr_lir_set_terminator(XrLirModule *m, XrLirBlock block,
                                           const XrLirInstruction *instruction) {
     return lir_emit(m, block, instruction, 2, NULL);
