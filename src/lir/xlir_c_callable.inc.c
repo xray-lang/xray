@@ -295,6 +295,12 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint3
             c_text(c,"    "); c_value(c,v->result); c_text(c," = "); c_value(c,value); c_text(c,";\n");
         } else c_error(c,XR_LIR_C_INVALID_LIR,"callable alias has no final transfer mode");
     } else if (v->op == XR_LIR_CELL_NEW) {
+        bool may_repeat=true;
+        XrLirBlock block={c->request->module,c->function.id,c->block};
+        if (v->type!=XR_LIR_I64_CELL ||
+            xr_lir_block_may_repeat(c->request->module,block,&may_repeat)!=XR_LIR_OK || may_repeat) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"Frame scalar Cell lacks completed one-shot construction facts");return;
+        }
         c_format(c,"    xrl_cell_%" PRIu32 " = ",v->result); c_value(c,v->operands[0]);
         c_format(c,";\n    v%" PRIu32 " = &xrl_cell_%" PRIu32 ";\n",v->result,v->result);
     } else if (v->op == XR_LIR_CELL_READ) {

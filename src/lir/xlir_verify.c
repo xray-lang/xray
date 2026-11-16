@@ -614,7 +614,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
             *scopes |= v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE ||
                 v->op == XR_LIR_FUNCTION_BIND || xr_lir_cell_value_type(m,v->type,NULL);
             scope_count += v->op == XR_LIR_FUNCTION_SCOPE_ENTER;
-            if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_ARRAY_CELL &&
+            if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_I64_CELL && v->type != XR_LIR_ARRAY_CELL &&
                 v->type != XR_LIR_MAP_STRING_I64_CELL && !xr_lir_cell_value_type(m,v->type,NULL))
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
@@ -802,6 +802,21 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
                         return status;
                     }
         }
+    return XR_LIR_OK;
+}
+static XrLirStatus lir_frame_cell_constructors(const XrLirFunctionData *f,uint32_t function,
+    const LirGraph *graph,XrLirDiagnostic *diagnostic) {
+    if (!graph->multiplicity) return XR_LIR_VERIFY_ERROR;
+    for (uint32_t b=0;b<f->block_count;++b) {
+        if (!graph->multiplicity[b]) continue;
+        const XrLirBlockData *block=f->blocks+b;
+        for (uint32_t i=0;i<block->instruction_count;++i) {
+            const XrLirInstructionView *v=&block->instructions[i].view;
+            if (v->op==XR_LIR_CELL_NEW && v->type==XR_LIR_I64_CELL)
+                return xr_lir_internal_error(diagnostic,"Frame scalar Cell construction may repeat in this activation",
+                    function,b+1,i+1,&v->source);
+        }
+    }
     return XR_LIR_OK;
 }
 
@@ -1155,6 +1170,7 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             status=lir_block_multiplicity_create(f,&graph.multiplicity);
             graph.owns_multiplicity=status==XR_LIR_OK;
         }
+        if (status==XR_LIR_OK) status=lir_frame_cell_constructors(f,index+1,&graph,d);
         if (status == XR_LIR_OK)
             status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
         if (status == XR_LIR_OK && scopes)

@@ -627,7 +627,7 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
     XrLirFunctionData *f = lir_block_function(m, handle);
     if (!f || !input)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-    if (input->op == XR_LIR_CELL_NEW && handle.id != f->entry && input->type != XR_LIR_ARRAY_CELL &&
+    if (input->op == XR_LIR_CELL_NEW && handle.id != f->entry && input->type != XR_LIR_I64_CELL && input->type != XR_LIR_ARRAY_CELL &&
         input->type != XR_LIR_MAP_STRING_I64_CELL && input->type != XR_LIR_SET_I64_CELL)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirBlockData *block = &f->blocks[handle.id - 1];
