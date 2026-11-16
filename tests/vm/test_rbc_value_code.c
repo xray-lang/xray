@@ -305,9 +305,25 @@ static void array_binding_calls(void) {
         for (uint32_t f=0;f<image->function_count;++f) {
             const XrRbcValueCode *code=xr_rbc_module_value_code(image,f);
             CHECK(code && !image->functions[f].cell_count);
-            for (uint32_t v=1;v<=code->value_count;++v)
-                if (code->homes->bindings && code->homes->bindings[v].type)
-                    CHECK(code->locations[v].kind==XR_RBC_VALUE_NOWHERE);
+            for (uint32_t v=1;v<=code->value_count;++v) {
+                if (!code->homes->bindings || !code->homes->bindings[v].type) continue;
+                const XrLirHomeBinding *binding=&code->homes->bindings[v];
+                if (binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==v) {
+                    const XrtValueImage *types=xr_rbc_module_value_image(image);
+                    CHECK(types && binding->type<=types->type_count &&
+                        (types->types[binding->type-1].kind==XRT_VALUE_ARRAY_I64 ||
+                         types->types[binding->type-1].kind==XRT_VALUE_ARRAY_U8));
+                    CHECK(binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX &&
+                        !code->homes->values[v].type && !code->homes->values[v].owner_count);
+                    XrRbcValueLocation location=code->locations[v];
+                    const XrRbcFunction *function=&image->functions[f];
+                    if (location.kind==XR_RBC_VALUE_REGISTER)
+                        CHECK(location.index<function->register_count && function->register_kinds &&
+                            function->register_kinds[location.index]==XR_RBC_STATE_REF);
+                    else CHECK(location.kind==XR_RBC_VALUE_SPILL &&
+                        location.index>=function->reference_spill_count && location.index<function->spill_count);
+                } else CHECK(code->locations[v].kind==XR_RBC_VALUE_NOWHERE);
+            }
         }
         xr_lir_module_destroy(module); run_after_input_retirement(program,0);
     }
