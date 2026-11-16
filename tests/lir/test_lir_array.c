@@ -538,7 +538,12 @@ static void slice_c_unfinished_result_rejection(XrLirType element) {
     if (element != XR_LIR_TYPE_INVALID) OK(xr_lir_slice_type(module, element, &result));
     XrLirFunction entry = {0};
     XrLirFunctionSpec spec = {.name="unpublished", .name_length=11, .result=result};
-    OK(xr_lir_declare_function(module, &spec, &entry)); OK(xr_lir_define_function(module, entry));
+    XrLirStatus declared = xr_lir_declare_function(module, &spec, &entry);
+    if (element == XR_LIR_TYPE_INVALID) {
+        CHECK(declared == XR_LIR_INVALID_ARGUMENT && !entry.module && !entry.id);
+        xr_lir_module_destroy(module); return;
+    }
+    OK(declared); OK(xr_lir_define_function(module, entry));
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
