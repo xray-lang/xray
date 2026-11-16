@@ -291,6 +291,7 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
             home->owner_count>activation->edge_capacity-builder->owners) return XRT_MANAGED_ARGUMENT;
         for (size_t leaf=0;leaf<home->owner_count;++leaf) {
             XrtPlaceEdge *edge=&activation->edges[builder->owners++];
+            edge->transfer=XRT_PLACE_TRANSFER_MOVE;
             XrtManagedStatus status=rbc_value_place(to,false,leaf,&edge->destination);
             if (status==XRT_MANAGED_OK) status=rbc_value_place(from,false,leaf,&edge->source);
             if (status==XRT_MANAGED_OK) status=rbc_value_place(to,true,leaf,&edge->temporary);
@@ -325,7 +326,7 @@ static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *st
         if (status!=XRT_MANAGED_OK) return status;
     }
     const XrtPlacePublication publication={rbc_value_publication,activation};
-    return xrt_place_edge_move(activation->edges,builder.owners,&publication);
+    return xrt_place_edge_transfer(activation->edges,builder.owners,&publication);
 }
 
 static XrtManagedStatus rbc_value_inline_replace(const XrRbcModule *module,XrRbcStack *stack,
@@ -370,12 +371,13 @@ static XrtManagedStatus rbc_value_replace(const XrRbcModule *module, XrRbcStack 
     }
     for (size_t leaf=0;leaf<home->owner_count;++leaf) {
         XrtPlaceEdge *edge=&scratch->edges[leaf];
+        edge->transfer=XRT_PLACE_TRANSFER_MOVE;
         status=rbc_value_place(destination,false,leaf,&edge->destination);
         if (status==XRT_MANAGED_OK) status=rbc_value_place(source,false,leaf,&edge->source);
         if (status==XRT_MANAGED_OK) status=rbc_value_place(destination,true,leaf,&edge->temporary);
         if (status!=XRT_MANAGED_OK) return status;
     }
-    return xrt_place_edge_move(scratch->edges,home->owner_count,&publication);
+    return xrt_place_edge_transfer(scratch->edges,home->owner_count,&publication);
 }
 static XrtManagedStatus rbc_value_factory(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
