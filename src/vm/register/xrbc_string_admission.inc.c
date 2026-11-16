@@ -206,6 +206,10 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
             continue;
         }
 
+        if (!f->register_kinds && kind==XR_RBC_BITS) {
+            if (s->state[v.a+1+p]!=RBC_BITS) return false;
+            continue;
+        }
         if (rbc_register_kind(f, v.a + 1 + p) != XR_RBC_CALL_WINDOW ||
             !rbc_call_parameter_matches(s, v.a + 1 + p, kind)) return false;
     }
