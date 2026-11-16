@@ -9,8 +9,10 @@
 #include "lir/xlir_builder.h"
 #include "lir/xlir_internal.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_map.h"
 #include "vm/register/xrbc_lir.h"
 #include "xray_native_function.h"
+#include "runtime/native/xnative_capture_backing.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -204,6 +206,215 @@ static void supported_and_rejected_captures(void) {
     XrRbcExecution *execution=NULL;
     CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
     xr_lir_module_destroy(module); execute(program,42);
+}
+static XrLirValue map_capture_operation(CArrayFixture *c,XrLirBlock block,XrLirMapOperation role,
+    XrLirType type,const XrLirValue *arguments,uint32_t count) {
+    uint32_t intrinsic=0;
+    OK(xr_lir_map_operation(c->module,role,role==XR_LIR_MAP_OP_SET ?
+        XR_LIR_MAP_STRING_I64_REF : XR_LIR_MAP_STRING_I64,&intrinsic));
+    XrLirInstruction op={.op=XR_LIR_CALL_INTRINSIC,.type=type,.intrinsic=intrinsic,
+        .operands=arguments,.operand_count=count};
+    XrLirValue result={0};
+    if (type==XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module,block,&op));
+    else OK(xr_lir_emit_value(c->module,block,&op,&result));
+    return result;
+}
+static void map_capture_drop(CArrayFixture *c,XrLirBlock block,XrLirOp operation,XrLirValue value) {
+    XrLirInstruction drop={.op=operation,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
+    OK(xr_lir_emit_effect(c->module,block,&drop));
+}
+static XrLirModule *map_capture_fixture(unsigned mode,XrLirFunction *root) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_map_catalog_install(c.module,false,false,false,false,false));
+    XrLirCallableType signature={.result=XR_LIR_I64};
+    XrLirType reader=0,factory=0,map_type=XR_LIR_MAP_STRING_I64;
+    OK(xr_lir_callable_type(c.module,&signature,&reader));
+    if (mode==1) {
+        signature.result=reader; OK(xr_lir_callable_type(c.module,&signature,&factory));
+    }
+    XrLirFunction read={0},make={0}; XrLirBlock block={0};
+    XrLirFunctionSpec spec={.name="map_length",.name_length=10,.parameters=&map_type,
+        .parameter_count=1,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,&read));
+    OK(xr_lir_set_closure_target(c.module,read,(XrLirClosureTarget){reader,1,false}));
+    OK(xr_lir_define_function(c.module,read)); OK(xr_lir_add_block(c.module,read,NULL,0,&block));
+    OK(xr_lir_set_entry(c.module,read,block)); XrLirValue map={0};
+    OK(xr_lir_function_parameter(c.module,read,0,&map));
+    XrLirValue length={0};
+    if (mode==9) {
+        XrLirFunction forward={0}; XrLirBlock body={0};
+        XrLirFunctionSpec helper={.name="forward_map",.name_length=11,.parameters=&map_type,
+            .parameter_count=1,.result=XR_LIR_I64};
+        OK(xr_lir_declare_function(c.module,&helper,&forward)); OK(xr_lir_define_function(c.module,forward));
+        OK(xr_lir_add_block(c.module,forward,NULL,0,&body)); OK(xr_lir_set_entry(c.module,forward,body));
+        XrLirValue formal={0}; OK(xr_lir_function_parameter(c.module,forward,0,&formal));
+        XrLirValue cell=ca_value(&c,body,XR_LIR_CELL_NEW,XR_LIR_MAP_STRING_I64_CELL,&formal,1);
+        XrLirValue copied=ca_value(&c,body,XR_LIR_CELL_READ,map_type,&cell,1);
+        XrLirValue result=map_capture_operation(&c,body,XR_LIR_MAP_OP_LEN,XR_LIR_I64,&copied,1);
+        map_capture_drop(&c,body,XR_LIR_MAP_DROP,copied); map_capture_drop(&c,body,XR_LIR_MAP_CELL_DROP,cell);
+        ca_return(&c,body,result);
+        XrLirInstruction call={.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=forward,.operands=&map,.operand_count=1};
+        OK(xr_lir_emit_value(c.module,block,&call,&length));
+    } else {
+    bool binding=mode>=6;
+    if (binding) {
+        XrLirValue initial=map;
+        if (mode!=6) {
+            XrLirMapLiteral literal={"empty-map.xr",12,NULL,0}; uint32_t ordinal=0;
+            OK(xr_lir_map_literal_add(c.module,&literal,&ordinal));
+            XrLirInstruction empty={.op=XR_LIR_MAP_LITERAL_NEW,.type=map_type,.bits=ordinal};
+            initial=(XrLirValue){0}; OK(xr_lir_emit_value(c.module,block,&empty,&initial));
+        }
+        XrLirValue cell=ca_value(&c,block,XR_LIR_CELL_NEW,XR_LIR_MAP_STRING_I64_CELL,&initial,1);
+        if (mode!=6) {
+            map_capture_drop(&c,block,XR_LIR_MAP_DROP,initial);
+            XrLirValue target=mode==8 ? ca_value(&c,block,XR_LIR_MAP_BORROW,XR_LIR_MAP_STRING_I64_REF,&cell,1) : cell;
+            XrLirValue arguments[]={target,map};
+            XrLirInstruction write={.op=mode==8 ? XR_LIR_MAP_REF_WRITE : XR_LIR_CELL_WRITE,
+                .type=XR_LIR_UNIT,.operands=arguments,.operand_count=2};
+            OK(xr_lir_emit_effect(c.module,block,&write));
+        }
+        map=ca_value(&c,block,XR_LIR_CELL_READ,map_type,&cell,1);
+        map_capture_drop(&c,block,XR_LIR_MAP_CELL_DROP,cell);
+    } else if (mode==5) {
+        XrLirMapLiteralOrigin origin={1,1,1};
+        XrLirMapLiteral literal={"spread-map.xr",13,&origin,1}; uint32_t ordinal=0;
+        OK(xr_lir_map_literal_add(c.module,&literal,&ordinal));
+        XrLirInstruction spread={.op=XR_LIR_MAP_LITERAL_NEW,.type=map_type,.bits=ordinal,
+            .operands=&map,.operand_count=1};
+        XrLirValue copied={0}; OK(xr_lir_emit_value(c.module,block,&spread,&copied)); map=copied;
+    } else if (mode!=4) map=ca_value(&c,block,XR_LIR_MAP_RETAIN,map_type,&map,1);
+    length=map_capture_operation(&c,block,XR_LIR_MAP_OP_LEN,XR_LIR_I64,&map,1);
+    if (mode!=4) map_capture_drop(&c,block,XR_LIR_MAP_DROP,map);
+    }
+    ca_return(&c,block,length);
+    if (mode==1) {
+        spec=(XrLirFunctionSpec){.name="nested_map",.name_length=10,.parameters=&map_type,
+            .parameter_count=1,.result=reader};
+        OK(xr_lir_declare_function(c.module,&spec,&make));
+        OK(xr_lir_set_closure_target(c.module,make,(XrLirClosureTarget){factory,1,false}));
+        OK(xr_lir_define_function(c.module,make)); OK(xr_lir_add_block(c.module,make,NULL,0,&block));
+        OK(xr_lir_set_entry(c.module,make,block)); OK(xr_lir_function_parameter(c.module,make,0,&map));
+        map=ca_value(&c,block,XR_LIR_MAP_RETAIN,map_type,&map,1);
+        XrLirInstruction reference={.op=XR_LIR_FUNCTION_REF,.type=reader,.callee=read,
+            .operands=&map,.operand_count=1,.bits=XR_LIR_CLOSURE_OWNED};
+        XrLirValue function={0}; OK(xr_lir_emit_value(c.module,block,&reference,&function));
+        map_capture_drop(&c,block,XR_LIR_MAP_DROP,map); ca_return(&c,block,function);
+    }
+    XrLirType result_type=mode==1 ? factory : reader;
+    bool snapshot=mode==2 || mode==3;
+    spec=(XrLirFunctionSpec){.name="map_creator",.name_length=11,.result=snapshot ? XR_LIR_I64 : result_type};
+    OK(xr_lir_declare_function(c.module,&spec,root)); OK(xr_lir_define_function(c.module,*root));
+    OK(xr_lir_add_block(c.module,*root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,*root,block));
+    XrLirLiteral literal={0}; OK(xr_lir_add_literal(c.module,"x",1,&literal));
+    XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    XrLirValue key={0}; OK(xr_lir_emit_value(c.module,block,&op,&key));
+    XrLirMapLiteralOrigin origin={0,1,1};
+    XrLirMapLiteral description={"owned-map.xr",12,&origin,1}; uint32_t ordinal=0;
+    OK(xr_lir_map_literal_add(c.module,&description,&ordinal));
+    XrLirValue arguments[]={key,ca_constant(&c,block,1)};
+    op=(XrLirInstruction){.op=XR_LIR_MAP_LITERAL_NEW,.type=map_type,.bits=ordinal,
+        .operands=arguments,.operand_count=2};
+    OK(xr_lir_emit_value(c.module,block,&op,&map));
+    XrLirValue cell=ca_value(&c,block,XR_LIR_CELL_NEW,XR_LIR_MAP_STRING_I64_CELL,&map,1);
+    op=(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=result_type,.callee=mode==1 ? make : read,
+        .operands=&map,.operand_count=1,.bits=mode==3 ? XR_LIR_CLOSURE_FRAME : XR_LIR_CLOSURE_OWNED};
+    XrLirValue function={0}; OK(xr_lir_emit_value(c.module,block,&op,&function));
+    XrLirValue result=function;
+    if (snapshot) {
+        XrLirValue before=ca_value(&c,block,XR_LIR_CALL_INDIRECT,XR_LIR_I64,&function,1);
+        XrLirLiteral other_literal={0}; OK(xr_lir_add_literal(c.module,"y",1,&other_literal));
+        op=(XrLirInstruction){.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=other_literal.id};
+        XrLirValue other={0}; OK(xr_lir_emit_value(c.module,block,&op,&other));
+        XrLirValue ref=ca_value(&c,block,XR_LIR_MAP_BORROW,XR_LIR_MAP_STRING_I64_REF,&cell,1);
+        XrLirValue update[]={ref,other,ca_constant(&c,block,2)};
+        (void)map_capture_operation(&c,block,XR_LIR_MAP_OP_SET,XR_LIR_UNIT,update,3);
+        XrLirValue after=ca_value(&c,block,XR_LIR_CALL_INDIRECT,XR_LIR_I64,&function,1);
+        XrLirValue current=ca_value(&c,block,XR_LIR_MAP_REF_READ,map_type,&ref,1);
+        length=map_capture_operation(&c,block,XR_LIR_MAP_OP_LEN,XR_LIR_I64,&current,1);
+        map_capture_drop(&c,block,XR_LIR_MAP_DROP,current);
+        map_capture_drop(&c,block,XR_LIR_STRING_DROP,other);
+        result=ca_binary(&c,block,XR_LIR_ADD,ca_binary(&c,block,XR_LIR_ADD,
+            ca_binary(&c,block,XR_LIR_MUL,before,ca_constant(&c,block,100)),
+            ca_binary(&c,block,XR_LIR_MUL,after,ca_constant(&c,block,10))),length);
+    }
+    map_capture_drop(&c,block,XR_LIR_MAP_CELL_DROP,cell);
+    map_capture_drop(&c,block,XR_LIR_MAP_DROP,map);
+    map_capture_drop(&c,block,XR_LIR_STRING_DROP,key); ca_return(&c,block,result);
+    OK(xr_lir_module_finish(c.module,NULL)); return c.module;
+}
+static void map_capture_retain_failure(const XrtFunction *function) {
+    XrtEnvironmentBorrow environment={0};
+    CHECK(xrt_environment_borrow_owned(function->owner,&environment)==XRT_MANAGED_OK);
+    const XrtValuePlan *plan=NULL; const void *bytes=NULL;
+    CHECK(xrt_environment_capture_borrow(&environment,0,&plan,&bytes)==XRT_MANAGED_OK);
+    XrtValuePlanSpec spec={0}; CHECK(xrt_value_plan_view(plan,&spec)==XRT_MANAGED_OK && spec.kind==XRT_VALUE_MAP_STRING_I64);
+    XrtManagedHeader *map=NULL; memcpy(&map,bytes,sizeof(map)); CHECK(map);
+    int32_t references=atomic_load(&map->references); atomic_store(&map->references,-INT32_MAX);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_owned_function_prepare(function,NULL,0,&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_VALUE_FAILURE);
+    XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
+    CHECK(xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) && failure==XR_XIR_VALUE_REFCOUNT_LIMIT);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    CHECK(atomic_load(&map->references)==-INT32_MAX); atomic_store(&map->references,references);
+}
+static void owned_map_captures(void) {
+    for (unsigned mode=0;mode<10;++mode) {
+        XrLirFunction root={0}; XrLirModule *input=map_capture_fixture(mode,&root);
+        if (mode==3) {
+            XrRbcProgram *rejected=NULL; XrRbcCompileDiagnostic diagnostic={0};
+            CHECK(xr_rbc_compile(input,root,&rejected,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED && !rejected);
+            CHECK(strstr(diagnostic.message,"operation has no admitted bytecode implementation"));
+            xr_lir_module_destroy(input); continue;
+        }
+        XrRbcProgram *program=compile(input,root); xr_lir_module_destroy(input);
+        const XrRbcModule *module=xr_rbc_program_view(program); bool found=false;
+        for (size_t f=0;f<module->function_count;++f) if (module->functions[f].capture_count) {
+            const XrRbcFunction *function=&module->functions[f];
+            if (function->captures[0].kind!=XR_RBC_CALLABLE_REFERENCE) continue;
+            const XrRbcValueCode *code=xr_rbc_module_value_code(module,(uint32_t)f);
+            CHECK(function->captures[0].type==XR_RBC_MAP_STRING_I64 && code && code->homes && code->parameters);
+            uint32_t parameter=code->parameters[0]; const XrLirValueHome *home=&code->homes->values[parameter];
+            CHECK(home->parameter==1 && home->owner_count==1 && home->size==sizeof(XrtManagedHeader *) &&
+                home->offset==SIZE_MAX && home->first_owner==SIZE_MAX && home->temporary_offset==SIZE_MAX &&
+                home->temporary_first_owner==SIZE_MAX && code->locations[parameter].kind==XR_RBC_VALUE_NOWHERE);
+            CHECK(code->homes->owned_frame_needed==(mode!=4 && mode!=9));
+            found=true;
+        }
+        CHECK(found);
+        XrRbcModule raw=*module; raw.code_lease=(XrRbcCodeLease){0}; XrRbcExecution *foreign=NULL;
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&foreign)==XR_RBC_INVALID && !foreign);
+        if (mode==2) { execute(program,112); continue; }
+        XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK); xr_rbc_program_destroy(program);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution); xr_rbc_execution_free(&execution);
+        for (unsigned nested=0;nested<=(mode==1 ? 1u : 0u);++nested) {
+            XrtFunction function={0};
+            CHECK(xr_rbc_outcome_take_function(outcome,&function) && function.owner); xr_rbc_outcome_free(&outcome);
+            if (!mode || mode>=6) map_capture_retain_failure(&function);
+            CHECK(xr_rbc_owned_function_prepare(&function,NULL,0,&execution)==XR_RBC_OK);
+            xrt_managed_drop(function.owner);
+            outcome=xr_rbc_execution_run(execution); xr_rbc_execution_free(&execution);
+        }
+        uint64_t length=0;
+        CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&length) && length==1);
+        xr_rbc_outcome_free(&outcome);
+    }
+}
+#include "lir_map_borrow_fixture.h"
+static void borrowed_map_binding_frontier(void) {
+    for (unsigned operation=0;operation<6;++operation) for (unsigned retained=0;retained<2;++retained)
+        for (unsigned closure_target=0;closure_target<2;++closure_target) {
+        XrLirFunction root={0},helper={0};
+        XrLirModule *module=map_binding_formal_fixture(operation,retained!=0,closure_target!=0,&root,&helper);
+        XrRbcProgram *program=NULL; XrRbcCompileDiagnostic diagnostic={0};
+        XrRbcCompileStatus status=xr_rbc_compile(module,root,&program,&diagnostic);
+        if (status!=XR_RBC_COMPILE_OK) fprintf(stderr,"Map binding operation=%u retained=%u closure=%u: %s\n",
+            operation,retained,closure_target,diagnostic.message);
+        CHECK(status==XR_RBC_COMPILE_OK && program); xr_lir_module_destroy(module); execute(program,1);
+    }
 }
 static void owned_duplicate_edge(void) {
     CArrayFixture c={0};
@@ -435,6 +646,8 @@ int main(void) {
     direct_weakened_formal();
     owned_zero_capture();
     supported_and_rejected_captures();
+    owned_map_captures();
+    borrowed_map_binding_frontier();
     owned_duplicate_edge();
     scope_receiving();
     scope_keep_formal(false); scope_keep_formal(true);

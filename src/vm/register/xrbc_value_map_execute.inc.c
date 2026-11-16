@@ -18,12 +18,10 @@ static XrtManagedStatus rbc_value_map_literal(const XrRbcModule *module, XrRbcSt
         if (operand >= access.count) return XRT_MANAGED_ARGUMENT;
         uint32_t value = activation->code->arguments[access.first + operand++];
         if (literal->items[n].kind) {
-            XrtPlace place;
-            const XrtManagedHeader *header = NULL;
-            XrtManagedStatus status = rbc_value_place(rbc_value_origin(activation,value),false,0,&place);
-            if (status == XRT_MANAGED_OK) status = xrt_place_borrow(place,&header);
+            const XrtMapBacking *map = NULL;
+            XrtManagedStatus status = rbc_value_map_borrow(module,activation,value,&map);
             if (status != XRT_MANAGED_OK) return status;
-            inputs[n] = (XrtMapLiteralInput){.source.spread=(const XrtMapBacking *)header};
+            inputs[n] = (XrtMapLiteralInput){.source.spread=map};
         } else {
             const XrtStringBacking *key = NULL;
             XrtManagedStatus status = rbc_value_string_borrow(activation,value,&key);
@@ -93,11 +91,9 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         }
         return status;
     }
-    XrtPlace place; const XrtManagedHeader *header=NULL;
-    XrtManagedStatus status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
-    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    const XrtMapBacking *map=NULL;
+    XrtManagedStatus status=rbc_value_map_borrow(module,activation,args[0],&map);
     if (status!=XRT_MANAGED_OK) return status;
-    const XrtMapBacking *map=(const XrtMapBacking *)header;
     if (access.index==XR_LIR_MAP_OP_LEN) {
         XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
         if (!result) return XRT_MANAGED_ARGUMENT;

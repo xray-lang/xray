@@ -75,6 +75,7 @@ typedef struct LirC {
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
     size_t string_event_cursor, string_workspace_cursor;
+    size_t map_stage_event_cursor, map_stage_workspace_cursor;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -93,6 +94,7 @@ static bool c_values_owned_type(LirC *, XrLirType);
 static void c_cell_scope_release(LirC *, uint32_t);
 static void c_cell_events_prepare(LirC *);
 static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
+static void c_map_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
