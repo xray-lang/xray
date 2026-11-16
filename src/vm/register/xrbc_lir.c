@@ -1694,7 +1694,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
     uint32_t source_id = 0;
     size_t literals = xr_lir_literal_count(input);
     RbcLirLiteralPool pool = {.program = p, .layouts=layouts};
-    if (p->value_homes) {
+    if (p->value_homes || p->module.callable_type_count) {
         p->value_codes = xr_calloc(p->module.function_count,sizeof(*p->value_codes));
         if (!p->value_codes) return rbc_lir_error(d,XR_RBC_COMPILE_OUT_OF_MEMORY,
             "cannot own typed function directory",(XrLirSource){0});
