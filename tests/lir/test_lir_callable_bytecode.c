@@ -447,6 +447,41 @@ static void slice_call_boundaries(void) {
         xr_lir_module_destroy(c.module); execute(program,68);
     }
 }
+#include "lir_slice_state_read_fixture.h"
+static void slice_state_reads(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
+    for (size_t family=0;family<2;++family) for (unsigned mutable=0;mutable<2;++mutable)
+        for (unsigned ready=0;ready<2;++ready) {
+        SliceStateReadFixture c=slice_state_read_fixture(elements[family],mutable!=0,ready!=0);
+        OK(xr_lir_module_finish(c.module,NULL)); XrRbcProgram *program=compile(c.module,c.root);
+        const XrRbcModule *module=xr_rbc_program_view(program);
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,0); CHECK(code && code->homes);
+        const XrLirHomeBinding *binding=&code->homes->bindings[c.reference.id];
+        CHECK(binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==c.reference.id &&
+            binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX);
+        CHECK(code->locations[c.reference.id].kind!=XR_RBC_VALUE_NOWHERE && !code->homes->values[c.reference.id].type);
+        bool read_role=false;
+        for (size_t n=0;n<code->access_count;++n) {
+            const XrRbcValueAccess *access=&code->accesses[n];
+            if (access->operation!=XR_RBC_VALUE_SLICE || access->index!=XR_LIR_SLICE_OP_NEW) continue;
+            CHECK(access->source==XR_LIR_STATE_REF && access->count==3 &&
+                code->arguments[access->first]==c.reference.id); read_role=true;
+        }
+        CHECK(read_role); xr_lir_module_destroy(c.module);
+        XrRbcExecution *execution=NULL; CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        xr_rbc_program_destroy(program); XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+        xr_rbc_execution_free(&execution);
+        if (ready) {
+            uint64_t bits=0; CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK &&
+                xr_rbc_outcome_bits(outcome,&bits) && bits==25);
+        } else {
+            XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
+            CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_VALUE_FAILURE &&
+                xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) && failure==XR_XIR_VALUE_BAD_ARGUMENT && locations);
+        }
+        xr_rbc_outcome_free(&outcome);
+    }
+}
 static void borrowed_map_binding_frontier(void) {
     for (unsigned operation=0;operation<6;++operation) for (unsigned retained=0;retained<2;++retained)
         for (unsigned closure_target=0;closure_target<2;++closure_target) {
@@ -705,6 +740,7 @@ int main(void) {
     owned_map_captures();
     borrowed_map_binding_frontier();
     slice_call_boundaries();
+    slice_state_reads();
     owned_duplicate_edge();
     scope_receiving();
     scope_keep_formal(false); scope_keep_formal(true);
