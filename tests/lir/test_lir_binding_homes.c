@@ -143,7 +143,6 @@ static XrLirModule *borrowed_map_fixture(bool writes) {
     XrLirFunction function={0}; XrLirFunctionSpec spec={.name="borrowed_map",.name_length=12,
         .parameters=writes ? parameters : &parameters[2],.parameter_count=writes ? 4u : 1u,.result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module,&spec,&function));
-    if (writes) OK(xr_lir_set_state_entry(c.module,function));
     OK(xr_lir_define_function(c.module,function)); XrLirBlock block={0};
     OK(xr_lir_add_block(c.module,function,NULL,0,&block)); OK(xr_lir_set_entry(c.module,function,block));
     XrLirValue inputs[4]={{0}};
@@ -168,7 +167,29 @@ static XrLirModule *borrowed_map_fixture(bool writes) {
         ca_effect(&c,block,XR_LIR_MAP_DROP,snapshot); ca_effect(&c,block,XR_LIR_MODULE_READY,inputs[3]);
     }
     ca_return(&c,block,map_fixture_call(&c,block,XR_LIR_MAP_OP_LEN,XR_LIR_I64,&incoming,1));
-    OK(xr_lir_module_finish(c.module,NULL)); return c.module;
+    if (writes) {
+        /* Mutable Ref formals belong to an internal typed call, never to the
+         * injected entry. Supply their real caller bindings and capability. */
+        XrLirType parameter=XR_LIR_STATE; XrLirFunction entry={0};
+        spec=(XrLirFunctionSpec){.name="entry",.name_length=5,.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+        OK(xr_lir_declare_function(c.module,&spec,&entry)); OK(xr_lir_set_state_entry(c.module,entry));
+        OK(xr_lir_define_function(c.module,entry)); block=(XrLirBlock){0};
+        OK(xr_lir_add_block(c.module,entry,NULL,0,&block)); OK(xr_lir_set_entry(c.module,entry,block));
+        XrLirValue state={0}; OK(xr_lir_function_parameter(c.module,entry,0,&state));
+        XrLirValue map=map_fixture_call(&c,block,XR_LIR_MAP_OP_NEW,XR_LIR_MAP_STRING_I64,NULL,0);
+        XrLirValue cell=ca_value(&c,block,XR_LIR_CELL_NEW,XR_LIR_MAP_STRING_I64_CELL,&map,1);
+        XrLirValue reference=ca_value(&c,block,XR_LIR_MAP_BORROW,XR_LIR_MAP_STRING_I64_REF,&cell,1);
+        XrLirValue arguments[]={cell,reference,map,state},result={0};
+        XrLirInstruction call={.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=function,.operands=arguments,.operand_count=4};
+        OK(xr_lir_emit_value(c.module,block,&call,&result));
+        ca_effect(&c,block,XR_LIR_MAP_CELL_DROP,cell); ca_effect(&c,block,XR_LIR_MAP_DROP,map);
+        ca_return(&c,block,result);
+    }
+    XrLirDiagnostic diagnostic={0}; XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
+    if (status!=XR_LIR_OK) fprintf(stderr,"borrowed Map homes writes=%u f%u b%u i%u: %s\n",
+        writes ? 1u : 0u,diagnostic.function,diagnostic.block,diagnostic.instruction,
+        diagnostic.message ? diagnostic.message : "no diagnostic");
+    OK(status); return c.module;
 }
 static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
     XrLirType result,const XrLirValue *args,uint32_t count) {
