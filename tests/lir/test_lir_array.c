@@ -632,6 +632,11 @@ static void slice_cleanup_proofs(void) {
         if (shape==SLICE_CLEANUP_BRANCH) {
             XrLirFunctionData *f=&c.module->functions[c.worker.id-1];
             CHECK(f->block_cleanup_rank[c.definition.id-1]<f->block_cleanup_rank[c.cleanup.id-1]);
+            uint32_t saved_instruction=f->values[c.target.id-1].instruction;
+            f->values[c.target.id-1].instruction=UINT32_MAX;
+            XrLirOwnershipPlan *invalid=NULL;
+            CHECK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){c.module,NULL,0},&invalid,NULL)!=XR_LIR_OK && !invalid);
+            f->values[c.target.id-1].instruction=saved_instruction;
             XrLirBlockData *block=&f->blocks[c.definition.id-1];
             XrLirEdgeView *edge=&block->instructions[block->instruction_count-1].view.edges[0],saved=*edge;
             edge->target=c.cleanup.id;edge->argument_count=0;edge->arguments=NULL;
