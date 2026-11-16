@@ -280,10 +280,10 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     OK(xr_lir_emit_value(c->module,loop,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
         .predicate=XR_LIR_LT,.operands=compared,.operand_count=2},&condition));
     XrLirValue back[]={values[0],values[2],values[1],count,values[4]};
-    XrLirValue exit[]={values[0],values[1],values[2],values[4]};
+    XrLirValue done_arguments[]={values[0],values[1],values[2],values[4]};
     OK(xr_lir_set_terminator(c->module,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,
-        .edges={{loop,back,mixed ? 5u : 4u},{done,exit,mixed ? 4u : 3u}}}));
+        .edges={{loop,back,mixed ? 5u : 4u},{done,done_arguments,mixed ? 4u : 3u}}}));
     XrLirValue total=ca_binary(c,done,XR_LIR_MUL,result[1],ca_constant(c,done,100));
     total=ca_binary(c,done,XR_LIR_ADD,total,result[2]);
     total=ca_binary(c,done,XR_LIR_ADD,total,ca_intrinsic(c,done,XR_LIR_ARRAY_OP_LEN,XR_LIR_I64,result,1));
