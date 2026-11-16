@@ -651,8 +651,10 @@ static XrtManagedStatus rbc_value_state(const XrRbcModule *module,XrRbcStack *st
         const XrtMapBacking *map=NULL;
         status=rbc_value_map_borrow(module,activation,access.other,&map);
         header=(const XrtManagedHeader *)map;
-    } else status=rbc_value_place(rbc_value_origin(activation,access.other),false,0,&place);
-    if (status==XRT_MANAGED_OK && !inline_value && !header) status=xrt_place_borrow(place,&header);
+    } else {
+        status=rbc_value_place(rbc_value_origin(activation,access.other),false,0,&place);
+        if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    }
     if (status!=XRT_MANAGED_OK) return status;
     XrtManagedHeader *borrow=(XrtManagedHeader *)header;
     const void *value=inline_value ? (const void *)inline_input.address : (const void *)&borrow;
