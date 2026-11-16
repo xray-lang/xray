@@ -13,6 +13,9 @@ typedef struct LirSliceFlow {
     uint32_t *values, *queue;
     uint8_t *inputs, *scratch, *edge, *queued;
     LirSliceRoot *bindings, *input_roots, *roots, *edge_roots;
+    XrLirCallableFunctionFacts callables;
+    uint32_t *callable_queue;
+    uint8_t *callable_seen;
     size_t count, head, tail, pending;
     bool checked_inputs;
 } LirSliceFlow;
@@ -21,6 +24,7 @@ static void lir_slice_flow_drop(LirSliceFlow *flow) {
     xr_free(flow->values); xr_free(flow->queue); xr_free(flow->inputs);
     xr_free(flow->scratch); xr_free(flow->edge); xr_free(flow->queued);
     xr_free(flow->bindings); xr_free(flow->input_roots); xr_free(flow->roots); xr_free(flow->edge_roots);
+    xr_free(flow->callable_queue); xr_free(flow->callable_seen);
 }
 static LirSliceRoot lir_slice_root_join(LirSliceRoot a, LirSliceRoot b) {
     if (!a.kind) return b;
@@ -100,6 +104,12 @@ static bool lir_slice_flow_create(const XrLirModule *m, const XrLirFunctionData 
     for (uint32_t n = 0; n < f->value_count; ++n)
         if (xr_lir_internal_slice_type(m, f->values[n].type)) flow->values[n + 1] = (uint32_t)++flow->count;
     if (!flow->count) return true;
+    if (flow->callables.value_count) {
+        if (flow->callables.value_count != f->value_count) return false;
+        flow->callable_queue = xr_malloc(values * sizeof(*flow->callable_queue));
+        flow->callable_seen = xr_calloc(values, 1);
+        if (!flow->callable_queue || !flow->callable_seen) return false;
+    }
     if (!lir_slice_extent(f->block_count, flow->count) ||
         !lir_slice_extent(f->block_count, sizeof(*flow->queue))) return false;
     flow->inputs = xr_calloc(f->block_count, flow->count);
@@ -166,6 +176,7 @@ static bool lir_slice_call_conflict(const XrLirModule *m, const XrLirInstruction
     }
     return false;
 }
+#include "xlir_slice_callable.inc.c"
 static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const LirSliceFlow *flow) {
     if (v->op == XR_LIR_CALL && m->slice_facts) return lir_slice_call_conflict(m, v, flow);
@@ -199,7 +210,9 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
             flow->scratch[flow->values[(uint32_t)v->bits] - 1] = 1;
             continue;
         }
-        if (check && lir_slice_callable_frontier(m, f, v, flow)) {
+        bool callable_checked = check && lir_slice_callable_frontier(m, f, v, flow);
+        LirSliceCallableCheck callable = callable_checked ? lir_slice_callable_check(m, f, v, flow) : LIR_SLICE_CALLABLE_SAFE;
+        if (callable_checked && callable == LIR_SLICE_CALLABLE_UNKNOWN) {
             const char *message = v->op == XR_LIR_CALL_INDIRECT ?
                 "indirect call with a live Slice requires captured binding effect facts" :
                 "callable arguments with a live Slice require captured binding effect facts";
@@ -207,7 +220,8 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
             if (d) d->status = XR_LIR_UNSUPPORTED;
             return XR_LIR_UNSUPPORTED;
         }
-        if (check && lir_slice_instruction_conflict(m, f, v, flow))
+        if (check && (callable == LIR_SLICE_CALLABLE_CONFLICT ||
+            (!callable_checked && lir_slice_instruction_conflict(m, f, v, flow))))
             return xr_lir_internal_error(d, "Array binding write conflicts with a live readonly Slice loan", function, b + 1, i + 1, &v->source);
         for (uint32_t a = 0; check && a < v->operand_count; ++a) {
             uint32_t row = flow->values[v->operands[a]];
@@ -277,13 +291,15 @@ static void lir_slice_successors(const XrLirFunctionData *f, uint32_t b, LirSlic
     }
 }
 static XrLirStatus lir_slice_function(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t function, XrLirDiagnostic *d) {
+    uint32_t function, const XrLirCallableFacts *callables, XrLirDiagnostic *d) {
     XrLirStatus status = lir_slice_frontier(m, f, function, d);
     if (status != XR_LIR_OK || f->kind == XR_LIR_FUNCTION_EXTERNAL) return status;
     bool needed = false;
     for (uint32_t n = 0; n < f->value_count; ++n) needed |= xr_lir_internal_slice_type(m, f->values[n].type);
     if (!needed) return XR_LIR_OK;
     LirSliceFlow flow = {0};
+    if (callables && xr_lir_callable_facts_function(callables,function,&flow.callables) != XR_LIR_OK)
+        return XR_LIR_VERIFY_ERROR;
     if (!lir_slice_flow_create(m, f, &flow)) { lir_slice_flow_drop(&flow); return XR_LIR_OUT_OF_MEMORY; }
     XrLirSliceFunctionFact contract;
     flow.checked_inputs = xr_lir_internal_slice_function_fact(m, function, &contract) == XR_LIR_OK && contract.available;

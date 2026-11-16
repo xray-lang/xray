@@ -54,6 +54,7 @@ static void ownership_free(void *memory) {
 #include "lir_ownership_fixture.h"
 #include "lir_record_fixture.h"
 #include "lir_slice_ownership_fixture.h"
+#include "lir_slice_callable_fixture.h"
 
 static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
@@ -148,6 +149,8 @@ int main(void) {
     CHECK(xr_lir_value_layouts_ownership(layouts,&types,&type_count)==XR_LIR_VALUE_LAYOUT_OK&&type_count==2);
     sweep(record,types,type_count); xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing);
     rejected_after_collection();
+    XrLirModule *callable=slice_callable_fixture(SLICE_CALLABLE_DIRECT);
+    OK(xr_lir_module_finish(callable,NULL));sweep(callable,NULL,0);
     puts("LIR ownership snapshot allocation failures passed");
     return 0;
 }
