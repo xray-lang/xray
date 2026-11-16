@@ -20,7 +20,7 @@ static void view_cold_checked_sources(const char *programs) {
         "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append", "readonly_byte_slice"};
     for (uint32_t n = 0; n < sizeof(names) / sizeof(*names); ++n) {
         char demo_directory[2048];
-        written = snprintf(demo_directory, sizeof(demo_directory), "%s/../../demos/07-advanced", programs);
+        written = snprintf(demo_directory, sizeof(demo_directory), "%s/../../../demos/07-advanced", programs);
         CHECK(written > 0 && (size_t)written < sizeof(demo_directory));
         bool original_u8 = !strcmp(names[n], "readonly_byte_slice");
         char *text = read_file(original_u8 ? demo_directory : directory, names[n], "xr");
