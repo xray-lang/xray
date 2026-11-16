@@ -28,6 +28,7 @@ typedef struct NativeEnvironmentImage {
     const XrtValueImage *source;
     XrtManagedLease code;
     XrtValueImagePlans *plans;
+    bool code_owned;
 } NativeEnvironmentImage;
 typedef struct NativeEnvironmentType {
     struct NativeEnvironmentType *next;
@@ -126,24 +127,31 @@ XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id) {
     return native_values(source_id)->root;
 }
 
-static XrtManagedStatus native_environment_plan(struct XrtNativeValues *values,
-    const XrtNativeEnvironmentInput *input, const XrtValuePlan **output) {
-    if (input->state) return xrt_module_state_plan(input->state,input->type,output);
-    if (!input->image) return XRT_MANAGED_ARGUMENT;
+static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
+    const XrtValueImage *source, XrtModuleState *state, XrtManagedLease code,
+    uint32_t type_id, const XrtValuePlan **output) {
+    if (state) return xrt_module_state_plan(state,type_id,output);
+    if (!source || (code.context ? !code.retain || !code.drop : code.retain || code.drop)) return XRT_MANAGED_ARGUMENT;
     NativeEnvironmentImage *image = values->images;
-    while (image && (image->source != input->image || image->code.context != input->code.context ||
-        image->code.retain != input->code.retain || image->code.drop != input->code.drop)) image = image->next;
+    while (image && (image->source != source || image->code.context != code.context ||
+        image->code.retain != code.retain || image->code.drop != code.drop)) image = image->next;
     if (!image) {
         void *memory = NULL;
         XrtManagedStatus status = xrt_managed_metadata_allocate(values->billing,sizeof(*image),&memory);
         if (status != XRT_MANAGED_OK) return status;
         image = memory;
-        *image = (NativeEnvironmentImage){.next=values->images,.source=input->image,.code=input->code};
+        *image = (NativeEnvironmentImage){.next=values->images,.source=source,.code=code};
         values->images = image;
-        status = xrt_value_image_bind(values->billing,input->image,input->code,&image->plans);
+        /* A Cell-only image need not leave any Code lease in its plans. Keep
+         * the cache's raw identity alive independently until this node retires. */
+        if (code.context) {
+            if (!code.retain(code.context)) return XRT_MANAGED_REFCOUNT;
+            image->code_owned = true;
+        }
+        status = xrt_value_image_bind(values->billing,source,code,&image->plans);
         if (status != XRT_MANAGED_OK) return status;
     }
-    return xrt_value_image_get(image->plans,input->type,output);
+    return xrt_value_image_get(image->plans,type_id,output);
 }
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,
     const XrtValuePlan *plan, const XrtCaptureType **output) {
@@ -168,7 +176,7 @@ XRAY_API XrtFunction xrt_native_environment_create(XrtManagedFrame *frame, size_
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT,source_id);
     struct XrtNativeValues *values = native_values(source_id);
     const XrtValuePlan *plan = NULL;
-    XrtManagedStatus status = native_environment_plan(values,input,&plan);
+    XrtManagedStatus status = native_capture_plan(values,input->image,input->state,input->code,input->type,&plan);
     XrtValuePlanSpec shape = {0};
     if (status == XRT_MANAGED_OK) status = xrt_value_plan_view(plan,&shape);
     if (status == XRT_MANAGED_OK && shape.kind != XRT_VALUE_ENVIRONMENT) status = XRT_MANAGED_ARGUMENT;
@@ -181,6 +189,63 @@ XRAY_API XrtFunction xrt_native_environment_create(XrtManagedFrame *frame, size_
     if (status == XRT_MANAGED_OK) status = xrt_environment_borrow(type,owner,&view);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
     return (XrtFunction){input->entry,(uintptr_t)view.payload,owner};
+}
+XRAY_API void xrt_native_cell_create(XrtManagedFrame *frame, size_t slot,
+    const XrtNativeCellInput *input, uint32_t source_id) {
+    if (!input || !input->type) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT,source_id);
+    const XrtManagedHeader *previous = NULL;
+    XrtManagedStatus status = xrt_place_borrow(
+        (XrtPlace){.frame=frame,.slot=slot,.nulls=XRT_PLACE_NULLABLE},&previous);
+    if (status != XRT_MANAGED_OK || previous)
+        xrt_native_managed_failure(status != XRT_MANAGED_OK ? status : XRT_MANAGED_ARGUMENT,source_id);
+    struct XrtNativeValues *values = native_values(source_id);
+    const XrtValuePlan *plan = NULL;
+    status = native_capture_plan(values,input->image,input->state,input->code,input->type,&plan);
+    XrtValuePlanSpec shape = {0}, payload = {0};
+    if (status == XRT_MANAGED_OK) status = xrt_value_plan_view(plan,&shape);
+    if (status == XRT_MANAGED_OK && shape.kind != XRT_VALUE_CELL) status = XRT_MANAGED_ARGUMENT;
+    if (status == XRT_MANAGED_OK) status = xrt_value_plan_view(shape.element,&payload);
+    if (status == XRT_MANAGED_OK && payload.kind != XRT_VALUE_I64 && payload.kind != XRT_VALUE_MAP_STRING_I64)
+        status = XRT_MANAGED_ARGUMENT;
+    const XrtCaptureType *type = NULL;
+    if (status == XRT_MANAGED_OK) status = native_environment_type(values,plan,&type);
+    if (status == XRT_MANAGED_OK) status = payload.kind == XRT_VALUE_I64 ?
+        xrt_i64_cell_create(frame,slot,type,input->initial.i64) :
+        xrt_map_cell_create(frame,slot,type,(const XrtMapBacking *)input->initial.map);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API int64_t xrt_native_cell_i64_read(const XrtManagedHeader *cell, uint32_t source_id) {
+    int64_t value = 0;
+    XrtManagedStatus status = xrt_i64_cell_read((const XrtI64Cell *)cell,&value);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    return value;
+}
+XRAY_API void xrt_native_cell_i64_write(XrtManagedHeader *cell, int64_t value, uint32_t source_id) {
+    XrtManagedStatus status = xrt_i64_cell_write_exclusive((XrtI64Cell *)cell,value);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_cell_map_read_copy(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *cell, uint32_t source_id) {
+    XrtManagedStatus status = xrt_map_cell_read_copy(frame,slot,(const XrtMapCell *)cell);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_cell_map_write(XrtManagedHeader *cell, const XrtManagedHeader *map, uint32_t source_id) {
+    XrtManagedStatus status = xrt_map_cell_write_exclusive((XrtMapCell *)cell,(const XrtMapBacking *)map);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API void xrt_native_cell_map_update(XrtManagedHeader *cell, XrtManagedFrame *frame, size_t workspace,
+    const XrtMapUpdate *update, bool *removed, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_map_cell_update_exclusive((XrtMapCell *)cell,frame,workspace,types,update,removed);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API XrtExternalOwner xrt_native_cell_map_binding(XrtManagedHeader *cell, uint32_t source_id) {
+    XrtExternalOwner binding = {0};
+    XrtManagedStatus status = xrt_map_cell_external((XrtMapCell *)cell,&binding);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    return binding;
 }
 
 XRAY_API void xrt_native_string_create(XrtManagedFrame *frame, size_t slot,
@@ -315,8 +380,11 @@ XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
     while (values->images) {
         NativeEnvironmentImage *image = values->images;
         values->images = image->next;
+        XrtManagedLease code = image->code;
+        bool code_owned = image->code_owned;
         xrt_value_image_drop(&image->plans);
         xrt_managed_metadata_free(values->billing,image,sizeof(*image));
+        if (code_owned) code.drop(code.context);
     }
     xrt_backing_types_drop(&values->backings);
     XrtBillingOwner *billing = values->billing;
