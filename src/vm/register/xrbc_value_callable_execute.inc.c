@@ -124,6 +124,19 @@ static XrtManagedStatus rbc_value_function_captures(const XrRbcModule *module,Xr
             child->capture_parameters[p].cell=cell;
             child->borrowed_parameters[p]=(const uint8_t *)&child->capture_parameters[p].cell;
             offset+=sizeof(cell);
+        } else if (capture.kind==XR_RBC_CALLABLE_REFERENCE) {
+            const XrLirValueHome *home=rbc_value_home(child->code,value);
+            if (!environment || capture.type!=XR_RBC_MAP_STRING_I64 || kind!=XRT_VALUE_MAP_STRING_I64 ||
+                !rbc_value_map(module,child->code,value,false) || home->parameter!=p+1 ||
+                home->offset!=SIZE_MAX || home->first_owner!=SIZE_MAX ||
+                home->temporary_offset!=SIZE_MAX || home->temporary_first_owner!=SIZE_MAX) return XRT_MANAGED_ARGUMENT;
+            const XrtManagedHeader *map=NULL; memcpy(&map,bytes,sizeof(map));
+            if (!map) return XRT_MANAGED_ARGUMENT;
+            /* The invocation's real Fn keeper retains this immutable Env across
+             * callee allocation and return. Its Map field is a borrowed formal,
+             * not a register owner or a new mutable binding. */
+            child->borrowed_parameters[p]=bytes;
+            offset+=sizeof(map);
         } else {
             XrRbcRegister *output=rbc_value_register(stack,child,value);
             uint64_t bits=0;
