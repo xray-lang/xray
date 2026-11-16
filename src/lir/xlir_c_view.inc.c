@@ -118,7 +118,7 @@ static void c_view_home_parts(LirC *c, const XrLirHomeWorkspace *workspace) {
 static void c_view_home(LirC *c, const XrLirHomeWorkspace *workspace) {
     c_text(c,"&(XrtInlineValueHome){"); c_view_home_parts(c,workspace); c_text(c,"}");
 }
-static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOperation operation,
+static const XrLirHomeEvent *c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOperation operation,
     uint32_t value, uint32_t workspace, uint32_t target) {
     (void)v;
     bool ending = operation == XR_LIR_SLICE_OP_END || operation == XR_LIR_SLICE_OP_CLEANUP ||
@@ -141,9 +141,13 @@ static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOpera
                 event->view_parameter == c->homes->values[value].view_parameter) &&
             event->transfer_mode == (ending ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_BORROW) &&
             event->hold_transfer_mode == (ending ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_COPY) &&
-            event->target == target) return true;
+            event->target == target) {
+            if ((uint32_t)event->view_cleanup>XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED ||
+                (event->view_cleanup && operation!=XR_LIR_SLICE_OP_CLEANUP)) break;
+            return event;
+        }
     }
-    c_error(c, XR_LIR_C_INVALID_LIR, "Slice operation has no matching final loan event"); return false;
+    c_error(c, XR_LIR_C_INVALID_LIR, "Slice operation has no matching final loan event"); return NULL;
 }
 static void c_view_cleanup(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (!c->homes || v->type != XR_LIR_UNIT || v->result || v->operand_count ||
@@ -165,7 +169,8 @@ static void c_view_cleanup(LirC *c, const XrLirInstructionView *v, uint32_t sour
         workspace->type != home->type || !c_slice_type(c, c_value_type(c, target))) {
         c_error(c, XR_LIR_C_INVALID_LIR, "Slice cleanup target disagrees with its keeper workspace"); return;
     }
-    if (!c_view_event(c, v, XR_LIR_SLICE_OP_CLEANUP, target, home->view_workspace, 0)) return;
+    const XrLirHomeEvent *event=c_view_event(c, v, XR_LIR_SLICE_OP_CLEANUP, target, home->view_workspace, 0);
+    if (!event || event->view_cleanup==XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED) return;
     /* A resource target can be unconstructed on this path. Inspect only the
      * common storage metadata; do not evaluate its natural Slice bytes or
      * allocate a Frame solely to retire a keeper that was never published. */

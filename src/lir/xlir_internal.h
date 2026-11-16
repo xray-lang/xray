@@ -48,6 +48,14 @@ typedef struct XrLirBlockData {
     uint32_t instruction_count, instruction_capacity;
     bool terminated;
 } XrLirBlockData;
+
+/* sink_first aliases the aligned tail of the one may_repeat allocation and
+ * exists only for functions with physical cleanup candidates. */
+typedef struct XrLirBlockConstructionFacts {
+    uint8_t *may_repeat;
+    uint32_t *sink_first;
+    uint32_t count;
+} XrLirBlockConstructionFacts;
 typedef struct XrLirFunctionData {
     char *name;
     size_t name_length;
@@ -69,6 +77,7 @@ typedef struct XrLirFunctionData {
     uint32_t value_count, value_capacity;
     uint32_t scope_count;
     uint8_t *block_multiplicity; /* Owned only after complete immutable admission. */
+    uint32_t *block_cleanup_rank; /* Borrowed aligned tail of block_multiplicity. */
     uint32_t block_multiplicity_count;
 } XrLirFunctionData;
 typedef struct XrLirLiteralData {

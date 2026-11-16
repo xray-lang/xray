@@ -53,6 +53,13 @@ typedef enum XrLirOwnershipTransferMode {
     XR_LIR_OWNERSHIP_TRANSFER_MOVE
 } XrLirOwnershipTransferMode;
 
+/* Logical cleanup always ends its loan. The optional physical no-op requires
+ * a fresh common CFG proof that this activation never constructed its keeper. */
+typedef enum XrLirSliceCleanupMode {
+    XR_LIR_SLICE_CLEANUP_CLEAR,
+    XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED
+} XrLirSliceCleanupMode;
+
 /* Positions and SSA IDs belong to the exact input module: function, block,
  * instruction and edge are one-based; argument is a zero-based parameter or
  * operand ordinal. Facts are grouped by function, not an execution schedule.
@@ -97,6 +104,7 @@ typedef struct XrLirOwnershipFact {
      * keeper COPY/MOVE/BORROW fact, not Slice's owned_count. */
     /* CLEANUP is a resource target and has no ordinary SSA operand read. */
     uint32_t view_operation;
+    XrLirSliceCleanupMode view_cleanup;
     XrLirOwnershipTransferMode hold_transfer_mode;
     XrLirSliceStorage view_storage;
     /* Actual zero-based formal origin, UINT32_MAX when inapplicable. RETURN
