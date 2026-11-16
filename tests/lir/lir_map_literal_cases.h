@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Literal provenance remains owned across vector growth and rewrites. */
+#include "vm/register/xrbc_value_code.h"
 static void map_literal_metadata(void) {
     XrLirModule *m=NULL,*copy=NULL;OK(xr_lir_module_create(NULL,&m));OK(xr_lir_module_create(NULL,&copy));
     char path[]="app.xr";XrLirMapLiteralOrigin items[]={{0,3,12},{1,4,9}};
@@ -87,39 +88,76 @@ static XrLirModule *map_literal_program(unsigned mode) {
     ret(m,b,result);OK(xr_lir_module_finish(m,NULL));return m;
 }
 static void map_literal_operand_boundaries(void) {
-    XrLirModule *m=map_literal_program(0);XrRbcProgram *program=program_new(m,0);xr_lir_module_destroy(m);
-    const XrRbcModule *view=xr_rbc_program_view(program);CHECK(view->function_count==1&&view->map_literal_count==2);
-    XrRbcModule module=*view;XrRbcFunction function=view->functions[0];module.functions=&function;
-    XrRbcArrayAccess *accesses=xr_malloc(function.array_access_count*sizeof(*accesses));
-    uint32_t capacity=65537;size_t first=function.array_operand_count;
-    XrRbcArrayLocation *operands=xr_malloc((first+2u*capacity)*sizeof(*operands));
-    XrtMapLiteralOrigin *origins=xr_malloc((size_t)capacity*sizeof(*origins));CHECK(accesses&&operands&&origins);
-    memcpy(accesses,function.array_accesses,function.array_access_count*sizeof(*accesses));
-    memcpy(operands,function.array_operands,first*sizeof(*operands));
-    size_t selected=SIZE_MAX;
-    for(size_t n=0;n<function.array_access_count;++n)
-        if(accesses[n].operation==XR_RBC_MAP_LITERAL&&accesses[n].kind==XR_RBC_MAP_STRING_I64){selected=n;break;}
-    CHECK(selected!=SIZE_MAX&&accesses[selected].count==4);
-    XrRbcArrayAccess *access=&accesses[selected];
-    XrRbcArrayLocation key=function.array_operands[access->first],value=function.array_operands[access->first+1];
-    XrtMapLiteral literals[]={view->map_literals[0],view->map_literals[1]};module.map_literals=literals;
-    XrtMapLiteral *literal=&literals[access->cell-1];literal->items=origins;
-    for(uint32_t n=0;n<capacity;++n) {
-        origins[n]=(XrtMapLiteralOrigin){0,n+1,1};
-        operands[first+2u*n]=key;operands[first+2u*n+1]=value;
-    }
-    function.array_accesses=accesses;function.array_operands=operands;access->first=(uint32_t)first;
     const uint32_t counts[]={32768,32769,65536,65537};
-    XrtLocationOwner *locations=xr_rbc_program_locations(program);CHECK(locations);
-    for(size_t n=0;n<sizeof(counts)/sizeof(counts[0]);++n) {
-        literal->count=counts[n];access->count=2u*counts[n];function.array_operand_count=first+access->count;
-        XrRbcExecution *execution=NULL;XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution);
-        if(n<3) {
-            if(status!=XR_RBC_OK)fprintf(stderr,"Map literal items %u operands %u admission %u\n",counts[n],access->count,(unsigned)status);
-            CHECK(status==XR_RBC_OK&&execution);xr_rbc_execution_free(&execution);
-        } else CHECK(status==XR_RBC_INVALID&&!execution);
+    for(size_t test=0;test<sizeof(counts)/sizeof(counts[0]);++test) {
+        uint32_t count=counts[test],operand_count=2u*count;
+        XrLirMapLiteralOrigin *origins=xr_malloc((size_t)count*sizeof(*origins));
+        XrLirValue *operands=xr_malloc((size_t)operand_count*sizeof(*operands));CHECK(origins&&operands);
+        XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+        XrLirFunction f=function(m,"wide_map_literal",NULL,0,XR_LIR_I64);
+        XrLirBlock b=block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,b));
+        XrLirLiteral text={0};OK(xr_lir_add_literal(m,"x",1,&text));
+        XrLirValue key=map_literal_value(m,b,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,text.id);
+        XrLirValue value=constant(m,b,XR_LIR_I64,42);
+        for(uint32_t item=0;item<count;++item) {
+            origins[item]=(XrLirMapLiteralOrigin){0,item+1,1};
+            operands[2u*item]=key;operands[2u*item+1]=value;
+        }
+        XrLirMapLiteral literal={"wide.xr",7,origins,count};uint32_t ordinal=0;
+        OK(xr_lir_map_literal_add(m,&literal,&ordinal));
+        XrLirValue map=map_literal_value(m,b,XR_LIR_MAP_LITERAL_NEW,XR_LIR_MAP_STRING_I64,
+            operands,operand_count,ordinal);
+        memset(origins,0xa5,(size_t)count*sizeof(*origins));xr_free(origins);
+        memset(operands,0xa5,(size_t)operand_count*sizeof(*operands));xr_free(operands);
+        map_literal_drop(m,b,XR_LIR_MAP_DROP,map);map_literal_drop(m,b,XR_LIR_STRING_DROP,key);
+        ret(m,b,value);OK(xr_lir_module_finish(m,NULL));OK(xr_lir_verify(m,NULL));
+        XrRbcProgram *program=program_new(m,0);xr_lir_module_destroy(m);
+        const XrRbcModule *view=xr_rbc_program_view(program);
+        CHECK(view&&view->function_count==1&&view->map_literal_count==1&&
+            view->code_lease.owner&&view->code_lease.retain&&view->code_lease.release);
+        CHECK(ordinal==1&&view->map_literals[0].count==count&&view->map_literals[0].items&&
+            view->map_literals[0].items[count-1].line==count);
+        const XrRbcValueCode *code=xr_rbc_module_value_code(view,0);
+        const XrtValueImage *image=xr_rbc_module_value_image(view);
+        CHECK(code&&code->homes&&code->homes->values&&code->arguments&&code->accesses&&code->locations&&
+            image&&image->types&&map.id<=code->value_count&&key.id<=code->value_count&&value.id<=code->value_count&&
+            code->homes->value_count==code->value_count&&code->homes->frame.owned_offsets);
+        size_t selected=SIZE_MAX;
+        for(size_t index=0;index<code->access_count;++index)
+            if(code->accesses[index].operation==XR_RBC_VALUE_MAP_LITERAL){CHECK(selected==SIZE_MAX);selected=index;}
+        CHECK(selected!=SIZE_MAX);
+        XrRbcValueAccess access=code->accesses[selected];
+        CHECK(access.index==ordinal&&access.result==map.id&&access.count==operand_count&&
+            access.first<=code->argument_count&&access.count<=code->argument_count-access.first);
+        for(uint32_t item=0;item<count;++item)
+            CHECK(code->arguments[access.first+2u*item]==key.id&&code->arguments[access.first+2u*item+1]==value.id);
+        const XrLirValueHome *home=&code->homes->values[map.id],*key_home=&code->homes->values[key.id];
+        CHECK(home->type&&home->type<=image->type_count&&image->types[home->type-1].kind==XRT_VALUE_MAP_STRING_I64&&
+            home->owner_count==1&&home->first_owner<code->homes->frame.slot_count&&
+            home->temporary_first_owner<code->homes->frame.slot_count&&
+            home->first_owner!=home->temporary_first_owner&&home->offset!=home->temporary_offset&&
+            code->homes->frame.owned_offsets[home->first_owner]==home->offset&&
+            code->homes->frame.owned_offsets[home->temporary_first_owner]==home->temporary_offset&&
+            code->locations[map.id].kind==XR_RBC_VALUE_NOWHERE);
+        CHECK(key_home->type&&key_home->type<=image->type_count&&
+            image->types[key_home->type-1].kind==XRT_VALUE_STRING&&!code->homes->values[value.id].type);
+        size_t encoded=0;
+        for(size_t pc=0;pc<view->functions[0].code_count;++pc) {
+            uint32_t word=view->functions[0].code[pc];
+            if((word&255)==XR_RBC_VALUE_ACCESS&&(word>>16)==selected)++encoded;
+        }
+        CHECK(encoded==1);
+        XrtLocationOwner *locations=xr_rbc_program_locations(program);CHECK(locations);
+        XrRbcExecution *execution=NULL;
+        XrRbcStatus status=xr_rbc_module_prepare(view,0,NULL,0,locations,&execution);
+        if(status!=XR_RBC_OK)fprintf(stderr,"Map literal items %u operands %u admission %u\n",count,operand_count,(unsigned)status);
+        CHECK(status==XR_RBC_OK&&execution);xr_rbc_execution_free(&execution);
+        /* Borrowing the exact descriptions cannot replace the real code owner. */
+        XrRbcModule raw=*view;raw.code_lease=(XrRbcCodeLease){0};
+        raw.borrowed_value_codes=&code;raw.borrowed_value_code_count=1;raw.borrowed_value_image=image;
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,locations,&execution)==XR_RBC_INVALID&&!execution);
+        xr_rbc_program_destroy(program);
     }
-    xr_free(origins);xr_free(operands);xr_free(accesses);xr_rbc_program_destroy(program);
 }
 static void map_literal_products(unsigned mode,bool rewrite,const char *path) {
     XrLirModule *m=map_literal_program(mode);if(rewrite)m=sccp_and_retire(m);

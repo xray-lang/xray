@@ -8,8 +8,10 @@
  */
 static bool lir_map_literal_valid(const XrLirMapLiteral *literal) {
     if(!literal || (literal->path_length!=0)!=(literal->path!=NULL) ||
-        (literal->path_length && !lir_record_text_valid(literal->path,literal->path_length)) || literal->count>65536 ||
+        (literal->path_length && !lir_record_text_valid(literal->path,literal->path_length)) ||
         (literal->count!=0)!=(literal->items!=NULL))return false;
+    size_t count=literal->count;
+    if(count>SIZE_MAX/sizeof(*literal->items))return false;
     for(uint32_t n=0;n<literal->count;++n)
         if(literal->items[n].kind>1 || !literal->items[n].line || !literal->items[n].column)return false;
     return true;
