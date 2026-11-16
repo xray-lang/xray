@@ -285,6 +285,20 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_producer_borrow(const XrtManagedHeader *
     *empty = spec;
     return XRT_MANAGED_OK;
 }
+XR_FUNCDEF bool xrt_managed_layout_matches(const XrtManagedHeader *owner, const XrtRuntimeTypeSpec *expected) {
+    if (!owner || !owner->ops || !expected || (expected->child_count && !expected->child_offsets) ||
+        (expected->tail_child_count && !expected->tail_child_offsets)) return false;
+    const XrtRuntimeTypeSpec *actual = &owner->ops->plan->spec;
+    return actual->fixed_size == expected->fixed_size && actual->alignment == expected->alignment &&
+        actual->capacity_offset == expected->capacity_offset && actual->stride == expected->stride &&
+        actual->child_count == expected->child_count && actual->tail_child_count == expected->tail_child_count &&
+        actual->drop_payload == expected->drop_payload && actual->code.context == expected->code.context &&
+        actual->code.retain == expected->code.retain && actual->code.drop == expected->code.drop &&
+        (!actual->child_count || !memcmp(actual->child_offsets, expected->child_offsets,
+            actual->child_count * sizeof(size_t))) &&
+        (!actual->tail_child_count || !memcmp(actual->tail_child_offsets, expected->tail_child_offsets,
+            actual->tail_child_count * sizeof(size_t)));
+}
 
 static bool allocation_extent(const XrtRuntimeTypePlan *plan, const XrtManagedHeader *value,
     size_t *bytes) {

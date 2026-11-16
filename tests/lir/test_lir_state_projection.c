@@ -53,9 +53,15 @@ static void define_entry(XrLirModule *module) {
 static Fixture fixture_new(bool unsupported) {
     Fixture f = {0}; LIR(xr_lir_module_create(NULL,&f.module));
     XrLirType record, maybe, string, empty, optional_empty, fixed, tuple;
-    XrLirRecordField fields[] = {{"flag",4,XR_LIR_I1},{"text",4,XR_LIR_STRING}};
-    LIR(xr_lir_record_type(f.module,fields,2,&record)); LIR(xr_lir_nullable_type(f.module,record,&maybe));
-    LIR(xr_lir_nullable_type(f.module,XR_LIR_STRING,&string)); LIR(xr_lir_record_type(f.module,NULL,0,&empty));
+    XrLirRecordField fields[] = {{"flag",4,XR_LIR_I1, 0},{"text",4,XR_LIR_STRING, 0}};
+    LIR(xr_lir_record_type(f.module,
+        &(XrLirRecordIdentity){.module="tests.lir.state_projection", .module_length=sizeof("tests.lir.state_projection")-1,
+            .name="StateRecord", .name_length=sizeof("StateRecord")-1},
+        fields,2,&record)); LIR(xr_lir_nullable_type(f.module,record,&maybe));
+    LIR(xr_lir_nullable_type(f.module,XR_LIR_STRING,&string)); LIR(xr_lir_record_type(f.module,
+        &(XrLirRecordIdentity){.module="tests.lir.state_projection", .module_length=sizeof("tests.lir.state_projection")-1,
+            .name="EmptyRecord", .name_length=sizeof("EmptyRecord")-1},
+        NULL,0,&empty));
     LIR(xr_lir_nullable_type(f.module,empty,&optional_empty));
     LIR(xr_lir_fixed_array_type(f.module,XR_LIR_U8,3,&fixed)); LIR(xr_lir_tuple_i64_type(f.module,2,&tuple));
     XrLirValueLayoutKey roots[SLOTS] = {{record,0,0},{maybe,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0},

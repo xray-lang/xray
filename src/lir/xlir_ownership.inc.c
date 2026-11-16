@@ -126,7 +126,7 @@ static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLi
         return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
     if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
     if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
-        v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_SET_DROP) return XR_LIR_OWNERSHIP_RELEASE;
+        v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP) return XR_LIR_OWNERSHIP_RELEASE;
     return 0;
 }
 static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,

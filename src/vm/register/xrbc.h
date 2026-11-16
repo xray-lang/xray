@@ -114,8 +114,7 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
     XR_RBC_VIEW_FRAME, XR_RBC_VIEW_CELL, XR_RBC_SLICE_I64, XR_RBC_STRING_REF, XR_RBC_FUNCTION,
     XR_RBC_I64_BINDING, XR_RBC_CAPTURED_CELL, XR_RBC_CAPTURED_CELL_BORROW,
-    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF, XR_RBC_BOXED,
-    XR_RBC_SET_I64, XR_RBC_SET_I64_CELL, XR_RBC_SET_I64_REF
+    XR_RBC_MAP_STRING_I64, XR_RBC_MAP_STRING_I64_CELL, XR_RBC_MAP_STRING_I64_REF, XR_RBC_BOXED
 } XrRbcRegisterKind;
 
 typedef enum XrRbcArrayOperation {
@@ -126,9 +125,7 @@ typedef enum XrRbcArrayOperation {
     XR_RBC_ARRAY_REF_SET, XR_RBC_ARRAY_REF_PUSH, XR_RBC_ARRAY_DISPLAY,
     XR_RBC_MAP_CONTAINS, XR_RBC_MAP_REMOVE, XR_RBC_MAP_CLEAR,
     XR_RBC_MAP_REF_REMOVE, XR_RBC_MAP_REF_CLEAR,
-    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE, XR_RBC_MAP_INDEX, XR_RBC_MAP_LITERAL,
-    XR_RBC_SET_CONTAINS,XR_RBC_SET_ADD,XR_RBC_SET_REMOVE,XR_RBC_SET_CLEAR,
-    XR_RBC_SET_REF_ADD,XR_RBC_SET_REF_REMOVE,XR_RBC_SET_REF_CLEAR,XR_RBC_SET_STATE_READ,XR_RBC_SET_STATE_WRITE
+    XR_RBC_MAP_STATE_READ, XR_RBC_MAP_STATE_WRITE, XR_RBC_MAP_INDEX
 } XrRbcArrayOperation;
 
 /* A location names one activation-owned bank. Variadic operands remain real
@@ -303,6 +300,7 @@ typedef struct XrRbcCodeLease {
 
 struct XrRbcValueCode;
 struct XrRbcCallableEntry;
+struct XrtMapLiteral;
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
@@ -340,6 +338,7 @@ typedef struct {
     const struct XrtValueImage *borrowed_value_image;
     const struct XrRbcCallableEntry *borrowed_callable_entries;
     const uint32_t *borrowed_type_callables;
+    /* Immutable provenance shares the authentic code owner's lifetime. */
     const struct XrtMapLiteral *map_literals;
     size_t map_literal_count;
 } XrRbcModule;
@@ -352,7 +351,8 @@ typedef enum {
     XR_RBC_NULL_UNWRAP,
     XR_RBC_OUTPUT_FAILURE,
     XR_RBC_HOST_CLOCK_FAILURE,
-    XR_RBC_VALUE_FAILURE
+    XR_RBC_VALUE_FAILURE,
+    XR_RBC_MESSAGE_PANIC
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -426,9 +426,8 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
-/* The body is borrowed until outcome_free and preserves every message byte. */
-XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *,uint32_t *,const char **,size_t *,
-    uint32_t *,const XrtLocationOwner **);
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *, uint32_t *code,
+    const char **bytes, size_t *length, uint32_t *source, const XrtLocationOwner **);
 XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,

@@ -47,7 +47,7 @@ typedef struct LirC {
     size_t length, capacity;
     uint32_t *closure;
     uint32_t closure_count;
-    uint8_t *seen, *fixed_divisors, *used_literals, *callable_used;
+    uint8_t *seen, *fixed_divisors, *used_literals, *used_map_literals, *callable_used;
     LirCConstructedType *constructed_types;
     uint32_t constructed_count, pod_count;
     XrLirFunction function;
@@ -273,7 +273,6 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->string_values |= type == XR_LIR_STRING;
     c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
     c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
-    c->sets |= type==XR_LIR_SET_I64 || type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF;
     c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
     c->views |= c_slice_type(c, type);
     c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views || c->maps;
@@ -418,7 +417,11 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c_display_point(c, v)) { c->displays = true; return; }
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) return;
-    if (c_map_point(c, v)) { c->maps = true; return; }
+    if (c_map_point(c, v)) {
+        c->maps = true;
+        if (v->op == XR_LIR_MAP_LITERAL_NEW) (void)c_map_literal_admit(c, v);
+        return;
+    }
     if (string_role) return;
     if (c_view_point(c, v)) return;
     switch (v->op) {
@@ -434,7 +437,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_STRING_LEN:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
-        case XR_LIR_SET_DROP: case XR_LIR_SET_CELL_DROP: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
+        case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
             break;
         case XR_LIR_CALL_INTRINSIC: {
             XrLirArrayIntrinsic shape = {0};
@@ -876,7 +879,6 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_array_instruction(c, v, source);
         return;
     }
-    if(c_set_point(c,v)) {uint32_t source=c_located(&v->source)?++c->location_cursor:0;c_set_instruction(c,v,source);return;}
     if (c_map_point(c, v) || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_MAP_CELL_DROP) {
         uint32_t source = c_map_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
         c_map_instruction(c, v, source);
@@ -1084,6 +1086,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_callable_publication(c);
     c_locations(c);
     c_literals(c);
+    c_map_literals(c);
     if (c->state) c_state_layout(c);
     else if (c->value_image) c_value_image(c,xr_lir_value_image_view(c->value_image));
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
@@ -1254,6 +1257,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.seen);
     xr_compile_resources_free(c.fixed_divisors);
     xr_compile_resources_free(c.used_literals);
+    xr_compile_resources_free(c.used_map_literals);
     xr_compile_resources_free(c.callable_used);
     xr_compile_resources_free(c.constructed_types);
     xr_compile_resources_free(c.callable_events);

@@ -264,6 +264,7 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *frame, size_
     }
     return map_finish(&destination, status);
 }
+#include "xnative_map_literal.inc.c"
 XR_FUNCDEF XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *map,
     const XrtStringBacking *key, int64_t *value, bool *found) {
     if (!map_shape(map) || !value || !found) return XRT_MANAGED_ARGUMENT;

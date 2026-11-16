@@ -15,6 +15,7 @@
 #include "xray_native_values.h"
 #include "xray_native_place.h"
 #include "xray_native_state.h"
+#include "xray_native_map.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,6 +198,49 @@ static void managed_scopes(void) {
 #endif
     xrt_locations_release(map);
 }
+typedef struct MessageCall {
+    XrtManagedHeader *taken;
+} MessageCall;
+static void message_root(void *context) {
+    MessageCall *call = context;
+    XrtManagedRoot *root = xrt_native_managed_root(1); XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter(root, 1, &frame));
+    xrt_native_string_create(frame, 0, "owned\0\xc3\xa9", 8, 1);
+    managed_require(xrt_managed_slot_take(frame, 0, &call->taken));
+    managed_require(xrt_managed_frame_leave(root, frame));
+    xrt_message_panic_take(&call->taken, 434, 1);
+}
+static void managed_message_owner(void) {
+    XrtLocationOwner *map = locations("message-owner.xr");
+    for (size_t allowance = 0; allowance < 64; ++allowance) {
+        XrtValueRoot owner = {0}; XrtBillingOwner *billing = NULL;
+        XrtExecutionFailure failure = {0}; MessageCall call = {0};
+        CHECK(xrt_native_values_prepare(&owner, &billing) == XRT_MANAGED_OK);
+        CHECK(xrt_billing_owner_retain(billing));
+#if defined(XR_NATIVE_VALUE_ALLOCATIONS)
+        xrt_billing_owner_fail_after(billing, allowance);
+#else
+        (void)allowance;
+#endif
+        CHECK(xrt_run_embedded_owned(map, &failure, message_root, &call, &owner) == XRT_EXECUTION_FAILURE);
+        CHECK(!call.taken && xrt_value_root_empty(&owner) && !xrt_value_root_active());
+        bool completed = failure.kind == XRT_FAILURE_MESSAGE_PANIC;
+        if (completed) {
+            const XrtStringBacking *message = (const XrtStringBacking *)failure.detail.message.message;
+            CHECK(failure.detail.message.code == 434 && failure.detail.message.source_id == 1 &&
+                message && message->length == 8 && message->runes == 7 &&
+                !memcmp(message->bytes, "owned\0\xc3\xa9", 8) &&
+                xr_signed_rc_read(&message->managed.references) == 1);
+        } else CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_OOM);
+        xrt_execution_failure_drop(&failure); xrt_execution_failure_drop(&failure);
+        CHECK(!failure.detail.message.message && xrt_billing_owner_stats(billing).blocks == 1);
+        xrt_billing_owner_drop(billing);
+        if (completed) { CHECK(allowance < 64); break; }
+        CHECK(allowance + 1 < 64);
+    }
+    xrt_locations_release(map);
+}
+#include "execution_map_literals.inc.c"
 #include "execution_environments.inc.c"
 static void state_string_root(void *context, XrtModuleState *state) {
     unsigned *completed = context;
@@ -234,6 +278,8 @@ static void standalone_state_string(void) {
 }
 int main(void) {
     managed_scopes();
+    managed_message_owner();
+    managed_map_literals();
     managed_environments();
     managed_cells();
     standalone_state_string();

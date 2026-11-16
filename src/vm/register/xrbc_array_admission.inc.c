@@ -10,23 +10,23 @@ static bool rbc_array_kind(XrRbcRegisterKind kind) {
     return xr_rbc_array_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT;
 }
 static bool rbc_indexed_cell_kind(XrRbcRegisterKind kind) {
-    return rbc_array_kind(kind) || kind == XR_RBC_MAP_STRING_I64 || kind==XR_RBC_SET_I64;
+    return rbc_array_kind(kind) || kind == XR_RBC_MAP_STRING_I64;
 }
 static bool rbc_array_cell_kind(XrRbcRegisterKind kind) {
     for (uint32_t i = 0; i < XR_RBC_ARRAY_FAMILY_COUNT; ++i)
         if (kind == xr_rbc_array_cell_at(i)) return true;
-    return kind == XR_RBC_MAP_STRING_I64_CELL || kind==XR_RBC_SET_I64_CELL;
+    return kind == XR_RBC_MAP_STRING_I64_CELL;
 }
 static bool rbc_direct_managed_kind(XrRbcRegisterKind kind) {
-    return kind == XR_RBC_STRING || kind == XR_RBC_SET_I64 || rbc_array_kind(kind);
+    return kind == XR_RBC_STRING || rbc_array_kind(kind);
 }
 static bool rbc_managed_kind(XrRbcRegisterKind kind) {
-    return kind == XR_RBC_BOXED || kind == XR_RBC_MAP_STRING_I64 || kind==XR_RBC_SET_I64 || rbc_direct_managed_kind(kind);
+    return kind == XR_RBC_BOXED || kind == XR_RBC_MAP_STRING_I64 || rbc_direct_managed_kind(kind);
 }
 static XrRbcRegisterKind rbc_array_cell_payload(XrRbcRegisterKind kind) {
     for (uint32_t i = 0; i < XR_RBC_ARRAY_FAMILY_COUNT; ++i)
         if (kind == xr_rbc_array_cell_at(i)) return xr_rbc_array_kind_at(i);
-    return kind == XR_RBC_MAP_STRING_I64_CELL ? XR_RBC_MAP_STRING_I64 : kind==XR_RBC_SET_I64_CELL?XR_RBC_SET_I64:XR_RBC_BITS;
+    return kind == XR_RBC_MAP_STRING_I64_CELL ? XR_RBC_MAP_STRING_I64 : XR_RBC_BITS;
 }
 static XrRbcRegisterKind rbc_reference_spill_kind(const XrRbcFunction *f, uint32_t slot) {
     return f->reference_spill_kinds ? f->reference_spill_kinds[slot] : XR_RBC_STRING;

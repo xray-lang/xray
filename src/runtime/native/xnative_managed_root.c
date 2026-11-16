@@ -379,12 +379,31 @@ XRAY_API XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *frame, size_t 
     frame->root->busy = false;
     return XRT_MANAGED_OK;
 }
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_construct(XrtManagedFrame *frame, size_t index,
+    XrtManagedOps *ops, size_t bytes, const XrtManagedSlotConstruction *construction) {
+    if (!ops || !construction || !construction->initialize || !construction->finish) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlot *slot = slot_begin(frame, index);
+    if (!slot) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *value = NULL;
+    XrtManagedStatus status = slot_prepare_active(slot, ops, bytes, &value);
+    if (status == XRT_MANAGED_OK) {
+        status = construction->initialize(value, construction->context);
+        if (status == XRT_MANAGED_OK) status = slot_commit_active(frame, slot);
+        if (status != XRT_MANAGED_OK) xrt_managed_abort(&slot->pending);
+    }
+    construction->finish(construction->context);
+    frame->root->busy = false;
+    return status;
+}
 XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size_t index,
     XrtManagedSlotLocation *output) {
     if (!output || !frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = &frame_slots(frame)[index];
     *output = (XrtManagedSlotLocation){frame_owner(frame, slot), &slot->pending, &frame->root->busy, NULL};
     return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedRoot *xrt_managed_frame_root(XrtManagedFrame *frame) {
+    return frame ? frame->root : NULL;
 }
 
 enum { RESERVED_EMPTY, RESERVED_PENDING, RESERVED_COMMITTED, RESERVED_PUBLISHED, RESERVED_CALLBACK };

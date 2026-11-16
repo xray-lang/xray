@@ -15,6 +15,7 @@
 #include "xnative_locations.h"
 #include "os/os_native_output.h"
 #include "xnative_value.h"
+#include "xnative_managed.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
 typedef struct XrtOutputFailure {
@@ -26,10 +27,6 @@ typedef struct XrtOutputFailure {
 typedef struct XrtArithmeticPanic {
     uint32_t code, source_id;
 } XrtArithmeticPanic;
-typedef struct XrtMessagePanic {
-    uint32_t code,source_id;
-    XrXirValue message;
-} XrtMessagePanic;
 
 typedef enum XrtHostClockReason {
     XRT_CLOCK_READ_FAILED, XRT_CLOCK_OUT_OF_RANGE
@@ -53,17 +50,19 @@ typedef struct XrtExecutionFailure {
     union {
         XrtOutputFailure output;
         XrtArithmeticPanic panic;
-        XrtMessagePanic message;
         XrtHostClockFailure clock;
         struct { XrXirValueStatus status; uint32_t source_id; } value;
+        struct { uint32_t code, source_id; XrtManagedHeader *message; } message;
     } detail;
 } XrtExecutionFailure;
-/* A message fault owns an independent canonical String after the root retires.
- * Release it before overwriting that failure slot. Other facts own no payload. */
+/* A message failure owns one genuine fixed String reference independently of
+ * execution retirement. Clear the owner before drop callbacks; repeated drop
+ * is harmless. A receiver must drop or transfer it before reusing failure. */
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
-/* The producer supplies an independently owned, non-private String. This
- * transfer allocates nothing and consumes it before leaving the activation. */
-XR_FUNC XR_NORET void xrt_message_panic_take(XrXirValue *,uint32_t,uint32_t);
+/* Consume an independently owned fixed String, publish it to preowned failure
+ * storage, then leave the active execution. Only duplicate-key code 434 is
+ * admitted here. No allocation or owner lookup occurs during the transfer. */
+XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id);
 
 typedef enum XrtExecutionStatus {
     XRT_EXECUTION_COMPLETED,

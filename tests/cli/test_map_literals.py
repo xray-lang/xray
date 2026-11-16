@@ -86,7 +86,8 @@ print(joined[0]);print(joined[1]);print(joined[2]);print(joined[3])
     generated = root / 'products.c'
     command([binary, 'build', '--c-only', str(path), '-o', str(generated)])
     text = generated.read_text(encoding='utf-8')
-    assert 'xrt_map_string_i64_literal(' in text and not re.search(r'\(\s*\{', text)
+    assert 'xrt_native_map_literal_create(' in text and 'xrt_map_string_i64_literal(' not in text
+    assert not re.search(r'\(\s*\{', text)
 
 
 def dynamic_keys(binary: str, root: Path) -> None:

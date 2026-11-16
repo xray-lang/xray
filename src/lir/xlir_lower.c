@@ -145,6 +145,8 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count &&
         c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE])
         return c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE];
+    if (lower_set_type(c,type))return XR_LIR_SET_I64;
+    if(xr_xir_type_is_cell(c->source->types,type) && lower_set_type(c,xr_xir_cell_element(c->source->types,type)))return XR_LIR_SET_I64_CELL;
     if (lower_map_type(c, type)) return XR_LIR_MAP_STRING_I64;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_map_type(c, xr_xir_cell_element(c->source->types, type))) return XR_LIR_MAP_STRING_I64_CELL;

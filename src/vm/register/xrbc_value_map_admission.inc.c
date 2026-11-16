@@ -23,6 +23,31 @@ static bool rbc_value_nullable_i64(const XrRbcModule *module,const XrRbcValueCod
     return packed.kind==XR_POD_NULLABLE && packed.element==XR_POD_I64 &&
         packed.physical.size==home->size && packed.physical.alignment==type->alignment;
 }
+static bool rbc_value_map_literal_valid(const XrRbcModule *module, const XrRbcValueCode *code,
+    const XrRbcFunction *function, XrRbcValueAccess access) {
+    if (!xr_rbc_module_code_owner(module) || !access.index || access.index > module->map_literal_count ||
+        !module->map_literals || access.source || access.other || access.window != UINT32_MAX ||
+        access.first > code->argument_count || access.count > code->argument_count - access.first ||
+        (access.count && !code->arguments) || !rbc_value_map(module,code,access.result,true)) return false;
+    const XrtMapLiteral *literal = &module->map_literals[access.index - 1];
+    if ((literal->path_length != 0) != (literal->path != NULL) ||
+        (literal->count != 0) != (literal->items != NULL) || literal->count > access.count) return false;
+    uint32_t operand = 0;
+    for (size_t n = 0; n < literal->count; ++n) {
+        uint32_t kind = literal->items[n].kind;
+        if (kind > 1 || operand >= access.count) return false;
+        uint32_t value = code->arguments[access.first + operand++];
+        if (!rbc_value_id(code,value)) return false;
+        if (kind) {
+            if (!rbc_value_map(module,code,value,false)) return false;
+        } else {
+            if (!rbc_value_string(module,code,value,false) || operand >= access.count) return false;
+            value = code->arguments[access.first + operand++];
+            if (!rbc_value_id(code,value) || !rbc_value_scalar(code,function,value,XR_RBC_BITS)) return false;
+        }
+    }
+    return operand == access.count;
+}
 static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.source || a.other || a.first>code->argument_count || a.count>code->argument_count-a.first ||

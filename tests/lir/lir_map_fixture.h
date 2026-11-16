@@ -15,9 +15,15 @@
 static XrLirValue map_fixture_call(CArrayFixture *c, XrLirBlock block, XrLirMapOperation role,
     XrLirType result, const XrLirValue *args, uint32_t count) {
     if(role==XR_LIR_MAP_OP_NEW) {
-        CHECK(count==2);XrLirMapLiteralOrigin origin={0,1,1};
-        XrLirMapLiteral literal={"map-fixture.xr",14,&origin,1};uint32_t ordinal=0;
+        CHECK(!(count & 1u));
+        size_t entries = count / 2;
+        CHECK(entries <= SIZE_MAX / sizeof(XrLirMapLiteralOrigin));
+        XrLirMapLiteralOrigin *origins = entries ? xr_malloc(entries * sizeof(*origins)) : NULL;
+        CHECK(!entries || origins);
+        for (size_t n = 0; n < entries; ++n) origins[n] = (XrLirMapLiteralOrigin){0,1,(uint32_t)n + 1};
+        XrLirMapLiteral literal={"map-fixture.xr",14,origins,(uint32_t)entries};uint32_t ordinal=0;
         OK(xr_lir_map_literal_add(c->module,&literal,&ordinal));
+        xr_free(origins);
         XrLirInstruction call={.op=XR_LIR_MAP_LITERAL_NEW,.type=result,.bits=ordinal,.operands=args,.operand_count=count};
         XrLirValue value={0};OK(xr_lir_emit_value(c->module,block,&call,&value));return value;
     }

@@ -60,15 +60,24 @@ static Types types_new(void) {
     LIR(xr_lir_nullable_type(t.module, XR_LIR_STRING, &t.optional_string));
     LIR(xr_lir_nullable_type(t.module, t.optional_string, &t.nested_string));
     char first_name[] = "a", second_name[] = "b";
-    XrLirRecordField inner[] = {{first_name, 1, XR_LIR_I1}, {second_name, 1, XR_LIR_STRING}};
-    LIR(xr_lir_record_type(t.module, inner, 2, &t.inner));
+    XrLirRecordField inner[] = {{first_name, 1, XR_LIR_I1, 0}, {second_name, 1, XR_LIR_STRING, 0}};
+    LIR(xr_lir_record_type(t.module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_layout", .module_length=sizeof("tests.lir.value_layout")-1,
+            .name="Inner", .name_length=sizeof("Inner")-1},
+        inner, 2, &t.inner));
     first_name[0] = second_name[0] = 'x';
     LIR(xr_lir_nullable_type(t.module, t.inner, &t.optional_inner));
-    XrLirRecordField outer[] = {{"first", 5, t.inner}, {"maybe", 5, t.optional_inner}, {"tail", 4, XR_LIR_I64}};
-    LIR(xr_lir_record_type(t.module, outer, 3, &t.outer));
+    XrLirRecordField outer[] = {{"first", 5, t.inner, 0}, {"maybe", 5, t.optional_inner, 0}, {"tail", 4, XR_LIR_I64, 0}};
+    LIR(xr_lir_record_type(t.module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_layout", .module_length=sizeof("tests.lir.value_layout")-1,
+            .name="Outer", .name_length=sizeof("Outer")-1},
+        outer, 3, &t.outer));
     LIR(xr_lir_nullable_type(t.module, t.outer, &t.optional_outer));
-    XrLirRecordField pod[] = {{"a", 1, XR_LIR_I1}, {"b", 1, XR_LIR_F64}, {"c", 1, XR_LIR_I64}};
-    LIR(xr_lir_record_type(t.module, pod, 3, &t.pod));
+    XrLirRecordField pod[] = {{"a", 1, XR_LIR_I1, 0}, {"b", 1, XR_LIR_F64, 0}, {"c", 1, XR_LIR_I64, 0}};
+    LIR(xr_lir_record_type(t.module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_layout", .module_length=sizeof("tests.lir.value_layout")-1,
+            .name="Pod", .name_length=sizeof("Pod")-1},
+        pod, 3, &t.pod));
     LIR(xr_lir_nullable_type(t.module, t.pod, &t.optional_pod));
     LIR(xr_lir_fixed_array_type(t.module, XR_LIR_U8, 17, &t.fixed));
     LIR(xr_lir_tuple_i64_type(t.module, 3, &t.tuple));
@@ -79,7 +88,10 @@ static Types types_new(void) {
     XrLirCallableType signature = {.result=XR_LIR_UNIT};
     LIR(xr_lir_callable_type(t.module, &signature, &t.function));
     LIR(xr_lir_cell_type(t.module, (XrLirCellType){XR_LIR_I64, 0}, &t.cell));
-    LIR(xr_lir_record_type(t.module, NULL, 0, &t.empty));
+    LIR(xr_lir_record_type(t.module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_layout", .module_length=sizeof("tests.lir.value_layout")-1,
+            .name="Empty", .name_length=sizeof("Empty")-1},
+        NULL, 0, &t.empty));
     LIR(xr_lir_nullable_type(t.module, t.empty, &t.optional_empty));
     LIR(xr_lir_module_finish(t.module, NULL));
     return t;
@@ -248,8 +260,14 @@ static void inline_overflow(void) {
     XrLirModule *module = NULL; LIR(xr_lir_module_create(NULL, &module));
     XrLirType type = XR_LIR_I64;
     for (unsigned i = 0; i < 64; ++i) {
-        XrLirRecordField fields[] = {{"a", 1, type}, {"b", 1, type}};
-        LIR(xr_lir_record_type(module, fields, 2, &type));
+        char name[32];
+        int length = snprintf(name, sizeof(name), "OverflowLevel%u", i);
+        CHECK(length > 0 && (size_t)length < sizeof(name));
+        XrLirRecordField fields[] = {{"a", 1, type, 0}, {"b", 1, type, 0}};
+        LIR(xr_lir_record_type(module,
+            &(XrLirRecordIdentity){.module="tests.lir.value_layout",
+                .module_length=sizeof("tests.lir.value_layout")-1, .name=name, .name_length=(uint32_t)length},
+            fields, 2, &type));
     }
     LIR(xr_lir_module_finish(module, NULL));
     Owner owner; owner_new(&owner, SIZE_MAX);
@@ -265,8 +283,11 @@ static void callable_layouts(void) {
     LIR(xr_lir_callable_type(module, &signature, &callback));
     signature.flags |= XR_LIR_CALLABLE_C_ABI;
     LIR(xr_lir_callable_type(module, &signature, &c_callback));
-    XrLirRecordField fields[] = {{"name",4,XR_LIR_STRING}, {"score",5,XR_LIR_I64}};
-    LIR(xr_lir_record_type(module, fields, 2, &record));
+    XrLirRecordField fields[] = {{"name",4,XR_LIR_STRING, 0}, {"score",5,XR_LIR_I64, 0}};
+    LIR(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_layout", .module_length=sizeof("tests.lir.value_layout")-1,
+            .name="CallableRecord", .name_length=sizeof("CallableRecord")-1},
+        fields, 2, &record));
     LIR(xr_lir_nullable_type(module, record, &optional));
     XrLirCallableParameter parameters[] = {
         {callback,0,XR_PARAM_READ,true}, {c_callback,0,XR_PARAM_READ,false},

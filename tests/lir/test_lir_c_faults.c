@@ -8,6 +8,7 @@
  */
 #include "lir/xlir_builder.h"
 #include "lir/xlir_c.h"
+#include "lir/xlir_map.h"
 #include "lir/xi_cgen_verify_output.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,7 +78,10 @@ static void refusal(XrLirCRequest *request, XrLirCStatus expected) {
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
     uint64_t held = sdk_stats(request->resources).held_bytes;
-    CHECK(xr_lir_emit_c(request, &output, &diagnostic) == expected);
+    XrLirCStatus actual = xr_lir_emit_c(request, &output, &diagnostic);
+    if (actual != expected)
+        fprintf(stderr,"C refusal expected=%u actual=%u: %s\n",(unsigned)expected,(unsigned)actual,diagnostic.message);
+    CHECK(actual == expected);
     CHECK(!output.bytes && !output.length && !output.entry_result);
     if (diagnostic.status != expected || sdk_stats(request->resources).held_bytes != held)
         fprintf(stderr, "C refusal expected=%u actual=%u held=%llu prior=%llu allocation=%zu: %s\n",
@@ -416,6 +420,37 @@ static void cell_memory_boundaries(void) {
         strstr(output.bytes,"xrt_inline_value_replace") && output.entry_result == XR_LIR_I64);
     xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
 }
+static void map_literal_memory_boundaries(void) {
+    XrLirModule *module = NULL; CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    char path[] = "map-fault.xr";
+    XrLirMapLiteral literal = {.path=path, .path_length=(uint32_t)sizeof(path) - 1};
+    uint32_t ordinal = 0; CHECK(xr_lir_map_literal_add(module, &literal, &ordinal) == XR_LIR_OK);
+    path[0] = 'z';
+    XrLirFunction entry = {0}; XrLirBlock block = {0};
+    CHECK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name="map", .name_length=3,
+        .result=XR_LIR_I64}, &entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module, entry) == XR_LIR_OK);
+    CHECK(xr_lir_add_block(module, entry, NULL, 0, &block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module, entry, block) == XR_LIR_OK);
+    XrLirValue map = {0}, answer = {0};
+    CHECK(xr_lir_emit_value(module, block, &(XrLirInstruction){.op=XR_LIR_MAP_LITERAL_NEW,
+        .type=XR_LIR_MAP_STRING_I64, .bits=ordinal}, &map) == XR_LIR_OK);
+    CHECK(xr_lir_emit_effect(module, block, &(XrLirInstruction){.op=XR_LIR_MAP_DROP,
+        .type=XR_LIR_UNIT, .operands=&map, .operand_count=1}) == XR_LIR_OK);
+    CHECK(xr_lir_emit_value(module, block, &(XrLirInstruction){.op=XR_LIR_CONST,
+        .type=XR_LIR_I64, .bits=42}, &answer) == XR_LIR_OK);
+    CHECK(xr_lir_set_terminator(module, block, &(XrLirInstruction){.op=XR_LIR_RET,
+        .type=XR_LIR_UNIT, .operands=&answer, .operand_count=1}) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module, entry, resources, "map-literal-publication-fault", NULL};
+    control_boundaries(&request); XrLirCOutput output = memory_boundaries(&request);
+    xr_lir_module_destroy(module); xr_compile_resources_release(resources);
+    CHECK(strstr(output.bytes, "xrt_native_map_literal_create") && strstr(output.bytes, "map-fault.xr") &&
+        !strstr(output.bytes, "zap-fault.xr") && output.entry_result == XR_LIR_I64);
+    xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
+}
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
         edge_control_boundaries(); return 0;
@@ -493,6 +528,7 @@ int main(int argc, char **argv) {
     literal_memory_boundaries();
     fixed_memory_boundaries();
     cell_memory_boundaries();
+    map_literal_memory_boundaries();
     puts("representative C workspace/text failures and cancellation passed");
     puts("output survives module, caller memory reference, control/context destruction; physical zero PASS");
     return 0;

@@ -14,13 +14,12 @@
 #include "xnative_module_state.h"
 #include "xnative_status.h"
 #include "xnative_values.h"
+#include "xray_native_string_value.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
 #include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
 #include "shared/xr_range_core.h"
-#include "xir/xxir_scalar.h"
-#include "xir/xxir_value_internal.h"
 #include <setjmp.h>
 #include <stdio.h>
 
@@ -45,21 +44,21 @@ XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure);
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {
-    if(!failure)return;
-    if(failure->kind==XRT_FAILURE_MESSAGE_PANIC)xr_xir_value_drop(&failure->detail.message.message);
-    *failure=(XrtExecutionFailure){0};
+    if (!failure) return;
+    XrtManagedHeader *message = failure->kind == XRT_FAILURE_MESSAGE_PANIC ? failure->detail.message.message : NULL;
+    *failure = (XrtExecutionFailure){0};
+    xrt_managed_drop(message);
 }
-XR_FUNC XR_NORET void xrt_message_panic_take(XrXirValue *owned,uint32_t code,uint32_t source) {
-    const XrtExecutionBinding *binding=current_execution;
-    XR_CHECK(binding && binding->target && code==434 && source<=binding->map.count && owned &&
-        owned->type==XR_XIR_STRING && xr_xir_value_valid(owned) &&
-        !((const XirObject *)(intptr_t)owned->payload)->root_private,
-        "message panic transfers a prepared independent String into the receiving failure");
-    XrXirValue message={0};
-    XR_CHECK(xr_xir_value_move(owned,&message)==XR_XIR_VALUE_OK,"message panic consumes its prepared owner once");
-    *binding->failure=(XrtExecutionFailure){.kind=XRT_FAILURE_MESSAGE_PANIC,
-        .detail.message={code,source,message}};
-    longjmp(*binding->target,1);
+XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && binding->target && code == 434 && source_id <= binding->map.count && owned && *owned,
+        "message panic consumes a genuine String owner at its active source point");
+    XrtManagedHeader *message = *owned; *owned = NULL;
+    binding->failure->kind = XRT_FAILURE_MESSAGE_PANIC;
+    binding->failure->detail.message.code = code;
+    binding->failure->detail.message.source_id = source_id;
+    binding->failure->detail.message.message = message;
+    longjmp(*binding->target, 1);
 }
 XRAY_API_NORET void xrt_fixed_array_bounds(uint32_t source_id) {
     xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
@@ -196,14 +195,15 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
         _Exit(1);
     }
     XrValueFormatSink sink = {NULL, panic_write};
-    if(failure->kind==XRT_FAILURE_MESSAGE_PANIC) {
-        const char *bytes=NULL;size_t length=0;
-        XR_CHECK(xr_xir_string_view(&failure->detail.message.message,&bytes,&length),"message fault owns its full UTF-8 body");
-        if(!xr_value_format_panic(sink,failure->detail.message.code,0,0,0,1,(const uint8_t *)bytes,length,0)) {
-            static const char fallback[]="XR_RUN_6005: cannot render uncaught message panic\n";
-            (void)xrt_io_write(2,fallback,sizeof(fallback)-1);
+    if (failure->kind == XRT_FAILURE_MESSAGE_PANIC) {
+        const XrtStringBacking *message = (const XrtStringBacking *)failure->detail.message.message;
+        if (!xr_value_format_panic(sink, failure->detail.message.code, 0, 0, 0, 1,
+            (const uint8_t *)message->bytes, message->length, 0)) {
+            static const char fallback[] = "XR_RUN_6005: cannot render uncaught message panic\n";
+            (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
         }
-        xrt_execution_failure_drop(failure);_Exit(1);
+        xrt_execution_failure_drop(failure);
+        _Exit(1);
     }
     XR_CHECK(failure->kind == XRT_FAILURE_TYPED_PANIC, "Native failure has a known physical carrier");
     if (!xr_value_format_panic(sink, failure->detail.panic.code, 0, 0, 0, 0, NULL, 0, 0)) {

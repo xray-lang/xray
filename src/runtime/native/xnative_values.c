@@ -331,6 +331,7 @@ XRAY_API void xrt_native_array_update_place(XrtPlace binding, XrtBackingArrayKin
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
 
+#include "xnative_map_literal_value.inc.c"
 XRAY_API void xrt_native_map_create(XrtManagedFrame *frame, size_t slot,
     const XrtMapInput *input, uint32_t source_id) {
     const XrtBackingTypes *types = NULL;

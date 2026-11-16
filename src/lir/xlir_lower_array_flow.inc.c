@@ -39,9 +39,7 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
     const XrXirFunction *source = f->source;
     bool needed = c->arrays || c->string_appends || c->maps;
     for (uint32_t p = 0; !needed && source->block_count > 1 && p < source->parameter_count; ++p)
-        needed = lower_managed_type(c, lower_type(c, source->parameters[p])) ||
-            lower_set_type(c, source->parameters[p]) ||
-            lower_set_type(c, xr_xir_cell_element(c->source->types, source->parameters[p]));
+        needed = lower_managed_type(c, lower_type(c, source->parameters[p]));
     for (uint32_t i = 0; !needed && i < source->instruction_count; ++i) {
         XrXirType type = source->instructions[i].type;
         XrXirType element = xr_xir_cell_element(c->source->types, type);

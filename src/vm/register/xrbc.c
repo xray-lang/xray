@@ -207,7 +207,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
             xr_rbc_array_ref_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT) return false;
     }
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_SET_I64_REF ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_BOXED ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -331,9 +331,6 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 #include "xrbc_string_admission.inc.c"
 
 static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
-    if(module->map_literal_count>UINT32_MAX || (module->map_literal_count && !module->map_literals))return XR_RBC_INVALID;
-    for(size_t n=0;n<module->map_literal_count;++n)
-        if(!xrt_map_literal_valid(&module->map_literals[n]))return XR_RBC_INVALID;
     XrRbcCodeLease lease = module->code_lease;
     if (lease.owner ? !lease.retain || !lease.release : lease.retain || lease.release)
         return XR_RBC_INVALID;
@@ -682,8 +679,7 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         xr_rbc_root, execution, &execution->values);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
-    else if (status == XRT_EXECUTION_FAILURE && (outcome->failure.kind == XRT_FAILURE_TYPED_PANIC ||
-        outcome->failure.kind==XRT_FAILURE_MESSAGE_PANIC))
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)
         outcome->status = XR_RBC_TYPED_PANIC;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_NULL_UNWRAP)
         outcome->status = XR_RBC_NULL_UNWRAP;
@@ -691,6 +687,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_HOST_CLOCK_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_VALUE)
         outcome->status = XR_RBC_VALUE_FAILURE;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_MESSAGE_PANIC)
+        outcome->status = XR_RBC_MESSAGE_PANIC;
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -812,7 +810,7 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
 
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations) {
-    if (!outcome || outcome->status != XR_RBC_TYPED_PANIC || outcome->failure.kind!=XRT_FAILURE_TYPED_PANIC || !facts || !borrowed_locations)
+    if (!outcome || outcome->status != XR_RBC_TYPED_PANIC || !facts || !borrowed_locations)
         return false;
     *facts = outcome->failure.detail.panic;
     *borrowed_locations = outcome->locations;
@@ -826,14 +824,18 @@ XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     *borrowed_locations = outcome->locations;
     return true;
 }
-XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *outcome,uint32_t *code,const char **body,size_t *length,
-    uint32_t *source,const XrtLocationOwner **locations) {
-    if(!outcome || outcome->status!=XR_RBC_TYPED_PANIC || outcome->failure.kind!=XRT_FAILURE_MESSAGE_PANIC ||
-        !code || !body || !length || !source || !locations)return false;
-    const XrtMessagePanic *panic=&outcome->failure.detail.message;
-    const char *bytes=NULL;size_t size=0;
-    if(!xr_xir_string_view(&panic->message,&bytes,&size))return false;
-    *code=panic->code;*body=bytes;*length=size;*source=panic->source_id;*locations=outcome->locations;return true;
+
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *outcome, uint32_t *code,
+    const char **bytes, size_t *length, uint32_t *source, const XrtLocationOwner **locations) {
+    if (!outcome || outcome->status != XR_RBC_MESSAGE_PANIC || !code || !bytes || !length || !source || !locations ||
+        outcome->failure.kind != XRT_FAILURE_MESSAGE_PANIC || !outcome->failure.detail.message.message) return false;
+    const XrtStringBacking *message = (const XrtStringBacking *)outcome->failure.detail.message.message;
+    *code = outcome->failure.detail.message.code;
+    *source = outcome->failure.detail.message.source_id;
+    *bytes = message->bytes;
+    *length = message->length;
+    *locations = outcome->locations;
+    return true;
 }
 
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,

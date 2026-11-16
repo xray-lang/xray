@@ -34,10 +34,8 @@ REQUIRED = (
     "native_array_slice",
     # Shared scalar decoding and text must retain independent native/RBC witnesses.
     "native_f64_i64_conversion", "native_f64_text",
-    # Value delimiters must reject type arrows and preserve source ownership.
     "test_lexer", "test_parser_recoverable", "test_parser_arrow_syntax",
-    "test_fmt_roundtrip", "test_value_arrow_syntax",
-    "spec_snippets_cn", "spec_snippets_en",
+    "test_fmt_roundtrip", "test_value_arrow_syntax", "spec_snippets_cn", "spec_snippets_en",
 )
 
 

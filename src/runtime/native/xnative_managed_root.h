@@ -17,6 +17,20 @@
  * Root registers this handle's address and both stable fields. Copying the
  * handle does not copy that registration. Every callback returns normally. */
 typedef struct XrtManagedSlotReservation { XrtManagedRoot *root; } XrtManagedSlotReservation;
+/* One factory fills this slot's actual pending token. Finish retires its input
+ * pins after commit/abort while the same Root still rejects reentry. Neither
+ * callback may leave nonlocally or use Root/Place operations. Finish runs once
+ * if the slot domain was entered, including a pending-conflict rejection. */
+typedef struct XrtManagedSlotConstruction {
+    XrtManagedStatus (*initialize)(XrtManagedHeader *, void *);
+    void (*finish)(void *);
+    void *context;
+} XrtManagedSlotConstruction;
+XR_FUNC XrtManagedStatus xrt_managed_slot_construct(XrtManagedFrame *, size_t,
+    XrtManagedOps *, size_t bytes, const XrtManagedSlotConstruction *);
+/* Borrow the actual Root of a live frame for a nested ordinary temporary
+ * frame. This neither extends its lifetime nor authorizes a guest operation. */
+XR_FUNC XrtManagedRoot *xrt_managed_frame_root(XrtManagedFrame *);
 
 /* A Cell domain pins its real owner before entering its atomic Header guard.
  * A bool domain belongs to one executor. The descriptor stays borrowed and
