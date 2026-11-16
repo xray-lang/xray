@@ -552,7 +552,11 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (rbc_lir_captured_cell_point(input, function, i)) return false;
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
-    if (xr_lir_constructed_type_count(input) && !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
+    XrLirSliceIntrinsic slice = {0};
+    bool slice_operation = i->op == XR_LIR_CALL_INTRINSIC &&
+        xr_lir_slice_intrinsic_view(input, i->intrinsic, &slice) == XR_LIR_OK && slice.id;
+    if (xr_lir_constructed_type_count(input) && !slice_operation &&
+        !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT && i->op != XR_LIR_FUNCTION_WEAKEN &&
         i->op != XR_LIR_FUNCTION_SCOPE_ENTER && i->op != XR_LIR_FUNCTION_SCOPE_LEAVE && i->op != XR_LIR_FUNCTION_BIND &&
@@ -592,8 +596,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        XrLirSliceIntrinsic slice = {0};
-        if (xr_lir_slice_intrinsic_view(input,i->intrinsic,&slice) == XR_LIR_OK && slice.id) return true;
+        if (slice_operation) return true;
         if (rbc_lir_map_role(input,i)) return true;
         if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
         return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);
