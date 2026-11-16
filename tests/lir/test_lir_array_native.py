@@ -103,9 +103,11 @@ def slice_observer(args, generated, client, binary, command, work):
     assert result.returncode == 0 and not result.stderr, (source, result.returncode, result.stdout, result.stderr)
     cases = [json.loads(line) for line in result.stdout.splitlines()]
     assert [row['mode'] for row in cases] == list(range(10)), cases
-    assert all(row['bytes'] == row['blocks'] == 0 for row in cases), cases
+    assert all(row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks']
+               for row in cases), cases
     return {'source': str(source), 'sourceSHA256': hashlib.sha256(source.read_bytes()).hexdigest(),
-            'cases': cases, 'result': 'PASS'}
+            'cases': cases, 'guestRefund': 'exact live-owner control baseline',
+            'finalOwnerFree': 'existing billing API and sanitizer coverage; no post-free statistics', 'result': 'PASS'}
 
 
 def main():
