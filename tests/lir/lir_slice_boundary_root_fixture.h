@@ -40,7 +40,9 @@ static SliceBoundaryFixture slice_boundary_root_fixture(XrLirType element, XrLir
         .type=element,.intrinsic=id,.operands=get,.operand_count=2});
     if (element==XR_LIR_U8) item=slice_boundary_value(&c,block,(XrLirInstruction){.op=XR_LIR_INTCAST,
         .type=XR_LIR_I64,.operands=&item,.operand_count=1});
-    XrLirValue caller_length=slice_boundary_role(&c,block,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,view);
+    XrLirValue caller_length=slice_boundary_value(&c,block,(XrLirInstruction){.op=XR_LIR_CALL,
+        .type=XR_LIR_I64,.callee=c.read,.operands=&view,.operand_count=1});
+    (void)slice_boundary_role(&c,block,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,view);
     XrLirValue totals[]={answer,item,length,caller_length},sum=totals[0];
     for (uint32_t n=1;n<4;++n) {
         XrLirValue add[]={sum,totals[n]};
