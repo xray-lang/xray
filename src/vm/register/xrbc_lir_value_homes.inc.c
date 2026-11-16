@@ -90,6 +90,9 @@ static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, Rbc
             if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
             if (rbc_home_key(input,function,(uint32_t)index,type,&key)) valid = rbc_home_root_append(c,roots,seen,base,key);
         }
+        XrLirClosureTarget declaration={0};
+        if (valid && xr_lir_closure_target_view(input,function,&declaration)==XR_LIR_OK && declaration.callable)
+            valid=rbc_home_root_append(c,roots,seen,base,(XrLirValueLayoutKey){declaration.callable,0,0});
         XrLirCallableFunctionFacts callable={0};
         if (valid && facts && xr_lir_callable_facts_function(facts,function.id,&callable)!=XR_LIR_OK)
             valid=rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"callable roots lost their function facts");

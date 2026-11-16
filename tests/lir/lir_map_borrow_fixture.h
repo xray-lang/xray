@@ -23,7 +23,7 @@ static XrLirModule *map_binding_formal_fixture(unsigned operation,bool retained,
     CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
     OK(xr_lir_map_catalog_install(c.module,false,false,false,false,false));
     XrLirStateModule owner={0};
-    XrLirStateSlot slot={.payload=XR_LIR_MAP_STRING_I64,.mutable=true,.size=8,.alignment=8};
+    XrLirStateSlot slot={.payload=XR_LIR_MAP_STRING_I64,.mutable=operation!=5,.size=8,.alignment=8};
     XrLirStateLayout layout={.modules=&owner,.module_count=1,.slots=&slot,.slot_count=1,.payload_size=8,.payload_alignment=8};
     OK(xr_lir_set_state_layout(c.module,&layout));
     XrLirType parameters[]={XR_LIR_MAP_STRING_I64,XR_LIR_STATE};

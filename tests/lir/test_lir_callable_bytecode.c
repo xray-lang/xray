@@ -11,6 +11,7 @@
 #include "lir/xlir_verify.h"
 #include "lir/xlir_map.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_capture_backing.h"
 #include "base/xmalloc.h"
@@ -413,7 +414,20 @@ static void borrowed_map_binding_frontier(void) {
         XrRbcCompileStatus status=xr_rbc_compile(module,root,&program,&diagnostic);
         if (status!=XR_RBC_COMPILE_OK) fprintf(stderr,"Map binding operation=%u retained=%u closure=%u: %s\n",
             operation,retained,closure_target,diagnostic.message);
-        CHECK(status==XR_RBC_COMPILE_OK && program); xr_lir_module_destroy(module); execute(program,1);
+        CHECK(status==XR_RBC_COMPILE_OK && program);
+        if (closure_target) {
+            const XrRbcModule *received=xr_rbc_program_view(program);
+            const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(received);
+            const XrtValueImage *image=xr_rbc_module_value_image(received); bool found=false;
+            CHECK(entries && image);
+            for (size_t f=0;f<received->function_count;++f) if (entries[f].source_function==helper.id) {
+                CHECK(entries[f].signature_type && entries[f].signature_type<=image->type_count &&
+                    image->types[entries[f].signature_type-1].kind==XRT_VALUE_FUNCTION && !entries[f].environment_type);
+                found=true;
+            }
+            CHECK(found);
+        }
+        xr_lir_module_destroy(module); execute(program,1);
     }
 }
 static void owned_duplicate_edge(void) {
