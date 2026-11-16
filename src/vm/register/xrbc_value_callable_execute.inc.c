@@ -112,9 +112,18 @@ static XrtManagedStatus rbc_value_function_captures(const XrRbcModule *module,Xr
             RbcFunctionCall checked;
             XrtManagedStatus status=rbc_value_function_target(module,stack,&binding,capture.type+1,&checked);
             if (status!=XRT_MANAGED_OK || (environment && !binding.owner)) return XRT_MANAGED_ARGUMENT;
-            child->function_parameters[p]=binding;
-            child->borrowed_parameters[p]=(const uint8_t *)&child->function_parameters[p];
+            child->capture_parameters[p].function=binding;
+            child->borrowed_parameters[p]=(const uint8_t *)&child->capture_parameters[p].function;
             offset+=sizeof(binding);
+        } else if (capture.kind==XR_RBC_CALLABLE_CELL) {
+            if (environment && kind!=XRT_VALUE_CELL) return XRT_MANAGED_ARGUMENT;
+            XrtManagedHeader *cell=NULL; memcpy(&cell,bytes,sizeof(cell));
+            if (!cell) return XRT_MANAGED_ARGUMENT;
+            /* The physical Frame cache can move with the spill bank. Keep only
+             * these borrowed natural bytes in the stable callee activation. */
+            child->capture_parameters[p].cell=cell;
+            child->borrowed_parameters[p]=(const uint8_t *)&child->capture_parameters[p].cell;
+            offset+=sizeof(cell);
         } else {
             XrRbcRegister *output=rbc_value_register(stack,child,value);
             uint64_t bits=0;

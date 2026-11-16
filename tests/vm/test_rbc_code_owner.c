@@ -74,12 +74,71 @@ static void *resize(void *memory, size_t bytes) {
 #include "../lir/lir_callable_fixture.h"
 #include "../lir/lir_callable_bytecode_cases.h"
 
-static XrLirModule *owned_fixture(XrLirFunction *root,bool capture) {
+static XrLirValue cell_map_role(CArrayFixture *c,XrLirBlock block,XrLirMapOperation role,
+    XrLirType result,const XrLirValue *arguments,uint32_t count) {
+    uint32_t intrinsic=0;
+    OK(xr_lir_map_operation(c->module,role,role==XR_LIR_MAP_OP_SET ? XR_LIR_MAP_STRING_I64_REF : XR_LIR_MAP_STRING_I64,&intrinsic));
+    XrLirInstruction instruction={.op=XR_LIR_CALL_INTRINSIC,.type=result,.intrinsic=intrinsic,
+        .operands=arguments,.operand_count=count};
+    XrLirValue value={0};
+    if (result==XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module,block,&instruction));
+    else OK(xr_lir_emit_value(c->module,block,&instruction,&value));
+    return value;
+}
+static XrLirValue cell_map_index(CArrayFixture *c,XrLirBlock block,XrLirValue cell,XrLirValue key) {
+    XrLirValue map=ca_value(c,block,XR_LIR_CELL_READ,XR_LIR_MAP_STRING_I64,&cell,1),arguments[]={map,key};
+    XrLirValue result=cell_map_role(c,block,XR_LIR_MAP_OP_INDEX,XR_LIR_I64,arguments,2);
+    ca_effect(c,block,XR_LIR_MAP_DROP,map);
+    return result;
+}
+static XrLirValue cell_counter_body(CArrayFixture *c,XrLirFunction target,XrLirBlock block,
+    XrLirType cell,XrLirValue formal,XrLirValue argument,bool map) {
+    XrLirValue scope=ca_value(c,block,XR_LIR_FUNCTION_SCOPE_ENTER,XR_LIR_FUNCTION_SCOPE,NULL,0),keep[]={scope,formal};
+    (void)ca_value(c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,cell,keep,2);
+    XrLirBlock join={0}; XrLirType types[]={cell,cell};
+    OK(xr_lir_add_block(c->module,target,types,2,&join));
+    XrLirValue incoming[]={formal,formal};
+    XrLirInstruction jump={.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{join,incoming,2}},.edge_count=1};
+    OK(xr_lir_set_terminator(c->module,block,&jump));
+    XrLirValue first={0},second={0};
+    OK(xr_lir_block_parameter(c->module,join,0,&first)); OK(xr_lir_block_parameter(c->module,join,1,&second));
+    XrLirValue key={0};
+    if (map) key=ca_text(c,join,"x",1);
+    XrLirValue old=map ? cell_map_index(c,join,formal,key) : ca_value(c,join,XR_LIR_CELL_READ,XR_LIR_I64,&formal,1);
+    XrLirValue next=ca_binary(c,join,XR_LIR_ADD,old,argument),replacement=next;
+    if (map) {
+        XrLirValue initial[]={key,ca_constant(c,join,41)};
+        replacement=cell_map_role(c,join,XR_LIR_MAP_OP_NEW,XR_LIR_MAP_STRING_I64,initial,2);
+    }
+    XrLirValue write[]={first,replacement};
+    OK(xr_lir_emit_effect(c->module,join,&(XrLirInstruction){.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=write,.operand_count=2}));
+    if (map) {
+        ca_effect(c,join,XR_LIR_MAP_DROP,replacement);
+        XrLirValue snapshot=ca_value(c,join,XR_LIR_CELL_READ,XR_LIR_MAP_STRING_I64,&formal,1);
+        XrLirValue ref=ca_value(c,join,XR_LIR_MAP_BORROW,XR_LIR_MAP_STRING_I64_REF,&first,1),update[]={ref,key,next};
+        (void)cell_map_role(c,join,XR_LIR_MAP_OP_SET,XR_LIR_UNIT,update,3);
+        XrLirValue index[]={snapshot,key};
+        old=cell_map_role(c,join,XR_LIR_MAP_OP_INDEX,XR_LIR_I64,index,2);
+        ca_effect(c,join,XR_LIR_MAP_DROP,snapshot);
+        next=cell_map_index(c,join,second,key);
+        next=ca_binary(c,join,XR_LIR_SUB,ca_binary(c,join,XR_LIR_ADD,next,old),ca_constant(c,join,41));
+        ca_effect(c,join,XR_LIR_STRING_DROP,key);
+    } else next=ca_value(c,join,XR_LIR_CELL_READ,XR_LIR_I64,&second,1);
+    ca_return(c,join,next);
+    return next;
+}
+static XrLirModule *owned_fixture(XrLirFunction *root,unsigned capture) {
     CArrayFixture c={0};
     OK(xr_lir_module_create(NULL,&c.module));
     XrLirCallableParameter parameter={.type=XR_LIR_I64};
     XrLirCallableType signature={.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
     XrLirType callable=0,arguments[]={XR_LIR_I64,XR_LIR_I64};
+    XrLirType cell=0;
+    if (capture>=2) {
+        if (capture==3) OK(xr_lir_map_catalog_install(c.module,false,false,false,false,false));
+        OK(xr_lir_cell_type(c.module,(XrLirCellType){capture==3 ? XR_LIR_MAP_STRING_I64 : XR_LIR_I64,0},&cell));
+        arguments[0]=cell;
+    }
     OK(xr_lir_callable_type(c.module,&signature,&callable));
     XrLirFunction target=test_function(c.module,"captured_add",arguments,capture ? 2u : 1u,XR_LIR_I64);
     OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=callable,.capture_count=capture ? 1u : 0u}));
@@ -89,11 +148,27 @@ static XrLirModule *owned_fixture(XrLirFunction *root,bool capture) {
     if (capture) OK(xr_lir_function_parameter(c.module,target,0,&seed));
     else seed=ca_constant(&c,block,40);
     OK(xr_lir_function_parameter(c.module,target,capture ? 1u : 0u,&argument));
-    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,seed,argument));
+    if (capture>=2) (void)cell_counter_body(&c,target,block,cell,seed,argument,capture==3);
+    else ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,seed,argument));
     *root=test_function(c.module,"factory",NULL,0,callable);
     block=test_block(c.module,*root,NULL,0);
     OK(xr_lir_set_entry(c.module,*root,block));
     if (capture) seed=ca_constant(&c,block,40);
+    if (capture>=2) {
+        XrLirValue outer=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_ENTER,XR_LIR_FUNCTION_SCOPE,NULL,0);
+        XrLirValue inner=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_ENTER,XR_LIR_FUNCTION_SCOPE,&outer,1);
+        if (capture==3) {
+            XrLirValue key=ca_text(&c,block,"x",1),initial[]={key,seed};
+            seed=cell_map_role(&c,block,XR_LIR_MAP_OP_NEW,XR_LIR_MAP_STRING_I64,initial,2);
+            ca_effect(&c,block,XR_LIR_STRING_DROP,key);
+        }
+        XrLirValue initial=seed;
+        seed=ca_value(&c,block,XR_LIR_CELL_NEW,cell,&initial,1);
+        if (capture==3) ca_effect(&c,block,XR_LIR_MAP_DROP,initial);
+        XrLirValue bind[]={outer,seed}; seed=ca_value(&c,block,XR_LIR_FUNCTION_BIND,cell,bind,2);
+        bind[0]=inner; bind[1]=seed; seed=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,cell,bind,2);
+        bind[0]=outer; bind[1]=seed; seed=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,cell,bind,2);
+    }
     XrLirInstruction instruction={.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target,
         .bits=XR_LIR_CLOSURE_OWNED,.operands=capture ? &seed : NULL,.operand_count=capture ? 1u : 0u};
     XrLirValue value={0};
@@ -103,7 +178,7 @@ static XrLirModule *owned_fixture(XrLirFunction *root,bool capture) {
     return c.module;
 }
 static XrLirModule *fixture(unsigned kind, XrLirFunction *root) {
-    if (kind>=4) return owned_fixture(root,kind==4);
+    if (kind>=4) return owned_fixture(root,kind==4 ? 1u : kind==5 ? 0u : kind-4u);
     if (!kind) {
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
@@ -296,7 +371,7 @@ static void check_result(XrRbcExecution **execution, unsigned kind) {
         XrtEnvironmentBorrow environment={0}; XrtValuePlanSpec shape={0};
         CHECK(xrt_environment_borrow_owned(function->owner,&environment)==XRT_MANAGED_OK);
         CHECK(xrt_value_plan_view(environment.plan,&shape)==XRT_MANAGED_OK);
-        CHECK(shape.kind==XRT_VALUE_ENVIRONMENT && shape.capture_count==(kind==4 ? 1u : 0u));
+        CHECK(shape.kind==XRT_VALUE_ENVIRONMENT && shape.capture_count==(kind==5 ? 0u : 1u));
         if (kind==5) CHECK(!shape.size && environment.payload==(const void *)(function->owner+1));
         uint64_t argument=2;
         CHECK(xr_rbc_owned_function_prepare(function,&argument,1,execution)==XR_RBC_OK);
@@ -385,6 +460,42 @@ static void owned_outcome_take(void) {
     xr_rbc_outcome_free(&outcome);
     CHECK(!tracked_live);
 }
+static void borrowed_cell_edge_rollback(void) {
+    XrRbcProgram *program=compile_fixture(6);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *lender=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    const XrtFunction *function=NULL;
+    CHECK(xr_rbc_outcome_function(lender,&function));
+    XrtEnvironmentBorrow environment={0};
+    CHECK(xrt_environment_borrow_owned(function->owner,&environment)==XRT_MANAGED_OK);
+    const XrtValuePlan *type=NULL; const void *bytes=NULL;
+    CHECK(xrt_environment_capture_borrow(&environment,0,&type,&bytes)==XRT_MANAGED_OK);
+    XrtValuePlanSpec shape={0}; CHECK(xrt_value_plan_view(type,&shape)==XRT_MANAGED_OK && shape.kind==XRT_VALUE_CELL);
+    XrtManagedHeader *cell=NULL; memcpy(&cell,bytes,sizeof(cell)); CHECK(cell);
+    int32_t saved=atomic_load(&cell->references);
+    /* Formal KEEP retains once, then the first duplicate stages successfully.
+     * The second retain must fail before either destination is published. */
+    atomic_store(&cell->references,INT32_MAX-2);
+    uint64_t argument=2;
+    CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_OK);
+    XrRbcOutcome *failed=xr_rbc_execution_run(execution);
+    CHECK(failed && xr_rbc_outcome_status(failed)==XR_RBC_VALUE_FAILURE);
+    XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
+    CHECK(xr_rbc_outcome_value_failure(failed,&failure,&source,&locations) && failure==XR_XIR_VALUE_REFCOUNT_LIMIT);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&failed);
+    CHECK(atomic_load(&cell->references)==INT32_MAX-2);
+    atomic_store(&cell->references,saved);
+    CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_OK);
+    xr_rbc_outcome_free(&lender);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    uint64_t result=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&result) && result==42);
+    xr_rbc_outcome_free(&outcome); CHECK(!tracked_live);
+}
 static void owned_run_failures(void) {
     XrRbcProgram *program=compile_fixture(4);
     size_t baseline=tracked_live;
@@ -448,9 +559,20 @@ static void scalar_callable_directory(void) {
     CHECK(!tracked_live);
     printf("Scalar callable directory: %zu compile failures refunded without managed homes\n",calls);
 }
+static bool cell_raw_retain(void *context) { ++*(uint32_t *)context; return true; }
+static void cell_raw_drop(void *context) { --*(uint32_t *)context; }
 static void prepared_after_program(unsigned kind) {
     CHECK(!tracked_live);
     XrRbcProgram *program = compile_fixture(kind);
+    if (kind>=6) {
+        XrRbcModule raw=*xr_rbc_program_view(program);
+        raw.code_lease=(XrRbcCodeLease){0};
+        XrRbcExecution *rejected=NULL;
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,program->locations,&rejected)==XR_RBC_INVALID && !rejected);
+        uint32_t references=1;
+        raw.code_lease=(XrRbcCodeLease){&references,cell_raw_retain,cell_raw_drop};
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,program->locations,&rejected)==XR_RBC_INVALID && !rejected && references==1);
+    }
     if (!kind) CHECK(program->module.natives == program->image->natives && program->module.natives != program->natives);
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
@@ -530,8 +652,16 @@ static void failure_sweep(unsigned kind) {
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
     size_t prepare_calls = attempts;
     attempts = 0;
-    check_result(&execution, kind); CHECK(tracked_live == baseline);
-    size_t run_calls = attempts;
+    size_t run_calls;
+    if (kind>=6) {
+        /* Measure only the factory run. Retired invocation is a separate real
+         * prepare/run boundary and has its own owner in check_result. */
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+        run_calls=attempts;
+        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    } else { check_result(&execution,kind); run_calls=attempts; }
+    CHECK(tracked_live == baseline);
     for (size_t point = 1; point <= prepare_calls; ++point) {
         attempts = 0; fail_at = point;
         CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OUT_OF_MEMORY && !execution);
@@ -560,6 +690,8 @@ int main(void) {
     code_lease_is_leaf(); raw_borrow_and_refusal();
     prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
     owned_run_failures();
+    for (unsigned kind=6;kind<8;++kind) { prepared_after_program(kind); failure_sweep(kind); }
+    borrowed_cell_edge_rollback();
     scalar_callable_directory();
     raw_callable_exact_boundaries();
     puts("CodeImage leases, independent Layout snapshots and post-Program executions passed");

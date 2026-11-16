@@ -20,6 +20,11 @@ static bool rbc_value_flow_read(RbcStringAdmission *state, const XrRbcValueCode 
         *output=(RbcValueEdgeState){.value={0,RBC_SLICE_BORROWED}};
         return true;
     }
+    if (rbc_value_cell(state->module,code,value,false)) {
+        /* The sealed producer already checked lexical Cell availability.
+         * This receiver transports its complete borrowed identity only. */
+        *output=(RbcValueEdgeState){.value={0,RBC_BITS}}; return true;
+    }
     if (rbc_value_function(state->module,code,value,false)) {
         RbcFunctionFlow *functions=rbc_function_liveness(state);
         if (!functions) return false;
@@ -131,6 +136,23 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     XrRbcValueAccess access=code->accesses[index];
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
+    case XR_RBC_VALUE_CELL: {
+        const XrLirHomeEvent *event=&code->homes->events[access.index-1];
+        if (event->kind==XR_LIR_OWNERSHIP_RELEASE) return true;
+        if (event->kind==XR_LIR_OWNERSHIP_CELL_VALUE || event->kind==XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT) {
+            if (access.source && !rbc_value_flow_read(state,code,access.source,&incoming)) return false;
+            if (access.other && !rbc_callable_scope_transfer(state,(XrRbcAggregateAccess){
+                .operation=event->kind==XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT ? XR_RBC_FUNCTION_SCOPE_LEAVE : XR_RBC_FUNCTION_BIND,
+                .destination=access.other})) return false;
+            return !access.result || rbc_value_flow_write(state,code,access.result,incoming);
+        }
+        if (event->cell_operation==XR_LIR_CELL_OP_NEW)
+            return rbc_value_flow_read(state,code,access.source,&incoming);
+        if (!rbc_value_flow_read(state,code,access.source,&incoming)) return false;
+        if (event->cell_operation==XR_LIR_CELL_OP_WRITE)
+            return rbc_value_flow_read(state,code,access.other,&incoming);
+        return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    }
     case XR_RBC_VALUE_STRING_APPEND_OWNED:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_read(state,code,access.other,&incoming) &&

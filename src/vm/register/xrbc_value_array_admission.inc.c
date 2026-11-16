@@ -19,6 +19,10 @@ static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCo
             code->parameters[binding->parameter-1]==value;
     if (binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW)
         return rbc_value_scalar(code,function,binding->source,XR_RBC_STATE_REF);
+    if (binding->kind==XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW)
+        return kind==XRT_VALUE_MAP_STRING_I64 && binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX &&
+            rbc_value_cell(module,code,binding->source,false) &&
+            rbc_value_home(code,binding->source)->cell_payload_type==binding->type;
     const XrLirHomeBinding *source=rbc_value_binding(code,binding->source);
     return binding->kind==XR_LIR_HOME_BINDING_CELL_BORROW && source && source->type==binding->type &&
         (source->kind==XR_LIR_HOME_BINDING_LOCAL || source->kind==XR_LIR_HOME_BINDING_PARAMETER);

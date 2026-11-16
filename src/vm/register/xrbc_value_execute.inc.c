@@ -28,6 +28,10 @@ typedef struct RbcValuePublication {
     RbcValuePayload destination, clear;
     const uint8_t *snapshot;
 } RbcValuePublication;
+typedef union RbcValueCapture {
+    XrtFunction function;
+    XrtManagedHeader *cell;
+} RbcValueCapture;
 struct RbcValueActivation {
     RbcValueActivation *previous;
     const XrRbcValueCode *code;
@@ -38,7 +42,7 @@ struct RbcValueActivation {
     uint8_t *payload;
     RbcValueOrigin *parameters;
     const uint8_t **borrowed_parameters;
-    XrtFunction *function_parameters;
+    RbcValueCapture *capture_parameters;
     XrtPlaceEdge *edges;
     RbcValuePublication *publications;
     uint8_t *snapshots;
@@ -81,7 +85,7 @@ static XrtManagedStatus rbc_value_environments(const XrRbcModule *module, XrRbcS
         for (uint32_t n=0;n<image->type_count;++n) runtime->environments[n]=NULL;
     }
     for (uint32_t n=0;status==XRT_MANAGED_OK && n<image->type_count;++n) {
-        if (image->types[n].kind!=XRT_VALUE_ENVIRONMENT) continue;
+        if (image->types[n].kind!=XRT_VALUE_ENVIRONMENT && image->types[n].kind!=XRT_VALUE_CELL) continue;
         const XrtValuePlan *plan=NULL;
         status=stack->layout ? xrt_module_layout_plan(stack->layout,n+1,&plan) : xrt_value_image_get(runtime->plans,n+1,&plan);
         if (status==XRT_MANAGED_OK) status=xrt_capture_type_new(runtime->billing,plan,&runtime->environments[n]);
@@ -182,7 +186,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     if (!rbc_value_capacities(code,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
-        !rbc_value_extent(&bytes,code->parameter_count,sizeof(XrtFunction)) ||
+        !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueCapture)) ||
         !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
         !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots,1) ||
         !rbc_value_extent(&bytes,code->homes && !code->homes->owned_frame_needed ? code->homes->frame.payload_size : 0,1))
@@ -199,7 +203,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     activation->field=(t *)((uint8_t *)memory+offset); offset+=(n)*sizeof(t); } while(0)
     RBC_VALUE_PART(parameters,code->parameter_count,RbcValueOrigin);
     RBC_VALUE_PART(borrowed_parameters,code->parameter_count,const uint8_t *);
-    RBC_VALUE_PART(function_parameters,code->parameter_count,XrtFunction);
+    RBC_VALUE_PART(capture_parameters,code->parameter_count,RbcValueCapture);
     RBC_VALUE_PART(edges,leaves,XrtPlaceEdge);
     RBC_VALUE_PART(publications,rows,RbcValuePublication);
     RBC_VALUE_PART(snapshots,snapshots,uint8_t);
@@ -210,7 +214,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
 #undef RBC_VALUE_PART
     for (uint32_t p = 0; p < code->parameter_count; ++p) {
         activation->parameters[p]=(RbcValueOrigin){0}; activation->borrowed_parameters[p]=NULL;
-        activation->function_parameters[p]=(XrtFunction){0};
+        activation->capture_parameters[p]=(RbcValueCapture){0};
     }
     runtime->top = activation;
     const XrRbcFunction *physical=&module->functions[function];
@@ -318,6 +322,15 @@ static XrtManagedStatus rbc_value_payload(const XrRbcModule *module, XrRbcStack 
     }
     return XRT_MANAGED_OK;
 }
+static XrtManagedStatus rbc_value_cell_borrow(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,uint32_t value,XrtManagedHeader **output) {
+    RbcValuePayload payload;
+    XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,value),&payload);
+    if (status!=XRT_MANAGED_OK) return status;
+    if (payload.size!=sizeof(*output) || payload.lanes) return XRT_MANAGED_ARGUMENT;
+    memcpy(output,payload.address,sizeof(*output));
+    return *output ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
 static void rbc_value_publication(void *context) {
     RbcValueActivation *activation=context;
     for (size_t p=0;p<activation->publication_count;++p) {
@@ -373,15 +386,20 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
     }
     if (home && home->owner_count) {
         const XrLirValueHome *source_home=rbc_value_home(code,source);
-        if (!source_home || source_home->parameter || builder->owners>activation->edge_capacity ||
+        const XrLirHomeWorkspace *stage=loan && loan->borrowed_owner_workspace!=SIZE_MAX ?
+            rbc_value_cell_stage(code,*loan) : NULL;
+        if (!source_home || (source_home->parameter && !stage) || builder->owners>activation->edge_capacity ||
             home->owner_count>activation->edge_capacity-builder->owners) return XRT_MANAGED_ARGUMENT;
         for (size_t leaf=0;leaf<home->owner_count;++leaf) {
             XrtPlaceEdge *edge=&activation->edges[builder->owners++];
             if (transfer!=XR_LIR_OWNERSHIP_TRANSFER_COPY && transfer!=XR_LIR_OWNERSHIP_TRANSFER_MOVE)
                 return XRT_MANAGED_ARGUMENT;
-            edge->transfer=transfer==XR_LIR_OWNERSHIP_TRANSFER_COPY ? XRT_PLACE_TRANSFER_COPY : XRT_PLACE_TRANSFER_MOVE;
+            edge->transfer=!stage && transfer==XR_LIR_OWNERSHIP_TRANSFER_COPY ? XRT_PLACE_TRANSFER_COPY : XRT_PLACE_TRANSFER_MOVE;
             XrtManagedStatus status=rbc_value_place(to,false,leaf,&edge->destination);
-            if (status==XRT_MANAGED_OK) status=rbc_value_place(from,false,leaf,&edge->source);
+            if (status==XRT_MANAGED_OK) {
+                if (stage) edge->source=(XrtPlace){.frame=activation->frame,.slot=stage->first_owner,.nulls=XRT_PLACE_NONNULL};
+                else status=rbc_value_place(from,false,leaf,&edge->source);
+            }
             if (status==XRT_MANAGED_OK) status=rbc_value_place(to,true,leaf,&edge->temporary);
             if (status!=XRT_MANAGED_OK) return status;
         }
@@ -393,28 +411,62 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
         home && home->owner_count && transfer==XR_LIR_OWNERSHIP_TRANSFER_MOVE,&builder->bytes);
     return status;
 }
+static void rbc_value_edge_unstage(RbcValueActivation *activation,const XrLirHomeEdge *edge,size_t prepared) {
+    while (prepared) {
+        XrLirHomeTransfer transfer=activation->code->homes->transfers[edge->first+--prepared];
+        if (transfer.borrowed_owner_workspace==SIZE_MAX) continue;
+        const XrLirHomeWorkspace *stage=rbc_value_cell_stage(activation->code,transfer);
+        XR_CHECK(stage && xrt_managed_slot_drop(activation->frame,stage->first_owner)==XRT_MANAGED_OK,
+            "an edge retires only borrowed Cell owners it staged in real homes");
+    }
+}
+static XrtManagedStatus rbc_value_edge_stage(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,const XrLirHomeEdge *edge,size_t *prepared) {
+    for (size_t p=0;p<edge->count;++p) {
+        XrLirHomeTransfer transfer=activation->code->homes->transfers[edge->first+p];
+        if (transfer.borrowed_owner_workspace!=SIZE_MAX) {
+            const XrLirHomeWorkspace *stage=rbc_value_cell_stage(activation->code,transfer);
+            if (!stage) return XRT_MANAGED_ARGUMENT;
+            XrtManagedHeader *previous=NULL;
+            XrtManagedStatus status=xrt_managed_slot_borrow(activation->frame,stage->first_owner,&previous);
+            if (status!=XRT_MANAGED_OK || previous) return status!=XRT_MANAGED_OK ? status : XRT_MANAGED_ARGUMENT;
+            XrtManagedHeader *cell=NULL;
+            status=rbc_value_cell_borrow(module,stack,activation,transfer.source,&cell);
+            if (status!=XRT_MANAGED_OK) return status;
+            if (!xrt_managed_retain(cell)) return XRT_MANAGED_REFCOUNT;
+            status=xrt_managed_slot_replace(activation->frame,stage->first_owner,&cell);
+            xrt_managed_drop(cell);
+            if (status!=XRT_MANAGED_OK) return status;
+        }
+        *prepared=p+1;
+    }
+    return XRT_MANAGED_OK;
+}
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access) {
     const XrRbcValueCode *code=activation->code;
     RbcValueEdgeBuilder builder={module,stack,activation,0,0};
     activation->publication_count=0;
+    const XrLirHomeEdge *selected=NULL; size_t prepared=0;
+    XrtManagedStatus status=XRT_MANAGED_OK;
     if (access.index!=UINT32_MAX) {
-        XrLirHomeEdge edge=code->homes->edges[access.index];
-        for (size_t p=0;p<edge.count;++p) {
-            XrLirHomeTransfer transfer=code->homes->transfers[edge.first+p];
-            XrtManagedStatus status=rbc_value_edge_pair(&builder,transfer.source,transfer.target,transfer.transfer_mode,&transfer);
-            if (status!=XRT_MANAGED_OK) return status;
+        selected=&code->homes->edges[access.index];
+        status=rbc_value_edge_stage(module,stack,activation,selected,&prepared);
+        for (size_t p=0;status==XRT_MANAGED_OK && p<selected->count;++p) {
+            XrLirHomeTransfer transfer=code->homes->transfers[selected->first+p];
+            status=rbc_value_edge_pair(&builder,transfer.source,transfer.target,transfer.transfer_mode,&transfer);
         }
     }
-    for (uint32_t p=0;p<access.count;++p) {
+    for (uint32_t p=0;status==XRT_MANAGED_OK && p<access.count;++p) {
         uint32_t source=code->arguments[access.first+(size_t)p*2],target=code->arguments[access.first+(size_t)p*2+1];
         const XrLirValueHome *home=rbc_value_home(code,target);
         if (home && home->type) continue;
-        XrtManagedStatus status=rbc_value_edge_pair(&builder,source,target,XR_LIR_OWNERSHIP_TRANSFER_BORROW,NULL);
-        if (status!=XRT_MANAGED_OK) return status;
+        status=rbc_value_edge_pair(&builder,source,target,XR_LIR_OWNERSHIP_TRANSFER_BORROW,NULL);
     }
     const XrtPlacePublication publication={rbc_value_publication,activation};
-    return xrt_place_edge_transfer(activation->edges,builder.owners,&publication);
+    if (status==XRT_MANAGED_OK) status=xrt_place_edge_transfer(activation->edges,builder.owners,&publication);
+    if (selected) rbc_value_edge_unstage(activation,selected,prepared);
+    return status;
 }
 
 static XrtManagedStatus rbc_value_inline_replace(const XrRbcModule *module,XrRbcStack *stack,
@@ -690,6 +742,14 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     XrtManagedStatus status=XRT_MANAGED_OK;
     if (rbc_value_function(module,activation->code,access.source,false)) {
         status=rbc_value_function_return(module,stack,activation,access);
+    } else if (rbc_value_cell(module,activation->code,access.source,false)) {
+        const XrLirHomeEvent *event=rbc_value_event(activation->code,access.index,XR_LIR_OWNERSHIP_RETURN_TRANSFER);
+        RbcValueActivation *caller=activation->previous;
+        if (!event || depth<=1 || !activation->receiving_call || !caller || caller->depth!=depth-1 ||
+            (event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY && event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE))
+            return XR_RBC_INVALID;
+        status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){caller,frame.destination},
+            rbc_value_origin(activation,access.source),event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY);
     } else if (home && (home->owner_count || rbc_value_inline(module,activation->code,access.source,false))) {
         RbcValueOrigin from=rbc_value_origin(activation,access.source);
         if (depth>1) {
@@ -759,6 +819,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     return XR_RBC_OK;
 }
 #include "xrbc_value_array_execute.inc.c"
+#include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
 #include "xrbc_value_map_execute.inc.c"
 #include "xrbc_value_inline_execute.inc.c"
@@ -789,7 +850,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         return rbc_value_call(module,stack,activation,access,pc,source);
     if (access.operation==XR_RBC_VALUE_RETURN) return rbc_value_return(module,stack,activation,access,source);
     XrtManagedStatus status=XRT_MANAGED_OK;
-    if (access.operation==XR_RBC_VALUE_STRING_APPEND_OWNED) status=rbc_value_string_append(activation,access,source);
+    if (access.operation==XR_RBC_VALUE_CELL) status=rbc_value_cell_step(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_STRING_APPEND_OWNED) status=rbc_value_string_append(activation,access,source);
     else if (access.operation==XR_RBC_VALUE_SLICE) status=rbc_value_slice_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) status=rbc_value_function_new(module,stack,activation,access);
     else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS || access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT)
