@@ -210,6 +210,8 @@ typedef struct EffectCheckedRoots {
     uint32_t lent_field_count, lent_field_capacity;
     EffectCheckCallbackLoan *callback_loan;
     uint32_t callback_loans, callback_loan_capacity;
+    uint32_t *callback_loan_index, callback_loan_index_capacity;
+    bool callback_loans_observed, callback_loans_closed;
     bool module_access;
     bool liveness_checked, refinement_dirty;
 } EffectCheckedRoots;
@@ -290,6 +292,7 @@ static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     xr_compile_resources_free(roots->module_index);
     xr_compile_resources_free(roots->lent_fields);
     xr_compile_resources_free(roots->callback_loan);
+    xr_compile_resources_free(roots->callback_loan_index);
     if (roots->terms) effect_terms_free(roots->terms);
     xr_compile_resources_free(roots->terms);
     xr_compile_resources_free(roots);

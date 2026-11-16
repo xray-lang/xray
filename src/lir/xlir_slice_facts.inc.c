@@ -33,6 +33,7 @@ static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView vi
             !lir_slice_span_valid(row->write, view.term_count) ||
             !lir_slice_span_valid(row->result_origin, view.term_count) ||
             !lir_slice_span_valid(row->callback_loans, view.callback_loan_count)) return false;
+        if (row->callback_loans.count && !row->available) return false;
         for (size_t p=0;p<row->callback_loans.count;++p) {
             XrLirSliceCallbackLoan relation=view.callback_loans[row->callback_loans.first+p];
             if (relation.callback_parameter>=f->parameter_count || relation.loan_parameter>=f->parameter_count ||
@@ -41,7 +42,8 @@ static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView vi
                 (relation.loan_kind==XR_LIR_SLICE_EFFECT_CAPTURE)!=(relation.loan_parameter<f->closure.capture_count) ||
                 !xr_lir_internal_slice_type(m,f->parameter_types[relation.loan_parameter])) return false;
             XrLirCallableType signature;
-            if (xr_lir_callable_type_view(m,f->parameter_types[relation.callback_parameter],&signature)!=XR_LIR_OK)
+            if (xr_lir_callable_type_view(m,f->parameter_types[relation.callback_parameter],&signature)!=XR_LIR_OK ||
+                (signature.flags&XR_LIR_CALLABLE_C_ABI))
                 return false;
             for (uint32_t c=0;c<f->callable_parameter_count;++c)
                 if (f->callable_parameters[c].parameter==relation.callback_parameter &&

@@ -12,6 +12,7 @@
 #include "xxir_view_liveness_internal.h"
 #include "xxir_view_loan_internal.h"
 #include "xxir_receive_control.h"
+#include "xxir_effect_callback_loan_internal.h"
 #include "../base/xchecks.h"
 #include "xxir_view_loan_transport.inc.c"
 
@@ -30,6 +31,7 @@ typedef struct ViewLive {
     uint64_t *storage,*inputs,*outputs,*current,*edge,*after;
     uint32_t count,words,total,head,tail,pending,edges;
     const XirViewLoanFacts *loans;
+    const XrXirEffects *effects;
     XirViewLoanTransport *loan_transport;
     uint64_t frame_bytes;
     bool pending_loans;
@@ -258,10 +260,12 @@ static XrXirStatus view_live_emit(ViewLive *a,XrXirViewLiveEvent *event) {
     event->function=a->location.function;event->block=a->location.block;
     event->before.values=event->after.values=a->values;event->before.count=event->after.count=a->count;
     event->before.words=event->after.words=a->words;
-    return a->visitor(a->user,a->context,event);
+    XrXirStatus status=a->effects ? xir_effects_callback_loan_observe(a->context,a->module,a->effects,event) : XR_XIR_OK;
+    if (status==XR_XIR_OK && a->visitor) status=a->visitor(a->user,a->context,event);
+    return status;
 }
 static XrXirStatus view_live_visit(ViewLive *a) {
-    if (!a->visitor) return XR_XIR_OK;
+    if (!a->visitor && !a->effects) return XR_XIR_OK;
     const XrXirFunction *f=a->function;
     for (uint32_t b=0;b<f->block_count;++b) {
 
@@ -295,7 +299,7 @@ static XrXirStatus view_live_visit(ViewLive *a) {
     return XR_XIR_OK;
 }
 static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
-    const XrXirModule *module,const XirViewLoanFacts *loans,const XirViewLiveRequest *request) {
+    const XrXirModule *module,const XirViewLoanFacts *loans,const XirViewLiveRequest *request,const XrXirEffects *effects) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;XrXirStatus status=xir_receive_poll(request->control);
@@ -310,7 +314,7 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
         if (module->declarations && module->declarations->functions[f].native_callable) {
             status=xir_native_callable_verify(module,f);continue;
         }
-        ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,
+        ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,.effects=effects,
             .visitor=request->visitor,.user=request->user,.loans=loans,.loan_transport=transport,.control=request->control,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=view_live_allocate(&a);
@@ -329,12 +333,13 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
         if (request->diagnostic) *request->diagnostic=pending_location;
         return XR_XIR_UNRESOLVED;
     }
+    if (status==XR_XIR_OK && effects) status=xir_effects_callback_loan_observed(context,module,effects);
     return status;
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
     XirViewLiveRequest request={visitor,user,diagnostic,NULL};
-    return view_liveness_run(context,module,NULL,&request);
+    return view_liveness_run(context,module,NULL,&request,NULL);
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_loans_verified(const XrXirCompileContext *context,
     const XrXirModule *module,const struct XrXirEffects *effects,const XirViewLiveRequest *request) {
@@ -343,7 +348,7 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_loans_verified(const XrXirCompileC
     if (status!=XR_XIR_OK) return status;
     if (!module || loans.restrictions.function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
     XirViewLiveRequest callbacks=request?*request:(XirViewLiveRequest){0};
-    return view_liveness_run(context,module,&loans,&callbacks);
+    return view_liveness_run(context,module,&loans,&callbacks,effects);
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,
     const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic,
