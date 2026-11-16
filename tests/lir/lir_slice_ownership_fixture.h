@@ -7,6 +7,7 @@
  * lir_slice_ownership_fixture.h - Sealed local loans for verifier failure injection
  */
 #include "lir/xlir_view.h"
+#include "lir/xlir_array.h"
 #define SLICE_OWN_TRY(expression) do { status = (expression); if (status != XR_LIR_OK) goto failed; } while (0)
 static XrLirStatus slice_ownership_fixture(XrLirType element, XrLirModule **output) {
     XrLirModule *m = NULL; XrLirStatus status; XrLirType slice = 0, parameter = XR_LIR_ARRAY_CELL;
