@@ -38,7 +38,13 @@ static XrLirValue slice_callable_role(XrLirModule *module,XrLirBlock block,
     XrLirSliceOperation role,XrLirType type,const XrLirValue *arguments,uint32_t count) {
     uint32_t intrinsic=0;
     XrLirType binding=0;
-    if (role==XR_LIR_SLICE_OP_NEW) OK(xr_lir_value_type(module,arguments[0],&binding));
+    if (role==XR_LIR_SLICE_OP_NEW) {
+        CHECK(count && arguments && arguments[0].module==module && arguments[0].function==block.function &&
+            block.function && block.function<=module->function_count);
+        const XrLirFunctionData *function=&module->functions[block.function-1];
+        CHECK(arguments[0].id && arguments[0].id<=function->value_count);
+        binding=function->values[arguments[0].id-1].type;
+    }
     OK(xr_lir_slice_operation(module,role,XR_LIR_I64,binding,&intrinsic));
     XrLirInstruction op={.op=XR_LIR_CALL_INTRINSIC,.type=type,.intrinsic=intrinsic,
         .operands=arguments,.operand_count=count};
