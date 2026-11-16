@@ -742,25 +742,17 @@
       "id": "demos/07-advanced/readonly_byte_slice.xr",
       "path": "demos/07-advanced/readonly_byte_slice.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:52: VIEW_NEW is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:demos/07-advanced/readonly_byte_slice.xr",
       "path": "demos/07-advanced/readonly_byte_slice.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/readonly_byte_slice.xr:1:52: VIEW_NEW is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/base64/base64.xr",
