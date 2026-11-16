@@ -15,17 +15,14 @@ static bool rbc_value_flow_read(RbcStringAdmission *state, const XrRbcValueCode 
     if (!rbc_value_id(code,value)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     if (rbc_value_function(state->module,code,value,false)) {
-        uint8_t *functions=rbc_function_liveness(state);
+        RbcFunctionFlow *functions=rbc_function_liveness(state);
         if (!functions) return false;
-        uint32_t origin=value;
-        for (uint32_t n=0;home->borrow_source && n<code->value_count;++n) {
-            origin=home->borrow_source; home=rbc_value_home(code,origin);
-            if (!home) return false;
-        }
-        uint8_t live=functions[origin];
-        if (!live && home->parameter) live=2;
-        if (!live) return false;
-        *output=(RbcValueEdgeState){.value={rbc_value_signature(state->module,code,value),RBC_FUNCTION},.scope=live};
+        /* A legal outer BIND may outlive the source's logical scope while its
+         * activation storage remains valid. Read this value's own capability. */
+        RbcFunctionFlow live=functions[value];
+        if (!live.storage || !rbc_scope_contains(rbc_function_scopes(state->module,state->function),
+                live.scope,rbc_scope_current(state))) return false;
+        *output=(RbcValueEdgeState){.value={rbc_value_signature(state->module,code,value),RBC_FUNCTION},.scope=live.storage};
         return true;
     }
     if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) || rbc_value_binding(code,value)) { *output=(RbcValueEdgeState){0}; return true; }
@@ -49,9 +46,9 @@ static bool rbc_value_flow_write(RbcStringAdmission *state, const XrRbcValueCode
     if (!rbc_value_id(code,value)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     if (rbc_value_function(state->module,code,value,false)) {
-        uint8_t *functions=rbc_function_liveness(state);
+        RbcFunctionFlow *functions=rbc_function_liveness(state);
         if (!functions || !incoming.scope || incoming.scope>3) return false;
-        functions[value]=(uint8_t)incoming.scope;
+        functions[value]=(RbcFunctionFlow){rbc_scope_current(state),(uint8_t)incoming.scope};
         return true;
     }
     if ((home && (home->owner_count || (home->type && code->locations[value].kind==XR_RBC_VALUE_NOWHERE))) || rbc_value_binding(code,value)) return true;
@@ -147,12 +144,15 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         if (!rbc_value_flow_read(state,code,access.source,&incoming)) return false;
         if (access.other && !rbc_callable_scope_transfer(state,(XrRbcAggregateAccess){
                 .operation=XR_RBC_FUNCTION_BIND,.destination=access.other})) return false;
-        return rbc_value_flow_write(state,code,access.result,incoming);
-    case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
-        if (access.source && (!rbc_value_flow_read(state,code,access.source,&incoming) ||
-            !rbc_value_flow_write(state,code,access.result,incoming))) return false;
-        return rbc_callable_scope_transfer(state,(XrRbcAggregateAccess){
-            .operation=XR_RBC_FUNCTION_SCOPE_LEAVE,.destination=access.other});
+        if (!rbc_value_flow_write(state,code,access.result,incoming)) return false;
+        if (access.other) rbc_function_liveness(state)[access.result].scope=access.other;
+        return true;
+    case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT: {
+        if (access.source && !rbc_value_flow_read(state,code,access.source,&incoming)) return false;
+        if (!rbc_callable_scope_transfer(state,(XrRbcAggregateAccess){
+                .operation=XR_RBC_FUNCTION_SCOPE_LEAVE,.destination=access.other})) return false;
+        return !access.source || rbc_value_flow_write(state,code,access.result,incoming);
+    }
     case XR_RBC_VALUE_FUNCTION_CALL:
         if (!rbc_value_flow_read(state,code,access.source,&incoming)) return false;
         for (uint32_t p=0;p<access.count;++p)
@@ -228,7 +228,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return !rbc_value_function(state->module,code,access.result,false) ||
             (rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_write(state,code,access.result,incoming));
     case XR_RBC_VALUE_DROP:
-        if (rbc_value_function(state->module,code,access.source,false)) rbc_function_liveness(state)[access.source]=0;
+        if (rbc_value_function(state->module,code,access.source,false))
+            rbc_function_liveness(state)[access.source]=(RbcFunctionFlow){0};
         return true;
     case XR_RBC_VALUE_STRING_PRINT:
         return true;

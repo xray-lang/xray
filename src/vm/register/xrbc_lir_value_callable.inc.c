@@ -71,7 +71,10 @@ static bool rbc_lir_function_access(RbcLirCompiler *c, const XrLirInstructionVie
         access->operation=XR_RBC_VALUE_FUNCTION_ALIAS;
         access->source=instruction->operands[instruction->op==XR_LIR_FUNCTION_BIND ? 1 : 0];
         access->index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_CALLABLE_VALUE,instruction->result);
-        if (instruction->op==XR_LIR_FUNCTION_BIND) access->other=c->scope_home[instruction->operands[0]];
+        if (instruction->op==XR_LIR_FUNCTION_BIND) {
+            access->other=c->scope_home[instruction->operands[0]];
+            access->window=(uint32_t)instruction->bits;
+        }
     }
     return access->index || rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"callable operation lost its common event");
 }
