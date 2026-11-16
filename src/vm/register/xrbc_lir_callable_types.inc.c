@@ -85,7 +85,7 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
 }
 
 static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
-    const uint32_t *ids, uint32_t count, XrRbcProgram *program) {
+    const uint32_t *ids, uint32_t count, XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
     bool needed = false;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirFunctionView view;
@@ -93,16 +93,26 @@ static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
         needed |= view.callable_parameter_count != 0;
     }
     if (!needed) return XR_RBC_COMPILE_OK;
+    diagnostic->function=ids[0]; diagnostic->block=diagnostic->instruction=0;
+    if (count && sizeof(XrRbcFunctionCallableParameters)>SIZE_MAX/count)
+        return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,
+            "callable parameter directory exceeds address space",(XrLirSource){0});
     XrRbcFunctionCallableParameters *functions = xr_calloc(count, sizeof(*functions));
-    if (!functions) return XR_RBC_COMPILE_OUT_OF_MEMORY;
+    if (!functions) return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,
+        "cannot own callable parameter directory",(XrLirSource){0});
     program->module.function_callable_parameters = functions;
     program->module.function_callable_parameter_count = count;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirFunctionView view;
         xr_lir_function_view(input, (XrLirFunction){input, ids[f]}, &view);
         if (!view.callable_parameter_count) continue;
+        diagnostic->function=ids[f];
+        if (sizeof(XrRbcFunctionCallableParameter)>SIZE_MAX/view.callable_parameter_count)
+            return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,
+                "callable parameter rows exceed address space",(XrLirSource){0});
         XrRbcFunctionCallableParameter *rows = xr_calloc(view.callable_parameter_count, sizeof(*rows));
-        if (!rows) return XR_RBC_COMPILE_OUT_OF_MEMORY;
+        if (!rows) return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,
+            "cannot own callable parameter rows",(XrLirSource){0});
         functions[f].rows = rows;
         functions[f].count = view.callable_parameter_count;
         for (uint32_t p = 0; p < view.callable_parameter_count; ++p) {
@@ -111,7 +121,8 @@ static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
             rows[p].contract.mode = (uint32_t)from.contract.mode;
             rows[p].contract.escaping = from.contract.escaping;
             if (!rbc_lir_callable_value(input, program, from.contract.type, from.contract.array_element,
-                    &rows[p].contract.value)) return XR_RBC_COMPILE_UNSUPPORTED;
+                    &rows[p].contract.value)) return rbc_lir_error(diagnostic,XR_RBC_COMPILE_UNSUPPORTED,
+                        "callable parameter has no exact bytecode carrier",(XrLirSource){0});
         }
     }
     return XR_RBC_COMPILE_OK;

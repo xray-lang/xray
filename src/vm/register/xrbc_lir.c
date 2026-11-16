@@ -1897,7 +1897,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             "only the designated entry receives module state", (XrLirSource){0});
         goto done;
     }
-    status = rbc_lir_callable_parameters(input, ids, count, p);
+    status = rbc_lir_callable_parameters(input, ids, count, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     for (uint32_t f = 0; p->module.callable_type_count && f < count; ++f) {
         XrLirFunctionView view;
@@ -1905,7 +1905,12 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         if (!rbc_lir_callable_type(input, view.result)) continue;
         if (!p->module.callable_results) {
             p->module.callable_results = xr_calloc(count, sizeof(*p->module.callable_results));
-            if (!p->module.callable_results) { status = XR_RBC_COMPILE_OUT_OF_MEMORY; goto done; }
+            if (!p->module.callable_results) {
+                d->function=ids[f]; d->block=d->instruction=0;
+                status = rbc_lir_error(d,XR_RBC_COMPILE_OUT_OF_MEMORY,
+                    "cannot own callable result directory",(XrLirSource){0});
+                goto done;
+            }
             p->module.callable_result_count = count;
         }
         ((uint32_t *)p->module.callable_results)[f] = p->physical_callables[view.result - XR_LIR_TYPE_COUNT] + 1;
