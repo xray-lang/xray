@@ -99,6 +99,7 @@ static size_t c_value_dependency(LirC *c, const LirCValueTypes *types,
 }
 static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_t ordinal) {
     const XrtValuePlanSpec *spec = &types->rows[ordinal].spec;
+    if (spec->kind == XRT_VALUE_ENVIRONMENT && !spec->capture_count) return;
     size_t type_id = ordinal + 1;
     const char *scalar = c_value_scalar_type(spec->kind);
     if (scalar) {
@@ -116,6 +117,11 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
             c_text(c, "    uint8_t tag;\n");
             if (c->status == XR_LIR_C_OK && types->rows[child].spec.kind != XRT_VALUE_UNIT)
                 c_format(c, "    XrlValue_%zu payload;\n", child + 1);
+        } else if (spec->kind == XRT_VALUE_ENVIRONMENT) {
+            for (size_t i = 0; i < spec->capture_count && c_request_poll(c); ++i) {
+                size_t child = c_value_dependency(c,types,spec->captures[i].type,ordinal);
+                c_format(c,"    XrlValue_%zu c%zu;\n",child + 1,i);
+            }
         } else if (spec->kind == XRT_VALUE_FIXED_U8) {
             c_format(c, "    uint8_t bytes[%zu];\n", spec->count);
         } else if (spec->kind == XRT_VALUE_TUPLE_I64) {
@@ -133,6 +139,9 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
     for (size_t f = 0; f < spec->field_count && c_request_poll(c); ++f)
         c_format(c, "_Static_assert(offsetof(XrlValue_%zu, f%zu) == UINT64_C(%" PRIu64 "), \"field offset\");\n",
             type_id, f, (uint64_t)spec->fields[f].offset);
+    for (size_t i = 0; i < spec->capture_count && c_request_poll(c); ++i)
+        c_format(c,"_Static_assert(offsetof(XrlValue_%zu, c%zu) == UINT64_C(%" PRIu64 "), \"capture offset\");\n",
+            type_id,i,(uint64_t)spec->captures[i].offset);
     if (spec->kind == XRT_VALUE_NULLABLE) {
         c_format(c, "_Static_assert(offsetof(XrlValue_%zu, tag) == UINT64_C(%" PRIu64 "), \"nullable tag\");\n",
             type_id, (uint64_t)spec->nullable.tag_offset);

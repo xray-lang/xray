@@ -77,15 +77,21 @@ static void c_values_array_mark(uint8_t *needed, size_t types, XrLirType element
     for (size_t k=0;k<4;++k) if (element==elements[k]) needed[types+k]=1;
 }
 static void c_values_prepare(LirC *c) {
+    if (!c_request_poll(c)) return;
     const XrLirModule *module = c->request->module;
     size_t type_count = (size_t)XR_LIR_TYPE_COUNT + c->constructed_count;
+    size_t function_count = xr_lir_function_count(module);
     void *flags = NULL, *memory = NULL;
-    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + 4, 1, &flags))) return;
+    if (type_count > SIZE_MAX - 4 || function_count > SIZE_MAX - type_count - 4) {
+        c_error(c,XR_LIR_C_OVERFLOW,"C value root inventory overflows"); return;
+    }
+    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + 4 + function_count, 1, &flags))) return;
     uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps;
+    uint8_t *environments = needed + type_count + 4;
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
         XrLirType payload = c->state_layout.slots[slot].payload;
-        if (c_callable_type(c,payload,NULL) || payload == XR_LIR_I64_CELL) {
+        if (payload == XR_LIR_I64_CELL) {
             c_error(c,XR_LIR_C_UNSUPPORTED,"callable State requires owned code and environment transport"); break;
         }
         if (payload == XR_LIR_ARRAY) c_values_array_mark(needed,type_count,c->state_layout.slots[slot].array_element);
@@ -94,6 +100,18 @@ static void c_values_prepare(LirC *c) {
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
         XrLirFunction function = {module, c->closure[i]}; XrLirFunctionView view;
         xr_lir_function_view(module, function, &view);
+        XrLirCallableFunctionFacts callables = {0};
+        if (module->callable_facts && xr_lir_callable_facts_function(module->callable_facts,function.id,&callables) != XR_LIR_OK) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"C value roots lost final callable facts"); break;
+        }
+        for (uint32_t v = 0; callables.values && v < callables.value_count && c_request_poll(c); ++v) {
+            const XrLirCallableValueFact *fact = &callables.values[v + 1];
+            if (fact->operation != XR_LIR_FUNCTION_REF || fact->transport != XR_LIR_CALLABLE_TRANSPORT_OWNED) continue;
+            if (!fact->known_target || fact->known_target > function_count) {
+                c_error(c,XR_LIR_C_INVALID_LIR,"owning callable has no exact environment target"); break;
+            }
+            environments[fact->known_target - 1] = 1;
+        }
         if (c->callable_used && c->callable_used[function.id - 1]) {
             XrLirClosureTarget target = {0};
             XR_CHECK(xr_lir_closure_target_view(module,function,&target) == XR_LIR_OK && target.callable,
@@ -129,6 +147,7 @@ static void c_values_prepare(LirC *c) {
     }
     size_t count = 0;
     for (size_t t = 1; t < type_count + 4; ++t) count += needed[t] != 0;
+    for (size_t f = 0; f < function_count; ++f) count += environments[f] != 0;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, count, sizeof(XrLirValueLayoutKey), &memory))) {
         xr_compile_resources_free(flags); return;
     }
@@ -136,6 +155,14 @@ static void c_values_prepare(LirC *c) {
     for (size_t t = 1; t < type_count + 4; ++t)
         if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0, 0} :
             (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count], 0};
+    bool environment_values = false;
+    for (uint32_t f = 0; f < function_count; ++f) if (environments[f]) {
+        XrLirClosureTarget target = {0};
+        if (xr_lir_closure_target_view(module,(XrLirFunction){module,f + 1},&target) != XR_LIR_OK) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"environment root lost its exact signature"); break;
+        }
+        roots[next++] = (XrLirValueLayoutKey){target.callable,0,f + 1}; environment_values = true;
+    }
     XrtManagedAllocator provider = {c, c_value_allocate, c_value_free, {c, c_value_resources_retain, c_value_resources_drop}};
     XrtManagedStatus created = xrt_billing_owner_new(&provider, SIZE_MAX, &c->value_billing);
     (void)c_resource(c, atomic_load_explicit(&c->value_allocation_failure, memory_order_relaxed));
@@ -146,9 +173,9 @@ static void c_values_prepare(LirC *c) {
     memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, 1, sizeof(*c->value_types), &memory))) return;
     c->value_types = memory; c_value_types_prepare(c, c->value_layouts, c->value_types);
-    if (c->state && c_request_poll(c)) {
+    if ((c->state || environment_values) && c_request_poll(c)) {
         c_value_layout_status(c, xr_lir_value_image_create(c->value_layouts, c->value_billing, &c->value_image));
-        if (c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
+        if (c->state && c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
             xr_lir_value_image_view(c->value_image), c->value_billing, &c->state_projection));
     }
     const XrLirOwnershipTypeFact *facts = NULL; uint32_t fact_count = 0;
@@ -297,9 +324,9 @@ static void c_values_helpers(LirC *c) {
                 returns |= c->homes->events[event].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER;
             if (!returns) c_value_landing(c, c->homes);
         }
-        if (!c->homes->owned_frame_needed) continue;
-        c_value_frame(c, c->homes);
+        if (c->homes->owned_frame_needed) c_value_frame(c, c->homes);
         if (c_values_owned_type(c, c->view.result)) c_value_returns(c, c->homes);
+        if (!c->homes->owned_frame_needed) continue;
         LirCEdgeEvents events = {0}; c_edge_events_prepare(c, c->homes, &events);
         for (size_t e = 0; e < c->homes->edge_count && c_request_poll(c); ++e) {
             const XrLirHomeEdge *edge = &c->homes->edges[e];
@@ -406,8 +433,12 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         return true;
     }
     if (v->op == XR_LIR_RET && c_values_owned_type(c, c->view.result)) {
-        c_format(c, "    { XrtManagedStatus status = xrl_return_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(xrl_root, xrl_frame, xrl_payload, xrl_result);\n",
+        c_format(c, "    { XrtManagedStatus status = xrl_return_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(",
             c->function.id, c->block, c->instruction);
+        c_text(c,c->homes->owned_frame_needed ? "xrl_root, xrl_frame, " : "NULL, NULL, ");
+        if (!c->homes->values[v->operands[0]].owner_count) { c_text(c,"&"); c_value(c,v->operands[0]); }
+        else c_text(c,"xrl_payload");
+        c_text(c,", xrl_result);\n");
         c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n      return; }\n", source);
         return true;
     }

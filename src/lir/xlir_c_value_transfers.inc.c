@@ -217,6 +217,24 @@ static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
         const XrLirHomeEvent *event = &homes->events[i];
         if (event->kind != XR_LIR_OWNERSHIP_RETURN_TRANSFER) continue;
         const XrLirValueHome *source = &homes->values[event->source];
+        bool borrowed = event->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY &&
+            source->type == homes->result_type && !source->owner_count &&
+            source->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW;
+        if (borrowed) {
+            const XrtValuePlanSpec *spec = &c->value_types->rows[source->type - 1].spec;
+            if (spec->kind != XRT_VALUE_FUNCTION || spec->owned_count != 1) {
+                c_error(c,XR_LIR_C_INVALID_LIR,"borrowed callable return lost its receiving signature"); return;
+            }
+            if (!declared) { c_value_landing(c,homes); declared = true; }
+            c_format(c,"static XrtManagedStatus xrl_return_%" PRIu32 "_%" PRIu32 "_%" PRIu32,
+                homes->source_function,event->block,event->instruction);
+            c_format(c,"(XrtManagedRoot *root, XrtManagedFrame *frame, void *source, XrlLanding_%" PRIu32 " landing) {\n",homes->source_function);
+            c_text(c,"    if (!source || !landing.frame || !landing.destination || !landing.temporary || (frame && !root)) return XRT_MANAGED_ARGUMENT;\n");
+            c_text(c,"    XrtManagedStatus status = xrt_inline_value_replace(&(XrtInlineValueHome){landing.frame, landing.destination, landing.temporary, landing.first_owner, landing.temporary_first_owner},\n");
+            c_format(c,"        &(XrtInlineValueSpec){%zu, %zu, (const size_t[]){%zu}, 1}, source);\n",spec->size,spec->alignment,spec->owned_offsets[0]);
+            c_text(c,"    if (status != XRT_MANAGED_OK) return status;\n    return frame ? xrt_managed_frame_leave(root,frame) : XRT_MANAGED_OK;\n}\n");
+            continue;
+        }
         if (source->type != homes->result_type || !source->owner_count || source->parameter ||
             event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) {
             c_error(c, XR_LIR_C_INVALID_LIR, "C return transfer lost its exact owned receiving home");
