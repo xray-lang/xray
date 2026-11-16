@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -33,23 +34,31 @@ def result(exit=0, stderr="", stdout=""):
 
 
 class FrontendReceipts(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory(prefix="spec frontend file identity ")
+        self.addCleanup(directory.cleanup)
+        self.fixture = Path(directory.name) / "fixture with a long name.xr"
+        self.fixture.write_text("print(1)\n", encoding="utf-8")
+        self.fixture.with_name("foreign.xr").write_bytes(self.fixture.read_bytes())
+
     def test_exact_first_diagnostic(self):
-        fixture = Path("case.xr").resolve()
+        fixture = self.fixture
         expected = f"{fixture}:2:3: error: E0327: rejected\n"
         self.assertEqual(gate.judge(receipt("TRUE_ERROR"), result(1, expected), fixture)[0], "TRUE_ERROR_PASS")
-        for changed in (expected.replace(":2:3:", ":3:3:"), expected.replace("E0327", "E0326"),
+        for changed in (expected.replace(":2:3:", ":3:3:"), expected.replace(":2:3:", ":2:4:"),
+                        expected.replace("E0327", "E0326"),
                         expected.replace("rejected", "different"), expected + expected,
                         expected.replace(str(fixture), str(fixture.with_name("foreign.xr")))):
             self.assertEqual(gate.judge(receipt("TRUE_ERROR"), result(1, changed), fixture)[0], "FIRST_DIAGNOSTIC_FAIL")
 
     def test_no_error_code_is_an_exact_fact(self):
         case = receipt("TRUE_ERROR");case["expected"]["first_diagnostic"].update(code=None, message="error: actual unnumbered diagnostic")
-        fixture = Path("case.xr").resolve()
+        fixture = self.fixture
         self.assertEqual(gate.judge(case, result(1, f"{fixture}:2:3: error: actual unnumbered diagnostic\n"), fixture)[0], "TRUE_ERROR_PASS")
         self.assertEqual(gate.judge(case, result(1, f"{fixture}:2:3: error: E0327: actual unnumbered diagnostic\n"), fixture)[0], "FIRST_DIAGNOSTIC_FAIL")
 
     def test_crash_timeout_and_binary_change_never_match(self):
-        fixture = Path("case.xr").resolve();text = f"{fixture}:2:3: error: E0327: rejected\n"
+        fixture = self.fixture;text = f"{fixture}:2:3: error: E0327: rejected\n"
         for exit in (-11, -1, 0xC0000005, 2):
             self.assertEqual(gate.judge(receipt("TRUE_ERROR"), result(exit, text), fixture)[0], "TOOL_FAIL")
         for extra in (dict(timeout_seconds=30), dict(tool_error="UTF8 error"), dict(binary_sha256_after="changed")):
@@ -57,11 +66,50 @@ class FrontendReceipts(unittest.TestCase):
             self.assertEqual(gate.judge(receipt("TRUE_ERROR"), row, fixture)[0], "TOOL_FAIL")
 
     def test_limitation_has_no_normative_pass_and_improvement_requires_receipt(self):
-        fixture = Path("case.xr").resolve();case = receipt("KNOWN_LIMITATION")
+        fixture = self.fixture;case = receipt("KNOWN_LIMITATION")
         self.assertEqual(gate.judge(case, result(1, f"{fixture}:2:3: error: E0327: rejected\n"), fixture)[0], "KNOWN_LIMITATION_STABLE")
         self.assertEqual(gate.judge(case, result(), fixture)[0], "LIMITATION_CHANGED")
         del case["normative_oracle"]
         with self.assertRaises(ValueError):gate.validate_case(case)
+
+    def test_real_file_alias_preserves_exact_diagnostic(self):
+        alias = self.fixture.with_name("another fixture name.xr")
+        os.link(self.fixture, alias)
+        for actual, expected in ((alias, self.fixture), (self.fixture, alias)):
+            text = f"{actual}:2:3: error: E0327: rejected\n"
+            status, first = gate.judge(receipt("TRUE_ERROR"), result(1, text), expected)
+            self.assertEqual(status, "TRUE_ERROR_PASS")
+            self.assertEqual(first, receipt("TRUE_ERROR")["expected"]["first_diagnostic"])
+        foreign = self.fixture.with_name("foreign.xr")
+        self.assertEqual(foreign.read_bytes(), self.fixture.read_bytes())
+        text = f"{foreign}:2:3: error: E0327: rejected\n"
+        self.assertEqual(gate.judge(receipt("TRUE_ERROR"), result(1, text), self.fixture)[0], "FIRST_DIAGNOSTIC_FAIL")
+
+    def test_missing_file_cannot_be_the_expected_fixture(self):
+        text = f"{self.fixture}:2:3: error: E0327: rejected\n"
+        self.fixture.unlink()
+        self.assertEqual(gate.judge(receipt("TRUE_ERROR"), result(1, text), self.fixture)[0], "FIRST_DIAGNOSTIC_FAIL")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows short file names")
+    def test_windows_short_path_preserves_exact_diagnostic(self):
+        import ctypes
+        from ctypes import wintypes
+        short_path = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+        short_path.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+        short_path.restype = wintypes.DWORD
+        needed = short_path(str(self.fixture), None, 0)
+        self.assertGreater(needed, 0, ctypes.get_last_error())
+        buffer = ctypes.create_unicode_buffer(needed)
+        written = short_path(str(self.fixture), buffer, needed)
+        self.assertTrue(0 < written < needed, ctypes.get_last_error())
+        alias = Path(buffer.value)
+        if os.path.normcase(str(alias)) == os.path.normcase(str(self.fixture)):
+            self.skipTest("The fixture volume does not expose an 8.3 alias")
+        for actual, expected in ((alias, self.fixture), (self.fixture, alias)):
+            text = f"{actual}:2:3: error: E0327: rejected\n"
+            status, first = gate.judge(receipt("TRUE_ERROR"), result(1, text), expected)
+            self.assertEqual(status, "TRUE_ERROR_PASS")
+            self.assertEqual(first, receipt("TRUE_ERROR")["expected"]["first_diagnostic"])
 
     def test_only_user_approved_dependency_can_defer(self):
         case = receipt();case.update(role="DEFERRED", dependency="Task338", required_for_task342=False)
