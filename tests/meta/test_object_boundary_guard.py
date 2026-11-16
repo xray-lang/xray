@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import check_structural_object_json_map_boundary as guard
+import check_parallel_surface_convergence as parallel_guard
 
 
 class ObjectBoundaryGuard(unittest.TestCase):
@@ -70,6 +71,61 @@ class ObjectBoundaryGuard(unittest.TestCase):
             other.write_text(self.notice + '\n', encoding='utf-8')
             findings = guard.collect(root)
             self.assertEqual(len(findings['PUBLIC_LEGACY_JSON_TYPE']), 2)
+
+
+class ParallelSurfaceGuard(unittest.TestCase):
+    notice = '首发布指同步点上的线性化顺序，不是墙钟、worker ID 或源码顺序。'
+    canonical = Path('spec/source/accepted/331-language-surface-convergence-cn.md')
+
+    def write_notice(self, root: Path, text: str) -> None:
+        path = root / self.canonical
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+
+    def findings(self, root: Path) -> list[str]:
+        return (parallel_guard.check_public_parallel_recommendations(root)
+                + parallel_guard.check_legacy_public_text(root))
+
+    def test_canonical_first_publication_definition_is_not_a_recommendation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_notice(root, '- ' + self.notice + '不能在首个 Error 到达时提前结束 join。\n')
+            self.assertEqual(self.findings(root), [])
+
+    def test_same_line_recommendations_and_legacy_syntax_still_fail(self):
+        cases = (
+            ('建议按 worker_id 排序。', 'worker-id parallel recommendation'),
+            ('建议按 worker ID 排序。', 'worker-id parallel recommendation'),
+            ('使用 lane arrays。', 'manual lane-array recommendation'),
+            ('`lanes[worker]`', 'manual lane indexing recommendation'),
+            ('`parallel for value in values {}`', 'legacy parallel grammar'),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for code, label in cases:
+                with self.subTest(code=code):
+                    self.write_notice(root, self.notice + code + '\n')
+                    findings = self.findings(root)
+                    self.assertEqual(len(findings), 1)
+                    self.assertIn(label, findings[0])
+
+    def test_fenced_recommendations_remain_active(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_notice(root, self.notice + '\n```xr\nconst worker_id = 0\n'
+                              'const slot = lanes[0]\nparallel for x in xs {}\n```\n')
+            findings = self.findings(root)
+            self.assertEqual(len(findings), 3)
+            self.assertTrue(any(':3:' in hit and 'worker-id' in hit for hit in findings))
+            self.assertTrue(any(':4:' in hit and 'lane indexing' in hit for hit in findings))
+            self.assertTrue(any(':5:' in hit and 'legacy parallel grammar' in hit for hit in findings))
+
+    def test_other_negations_and_documents_have_no_exemption(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_notice(root, '不是建议按 worker ID 排序。\n')
+            (root / 'spec/another.md').write_text(self.notice + '\n', encoding='utf-8')
+            self.assertEqual(len(self.findings(root)), 2)
 
 
 if __name__ == '__main__':

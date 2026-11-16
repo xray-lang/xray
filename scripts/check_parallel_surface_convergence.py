@@ -56,6 +56,11 @@ PUBLIC_PARALLEL_RECOMMENDATION_PATTERNS = (
     (re.compile(r"\blanes\s*\[", re.IGNORECASE), "manual lane indexing recommendation"),
 )
 
+FIRST_PUBLICATION_NOTICE_PATH = Path("spec/source/accepted/331-language-surface-convergence-cn.md")
+FIRST_PUBLICATION_NOTICE = re.compile(
+    r"首发布指同步点上的线性化顺序，不是墙钟、(?P<name>worker ID) 或源码顺序。"
+)
+
 PUBLIC_TEXT_SUFFIXES = {".md", ".xr"}
 SOURCE_SUFFIXES = {".c", ".h", ".inc.c", ".def"}
 
@@ -77,16 +82,29 @@ def iter_files(root: Path, dirs: tuple[str, ...], suffixes: set[str]):
                 yield path
 
 
+def has_active_match(relative: Path, line: str, pattern: re.Pattern[str], label: str) -> bool:
+    # The canonical definition explicitly rejects executor identity as the
+    # arbitration order. Other recommendations on that same line stay active.
+    excluded = ()
+    if relative == FIRST_PUBLICATION_NOTICE_PATH and label == "worker-id parallel recommendation":
+        excluded = tuple(match.span("name") for match in FIRST_PUBLICATION_NOTICE.finditer(line))
+    return any(
+        not any(start <= match.start() and match.end() <= end for start, end in excluded)
+        for match in pattern.finditer(line)
+    )
+
+
 def scan_text_file(root: Path, path: Path, patterns) -> list[str]:
     errors: list[str] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError:
         return errors
+    relative = rel(root, path)
     for lineno, line in enumerate(lines, 1):
         for pattern, label in patterns:
-            if pattern.search(line):
-                errors.append(f"{rel(root, path)}:{lineno}: {label}: {line.strip()}")
+            if has_active_match(relative, line, pattern, label):
+                errors.append(f"{relative}:{lineno}: {label}: {line.strip()}")
     return errors
 
 
