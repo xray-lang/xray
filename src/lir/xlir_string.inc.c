@@ -36,6 +36,14 @@ XR_FUNC uint32_t xr_lir_string_role(const XrLirModule *m, const XrLirInstruction
             return xr_lir_string_intrinsic_valid(&m->intrinsics[n]) ? m->intrinsics[n].operation : 0;
     return 0;
 }
+XR_FUNC bool xr_lir_string_binding(const XrLirModule *m, XrLirValue value) {
+    XrLirType type;
+    if (xr_lir_value_type(m, value, &type) != XR_LIR_OK) return false;
+    if (type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF) return true;
+    XrLirStateReference reference;
+    return type == XR_LIR_STATE_REF && xr_lir_state_reference_view(m, value, &reference) == XR_LIR_OK &&
+        reference.payload == XR_LIR_STRING;
+}
 XR_FUNC XrLirStatus xr_lir_string_operation(const XrLirModule *m, XrLirStringOperation role, uint32_t *output) {
     if (!m || !output || m->failure != XR_LIR_OK || role < XR_LIR_STRING_OP_APPEND_OWNED ||
         role >= XR_LIR_STRING_OP_END) return XR_LIR_INVALID_ARGUMENT;

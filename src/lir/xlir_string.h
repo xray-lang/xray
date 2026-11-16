@@ -22,6 +22,10 @@ typedef enum XrLirStringOperation {
 } XrLirStringOperation;
 XR_FUNC bool xr_lir_string_intrinsic_valid(const XrLirIntrinsic *);
 XR_FUNC uint32_t xr_lir_string_role(const XrLirModule *, const XrLirInstructionView *);
+/* Cold root collection and home placement share this exact payload query.
+ * A binding is borrowed storage, never an owned String snapshot or an escaping
+ * Cell value. State's existing reference shape remains its authority. */
+XR_FUNC bool xr_lir_string_binding(const XrLirModule *, XrLirValue);
 XR_FUNC XrLirStatus xr_lir_string_operation(const XrLirModule *, XrLirStringOperation, uint32_t *);
 XR_FUNC XrLirStatus xr_lir_string_catalog_install(XrLirModule *, bool slices, bool arrays, bool display);
 XR_FUNC const char *xr_lir_string_native_symbol(XrLirStringOperation);

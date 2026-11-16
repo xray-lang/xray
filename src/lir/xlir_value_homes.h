@@ -94,6 +94,9 @@ typedef struct XrLirHomeWorkspace {
      * offset/temporary_offset start complete bundles; each has one actual hold
      * slot. Other workspaces keep their existing VALUE interpretation. */
     XrLirHomeWorkspaceKind kind;
+    /* A String VALUE candidate names the actual nonconsumed binding here.
+     * It has one pending/owner slot and no separate temporary; the matching
+     * STRING_OPERATION event supplies the borrowed suffix. */
     uint32_t value;
     size_t temporary_offset, temporary_first_owner;
 } XrLirHomeWorkspace;
@@ -141,6 +144,8 @@ typedef struct XrLirValueHomes {
      * a logical parameter (one-based) or an actual source SSA; their offset
      * and first_owner are SIZE_MAX. Builtin activation CELL/REF values remain
      * type zero; a constructed Cell has its own separate identity home.
+     * String CELL/REF use the same scheme with the String image row. A String
+     * STATE_REF row borrows its own actual capability (source is its SSA id).
      * These rows confer no aliasing, mutation or escaping authority. */
     const XrLirHomeBinding *bindings;
     /* Real instruction-local pending owners for allocating mutators, including

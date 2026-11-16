@@ -143,16 +143,18 @@ static bool lir_home_slice(LirHomeBuilder *b, XrLirValueHome *home, uint32_t val
     home->first_owner = home->temporary_first_owner = SIZE_MAX;
     return true;
 }
-static bool lir_home_binding_type(XrLirType type) {
+static bool lir_home_binding_type(LirHomeCompiler *c, uint32_t value, XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
-        type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
+        type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
+        xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value});
 }
 static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlanSpec *spec) {
     const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key;
     if (!type || xr_lir_value_layouts_at(b->layouts,type - 1,&key,&plan) != XR_LIR_VALUE_LAYOUT_OK ||
         xrt_value_plan_view(plan,spec) != XRT_MANAGED_OK || spec->size != sizeof(XrtManagedHeader *) ||
         spec->owned_count != 1 || !spec->owned_offsets || spec->owned_offsets[0] ||
-        spec->kind < XRT_VALUE_ARRAY_I64 || spec->kind > XRT_VALUE_MAP_STRING_I64)
+        (spec->kind != XRT_VALUE_STRING &&
+         (spec->kind < XRT_VALUE_ARRAY_I64 || spec->kind > XRT_VALUE_MAP_STRING_I64)))
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Header payload plan");
     return true;
 }
@@ -160,7 +162,7 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
     LirHomeCompiler *c = &b->compiler; bool needed = false;
     for (uint32_t v = 1; v <= c->view.value_count && !needed; ++v) {
         XrLirType type; xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,v},&type);
-        needed = lir_home_binding_type(type);
+        needed = lir_home_binding_type(c,v,type);
     }
     if (!needed) return true;
     size_t count = (size_t)c->view.value_count + 1;
@@ -172,15 +174,21 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
     for (size_t v = 0; v < count; ++v)
         bindings[v] = (XrLirHomeBinding){.offset=SIZE_MAX,.first_owner=SIZE_MAX};
     for (uint32_t p = 0; p < c->view.parameter_count; ++p)
-        if (lir_home_binding_type(c->view.parameter_types[p])) {
+        if (lir_home_binding_type(c,c->view.parameters[p],c->view.parameter_types[p])) {
             XrLirHomeBinding *binding = &bindings[c->view.parameters[p]];
             binding->kind = XR_LIR_HOME_BINDING_PARAMETER; binding->parameter = p + 1;
         }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         XrLirType type; xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,v},&type);
-        if (!lir_home_binding_type(type)) continue;
+        if (!lir_home_binding_type(c,v,type)) continue;
         XrLirValueLayoutKey key = {XR_LIR_MAP_STRING_I64,0,0};
-        if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
+        if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v})) {
+            key = (XrLirValueLayoutKey){XR_LIR_STRING,0,0};
+            if (type == XR_LIR_STATE_REF) {
+                bindings[v].kind = XR_LIR_HOME_BINDING_STATE_BORROW;
+                bindings[v].source = v;
+            }
+        } else if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
             XrLirArrayShape shape;
             if (xr_lir_array_shape_view(c->input,(XrLirValue){c->input,c->function.id,v},&shape) != XR_LIR_OK)
                 return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Array element");
@@ -215,7 +223,8 @@ static bool lir_home_binding_fact(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         else if (xr_lir_cell_value_type(b->compiler.input,type,NULL) &&
             b->homes->values[fact.target_value].cell_payload_type == row->type)
             row->kind = XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW;
-        else if ((type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL) && bindings[fact.target_value].type == row->type)
+        else if ((type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_STRING_CELL) &&
+            bindings[fact.target_value].type == row->type)
             row->kind = XR_LIR_HOME_BINDING_CELL_BORROW;
         else return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"binding source is not an activation or State binding");
         row->source = fact.target_value;
@@ -231,11 +240,18 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         (fact.array_operation == XR_LIR_ARRAY_OP_SET || fact.array_operation == XR_LIR_ARRAY_OP_PUSH);
     bool map = fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION &&
         (fact.map_operation == XR_LIR_MAP_OP_SET || fact.map_operation == XR_LIR_MAP_OP_REMOVE || fact.map_operation == XR_LIR_MAP_OP_CLEAR);
-    if (!array && !map) return true;
+    bool string = fact.kind == XR_LIR_OWNERSHIP_STRING_OPERATION;
+    if (!array && !map && !string) return true;
     if (!fact.value || fact.value > b->homes->value_count || !b->homes->bindings || !b->homes->bindings[fact.value].type)
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"mutator has no actual binding payload");
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
-        .type=b->homes->bindings[fact.value].type};
+        .type=b->homes->bindings[fact.value].type,.value=string ? fact.value : 0};
+    if (string) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+    if (string && (fact.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
+        (fact.string_operation != XR_LIR_STRING_OP_APPEND_CELL && fact.string_operation != XR_LIR_STRING_OP_APPEND_STATE &&
+         fact.string_operation != XR_LIR_STRING_OP_APPEND_REF) || !fact.target_value ||
+        fact.target_value > b->homes->value_count || b->homes->values[fact.target_value].type != workspace.type))
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"String append lost its borrowed binding or suffix");
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,workspace.type,&spec) ||
         !lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
@@ -500,7 +516,8 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         }
         XrLirHomeEvent row = {.kind=(uint32_t)fact.kind,.block=fact.block,.instruction=fact.instruction,.source=fact.value,
             .argument=fact.argument,.edge=fact.edge,.target_block=fact.target_block,.target=fact.target_value,
-            .operation=fact.cell_transport ? (uint32_t)fact.cell_operation :
+            .operation=fact.string_operation ? (uint32_t)fact.string_operation :
+                fact.cell_transport ? (uint32_t)fact.cell_operation :
                 fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
                 fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,
             .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,

@@ -10,6 +10,7 @@
 #define XLIR_OWNERSHIP_H
 #include "xlir_array.h"
 #include "xlir_map.h"
+#include "xlir_string.h"
 #include "xlir_callable_facts.h"
 
 typedef struct XrLirOwnershipPlan XrLirOwnershipPlan;
@@ -37,7 +38,8 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_VIEW_END,
     XR_LIR_OWNERSHIP_CELL_VALUE,
     XR_LIR_OWNERSHIP_CELL_OPERATION,
-    XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT
+    XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT,
+    XR_LIR_OWNERSHIP_STRING_OPERATION
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible
@@ -109,6 +111,10 @@ typedef struct XrLirOwnershipFact {
     XrLirType cell_payload;
     XrLirCellTransport cell_transport;
     uint32_t cell_scope;
+    /* Unit String append borrows value's actual binding and target_value's
+     * suffix. It neither consumes the binding nor produces an SSA owner.
+     * BINDING facts also retain exact String Ref roles when present. */
+    XrLirStringOperation string_operation;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {
