@@ -132,6 +132,7 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
     case XR_RBC_VALUE_SLICE: {
+        if (access.index==XR_LIR_SLICE_OP_CLEANUP) return true;
         const uint32_t *args=code->arguments+access.first;
         if (access.index==XR_LIR_SLICE_OP_NEW) {
             if (!rbc_value_flow_binding(state,code,args[0],false) ||

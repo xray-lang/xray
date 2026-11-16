@@ -133,7 +133,8 @@ static void slice_bytecode_retirement(void) {
         const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
         uint32_t roles=0; size_t borrowed=0;
         for (size_t n=0;n<code->access_count;++n)
-            if (code->accesses[n].operation==XR_RBC_VALUE_SLICE) roles|=1u<<code->accesses[n].index;
+            if (code->accesses[n].operation==XR_RBC_VALUE_SLICE && code->accesses[n].index<=XR_LIR_SLICE_OP_END)
+                roles|=1u<<code->accesses[n].index;
         for (uint32_t v=1;v<=code->value_count;++v) {
             const XrLirValueHome *home=&code->homes->values[v];
             if (!home->view_workspace) continue;
@@ -141,7 +142,7 @@ static void slice_bytecode_retirement(void) {
                 home->temporary_first_owner==SIZE_MAX && code->locations[v].kind==XR_RBC_VALUE_NOWHERE);
             ++borrowed;
         }
-        CHECK(roles==((1u<<XR_LIR_SLICE_OP_COUNT)-2u) && borrowed==(edges ? 5u : 3u));
+        CHECK(roles==((1u<<(XR_LIR_SLICE_OP_END+1))-2u) && borrowed==(edges ? 5u : 3u));
         // A real lease on copied function descriptors is still an external raw input.
         XrRbcFunction function=module->functions[0]; XrRbcModule raw=*module; raw.functions=&function;
         CHECK(module->function_count==1); XrRbcExecution *invalid=NULL;

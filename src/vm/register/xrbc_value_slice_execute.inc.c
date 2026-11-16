@@ -17,6 +17,13 @@ static XrtManagedStatus rbc_value_slice_storage(RbcValueActivation *activation,
 }
 static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
+    if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
+        if (!activation->frame) return XRT_MANAGED_OK;
+        const XrLirHomeEvent *event=&activation->code->homes->events[access.window-1];
+        XrtInlineValueHome destination={0};
+        XrtManagedStatus status=rbc_value_slice_storage(activation,event->view_workspace,&destination);
+        return status==XRT_MANAGED_OK ? xrt_array_slice_clear(&destination) : status;
+    }
     const uint32_t *args=activation->code->arguments+access.first;
     bool construct=access.index==XR_LIR_SLICE_OP_NEW || access.index==XR_LIR_SLICE_OP_REBORROW || access.index==XR_LIR_SLICE_OP_BIND;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,construct ? access.result : args[0]);

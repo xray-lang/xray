@@ -46,8 +46,19 @@ static bool rbc_value_slice(const XrRbcModule *module,const XrRbcValueCode *code
 static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (!xr_rbc_module_code_owner(module) || access.source || access.other ||
-        access.index<=XR_LIR_SLICE_OP_NONE || access.index>=XR_LIR_SLICE_OP_COUNT ||
-        access.first>code->argument_count || access.count>code->argument_count-access.first || !code->arguments) return false;
+        access.index<=XR_LIR_SLICE_OP_NONE || access.index>=XR_LIR_SLICE_OP_COUNT) return false;
+    if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
+        if (access.result || access.first || access.count || !code->homes || !code->homes->events ||
+            !access.window || access.window>code->homes->event_count) return false;
+        const XrLirHomeEvent *event=&code->homes->events[access.window-1];
+        if (event->kind!=XR_LIR_OWNERSHIP_VIEW_END || event->target ||
+            event->view_operation!=XR_LIR_SLICE_OP_CLEANUP ||
+            event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+            event->hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+            !rbc_value_slice(module,code,event->source)) return false;
+        return event->view_workspace==rbc_value_home(code,event->source)->view_workspace;
+    }
+    if (access.first>code->argument_count || access.count>code->argument_count-access.first || !code->arguments) return false;
     for (uint32_t p=0;p<access.count;++p) if (!rbc_value_id(code,code->arguments[access.first+p])) return false;
     bool construct=access.index==XR_LIR_SLICE_OP_NEW || access.index==XR_LIR_SLICE_OP_REBORROW || access.index==XR_LIR_SLICE_OP_BIND;
     uint32_t count=access.index==XR_LIR_SLICE_OP_NEW ? 3u : access.index==XR_LIR_SLICE_OP_REBORROW ? 4u :
