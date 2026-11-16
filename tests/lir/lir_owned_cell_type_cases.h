@@ -44,7 +44,10 @@ static void owned_cell_type_receivers(void) {
         OK(xr_lir_cell_type_view(rebuilt, cells[n], &received));
         CHECK(received.payload == shapes[n].payload && received.array_element == shapes[n].array_element);
         XrLirTypeLayout layout = {17, 4, 5, false};
-        CHECK(xr_lir_type_layout(rebuilt, cells[n], &layout) == XR_LIR_UNSUPPORTED && layout.size == 17);
+        if (!n) {
+            OK(xr_lir_type_layout(rebuilt,cells[n],&layout));
+            CHECK(layout.size == sizeof(void *) && layout.alignment == _Alignof(void *) && layout.managed);
+        } else CHECK(xr_lir_type_layout(rebuilt, cells[n], &layout) == XR_LIR_UNSUPPORTED && layout.size == 17);
     }
     OK(xr_lir_verify(rebuilt, NULL));
     xr_lir_module_destroy(rebuilt);

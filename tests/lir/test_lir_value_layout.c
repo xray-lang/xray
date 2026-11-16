@@ -213,7 +213,7 @@ static void failures_and_boundaries(void) {
         CHECK(after.bytes == baseline.bytes && after.blocks == baseline.blocks);
     }
     xrt_billing_owner_fail_after(owner.billing, SIZE_MAX);
-    const XrLirType unsupported[] = {t.cell, XR_LIR_STATE, XR_LIR_STATE_REF, XR_LIR_PTR, XR_LIR_FUNCTION_SCOPE};
+    const XrLirType unsupported[] = {XR_LIR_STATE, XR_LIR_STATE_REF, XR_LIR_PTR, XR_LIR_FUNCTION_SCOPE};
     for (size_t i = 0; i < sizeof(unsupported) / sizeof(*unsupported); ++i) {
         key.type = unsupported[i];
         CHECK(xr_lir_value_layouts_create(t.module, &key, 1, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
@@ -366,6 +366,63 @@ static void slice_builtin_admission(XrLirModule *module) {
     LIR(xr_lir_module_finish(generic, NULL)); CHECK(!lir_module_has_builtin_abi(generic));
     xr_lir_module_destroy(generic);
 }
+static void cell_layouts(void) {
+    XrLirModule *module = NULL; LIR(xr_lir_module_create(NULL,&module));
+    XrLirType cells[3] = {0}, callable = 0;
+    const XrLirType payloads[] = {XR_LIR_I64,XR_LIR_MAP_STRING_I64,XR_LIR_STRING};
+    for (size_t n = 0; n < 3; ++n) LIR(xr_lir_cell_type(module,(XrLirCellType){payloads[n],0},&cells[n]));
+    LIR(xr_lir_callable_type(module,&(XrLirCallableType){.result=XR_LIR_I64},&callable));
+    XrLirFunction target = {0};
+    LIR(xr_lir_declare_function(module,&(XrLirFunctionSpec){.name="cells",.name_length=5,
+        .parameters=cells,.parameter_count=2,.result=XR_LIR_I64},&target));
+    LIR(xr_lir_set_closure_target(module,target,(XrLirClosureTarget){callable,2,false}));
+    LIR(xr_lir_define_function(module,target));
+    XrLirBlock entry = {0}; XrLirValue input = {0}, result = {0};
+    LIR(xr_lir_add_block(module,target,NULL,0,&entry)); LIR(xr_lir_set_entry(module,target,entry));
+    LIR(xr_lir_function_parameter(module,target,0,&input));
+    LIR(xr_lir_emit_value(module,entry,&(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_I64,
+        .operands=&input,.operand_count=1},&result));
+    LIR(xr_lir_set_terminator(module,entry,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&result,.operand_count=1}));
+    LIR(xr_lir_module_finish(module,NULL));
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    XrLirValueLayoutKey roots[] = {{cells[0],0,0},{cells[1],0,0},{callable,0,target.id}};
+    XrLirValueLayouts *set = NULL;
+    XrtBillingStats baseline = xrt_billing_owner_stats(owner.billing);
+    LAYOUT(xr_lir_value_layouts_create(module,roots,3,owner.billing,&set));
+    size_t allocations = xrt_billing_owner_stats(owner.billing).allocations - baseline.allocations;
+    for (size_t n = 0; n < 2; ++n) {
+        XrtValuePlanSpec spec = view(get(set,cells[n]));
+        CHECK(spec.kind == XRT_VALUE_CELL && spec.size == sizeof(void *) && spec.alignment == alignof(void *));
+        CHECK(spec.owned_count == 1 && !spec.owned_offsets[0] && spec.element == get(set,payloads[n]));
+    }
+    const XrLirOwnershipTypeFact *facts = NULL; uint32_t count = 0;
+    LAYOUT(xr_lir_value_layouts_ownership(set,&facts,&count));
+    CHECK(count == 2 && facts[0].type == cells[0] && facts[1].type == cells[1] && facts[0].has_owned && facts[1].has_owned);
+    const XrtValuePlan *environment = NULL;
+    LAYOUT(xr_lir_value_layouts_get(set,roots[2],&environment));
+    XrtValuePlanSpec env = view(environment);
+    CHECK(env.kind == XRT_VALUE_ENVIRONMENT && env.capture_count == 2 && env.owned_count == 2 &&
+        env.captures[0].type == get(set,cells[0]) && env.captures[1].type == get(set,cells[1]) &&
+        env.captures[0].offset == 0 && env.captures[1].offset == sizeof(void *) &&
+        env.owned_offsets[0] == 0 && env.owned_offsets[1] == sizeof(void *));
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)environment));
+    xr_lir_value_layouts_destroy(set); set = NULL;
+    baseline = xrt_billing_owner_stats(owner.billing);
+    for (size_t point = 0; point < allocations; ++point) {
+        xrt_billing_owner_fail_after(owner.billing,point);
+        CHECK(xr_lir_value_layouts_create(module,roots,3,owner.billing,&set) == XR_LIR_VALUE_LAYOUT_OOM && !set);
+        XrtBillingStats after = xrt_billing_owner_stats(owner.billing);
+        CHECK(after.bytes == baseline.bytes && after.blocks == baseline.blocks);
+    }
+    xrt_billing_owner_fail_after(owner.billing,SIZE_MAX);
+    XrLirValueLayoutKey rejected = {cells[2],0,0};
+    CHECK(xr_lir_value_layouts_create(module,&rejected,1,owner.billing,&set) == XR_LIR_VALUE_LAYOUT_UNSUPPORTED && !set);
+    xr_lir_module_destroy(module); owner_drop(&owner); CHECK(!atomic_load(&owner.audit.final));
+    env = view(environment); CHECK(env.capture_count == 2 && view(env.captures[1].type).kind == XRT_VALUE_CELL &&
+        view(view(env.captures[1].type).element).kind == XRT_VALUE_MAP_STRING_I64);
+    xrt_value_plan_drop((XrtValuePlan *)environment); CHECK(atomic_load(&owner.audit.final) == 1);
+}
 static void slice_layouts(void) {
     XrLirModule *module = NULL, *received = NULL;
     LIR(xr_lir_module_create(NULL, &module));
@@ -427,7 +484,7 @@ static void slice_layouts(void) {
 }
 int main(void) {
     natural_layouts(); creator_retirement(); failures_and_boundaries(); inline_overflow(); callable_layouts();
-    slice_layouts();
+    slice_layouts(); cell_layouts();
     puts("Admitted LIR value layouts: natural offsets, independent plans, billed rollback and real inline owners passed");
     return 0;
 }

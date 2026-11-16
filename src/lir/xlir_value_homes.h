@@ -112,6 +112,7 @@ typedef struct XrLirHomeEvent {
     /* One-based receiving Cell and payload image ids, not compiler type ids. */
     uint32_t cell_type, cell_payload_type;
     XrLirCellTransport cell_transport;
+    uint32_t cell_scope;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {
@@ -132,7 +133,8 @@ typedef struct XrLirValueHomes {
     /* SSA indexed, including zero. type names the exact payload image row,
      * not a heap Cell. Only LOCAL owns a real Header slot. Other rows borrow
      * a logical parameter (one-based) or an actual source SSA; their offset
-     * and first_owner are SIZE_MAX. Ordinary values[CELL/REF] remain type zero.
+     * and first_owner are SIZE_MAX. Builtin activation CELL/REF values remain
+     * type zero; a constructed Cell has its own separate identity home.
      * These rows confer no aliasing, mutation or escaping authority. */
     const XrLirHomeBinding *bindings;
     /* Real instruction-local pending owners for allocating mutators, including

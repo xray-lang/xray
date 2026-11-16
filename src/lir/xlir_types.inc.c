@@ -109,7 +109,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
     }
     if (shape.kind == XR_LIR_TYPE_CELL) {
         if (shape.count || shape.element >= XR_LIR_TYPE_COUNT + ordinal) return false;
-        *output = (XrLirTypeLayout){0, 1, 0, true};
+        *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
     if (shape.kind != XR_LIR_TYPE_NULLABLE || shape.count ||
@@ -335,7 +335,8 @@ XR_FUNC XrLirStatus xr_lir_type_layout(const XrLirModule *m, XrLirType type,
     XrLirTypeView view;
     XrLirStatus status = xr_lir_type_view(m, type, &view);
     if (!output || status != XR_LIR_OK) return XR_LIR_INVALID_ARGUMENT;
-    if (view.kind == XR_LIR_TYPE_CALLABLE || view.kind == XR_LIR_TYPE_CELL) return XR_LIR_UNSUPPORTED;
+    if (view.kind == XR_LIR_TYPE_CALLABLE ||
+        (view.kind == XR_LIR_TYPE_CELL && !xr_lir_cell_value_type(m,type,NULL))) return XR_LIR_UNSUPPORTED;
     XrLirTypeLayout layout = {0, 1, 1, false};
     if (view.kind != XR_LIR_TYPE_BUILTIN) {
         layout = m->types[type - XR_LIR_TYPE_COUNT].layout;

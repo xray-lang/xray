@@ -16,9 +16,7 @@ static bool lir_scope_contains(const uint32_t *parents, uint32_t count,
 }
 static bool lir_scope_callable(const XrLirModule *m, XrLirType type) {
     XrLirCallableType signature;
-    XrLirCellType cell;
-    if (xr_lir_cell_type_view(m, type, &cell) == XR_LIR_OK)
-        return cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64;
+    if (xr_lir_cell_value_type(m,type,NULL)) return true;
     return type >= XR_LIR_TYPE_COUNT && xr_lir_callable_type_view(m, type, &signature) == XR_LIR_OK;
 }
 /* Frame storage belongs to the activation, while a captured canonical Cell
@@ -74,8 +72,7 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
     parents[0] = 0;
     bool captured_cells = false;
     for (uint32_t v = 0; v < f->value_count && !captured_cells; ++v) {
-        XrLirCellType cell;
-        captured_cells = xr_lir_cell_type_view(m, f->values[v].type, &cell) == XR_LIR_OK;
+        captured_cells = xr_lir_cell_value_type(m,f->values[v].type,NULL);
     }
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (lir_scope_callable(m, f->parameter_types[p])) owners[f->parameters[p]] = 0;
@@ -161,8 +158,16 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
             }
         }
     }
+    XrLirCallableFacts *temporary = NULL;
+    XrLirCallableFacts **destination = facts ? facts : captured_cells ? &temporary : NULL;
     XrLirStatus status = lir_callable_facts_capture(m, f, function,
-        (LirCallableGeometry){parents, owners, floors}, facts);
+        (LirCallableGeometry){parents, owners, floors}, destination);
+    if (status == XR_LIR_OK && captured_cells) {
+        XrLirCallableFunctionFacts rows = {0};
+        status = xr_lir_callable_facts_function(*destination,function,&rows);
+        if (status == XR_LIR_OK) status = lir_scoped_cells_verify(m,f,function,graph,rows,diagnostic);
+    }
+    xr_lir_callable_facts_destroy(temporary);
     xr_free(storage);
     return status;
 invalid:

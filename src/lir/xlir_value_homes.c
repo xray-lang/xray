@@ -64,7 +64,8 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
         if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return false;
         plain = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE ||
-            shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_SLICE;
+            shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_SLICE ||
+            xr_lir_cell_value_type(module,type,NULL);
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
     *key = (XrLirValueLayoutKey){type, 0, 0};
@@ -118,7 +119,8 @@ static bool lir_home_temporary(LirHomeBuilder *b, XrLirValueHome *home) {
     if (xr_lir_value_layouts_at(b->layouts, home->type - 1, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
         xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned temporary lost its receiving layout");
-    bool borrowed = home->transport == XR_LIR_CALLABLE_TRANSPORT_FRAME || home->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW;
+    bool borrowed = home->transport == XR_LIR_CALLABLE_TRANSPORT_FRAME || home->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW ||
+        home->cell_transport == XR_LIR_CELL_TRANSPORT_BORROW;
     if (borrowed) { spec.owned_count = 0; spec.owned_offsets = NULL; }
     if (!lir_home_reserve(b, &spec, &home->temporary_offset, &home->temporary_first_owner)) return false;
     if (borrowed) home->temporary_first_owner = SIZE_MAX;
@@ -210,6 +212,9 @@ static bool lir_home_binding_fact(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         XrLirType type;
         xr_lir_value_type(b->compiler.input,(XrLirValue){b->compiler.input,b->compiler.function.id,fact.target_value},&type);
         if (type == XR_LIR_STATE_REF) row->kind = XR_LIR_HOME_BINDING_STATE_BORROW;
+        else if (xr_lir_cell_value_type(b->compiler.input,type,NULL) &&
+            b->homes->values[fact.target_value].cell_payload_type == row->type)
+            row->kind = XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW;
         else if ((type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL) && bindings[fact.target_value].type == row->type)
             row->kind = XR_LIR_HOME_BINDING_CELL_BORROW;
         else return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"binding source is not an activation or State binding");
@@ -244,6 +249,18 @@ static bool lir_home_callable_rows(LirHomeBuilder *b, const XrLirOwnershipPlan *
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(ownership,function.fact_offset + n,&fact) != XR_LIR_OK)
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"callable transport fact disappeared");
+        if (fact.kind == XR_LIR_OWNERSHIP_CELL_VALUE) {
+            XrLirCellType cell;
+            if (!fact.value || fact.value > b->compiler.view.value_count ||
+                !xr_lir_cell_value_type(b->compiler.input,fact.type,&cell) || cell.payload != fact.cell_payload ||
+                (fact.cell_transport != XR_LIR_CELL_TRANSPORT_BORROW && fact.cell_transport != XR_LIR_CELL_TRANSPORT_OWNED))
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Cell transport lost its exact payload or source");
+            XrtValuePlanSpec payload; uint32_t ordinal;
+            if (!lir_home_spec(b,(XrLirValueLayoutKey){cell.payload,0,0},&payload,&ordinal)) return false;
+            values[fact.value].cell_payload_type = ordinal + 1;
+            values[fact.value].cell_transport = fact.cell_transport;
+            continue;
+        }
         if (fact.kind != XR_LIR_OWNERSHIP_CALLABLE_VALUE) continue;
         if (!fact.value || fact.value > b->compiler.view.value_count || fact.target_value > b->compiler.view.value_count)
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"callable transport names an invalid SSA value");
@@ -291,8 +308,12 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
         XrLirValueHome *home = &values[v];
         home->type = ordinal + 1; home->size = spec.size; home->owner_count = spec.owned_count;
         bool callable = spec.kind == XRT_VALUE_FUNCTION;
+        bool cell = spec.kind == XRT_VALUE_CELL;
         bool borrowed = callable && (home->transport == XR_LIR_CALLABLE_TRANSPORT_FRAME ||
             home->transport == XR_LIR_CALLABLE_TRANSPORT_BORROW);
+        borrowed |= cell && home->cell_transport == XR_LIR_CELL_TRANSPORT_BORROW;
+        if (cell && (!home->cell_transport || !home->cell_payload_type))
+            return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Cell value has no verified identity transport");
         if (callable && !home->transport)
             return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"callable value has no verified transport fact");
         if (borrowed) { home->owner_count = 0; spec.owned_count = 0; spec.owned_offsets = NULL; }
@@ -457,11 +478,19 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         }
         XrLirHomeEvent row = {.kind=(uint32_t)fact.kind,.block=fact.block,.instruction=fact.instruction,.source=fact.value,
             .argument=fact.argument,.edge=fact.edge,.target_block=fact.target_block,.target=fact.target_value,
-            .operation=fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
+            .operation=fact.cell_transport ? (uint32_t)fact.cell_operation :
+                fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
                 fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,
             .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,
             .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize,.transfer_mode=fact.transfer_mode,
-            .view_operation=fact.view_operation,.view_workspace=view_workspace,.hold_transfer_mode=fact.hold_transfer_mode};
+            .view_operation=fact.view_operation,.view_workspace=view_workspace,.hold_transfer_mode=fact.hold_transfer_mode,
+            .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope};
+        if (fact.cell_transport) {
+            if (!fact.value || fact.value > b->homes->value_count || !b->homes->values[fact.value].cell_payload_type)
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Cell event lost its actual identity home");
+            row.cell_type = b->homes->values[fact.value].type;
+            row.cell_payload_type = b->homes->values[fact.value].cell_payload_type;
+        }
         if (!lir_home_append(b, &b->events, &row)) return false;
     }
     for (uint32_t v = 1; b->homes->bindings && v <= b->homes->value_count; ++v) {

@@ -572,7 +572,9 @@ static void callable_targets_and_join(unsigned shape) {
 }
 #include "lir_slice_homes_cases.h"
 #include "lir_slice_call_cases.h"
+#include "lir_scoped_cell_homes_cases.h"
 int main(void) {
+    scoped_cells();
     slice_homes();
     slice_callback_frontier();
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};

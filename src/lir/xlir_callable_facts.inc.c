@@ -53,6 +53,7 @@ static bool lir_function_has_callables(const XrLirModule *m, const XrLirFunction
     if (xr_lir_callable_type_view(m, f->result, &signature) == XR_LIR_OK) return true;
     for (uint32_t v = 0; v < f->value_count; ++v)
         if (f->values[v].type == XR_LIR_FUNCTION_SCOPE ||
+            xr_lir_cell_value_type(m, f->values[v].type, NULL) ||
             xr_lir_callable_type_view(m, f->values[v].type, &signature) == XR_LIR_OK) return true;
     return false;
 }
@@ -162,7 +163,7 @@ static XrLirStatus lir_callable_transports(const XrLirFunctionData *f, XrLirCall
     for (size_t v = 0; v < count; ++v) heads[v] = SIZE_MAX;
     for (uint32_t i = 0; i < f->value_count; ++i) {
         uint32_t v = i + 1;
-        if (!rows[v].type || rows[v].type == XR_LIR_FUNCTION_SCOPE) continue;
+        if (rows[v].kind != XR_LIR_SCOPED_VALUE_FUNCTION) continue;
         if (rows[v].parameter) masks[v] = 2;
         else if (rows[v].operation == XR_LIR_FUNCTION_REF)
             masks[v] = rows[v].materialize || rows[v].constructor_storage == XR_LIR_CLOSURE_OWNED ? 4 : 1;
@@ -177,7 +178,7 @@ static XrLirStatus lir_callable_transports(const XrLirFunctionData *f, XrLirCall
             const XrLirEdgeView *edge = &end->edges[e];
             const XrLirBlockData *target = &f->blocks[edge->target - 1];
             for (uint32_t p = 0; p < edge->argument_count; ++p)
-                if (rows[target->parameters[p]].type && rows[target->parameters[p]].type != XR_LIR_FUNCTION_SCOPE)
+                if (rows[target->parameters[p]].kind == XR_LIR_SCOPED_VALUE_FUNCTION)
                     lir_callable_flow_edge(flow,&used,heads,edge->arguments[p],target->parameters[p]);
         }
     }
@@ -192,7 +193,7 @@ static XrLirStatus lir_callable_transports(const XrLirFunctionData *f, XrLirCall
     }
     for (uint32_t i = 0; i < f->value_count; ++i) {
         uint32_t v = i + 1; uint8_t mask = masks[v];
-        if (!rows[v].type || rows[v].type == XR_LIR_FUNCTION_SCOPE) continue;
+        if (rows[v].kind != XR_LIR_SCOPED_VALUE_FUNCTION) continue;
         rows[v].transport = mask == 4 ? XR_LIR_CALLABLE_TRANSPORT_OWNED :
             mask == 1 ? XR_LIR_CALLABLE_TRANSPORT_FRAME :
             mask == 2 || mask == 3 ? XR_LIR_CALLABLE_TRANSPORT_BORROW : XR_LIR_CALLABLE_TRANSPORT_MIXED;
@@ -231,14 +232,22 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     for (uint32_t index = 0; index < f->value_count; ++index) {
         uint32_t v = index + 1;
         XrLirCallableType signature;
+        XrLirCellType cell;
         bool callable = xr_lir_callable_type_view(m, f->values[v - 1].type, &signature) == XR_LIR_OK;
-        if (!callable && f->values[v - 1].type != XR_LIR_FUNCTION_SCOPE) {
+        bool identity = xr_lir_cell_value_type(m, f->values[v - 1].type, &cell);
+        if (!callable && !identity && f->values[v - 1].type != XR_LIR_FUNCTION_SCOPE) {
             rows[v] = (XrLirCallableValueFact){0}; continue;
         }
         XrLirCallableValueFact *row = &rows[v];
+        row->kind = callable ? XR_LIR_SCOPED_VALUE_FUNCTION : identity ? XR_LIR_SCOPED_VALUE_CELL : XR_LIR_SCOPED_VALUE_SCOPE;
         row->type = f->values[v - 1].type; row->origin = v; row->frame_floor = UINT32_MAX;
         row->block = f->values[v - 1].block;
-        row->owner_scope = callable && geometry.owners ? geometry.owners[v] : 0;
+        row->owner_scope = (callable || identity) && geometry.owners ? geometry.owners[v] : 0;
+        if (identity) {
+            row->persistent = false;
+            row->cell_payload = cell.payload;
+            row->cell_transport = row->parameter ? XR_LIR_CELL_TRANSPORT_BORROW : XR_LIR_CELL_TRANSPORT_OWNED;
+        }
         const XrLirInstructionView *op = xr_lir_internal_value_definition(f, v);
         if (op) {
             row->operation = op->op;
@@ -261,6 +270,8 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
             row->persistent = lir_callable_persistence_seed(f, v, UINT64_MAX, &links[v]);
             row->alias_source = links[v];
         }
+        if (identity && op && (op->op == XR_LIR_FUNCTION_BIND || op->op == XR_LIR_FUNCTION_SCOPE_LEAVE ||
+            op->op == XR_LIR_VALUE_RETAIN)) row->alias_source = op->operands[op->operand_count - 1];
     }
     XR_DCHECK(next_capture == captures, "every constructor operand has one owned capture ordinal");
     bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path, colors);

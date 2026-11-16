@@ -121,6 +121,7 @@ static bool lir_plan_value(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
 /* Both lifetime checking and event collection consume this transfer identity. */
 static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v) {
+    if (v->operand_count && xr_lir_cell_value_type(m,f->values[v->operands[0] - 1].type,NULL)) return 0;
     if (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(m,f->result))
         return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
     if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
@@ -156,8 +157,7 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     return lir_plan_add(plan,fact);
 }
 static bool lir_plan_callable_row(const XrLirCallableFunctionFacts *facts, uint32_t value) {
-    return value && value <= facts->value_count && facts->values[value].type &&
-        facts->values[value].type != XR_LIR_FUNCTION_SCOPE;
+    return value && value <= facts->value_count && facts->values[value].kind == XR_LIR_SCOPED_VALUE_FUNCTION;
 }
 static bool lir_plan_callable_owned(const XrLirCallableFunctionFacts *facts, uint32_t value) {
     return lir_plan_callable_row(facts,value) && facts->values[value].transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
@@ -267,6 +267,7 @@ static XrLirStatus lir_plan_callables(XrLirOwnershipPlan *plan, const XrLirFunct
 }
 /* The verifier establishes ownership once. This one deterministic producer
  * records already checked positions without rebuilding graphs or owner sets. */
+#include "xlir_cell_ownership.inc.c"
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
     const XrLirCallableFacts *callables, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
@@ -279,6 +280,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL) continue;
         XrLirStatus callable_status = lir_plan_callables(plan,f,function,callables);
         if (callable_status != XR_LIR_OK) return callable_status;
+        XrLirStatus cell_status = lir_plan_cells(plan,f,function,callables);
+        if (cell_status != XR_LIR_OK) return cell_status;
         for (uint32_t p = 0; p < f->parameter_count; ++p)
             if (lir_managed_value(m,f->parameter_types[p]) && !lir_plan_value(plan,f,
                 XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
@@ -397,7 +400,9 @@ static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
     for (uint32_t i = 0; i < request->type_count; ++i) {
         XrLirTypeView view;
         if (xr_lir_type_view(m, request->types[i].type, &view) != XR_LIR_OK ||
-            (view.kind != XR_LIR_TYPE_RECORD && view.kind != XR_LIR_TYPE_NULLABLE) ||
+            (view.kind != XR_LIR_TYPE_RECORD && view.kind != XR_LIR_TYPE_NULLABLE &&
+                !xr_lir_cell_value_type(m,request->types[i].type,NULL)) ||
+            (view.kind == XR_LIR_TYPE_CELL && !request->types[i].has_owned) ||
             (i && request->types[i - 1].type >= request->types[i].type))
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid constructed ownership facts");
     }
