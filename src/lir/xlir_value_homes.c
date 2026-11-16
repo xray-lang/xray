@@ -7,6 +7,7 @@
  * xlir_value_homes.c - Shared cold home placement from sealed physical facts
  */
 #include "xlir_value_homes.h"
+#include "xlir_state.h"
 #include "base/xmalloc.h"
 #include "xray_native_array_slice.h"
 #include <stdlib.h>
@@ -143,10 +144,16 @@ static bool lir_home_slice(LirHomeBuilder *b, XrLirValueHome *home, uint32_t val
     home->first_owner = home->temporary_first_owner = SIZE_MAX;
     return true;
 }
+static bool lir_home_map_state_binding(LirHomeCompiler *c, uint32_t value, XrLirType type) {
+    XrLirStateReference reference;
+    return type == XR_LIR_STATE_REF && xr_lir_state_reference_view(c->input,
+        (XrLirValue){c->input,c->function.id,value},&reference) == XR_LIR_OK &&
+        reference.payload == XR_LIR_MAP_STRING_I64;
+}
 static bool lir_home_binding_type(LirHomeCompiler *c, uint32_t value, XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
-        xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value});
+        xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value}) || lir_home_map_state_binding(c,value,type);
 }
 static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlanSpec *spec) {
     const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key;
@@ -193,6 +200,9 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
             if (xr_lir_array_shape_view(c->input,(XrLirValue){c->input,c->function.id,v},&shape) != XR_LIR_OK)
                 return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Array element");
             key = (XrLirValueLayoutKey){XR_LIR_ARRAY,shape.element,0};
+        } else if (lir_home_map_state_binding(c,v,type)) {
+            bindings[v].kind = XR_LIR_HOME_BINDING_STATE_BORROW;
+            bindings[v].source = v;
         }
         XrtValuePlanSpec spec; uint32_t ordinal;
         if (!lir_home_spec(b,key,&spec,&ordinal)) return false;
@@ -249,7 +259,7 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     uint32_t type = b->homes->bindings[fact.value].type;
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,type,&spec)) return false;
-    if (borrowed_copy && spec.kind != XRT_VALUE_STRING) return true;
+    if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64) return true;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
         .type=type,.value=string || borrowed_copy ? fact.value : 0};
     if (string || borrowed_copy) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
@@ -260,7 +270,7 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"String append lost its borrowed binding or suffix");
     if (borrowed_copy && (b->homes->values[fact.target_value].type != workspace.type ||
         b->homes->values[fact.target_value].offset != SIZE_MAX || b->homes->values[fact.target_value].first_owner != SIZE_MAX))
-        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed String copy lost its incoming formal");
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed binding copy lost its incoming formal");
     if (!lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
     return lir_home_append(b,&b->workspaces,&workspace);
 }

@@ -158,7 +158,7 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     fact.array_element=f->values[fact.value - 1].array_element;
     return lir_plan_add(plan,fact);
 }
-static bool lir_plan_string_binding(XrLirOwnershipPlan *plan, const XrLirModule *m,
+static bool lir_plan_payload_binding(XrLirOwnershipPlan *plan, const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v, XrLirOwnershipFact fact) {
     XrLirStringOperation role = (XrLirStringOperation)xr_lir_string_role(m,v);
     fact.string_operation = role;
@@ -173,7 +173,8 @@ static bool lir_plan_string_binding(XrLirOwnershipPlan *plan, const XrLirModule 
         fact.kind = XR_LIR_OWNERSHIP_STRING_OPERATION; fact.value = v->operands[0]; fact.target_value = v->operands[1];
         fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
     } else if ((v->op == XR_LIR_STATE_READ || v->op == XR_LIR_STATE_WRITE) &&
-        f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_STRING) {
+        (f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_STRING ||
+         f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_MAP_STRING_I64)) {
         fact.kind = v->op == XR_LIR_STATE_READ ? XR_LIR_OWNERSHIP_BINDING_READ : XR_LIR_OWNERSHIP_BINDING_WRITE;
         fact.value = v->operands[0]; fact.target_value = v->op == XR_LIR_STATE_READ ? v->result : v->operands[1];
     } else return true;
@@ -333,7 +334,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                         return XR_LIR_OUT_OF_MEMORY;
                 }
                 if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
-                if (!lir_plan_string_binding(plan,m,f,v,(XrLirOwnershipFact){.function=function,
+                if (!lir_plan_payload_binding(plan,m,f,v,(XrLirOwnershipFact){.function=function,
                     .block=b + 1,.instruction=i + 1})) return XR_LIR_OUT_OF_MEMORY;
                 XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
                 for (uint32_t a = 0; a < v->operand_count; ++a) {

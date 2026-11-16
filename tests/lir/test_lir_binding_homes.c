@@ -130,6 +130,46 @@ static XrLirModule *string_state_fixture(bool borrowed_rhs) {
     ca_effect(&c,block,XR_LIR_STRING_DROP,text); ca_effect(&c,block,XR_LIR_MODULE_READY,state);
     ca_return(&c,block,(XrLirValue){0}); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
 }
+static XrLirModule *borrowed_map_fixture(bool writes) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_map_catalog_install(c.module,false,false,false,false,false));
+    XrLirType parameters[]={XR_LIR_MAP_STRING_I64_CELL,XR_LIR_MAP_STRING_I64_REF,XR_LIR_MAP_STRING_I64,XR_LIR_STATE};
+    if (writes) {
+        XrLirStateModule module={0};
+        XrLirStateSlot slot={.payload=XR_LIR_MAP_STRING_I64,.mutable=true,.size=sizeof(void *),.alignment=_Alignof(void *)};
+        OK(xr_lir_set_state_layout(c.module,&(XrLirStateLayout){.modules=&module,.module_count=1,.slots=&slot,
+            .slot_count=1,.payload_size=sizeof(void *),.payload_alignment=_Alignof(void *)}));
+    }
+    XrLirFunction function={0}; XrLirFunctionSpec spec={.name="borrowed_map",.name_length=12,
+        .parameters=writes ? parameters : &parameters[2],.parameter_count=writes ? 4u : 1u,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,&function));
+    if (writes) OK(xr_lir_set_state_entry(c.module,function));
+    OK(xr_lir_define_function(c.module,function)); XrLirBlock block={0};
+    OK(xr_lir_add_block(c.module,function,NULL,0,&block)); OK(xr_lir_set_entry(c.module,function,block));
+    XrLirValue inputs[4]={{0}};
+    for (uint32_t p=0;p<spec.parameter_count;++p) OK(xr_lir_function_parameter(c.module,function,p,&inputs[p]));
+    XrLirValue incoming=inputs[writes ? 2 : 0];
+    if (writes) {
+        XrLirValue cell=ca_value(&c,block,XR_LIR_CELL_NEW,XR_LIR_MAP_STRING_I64_CELL,&incoming,1);
+        XrLirValue args[]={inputs[0],incoming};
+        XrLirInstruction write={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=args,.operand_count=2};
+        OK(xr_lir_emit_effect(c.module,block,&write));
+        args[0]=inputs[1]; write.op=XR_LIR_MAP_REF_WRITE; OK(xr_lir_emit_effect(c.module,block,&write));
+        XrLirValue snapshot=ca_value(&c,block,XR_LIR_CELL_READ,XR_LIR_MAP_STRING_I64,&cell,1);
+        ca_effect(&c,block,XR_LIR_MAP_DROP,snapshot); ca_effect(&c,block,XR_LIR_MAP_CELL_DROP,cell);
+        ca_effect(&c,block,XR_LIR_MODULE_BEGIN,inputs[3]);
+        snapshot=ca_value(&c,block,XR_LIR_MAP_RETAIN,XR_LIR_MAP_STRING_I64,&incoming,1);
+        args[0]=inputs[3]; args[1]=snapshot;
+        XrLirValue state=ca_value(&c,block,XR_LIR_STATE_CONSTRUCT,XR_LIR_STATE_REF,args,2);
+        ca_effect(&c,block,XR_LIR_STATE_PUBLISH,state); ca_effect(&c,block,XR_LIR_MAP_DROP,snapshot);
+        args[0]=state; args[1]=incoming; write.op=XR_LIR_STATE_WRITE;
+        OK(xr_lir_emit_effect(c.module,block,&write));
+        snapshot=ca_value(&c,block,XR_LIR_STATE_READ,XR_LIR_MAP_STRING_I64,&state,1);
+        ca_effect(&c,block,XR_LIR_MAP_DROP,snapshot); ca_effect(&c,block,XR_LIR_MODULE_READY,inputs[3]);
+    }
+    ca_return(&c,block,map_fixture_call(&c,block,XR_LIR_MAP_OP_LEN,XR_LIR_I64,&incoming,1));
+    OK(xr_lir_module_finish(c.module,NULL)); return c.module;
+}
 static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
     XrLirType result,const XrLirValue *args,uint32_t count) {
     uint32_t id=0;
@@ -265,6 +305,66 @@ static void *home_resize(void *old,size_t bytes) {
 #define xr_realloc(old,bytes) home_resize(old,bytes)
 #define xr_free(memory) home_free(memory)
 #include "lir/xlir_value_homes.c"
+
+static void borrowed_map_stages(void) {
+    for (unsigned writes=0;writes<2;++writes) {
+        XrLirModule *module=borrowed_map_fixture(writes!=0); XrtBillingOwner *billing=NULL;
+        MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+        XrLirValueLayoutKey roots[]={{XR_LIR_MAP_STRING_I64,0,0},{XR_LIR_I64,0,0}};
+        XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(module,roots,2,billing,&set));
+        XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=module},&plan,NULL));
+        XrLirValueHomes *homes=NULL; XrLirValueHomesRequest request={module,{module,1},set,plan};
+        attempts=0; HOME(xr_lir_value_homes_create(&request,&homes)); size_t sites=attempts;
+        uint32_t incoming=writes ? 3u : 1u;
+        const XrLirValueHome *formal=&homes->values[incoming];
+        CHECK(formal->parameter==incoming && formal->size==sizeof(XrtManagedHeader *) &&
+            formal->offset==SIZE_MAX && formal->first_owner==SIZE_MAX &&
+            formal->temporary_offset==SIZE_MAX && formal->temporary_first_owner==SIZE_MAX);
+        if (!writes) CHECK(!homes->workspace_count && !homes->owned_frame_needed && !homes->frame.slot_count && !homes->frame.payload_size);
+        else {
+            CHECK(homes->workspace_count==4 && homes->owned_frame_needed);
+            unsigned kinds_seen=0; bool state_write=false,state_read=false;
+            for (size_t w=0;w<homes->workspace_count;++w) {
+                const XrLirHomeWorkspace *stage=&homes->workspaces[w]; size_t matching=0;
+                CHECK(stage->kind==XR_LIR_HOME_WORKSPACE_VALUE && stage->type==formal->type &&
+                    stage->temporary_offset==SIZE_MAX && stage->temporary_first_owner==SIZE_MAX &&
+                    stage->first_owner<homes->frame.slot_count && homes->frame.owned_offsets[stage->first_owner]==stage->offset);
+                for (size_t e=0;e<homes->event_count;++e) {
+                    const XrLirHomeEvent *event=&homes->events[e];
+                    if (event->block!=stage->block || event->instruction!=stage->instruction || event->source!=stage->value) continue;
+                    CHECK((event->kind==XR_LIR_OWNERSHIP_BINDING_NEW || event->kind==XR_LIR_OWNERSHIP_BINDING_WRITE) &&
+                        event->target==incoming && homes->bindings[event->source].type==stage->type); ++matching;
+                    XrLirInstructionView op; OK(xr_lir_instruction_view(module,(XrLirBlock){module,1,event->block},event->instruction-1,&op));
+                    kinds_seen|=op.op==XR_LIR_CELL_NEW ? 1u : op.op==XR_LIR_CELL_WRITE ? 2u :
+                        op.op==XR_LIR_MAP_REF_WRITE ? 4u : op.op==XR_LIR_STATE_WRITE ? 8u : 0u;
+                    if (op.op==XR_LIR_STATE_WRITE) {
+                        const XrLirHomeBinding *binding=&homes->bindings[event->source];
+                        CHECK(binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==event->source &&
+                            binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX); state_write=true;
+                    }
+                    const XrLirHomeBinding *binding=&homes->bindings[event->source];
+                    CHECK(binding->first_owner==SIZE_MAX || binding->first_owner!=stage->first_owner);
+                }
+                CHECK(matching==1);
+                for (size_t v=1;v<=homes->value_count;++v) CHECK(homes->values[v].first_owner!=stage->first_owner &&
+                    homes->values[v].temporary_first_owner!=stage->first_owner);
+            }
+            for (size_t e=0;e<homes->event_count;++e) {
+                const XrLirHomeEvent *event=&homes->events[e];
+                state_read|=event->kind==XR_LIR_OWNERSHIP_BINDING_READ &&
+                    homes->bindings[event->source].kind==XR_LIR_HOME_BINDING_STATE_BORROW;
+            }
+            CHECK(kinds_seen==15 && state_write && state_read);
+        }
+        xr_lir_value_homes_destroy(homes); homes=NULL; CHECK(!live);
+        for (size_t point=1;point<=sites;++point) {
+            attempts=0; fail_at=point;
+            CHECK(xr_lir_value_homes_create(&request,&homes)==XR_LIR_VALUE_LAYOUT_OOM && !homes && !live);
+        }
+        fail_at=SIZE_MAX; xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set); xr_lir_module_destroy(module);
+        CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+    }
+}
 
 static XrLirValueLayouts *layouts(XrLirModule *module,XrtBillingOwner *billing) {
     XrLirValueLayoutKey roots[32]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_U8,0,0},{XR_LIR_U64,0,0},
@@ -744,6 +844,7 @@ static void callable_targets_and_join(unsigned shape) {
 #include "lir_slice_call_cases.h"
 #include "lir_scoped_cell_homes_cases.h"
 int main(void) {
+    borrowed_map_stages();
     string_projections();
     scoped_cells();
     slice_homes();
