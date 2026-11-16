@@ -30,6 +30,8 @@ REQUIRED = (
     # Physical metadata, allocator and foreign-thread owner retirement.
     "native_managed_kernel", "native_managed_root", "native_backing", "native_string_backing_ops",
     "native_place", "native_value_plan", "native_managed_status", "native_capture_backing", "rbc_code_owner",
+    # A real allocator can clear State before or after a Slice keeper is published.
+    "native_array_slice",
     # Shared scalar decoding and text must retain independent native/RBC witnesses.
     "native_f64_i64_conversion", "native_f64_text",
 )
