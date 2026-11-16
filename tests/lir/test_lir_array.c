@@ -605,16 +605,20 @@ static void scalar_edge_structure(const char *text,XrLirModule *module,XrLirFunc
 static XrLirSliceCleanupMode cleanup_proof_mode(SliceCleanupFixture c) {
     XrLirOwnershipPlan *plan=NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){c.module,NULL,0},&plan,NULL));
-    bool found=false;XrLirSliceCleanupMode mode=XR_LIR_SLICE_CLEANUP_CLEAR;
+    bool found=false;uint32_t formal=0;XrLirSliceCleanupMode mode=XR_LIR_SLICE_CLEANUP_CLEAR;
     for (uint32_t n=0;n<xr_lir_ownership_fact_count(plan);++n) {
         XrLirOwnershipFact fact;OK(xr_lir_ownership_fact_at(plan,n,&fact));
+        if (fact.view_operation==XR_LIR_SLICE_OP_FORMAL_CLEANUP) {
+            CHECK(fact.function==c.reader.id && fact.view_storage==XR_LIR_SLICE_STORAGE_BORROWED_FORMAL &&
+                fact.view_cleanup==XR_LIR_SLICE_CLEANUP_CLEAR);++formal;
+        }
         if (fact.kind==XR_LIR_OWNERSHIP_VIEW_END && fact.view_operation==XR_LIR_SLICE_OP_CLEANUP &&
             fact.function==c.worker.id && fact.block==c.cleanup.id &&
             fact.instruction==c.cleanup_instruction && fact.value==c.target.id) {
             CHECK(!found);found=true;mode=fact.view_cleanup;
         }
     }
-    CHECK(found==(c.cleanup.id!=0));xr_lir_ownership_plan_destroy(plan);return mode;
+    CHECK(found==(c.cleanup.id!=0) && formal==(c.reader.id?2u:0u));xr_lir_ownership_plan_destroy(plan);return mode;
 }
 static void slice_cleanup_proofs(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
@@ -654,6 +658,8 @@ static void array_c_output(const char *name, const char *path) {
     XrLirFunction root = {0};
     if (!strncmp(name,"slice-proof-",12)) {
         SliceCleanupCase shape=strstr(name,"-bind-")?SLICE_CLEANUP_BIND:
+            strstr(name,"-call-before-")?SLICE_CLEANUP_CALL_BEFORE:
+            strstr(name,"-call-after-")?SLICE_CLEANUP_CALL_AFTER:
             strstr(name,"-loop-")?SLICE_CLEANUP_LOOP:SLICE_CLEANUP_BRANCH;
         SliceCleanupFixture c=slice_cleanup_fixture(strstr(name,"-u8")?XR_LIR_U8:XR_LIR_I64,
             shape,strstr(name,"-live-")!=NULL);
@@ -748,7 +754,7 @@ static void array_c_output(const char *name, const char *path) {
     if (!strncmp(name,"slice-proof-",12)) {
         size_t clear=0;const char *at=output.bytes;
         while ((at=strstr(at,"xrt_array_slice_clear("))!=NULL) {++clear;++at;}
-        CHECK(clear==((strstr(name,"-loop-") || strstr(name,"-bind-"))?2u:1u));
+        CHECK(clear==((strstr(name,"-loop-") || strstr(name,"-bind-") || strstr(name,"-call-"))?2u:1u));
     }
     if (!strncmp(name,"scalar-edge-",12))
         scalar_edge_structure(output.bytes,m,root,strcmp(name,"scalar-edge-swap")!=0);
@@ -886,7 +892,8 @@ int main(int argc, char **argv) {
     slice_cleanup_proofs();
     static const char *const cleanup_products[]={"slice-proof-branch-i64","slice-proof-branch-u8",
         "slice-proof-live-i64","slice-proof-live-u8","slice-proof-bind-i64","slice-proof-bind-u8",
-        "slice-proof-loop-i64","slice-proof-loop-u8"};
+        "slice-proof-loop-i64","slice-proof-loop-u8","slice-proof-call-before-i64","slice-proof-call-before-u8",
+        "slice-proof-call-after-i64","slice-proof-call-after-u8"};
     for (size_t n=0;n<sizeof(cleanup_products)/sizeof(*cleanup_products);++n) array_c_output(cleanup_products[n],NULL);
     map_receiving_owners();
     map_state_receiver();

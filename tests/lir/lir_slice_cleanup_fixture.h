@@ -7,11 +7,12 @@ typedef enum SliceCleanupCase {
     SLICE_CLEANUP_BRANCH, SLICE_CLEANUP_BEFORE, SLICE_CLEANUP_REACHABLE,
     SLICE_CLEANUP_SAME_BEFORE, SLICE_CLEANUP_SAME_AFTER, SLICE_CLEANUP_LOOP,
     SLICE_CLEANUP_PHI, SLICE_CLEANUP_BIND, SLICE_CLEANUP_REBORROW,
-    SLICE_CLEANUP_STRICT_END, SLICE_CLEANUP_CASE_COUNT
+    SLICE_CLEANUP_STRICT_END, SLICE_CLEANUP_CALL_BEFORE, SLICE_CLEANUP_CALL_AFTER,
+    SLICE_CLEANUP_CASE_COUNT
 } SliceCleanupCase;
 typedef struct SliceCleanupFixture {
     XrLirModule *module;
-    XrLirFunction root, worker;
+    XrLirFunction root, worker, relay, reader;
     XrLirBlock definition, cleanup;
     XrLirValue target;
     uint32_t cleanup_instruction;
@@ -50,6 +51,36 @@ static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupC
     OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup_root",.name_length=12,.result=XR_LIR_I64},&c.root));
     OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup_worker",.name_length=14,
         .parameters=&cell_type,.parameter_count=1,.result=XR_LIR_I64},&c.worker));
+    bool call=shape==SLICE_CLEANUP_CALL_BEFORE || shape==SLICE_CLEANUP_CALL_AFTER;
+    if (call) {
+        OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup_relay",.name_length=13,
+            .parameters=&slice,.parameter_count=1,.result=slice},&c.relay));
+        OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup_reader",.name_length=14,
+            .parameters=&slice,.parameter_count=1,.result=XR_LIR_I64},&c.reader));
+        OK(xr_lir_define_function(m,c.relay));OK(xr_lir_define_function(m,c.reader));
+        XrLirBlock relay={0},reader={0};XrLirValue borrowed={0},read_input={0};
+        OK(xr_lir_add_block(m,c.relay,NULL,0,&relay));OK(xr_lir_set_entry(m,c.relay,relay));
+        OK(xr_lir_add_block(m,c.reader,NULL,0,&reader));OK(xr_lir_set_entry(m,c.reader,reader));
+        OK(xr_lir_function_parameter(m,c.relay,0,&borrowed));
+        OK(xr_lir_function_parameter(m,c.reader,0,&read_input));
+        OK(xr_lir_set_terminator(m,relay,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+            .operands=&borrowed,.operand_count=1}));
+        XrLirValue length=cleanup_role(reader,element,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,&read_input,1);
+        for (unsigned n=0;n<2;++n) cleanup_effect(reader,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,
+            .type=XR_LIR_UNIT,.bits=read_input.id});
+        OK(xr_lir_set_terminator(m,reader,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+            .operands=&length,.operand_count=1}));
+        /* Install the exact declaration contracts before constructing cleanup
+         * of a CALL result; that builder boundary already requires its origin. */
+        XrLirSliceFunctionFact rows[5]={{0}};
+        for (uint32_t f=1;f<=4;++f) rows[f]=(XrLirSliceFunctionFact){.function=f,
+            .parameter_count=m->functions[f-1].parameter_count,.result_parameter=UINT32_MAX,.available=true};
+        XrLirSliceEffect origin={XR_LIR_SLICE_EFFECT_PARAMETER,0};
+        rows[c.relay.id].result_parameter=0;rows[c.relay.id].result_origin=(XrLirSliceEffectSpan){0,1};
+        rows[c.reader.id].access=(XrLirSliceEffectSpan){0,1};
+        OK(xr_lir_internal_slice_effects_set(m,(XrLirSliceFactsView){.functions=rows,.function_count=4,
+            .terms=&origin,.term_count=1}));
+    }
     OK(xr_lir_define_function(m,c.root));OK(xr_lir_define_function(m,c.worker));
     XrLirValue input={0};OK(xr_lir_function_parameter(m,c.worker,0,&input));
     OK(xr_lir_set_array_shape(m,input,&(XrLirArrayShape){element}));
@@ -75,7 +106,11 @@ static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupC
         c.target=cleanup_role(c.definition,element,shape==SLICE_CLEANUP_BIND?XR_LIR_SLICE_OP_BIND:XR_LIR_SLICE_OP_REBORROW,
             slice,borrow,shape==SLICE_CLEANUP_BIND?1u:4u);
     }
-    XrLirValue length=cleanup_role(c.definition,element,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,&c.target,1);
+    if (call) c.target=cleanup_value(c.definition,(XrLirInstruction){.op=XR_LIR_CALL,.type=slice,
+        .callee=c.relay,.operands=&original,.operand_count=1});
+    XrLirValue length=call ? cleanup_value(c.definition,(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,
+        .callee=c.reader,.operands=&c.target,.operand_count=1}) :
+        cleanup_role(c.definition,element,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,&c.target,1);
     if (shape==SLICE_CLEANUP_PHI) {
         XrLirValue phi={0};OK(xr_lir_block_parameter(m,other,0,&phi));
         c.cleanup=entry;c.target=phi;
@@ -95,7 +130,7 @@ static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupC
             c.cleanup_instruction=m->functions[c.worker.id-1].blocks[c.definition.id-1].instruction_count+1;
             cleanup_end(c.definition,c.target);
         }
-        if (derived) cleanup_end(c.definition,original);
+        if (derived || call) cleanup_end(c.definition,original);
         if (shape==SLICE_CLEANUP_LOOP) {
             OK(xr_lir_set_terminator(m,c.definition,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
                 .operands=&again,.operand_count=1,.edge_count=2,.edges={{c.definition,NULL,0},{done,&length,1}}}));
@@ -110,8 +145,8 @@ static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupC
         OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
             .operands=&condition,.operand_count=1,.edge_count=2,.edges={{c.definition,NULL,0},{other,NULL,0}}}));
     else cleanup_branch(entry,shape==SLICE_CLEANUP_BEFORE?other:c.definition,NULL,0);
-    if (shape==SLICE_CLEANUP_SAME_BEFORE || shape==SLICE_CLEANUP_LOOP || derived) {
-        uint32_t ordinal=derived?1u:0u;
+    if (shape==SLICE_CLEANUP_SAME_BEFORE || shape==SLICE_CLEANUP_LOOP || derived || shape==SLICE_CLEANUP_CALL_BEFORE) {
+        uint32_t ordinal=derived || call?1u:0u;
         OK(xr_lir_internal_slice_cleanup_insert(m,c.definition,ordinal,c.target,NULL));
         c.cleanup=c.definition;c.cleanup_instruction=ordinal+1;
     }
@@ -129,7 +164,7 @@ static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupC
     cleanup_effect(root,(XrLirInstruction){.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,.operands=&binding,.operand_count=1});
     OK(xr_lir_set_terminator(m,root,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&output,.operand_count=1}));
     c.unconstructed=shape==SLICE_CLEANUP_BRANCH || shape==SLICE_CLEANUP_BEFORE ||
-        shape==SLICE_CLEANUP_SAME_BEFORE || derived;
+        shape==SLICE_CLEANUP_SAME_BEFORE || shape==SLICE_CLEANUP_CALL_BEFORE || derived;
     c.expected=shape==SLICE_CLEANUP_BRANCH && !take_definition?40:43;
     return c;
 }
