@@ -145,12 +145,18 @@ static void slice_state_read_cases(XrLirType element, bool mutable) {
             CHECK(op != XR_LIR_ARRAY_BORROW && op != XR_LIR_CELL_NEW);
         }
     XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
-    XrLirValueLayoutKey roots[] = {{XR_LIR_ARRAY,element,0},{function->values[c.view.id-1].type,0,0},{XR_LIR_I64,0,0}};
-    XrLirValueLayouts *set = NULL; HOME(xr_lir_value_layouts_create(c.module,roots,3,billing,&set));
+    /* The Array Header plan does not imply a scalar element value plan.
+     * The actual constants and GET result need their own family root. */
+    XrLirValueLayoutKey roots[] = {{XR_LIR_ARRAY,element,0},{function->values[c.view.id-1].type,0,0},
+        {XR_LIR_I64,0,0},{element,0,0}};
+    XrLirValueLayouts *set = NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
     XrLirOwnershipPlan *plan = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
     XrLirValueHomesRequest request = {c.module,c.root,set,plan}; XrLirValueHomes *homes = NULL;
-    HOME(xr_lir_value_homes_create(&request,&homes));
+    XrLirValueLayoutStatus status = xr_lir_value_homes_create(&request,&homes);
+    if (status != XR_LIR_VALUE_LAYOUT_OK)
+        fprintf(stderr,"State Slice homes element=%u mutable=%u status=%u\n",(unsigned)element,(unsigned)mutable,(unsigned)status);
+    HOME(status);
     CHECK(homes->bindings && c.reference.id < homes->value_count);
     const XrLirHomeBinding *binding = &homes->bindings[c.reference.id];
     CHECK(binding->kind == XR_LIR_HOME_BINDING_STATE_BORROW && binding->source == c.reference.id &&
