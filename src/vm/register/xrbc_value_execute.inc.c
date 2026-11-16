@@ -480,8 +480,18 @@ static XrtManagedStatus rbc_value_factory(const XrRbcModule *module, XrRbcStack 
         if (status==XRT_MANAGED_OK) status=xrt_string_backing_concat_create(activation->frame,
             home->temporary_first_owner,types,left,right,0);
     } else if (access.operation==XR_RBC_VALUE_STRING_LITERAL) {
-        XrRbcLiteral literal=module->literals[access.index];
-        status=xrt_string_backing_create(activation->frame,home->temporary_first_owner,types,literal.bytes,literal.length,0);
+        XrtPlace cache={.frame=activation->frame,.slot=home->literal_cache_owner,.nulls=XRT_PLACE_NULLABLE};
+        const XrtManagedHeader *cached=NULL;
+        status=xrt_place_borrow(cache,&cached);
+        if (status==XRT_MANAGED_OK && !cached) {
+            XrRbcLiteral literal=module->literals[access.index];
+            status=xrt_string_backing_create(activation->frame,home->literal_cache_owner,types,literal.bytes,literal.length,0);
+        }
+        if (status!=XRT_MANAGED_OK) return status;
+        XrtPlace destination;
+        status=rbc_value_place((RbcValueOrigin){activation,access.result},false,0,&destination);
+        cache.nulls=XRT_PLACE_NONNULL;
+        return status==XRT_MANAGED_OK ? xrt_place_copy_replace(destination,cache,NULL) : status;
     } else {
         XrRbcRegister *input=rbc_value_register(stack,activation,access.source);
         if (!input) return XRT_MANAGED_ARGUMENT;

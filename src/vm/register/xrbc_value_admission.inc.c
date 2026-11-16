@@ -43,6 +43,25 @@ static bool rbc_value_string(const XrRbcModule *module, const XrRbcValueCode *co
         (!destination || (!home->parameter && home->offset != SIZE_MAX &&
             home->temporary_offset != SIZE_MAX && home->temporary_first_owner < code->homes->frame.slot_count));
 }
+static bool rbc_value_string_literal(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value) {
+    if (!xr_rbc_module_code_owner(module) || !rbc_value_string(module,code,value,true)) return false;
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    const XrtValueImageType *type=&image->types[home->type-1];
+    const XrtManagedFrameSpec *frame=&code->homes->frame;
+    if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) || type->owned_count!=1 ||
+        type->first_owned>=image->owned_count || !image->owned_offsets || image->owned_offsets[type->first_owned] ||
+        !code->homes->owned_frame_needed || !frame->owned_offsets || frame->payload_alignment<_Alignof(XrtManagedHeader *)) return false;
+    size_t offsets[]={home->offset,home->temporary_offset,home->literal_cache_offset};
+    size_t slots[]={home->first_owner,home->temporary_first_owner,home->literal_cache_owner};
+    for (size_t n=0;n<3;++n) {
+        if (slots[n]>=frame->slot_count || offsets[n]%_Alignof(XrtManagedHeader *) ||
+            offsets[n]>frame->payload_size || sizeof(XrtManagedHeader *)>frame->payload_size-offsets[n] ||
+            frame->owned_offsets[slots[n]]!=offsets[n]) return false;
+        for (size_t p=0;p<n;++p) if (slots[n]==slots[p] || offsets[n]==offsets[p]) return false;
+    }
+    return true;
+}
 static const XrLirHomeBinding *rbc_value_binding(const XrRbcValueCode *code, uint32_t value) {
     return rbc_value_id(code,value) && code->homes && code->homes->bindings &&
         value<=code->homes->value_count && code->homes->bindings[value].type ? &code->homes->bindings[value] : NULL;
@@ -251,7 +270,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_FUNCTION_ALIAS: case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
         return rbc_value_function_access_valid(module,code,function,a);
     case XR_RBC_VALUE_STRING_LITERAL:
-        return !a.source && !a.other && a.index < module->literal_count && rbc_value_string(module,code,a.result,true);
+        return !a.source && !a.other && a.index < module->literal_count && rbc_value_string_literal(module,code,a.result);
     case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64:
         return !a.other && rbc_value_string(module,code,a.result,true) && rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
     case XR_RBC_VALUE_STRING_CONCAT:
