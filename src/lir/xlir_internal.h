@@ -26,6 +26,7 @@
 #include "xlir_map.h"
 #include "xlir_ownership.h"
 #include "xlir_callable_facts.h"
+#include "xlir_slice_facts.h"
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
@@ -104,7 +105,17 @@ struct XrLirModule {
     uint32_t state_entry;
     bool state_layout_set;
     XrLirCallableFacts *callable_facts;
+    XrLirSliceFacts *slice_facts;
 };
+
+/* Only Lower receives these numeric contracts from the exact completed Source
+ * artifact. Rebuilding copies them with actual function relocation; neither
+ * backend supplies summaries or treats absent terms as an empty WRITE set. */
+XR_FUNC XrLirStatus xr_lir_internal_slice_effects_set(XrLirModule *, XrLirSliceFactsView);
+XR_FUNC XrLirStatus xr_lir_internal_slice_effects_copy(XrLirModule *, const XrLirModule *,
+    const XrLirFunction *functions, uint32_t count);
+XR_FUNC XrLirStatus xr_lir_internal_slice_function_fact(const XrLirModule *, uint32_t,
+    XrLirSliceFunctionFact *);
 
 XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);
 /* The receiving catalog exists before function construction. This borrowed
@@ -120,6 +131,9 @@ typedef struct XrLirSliceCleanupInsertion {
     uint32_t ordinal;
     XrLirValue target;
     XrLirSource source;
+    /* Zero retains the local keeper cleanup. Formal cleanup is a distinct
+     * resource effect with no physical keeper or ordinary operand read. */
+    bool formal;
 } XrLirSliceCleanupInsertion;
 /* Input positions refer to the unchanged body and are ordered within each
  * block. Each block is merged once after the normal emitter owns its effects. */

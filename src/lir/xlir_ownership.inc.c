@@ -84,6 +84,7 @@ static bool lir_plan_function(XrLirOwnershipPlan *plan, const XrLirModule *m, co
 }
 
 static bool lir_plan_add(XrLirOwnershipPlan *plan, XrLirOwnershipFact fact) {
+    if (!fact.view_storage) fact.view_parameter = UINT32_MAX;
     if (!plan) return true;
     const XrLirOwnershipTypeFact *type = lir_plan_type(plan, fact.type);
     if (type && !type->has_owned) return true;
@@ -293,6 +294,41 @@ static XrLirStatus lir_plan_callables(XrLirOwnershipPlan *plan, const XrLirFunct
 /* The verifier establishes ownership once. This one deterministic producer
  * records already checked positions without rebuilding graphs or owner sets. */
 #include "xlir_cell_ownership.inc.c"
+static XrLirSliceStorage lir_plan_slice_storage(const XrLirFunctionData *f, uint32_t value) {
+    const XrLirValueData *row = &f->values[value - 1];
+    return row->parameter && !row->block ? XR_LIR_SLICE_STORAGE_BORROWED_FORMAL : XR_LIR_SLICE_STORAGE_LOCAL_KEEPER;
+}
+static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule *m,
+    const XrLirFunctionData *f, const XrLirInstructionView *v, XrLirOwnershipFact fact) {
+    uint32_t value = 0;
+    fact.view_parameter = UINT32_MAX;
+    if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP) {
+        fact.kind = XR_LIR_OWNERSHIP_VIEW_END; value = (uint32_t)v->bits;
+        fact.view_operation = v->op == XR_LIR_SLICE_FORMAL_CLEANUP ? XR_LIR_SLICE_OP_FORMAL_CLEANUP : XR_LIR_SLICE_OP_CLEANUP;
+    } else if (v->op == XR_LIR_CALL && xr_lir_internal_slice_type(m, v->type)) {
+        XrLirSliceFunctionFact callee;
+        if (xr_lir_slice_function_fact(m, v->callee, &callee) != XR_LIR_OK ||
+            !callee.available || callee.result_parameter >= v->operand_count) return false;
+        fact.kind = XR_LIR_OWNERSHIP_VIEW_VALUE; value = v->result;
+        fact.view_operation = XR_LIR_SLICE_OP_CALL; fact.view_parameter = callee.result_parameter;
+        fact.target_value = v->operands[callee.result_parameter];
+        fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
+        fact.hold_transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_COPY;
+    } else if (v->op == XR_LIR_RET && v->operand_count &&
+        xr_lir_internal_slice_type(m, f->values[v->operands[0] - 1].type)) {
+        XrLirSliceFunctionFact own;
+        if (xr_lir_slice_function_fact(m, fact.function, &own) != XR_LIR_OK || !own.available) return false;
+        fact.kind = XR_LIR_OWNERSHIP_RETURN_TRANSFER; value = v->operands[0];
+        fact.view_operation = XR_LIR_SLICE_OP_RETURN; fact.view_parameter = own.result_parameter;
+        fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
+        fact.hold_transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_COPY;
+    } else return true;
+    fact.value = value; fact.type = f->values[value - 1].type;
+    fact.view_storage = lir_plan_slice_storage(f, value);
+    if (fact.view_storage == XR_LIR_SLICE_STORAGE_BORROWED_FORMAL && fact.view_parameter == UINT32_MAX)
+        fact.view_parameter = f->values[value - 1].instruction;
+    return lir_plan_add(plan, fact);
+}
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
     const XrLirCallableFacts *callables, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
@@ -311,6 +347,12 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
             if ((lir_managed_value(m,f->parameter_types[p]) || f->parameter_types[p] == XR_LIR_STRING_CELL ||
                 f->parameter_types[p] == XR_LIR_STRING_REF) && !lir_plan_value(plan,f,
                 XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
+        for (uint32_t p = 0; p < f->parameter_count; ++p)
+            if (xr_lir_internal_slice_type(m, f->parameter_types[p]) &&
+                !lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_VIEW_VALUE,
+                    .function=function,.value=f->parameters[p],.argument=p,.type=f->parameter_types[p],
+                    .transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW,
+                    .view_storage=XR_LIR_SLICE_STORAGE_BORROWED_FORMAL,.view_parameter=p})) return XR_LIR_OUT_OF_MEMORY;
         for (uint32_t b = 0; b < f->block_count; ++b) {
             const XrLirBlockData *block = &f->blocks[b];
             for (uint32_t p = 0; p < block->parameter_count; ++p)
@@ -322,17 +364,13 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                     !lir_plan_add(plan, (XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_VIEW_VALUE,
                         .function=function,.block=b + 1,.value=value,.argument=p,
                         .type=f->values[value - 1].type,.transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW,
-                        .hold_transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_COPY})) return XR_LIR_OUT_OF_MEMORY;
+                        .hold_transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_COPY,
+                        .view_storage=XR_LIR_SLICE_STORAGE_LOCAL_KEEPER,.view_parameter=UINT32_MAX})) return XR_LIR_OUT_OF_MEMORY;
             }
             for (uint32_t i = 0; i < block->instruction_count; ++i) {
                 const XrLirInstructionView *v = &block->instructions[i].view;
-                if (v->op == XR_LIR_SLICE_CLEANUP) {
-                    uint32_t value = (uint32_t)v->bits;
-                    if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_VIEW_END,
-                        .function=function,.block=b + 1,.instruction=i + 1,.value=value,
-                        .type=f->values[value - 1].type,.view_operation=XR_LIR_SLICE_OP_CLEANUP}))
-                        return XR_LIR_OUT_OF_MEMORY;
-                }
+                if (!lir_plan_slice_boundary(plan,m,f,v,(XrLirOwnershipFact){.function=function,
+                    .block=b + 1,.instruction=i + 1})) return XR_LIR_OUT_OF_MEMORY;
                 if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
                 if (!lir_plan_payload_binding(plan,m,f,v,(XrLirOwnershipFact){.function=function,
                     .block=b + 1,.instruction=i + 1})) return XR_LIR_OUT_OF_MEMORY;
@@ -358,6 +396,9 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .function=function,.block=b + 1,.instruction=i + 1,.value=value,
                             .target_value=end ? 0 : v->operands[0],.type=f->values[value - 1].type,
                             .array_element=slice.element,.view_operation=slice.operation,
+                            .view_storage=lir_plan_slice_storage(f,value),
+                            .view_parameter=f->values[value - 1].parameter && !f->values[value - 1].block ?
+                                f->values[value - 1].instruction : UINT32_MAX,
                             .transfer_mode=end ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_BORROW,
                             .hold_transfer_mode=end ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_COPY}))
                             return XR_LIR_OUT_OF_MEMORY;
@@ -392,6 +433,9 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
                             .argument=a,.edge=e + 1,.target_block=edge->target,
                             .target_value=f->blocks[edge->target - 1].parameters[a],.type=f->values[id - 1].type,
+                            .view_storage=lir_plan_slice_storage(f,id),
+                            .view_parameter=f->values[id - 1].parameter && !f->values[id - 1].block ?
+                                f->values[id - 1].instruction : UINT32_MAX,
                             .transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW,
                             .hold_transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_COPY})) return XR_LIR_OUT_OF_MEMORY;
                     if (lir_managed_value(m,f->values[id - 1].type) &&

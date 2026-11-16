@@ -24,6 +24,7 @@
 #include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_closure_placement.h"
 #include "../xir/xxir_lexical.h"
+#include "../xir/xxir_effect_module_export_internal.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -1060,13 +1061,17 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         lower_type(c, f->result) == XR_LIR_ARRAY_CELL ||
         lower_type(c, f->result) == XR_LIR_MAP_STRING_I64_CELL)
         return lower_unsupported(c, "function result type");
-    if (xr_lir_internal_slice_type(c->module, lower_type(c, f->result)))
+    bool slice_result = xr_lir_internal_slice_type(c->module, lower_type(c, f->result));
+    c->views |= slice_result;
+    if (slice_result)
         return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
     c->arrays |= lower_array_element(c, f->result) != XR_LIR_TYPE_INVALID;
     c->maps |= lower_map_type(c, f->result);
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         if (!lower_receive_type(c, f->parameters[p])) return false;
-        if (xr_lir_internal_slice_type(c->module, lower_type(c, f->parameters[p])))
+        bool slice_parameter = xr_lir_internal_slice_type(c->module, lower_type(c, f->parameters[p]));
+        c->views |= slice_parameter;
+        if (slice_parameter)
             return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
         c->string_appends |= lower_type(c, f->parameters[p]) == XR_LIR_STRING_CELL;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
@@ -1227,6 +1232,8 @@ static bool lower_declare(Lower *c, uint32_t index) {
     xr_free(contracts);
     return good;
 }
+
+#include "xlir_lower_slice_facts.inc.c"
 
 static void lower_function_free(LowerFunction *f) {
     xr_free(f->views.cleanups);
@@ -2592,13 +2599,17 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f])
             good = lower_declare(&c, f);
+    XrLirFunction entry = {0};
+    /* Slice contracts refer to the final function directory. Declare the
+     * ordinary entry before receiving them; no source body is executed here. */
+    if (good && c.views && !local) good = lower_wrapper(&c, &entry);
+    if (good) good = lower_slice_effects(&c);
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f])
             good = lower_function(&c, f);
-    XrLirFunction entry = {0};
     if (good && local)
         entry = c.functions[selected];
-    else if (good)
+    else if (good && !entry.id)
         good = lower_wrapper(&c, &entry);
     if (good)
         good = lower_build(&c, xr_lir_module_finish(c.module, NULL));

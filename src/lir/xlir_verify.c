@@ -142,9 +142,20 @@ static bool lir_slice_cleanup_target(const XrLirModule *m, const XrLirFunctionDa
         f->blocks[value.block - 1].parameters[value.instruction] == id;
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, (uint32_t)id);
     XrLirSliceIntrinsic role;
-    return definition && definition->result == id && definition->type == value.type &&
-        definition->op == XR_LIR_CALL_INTRINSIC && xr_lir_slice_intrinsic_view(m, definition->intrinsic, &role) == XR_LIR_OK &&
+    if (!definition || definition->result != id || definition->type != value.type) return false;
+    if (definition->op == XR_LIR_CALL) {
+        XrLirSliceFunctionFact fact;
+        return xr_lir_internal_slice_function_fact(m, definition->callee, &fact) == XR_LIR_OK &&
+            fact.available && fact.result_parameter < definition->operand_count;
+    }
+    return definition->op == XR_LIR_CALL_INTRINSIC && xr_lir_slice_intrinsic_view(m, definition->intrinsic, &role) == XR_LIR_OK &&
         (role.operation == XR_LIR_SLICE_OP_NEW || role.operation == XR_LIR_SLICE_OP_BIND || role.operation == XR_LIR_SLICE_OP_REBORROW);
+}
+static bool lir_slice_formal_cleanup_target(const XrLirModule *m, const XrLirFunctionData *f, uint64_t id) {
+    if (!id || id > f->value_count || !xr_lir_internal_slice_type(m, f->values[id - 1].type)) return false;
+    const XrLirValueData *value = &f->values[id - 1];
+    return value->parameter && !value->block && value->instruction < f->parameter_count &&
+        f->parameters[value->instruction] == id;
 }
 
 static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFunctionData *f,
@@ -421,13 +432,16 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_RECORD_FIELD &&
-        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
+        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
+        v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
-    if (v->op == XR_LIR_SLICE_CLEANUP) {
-        if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !lir_slice_cleanup_target(m, f, v->bits)) goto invalid;
+    if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP) {
+        bool target = v->op == XR_LIR_SLICE_FORMAL_CLEANUP ?
+            lir_slice_formal_cleanup_target(m, f, v->bits) : lir_slice_cleanup_target(m, f, v->bits);
+        if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !target) goto invalid;
         return XR_LIR_OK;
     }
     uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR ? 2 : 0);
@@ -1012,6 +1026,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 }
 
 #include "xlir_callable_facts.inc.c"
+#include "xlir_slice_facts.inc.c"
 #include "xlir_cell_verify.inc.c"
 #include "xlir_callable_scope_verify.inc.c"
 #include "xlir_slice_verify.inc.c"
@@ -1026,6 +1041,8 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
     if (!xr_lir_internal_types_valid(m) || !xr_lir_internal_map_literals_valid(m))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "constructed type pool is invalid");
+    if (m->slice_facts && !lir_slice_effects_valid(m,m->slice_facts->view))
+        return lir_status_error(d,XR_LIR_VERIFY_ERROR,"Slice receiving summary is invalid");
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_DISPLAY] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
     if (m->intrinsic_count && !m->intrinsics)

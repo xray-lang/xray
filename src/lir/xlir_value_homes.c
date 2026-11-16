@@ -128,7 +128,15 @@ static bool lir_home_temporary(LirHomeBuilder *b, XrLirValueHome *home) {
     return true;
 }
 static bool lir_home_slice(LirHomeBuilder *b, XrLirValueHome *home, uint32_t value) {
-    if (home->parameter) return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_UNSUPPORTED, "Slice formal has no caller loan hook");
+    if (home->parameter) {
+        XrLirSliceFunctionFact fact;
+        if (xr_lir_slice_function_fact(b->compiler.input, b->compiler.function.id, &fact) != XR_LIR_OK ||
+            !fact.available || home->parameter > fact.parameter_count)
+            return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_UNSUPPORTED, "Slice formal has no checked caller loan");
+        home->view_storage = XR_LIR_SLICE_STORAGE_BORROWED_FORMAL;
+        home->view_parameter = home->parameter - 1;
+        return true;
+    }
     if (b->workspaces.count >= UINT32_MAX)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OVERFLOW, "Slice workspace ordinal overflows");
     size_t leaf = offsetof(XrtArraySliceBundle, hold);
@@ -139,6 +147,7 @@ static bool lir_home_slice(LirHomeBuilder *b, XrLirValueHome *home, uint32_t val
         !lir_home_reserve(b, &spec, &workspace.temporary_offset, &workspace.temporary_first_owner)) return false;
     if (!lir_home_append(b, &b->workspaces, &workspace)) return false;
     home->view_workspace = (uint32_t)b->workspaces.count;
+    home->view_storage = XR_LIR_SLICE_STORAGE_LOCAL_KEEPER;
     home->offset = workspace.offset + offsetof(XrtArraySliceBundle, value);
     home->temporary_offset = workspace.temporary_offset + offsetof(XrtArraySliceBundle, value);
     home->first_owner = home->temporary_first_owner = SIZE_MAX;
@@ -325,7 +334,7 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
     b->homes->values = values;
     for (size_t v = 0; v < count; ++v) values[v] = (XrLirValueHome){.type=0,
         .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX,
-        .literal_cache_offset=SIZE_MAX, .literal_cache_owner=SIZE_MAX};
+        .literal_cache_offset=SIZE_MAX, .literal_cache_owner=SIZE_MAX,.view_parameter=UINT32_MAX};
     if (!lir_home_callable_rows(b,ownership,values)) return false;
     for (size_t index = 1; index <= c->view.value_count; ++index) {
         uint32_t v = (uint32_t)index;
@@ -387,6 +396,13 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
         uint32_t ordinal;
         if (!lir_home_spec(b, key, &result, &ordinal)) return false;
         b->homes->result_type = ordinal + 1;
+        if (result.kind == XRT_VALUE_SLICE_I64 || result.kind == XRT_VALUE_SLICE_U8) {
+            XrLirSliceFunctionFact fact;
+            if (xr_lir_slice_function_fact(c->input,c->function.id,&fact) != XR_LIR_OK ||
+                !fact.available || fact.result_parameter >= c->view.parameter_count)
+                return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Slice result lost its unique borrowed origin");
+            b->homes->view_result_parameter = fact.result_parameter;
+        }
     }
     return true;
 }
@@ -416,6 +432,25 @@ static bool lir_home_cell_stage(LirHomeBuilder *b, const XrLirValueHome *source,
     transfer->borrowed_owner_workspace = b->workspaces.count;
     return lir_home_append(b,&b->workspaces,&workspace);
 }
+static bool lir_home_slice_stage(LirHomeBuilder *b, const XrLirValueHome *source,
+    const XrLirValueHome *target, XrLirHomeWorkspace workspace, XrLirHomeTransfer *transfer) {
+    if (source->view_storage != XR_LIR_SLICE_STORAGE_BORROWED_FORMAL) return true;
+    if (!source->parameter || source->view_workspace || source->owner_count ||
+        source->offset != SIZE_MAX || source->first_owner != SIZE_MAX ||
+        target->view_storage != XR_LIR_SLICE_STORAGE_LOCAL_KEEPER || !target->view_workspace ||
+        transfer->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
+        transfer->hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Slice formal edge lost its borrowed COPY hold");
+    size_t leaf = 0;
+    XrtValuePlanSpec spec = {.size=sizeof(XrtManagedHeader *),.alignment=_Alignof(XrtManagedHeader *),
+        .owned_offsets=&leaf,.owned_count=1};
+    workspace.kind = XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE;
+    workspace.type = target->type; workspace.value = transfer->source;
+    workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+    if (!lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
+    transfer->borrowed_owner_workspace = b->workspaces.count;
+    return lir_home_append(b,&b->workspaces,&workspace);
+}
 static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *selected, size_t selected_count) {
     LirHomeCompiler *c = &b->compiler;
     const XrLirValueHome *values = b->homes->values;
@@ -426,8 +461,21 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction; xr_lir_instruction_view(c->input, id, n, &instruction);
             if (instruction.op == XR_LIR_CALL) {
-                XrLirHomeCall call = {id.id, n + 1, instruction.callee,
-                    instruction.result, b->arguments.count, instruction.operand_count};
+                XrLirHomeCall call = {.block=id.id,.instruction=n + 1,.callee=instruction.callee,
+                    .result=instruction.result,.first=b->arguments.count,.count=instruction.operand_count,
+                    .view_result_parameter=UINT32_MAX};
+                if (instruction.result && values[instruction.result].view_storage) {
+                    XrLirSliceFunctionFact callee;
+                    if (xr_lir_slice_function_fact(c->input,instruction.callee,&callee) != XR_LIR_OK ||
+                        !callee.available || callee.result_parameter >= instruction.operand_count ||
+                        values[instruction.result].view_storage != XR_LIR_SLICE_STORAGE_LOCAL_KEEPER)
+                        return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Slice call lost its receiving landing");
+                    call.view_result_workspace = values[instruction.result].view_workspace;
+                    call.view_result_parameter = callee.result_parameter;
+                    call.view_result_source_argument = instruction.operands[callee.result_parameter];
+                    if (values[call.view_result_source_argument].type != values[instruction.result].type)
+                        return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Slice call lost its same-family input origin");
+                }
                 bool typed = instruction.result && values[instruction.result].type != 0;
                 for (uint32_t p = 0; p < instruction.operand_count; ++p) {
                     uint32_t value = instruction.operands[p];
@@ -458,8 +506,9 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected edge lost its exact receiving homes");
                     if (values[target.parameters[p]].owner_count && !matched)
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned edge has no verified transfer event");
-                    bool slice = values[target.parameters[p]].view_workspace != 0;
-                    if (slice && (!matched || !values[edge.arguments[p]].view_workspace ||
+                    bool slice = values[target.parameters[p]].view_storage != XR_LIR_SLICE_STORAGE_NONE;
+                    if (slice && (!matched || !values[edge.arguments[p]].view_storage ||
+                        event->view_storage != values[edge.arguments[p]].view_storage ||
                         event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
                         event->hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY))
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice edge lost its verified loan keeper copy");
@@ -468,8 +517,11 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         .hold_transfer_mode=matched ? event->hold_transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE,
                         .source_workspace=slice ? values[edge.arguments[p]].view_workspace : 0,
                         .target_workspace=slice ? values[target.parameters[p]].view_workspace : 0,
-                        .borrowed_owner_workspace=SIZE_MAX};
+                        .borrowed_owner_workspace=SIZE_MAX,
+                        .source_storage=slice ? values[edge.arguments[p]].view_storage : XR_LIR_SLICE_STORAGE_NONE};
                     if (!lir_home_cell_stage(b,&values[transfer.source],&values[transfer.target],
+                        (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
+                    if (slice && !lir_home_slice_stage(b,&values[transfer.source],&values[transfer.target],
                         (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
                     if (!lir_home_append(b, &b->transfers, &transfer)) return false;
                     ++row.count;
@@ -514,11 +566,18 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
             return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "ownership event disappeared during projection");
         if (!lir_home_binding_fact(b,fact) || !lir_home_workspace(b,fact)) return false;
         uint32_t view_workspace = 0;
-        if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE || fact.kind == XR_LIR_OWNERSHIP_VIEW_END) {
+        if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE || fact.kind == XR_LIR_OWNERSHIP_VIEW_END ||
+            (fact.kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER && fact.view_storage)) {
             if (!fact.value || fact.value > b->homes->value_count ||
-                !(view_workspace = b->homes->values[fact.value].view_workspace))
-                return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice event has no real keeper workspace");
-            if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE) {
+                fact.view_storage != b->homes->values[fact.value].view_storage)
+                return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice event lost its actual storage");
+            view_workspace = b->homes->values[fact.value].view_workspace;
+            bool formal = fact.view_storage == XR_LIR_SLICE_STORAGE_BORROWED_FORMAL;
+            if ((formal && view_workspace) || (!formal && !view_workspace) ||
+                (fact.view_operation == XR_LIR_SLICE_OP_FORMAL_CLEANUP && !formal) ||
+                (fact.view_operation == XR_LIR_SLICE_OP_CLEANUP && formal))
+                return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice cleanup confused a formal and a real keeper");
+            if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE && view_workspace) {
                 XrLirHomeWorkspace *workspace = &((XrLirHomeWorkspace *)b->workspaces.data)[view_workspace - 1];
                 workspace->block = fact.block; workspace->instruction = fact.instruction;
             }
@@ -540,6 +599,7 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
             .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,
             .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize,.transfer_mode=fact.transfer_mode,
             .view_operation=fact.view_operation,.view_workspace=view_workspace,.hold_transfer_mode=fact.hold_transfer_mode,
+            .view_storage=fact.view_storage,.view_parameter=fact.view_parameter,
             .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope};
         if (fact.cell_transport) {
             if (!fact.value || fact.value > b->homes->value_count || !b->homes->values[fact.value].cell_payload_type)
@@ -572,6 +632,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     b.homes = xr_calloc(1, sizeof(*b.homes));
     if (!b.homes) return XR_LIR_VALUE_LAYOUT_OOM;
     b.homes->frame.payload_alignment = 1;
+    b.homes->view_result_parameter = UINT32_MAX;
     bool success = lir_home_function(&b, request->ownership);
     b.homes->frame.slot_count = b.owners.count; b.homes->frame.owned_offsets = b.owners.data;
     b.homes->owned_frame_needed = b.owners.count != 0;

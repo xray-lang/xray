@@ -45,6 +45,9 @@ typedef struct XrLirValueHome {
      * Borrowed Cell formals have no owner slot, offset or temporary. */
     uint32_t cell_payload_type;
     XrLirCellTransport cell_transport;
+    XrLirSliceStorage view_storage;
+    /* Exact zero-based physical formal ordinal, UINT32_MAX for local keepers. */
+    uint32_t view_parameter;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
 typedef struct XrLirHomeTransfer {
@@ -56,11 +59,12 @@ typedef struct XrLirHomeTransfer {
      * remain BORROW; these one-based workspace ordinals describe physical RC. */
     XrLirOwnershipTransferMode hold_transfer_mode;
     uint32_t source_workspace, target_workspace;
-    /* SIZE_MAX is absent. A borrowed Cell formal's logical COPY first retains
-     * into this real CELL_BORROW_STAGE owner. Only after all such staging
-     * succeeds may the edge MOVE that owner into its destination, using the
+    /* SIZE_MAX is absent. A borrowed Cell/Slice formal's logical COPY first
+     * retains into its real CELL_BORROW_STAGE/VIEW_BORROW_STAGE owner. After all
+     * staging succeeds the edge MOVEs that owner into its destination, using the
      * destination's distinct temporary. The formal never acquires a slot. */
     size_t borrowed_owner_workspace;
+    XrLirSliceStorage source_storage;
 } XrLirHomeTransfer;
 typedef struct XrLirHomeEdge {
     uint32_t block, edge, target_block;
@@ -69,6 +73,10 @@ typedef struct XrLirHomeEdge {
 typedef struct XrLirHomeCall {
     uint32_t block, instruction, callee, result;
     size_t first, count;
+    /* One-based caller landing workspace, zero for an ordinary result.
+     * source_argument is the actual borrowed-origin SSA, not an argument
+     * index. result_parameter is the exact callee physical formal ordinal. */
+    uint32_t view_result_workspace, view_result_source_argument, view_result_parameter;
 } XrLirHomeCall;
 
 typedef enum XrLirHomeBindingKind {
@@ -85,7 +93,10 @@ typedef struct XrLirHomeBinding {
 typedef enum XrLirHomeWorkspaceKind {
     XR_LIR_HOME_WORKSPACE_VALUE,
     XR_LIR_HOME_WORKSPACE_VIEW_HOLD,
-    XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE
+    XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE,
+    /* One real Header-only slot, no temporary. Logical formal COPY first
+     * retains all sources here before one physical edge MOVE publication. */
+    XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE
 } XrLirHomeWorkspaceKind;
 typedef struct XrLirHomeWorkspace {
     uint32_t block, instruction, type;
@@ -127,6 +138,8 @@ typedef struct XrLirHomeEvent {
     uint32_t cell_type, cell_payload_type;
     XrLirCellTransport cell_transport;
     uint32_t cell_scope;
+    XrLirSliceStorage view_storage;
+    uint32_t view_parameter;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {
@@ -158,6 +171,8 @@ typedef struct XrLirValueHomes {
      * Every slot starts at true NULL under the existing Frame initialization. */
     const XrLirHomeWorkspace *workspaces;
     size_t workspace_count;
+    /* Unique same-typed input origin of a Slice result, UINT32_MAX absent. */
+    uint32_t view_result_parameter;
 } XrLirValueHomes;
 
 typedef struct XrLirValueHomesRequest {

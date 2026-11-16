@@ -424,7 +424,54 @@ static void facts_construction_reentry(void) {
     }
 }
 
+#include "lir_slice_boundary_fixture.h"
+static void facts_slice_receiving(void) {
+    for (unsigned family = 0; family < 2; ++family) {
+        SliceBoundaryFixture fixture = slice_boundary_fixture(family ? XR_LIR_U8 : XR_LIR_I64,false);
+        OK(xr_lir_module_finish(fixture.module,NULL));
+        size_t baseline = live, bytes = live_bytes;
+        XrLirSliceFacts *copy = NULL; attempt = 0;
+        OK(xr_lir_slice_facts_create(fixture.module,&copy)); size_t sites = attempt;
+        XrLirSliceFactsView cached, received;
+        OK(xr_lir_slice_facts_view(fixture.module->slice_facts,&cached));
+        OK(xr_lir_slice_facts_view(copy,&received));
+        CHECK(sites && received.functions != cached.functions && received.terms != cached.terms &&
+            received.function_count == 4 && received.term_count == 4 &&
+            !memcmp(received.functions,cached.functions,5 * sizeof(*received.functions)) &&
+            !memcmp(received.terms,cached.terms,4 * sizeof(*received.terms)));
+        XrLirSliceFacts *preserved = copy;
+        CHECK(xr_lir_slice_facts_create(fixture.module,&copy) == XR_LIR_INVALID_ARGUMENT && copy == preserved);
+        xr_lir_slice_facts_destroy(copy); copy = NULL;
+        CHECK(live == baseline && live_bytes == bytes);
+        for (size_t n = 0; n < sites; ++n) {
+            attempt = 0; fail_at = n;
+            CHECK(xr_lir_slice_facts_create(fixture.module,&copy) == XR_LIR_OUT_OF_MEMORY && !copy &&
+                live == baseline && live_bytes == bytes);
+        }
+        fail_at = SIZE_MAX; OK(xr_lir_slice_facts_create(fixture.module,&copy));
+        xr_lir_module_destroy(fixture.module);
+        OK(xr_lir_slice_facts_view(copy,&received));
+        CHECK(received.functions[fixture.relay.id].result_parameter == 1 &&
+            received.terms[received.functions[fixture.relay.id].result_origin.first].kind == XR_LIR_SLICE_EFFECT_PARAMETER &&
+            received.terms[received.functions[fixture.read.id].write.first].kind == XR_LIR_SLICE_EFFECT_UNKNOWN &&
+            received.terms[received.functions[fixture.read.id].access.first].kind == XR_LIR_SLICE_EFFECT_FIELD);
+        xr_lir_slice_facts_destroy(copy); CHECK(!live && !live_bytes);
+    }
+}
+static void facts_slice_finish_failures(void) {
+    SliceBoundaryFixture fixture = slice_boundary_fixture(XR_LIR_I64,false); attempt = 0;
+    OK(xr_lir_module_finish(fixture.module,NULL)); size_t sites = attempt;
+    xr_lir_module_destroy(fixture.module); CHECK(!live && !live_bytes);
+    for (size_t n = 0; n < sites; ++n) {
+        fixture = slice_boundary_fixture(XR_LIR_I64,false); attempt = 0; fail_at = n;
+        XrLirDiagnostic diagnostic = {0};
+        CHECK(xr_lir_module_finish(fixture.module,&diagnostic) == XR_LIR_OUT_OF_MEMORY &&
+            diagnostic.status == XR_LIR_OUT_OF_MEMORY && !fixture.module->finished && !fixture.module->callable_facts);
+        fail_at = SIZE_MAX; xr_lir_module_destroy(fixture.module); CHECK(!live && !live_bytes);
+    }
+}
 int main(void) {
+    facts_slice_receiving(); facts_slice_finish_failures();
     facts_scalar_empty(); facts_construction_reentry(); facts_seed_origins();
     facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();
     puts("constructor callable facts, owned copies and failure cleanup passed");

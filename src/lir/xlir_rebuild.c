@@ -101,6 +101,7 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
+    if (status == XR_LIR_OK) status = xr_lir_internal_slice_effects_copy(c->output, c->input, c->functions, count);
     return status;
 }
 
@@ -195,7 +196,7 @@ static XrLirStatus rebuild_arguments(Rebuild *c, const uint32_t *ids, uint32_t c
 
 static XrLirStatus rebuild_instruction(Rebuild *c, XrLirBlock block,
     const XrLirInstructionView *source, bool terminal) {
-    if (source->op == XR_LIR_SLICE_CLEANUP)
+    if (source->op == XR_LIR_SLICE_CLEANUP || source->op == XR_LIR_SLICE_FORMAL_CLEANUP)
         return lir_slice_copy_cleanup_record(&c->cleanups, c->output, block, source);
     XR_DCHECK(source->edge_count <= 2, "Verified scalar control flow has at most two successors");
     XrLirInstruction instruction = {.op = source->op, .type = source->type,

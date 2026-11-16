@@ -8,12 +8,13 @@
  */
 typedef struct LirSliceRoot { uint32_t kind, identity; } LirSliceRoot;
 enum { LIR_SLICE_ROOT_LOCAL=1, LIR_SLICE_ROOT_FORMAL, LIR_SLICE_ROOT_STATE,
-    LIR_SLICE_ROOT_UNKNOWN, LIR_SLICE_ROOT_STATE_ANY };
+    LIR_SLICE_ROOT_UNKNOWN, LIR_SLICE_ROOT_STATE_ANY, LIR_SLICE_ROOT_INPUT };
 typedef struct LirSliceFlow {
     uint32_t *values, *queue;
     uint8_t *inputs, *scratch, *edge, *queued;
     LirSliceRoot *bindings, *input_roots, *roots, *edge_roots;
     size_t count, head, tail, pending;
+    bool checked_inputs;
 } LirSliceFlow;
 static bool lir_slice_extent(uint64_t count, size_t stride) { return stride && count <= SIZE_MAX / stride; }
 static void lir_slice_flow_drop(LirSliceFlow *flow) {
@@ -26,10 +27,14 @@ static LirSliceRoot lir_slice_root_join(LirSliceRoot a, LirSliceRoot b) {
     if (!b.kind || (a.kind == b.kind && a.identity == b.identity)) return a;
     return (LirSliceRoot){LIR_SLICE_ROOT_UNKNOWN,0};
 }
-static bool lir_slice_root_alias(LirSliceRoot a, LirSliceRoot b) {
+static bool lir_slice_root_alias(LirSliceRoot a, LirSliceRoot b, bool checked_inputs) {
     if (!a.kind || !b.kind) return false;
     if (a.kind == LIR_SLICE_ROOT_UNKNOWN || b.kind == LIR_SLICE_ROOT_UNKNOWN) return true;
     if (a.kind == LIR_SLICE_ROOT_LOCAL || b.kind == LIR_SLICE_ROOT_LOCAL)
+        return a.kind == b.kind && a.identity == b.identity;
+    /* Completed call obligations separate borrowed inputs from State and
+     * other input roots. Actual arguments are substituted at every call. */
+    if (checked_inputs && (a.kind == LIR_SLICE_ROOT_INPUT || b.kind == LIR_SLICE_ROOT_INPUT))
         return a.kind == b.kind && a.identity == b.identity;
     return a.kind != LIR_SLICE_ROOT_STATE || b.kind != LIR_SLICE_ROOT_STATE || a.identity == b.identity;
 }
@@ -54,7 +59,10 @@ static XrLirStatus lir_slice_frontier(const XrLirModule *m, const XrLirFunctionD
     bool signature = xr_lir_internal_slice_type(m, f->result);
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         signature |= xr_lir_internal_slice_type(m, f->parameter_types[p]);
-    if (signature) {
+    XrLirSliceFunctionFact contract = {0};
+    bool checked = xr_lir_internal_slice_function_fact(m, function, &contract) == XR_LIR_OK && contract.available;
+    if (signature && (!checked || f->kind == XR_LIR_FUNCTION_EXTERNAL ||
+        (xr_lir_internal_slice_type(m, f->result) && contract.result_parameter == UINT32_MAX))) {
         xr_lir_internal_error(d, "Slice parameters and returns require a checked caller loan", function, 0, 0, NULL);
         if (d) d->status = XR_LIR_UNSUPPORTED;
         return XR_LIR_UNSUPPORTED;
@@ -67,8 +75,15 @@ static XrLirStatus lir_slice_frontier(const XrLirModule *m, const XrLirFunctionD
             for (uint32_t a = 0; a < v->operand_count; ++a)
                 slice |= xr_lir_internal_slice_type(m, f->values[v->operands[a] - 1].type);
             XrLirSliceIntrinsic role;
-            if (slice && (v->op != XR_LIR_CALL_INTRINSIC ||
-                xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) != XR_LIR_OK)) {
+            bool admitted = v->op == XR_LIR_CALL_INTRINSIC &&
+                xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) == XR_LIR_OK;
+            if (v->op == XR_LIR_RET && checked && xr_lir_internal_slice_type(m, f->result)) admitted = true;
+            if (v->op == XR_LIR_CALL) {
+                XrLirSliceFunctionFact callee;
+                admitted = xr_lir_internal_slice_function_fact(m, v->callee, &callee) == XR_LIR_OK && callee.available &&
+                    (!xr_lir_internal_slice_type(m, v->type) || callee.result_parameter < v->operand_count);
+            }
+            if (slice && !admitted) {
                 xr_lir_internal_error(d, "Slice use requires a closed readonly loan operation", function, b + 1, i + 1, &v->source);
                 if (d) d->status = XR_LIR_UNSUPPORTED;
                 return XR_LIR_UNSUPPORTED;
@@ -109,7 +124,7 @@ static void lir_slice_enqueue(LirSliceFlow *flow, uint32_t block, uint32_t block
 }
 static bool lir_slice_write_conflict(const LirSliceFlow *flow, LirSliceRoot root) {
     for (size_t n = 0; n < flow->count; ++n)
-        if ((flow->scratch[n] & 2u) && lir_slice_root_alias(flow->roots[n], root)) return true;
+        if ((flow->scratch[n] & 2u) && lir_slice_root_alias(flow->roots[n], root, flow->checked_inputs)) return true;
     return false;
 }
 static bool lir_slice_callable_frontier(const XrLirModule *m, const XrLirFunctionData *f,
@@ -125,8 +140,35 @@ static bool lir_slice_callable_frontier(const XrLirModule *m, const XrLirFunctio
     }
     return false;
 }
+static bool lir_slice_call_conflict(const XrLirModule *m, const XrLirInstructionView *v, const LirSliceFlow *flow) {
+    if (m->functions[v->callee - 1].kind == XR_LIR_FUNCTION_EXTERNAL) {
+        XrLirExternKind kind = m->functions[v->callee - 1].extern_kind;
+        if (kind == XR_LIR_EXTERN_PRINT_I64 || kind == XR_LIR_EXTERN_PRINT_STRING ||
+            (kind >= XR_LIR_EXTERN_CLOCK_REALTIME && kind <= XR_LIR_EXTERN_UTC_OFFSET_AT)) return false;
+    }
+    XrLirSliceFunctionFact callee; XrLirSliceFactsView facts;
+    if (xr_lir_internal_slice_function_fact(m, v->callee, &callee) != XR_LIR_OK || !callee.available ||
+        xr_lir_slice_facts_view(m->slice_facts, &facts) != XR_LIR_OK) {
+        /* No summary is not an empty WRITE set, including a zero-arg call. */
+        return lir_slice_write_conflict(flow, (LirSliceRoot){LIR_SLICE_ROOT_UNKNOWN,0});
+    }
+    for (size_t n = 0; n < callee.write.count; ++n) {
+        XrLirSliceEffect term = facts.terms[callee.write.first + n];
+        LirSliceRoot root = {LIR_SLICE_ROOT_UNKNOWN,0};
+        if (term.kind == XR_LIR_SLICE_EFFECT_SLOT) root = (LirSliceRoot){LIR_SLICE_ROOT_STATE,term.identity};
+        else if (term.kind == XR_LIR_SLICE_EFFECT_PARAMETER || term.kind == XR_LIR_SLICE_EFFECT_CAPTURE) {
+            if (term.identity >= v->operand_count) return true;
+            uint32_t actual = v->operands[term.identity], slice = flow->values[actual];
+            root = slice ? flow->roots[slice - 1] : flow->bindings[actual];
+            if (!root.kind) root = (LirSliceRoot){LIR_SLICE_ROOT_UNKNOWN,0};
+        }
+        if (lir_slice_write_conflict(flow, root)) return true;
+    }
+    return false;
+}
 static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const LirSliceFlow *flow) {
+    if (v->op == XR_LIR_CALL && m->slice_facts) return lir_slice_call_conflict(m, v, flow);
     if (v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_REF) {
         for (uint32_t a = 0; a < v->operand_count; ++a) {
             uint32_t value = v->operands[a];
@@ -153,7 +195,7 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
     const XrLirBlockData *block = &f->blocks[b];
     for (uint32_t i = 0; i < block->instruction_count; ++i) {
         const XrLirInstructionView *v = &block->instructions[i].view;
-        if (v->op == XR_LIR_SLICE_CLEANUP) {
+        if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP) {
             flow->scratch[flow->values[(uint32_t)v->bits] - 1] = 1;
             continue;
         }
@@ -171,6 +213,23 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
             uint32_t row = flow->values[v->operands[a]];
             if (row && flow->scratch[row - 1] != 2)
                 return xr_lir_internal_error(d, "Slice use is outside its live loan", function, b + 1, i + 1, &v->source);
+        }
+        if (v->op == XR_LIR_CALL && v->result && flow->values[v->result]) {
+            XrLirSliceFunctionFact callee;
+            if (xr_lir_internal_slice_function_fact(m, v->callee, &callee) != XR_LIR_OK ||
+                !callee.available || callee.result_parameter >= v->operand_count) return XR_LIR_UNSUPPORTED;
+            uint32_t source = flow->values[v->operands[callee.result_parameter]];
+            if (!source) return XR_LIR_VERIFY_ERROR;
+            uint32_t row = flow->values[v->result] - 1;
+            flow->scratch[row] = 2; flow->roots[row] = flow->roots[source - 1];
+        }
+        if (check && v->op == XR_LIR_RET && v->operand_count && flow->values[v->operands[0]]) {
+            XrLirSliceFunctionFact own;
+            uint32_t row = flow->values[v->operands[0]] - 1;
+            if (xr_lir_internal_slice_function_fact(m, function, &own) != XR_LIR_OK || !own.available ||
+                own.result_parameter >= f->parameter_count || flow->roots[row].kind != LIR_SLICE_ROOT_INPUT ||
+                flow->roots[row].identity != f->parameters[own.result_parameter])
+                return xr_lir_internal_error(d, "Slice return is not the verified borrowed input origin", function, b + 1, i + 1, &v->source);
         }
         XrLirSliceIntrinsic role;
         if (v->op != XR_LIR_CALL_INTRINSIC || xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) != XR_LIR_OK) continue;
@@ -226,7 +285,15 @@ static XrLirStatus lir_slice_function(const XrLirModule *m, const XrLirFunctionD
     if (!needed) return XR_LIR_OK;
     LirSliceFlow flow = {0};
     if (!lir_slice_flow_create(m, f, &flow)) { lir_slice_flow_drop(&flow); return XR_LIR_OUT_OF_MEMORY; }
+    XrLirSliceFunctionFact contract;
+    flow.checked_inputs = xr_lir_internal_slice_function_fact(m, function, &contract) == XR_LIR_OK && contract.available;
     memset(flow.inputs + (size_t)(f->entry - 1) * flow.count, 1, flow.count);
+    for (uint32_t p = 0; p < f->parameter_count; ++p) {
+        uint32_t value = f->parameters[p], row = flow.values[value];
+        if (!row) continue;
+        flow.inputs[(size_t)(f->entry - 1) * flow.count + row - 1] = 2;
+        flow.input_roots[(size_t)(f->entry - 1) * flow.count + row - 1] = (LirSliceRoot){LIR_SLICE_ROOT_INPUT,value};
+    }
     lir_slice_enqueue(&flow, f->entry - 1, f->block_count);
     while (flow.pending) {
         uint32_t b = flow.queue[flow.head]; flow.head = (flow.head + 1) % f->block_count;

@@ -23,6 +23,10 @@ typedef enum XrLirSliceOperation {
     XR_LIR_SLICE_OP_END,
     /* Resource cleanup is a zero-operand LIR effect, never a callable role. */
     XR_LIR_SLICE_OP_CLEANUP,
+    XR_LIR_SLICE_OP_FORMAL_CLEANUP,
+    /* Call and return hooks are common events, not intrinsic catalog rows. */
+    XR_LIR_SLICE_OP_CALL,
+    XR_LIR_SLICE_OP_RETURN,
     XR_LIR_SLICE_OP_COUNT
 } XrLirSliceOperation;
 typedef struct XrLirSliceIntrinsic {
@@ -55,4 +59,8 @@ XR_FUNC XrLirStatus xr_lir_slice_intrinsic_view(const XrLirModule *, uint32_t id
  * Finish validates its producer and home; cleanup never reads its natural
  * bytes and leaves it logically dead. Strict END and reads still require a
  * live loan. A not-yet-allocated Frame has no published keeper to retire. */
+/* SLICE_FORMAL_CLEANUP is a separate Unit/zero-operand/zero-edge effect whose
+ * bits name one READ Slice formal in this function. It only ends that formal's
+ * logical loan, including conditional or repeated cleanup. Its physical action
+ * is NONE: no bytes, owner, slot or caller keeper is read or retired. */
 #endif // XLIR_VIEW_H

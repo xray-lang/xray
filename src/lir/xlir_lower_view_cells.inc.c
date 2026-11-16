@@ -40,6 +40,13 @@ static bool lower_view_cell_graph(LowerFunction *f, LowerViewCellGraph *graph) {
             xr_lir_slice_intrinsic_view(f->owner->module, op->intrinsic, &role) == XR_LIR_OK &&
             (role.operation == XR_LIR_SLICE_OP_NEW || role.operation == XR_LIR_SLICE_OP_BIND || role.operation == XR_LIR_SLICE_OP_REBORROW))))
             if (!lower_view_cell_link(f, graph, op->operands[0], op->result)) return false;
+        if (op && op->op == XR_LIR_CALL && xr_lir_internal_slice_type(f->owner->module,op->type)) {
+            XrLirSliceFunctionFact contract;
+            if (xr_lir_internal_slice_function_fact(f->owner->module,op->callee,&contract) != XR_LIR_OK ||
+                !contract.available || contract.result_parameter >= op->operand_count)
+                return lower_unsupported(f->owner,"Slice call has no physical source-origin link");
+            if (!lower_view_cell_link(f,graph,op->operands[contract.result_parameter],op->result)) return false;
+        }
     }
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
         f->owner->block = b;

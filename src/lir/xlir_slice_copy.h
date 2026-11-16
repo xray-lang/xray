@@ -28,7 +28,8 @@ static XrLirStatus lir_slice_copy_cleanup_record(LirSliceCopyCleanups *pending, 
     }
     uint32_t ordinal = output->functions[block.function - 1].blocks[block.id - 1].instruction_count;
     pending->items[pending->count++] = (XrLirSliceCleanupInsertion){.block=block,.ordinal=ordinal,
-        .target={output,block.function,(uint32_t)source->bits},.source=source->source};
+        .target={output,block.function,(uint32_t)source->bits},.source=source->source,
+        .formal=source->op == XR_LIR_SLICE_FORMAL_CLEANUP};
     return XR_LIR_OK;
 }
 
