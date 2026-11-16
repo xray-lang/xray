@@ -13,7 +13,7 @@ import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 MODES = ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp')
 
@@ -114,7 +114,7 @@ def compile_command(args, source, executable):
     if args.kind == 'msvc':
         crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-        command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt,
+        command = [args.compiler, '/nologo', *native_c11_options(args.compiler, driver=args.kind), '/W4', '/WX', '/O2', '/utf-8', crt,
                    '/I' + str(args.include), '/I' + str(args.source_root / 'src'),
                    source, '/Fe:' + str(executable),
                    '/Fo' + str(executable.with_suffix('.obj'))]
