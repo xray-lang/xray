@@ -46,6 +46,19 @@ XRAY_API XrtManagedStatus xrt_array_slice_clear(const XrtInlineValueHome *home) 
     XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();
     return xrt_inline_value_replace(home, &spec, NULL);
 }
+XRAY_API XrtManagedStatus xrt_array_slice_range_bind(const XrtInlineValueHome *home,
+    XrtBackingArrayKind kind, const XrtArrayBacking *array, int64_t start, int64_t limit) {
+    if (start < 0 || limit < start) return XRT_MANAGED_BOUNDS;
+    return xrt_array_slice_bind(home, kind, array, (size_t)start, (size_t)(limit - start));
+}
+XRAY_API XrtManagedStatus xrt_array_slice_range_reborrow(const XrtInlineValueHome *home,
+    XrtBackingArrayKind kind, const XrtReadonlyArraySlice *parent, int64_t start, int64_t limit, bool open) {
+    XrtManagedStatus status = slice_range(parent, kind);
+    if (status != XRT_MANAGED_OK) return status;
+    if (open) limit = (int64_t)parent->count;
+    if (start < 0 || limit < start) return XRT_MANAGED_BOUNDS;
+    return xrt_array_slice_reborrow(home, kind, parent, (size_t)start, (size_t)(limit - start));
+}
 XRAY_API XrtManagedStatus xrt_array_slice_length(const XrtReadonlyArraySlice *slice, int64_t *output) {
     if (!slice || !slice->backing || !output || slice->count > INT64_MAX) return XRT_MANAGED_ARGUMENT;
     *output = (int64_t)slice->count;

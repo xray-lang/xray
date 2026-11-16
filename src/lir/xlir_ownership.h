@@ -81,6 +81,14 @@ typedef struct XrLirOwnershipFact {
     XrLirOwnershipTransferMode transfer_mode;
     /* A natural Slice has no owner leaf. This separate mode describes only
      * its private physical keeper; it cannot create or extend a logical loan. */
+    /* VIEW_VALUE: value is the new Slice SSA; target_value is its real Array
+     * binding for NEW, or its exact source Slice for BIND/REBORROW. Parameters
+     * use argument as their ordinal and have no target or keeper mode.
+     * VIEW_END: value is the exact ended SSA. Normalized scope cleanup produces
+     * one END for each actual semantic death, never a readable empty value.
+     * Selected edges keep value/target_value as source/target Slice SSA ids.
+     * Natural transfer_mode is BORROW; hold_transfer_mode is a separate real
+     * keeper COPY/MOVE/BORROW fact, not Slice's owned_count. */
     uint32_t view_operation;
     XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirOwnershipFact;

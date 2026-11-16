@@ -47,6 +47,13 @@ XRAY_API XrtManagedStatus xrt_array_slice_bind(const XrtInlineValueHome *,
     XrtBackingArrayKind, const XrtArrayBacking *, size_t start, size_t count);
 XRAY_API XrtManagedStatus xrt_array_slice_reborrow(const XrtInlineValueHome *,
     XrtBackingArrayKind, const XrtReadonlyArraySlice *, size_t start, size_t count);
+/* These are the shared start/limit receivers used by both execution backends.
+ * NEW receives normalized Array bounds; reborrow is strict and open selects
+ * the parent's length. The kernels own subtraction and signed-bound checks. */
+XRAY_API XrtManagedStatus xrt_array_slice_range_bind(const XrtInlineValueHome *,
+    XrtBackingArrayKind, const XrtArrayBacking *, int64_t start, int64_t limit);
+XRAY_API XrtManagedStatus xrt_array_slice_range_reborrow(const XrtInlineValueHome *,
+    XrtBackingArrayKind, const XrtReadonlyArraySlice *, int64_t start, int64_t limit, bool open);
 /* Only a confirmed END/cleanup may clear a bundle. Its zero bytes do not form
  * another readable Slice. Each reader consumes an already admitted live loan;
  * binding/reborrow has checked the backing extent and element geometry. Normal
