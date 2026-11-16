@@ -45,6 +45,7 @@
 #include "lir_map_borrow_fixture.h"
 #include "lir_slice_boundary_root_fixture.h"
 #include "lir_slice_state_read_fixture.h"
+#include "lir_slice_cleanup_fixture.h"
 #include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
@@ -601,10 +602,59 @@ static void scalar_edge_structure(const char *text,XrLirModule *module,XrLirFunc
         cursor=strchr(jump,'\n')+1;
     }
 }
+static XrLirSliceCleanupMode cleanup_proof_mode(SliceCleanupFixture c) {
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){c.module,NULL,0},&plan,NULL));
+    bool found=false;XrLirSliceCleanupMode mode=XR_LIR_SLICE_CLEANUP_CLEAR;
+    for (uint32_t n=0;n<xr_lir_ownership_fact_count(plan);++n) {
+        XrLirOwnershipFact fact;OK(xr_lir_ownership_fact_at(plan,n,&fact));
+        if (fact.kind==XR_LIR_OWNERSHIP_VIEW_END && fact.view_operation==XR_LIR_SLICE_OP_CLEANUP &&
+            fact.function==c.worker.id && fact.block==c.cleanup.id &&
+            fact.instruction==c.cleanup_instruction && fact.value==c.target.id) {
+            CHECK(!found);found=true;mode=fact.view_cleanup;
+        }
+    }
+    CHECK(found==(c.cleanup.id!=0));xr_lir_ownership_plan_destroy(plan);return mode;
+}
+static void slice_cleanup_proofs(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
+    for (size_t e=0;e<2;++e) for (unsigned shape=0;shape<SLICE_CLEANUP_CASE_COUNT;++shape) {
+        SliceCleanupFixture c=slice_cleanup_fixture(elements[e],(SliceCleanupCase)shape,false);
+        OK(xr_lir_module_finish(c.module,NULL));
+        CHECK(!c.module->functions[c.root.id-1].block_cleanup_rank);
+        CHECK((c.module->functions[c.worker.id-1].block_cleanup_rank!=NULL)==(shape!=SLICE_CLEANUP_STRICT_END));
+        CHECK(cleanup_proof_mode(c)==(c.unconstructed?XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED:XR_LIR_SLICE_CLEANUP_CLEAR));
+        if (shape==SLICE_CLEANUP_REACHABLE) {
+            const uint32_t *rank=c.module->functions[c.worker.id-1].block_cleanup_rank;
+            CHECK(rank[c.definition.id-1]>rank[c.cleanup.id-1]);
+        }
+        if (shape==SLICE_CLEANUP_LOOP) CHECK(c.module->functions[c.worker.id-1].block_multiplicity[c.definition.id-1]);
+        if (shape==SLICE_CLEANUP_BRANCH) {
+            XrLirFunctionData *f=&c.module->functions[c.worker.id-1];
+            CHECK(f->block_cleanup_rank[c.definition.id-1]<f->block_cleanup_rank[c.cleanup.id-1]);
+            XrLirBlockData *block=&f->blocks[c.definition.id-1];
+            XrLirEdgeView *edge=&block->instructions[block->instruction_count-1].view.edges[0],saved=*edge;
+            edge->target=c.cleanup.id;edge->argument_count=0;edge->arguments=NULL;
+            /* A valid new path contradicts the old immutable cache. Public
+             * collection must use its freshly verified component order. */
+            OK(xr_lir_verify(c.module,NULL));
+            CHECK(cleanup_proof_mode(c)==XR_LIR_SLICE_CLEANUP_CLEAR);
+            *edge=saved;
+        }
+        xr_lir_module_destroy(c.module);
+    }
+}
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
-    if (!strcmp(name, "function-reference")) callable_fixture(&m, &root);
+    if (!strncmp(name,"slice-proof-",12)) {
+        SliceCleanupCase shape=strstr(name,"-bind-")?SLICE_CLEANUP_BIND:
+            strstr(name,"-loop-")?SLICE_CLEANUP_LOOP:SLICE_CLEANUP_BRANCH;
+        SliceCleanupFixture c=slice_cleanup_fixture(strstr(name,"-u8")?XR_LIR_U8:XR_LIR_I64,
+            shape,strstr(name,"-live-")!=NULL);
+        m=c.module;root=c.root;OK(xr_lir_module_finish(m,NULL));
+    }
+    else if (!strcmp(name, "function-reference")) callable_fixture(&m, &root);
     else if (!strcmp(name, "function-frame")) callable_fixture_capture(&m, &root, true);
     else if (!strcmp(name, "function-owned")) callable_fixture_capture(&m, &root, 3);
     else if (!strcmp(name, "function-owned-return")) callable_factory_fixture(&m, &root, false);
@@ -689,6 +739,11 @@ static void array_c_output(const char *name, const char *path) {
         slice_c_reader_has_no_owners(output.bytes);
         CHECK(strstr(output.bytes,"xrt_array_slice_clear(xrl_frame, (unsigned char *)xrl_payload + ") &&
             !strstr(output.bytes,"xrt_array_slice_clear(&(XrtInlineValueHome)"));
+    }
+    if (!strncmp(name,"slice-proof-",12)) {
+        size_t clear=0;const char *at=output.bytes;
+        while ((at=strstr(at,"xrt_array_slice_clear("))!=NULL) {++clear;++at;}
+        CHECK(clear==((strstr(name,"-loop-") || strstr(name,"-bind-"))?2u:1u));
     }
     if (!strncmp(name,"scalar-edge-",12))
         scalar_edge_structure(output.bytes,m,root,strcmp(name,"scalar-edge-swap")!=0);
@@ -823,6 +878,11 @@ int main(int argc, char **argv) {
     array_c_output("scalar-edge-swap",NULL);
     array_c_output("scalar-edge-mixed",NULL);
     array_c_output("scalar-edge-pod",NULL);
+    slice_cleanup_proofs();
+    static const char *const cleanup_products[]={"slice-proof-branch-i64","slice-proof-branch-u8",
+        "slice-proof-live-i64","slice-proof-live-u8","slice-proof-bind-i64","slice-proof-bind-u8",
+        "slice-proof-loop-i64","slice-proof-loop-u8"};
+    for (size_t n=0;n<sizeof(cleanup_products)/sizeof(*cleanup_products);++n) array_c_output(cleanup_products[n],NULL);
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();

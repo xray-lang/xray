@@ -124,6 +124,10 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
     expected = {'scalar-edge-swap': 2011, 'scalar-edge-mixed': 2011, 'scalar-edge-pod': 2018,
+                'slice-proof-branch-i64': 40, 'slice-proof-branch-u8': 40,
+                'slice-proof-live-i64': 43, 'slice-proof-live-u8': 43,
+                'slice-proof-bind-i64': 43, 'slice-proof-bind-u8': 43,
+                'slice-proof-loop-i64': 43, 'slice-proof-loop-u8': 43,
                 'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73,
                 'slice-boundary-i64': 68, 'slice-boundary-u8': 68,
                 'slice-state-const-i64': 25, 'slice-state-const-u8': 25,
