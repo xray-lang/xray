@@ -92,10 +92,14 @@ static bool lower_slice_effects_receive(Lower *c, XirModuleEffectExportView sour
 }
 static bool lower_slice_effects(Lower *c) {
     if (!c->views) return true;
-    XirModuleEffectExport *owned = NULL; XirModuleEffectExportView view;
+    XirModuleEffectExport *owned = NULL;
     XrXirStatus status = xir_effects_module_export_copy(c->request->closed,&owned);
-    if (status == XR_XIR_OK) status = xir_effects_module_export_view(owned,&view);
-    bool good = status == XR_XIR_OK && lower_slice_effects_receive(c,view);
+    bool good = false;
+    if (status == XR_XIR_OK) {
+        XirModuleEffectExportView view = {0};
+        status = xir_effects_module_export_view(owned,&view);
+        if (status == XR_XIR_OK) good = lower_slice_effects_receive(c,view);
+    }
     xir_effects_module_export_free(owned);
     if (status != XR_XIR_OK) lower_error(c,status == XR_XIR_OUT_OF_MEMORY ? XR_LIR_OUT_OF_MEMORY : XR_LIR_UNSUPPORTED,
         "Slice calls require completed module WRITE and ORIGIN facts");
