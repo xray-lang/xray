@@ -11,6 +11,8 @@
  *   replacement is published before any previous owner can run its destructor.
  */
 #include "xnative_module_state.h"
+#include "xnative_capture_backing.h"
+#include "xray_native_function.h"
 #include "xray_native_values.h"
 #include "base/xchecks.h"
 #include "base/xsigned_rc.h"
@@ -79,6 +81,11 @@ static bool module_part(uint8_t *base, size_t *offset, size_t count, size_t stri
 static const ModuleType *module_slot_type(const XrtModuleState *state, uint32_t slot) {
     return &state->layout->types[state->layout->view.slots[slot].type - 1];
 }
+XR_FUNCDEF XrtManagedStatus xrt_module_state_plan(const XrtModuleState *state, uint32_t type,
+    const XrtValuePlan **empty) {
+    if (!state) return XRT_MANAGED_ARGUMENT;
+    return xrt_module_layout_plan(state->layout, type, empty);
+}
 static void *module_payload(const XrtModuleState *state, uint32_t slot) {
     return state->payload + state->layout->view.slots[slot].offset;
 }
@@ -112,6 +119,23 @@ XRAY_API XrtModuleStatus xrt_module_external_owner(const XrtModuleRef *reference
     return XRT_MANAGED_OK;
 }
 
+/* The caller has admitted the complete typed binding, including its immutable
+ * backend entry and code lifetime. Storage validation cannot authenticate an
+ * opaque foreign entry or infer signature identity from a plan address. */
+static XrtManagedStatus module_function_storage(const void *value) {
+    XrtFunction function;
+    memcpy(&function, value, sizeof(function));
+    if (!function.entry || !function.owner) return XRT_MANAGED_ARGUMENT;
+    XrtEnvironmentBorrow environment = {0};
+    XrtManagedStatus status = xrt_environment_borrow_owned(function.owner, &environment);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtValuePlanSpec shape, signature;
+    if (function.environment != (uintptr_t)environment.payload ||
+        xrt_value_plan_view(environment.plan, &shape) != XRT_MANAGED_OK ||
+        xrt_value_plan_view(shape.entry.signature, &signature) != XRT_MANAGED_OK ||
+        signature.kind != XRT_VALUE_FUNCTION) return XRT_MANAGED_ARGUMENT;
+    return XRT_MANAGED_OK;
+}
 /* Traverse retained plans with a bounded, preallocated stack. No recursive
  * callbacks, compiler pool queries or independent physical layout are needed. */
 static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType *type, void *value) {
@@ -148,6 +172,9 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
         } else if (spec->kind >= XRT_VALUE_STRING && spec->kind <= XRT_VALUE_MAP_STRING_I64) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!owner) return XRT_MANAGED_ARGUMENT;
+        } else if (spec->kind == XRT_VALUE_FUNCTION) {
+            XrtManagedStatus status = module_function_storage(top->value);
+            if (status != XRT_MANAGED_OK) return status;
         }
         if (child) {
             XR_CHECK(depth < state->layout->depth, "the earlier-row type DAG bounds validation depth");
