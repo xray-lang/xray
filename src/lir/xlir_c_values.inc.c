@@ -247,7 +247,7 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     if (c->array_frame_block && c->array_frame_block == c->block) return;
     c_text(c, "    if (!xrl_frame) {\n");
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
-    c_format(c, "        XrtManagedStatus status = xrl_frame_%" PRIu32 "_enter(xrl_root, &xrl_frame, &xrl_payload);\n", c->function.id);
+    c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
     if (c->seen[c->function.id - 1] & LIR_C_FUNCTION_STRING_BINDING)
         c_format(c, "        xrt_native_string_binding_prepare(UINT32_C(%" PRIu32 "));\n", source);

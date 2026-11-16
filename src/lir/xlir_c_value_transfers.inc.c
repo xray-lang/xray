@@ -68,16 +68,7 @@ static void c_value_frame(LirC *c, const XrLirValueHomes *homes) {
     c_text(c, "};\n");
     c_format(c, "static const XrtManagedFrameSpec xrl_frame_%" PRIu32 " = {%zu, %zu, %zu, xrl_owners_%" PRIu32 "};\n",
         function, homes->frame.slot_count, homes->frame.payload_size, homes->frame.payload_alignment, function);
-    c_format(c, "static XrtManagedStatus xrl_frame_%" PRIu32 "_enter(XrtManagedRoot *root, XrtManagedFrame **output, void **payload) {\n", function);
-    c_text(c, "    if (!output || *output || !payload || *payload) return XRT_MANAGED_ARGUMENT;\n"
-        "    XrtManagedFrame *frame = NULL;\n    void *bytes = NULL;\n    size_t extent = 0;\n");
-    c_format(c, "    XrtManagedStatus status = xrt_managed_frame_enter_layout(root, &xrl_frame_%" PRIu32 ", &frame);\n", function);
-    c_text(c, "    if (status != XRT_MANAGED_OK) return status;\n"
-        "    status = xrt_managed_frame_payload(frame, &bytes, &extent);\n"
-        "    if (status != XRT_MANAGED_OK) {\n"
-        "        XrtManagedStatus cleanup = xrt_managed_frame_leave(root, frame);\n"
-        "        return cleanup == XRT_MANAGED_OK ? status : cleanup;\n    }\n"
-        "    *output = frame; *payload = bytes;\n    return XRT_MANAGED_OK;\n}\n");
+
 }
 static const XrLirHomeWorkspace *c_value_borrow_stage(LirC *c, const XrLirValueHomes *homes,
     XrLirHomeTransfer transfer, const XrLirHomeEdge *edge) {
