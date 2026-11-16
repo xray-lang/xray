@@ -122,6 +122,11 @@ static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOpera
         operation == XR_LIR_SLICE_OP_FORMAL_CLEANUP;
     while (c->view_event_cursor < c->homes->event_count && c_request_poll(c)) {
         const XrLirHomeEvent *event = &c->homes->events[c->view_event_cursor];
+        /* Callable and Cell passes can precede earlier ordinary operations.
+         * Only the Slice substream has the instruction order used below. */
+        if (event->kind != XR_LIR_OWNERSHIP_VIEW_VALUE && event->kind != XR_LIR_OWNERSHIP_VIEW_END) {
+            ++c->view_event_cursor; continue;
+        }
         if (event->block > c->block || (event->block == c->block && event->instruction > c->instruction)) break;
         ++c->view_event_cursor;
         if (event->block != c->block || event->instruction != c->instruction ||
