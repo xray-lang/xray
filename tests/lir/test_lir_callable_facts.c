@@ -398,9 +398,13 @@ static void facts_scalar_empty(void) {
     XrLirFunction function = facts_function(module, &(XrLirFunctionSpec){.name="scalar", .name_length=6, .result=XR_LIR_UNIT});
     facts_return(module, facts_block(module, function), (XrLirValue){0});
     OK(xr_lir_module_finish(module, NULL));
+    size_t baseline = live, baseline_bytes = live_bytes;
+    CHECK(baseline && baseline_bytes);
     XrLirCallableFacts *copy = NULL; attempt = 0; fail_at = 0;
-    OK(xr_lir_callable_facts_create(module, &copy)); CHECK(!copy && !attempt && !live && !live_bytes);
+    OK(xr_lir_callable_facts_create(module, &copy));
+    CHECK(!copy && !attempt && live == baseline && live_bytes == baseline_bytes);
     fail_at = SIZE_MAX; xr_lir_module_destroy(module);
+    CHECK(!live && !live_bytes);
 }
 
 #include "lir_callable_construction_fixture.h"
