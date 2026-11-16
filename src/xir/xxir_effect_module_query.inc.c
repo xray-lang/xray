@@ -16,6 +16,129 @@
  *   also hold, and only a run-time identity check could tell the objects
  *   apart; until compiled code has one, every such call is refused.
  */
+#include "xxir_effect_module_export_internal.h"
+
+struct XirModuleEffectExport { XirModuleEffectExportView view; };
+XR_FUNC void xir_effects_module_export_free(XirModuleEffectExport *owned) {
+    if (!owned) return;
+    xr_compile_resources_free((void *)owned->view.functions);
+    xr_compile_resources_free((void *)owned->view.values);
+    xr_compile_resources_free((void *)owned->view.terms);
+    xr_compile_resources_free((void *)owned->view.modules);
+    xr_compile_resources_free((void *)owned->view.dependencies);
+    xr_compile_resources_free((void *)owned->view.slots);
+    xr_compile_resources_free(owned);
+}
+XR_FUNC XrXirStatus xir_effects_module_export_view(const XirModuleEffectExport *owned, XirModuleEffectExportView *output) {
+    if (!owned || !output) return XR_XIR_BAD_STRUCTURE;
+    *output = owned->view; return XR_XIR_OK;
+}
+static bool effect_module_export_kind(uint8_t kind, XirModuleEffectTermKind *output) {
+    switch (kind) {
+    case EFFECT_MODULE_SLOT: *output=XIR_MODULE_EFFECT_SLOT; return true;
+    case EFFECT_MODULE_CALLBACK: *output=XIR_MODULE_EFFECT_CALLBACK; return true;
+    case EFFECT_MODULE_CAPTURE: *output=XIR_MODULE_EFFECT_CAPTURE; return true;
+    case EFFECT_MODULE_UNKNOWN: *output=XIR_MODULE_EFFECT_UNKNOWN; return true;
+    case EFFECT_MODULE_FIELD: *output=XIR_MODULE_EFFECT_FIELD; return true;
+    case EFFECT_MODULE_PARAMETER: *output=XIR_MODULE_EFFECT_PARAMETER; return true;
+    default: return false;
+    }
+}
+static XrXirStatus effect_module_export_set(const EffectCheckedRoots *roots, uint32_t node, uint8_t property,
+    XirModuleEffectSpan *span, size_t *used, XirModuleEffectTerm *terms) {
+    if (node >= roots->nodes) return XR_XIR_BAD_STRUCTURE;
+    if (!roots->module_access) { *span = (XirModuleEffectSpan){0}; return XR_XIR_OK; }
+    size_t first = *used; uint32_t visited = 0;
+    for (uint32_t m = roots->node[node].module_sets[property]; m != UINT32_MAX;) {
+        if (m >= roots->module_members || visited++ >= roots->module_members || *used == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
+        EffectModuleMember member = roots->module_member[m]; XirModuleEffectTermKind kind;
+        if (member.node != node || member.property != property || !effect_module_export_kind(member.kind, &kind)) return XR_XIR_BAD_STRUCTURE;
+        if (terms) terms[*used] = (XirModuleEffectTerm){kind,member.identity,member.function,member.instruction};
+        ++*used; m = member.next;
+    }
+    *span = (XirModuleEffectSpan){*used == first ? 0 : first,*used - first}; return XR_XIR_OK;
+}
+static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, uint32_t count,
+    XirModuleEffectExportView *view, bool copy) {
+    size_t used = 0, value = 0; XrXirStatus status = XR_XIR_OK;
+    for (uint32_t f = 0; f < count && status == XR_XIR_OK; ++f) {
+        EffectCheckFunction source = roots->function[f]; XirModuleEffectFunction row = {
+            .module=source.module,.parameter_count=source.parameters,.capture_count=source.capture_count,
+            .first_value=value,.value_count=source.values};
+        if (source.first > roots->nodes || source.values > roots->nodes - source.first) return XR_XIR_BAD_STRUCTURE;
+        status = effect_module_export_set(roots, source.root, EFFECT_MODULE_ACCESS, &row.access, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (status == XR_XIR_OK) status = effect_module_export_set(roots, source.root, EFFECT_MODULE_WRITE, &row.write, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (status == XR_XIR_OK) status = effect_module_export_set(roots, source.result, EFFECT_MODULE_ORIGIN, &row.result_origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (copy) ((XirModuleEffectFunction *)view->functions)[f] = row;
+        if (source.values > SIZE_MAX - value) return XR_XIR_OVERFLOW;
+        for (uint32_t v = 0; v < source.values && status == XR_XIR_OK; ++v) {
+            XirModuleEffectSpan origin;
+            status = effect_module_export_set(roots, source.first + v, EFFECT_MODULE_ORIGIN, &origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+            if (copy && status == XR_XIR_OK) ((XirModuleEffectValue *)view->values)[value + v].origin = origin;
+        }
+        value += source.values;
+    }
+    if (copy && (used != view->term_count || value != view->value_count)) return XR_XIR_BAD_STRUCTURE;
+    if (!copy) { view->term_count = used; view->value_count = value; }
+    return status;
+}
+static XrXirStatus effect_module_export_allocate(const XrXirCompileContext *context,
+    const XrXirDeclarations *declarations, XirModuleEffectExportView *view) {
+    XrXirStatus status = XR_XIR_OK;
+    view->module_count = declarations->module_count; view->slot_count = declarations->slot_count;
+    for (uint32_t m = 0; m < view->module_count; ++m) {
+        uint32_t count = declarations->modules[m].dependency_count;
+        if (count > SIZE_MAX - view->dependency_count) return XR_XIR_OVERFLOW;
+        view->dependency_count += count;
+    }
+    view->functions = xir_compile_calloc(context, view->function_count, sizeof(*view->functions), &status);
+    view->values = xir_compile_calloc(context, view->value_count, sizeof(*view->values), &status);
+    view->terms = xir_compile_calloc(context, view->term_count, sizeof(*view->terms), &status);
+    view->modules = xir_compile_calloc(context, view->module_count, sizeof(*view->modules), &status);
+    view->dependencies = xir_compile_calloc(context, view->dependency_count, sizeof(*view->dependencies), &status);
+    view->slots = xir_compile_calloc(context, view->slot_count, sizeof(*view->slots), &status);
+    return status;
+}
+XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact, XirModuleEffectExport **output) {
+    if (!artifact || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    if (artifact->module.stage != XR_XIR_CHECKED && artifact->module.stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    const XrXirCompileContext *context = &artifact->context;
+    XirEffectInput input = {&artifact->module,artifact->construction,NULL};
+    const XrXirEffects *effects = artifact->program_final ? artifact->program_final : artifact->checked_effects;
+    if (!effects || !effect_final_outcomes(effects) || !effects->checked_roots)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = xir_effects_source_body_match_input(context, input, effects);
+    if (status != XR_XIR_OK) return status;
+    if (!input.module->declarations) return XR_XIR_BAD_STRUCTURE;
+    XirModuleEffectExport *owned = xir_compile_calloc(context, 1, sizeof(*owned), &status);
+    if (!owned) return status;
+    XirModuleEffectExportView *view = &owned->view;
+    view->function_count = input.module->function_count;
+    view->module_access_complete = effects->checked_roots->module_access;
+    status = effect_module_export_terms(effects->checked_roots, view->function_count, view, false);
+    if (status == XR_XIR_OK) status = effect_module_export_allocate(context, input.module->declarations, view);
+    if (status == XR_XIR_OK) status = xir_effects_source_body_match_input(context, input, effects);
+    if (status == XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, view->function_count, view, true);
+    if (status == XR_XIR_OK) {
+        const XrXirDeclarations *declarations = input.module->declarations; size_t next = 0;
+        if (view->module_count != declarations->module_count || view->slot_count != declarations->slot_count) status = XR_XIR_BAD_STRUCTURE;
+        for (uint32_t m = 0; m < view->module_count && status == XR_XIR_OK; ++m) {
+            XrXirSourceModule source = declarations->modules[m];
+            if (source.dependency_count > view->dependency_count - next) { status = XR_XIR_BAD_STRUCTURE; break; }
+            ((XirModuleEffectDependency *)view->modules)[m] = (XirModuleEffectDependency){source.dependency_count ? next : 0,source.dependency_count};
+            if (source.dependency_count) memcpy((uint32_t *)view->dependencies + next, source.dependencies,
+                (size_t)source.dependency_count * sizeof(*source.dependencies));
+            next += source.dependency_count;
+        }
+        if (next != view->dependency_count) status = XR_XIR_BAD_STRUCTURE;
+        for (uint32_t s = 0; s < view->slot_count && status == XR_XIR_OK; ++s)
+            ((XirModuleEffectSlot *)view->slots)[s].module = declarations->slots[s].module;
+    }
+    if (status == XR_XIR_OK) status = xir_effects_source_body_match_input(context, input, effects);
+    if (status != XR_XIR_OK) { xir_effects_module_export_free(owned); return status; }
+    *output = owned; return XR_XIR_OK;
+}
+
 /* property selects ACCESS or WRITE terms of the code a call runs. */
 typedef struct EffectModuleTarget {
     uint8_t kind, property;

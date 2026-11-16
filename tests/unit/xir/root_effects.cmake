@@ -11,5 +11,8 @@ else()
 endif()
 add_test(NAME test_xir_control_summary_owner COMMAND test_xir_root_effects --control-summary)
 add_test(NAME test_xir_source_storage_owner COMMAND test_xir_root_effects --source-storage)
+add_test(NAME test_xir_module_effect_export COMMAND test_xir_root_effects --module-export)
+set_tests_properties(test_xir_module_effect_export PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "unit;xir;metadata;ownership;compiler-fault")
 set_tests_properties(test_xir_control_summary_owner test_xir_source_storage_owner PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;metadata;ownership;compiler-fault")
