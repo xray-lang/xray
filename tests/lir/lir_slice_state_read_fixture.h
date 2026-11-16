@@ -17,15 +17,19 @@ typedef struct SliceStateReadFixture {
     XrLirBlock block;
     XrLirValue reference, view;
 } SliceStateReadFixture;
+typedef enum SliceStateReadPhase {
+    SLICE_STATE_UNINITIALIZED, SLICE_STATE_INITIALIZING, SLICE_STATE_READY
+} SliceStateReadPhase;
 static XrLirValue slice_state_read_value(SliceStateReadFixture *c, XrLirInstruction op) {
     XrLirValue value = {0}; OK(xr_lir_emit_value(c->module,c->block,&op,&value)); return value;
 }
 static void slice_state_read_effect(SliceStateReadFixture *c, XrLirInstruction op) {
     OK(xr_lir_emit_effect(c->module,c->block,&op));
 }
-/* Ready=false leaves a real initialized slot in its initializing module.
- * Both consumers must reject its READ without publishing a Slice keeper. */
-static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mutable, bool ready) {
+/* An initialized slot can already be read while its module initializes.
+ * An uninitialized slot has a real metadata reference but no readable value. */
+static SliceStateReadFixture slice_state_read_fixture_phase(XrLirType element, bool mutable,
+    SliceStateReadPhase phase) {
     SliceStateReadFixture c = {0}; OK(xr_lir_module_create(NULL,&c.module));
     OK(xr_lir_slice_catalog_install(c.module)); XrLirType slice = 0;
     OK(xr_lir_slice_type(c.module,element,&slice));
@@ -49,7 +53,10 @@ static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mu
     XrLirValue array = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
         .type=XR_LIR_ARRAY,.intrinsic=id,.operands=values,.operand_count=3});
     XrLirValue initial[] = {state,array};
-    if (mutable) {
+    if (phase == SLICE_STATE_UNINITIALIZED) {
+        c.reference = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_STATE_REFERENCE,
+            .type=XR_LIR_STATE_REF,.operands=&state,.operand_count=1});
+    } else if (mutable) {
         c.reference = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_STATE_CONSTRUCT,
             .type=XR_LIR_STATE_REF,.operands=initial,.operand_count=2});
         slice_state_read_effect(&c,(XrLirInstruction){.op=XR_LIR_STATE_PUBLISH,.type=XR_LIR_UNIT,
@@ -62,7 +69,7 @@ static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mu
     }
     slice_state_read_effect(&c,(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,
         .operands=&array,.operand_count=1});
-    if (ready) slice_state_read_effect(&c,(XrLirInstruction){.op=XR_LIR_MODULE_READY,.type=XR_LIR_UNIT,
+    if (phase == SLICE_STATE_READY) slice_state_read_effect(&c,(XrLirInstruction){.op=XR_LIR_MODULE_READY,.type=XR_LIR_UNIT,
         .operands=&state,.operand_count=1});
     XrLirValue first = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=0});
     XrLirValue last = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=3});
@@ -89,5 +96,9 @@ static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mu
     XrLirInstruction finish = {.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&total,.operand_count=1};
     OK(xr_lir_set_terminator(c.module,c.block,&finish));
     return c;
+}
+static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mutable, bool ready) {
+    return slice_state_read_fixture_phase(element,mutable,
+        ready ? SLICE_STATE_READY : SLICE_STATE_UNINITIALIZED);
 }
 #endif // LIR_SLICE_STATE_READ_FIXTURE_H
