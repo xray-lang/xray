@@ -115,9 +115,9 @@ static bool lir_slice_write_conflict(const LirSliceFlow *flow, LirSliceRoot root
 static bool lir_slice_callable_frontier(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const LirSliceFlow *flow) {
     if (v->op != XR_LIR_CALL && v->op != XR_LIR_CALL_INDIRECT) return false;
-    bool live = false;
-    for (size_t n = 0; n < flow->count; ++n) live |= (flow->scratch[n] & 2u) != 0;
-    if (!live) return false;
+    bool has_live_slice = false;
+    for (size_t n = 0; n < flow->count; ++n) has_live_slice |= (flow->scratch[n] & 2u) != 0;
+    if (!has_live_slice) return false;
     if (v->op == XR_LIR_CALL_INDIRECT) return true;
     for (uint32_t a = 0; a < v->operand_count; ++a) {
         XrLirCallableType signature;
