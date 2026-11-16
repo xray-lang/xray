@@ -21,11 +21,11 @@ static void callable_construction_fixture(unsigned shape, XrLirModule **output,
     OK(xr_lir_set_terminator(m, body, &ret));
     spec = (XrLirFunctionSpec){.name="construction", .name_length=12, .result=scalar};
     OK(xr_lir_declare_function(m, &spec, root)); OK(xr_lir_define_function(m, *root));
-    XrLirBlock entry = {0}, construct = {0}, loop = {0}, exit = {0};
+    XrLirBlock entry = {0}, construct = {0}, loop = {0}, returned = {0};
     OK(xr_lir_add_block(m, *root, NULL, 0, &entry)); OK(xr_lir_set_entry(m, *root, entry));
     OK(xr_lir_add_block(m, *root, NULL, 0, &construct));
     if (shape == 1 || shape == 3) OK(xr_lir_add_block(m, *root, NULL, 0, &loop));
-    OK(xr_lir_add_block(m, *root, NULL, 0, &exit));
+    OK(xr_lir_add_block(m, *root, NULL, 0, &returned));
     XrLirValue seed = {0}, condition = {0};
     XrLirInstruction instruction = {.op=XR_LIR_CONST, .type=scalar, .bits=42};
     OK(xr_lir_emit_value(m, entry, &instruction, &seed));
@@ -47,17 +47,17 @@ static void callable_construction_fixture(unsigned shape, XrLirModule **output,
         .operands=reference, .operand_count=1};
     OK(xr_lir_emit_value(m, construct, &instruction, &result));
     branch = (XrLirInstruction){.op=XR_LIR_BR, .type=XR_LIR_UNIT, .edge_count=1,
-        .edges={{.target=shape == 3 ? loop : exit}}};
+        .edges={{.target=shape == 3 ? loop : returned}}};
     if (shape == 2) branch = (XrLirInstruction){.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT,
         .operands=&condition, .operand_count=1, .edge_count=2,
-        .edges={{.target=construct}, {.target=exit}}};
+        .edges={{.target=construct}, {.target=returned}}};
     OK(xr_lir_set_terminator(m, construct, &branch));
     if (shape == 3) {
         branch = (XrLirInstruction){.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operands=&condition,
-            .operand_count=1, .edge_count=2, .edges={{.target=construct}, {.target=exit}}};
+            .operand_count=1, .edge_count=2, .edges={{.target=construct}, {.target=returned}}};
         OK(xr_lir_set_terminator(m, loop, &branch));
     }
-    ret.operands = &result; OK(xr_lir_set_terminator(m, exit, &ret));
+    ret.operands = &result; OK(xr_lir_set_terminator(m, returned, &ret));
     OK(xr_lir_module_finish(m, NULL)); *output = m;
 }
 #endif // LIR_CALLABLE_CONSTRUCTION_FIXTURE_H
