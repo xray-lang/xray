@@ -167,13 +167,30 @@ static void c_view_cleanup(LirC *c, const XrLirInstructionView *v, uint32_t sour
 static void c_view_bind(LirC *c, const XrLirInstructionView *v,
     const XrLirSliceIntrinsic *shape, const XrLirHomeWorkspace *workspace, uint32_t source) {
     const char *kind = c_array_kind(shape->element);
+    bool state = shape->operation == XR_LIR_SLICE_OP_NEW && shape->binding_type == XR_LIR_STATE_REF;
+    if (state) {
+        XrLirStateReference reference = {0};
+        if (xr_lir_state_reference_view(c->request->module,
+                (XrLirValue){c->request->module, c->function.id, v->operands[0]}, &reference) != XR_LIR_OK ||
+            reference.payload != XR_LIR_ARRAY || reference.array_element != shape->element) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "Slice State read lost its exact Array reference shape"); return;
+        }
+    }
     /* All allocating setup precedes the checked binding borrow. The receiver
      * then retains into a true temporary without an allocating callback. */
     c_values_ensure(c, source);
     c_text(c, "    { XrtManagedStatus status;\n");
     if (shape->operation == XR_LIR_SLICE_OP_NEW) {
-        c_text(c, "    const XrtManagedHeader *owner = NULL;\n    status = xrt_place_borrow(");
-        c_value(c, v->operands[0]); c_text(c, ", &owner);\n"); c_array_require(c, source);
+        c_text(c, "    const XrtManagedHeader *owner = NULL;\n");
+        if (state) {
+            c_text(c, "    const void *borrowed = NULL;\n    xrt_module_require(xrt_module_borrow(");
+            c_value(c, v->operands[0]);
+            c_format(c, ", &borrowed), UINT32_C(%" PRIu32 "));\n", source);
+            c_text(c, "    memcpy(&owner, borrowed, sizeof(owner));\n");
+        } else {
+            c_text(c, "    status = xrt_place_borrow(");
+            c_value(c, v->operands[0]); c_text(c, ", &owner);\n"); c_array_require(c, source);
+        }
         c_text(c, "    status = xrt_array_slice_range_bind("); c_view_home(c, workspace);
         c_format(c, ", %s, (const XrtArrayBacking *)owner, ", kind);
         c_value(c, v->operands[1]); c_text(c, ", "); c_value(c, v->operands[2]);
