@@ -23,6 +23,11 @@
 
 typedef struct Audit {
     _Atomic(size_t) leases, bytes, blocks, finalized, remaining, calls;
+    XrtManagedRoot *probe_root;
+    XrtManagedFrame *probe_frame;
+    XrtManagedHeader *before_source, *before_result;
+    size_t allocation_probes, retirement_probes, published_length;
+    bool probe_allocate, probe_free;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -44,9 +49,28 @@ static void provider_drop(void *context) {
         atomic_fetch_add(&audit->finalized, 1);
     }
 }
+static void provider_probe(Audit *audit, bool retiring) {
+    if (!(retiring ? audit->probe_free : audit->probe_allocate)) return;
+    STATUS(xrt_managed_root_drain(audit->probe_root), XRT_MANAGED_ARGUMENT);
+    XrtManagedSlotLocation source, result, temporary;
+    OK(xrt_managed_slot_location(audit->probe_frame, 0, &source));
+    OK(xrt_managed_slot_location(audit->probe_frame, 1, &result));
+    OK(xrt_managed_slot_location(audit->probe_frame, 2, &temporary));
+    CHECK(*source.busy && *result.busy && *temporary.busy);
+    if (retiring) {
+        CHECK(!*source.owner && !*temporary.owner && *result.owner);
+        XrtStringBacking *value = (XrtStringBacking *)*result.owner;
+        CHECK(value->length == audit->published_length && !value->bytes[value->length]);
+        ++audit->retirement_probes;
+    } else {
+        CHECK(*source.owner == audit->before_source && *result.owner == audit->before_result);
+        ++audit->allocation_probes;
+    }
+}
 static void *provider_allocate(void *context, size_t bytes) {
     Audit *audit = context;
     atomic_fetch_add(&audit->calls, 1);
+    provider_probe(audit, false);
     size_t remaining = atomic_load(&audit->remaining);
     while (remaining != SIZE_MAX) {
         if (!remaining) return NULL;
@@ -58,6 +82,7 @@ static void *provider_allocate(void *context, size_t bytes) {
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *audit = context;
+    provider_probe(audit, true);
     CHECK(atomic_fetch_sub(&audit->bytes, bytes) >= bytes);
     CHECK(atomic_fetch_sub(&audit->blocks, 1));
     xr_free(memory);
@@ -444,6 +469,77 @@ static void independent_owners(void) {
     CHECK(atomic_load(&destination.audit.finalized) == 1 && !atomic_load(&destination.audit.bytes));
     puts("String cross-owner copy and escaped split metadata lifetimes passed");
 }
+static void owned_append_aliases(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    OK(xrt_string_backing_create(f.frame, 0, &f.types, "ab", 2, 64));
+    XrtStringBacking *left = string(&f, 0), *suffix = make(&f, 3, "c");
+    make(&f, 1, "old");
+    size_t calls = atomic_load(&f.audit.calls);
+    XrtStringAppendOwned input = {0,1,2,suffix};
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2) && string(&f, 1) == left);
+    CHECK(atomic_load(&f.audit.calls) == calls && xr_signed_rc_read(&left->managed.references) == 1);
+    slot_is(&f, 1, "abc");
+    input = (XrtStringAppendOwned){1,0,2,left};
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 1) && string(&f, 0) == left && atomic_load(&f.audit.calls) == calls);
+    slot_is(&f, 0, "abcabc");
+    OK(xrt_string_backing_copy_into(f.frame, 1, left));
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    atomic_store(&f.audit.remaining, 0);
+    input = (XrtStringAppendOwned){0,1,2,left};
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_OOM);
+    CHECK(borrow(&f, 0) == &left->managed && borrow(&f, 1) == &left->managed && !borrow(&f, 2));
+    slot_is(&f, 0, "abcabc"); same_bill(&f, before);
+    atomic_store(&f.audit.remaining, SIZE_MAX);
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2) && string(&f, 1) != left);
+    slot_is(&f, 1, "abcabcabcabc");
+    fixture_done(&f);
+}
+static void owned_append_preflight(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    OK(xrt_string_backing_create(f.frame, 0, &f.types, "p", 1, 64));
+    XrtStringBacking *source = string(&f, 0), *old = make(&f, 1, "old"), *suffix = make(&f, 3, "z");
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(f.frame, 1, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    XrtStringAppendOwned input = {0,1,2,suffix};
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_ARGUMENT);
+    CHECK(borrow(&f, 0) == &source->managed && borrow(&f, 1) == &old->managed && !borrow(&f, 2));
+    slot_is(&f, 0, "p"); same_bill(&f, before);
+    OK(xrt_managed_slot_abort(f.frame, 1));
+    input.result_slot = 0;
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_ARGUMENT);
+    input.result_slot = 1; make(&f, 2, "occupied");
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_ARGUMENT);
+    slot_is(&f, 0, "p"); slot_is(&f, 1, "old"); slot_is(&f, 2, "occupied");
+    fixture_done(&f);
+}
+static void owned_append_growth_and_callbacks(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    make(&f, 0, "a"); make(&f, 1, "old"); XrtStringBacking *suffix = make(&f, 3, "z");
+    f.audit.probe_root = f.root; f.audit.probe_frame = f.frame;
+    f.audit.before_source = borrow(&f, 0); f.audit.before_result = borrow(&f, 1);
+    f.audit.published_length = 2; f.audit.probe_allocate = f.audit.probe_free = true;
+    XrtStringAppendOwned input = {0,1,2,suffix};
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    f.audit.probe_allocate = f.audit.probe_free = false;
+    CHECK(f.audit.allocation_probes && f.audit.retirement_probes >= 2);
+    slot_is(&f, 1, "az");
+    size_t calls = atomic_load(&f.audit.calls), source = 1;
+    for (size_t i = 0; i < 4096; ++i) {
+        input = (XrtStringAppendOwned){source,1-source,2,suffix};
+        OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+        source = 1-source;
+        CHECK(!borrow(&f, 1-source) && !borrow(&f, 2));
+    }
+    XrtStringBacking *value = string(&f, source);
+    CHECK(value->length == 4098 && value->runes == 4098 && atomic_load(&f.audit.calls) - calls < 16);
+    CHECK(value->bytes[0] == 'a' && !value->bytes[4098]);
+    for (size_t i = 1; i < value->length; ++i) CHECK(value->bytes[i] == 'z');
+    fixture_done(&f);
+}
 int main(void) {
     read_unicode();
     derived_alias_chain();
@@ -453,6 +549,9 @@ int main(void) {
     split_values();
     failures_and_refunds();
     independent_owners();
+    owned_append_aliases();
+    owned_append_preflight();
+    owned_append_growth_and_callbacks();
     puts("typed String operation kernel passed");
     return 0;
 }

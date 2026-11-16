@@ -12,6 +12,7 @@
  */
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_backing.h"
+#include "xnative_place.h"
 #include "base/xchecks.h"
 #include "shared/xr_string_core.h"
 #include "shared/xr_text_kernel.h"
@@ -250,6 +251,70 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_try_append_exclusive(XrtStringBac
     text->runes = runes;
     *appended = true;
     return XRT_MANAGED_OK;
+}
+typedef struct StringAppendTransaction {
+    const XrtStringBacking *suffix;
+    XrtStringBacking *source;
+    bool appended;
+} StringAppendTransaction;
+static XrtManagedStatus string_append_apply(XrtManagedHeader *source, void *context) {
+    StringAppendTransaction *transaction = context;
+    transaction->source = (XrtStringBacking *)source;
+    if (transaction->source->length >= transaction->source->capacity ||
+        transaction->source->runes > transaction->source->length ||
+        transaction->suffix->length >= transaction->suffix->capacity ||
+        transaction->suffix->runes > transaction->suffix->length) return XRT_MANAGED_ARGUMENT;
+    return xrt_string_backing_try_append_exclusive(transaction->source,
+        transaction->suffix, &transaction->appended);
+}
+static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation,
+    const XrtBackingTypes *types, const StringAppendTransaction *transaction) {
+    const XrtStringBacking *left = transaction->source, *right = transaction->suffix;
+    if (right->length > SIZE_MAX - left->length || right->runes > SIZE_MAX - left->runes)
+        return XRT_MANAGED_OVERFLOW;
+    size_t length = left->length + right->length;
+    size_t maximum = SIZE_MAX - sizeof(XrtStringBacking);
+    if (length >= maximum) return XRT_MANAGED_OVERFLOW;
+    size_t required = length + 1, capacity = left->capacity;
+    if (capacity < 64) capacity = 64;
+    if (capacity > maximum) return XRT_MANAGED_OVERFLOW;
+    while (capacity < required) {
+        if (capacity > maximum / 2) { capacity = required; break; }
+        capacity *= 2;
+    }
+    XrtManagedHeader *pending = NULL;
+    XrtManagedStatus status = xrt_managed_slot_reserved_prepare(reservation, types->string,
+        sizeof(XrtStringBacking) + capacity, &pending);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtStringBacking *value = (XrtStringBacking *)pending;
+    XR_CHECK(value->capacity == capacity, "String growth charges its actual complete capacity");
+    if (left->length) memcpy(value->bytes, left->bytes, left->length);
+    if (right->length) memcpy(value->bytes + left->length, right->bytes, right->length);
+    value->bytes[length] = 0;
+    value->length = length;
+    value->runes = left->runes + right->runes;
+    return xrt_managed_slot_reserved_commit(reservation);
+}
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *frame,
+    const XrtBackingTypes *types, const XrtStringAppendOwned *input) {
+    if (!frame || !types || !types->string || !input || !input->suffix) return XRT_MANAGED_ARGUMENT;
+    XrtPlaceReplacement reservation = {0};
+    XrtPlace source = {.frame=frame, .slot=input->source_slot, .nulls=XRT_PLACE_NONNULL};
+    XrtManagedStatus status = xrt_place_replacement_begin(source, frame, input->temporary_slot, &reservation);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_managed_slot_reserved_result_check(&reservation, input->result_slot);
+    StringAppendTransaction transaction = {.suffix=input->suffix};
+    if (status == XRT_MANAGED_OK)
+        status = xrt_managed_slot_reserved_apply(&reservation, string_append_apply, &transaction);
+    if (status == XRT_MANAGED_OK && !transaction.appended)
+        status = string_append_candidate(&reservation, types, &transaction);
+    if (status == XRT_MANAGED_OK) {
+        status = xrt_managed_slot_reserved_consume_publish(&reservation, input->result_slot);
+        XR_CHECK(status == XRT_MANAGED_OK, "prechecked stable String slots cannot reject completed publication");
+    }
+    XR_CHECK(xrt_place_replacement_end(&reservation) == XRT_MANAGED_OK,
+        "String failure and success release one registered ownership transaction");
+    return status;
 }
 XR_FUNCDEF XrtManagedStatus xrt_string_backing_i64_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, int64_t value) {
