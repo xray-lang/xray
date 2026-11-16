@@ -196,6 +196,37 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
 }
 #include "xrbc_value_inline_admission.inc.c"
 #include "xrbc_value_callable_admission.inc.c"
+static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcValueCode *code,
+    XrRbcValueAccess access) {
+    const XrLirHomeEvent *transfer=rbc_value_event(code,access.index,XR_LIR_OWNERSHIP_APPEND_TRANSFER);
+    if (!xr_rbc_module_code_owner(module) || !transfer ||
+        !transfer->block || !transfer->instruction ||
+        transfer->source!=access.source || transfer->argument || transfer->target || transfer->edge || transfer->target_block ||
+        transfer->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
+        !rbc_value_string(module,code,access.source,false) || !rbc_value_string(module,code,access.other,false) ||
+        !rbc_value_string(module,code,access.result,true)) return false;
+    const XrLirValueHome *source=rbc_value_home(code,access.source),*result=rbc_value_home(code,access.result);
+    size_t slots[]={source->first_owner,result->first_owner,result->temporary_first_owner};
+    if (source->parameter || source->offset==SIZE_MAX || !code->homes->frame.owned_offsets) return false;
+    for (size_t n=0;n<3;++n) {
+        if (slots[n]>=code->homes->frame.slot_count) return false;
+        for (size_t p=0;p<n;++p) if (slots[n]==slots[p]) return false;
+    }
+    if (code->homes->frame.owned_offsets[slots[0]]!=source->offset ||
+        code->homes->frame.owned_offsets[slots[1]]!=result->offset ||
+        code->homes->frame.owned_offsets[slots[2]]!=result->temporary_offset) return false;
+    bool borrowed=false,owned=false;
+    for (size_t n=0;n<code->homes->event_count;++n) {
+        const XrLirHomeEvent *event=&code->homes->events[n];
+        if (event->block!=transfer->block || event->instruction!=transfer->instruction) continue;
+        if (event->target || event->edge || event->target_block) continue;
+        if (event->kind==XR_LIR_OWNERSHIP_OPERAND_BORROW && event->source==access.other && event->argument==1 &&
+            event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW) borrowed=true;
+        if (event->kind==XR_LIR_OWNERSHIP_RESULT_OWNER && event->source==access.result && !event->argument &&
+            event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_NONE) owned=true;
+    }
+    return borrowed && owned;
+}
 static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, uint32_t word) {
     if ((word & 255) != XR_RBC_VALUE_ACCESS || ((word >> 8) & 255)) return false;
@@ -214,6 +245,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
     switch (a.operation) {
+    case XR_RBC_VALUE_STRING_APPEND_OWNED: return rbc_value_string_append_valid(module,code,a);
     case XR_RBC_VALUE_SLICE: return rbc_value_slice_access_valid(module,code,function,a);
     case XR_RBC_VALUE_FUNCTION_NEW: case XR_RBC_VALUE_FUNCTION_CALL:
     case XR_RBC_VALUE_FUNCTION_ALIAS: case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:

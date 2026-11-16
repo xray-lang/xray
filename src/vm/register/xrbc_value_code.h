@@ -35,7 +35,7 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_RECORD_NEW, XR_RBC_VALUE_RECORD_FIELD, XR_RBC_VALUE_NULLABLE_NONE,
     XR_RBC_VALUE_NULLABLE_SOME, XR_RBC_VALUE_NULLABLE_IS_SOME, XR_RBC_VALUE_NULLABLE_UNWRAP,
     XR_RBC_VALUE_FUNCTION_NEW, XR_RBC_VALUE_FUNCTION_CALL, XR_RBC_VALUE_FUNCTION_ALIAS,
-    XR_RBC_VALUE_FUNCTION_SCOPE_EXIT, XR_RBC_VALUE_SLICE
+    XR_RBC_VALUE_FUNCTION_SCOPE_EXIT, XR_RBC_VALUE_SLICE, XR_RBC_VALUE_STRING_APPEND_OWNED
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -55,6 +55,8 @@ typedef struct XrRbcValueAccess {
     /* SLICE index is its closed role, first/count its full SSA operand span.
      * window is a one-based common loan event for construction/END, zero for
      * readers and materialization. Natural bytes never carry a keeper owner. */
+    /* STRING_APPEND_OWNED index is its one-based APPEND_TRANSFER event.
+     * source moves, other borrows, and result has its own real staging slot. */
     uint32_t index, first, count, window;
 } XrRbcValueAccess;
 

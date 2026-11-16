@@ -497,6 +497,19 @@ static XrtManagedStatus rbc_value_factory(const XrRbcModule *module, XrRbcStack 
     if (status==XRT_MANAGED_OK) status=rbc_value_place(result,true,0,&temporary);
     return status==XRT_MANAGED_OK ? xrt_place_move_replace(destination,temporary,NULL) : status;
 }
+static XrtManagedStatus rbc_value_string_append(RbcValueActivation *activation,
+    XrRbcValueAccess access,uint32_t source) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+    const XrtStringBacking *suffix=NULL;
+    if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&suffix);
+    if (status!=XRT_MANAGED_OK) return status;
+    const XrLirValueHome *from=rbc_value_home(activation->code,access.source),
+        *to=rbc_value_home(activation->code,access.result);
+    XrtStringAppendOwned update={.source_slot=from->first_owner,.result_slot=to->first_owner,
+        .temporary_slot=to->temporary_first_owner,.suffix=suffix};
+    return xrt_string_backing_append_owned(activation->frame,types,&update);
+}
 static XrtManagedStatus rbc_value_function_state(const XrRbcModule *,XrRbcStack *,RbcValueActivation *,XrRbcValueAccess);
 static XrtManagedStatus rbc_value_state(const XrRbcModule *module,XrRbcStack *stack,RbcValueActivation *activation,
     XrRbcValueAccess access) {
@@ -766,7 +779,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         return rbc_value_call(module,stack,activation,access,pc,source);
     if (access.operation==XR_RBC_VALUE_RETURN) return rbc_value_return(module,stack,activation,access,source);
     XrtManagedStatus status=XRT_MANAGED_OK;
-    if (access.operation==XR_RBC_VALUE_SLICE) status=rbc_value_slice_step(module,stack,activation,access,source);
+    if (access.operation==XR_RBC_VALUE_STRING_APPEND_OWNED) status=rbc_value_string_append(activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_SLICE) status=rbc_value_slice_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) status=rbc_value_function_new(module,stack,activation,access);
     else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS || access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT)
         status=rbc_value_function_alias(module,stack,activation,access,source);

@@ -131,6 +131,10 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     XrRbcValueAccess access=code->accesses[index];
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
+    case XR_RBC_VALUE_STRING_APPEND_OWNED:
+        return rbc_value_flow_read(state,code,access.source,&incoming) &&
+            rbc_value_flow_read(state,code,access.other,&incoming) &&
+            rbc_value_flow_write(state,code,access.result,incoming);
     case XR_RBC_VALUE_SLICE: {
         if (access.index==XR_LIR_SLICE_OP_CLEANUP) return true;
         const uint32_t *args=code->arguments+access.first;
