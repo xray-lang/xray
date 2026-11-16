@@ -39,6 +39,7 @@
 #include "lir_tuple_cases.h"
 #include "lir_map_cases.h"
 #include "lir_c_cell_fixture.h"
+#include "lir_frame_scalar_cell_fixture.h"
 #include "lir_c_map_literal_fixture.h"
 #include "lir_map_borrow_fixture.h"
 #include "lir_slice_boundary_root_fixture.h"
@@ -579,6 +580,10 @@ static void array_c_output(const char *name, const char *path) {
         XrLirValue reference = {0};
         callable_construction_fixture(!strcmp(name,"callable-loop-before-frame") ? 1u : 0u,&m,&root,&reference);
     }
+    else if (!strcmp(name,"frame-scalar-cells")) {
+        FrameScalarCellFixture f=frame_scalar_cell_fixture(FRAME_SCALAR_CELL_VALID);
+        m=f.module;root=f.root;OK(xr_lir_module_finish(m,NULL));
+    }
     else if (!strcmp(name,"cell-i64-frame")) callable_cell_c_fixture(&m,&root,false,false);
     else if (!strcmp(name,"cell-i64-owned")) callable_cell_c_fixture(&m,&root,false,true);
     else if (!strcmp(name,"cell-map-frame")) callable_cell_c_fixture(&m,&root,true,false);
@@ -711,8 +716,54 @@ static void array_vm_fixture(const char *name,int64_t expected) {
     xr_rbc_outcome_free(&outcome);
 }
 
+static void frame_scalar_cell_admission(void) {
+    for (unsigned kind=FRAME_SCALAR_CELL_VALID;kind<=FRAME_SCALAR_CELL_UNINITIALIZED;++kind) {
+        FrameScalarCellFixture f=frame_scalar_cell_fixture((FrameScalarCellCase)kind);
+        bool repeat=true;
+        CHECK(xr_lir_block_may_repeat(f.module,f.left,&repeat)==XR_LIR_INVALID_STATE && repeat);
+        XrLirDiagnostic diagnostic={0};XrLirStatus status=xr_lir_module_finish(f.module,&diagnostic);
+        if (kind!=FRAME_SCALAR_CELL_VALID) {
+            CHECK(status==XR_LIR_VERIFY_ERROR);
+            CHECK(strstr(diagnostic.message,kind==FRAME_SCALAR_CELL_LOOP?"may repeat":"does not dominate"));
+            CHECK(xr_lir_block_may_repeat(f.module,f.left,&repeat)!=XR_LIR_OK && repeat);
+        } else {
+            OK(status);XrLirBlock blocks[]={f.entry,f.left,f.right,f.join};
+            for (size_t b=0;b<sizeof(blocks)/sizeof(*blocks);++b) {
+                repeat=true;OK(xr_lir_block_may_repeat(f.module,blocks[b],&repeat));CHECK(!repeat);
+            }
+            XrLirModule *other=NULL;OK(xr_lir_module_create(NULL,&other));repeat=true;
+            CHECK(xr_lir_block_may_repeat(other,f.left,&repeat)==XR_LIR_INVALID_ARGUMENT && repeat);
+            xr_lir_module_destroy(other);
+            /* Independent verification must read the changed CFG, even when
+             * this deliberately corrupted internal owner has an old cache. */
+            XrLirFunctionData *function=&f.module->functions[f.choose.id-1];
+            XrLirBlockData *left=&function->blocks[f.left.id-1];
+            XrLirEdgeView *edge=&left->instructions[left->instruction_count-1].view.edges[0];
+            XrLirEdgeView original=*edge;
+            edge->target=f.left.id;edge->argument_count=0;edge->arguments=NULL;
+            CHECK(xr_lir_verify(f.module,&diagnostic)==XR_LIR_VERIFY_ERROR);
+            CHECK(strstr(diagnostic.message,"may repeat"));
+            *edge=original;
+        }
+        xr_lir_module_destroy(f.module);
+    }
+    CArrayFixture c={0};OK(xr_lir_module_create(NULL,&c.module));XrLirFunction root={0};
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="cycle",.name_length=5,.result=XR_LIR_I64},&root));
+    OK(xr_lir_define_function(c.module,root));XrLirBlock entry={0},loop={0},exit={0};
+    OK(xr_lir_add_block(c.module,root,NULL,0,&entry));OK(xr_lir_set_entry(c.module,root,entry));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&loop));OK(xr_lir_add_block(c.module,root,NULL,0,&exit));
+    OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{loop,NULL,0}}}));XrLirValue flag={0};
+    OK(xr_lir_emit_value(c.module,loop,&(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1},&flag));
+    OK(xr_lir_set_terminator(c.module,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{loop,NULL,0},{exit,NULL,0}}}));
+    ca_return(&c,exit,ca_constant(&c,exit,42));OK(xr_lir_module_finish(c.module,NULL));bool repeat=false;
+    OK(xr_lir_block_may_repeat(c.module,loop,&repeat));CHECK(repeat);xr_lir_module_destroy(c.module);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
+    frame_scalar_cell_admission();array_c_output("frame-scalar-cells",NULL);
     CHECK(argc == 1);
     array_c_output("string-bindings",NULL);
     array_c_output("string-ref-bindings",NULL);
