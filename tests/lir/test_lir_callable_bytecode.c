@@ -451,8 +451,10 @@ static void slice_call_boundaries(void) {
 static void slice_state_reads(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) for (unsigned mutable=0;mutable<2;++mutable)
-        for (unsigned ready=0;ready<2;++ready) {
-        SliceStateReadFixture c=slice_state_read_fixture(elements[family],mutable!=0,ready!=0);
+        for (unsigned phase=SLICE_STATE_UNINITIALIZED;phase<=SLICE_STATE_READY;++phase) {
+        SliceStateReadFixture c=phase==SLICE_STATE_INITIALIZING ?
+            slice_state_read_fixture_phase(elements[family],mutable!=0,SLICE_STATE_INITIALIZING) :
+            slice_state_read_fixture(elements[family],mutable!=0,phase==SLICE_STATE_READY);
         OK(xr_lir_module_finish(c.module,NULL)); XrRbcProgram *program=compile(c.module,c.root);
         const XrRbcModule *module=xr_rbc_program_view(program);
         const XrRbcValueCode *code=xr_rbc_module_value_code(module,0); CHECK(code && code->homes);
@@ -469,15 +471,26 @@ static void slice_state_reads(void) {
         }
         CHECK(read_role); xr_lir_module_destroy(c.module);
         XrRbcExecution *execution=NULL; CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        const XrtLocationOwner *expected_locations=xr_rbc_program_locations(program);
         xr_rbc_program_destroy(program); XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
         xr_rbc_execution_free(&execution);
-        if (ready) {
-            uint64_t bits=0; CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK &&
-                xr_rbc_outcome_bits(outcome,&bits) && bits==25);
+        if (phase!=SLICE_STATE_UNINITIALIZED) {
+            uint64_t bits=0; bool received=xr_rbc_outcome_bits(outcome,&bits);
+            bool valid=xr_rbc_outcome_status(outcome)==XR_RBC_OK && received && bits==25;
+            if (!valid) fprintf(stderr,"Slice State family=%u mutable=%u phase=%u: status=%u bitsReceived=%u bits=%llu\n",
+                (unsigned)elements[family],mutable,phase,(unsigned)xr_rbc_outcome_status(outcome),
+                (unsigned)received,(unsigned long long)bits);
+            CHECK(valid);
         } else {
-            XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
-            CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_VALUE_FAILURE &&
-                xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) && failure==XR_XIR_VALUE_BAD_ARGUMENT && locations);
+            XrXirValueStatus failure=XR_XIR_VALUE_OK; uint32_t source=UINT32_MAX;
+            const XrtLocationOwner *locations=NULL;
+            bool received=xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations);
+            bool valid=xr_rbc_outcome_status(outcome)==XR_RBC_VALUE_FAILURE && received &&
+                failure==XR_XIR_VALUE_BAD_ARGUMENT && !source && locations==expected_locations;
+            if (!valid) fprintf(stderr,"Slice State family=%u mutable=%u phase=%u: status=%u failureReceived=%u failure=%u source=%u locationsMatch=%u\n",
+                (unsigned)elements[family],mutable,phase,(unsigned)xr_rbc_outcome_status(outcome),
+                (unsigned)received,(unsigned)failure,source,(unsigned)(locations==expected_locations));
+            CHECK(valid);
         }
         xr_rbc_outcome_free(&outcome);
     }
