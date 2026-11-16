@@ -51,14 +51,20 @@ static void view_cold_checked_sources(const char *programs) {
             CHECK(xir_effects_module_export_view(summary,&summary_view)==XR_XIR_OK && summary_view.module_access_complete &&
                 summary_view.function_count==actual->function_count);
             summary_functions=summary_view.function_count; CHECK(summary_functions);
-            first_summary=summary_view.functions[0];
+            memcpy(&first_summary,&summary_view.functions[0],sizeof(first_summary));
             for (uint32_t f=0;f<summary_functions;++f)
                 CHECK(summary_view.functions[f].parameter_count==actual->functions[f].parameter_count &&
                     summary_view.functions[f].capture_count==actual->declarations->functions[f].capture_count);
         }
         XrLirLowered output = {0};
         XrLirLowerRequest request = {closed, fixture.source.snapshot, false};
-        OK(xr_lir_lower_program_checked(&request, &output, NULL));
+        XrLirLowerFailure failure = {0};
+        XrLirStatus status=xr_lir_lower_program_checked(&request,&output,&failure);
+        if (status!=XR_LIR_OK)
+            fprintf(stderr,"cold view case %s status%u f%u b%u i%u %u:%u: %s\n",names[n],(unsigned)status,
+                failure.diagnostic.function,failure.diagnostic.block,failure.diagnostic.instruction,
+                (unsigned)failure.diagnostic.source.line,(unsigned)failure.diagnostic.source.column,failure.diagnostic.message);
+        OK(status); xr_lir_lower_failure_free(&failure);
         xr_xir_compile_artifact_free(closed);
         source_fixture_free(&fixture);
         xr_compile_resources_release(receiver.resources);
