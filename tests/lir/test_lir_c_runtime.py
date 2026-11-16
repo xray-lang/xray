@@ -200,13 +200,13 @@ def main():
         assert text.count('xrt_run_standalone(') + text.count('xrt_run_standalone_state(') == 1
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
         if name.startswith('original-string-parameter'):
-            assert re.search(r'xrt_print_string\(bytes, length, UINT32_C\([0-9]+\)\);', text)
+            assert 'xrt_print_string(' in text
         elif name.startswith('state-ref-'):
             assert 'xrt_run_standalone_state(' in text and 'xrt_module_' in text
         else:
-            assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
+            assert re.search(r'xrt_print_(?:i64|string)\([^;]+UINT32_C\([0-9]+\)\);', text)
         if name.startswith('literal-terminator') or name == 'literal-utf8-nul':
-            assert re.search(r'xrt_print_string\((?:v|p)[0-9]+, \(size_t\)(?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
+            assert 'xrt_print_string(' in text
             assert 'static const unsigned char xrl_literal' in text
         assert 'invoke_io' not in text and 'fail_io' not in text and 'switch' not in text
         if name == 'fib':

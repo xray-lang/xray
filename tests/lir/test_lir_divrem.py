@@ -64,10 +64,11 @@ def adapter(generated, result, panic, location):
         text += 'if(argc>1){XrtLocationOwner *owner=NULL;XrtExecutionFailure failure={0};\n'
         text += 'if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&owner)!=XRT_LOCATION_OK)return 2;\n'
         if stateful:
-            text += ('EmbeddedState call={0};XrtModuleLayout *layout=NULL;\n'
-                'if(xrt_module_layout_new(&xrl_state_spec,&layout)!=0)return 2;\n'
-                'XrtModuleStatus prepared=xrt_module_state_new(layout,UINT64_MAX,&call.state);\n'
-                'xrt_module_layout_drop(&layout);if(prepared)return 2;\n'
+            text += ('EmbeddedState call={0};XrtModuleLayout *layout=NULL;XrtBillingOwner *billing=NULL;\n'
+                'XrtModuleStatus prepared=xrt_billing_owner_new(NULL,SIZE_MAX,&billing);\n'
+                'if(!prepared)prepared=xrt_module_layout_new(billing,&xrl_state_spec,(XrtManagedLease){0},&layout);\n'
+                'if(!prepared)prepared=xrt_module_state_new(layout,billing,&call.state);\n'
+                'xrt_module_layout_drop(&layout);xrt_billing_owner_drop(billing);if(prepared)return 2;\n'
                 'XrtExecutionStatus outcome=xrt_run_embedded(owner,&failure,embedded_state,&call);\n'
                 'xrt_module_state_drop(&call.state);if(outcome!=XRT_EXECUTION_FAILURE)return 3;\n')
         else:
