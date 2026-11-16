@@ -72,6 +72,7 @@ typedef struct LirC {
     size_t cell_operation_cursor, cell_scope_cursor;
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
+    size_t string_event_cursor, string_workspace_cursor;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -174,7 +175,8 @@ static const char *c_builtin_type(XrLirType type) {
     if (type == XR_LIR_I64_CELL) return "int64_t *";
     if (type == XR_LIR_FUNCTION_SCOPE) return "uint32_t";
     if (type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64) return "XrtManagedHeader *";
-    if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
+    if (type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF ||
+        type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF) return "XrtPlace";
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
@@ -257,9 +259,8 @@ static bool c_scalar(LirC *c, XrLirType type) {
         c->callables = true;
         return true;
     }
-    if (type == XR_LIR_STRING_CELL ||
-        type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL ||
-        type == XR_LIR_SLICE_I64 || type == XR_LIR_STRING_REF ||
+    if (type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL ||
+        type == XR_LIR_SLICE_I64 ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(c->request->module, type, &shape) == XR_LIR_OK &&
             (shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_CELL))) {
         char message[128];
@@ -270,12 +271,12 @@ static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(c, type))
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
     c->f64 |= type == XR_LIR_F64;
-    c->string_values |= type == XR_LIR_STRING;
+    c->string_values |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF;
     c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
     c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
     c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
     c->views |= c_slice_type(c, type);
-    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views || c->maps;
+    c->runtime |= c->string_values || c->state || c->arrays || c->views || c->maps;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -287,8 +288,18 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
+static bool c_string_binding_point(LirC *c, const XrLirInstructionView *v) {
+    uint32_t role = xr_lir_string_role(c->request->module, v);
+    if (role > XR_LIR_STRING_OP_APPEND_OWNED && role < XR_LIR_STRING_OP_END) return true;
+    if (v->op == XR_LIR_CELL_NEW) return v->type == XR_LIR_STRING_CELL;
+    if (v->op == XR_LIR_STRING_CELL_DROP) return true;
+    return (v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE ||
+        v->op == XR_LIR_STATE_READ || v->op == XR_LIR_STATE_WRITE) && v->operand_count &&
+        xr_lir_string_binding(c->request->module,
+            (XrLirValue){c->request->module, c->function.id, v->operands[0]});
+}
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
-    if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
+    if (c_string_binding_point(c, v) || c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
@@ -384,6 +395,14 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             c_error(c,XR_LIR_C_UNSUPPORTED,"Frame environment cannot escape its native activation"); return;
         }
     }
+    if (v->op == XR_LIR_FUNCTION_REF) {
+        for (uint32_t p = 0; p < v->operand_count; ++p) {
+            XrLirType capture = c_value_type(c,v->operands[p]);
+            if (capture == XR_LIR_STRING_CELL || capture == XR_LIR_STRING_REF) {
+                c_error(c,XR_LIR_C_UNSUPPORTED,"String binding captures require an independent lifetime contract"); return;
+            }
+        }
+    }
     if (c_callable_point(c,v)) {
         if (c_located(&v->source)) {
             if (c->location_count == UINT32_MAX) c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
@@ -395,13 +414,14 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         c_error(c,XR_LIR_C_UNSUPPORTED,"callable result requires owned environment transport"); return;
     }
     uint32_t string_role = xr_lir_string_role(c->request->module, v);
-    if (string_role && string_role != XR_LIR_STRING_OP_APPEND_OWNED) {
+    if (string_role && (string_role < XR_LIR_STRING_OP_APPEND_OWNED || string_role >= XR_LIR_STRING_OP_END)) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "String operation has no target execution binding");
         return;
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN ||
         v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE || v->op == XR_LIR_FUNCTION_BIND ||
-        ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) && !c_array_point(c, v) && !c_map_point(c, v))) {
+        ((v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) &&
+            !c_array_point(c, v) && !c_map_point(c, v) && !c_string_binding_point(c, v))) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "value operation has no bound target C execution interface"); return;
     }
     if (c_string_point(c, v) || c_state_point(v) || c_array_point(c, v) || c_map_point(c, v) || c_record_point(v) || c_view_point(c, v) ||
@@ -885,6 +905,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     }
     uint32_t string_source = c_string_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
+    if (c_string_binding_point(c, v)) {
+        c_string_binding_instruction(c, v, string_source);
+        return;
+    }
     if (c_values_instruction(c, v, string_source)) return;
     if (c_state_point(v)) {
         uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;

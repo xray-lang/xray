@@ -12,6 +12,7 @@
 #include "lir/xlir_sccp.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_c.h"
+#include "lir/xlir_string.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_array.h"
@@ -39,6 +40,7 @@
 #include "lir_map_cases.h"
 #include "lir_c_cell_fixture.h"
 #include "lir_c_map_literal_fixture.h"
+#include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -427,6 +429,68 @@ static void array_state_shapes(XrLirType element) {
     xr_lir_module_destroy(inlined);
 }
 
+static XrLirValue cs_binding_role(CArrayFixture *c, XrLirBlock block, XrLirStringOperation role,
+    XrLirType type, const XrLirValue *arguments, uint32_t count) {
+    uint32_t intrinsic=0; OK(xr_lir_string_operation(c->module,role,&intrinsic));
+    XrLirInstruction instruction={.op=XR_LIR_CALL_INTRINSIC,.type=type,.intrinsic=intrinsic,
+        .operands=arguments,.operand_count=count,.source=ca_source()};
+    XrLirValue result={0};
+    if (type==XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module,block,&instruction));
+    else OK(xr_lir_emit_value(c->module,block,&instruction,&result));
+    return result;
+}
+static void cs_binding_fixture(XrLirModule **output, XrLirFunction *entry) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_string_catalog_install(c.module,false,false,false));
+    XrLirStateModule state_module={0};
+    XrLirStateSlot slot={.payload=XR_LIR_STRING,.mutable=true,.size=sizeof(void *),.alignment=_Alignof(void *)};
+    XrLirStateLayout layout={.modules=&state_module,.module_count=1,.slots=&slot,.slot_count=1,
+        .payload_size=sizeof(void *),.payload_alignment=_Alignof(void *)};
+    OK(xr_lir_set_state_layout(c.module,&layout));
+    XrLirType state_type=XR_LIR_STATE,parameters[]={XR_LIR_STRING,XR_LIR_STATE};
+    XrLirFunction root={0},helper={0};
+    XrLirFunctionSpec spec={.name="root",.name_length=4,.parameters=&state_type,.parameter_count=1,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_set_state_entry(c.module,root));
+    spec=(XrLirFunctionSpec){.name="bindings",.name_length=8,.parameters=parameters,.parameter_count=2,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,&helper)); OK(xr_lir_define_function(c.module,helper));
+    XrLirBlock body={0}; OK(xr_lir_add_block(c.module,helper,NULL,0,&body)); OK(xr_lir_set_entry(c.module,helper,body));
+    XrLirValue incoming={0},state={0};
+    OK(xr_lir_function_parameter(c.module,helper,0,&incoming)); OK(xr_lir_function_parameter(c.module,helper,1,&state));
+    XrLirValue cell=ca_value(&c,body,XR_LIR_CELL_NEW,XR_LIR_STRING_CELL,&incoming,1);
+    XrLirValue pair[]={cell,incoming};
+    XrLirInstruction write={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=pair,.operand_count=2,.source=ca_source()};
+    OK(xr_lir_emit_effect(c.module,body,&write));
+    XrLirValue local_ref=cs_binding_role(&c,body,XR_LIR_STRING_OP_BORROW_CELL,XR_LIR_STRING_REF,&cell,1);
+    pair[0]=local_ref; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_WRITE_REF,XR_LIR_UNIT,pair,2);
+    pair[0]=cell; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_APPEND_CELL,XR_LIR_UNIT,pair,2);
+    pair[0]=local_ref; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_APPEND_REF,XR_LIR_UNIT,pair,2);
+    XrLirValue reference=ca_value(&c,body,XR_LIR_STATE_REFERENCE,XR_LIR_STATE_REF,&state,1);
+    pair[0]=reference; write=(XrLirInstruction){.op=XR_LIR_STATE_WRITE,.type=XR_LIR_UNIT,.operands=pair,.operand_count=2,.source=ca_source()};
+    OK(xr_lir_emit_effect(c.module,body,&write));
+    (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_APPEND_STATE,XR_LIR_UNIT,pair,2);
+    XrLirValue state_ref=cs_binding_role(&c,body,XR_LIR_STRING_OP_BORROW_STATE,XR_LIR_STRING_REF,&reference,1);
+    XrLirValue left=cs_binding_role(&c,body,XR_LIR_STRING_OP_READ_REF,XR_LIR_STRING,&local_ref,1);
+    XrLirValue right=cs_binding_role(&c,body,XR_LIR_STRING_OP_READ_REF,XR_LIR_STRING,&state_ref,1);
+    XrLirValue left_length=ca_value(&c,body,XR_LIR_STRING_LEN,XR_LIR_I64,&left,1);
+    XrLirValue right_length=ca_value(&c,body,XR_LIR_STRING_LEN,XR_LIR_I64,&right,1);
+    ca_effect(&c,body,XR_LIR_STRING_DROP,left); ca_effect(&c,body,XR_LIR_STRING_DROP,right);
+    ca_effect(&c,body,XR_LIR_STRING_CELL_DROP,cell);
+    ca_return(&c,body,ca_binary(&c,body,XR_LIR_ADD,left_length,right_length));
+    OK(xr_lir_define_function(c.module,root)); OK(xr_lir_add_block(c.module,root,NULL,0,&body));
+    OK(xr_lir_set_entry(c.module,root,body)); OK(xr_lir_function_parameter(c.module,root,0,&state));
+    ca_effect(&c,body,XR_LIR_MODULE_BEGIN,state);
+    XrLirValue seed=ca_text(&c,body,"seed",4),rhs=ca_text(&c,body,"xy",2),construct[]={state,seed};
+    reference=ca_value(&c,body,XR_LIR_STATE_CONSTRUCT,XR_LIR_STATE_REF,construct,2);
+    ca_effect(&c,body,XR_LIR_STATE_PUBLISH,reference); ca_effect(&c,body,XR_LIR_MODULE_READY,state);
+    XrLirValue snapshot=ca_value(&c,body,XR_LIR_STATE_READ,XR_LIR_STRING,&reference,1),arguments[]={rhs,state},result={0};
+    XrLirInstruction call={.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=helper,.operands=arguments,.operand_count=2};
+    OK(xr_lir_emit_value(c.module,body,&call,&result));
+    XrLirValue saved_length=ca_value(&c,body,XR_LIR_STRING_LEN,XR_LIR_I64,&snapshot,1);
+    ca_effect(&c,body,XR_LIR_STRING_DROP,snapshot); ca_effect(&c,body,XR_LIR_STRING_DROP,seed); ca_effect(&c,body,XR_LIR_STRING_DROP,rhs);
+    ca_return(&c,body,ca_binary(&c,body,XR_LIR_ADD,result,saved_length));
+    OK(xr_lir_module_finish(c.module,NULL)); *output=c.module; *entry=root;
+}
+
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
@@ -450,11 +514,15 @@ static void array_c_output(const char *name, const char *path) {
             !strcmp(name,"map-literal-spread-wins") ? 5u : 0u;
         c_map_literal_fixture(mode,&m,&root);
     }
+    else if (!strcmp(name,"string-bindings")) cs_binding_fixture(&m,&root);
+    else if (!strcmp(name,"string-ref-bindings")) {
+        OK(string_ref_fixture(&m)); OK(xr_lir_function_at(m,0,&root));
+    }
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XrLirCRequest request = {.module=m, .entry=root, .resources=resources, .translation_unit=path};
+    XrLirCRequest request = {.module=m, .entry=root, .resources=resources, .translation_unit=path ? path : "string-bindings.c"};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic = {0};
     XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
@@ -465,8 +533,13 @@ static void array_c_output(const char *name, const char *path) {
         CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
         xr_rbc_program_destroy(program);
     }
-    FILE *file = fopen(path, "wb");
-    CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
+    if (!strcmp(name,"string-bindings"))
+        CHECK(strstr(output.bytes,"xrt_native_string_binding_prepare(") && strstr(output.bytes,"xrt_native_string_append_place(") &&
+            strstr(output.bytes,"xrt_place_move_replace(") && strstr(output.bytes,"XrtPlace"));
+    if (path) {
+        FILE *file = fopen(path, "wb");
+        CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
+    }
     xr_lir_c_output_free(&output);
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
 }
@@ -530,6 +603,8 @@ static void array_vm_fixture(const char *name,int64_t expected) {
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     CHECK(argc == 1);
+    array_c_output("string-bindings",NULL);
+    array_c_output("string-ref-bindings",NULL);
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();
