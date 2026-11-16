@@ -134,6 +134,19 @@ static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uin
 
 #include "xlir_callable_verify.inc.c"
 
+static bool lir_slice_cleanup_target(const XrLirModule *m, const XrLirFunctionData *f, uint64_t id) {
+    if (!id || id > f->value_count || !xr_lir_internal_slice_type(m, f->values[id - 1].type)) return false;
+    XrLirValueData value = f->values[id - 1];
+    if (value.parameter) return value.block && value.block <= f->block_count &&
+        value.instruction < f->blocks[value.block - 1].parameter_count &&
+        f->blocks[value.block - 1].parameters[value.instruction] == id;
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, (uint32_t)id);
+    XrLirSliceIntrinsic role;
+    return definition && definition->result == id && definition->type == value.type &&
+        definition->op == XR_LIR_CALL_INTRINSIC && xr_lir_slice_intrinsic_view(m, definition->intrinsic, &role) == XR_LIR_OK &&
+        (role.operation == XR_LIR_SLICE_OP_NEW || role.operation == XR_LIR_SLICE_OP_BIND || role.operation == XR_LIR_SLICE_OP_REBORROW);
+}
+
 static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFunctionData *f,
                                          const XrLirInstructionView *v) {
     XrLirType a = v->operand_count ? f->values[v->operands[0] - 1].type : XR_LIR_TYPE_INVALID;
@@ -384,9 +397,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
     if (v->op == XR_LIR_SLICE_CLEANUP) {
-        if (v->type != XR_LIR_UNIT || !v->bits || v->bits > f->value_count ||
-            !xr_lir_internal_slice_type(m, f->values[v->bits - 1].type) ||
-            (f->values[v->bits - 1].parameter && !f->values[v->bits - 1].block)) goto invalid;
+        if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !lir_slice_cleanup_target(m, f, v->bits)) goto invalid;
         return XR_LIR_OK;
     }
     uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR ? 2 : 0);
