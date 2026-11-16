@@ -16,11 +16,12 @@ static bool lower_slice_call(LowerFunction *f, uint32_t block, XrLirSliceOperati
     if (role == XR_LIR_SLICE_OP_NEW)
         binding = c->module->functions[f->function.id - 1].values[args[0].id - 1].type;
     if (!lower_build(c, xr_lir_slice_operation(c->module, role, element, binding, &id))) return false;
-    XrLirIntrinsic entry;
-    if (!lower_build(c, xr_lir_intrinsic_view(c->module, id, &entry))) return false;
-    XrLirInstruction call = {.op=XR_LIR_CALL_INTRINSIC,.type=entry.result,.intrinsic=id,
+    const XrLirIntrinsic *entry = xr_lir_internal_slice_intrinsic(c->module, id);
+    if (!entry) return lower_unsupported(c, "Slice role lost its receiving signature");
+    XrLirType result = entry->result;
+    XrLirInstruction call = {.op=XR_LIR_CALL_INTRINSIC,.type=result,.intrinsic=id,
         .operands=args,.operand_count=count,.source=lower_source(c)};
-    return lower_build(c, entry.result == XR_LIR_UNIT ? xr_lir_emit_effect(c->module, f->blocks[block], &call) :
+    return lower_build(c, result == XR_LIR_UNIT ? xr_lir_emit_effect(c->module, f->blocks[block], &call) :
         xr_lir_emit_value(c->module, f->blocks[block], &call, output));
 }
 static bool lower_slice_source(LowerFunction *f, uint32_t ordinal, XrLirValue *output) {

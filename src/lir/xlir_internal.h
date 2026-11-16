@@ -107,6 +107,9 @@ struct XrLirModule {
 };
 
 XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);
+/* The receiving catalog exists before function construction. This borrowed
+ * entry stays with its module; copy the needed signature fields before emit. */
+XR_FUNC const XrLirIntrinsic *xr_lir_internal_slice_intrinsic(const XrLirModule *, uint32_t);
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *, XrLirType);
 
 /* Operand validation may reach a later block before its shape is checked. */

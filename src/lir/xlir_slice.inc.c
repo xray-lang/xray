@@ -52,17 +52,18 @@ XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *m, const X
     for (uint32_t p = 0; p < count; ++p) if (entry->parameters[p] != parameters[p]) return false;
     return true;
 }
+XR_FUNC const XrLirIntrinsic *xr_lir_internal_slice_intrinsic(const XrLirModule *m, uint32_t id) {
+    for (uint32_t n = 0; m && m->failure == XR_LIR_OK && n < m->intrinsic_count; ++n)
+        if (m->intrinsics[n].id == id && xr_lir_internal_slice_intrinsic_valid(m, &m->intrinsics[n]))
+            return &m->intrinsics[n];
+    return NULL;
+}
 XR_FUNC XrLirStatus xr_lir_slice_intrinsic_view(const XrLirModule *m, uint32_t id, XrLirSliceIntrinsic *output) {
     if (!m || !output || m->failure != XR_LIR_OK) return XR_LIR_INVALID_ARGUMENT;
-    for (uint32_t n = 0; n < m->intrinsic_count; ++n) {
-        const XrLirIntrinsic *entry = &m->intrinsics[n];
-        if (entry->id != id) continue;
-        XrLirSliceIntrinsic shape;
-        if (!xr_lir_internal_slice_intrinsic_valid(m, entry) || !lir_slice_decode(entry->operation, &shape))
-            return XR_LIR_UNSUPPORTED;
-        shape.id = id; *output = shape; return XR_LIR_OK;
-    }
-    return XR_LIR_UNSUPPORTED;
+    const XrLirIntrinsic *entry = xr_lir_internal_slice_intrinsic(m, id);
+    XrLirSliceIntrinsic shape;
+    if (!entry || !lir_slice_decode(entry->operation, &shape)) return XR_LIR_UNSUPPORTED;
+    shape.id = id; *output = shape; return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *m, XrLirSliceOperation operation,
     XrLirType element, XrLirType binding, uint32_t *output) {
