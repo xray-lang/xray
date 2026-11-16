@@ -105,6 +105,21 @@ endif()
 add_test(NAME native_place COMMAND test_native_place)
 set_tests_properties(native_place PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
 
+add_executable(test_native_array_slice test_array_slice.c)
+target_link_libraries(test_native_array_slice PRIVATE xray_native_runtime)
+target_include_directories(test_native_array_slice PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_array_slice PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_array_slice PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_array_slice PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_native_array_slice PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_array_slice COMMAND test_native_array_slice)
+set_tests_properties(native_array_slice PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+
 add_executable(test_native_string_backing_ops test_string_backing_ops.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"

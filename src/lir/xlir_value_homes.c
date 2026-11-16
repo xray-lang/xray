@@ -210,7 +210,8 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     if (!array && !map) return true;
     if (!fact.value || fact.value > b->homes->value_count || !b->homes->bindings || !b->homes->bindings[fact.value].type)
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"mutator has no actual binding payload");
-    XrLirHomeWorkspace workspace = {fact.block,fact.instruction,b->homes->bindings[fact.value].type,0,0};
+    XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
+        .type=b->homes->bindings[fact.value].type};
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,workspace.type,&spec) ||
         !lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;

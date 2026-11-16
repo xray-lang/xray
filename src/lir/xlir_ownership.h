@@ -32,7 +32,9 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_MAP_OPERATION,
     XR_LIR_OWNERSHIP_CALLABLE_VALUE,
     XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE,
-    XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT
+    XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT,
+    XR_LIR_OWNERSHIP_VIEW_VALUE,
+    XR_LIR_OWNERSHIP_VIEW_END
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible
@@ -77,6 +79,10 @@ typedef struct XrLirOwnershipFact {
     uint32_t callable_function, callable_scope;
     bool callable_materialize;
     XrLirOwnershipTransferMode transfer_mode;
+    /* A natural Slice has no owner leaf. This separate mode describes only
+     * its private physical keeper; it cannot create or extend a logical loan. */
+    uint32_t view_operation;
+    XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

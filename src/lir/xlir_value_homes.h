@@ -31,6 +31,9 @@ typedef struct XrLirValueHome {
      * Env pointer. environment_type names a constructor's same-image Env. */
     XrLirCallableTransport transport;
     uint32_t borrow_source, environment_type;
+    /* One-based existing workspace ordinal, zero for an unowned formal or a
+     * non-View. The natural value's owner_count remains zero. */
+    uint32_t view_workspace;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
 typedef struct XrLirHomeTransfer {
@@ -57,9 +60,19 @@ typedef struct XrLirHomeBinding {
     uint32_t type, parameter, source;
     size_t offset, first_owner;
 } XrLirHomeBinding;
+typedef enum XrLirHomeWorkspaceKind {
+    XR_LIR_HOME_WORKSPACE_VALUE,
+    XR_LIR_HOME_WORKSPACE_VIEW_HOLD
+} XrLirHomeWorkspaceKind;
 typedef struct XrLirHomeWorkspace {
     uint32_t block, instruction, type;
     size_t offset, first_owner;
+    /* VIEW_HOLD uses the shared Slice bundle geometry, not type's owner leaves.
+     * offset/temporary_offset start complete bundles; each has one actual hold
+     * slot. Other workspaces keep their existing VALUE interpretation. */
+    XrLirHomeWorkspaceKind kind;
+    uint32_t value;
+    size_t temporary_offset, temporary_first_owner;
 } XrLirHomeWorkspace;
 
 /* These are copied producer positions, not another lifetime analysis. Kind and
@@ -72,6 +85,8 @@ typedef struct XrLirHomeEvent {
     XrLirCallableTransport callable_transport;
     bool callable_materialize;
     XrLirOwnershipTransferMode transfer_mode;
+    uint32_t view_operation, view_workspace;
+    XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {
