@@ -479,7 +479,8 @@ def _map_literal_cases(args, root, results):
             generated = work / 'generated.c'
             producer = run([args.driver, case, mode, generated], work)
             text = generated.read_text(encoding='ascii')
-            assert 'xrt_map_string_i64_literal(' in text and not re.search(r'\(\s*\{', text)
+            assert 'xrt_native_map_literal_create(' in text and 'xrt_map_string_i64_literal(' not in text
+            assert not re.search(r'\(\s*\{', text)
             (work / 'gateway.c').write_text('#include "generated.c"\n', encoding='ascii')
             (work / 'adapter.c').write_text('#include <stdint.h>\n#include <inttypes.h>\n#include <stdio.h>\n'
                 'extern int64_t xray_lir_entry(void);\n'
