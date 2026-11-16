@@ -749,15 +749,15 @@ static void frame_scalar_cell_admission(void) {
     }
     CArrayFixture c={0};OK(xr_lir_module_create(NULL,&c.module));XrLirFunction root={0};
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="cycle",.name_length=5,.result=XR_LIR_I64},&root));
-    OK(xr_lir_define_function(c.module,root));XrLirBlock entry={0},loop={0},exit={0};
+    OK(xr_lir_define_function(c.module,root));XrLirBlock entry={0},loop={0},exit_block={0};
     OK(xr_lir_add_block(c.module,root,NULL,0,&entry));OK(xr_lir_set_entry(c.module,root,entry));
-    OK(xr_lir_add_block(c.module,root,NULL,0,&loop));OK(xr_lir_add_block(c.module,root,NULL,0,&exit));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&loop));OK(xr_lir_add_block(c.module,root,NULL,0,&exit_block));
     OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
         .edge_count=1,.edges={{loop,NULL,0}}}));XrLirValue flag={0};
     OK(xr_lir_emit_value(c.module,loop,&(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1},&flag));
     OK(xr_lir_set_terminator(c.module,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{loop,NULL,0},{exit,NULL,0}}}));
-    ca_return(&c,exit,ca_constant(&c,exit,42));OK(xr_lir_module_finish(c.module,NULL));bool repeat=false;
+        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{loop,NULL,0},{exit_block,NULL,0}}}));
+    ca_return(&c,exit_block,ca_constant(&c,exit_block,42));OK(xr_lir_module_finish(c.module,NULL));bool repeat=false;
     OK(xr_lir_block_may_repeat(c.module,loop,&repeat));CHECK(repeat);xr_lir_module_destroy(c.module);
 }
 
