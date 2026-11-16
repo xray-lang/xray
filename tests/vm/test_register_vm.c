@@ -860,8 +860,15 @@ static void test_cells(void) {
     immediate(code, 0, XR_RBC_LOADI, 0, 7);
     immediate(code, 1, XR_RBC_CELL_NEW, 0, 1);
     reject_prepare(&module, 0, NULL, 0); // Ordinal is outside its descriptor.
+    CHECK(bits == 999);
     function.cell_count = 2;
-    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    // A real NEW at ordinal one may leave ordinal zero reserved and unready.
+    // Transporting its actual handle reads the initialized value, not a prefix.
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && bits == 7);
+    immediate(code, 2, XR_RBC_LOADI, 1, 1);
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 7);
+    emit(code, 2, XR_RBC_MOV, 1, 0, 0);
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && bits == 7);
     function.cell_count = 65537;
     reject_prepare(&module, 0, NULL, 0);
     uint32_t parent[5], child[3];
@@ -876,6 +883,7 @@ static void test_cells(void) {
     XrRbcFunction functions[] = {{parent, 5, NULL, 0, 3, 0, NULL, 0, 1},
         {child, 3, NULL, 0, 1, 0, NULL, 0, 1}};
     module = (XrRbcModule) {functions, 2, NULL, 0, NULL, 0};
+    bits = 999;
     CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
     uint32_t word = 919;
     CHECK(xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_NEW, 254, 0, 0, UINT16_MAX}));
