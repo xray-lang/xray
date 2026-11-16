@@ -384,6 +384,27 @@ static bool view_loan_scalar_cell(XirViewLoanTransport *a,XirStorageReference re
     }
     return false;
 }
+/* HIR can already express an actual capture as a predecessor flow, so that
+ * path need not visit the environment fallback. Inspect only the rejected
+ * constructor's existing immediate dependents and actual capture operands. */
+static bool view_loan_captured_array(XirViewLoanTransport *a,uint32_t id) {
+    const ViewLoanState *state=a->states+id;
+    XirStorageReference reference=state->reference;
+    if (!xir_view_actual_array_cell(a->module,reference.function,reference.value)) return false;
+    if (state->captured) return true;
+    const XrXirFunction *body=a->module->functions+reference.function;
+    for (uint32_t d=state->head;d!=UINT32_MAX && d<a->dependency_count;d=a->dependencies[d].next) {
+        XirStorageReference parent=a->states[a->dependencies[d].dependent].reference;
+        if (parent.function!=reference.function || parent.environment!=reference.environment ||
+            parent.value<body->parameter_count || parent.value-body->parameter_count>=body->instruction_count) continue;
+        const XrXirInstruction *op=body->instructions+parent.value-body->parameter_count;
+        if (op->op!=XR_XIR_FUNCTION_REF || op->args[0]>body->operand_count ||
+            op->args[1]>body->operand_count-op->args[0] || (op->args[1] && !body->operands)) continue;
+        for (uint32_t p=0;p<op->args[1];++p)
+            if (body->operands[op->args[0]+p]==reference.value) return true;
+    }
+    return false;
+}
 static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand,
     XrXirDiagnosticReason *reason) {
     if (a->states[id].grounded) return true;
@@ -404,7 +425,7 @@ static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirVi
     bool receiver=xr_xir_type_is_class(a->module->types,type) &&
         reference.function == demand->function && reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT;
     if (!borrowed && !callable && !scalar && !cell && !receiver) {
-        if (reason && a->states[id].captured && xir_view_actual_array_cell(a->module,reference.function,reference.value))
+        if (reason && view_loan_captured_array(a,id))
             *reason=XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_TRANSPORT;
         a->status=XR_XIR_UNRESOLVED;return false;
     }
