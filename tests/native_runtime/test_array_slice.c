@@ -59,6 +59,9 @@ static void kernel(XrtBackingArrayKind kind) {
     CHECK(xrt_array_slice_bind(&primary, kind, (const XrtArrayBacking *)header, 0, 1) == XRT_MANAGED_REFCOUNT);
     CHECK(!memcmp(&saved, &storage->value, sizeof(saved)) && !storage->temporary.hold);
     atomic_store(&header->references, references);
+    OK(xrt_array_slice_reborrow(&primary, kind, &storage->value.value, 0, 2));
+    CHECK(!memcmp(&saved, &storage->value, sizeof(saved)) && !storage->temporary.hold);
+    CHECK(atomic_load(&header->references) == references);
     OK(xrt_array_slice_range_reborrow(&child, kind, &storage->value.value, 1, 0, true));
     CHECK(xrt_array_slice_reborrow(&child, kind, &storage->value.value, 2, 1) == XRT_MANAGED_BOUNDS);
     XrtBillingStats after = xrt_billing_owner_stats(billing);

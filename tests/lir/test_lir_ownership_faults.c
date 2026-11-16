@@ -53,6 +53,7 @@ static void ownership_free(void *memory) {
 #include "lir_array_fixture.h"
 #include "lir_ownership_fixture.h"
 #include "lir_record_fixture.h"
+#include "lir_slice_ownership_fixture.h"
 
 static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
@@ -123,6 +124,10 @@ int main(void) {
     for (uint32_t i = 0; i < 3; ++i) {
         XrLirModule *input = NULL;
         OK(ownership_fixture(i == 1 ? XR_LIR_MAP_STRING_I64 : XR_LIR_STRING, i == 2, 2, &input));
+        sweep(input,NULL,0);
+    }
+    for (uint32_t i = 0; i < 2; ++i) {
+        XrLirModule *input = NULL; OK(slice_ownership_fixture(i ? XR_LIR_U8 : XR_LIR_I64, &input));
         sweep(input,NULL,0);
     }
     XrLirModule *grown = NULL;
