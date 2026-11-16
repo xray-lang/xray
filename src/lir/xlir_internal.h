@@ -68,6 +68,8 @@ typedef struct XrLirFunctionData {
     XrLirValueData *values;
     uint32_t value_count, value_capacity;
     uint32_t scope_count;
+    uint8_t *block_multiplicity; /* Owned only after complete immutable admission. */
+    uint32_t block_multiplicity_count;
 } XrLirFunctionData;
 typedef struct XrLirLiteralData {
     uint8_t *bytes;

@@ -652,6 +652,8 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
 typedef struct LirGraph {
     uint32_t count, entry;
     uint32_t *memory, *offsets, *predecessors, *order, *rank, *idom, *stack, *next, *cursor;
+    uint8_t *multiplicity;
+    bool owns_multiplicity;
 } LirGraph;
 
 static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *f, uint32_t block) {
@@ -1036,7 +1038,8 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 #include "xlir_callable_scope_verify.inc.c"
 #include "xlir_slice_verify.inc.c"
 
-static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts) {
+static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts,
+    uint8_t **multiplicity) {
     if (d)
         memset(d, 0, sizeof(*d));
     if (!m || m->failure != XR_LIR_OK || m->function_count > m->function_capacity ||
@@ -1148,12 +1151,17 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
         if (status == XR_LIR_VERIFY_ERROR)
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
+        if (status==XR_LIR_OK) {
+            status=lir_block_multiplicity_create(f,&graph.multiplicity);
+            graph.owns_multiplicity=status==XR_LIR_OK;
+        }
         if (status == XR_LIR_OK)
             status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
         if (status == XR_LIR_OK && scopes)
             status = lir_callable_scopes(m, f, index + 1, &graph, d, facts);
         else if (status == XR_LIR_OK)
-            status = lir_callable_facts_capture(m, f, index + 1, (LirCallableGeometry){0}, facts);
+            status = lir_callable_facts_capture(m, f, index + 1,
+                (LirCallableGeometry){.multiplicity=graph.multiplicity}, facts);
         xr_free(seen);
         if (status == XR_LIR_OK) {
             lir_graph_dominators(&graph);
@@ -1161,6 +1169,10 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
         }
         if (status == XR_LIR_OK) status = lir_state_function(m, index, d);
         if (status == XR_LIR_OK) status = lir_slice_function(m, f, index + 1, d);
+        if (status==XR_LIR_OK && multiplicity) {
+            multiplicity[index]=graph.multiplicity;graph.owns_multiplicity=false;
+        }
+        if (graph.owns_multiplicity) xr_free(graph.multiplicity);
         xr_free(graph.memory);
         if (status != XR_LIR_OK) {
             if (d && d->status == XR_LIR_OK) {
@@ -1174,15 +1186,28 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
 }
 
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
-    return lir_verify(m, d, NULL);
+    return lir_verify(m, d, NULL, NULL);
 }
 
 XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *m, XrLirDiagnostic *d) {
     if (!m || m->finished || m->callable_facts)
         return lir_status_error(d, XR_LIR_INVALID_STATE, "callable construction is already published");
     XrLirCallableFacts *pending = NULL;
-    XrLirStatus status = lir_verify(m, d, &pending);
-    if (status == XR_LIR_OK) m->callable_facts = pending;
+    uint8_t **multiplicity=m->function_count ? xr_calloc(m->function_count,sizeof(*multiplicity)) : NULL;
+    if (m->function_count && !multiplicity)
+        return lir_status_error(d,XR_LIR_OUT_OF_MEMORY,"cannot own block construction multiplicity");
+    XrLirStatus status = lir_verify(m, d, &pending, multiplicity);
+    if (status == XR_LIR_OK) {
+        m->callable_facts = pending;
+        for (uint32_t f=0;f<m->function_count;++f) {
+            XR_CHECK(!m->functions[f].block_multiplicity,"finished block facts publish once into their actual function");
+            m->functions[f].block_multiplicity=multiplicity[f];
+            m->functions[f].block_multiplicity_count=m->functions[f].block_count;
+            multiplicity[f]=NULL;
+        }
+    }
     else xr_lir_callable_facts_destroy(pending);
+    for (uint32_t f=0;f<m->function_count;++f) xr_free(multiplicity[f]);
+    xr_free(multiplicity);
     return status;
 }

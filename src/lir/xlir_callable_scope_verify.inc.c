@@ -161,7 +161,7 @@ static XrLirStatus lir_callable_scopes(const XrLirModule *m, const XrLirFunction
     XrLirCallableFacts *temporary = NULL;
     XrLirCallableFacts **destination = facts ? facts : captured_cells ? &temporary : NULL;
     XrLirStatus status = lir_callable_facts_capture(m, f, function,
-        (LirCallableGeometry){parents, owners, floors}, destination);
+        (LirCallableGeometry){parents, owners, floors, graph->multiplicity}, destination);
     if (status == XR_LIR_OK && captured_cells) {
         XrLirCallableFunctionFacts rows = {0};
         status = xr_lir_callable_facts_function(*destination,function,&rows);
