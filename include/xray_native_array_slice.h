@@ -59,7 +59,12 @@ XRAY_API XrtManagedStatus xrt_array_slice_range_reborrow(const XrtInlineValueHom
  * binding/reborrow has checked the backing extent and element geometry. Normal
  * readers check only the dynamic index, never revalidate that cold geometry.
  * They do not query a compiler pool or acquire RC. */
-XRAY_API XrtManagedStatus xrt_array_slice_clear(const XrtInlineValueHome *);
+/* Supply the same five real receiving-home fields as bind/reborrow. The callee
+ * assembles its synchronous descriptor without exposing a caller-stack object;
+ * the shared replacement kernel still validates every field and retires the
+ * old keeper before returning. These borrowed parts grant no loan permission. */
+XRAY_API XrtManagedStatus xrt_array_slice_clear(XrtManagedFrame *, void *value, void *temporary,
+    size_t first_owner, size_t temporary_first_owner);
 XRAY_API XrtManagedStatus xrt_array_slice_length(const XrtReadonlyArraySlice *, int64_t *);
 XRAY_API XrtManagedStatus xrt_array_slice_read_bits(const XrtReadonlyArraySlice *,
     XrtBackingArrayKind, int64_t index, uint64_t *);

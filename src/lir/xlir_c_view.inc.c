@@ -110,10 +110,13 @@ static const XrLirHomeWorkspace *c_view_borrow_stage(LirC *c, const XrLirValueHo
     }
     return stage;
 }
-static void c_view_home(LirC *c, const XrLirHomeWorkspace *workspace) {
-    c_format(c, "&(XrtInlineValueHome){xrl_frame, (unsigned char *)xrl_payload + %zu,\n", workspace->offset);
-    c_format(c, "        (unsigned char *)xrl_payload + %zu, %zu, %zu}",
+static void c_view_home_parts(LirC *c, const XrLirHomeWorkspace *workspace) {
+    c_format(c, "xrl_frame, (unsigned char *)xrl_payload + %zu,\n", workspace->offset);
+    c_format(c, "        (unsigned char *)xrl_payload + %zu, %zu, %zu",
         workspace->temporary_offset, workspace->first_owner, workspace->temporary_first_owner);
+}
+static void c_view_home(LirC *c, const XrLirHomeWorkspace *workspace) {
+    c_text(c,"&(XrtInlineValueHome){"); c_view_home_parts(c,workspace); c_text(c,"}");
 }
 static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOperation operation,
     uint32_t value, uint32_t workspace, uint32_t target) {
@@ -167,7 +170,7 @@ static void c_view_cleanup(LirC *c, const XrLirInstructionView *v, uint32_t sour
      * common storage metadata; do not evaluate its natural Slice bytes or
      * allocate a Frame solely to retire a keeper that was never published. */
     c_text(c, "    if (xrl_frame) {\n    XrtManagedStatus status = xrt_array_slice_clear(");
-    c_view_home(c, workspace); c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n");
+    c_view_home_parts(c, workspace); c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n");
 }
 static void c_view_bind(LirC *c, const XrLirInstructionView *v,
     const XrLirSliceIntrinsic *shape, const XrLirHomeWorkspace *workspace, uint32_t source) {
@@ -235,7 +238,7 @@ static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t 
             binding ? v->operands[0] : 0)) return;
         if (binding) { c_view_bind(c, v, &shape, workspace, source); return; }
         if (home->view_storage == XR_LIR_SLICE_STORAGE_BORROWED_FORMAL) return;
-        c_text(c, "    { XrtManagedStatus status = xrt_array_slice_clear("); c_view_home(c, workspace);
+        c_text(c, "    { XrtManagedStatus status = xrt_array_slice_clear("); c_view_home_parts(c, workspace);
         c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n"); return;
     }
     if (shape.operation == XR_LIR_SLICE_OP_COPY) {

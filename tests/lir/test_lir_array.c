@@ -685,7 +685,11 @@ static void array_c_output(const char *name, const char *path) {
         if (strcmp(name,"map-formal-construct") && strcmp(name,"map-formal-initialize"))
             CHECK(strstr(output.bytes,"xrt_managed_slot_adopt(") && strstr(output.bytes,"xrt_place_move_replace("));
     }
-    if (!strncmp(name,"slice-boundary-",15)) slice_c_reader_has_no_owners(output.bytes);
+    if (!strncmp(name,"slice-boundary-",15)) {
+        slice_c_reader_has_no_owners(output.bytes);
+        CHECK(strstr(output.bytes,"xrt_array_slice_clear(xrl_frame, (unsigned char *)xrl_payload + ") &&
+            !strstr(output.bytes,"xrt_array_slice_clear(&(XrtInlineValueHome)"));
+    }
     if (!strncmp(name,"scalar-edge-",12))
         scalar_edge_structure(output.bytes,m,root,strcmp(name,"scalar-edge-swap")!=0);
     if (path) {

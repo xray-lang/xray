@@ -42,9 +42,11 @@ XRAY_API XrtManagedStatus xrt_array_slice_reborrow(const XrtInlineValueHome *hom
     if (start > parent->count || count > parent->count - start) return XRT_MANAGED_BOUNDS;
     return xrt_array_slice_bind(home, kind, parent->backing, parent->start + start, count);
 }
-XRAY_API XrtManagedStatus xrt_array_slice_clear(const XrtInlineValueHome *home) {
+XRAY_API XrtManagedStatus xrt_array_slice_clear(XrtManagedFrame *frame, void *value, void *temporary,
+    size_t first_owner, size_t temporary_first_owner) {
+    const XrtInlineValueHome home = {frame, value, temporary, first_owner, temporary_first_owner};
     XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();
-    return xrt_inline_value_replace(home, &spec, NULL);
+    return xrt_inline_value_replace(&home, &spec, NULL);
 }
 XRAY_API XrtManagedStatus xrt_array_slice_range_bind(const XrtInlineValueHome *home,
     XrtBackingArrayKind kind, const XrtArrayBacking *array, int64_t start, int64_t limit) {
