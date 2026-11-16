@@ -192,11 +192,11 @@ static void scoped_cells(void) {
         XrLirStatus status = xr_lir_module_finish(f.c.module,&diagnostic);
         const char *expected = attack == 1 ? "Cell edge follows release or precedes ownership" : attack == 2 ?
             "function scope parent or selected-edge lifetime is inconsistent" : "Cell use follows release or precedes ownership";
-        if (status != XR_LIR_VERIFY_ERROR || !diagnostic.message || strcmp(diagnostic.message,expected))
+        if (status != XR_LIR_VERIFY_ERROR || strcmp(diagnostic.message,expected))
             fprintf(stderr,"Cell lifetime attack=%u status=%u function=%u block=%u instruction=%u: %s; expected: %s\n",
                 attack,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,
-                diagnostic.message ? diagnostic.message : "(none)",expected);
-        CHECK(status == XR_LIR_VERIFY_ERROR && diagnostic.message && !strcmp(diagnostic.message,expected));
+                diagnostic.message,expected);
+        CHECK(status == XR_LIR_VERIFY_ERROR && !strcmp(diagnostic.message,expected));
         xr_lir_module_destroy(f.c.module);
     }
 }
