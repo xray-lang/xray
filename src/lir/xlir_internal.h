@@ -171,6 +171,7 @@ XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *, const XrLi
 /* The constructor receives facts from the same scope-verification pass. This
  * is not an alternate admission path or a caller-selectable trust flag. */
 XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *, XrLirDiagnostic *);
+XR_FUNC void xr_lir_internal_block_multiplicity_free(uint8_t *);
 XR_FUNC bool xr_lir_internal_array_element(XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
