@@ -66,8 +66,8 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
             const XrXirInstruction *op = &source->instructions[i];
             f->value_blocks[value] = b;
             f->promoted_arrays[value] = op->op == XR_XIR_CELL_NEW &&
-                (lower_type(c, op->type) == XR_LIR_ARRAY_CELL || lower_type(c, op->type) == XR_LIR_VIEW_CELL ||
-                 lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL || lower_type(c,op->type)==XR_LIR_SET_I64_CELL ||
+                (lower_type(c, op->type) == XR_LIR_ARRAY_CELL ||
+                 lower_type(c, op->type) == XR_LIR_MAP_STRING_I64_CELL ||
                  xr_xir_type_is_callable(c->source->types, xr_xir_cell_element(c->source->types, op->type)) ||
                  (source->block_count > 1 && xr_xir_cell_element(c->source->types, op->type) == XR_XIR_STRING)) &&
                 lower_module_cell(c, c->function, value) == UINT32_MAX;

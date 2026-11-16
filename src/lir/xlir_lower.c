@@ -87,17 +87,11 @@ typedef struct LowerFunction {
     uint8_t *literal_uses;
     uint32_t value_count, cell_count, ordered, frame_cell_count, retired_value_count;
     LowerArrayCells array_cells;
-    XrLirValue view_frame;
-    XrLirValue *view_module_refs;
-    uint32_t *view_slots, *view_cells;
-    uint32_t view_slot_count, view_cell_count;
-    bool view_needed;
     LowerLexical lexical;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_map_borrow(LowerFunction *, uint32_t, XrLirValue *);
-static bool lower_view_bind(LowerFunction *, uint32_t, uint32_t, XrLirValue, XrLirValue *);
 
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
     if (!xr_xir_type_is_array(c->source->types, type)) return XR_LIR_TYPE_INVALID;
@@ -134,18 +128,13 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count &&
         c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE])
         return c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE];
-    const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
-    if (lower_set_type(c,type))return XR_LIR_SET_I64;
-    if(xr_xir_type_is_cell(c->source->types,type) && lower_set_type(c,xr_xir_cell_element(c->source->types,type)))return XR_LIR_SET_I64_CELL;
     if (lower_map_type(c, type)) return XR_LIR_MAP_STRING_I64;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_map_type(c, xr_xir_cell_element(c->source->types, type))) return XR_LIR_MAP_STRING_I64_CELL;
-    if (node && node->kind == XR_XIR_TYPE_SLICE && node->element == XR_XIR_I64) return XR_LIR_SLICE_I64;
     if (lower_array_element(c, type)) return XR_LIR_ARRAY;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_array_element(c, xr_xir_cell_element(c->source->types, type)))
-        return c->views && lower_array_element(c, xr_xir_cell_element(c->source->types, type)) == XR_LIR_I64 ?
-            XR_LIR_VIEW_CELL : XR_LIR_ARRAY_CELL;
+        return XR_LIR_ARRAY_CELL;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING) return XR_LIR_STRING_CELL;
     if (xr_xir_type_is_cell(c->source->types, type) &&
@@ -318,7 +307,22 @@ static bool lower_receive_type(Lower *, XrXirType);
  * An unused source descriptor cannot change the retained program's frontier. */
 static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
+    if (node && node->kind == XR_XIR_TYPE_SLICE) {
+        XrLirType element = lower_type(c, node->element);
+        if (element != XR_LIR_I64 && element != XR_LIR_U8) return lower_unsupported(c, "readonly Array Slice element type");
+        if (!c->constructed_types)
+            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+        if (!c->constructed_types) return false;
+        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+        return c->constructed_types[index] || lower_build(c,
+            xr_lir_slice_type(c->module, element, &c->constructed_types[index]));
+    }
     if (node && node->kind == XR_XIR_TYPE_CALLABLE) return lower_receive_callable(c, type, node);
+    if (node && node->kind == XR_XIR_TYPE_NULLABLE) {
+        const XrXirTypeNode *child = xr_xir_type_node(c->source->types, node->element);
+        if (child && (child->kind == XR_XIR_TYPE_SLICE || child->kind == XR_XIR_TYPE_MUT_SLICE))
+            return lower_unsupported(c, "Nullable Slice requires a checked optional loan");
+    }
     XrXirTypeDescription description = {0};
     if (node && (node->kind == XR_XIR_TYPE_NULLABLE ||
         (node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, type, &description))))
@@ -1035,15 +1039,16 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     if (!lower_receive_type(c, f->result)) return false;
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_I64_CELL ||
         lower_type(c, f->result) == XR_LIR_ARRAY_CELL ||
-        lower_type(c, f->result) == XR_LIR_MAP_STRING_I64_CELL ||
-        lower_type(c, f->result) == XR_LIR_VIEW_CELL)
+        lower_type(c, f->result) == XR_LIR_MAP_STRING_I64_CELL)
         return lower_unsupported(c, "function result type");
-    c->views |= lower_type(c, f->result) == XR_LIR_SLICE_I64;
+    if (xr_lir_internal_slice_type(c->module, lower_type(c, f->result)))
+        return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
     c->arrays |= lower_array_element(c, f->result) != XR_LIR_TYPE_INVALID;
     c->maps |= lower_map_type(c, f->result);
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         if (!lower_receive_type(c, f->parameters[p])) return false;
-        c->views |= lower_type(c, f->parameters[p]) == XR_LIR_SLICE_I64;
+        if (xr_lir_internal_slice_type(c->module, lower_type(c, f->parameters[p])))
+            return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
         c->string_appends |= lower_type(c, f->parameters[p]) == XR_LIR_STRING_CELL;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;
@@ -1187,7 +1192,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
     for (uint32_t p = 0; p < f->parameter_count && good; ++p) {
         XrXirType type = f->parameters[p];
         if (xr_xir_type_is_cell(c->source->types, type)) type = xr_xir_cell_element(c->source->types, type);
-        if (parameters[p] != XR_LIR_VIEW_CELL && lower_array_element(c, type)) {
+        if (lower_array_element(c, type)) {
             XrLirValue value = {0};
             XrLirArrayShape shape = {lower_array_element(c, type)};
             good = lower_build(c, xr_lir_function_parameter(c->module, c->functions[index], p, &value)) &&
@@ -1218,9 +1223,6 @@ static void lower_function_free(LowerFunction *f) {
     xr_free(f->lexical.term_target);
     xr_free(f->lexical.value_scopes);
     xr_free(f->frame_bindings);
-    xr_free(f->view_module_refs);
-    xr_free(f->view_slots);
-    xr_free(f->view_cells);
     xr_free(f->array_cells.owners);
     xr_free(f->array_cells.indices);
     xr_free(f->array_cells.use);
@@ -1949,10 +1951,6 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
                                   : xr_lir_emit_value(c->module, f->blocks[b], &call,
                                                       &f->values[f->source->parameter_count + i]));
     xr_free(arguments);
-    if (good && call.type == XR_LIR_SLICE_I64) {
-        uint32_t result = f->source->parameter_count + i;
-        good = lower_view_bind(f, b, f->view_slots[result], f->values[result], &f->values[result]);
-    }
     return good;
 }
 
@@ -2114,7 +2112,6 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (f->array_values && f->array_values[value] != UINT32_MAX)
             f->current[f->array_values[value]] = f->values[value];
     }
-    if (!lower_view_phis(f, b)) return false;
     if (!b && f->array_values)
         for (uint32_t p = 0; p < f->source->parameter_count; ++p)
             if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
@@ -2354,7 +2351,6 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (good) good = lower_managed_release_block(f, b, &instruction);
     if (good) good = lower_lexical_terminator(f, b,
         term->op == XR_XIR_RETURN && lower_callable_type(f, f->source->result) ? &value : NULL);
-    if (good && term->op == XR_XIR_RETURN) good = lower_view_leave(f, b, &value);
     if (good)
         good = lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &instruction));
     for (uint32_t e = 0; e < 2; ++e)
@@ -2371,13 +2367,12 @@ static bool lower_function(Lower *c, uint32_t index) {
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
                 lower_cell_inventory(&f) && lower_lexical_inventory(&f) &&
-                lower_view_inventory(&f) && lower_liveness(&f) && lower_blocks(&f);
+                lower_liveness(&f) && lower_blocks(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function, p, &f.values[p]));
     if (lower_hidden_state(c, index) && good)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function,
             f.source->parameter_count, &f.state));
-    if (good) good = lower_view_enter(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         if (f.source->parameters[p] == XR_XIR_STRING || xr_lir_boxed_type(c->module, lower_type(c, f.source->parameters[p]))) {
             XrLirValue retained = {0};
@@ -2522,10 +2517,11 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.maps |= c.state_layout.slots[s].payload == XR_LIR_MAP_STRING_I64;
     }
     if (good && c.views) {
-        c.arrays = true;
-        good = lower_view_state_layout(&c);
-    }
-    if (good && c.maps)
+        uint32_t flags = (c.displays ? XR_LIR_SLICE_LIBRARY_DISPLAY : 0) |
+            (c.string_appends ? XR_LIR_SLICE_LIBRARY_STRING : 0) |
+            (c.ranges ? XR_LIR_SLICE_LIBRARY_RANGE : 0) | (c.maps ? XR_LIR_SLICE_LIBRARY_MAP : 0);
+        good = lower_build(&c, xr_lir_slice_library_catalog_install(c.module, flags));
+    } else if (good && c.maps)
         good = lower_build(&c, xr_lir_map_catalog_install(c.module, c.views, c.arrays, c.displays, c.string_appends, c.ranges));
     else if (good && c.ranges)
         good = lower_build(&c, xr_lir_range_catalog_install(c.module, c.views, c.arrays, c.displays, c.string_appends));
@@ -2533,8 +2529,6 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         good = lower_build(&c, xr_lir_string_catalog_install(c.module, c.views, c.arrays, c.displays));
     else if (good && c.displays)
         good = lower_build(&c, xr_lir_display_catalog_install(c.module, c.views, c.arrays));
-    else if (good && c.views)
-        good = lower_build(&c, xr_lir_view_catalog_install(c.module));
     else if (good && c.arrays)
         good = lower_build(&c, xr_lir_array_catalog_install(c.module));
     if (good && c.state_layout.slot_count)
