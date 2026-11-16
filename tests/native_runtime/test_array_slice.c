@@ -52,12 +52,14 @@ static void kernel(XrtBackingArrayKind kind) {
     XrtArraySliceBundle saved = storage->value;
     CHECK(xrt_array_slice_bind(&primary, kind, (const XrtArrayBacking *)header, 4, 0) == XRT_MANAGED_BOUNDS);
     CHECK(!memcmp(&saved, &storage->value, sizeof(saved)));
+    CHECK(xrt_array_slice_range_bind(&primary, kind, (const XrtArrayBacking *)header, -1, 2) == XRT_MANAGED_BOUNDS);
+    CHECK(xrt_array_slice_range_reborrow(&child, kind, &storage->value.value, 1, 0, false) == XRT_MANAGED_BOUNDS);
     int32_t references = atomic_load(&header->references);
     atomic_store(&header->references, -INT32_MAX);
     CHECK(xrt_array_slice_bind(&primary, kind, (const XrtArrayBacking *)header, 0, 1) == XRT_MANAGED_REFCOUNT);
     CHECK(!memcmp(&saved, &storage->value, sizeof(saved)) && !storage->temporary.hold);
     atomic_store(&header->references, references);
-    OK(xrt_array_slice_reborrow(&child, kind, &storage->value.value, 1, 1));
+    OK(xrt_array_slice_range_reborrow(&child, kind, &storage->value.value, 1, 0, true));
     CHECK(xrt_array_slice_reborrow(&child, kind, &storage->value.value, 2, 1) == XRT_MANAGED_BOUNDS);
     XrtBillingStats after = xrt_billing_owner_stats(billing);
     CHECK(before.allocations == after.allocations && before.bytes == after.bytes && before.blocks == after.blocks);

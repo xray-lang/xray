@@ -32,7 +32,9 @@ typedef struct XrLirValueHome {
     XrLirCallableTransport transport;
     uint32_t borrow_source, environment_type;
     /* One-based existing workspace ordinal, zero for an unowned formal or a
-     * non-View. The natural value's owner_count remains zero. */
+     * non-View. The natural value's owner_count remains zero and first_owner
+     * stays SIZE_MAX. offset/temporary_offset project the corresponding bundle
+     * value field, never a second allocation of the natural bytes. */
     uint32_t view_workspace;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
@@ -89,6 +91,8 @@ typedef struct XrLirHomeEvent {
     XrLirCallableTransport callable_transport;
     bool callable_materialize;
     XrLirOwnershipTransferMode transfer_mode;
+    /* VALUE names its receiving workspace; END names the source workspace.
+     * Selected edges carry both workspace ordinals in HomeTransfer instead. */
     uint32_t view_operation, view_workspace;
     XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirHomeEvent;
