@@ -557,7 +557,9 @@ static void callable_targets_and_join(unsigned shape) {
     CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
     puts(mixed ? "mixed callable join remains explicit and unsupported" : "same-signature targets stay distinct and only a checked code-only escape materializes");
 }
+#include "lir_slice_homes_cases.h"
 int main(void) {
+    slice_homes();
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};
     for (size_t i=0;i<4;++i) {
         XrLirModule *module=NULL; OK(array_fixture_create(elements[i],&module)); project(module,false);
