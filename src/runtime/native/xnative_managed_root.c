@@ -427,6 +427,46 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_publish(XrtManagedSlotRese
     root->reserved_phase=RESERVED_PUBLISHED;
     return XRT_MANAGED_OK;
 }
+static XrtManagedSlot *reserved_result_slot(const XrtManagedSlotReservation *handle, size_t index) {
+    if (!reserved_slot(handle)) return NULL;
+    XrtManagedRoot *root = handle->root;
+    XrtManagedFrame *frame = root->reserved_frame;
+    if (index >= frame->slot_count || index == root->reserved_index) return NULL;
+    XrtManagedSlot *result = &frame_slots(frame)[index];
+    if (frame_owner(frame, result) == root->reserved_binding.owner ||
+        result->pending.value || result->pending.allocation_bytes) return NULL;
+    return result;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_result_check(
+    const XrtManagedSlotReservation *handle, size_t index) {
+    return reserved_result_slot(handle, index) && handle->root->reserved_phase == RESERVED_EMPTY ?
+        XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_consume_publish(
+    XrtManagedSlotReservation *handle, size_t index) {
+    XrtManagedSlot *result = reserved_result_slot(handle, index);
+    if (!result) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root = handle->root;
+    bool replacement = root->reserved_phase == RESERVED_COMMITTED;
+    if (!replacement && root->reserved_phase != RESERVED_EMPTY) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlot *slot = reserved_slot(handle);
+    XrtManagedHeader **candidate = frame_owner(root->reserved_frame, slot);
+    if (!*root->reserved_binding.owner || slot->pending.value || slot->pending.allocation_bytes ||
+        (replacement ? !*candidate : !slot_empty(root->reserved_frame, slot))) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader **destination = frame_owner(root->reserved_frame, result);
+    XrtManagedHeader *old_source = *root->reserved_binding.owner, *old_result = *destination;
+    XrtManagedHeader *incoming = replacement ? *candidate : old_source;
+    root->reserved_phase = RESERVED_CALLBACK;
+    *root->reserved_binding.owner = NULL;
+    *candidate = NULL;
+    *destination = incoming;
+    /* Both incoming ownership and source consumption precede arbitrary final
+     * release callbacks. An in-place source reference is moved, never retained. */
+    xrt_managed_drop(old_result);
+    if (replacement) xrt_managed_drop(old_source);
+    root->reserved_phase = RESERVED_PUBLISHED;
+    return XRT_MANAGED_OK;
+}
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_end(XrtManagedSlotReservation *handle) {
     XrtManagedSlot *slot=reserved_slot(handle);
     if (!slot) return XRT_MANAGED_ARGUMENT;

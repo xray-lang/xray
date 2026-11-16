@@ -66,6 +66,12 @@ XR_FUNC XrtStringSplitResult xrt_string_backing_split_create(XrtManagedFrame *, 
  * OK with appended=false and no changes; the caller may then concat_create.
  * Capacity is immutable. Self-append is supported under the same authority. */
 XR_FUNC XrtManagedStatus xrt_string_backing_try_append_exclusive(XrtStringBacking *, const XrtStringBacking *, bool *appended);
+/* The caller supplies an admitted MOVE and live RHS borrow. Geometry and all
+ * three real slots are checked before an allocation-free edit. COW prepares a
+ * geometrically grown candidate under the same reservation; any rejection
+ * preserves source/result and clears only this operation's pending candidate. */
+XR_FUNC XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *,
+    const XrtBackingTypes *, const XrtStringAppendOwned *);
 XR_FUNC XrtManagedStatus xrt_string_backing_i64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, int64_t);
 XR_FUNC XrtManagedStatus xrt_string_backing_u64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint64_t);
 XR_FUNC XrtManagedStatus xrt_string_backing_f64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint64_t bits);

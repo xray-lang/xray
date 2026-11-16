@@ -15,6 +15,14 @@
 #include "xray_native_managed.h"
 
 typedef struct XrtStringBacking XrtStringBacking;
+/* All three slots belong to one stable Frame and are distinct. The source is
+ * an owned String consumed on success, the result can hold an old owner, and
+ * the temporary is truly empty. Suffix is borrowed throughout the call and may
+ * alias either String. These coordinates carry no mutation permission. */
+typedef struct XrtStringAppendOwned {
+    size_t source_slot, result_slot, temporary_slot;
+    const XrtStringBacking *suffix;
+} XrtStringAppendOwned;
 #ifndef __cplusplus
 #if defined(_MSC_VER)
 #pragma warning(push)

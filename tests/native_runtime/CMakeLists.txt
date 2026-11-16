@@ -123,6 +123,7 @@ set_tests_properties(native_array_slice PROPERTIES LABELS "unit;native-runtime;o
 add_executable(test_native_string_backing_ops test_string_backing_ops.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing_ops.c"

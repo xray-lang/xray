@@ -31,5 +31,12 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotR
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_commit(const XrtManagedSlotReservation *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_abort(const XrtManagedSlotReservation *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_publish(XrtManagedSlotReservation *);
+/* Result belongs to the registered candidate's Frame, differs from the source
+ * and candidate, and has no pending token. Check it before any payload edit.
+ * Consume publishes either the edited source (EMPTY phase) or the completed
+ * candidate, clears source/candidate, then retires both replaced owners while
+ * the original busy domain and handle registration remain held. */
+XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_result_check(const XrtManagedSlotReservation *, size_t result);
+XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_consume_publish(XrtManagedSlotReservation *, size_t result);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_end(XrtManagedSlotReservation *);
 #endif // XNATIVE_MANAGED_ROOT_H
