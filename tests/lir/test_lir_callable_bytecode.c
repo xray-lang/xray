@@ -211,8 +211,9 @@ static void owned_duplicate_edge(void) {
     XrLirValue number=ca_constant(&c,entry,14),duplicates[]={function,function};
     instruction=(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{join,duplicates,2}},.edge_count=1};
     OK(xr_lir_set_terminator(c.module,entry,&instruction));
-    XrLirBlockView view={0}; OK(xr_lir_block_view(c.module,join,&view));
-    XrLirValue sources[]={{c.module,root.id,view.parameters[0]},{c.module,root.id,view.parameters[1]},function};
+    XrLirValue sources[]={{0},{0},function};
+    OK(xr_lir_block_parameter(c.module,join,0,&sources[0]));
+    OK(xr_lir_block_parameter(c.module,join,1,&sources[1]));
     XrLirValue sum={0};
     for (unsigned n=0;n<3;++n) {
         XrLirValue arguments[]={sources[n],number};
