@@ -153,6 +153,10 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
     const XrLirBlockData *block = &f->blocks[b];
     for (uint32_t i = 0; i < block->instruction_count; ++i) {
         const XrLirInstructionView *v = &block->instructions[i].view;
+        if (v->op == XR_LIR_SLICE_CLEANUP) {
+            flow->scratch[flow->values[(uint32_t)v->bits] - 1] = 1;
+            continue;
+        }
         if (check && lir_slice_callable_frontier(m, f, v, flow)) {
             const char *message = v->op == XR_LIR_CALL_INDIRECT ?
                 "indirect call with a live Slice requires captured binding effect facts" :

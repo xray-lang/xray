@@ -6,7 +6,8 @@
  *
  * xlir_slice.inc.c - One typed catalog for natural readonly Array windows
  */
-enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 16 };
+enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 16,
+    LIR_SLICE_ROLE_STRIDE = XR_LIR_SLICE_OP_CLEANUP };
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
     return m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count &&
         m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
@@ -14,7 +15,7 @@ XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
 static bool lir_slice_decode(uint32_t operation, XrLirSliceIntrinsic *output) {
     if (operation < LIR_SLICE_OPERATION_BASE) return false;
     uint32_t encoded = operation - LIR_SLICE_OPERATION_BASE;
-    uint32_t role = encoded % XR_LIR_SLICE_OP_COUNT, family = encoded / XR_LIR_SLICE_OP_COUNT;
+    uint32_t role = encoded % LIR_SLICE_ROLE_STRIDE, family = encoded / LIR_SLICE_ROLE_STRIDE;
     if (!role || family >= 4 || ((family & 1u) && role != XR_LIR_SLICE_OP_NEW)) return false;
     *output = (XrLirSliceIntrinsic){.operation=(XrLirSliceOperation)role,
         .element=family < 2 ? XR_LIR_I64 : XR_LIR_U8,

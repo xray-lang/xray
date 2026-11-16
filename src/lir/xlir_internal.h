@@ -106,6 +106,11 @@ XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *, const Xr
 /* The receiving catalog exists before function construction. This borrowed
  * entry stays with its module; copy the needed signature fields before emit. */
 XR_FUNC const XrLirIntrinsic *xr_lir_internal_slice_intrinsic(const XrLirModule *, uint32_t);
+/* Insert a fully resolved non-reading cleanup after ordinary SSA construction.
+ * The standard emitter owns its source and validates its target; this helper
+ * preserves all existing definitions while restoring the intended position. */
+XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_insert(XrLirModule *, XrLirBlock,
+    uint32_t ordinal, XrLirValue target, const XrLirSource *);
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *, XrLirType);
 
 /* Operand validation may reach a later block before its shape is checked. */

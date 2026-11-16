@@ -89,6 +89,7 @@ typedef struct XrLirOwnershipFact {
      * Selected edges keep value/target_value as source/target Slice SSA ids.
      * Natural transfer_mode is BORROW; hold_transfer_mode is a separate real
      * keeper COPY/MOVE/BORROW fact, not Slice's owned_count. */
+    /* CLEANUP is a resource target and has no ordinary SSA operand read. */
     uint32_t view_operation;
     XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirOwnershipFact;

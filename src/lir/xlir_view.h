@@ -21,6 +21,8 @@ typedef enum XrLirSliceOperation {
     XR_LIR_SLICE_OP_GET,
     XR_LIR_SLICE_OP_COPY,
     XR_LIR_SLICE_OP_END,
+    /* Resource cleanup is a zero-operand LIR effect, never a callable role. */
+    XR_LIR_SLICE_OP_CLEANUP,
     XR_LIR_SLICE_OP_COUNT
 } XrLirSliceOperation;
 typedef struct XrLirSliceIntrinsic {
@@ -47,4 +49,10 @@ XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *, XrLirSliceOperat
  * rows or Header addresses grants neither a live loan nor a keeper reference. */
 XR_FUNC XrLirStatus xr_lir_slice_intrinsic_view(const XrLirModule *, uint32_t id,
     XrLirSliceIntrinsic *);
+/* SLICE_CLEANUP has Unit type and no SSA operands. Its bits name one actual
+ * local Slice value in the same function, solely as a keeper target. The
+ * target may be unconstructed, non-dominating or already ended on this path.
+ * Finish validates its producer and home; cleanup never reads its natural
+ * bytes and leaves it logically dead. Strict END and reads still require a
+ * live loan. A not-yet-allocated Frame has no published keeper to retire. */
 #endif // XLIR_VIEW_H
