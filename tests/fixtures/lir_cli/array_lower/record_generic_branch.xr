@@ -1,3 +1,6 @@
+struct Row {
+    score: i64
+}
 fn snapshot<T>(value:T)->T { return value }
 fn some<T>(value:T)->T? { return value }
 fn choose_optional<T>(value:T,keep:bool)->T? {
@@ -5,13 +8,13 @@ fn choose_optional<T>(value:T,keep:bool)->T? {
     return null
 }
 fn local(seed:i64)->i64 {
-    const value=some({score:seed})
+    const value=some(Row{score:seed})
     const nested=some(snapshot(value))
     return nested!!.score
 }
-var current=some({score:17})
+var current=some(Row{score:17})
 const saved=snapshot(current)
-current=some({score:42})
+current=some(Row{score:42})
 print(current!.score)
 print(saved!.score)
 current=null
@@ -23,8 +26,8 @@ const nested=some(snapshot(saved))
 print(nested!!.score)
 const empty_outer=choose_optional(snapshot(saved),false)
 print(empty_outer==null ? 1 : 0)
-print(choose_optional({score:23},false)==null ? 1 : 0)
-print(choose_optional({score:29},true)!.score)
-current=some({score:63})
+print(choose_optional(Row{score:23},false)==null ? 1 : 0)
+print(choose_optional(Row{score:29},true)!.score)
+current=some(Row{score:63})
 print(snapshot(current)!.score)
 print(local(9))

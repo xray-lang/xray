@@ -1,3 +1,8 @@
-var current = {left:"first",right:"second",score:41}
+struct Row {
+    left: string
+    right: string
+    score: i64
+}
+var current = Row{left:"first",right:"second",score:41}
 fn read()->i64 { return current.score }
 print(read())
