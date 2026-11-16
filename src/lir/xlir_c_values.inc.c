@@ -421,6 +421,35 @@ static void c_values_root(LirC *c) {
         "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n");
     c_text(c, "    return result;\n}\n");
 }
+static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (!c->homes || !c->homes->values || !c->homes->owned_frame_needed) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "String literal has no common activation cache"); return;
+    }
+    const XrLirValueHome *home = c_string_home(c, v->result, false);
+    if (!home || !c_string_owner_slot(c, home, true)) return;
+    const XrtManagedFrameSpec *frame = &c->homes->frame;
+    size_t slot = home->literal_cache_owner, offset = home->literal_cache_offset;
+    if (slot >= frame->slot_count || slot == home->first_owner || slot == home->temporary_first_owner ||
+        offset % _Alignof(XrtManagedHeader *) || offset > frame->payload_size ||
+        sizeof(XrtManagedHeader *) > frame->payload_size - offset || frame->owned_offsets[slot] != offset) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "String literal cache lost its distinct physical owner slot"); return;
+    }
+    XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
+    const uint8_t *bytes = NULL; size_t length = 0;
+    if (xr_lir_literal_view(c->request->module, literal, &bytes, &length) != XR_LIR_OK) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "String literal cache has no admitted byte source"); return;
+    }
+    c_values_ensure(c, source);
+    c_format(c, "    if (!*(XrtManagedHeader **)((unsigned char *)xrl_payload + %zu))\n", offset);
+    c_format(c, "        xrt_native_string_create(xrl_frame, %zu, (const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
+        slot, v->bits, length, source);
+    /* The keeper survives logical SSA consumption. Each executed definition
+     * acquires its own reference, so ordinary MOVE and DROP remain exact. */
+    c_format(c, "    { XrtManagedStatus status = xrt_place_copy_replace((XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL},\n",
+        home->first_owner);
+    c_format(c, "        (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}, NULL);\n", slot);
+    c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
+}
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_CALL && c_values_owned_type(c, v->type)) {
         c_values_ensure(c, source);
@@ -463,13 +492,7 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_values_publish_leaf(c, v->result, source); return true;
     }
     if (v->op == XR_LIR_STRING_LITERAL) {
-        XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
-        const uint8_t *bytes = NULL; size_t length = 0;
-        xr_lir_literal_view(c->request->module, literal, &bytes, &length);
-        c_values_ensure(c, source);
-        c_text(c, "    if (!"); c_value(c, v->result); c_text(c, ")\n");
-        c_format(c, "        xrt_native_string_create(xrl_frame, %zu, (const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
-            c->homes->values[v->result].first_owner, v->bits, length, source);
+        c_values_string_literal(c, v, source);
         return true;
     }
     if (v->op == XR_LIR_STRING_RETAIN) {
