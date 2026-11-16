@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir_callable_bytecode_cases.h"
+#include "lir_callable_construction_fixture.h"
 
 static void callable_c_rejected(const XrLirModule *module, XrLirFunction root, XrLirCStatus expected) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
@@ -316,6 +317,13 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
 }
 
 static void callable_vm_execution(void) {
+    for (unsigned shape = 0; shape < 4; ++shape) {
+        XrLirModule *module = NULL; XrLirFunction root = {0}; XrLirValue reference = {0};
+        callable_construction_fixture(shape, &module, &root, &reference);
+        if (shape < 2) callable_c_frame(module, root);
+        else callable_c_rejected(module, root, XR_LIR_C_UNSUPPORTED);
+        xr_lir_module_destroy(module);
+    }
     callable_reentry_snapshot_frontier();
     callable_entry_signature_frontiers();
     XrLirModule *captured = NULL;

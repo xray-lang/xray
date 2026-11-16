@@ -89,54 +89,6 @@ static uint32_t c_callable_result_type(LirC *c, XrLirCallableType signature) {
         c_error(c,XR_LIR_C_INVALID_LIR,"callable result lost its common landing plan");
     return type;
 }
-typedef struct LirCFnDfs { uint32_t block, parent, edge; } LirCFnDfs;
-/* Reentering a constructor needs distinct capture snapshots. Identify only
- * cyclic blocks in linear time; an unrelated loop does not reject its caller. */
-static bool c_callable_cycle_index(LirC *c) {
-    size_t slots = c->view.block_count;
-    if (slots == SIZE_MAX) { c_error(c,XR_LIR_C_OVERFLOW,"callable CFG exceeds address space"); return false; }
-    ++slots;
-    void *memory = NULL;
-    if (!c_resource(c,xr_compile_resources_calloc(c->request->resources,slots,
-        3 * sizeof(uint32_t) + sizeof(LirCFnDfs) + 2,&memory))) return false;
-    c->callable_cfg = memory;
-    uint32_t *index = memory, *low = index + slots, *stack = low + slots;
-    LirCFnDfs *frames = (LirCFnDfs *)(stack + slots);
-    uint8_t *active = (uint8_t *)(frames + slots), *cycles = active + slots;
-    c->callable_cycles = cycles;
-    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
-    uint32_t clock = 0; size_t depth = 0, used = 0;
-    for (uint32_t n = 0; n < c->view.block_count && c_request_poll(c); ++n) {
-        uint32_t start = n + 1;
-        if (index[start]) continue;
-        frames[depth++] = (LirCFnDfs){start,0,0};
-        while (depth && c_request_poll(c)) {
-            LirCFnDfs *walk = &frames[depth - 1]; uint32_t block = walk->block;
-            if (!index[block]) {
-                index[block] = low[block] = ++clock; stack[used++] = block; active[block] = 1;
-            }
-            const XrLirBlockData *body = &function->blocks[block - 1];
-            const XrLirInstructionView *end = &body->instructions[body->instruction_count - 1].view;
-            if (walk->edge < end->edge_count) {
-                uint32_t target = end->edges[walk->edge++].target;
-                if (!index[target]) { frames[depth++] = (LirCFnDfs){target,block,0}; continue; }
-                if (active[target] && low[block] > index[target]) low[block] = index[target];
-                continue;
-            }
-            uint32_t parent = walk->parent; --depth;
-            if (parent && low[parent] > low[block]) low[parent] = low[block];
-            if (low[block] == index[block]) {
-                size_t begin = used;
-                do { XR_CHECK(begin,"an active component contains its root"); --begin; } while (stack[begin] != block);
-                bool cyclic = used - begin > 1;
-                for (uint32_t e = 0; e < end->edge_count; ++e) cyclic |= end->edges[e].target == block;
-                for (size_t at = begin; at < used; ++at) { active[stack[at]] = 0; cycles[stack[at]] = (uint8_t)cyclic; }
-                used = begin;
-            }
-        }
-    }
-    return c_request_poll(c);
-}
 static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
     c->callables = true;
     if (v->op == XR_LIR_FUNCTION_REF) {
@@ -144,7 +96,9 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
         xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&target);
         XrLirCallableValueFact fact;
         if (!c_callable_fact(c,v->result,&fact)) return false;
-        if (fact.operation != v->op || fact.constructor_storage != v->bits || fact.known_target != v->callee) {
+        if (fact.kind != XR_LIR_SCOPED_VALUE_FUNCTION || fact.type != v->type ||
+            fact.operation != v->op || fact.constructor_storage != v->bits || fact.known_target != v->callee ||
+            fact.block != c->block || fact.instruction != c->instruction || fact.capture_count != v->operand_count) {
             c_error(c,XR_LIR_C_INVALID_LIR,"callable constructor changed after its final facts were sealed"); return false;
         }
         bool owned = fact.transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
@@ -164,8 +118,7 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
         }
         c->runtime |= owned;
         if (v->operand_count) {
-            if (!owned && !c->callable_cycles && !c_callable_cycle_index(c)) return false;
-            if (!owned && c->callable_cycles[c->block]) {
+            if (!owned && fact.constructor_may_repeat) {
                 c_error(c,XR_LIR_C_UNSUPPORTED,"reentered Frame environments require independent capture snapshots"); return false;
             }
             for (uint32_t p = 0; p < v->operand_count; ++p) {
