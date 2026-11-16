@@ -5,13 +5,23 @@
  *
  * xrbc_callable_scope_transfer.inc.c - Scope geometry in the existing CFG rows
  */
-static size_t rbc_flow_state_bytes(const XrRbcModule *module, const XrRbcFunction *function) {
+static size_t rbc_flow_function_offset(const XrRbcModule *module, const XrRbcFunction *function) {
     size_t homes = function->aggregate_value_count + function->environment_count;
     if (homes < function->aggregate_value_count) return SIZE_MAX;
     if (!rbc_function_scopes(module, function).count) return homes;
     size_t scopes = ((size_t)function->register_count + 1) * sizeof(uint32_t);
     if (homes > SIZE_MAX - 3u || ((homes + 3u) & ~(size_t)3u) > SIZE_MAX - scopes) return SIZE_MAX;
     return ((homes + 3u) & ~(size_t)3u) + scopes;
+}
+static size_t rbc_flow_state_bytes(const XrRbcModule *module,const XrRbcFunction *function) {
+    size_t bytes=rbc_flow_function_offset(module,function);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,(uint32_t)(function-module->functions));
+    size_t values=code && code->homes ? (size_t)code->value_count+1 : 0;
+    return bytes>SIZE_MAX-values ? SIZE_MAX : bytes+values;
+}
+static uint8_t *rbc_function_liveness(const RbcStringAdmission *state) {
+    const XrRbcValueCode *code=xr_rbc_module_value_code(state->module,(uint32_t)(state->function-state->module->functions));
+    return code && code->homes ? state->aggregates+rbc_flow_function_offset(state->module,state->function) : NULL;
 }
 static uint32_t *rbc_scope_state(const RbcStringAdmission *state) {
     if (!rbc_function_scopes(state->module, state->function).count) return NULL;

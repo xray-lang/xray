@@ -33,7 +33,9 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_ARRAY, XR_RBC_VALUE_BINDING_NEW, XR_RBC_VALUE_BINDING_READ,
     XR_RBC_VALUE_BINDING_WRITE, XR_RBC_VALUE_BINDING_DROP, XR_RBC_VALUE_MAP, XR_RBC_VALUE_DISPLAY,
     XR_RBC_VALUE_RECORD_NEW, XR_RBC_VALUE_RECORD_FIELD, XR_RBC_VALUE_NULLABLE_NONE,
-    XR_RBC_VALUE_NULLABLE_SOME, XR_RBC_VALUE_NULLABLE_IS_SOME, XR_RBC_VALUE_NULLABLE_UNWRAP
+    XR_RBC_VALUE_NULLABLE_SOME, XR_RBC_VALUE_NULLABLE_IS_SOME, XR_RBC_VALUE_NULLABLE_UNWRAP,
+    XR_RBC_VALUE_FUNCTION_NEW, XR_RBC_VALUE_FUNCTION_CALL, XR_RBC_VALUE_FUNCTION_ALIAS,
+    XR_RBC_VALUE_FUNCTION_SCOPE_EXIT
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -65,6 +67,8 @@ typedef struct XrRbcValueCode {
     size_t argument_count;
     const struct XrtPodDisplay *displays;
     size_t display_count;
+    const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
+    uint32_t scope_count;
 } XrRbcValueCode;
 
 /* Descriptions borrow the actual code lease, as the existing common homes do.

@@ -73,7 +73,36 @@ static void *resize(void *memory, size_t bytes) {
 #include "../lir/lir_array_c_fixture.h"
 #include "../lir/lir_callable_fixture.h"
 
+static XrLirModule *owned_fixture(XrLirFunction *root,bool capture) {
+    CArrayFixture c={0};
+    OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter parameter={.type=XR_LIR_I64};
+    XrLirCallableType signature={.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+    XrLirType callable=0,arguments[]={XR_LIR_I64,XR_LIR_I64};
+    OK(xr_lir_callable_type(c.module,&signature,&callable));
+    XrLirFunction target=test_function(c.module,"captured_add",arguments,capture ? 2u : 1u,XR_LIR_I64);
+    OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=callable,.capture_count=capture ? 1u : 0u}));
+    XrLirBlock block=test_block(c.module,target,NULL,0);
+    OK(xr_lir_set_entry(c.module,target,block));
+    XrLirValue seed={0},argument={0};
+    if (capture) OK(xr_lir_function_parameter(c.module,target,0,&seed));
+    else seed=ca_constant(&c,block,40);
+    OK(xr_lir_function_parameter(c.module,target,capture ? 1u : 0u,&argument));
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,seed,argument));
+    *root=test_function(c.module,"factory",NULL,0,callable);
+    block=test_block(c.module,*root,NULL,0);
+    OK(xr_lir_set_entry(c.module,*root,block));
+    if (capture) seed=ca_constant(&c,block,40);
+    XrLirInstruction instruction={.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target,
+        .bits=XR_LIR_CLOSURE_OWNED,.operands=capture ? &seed : NULL,.operand_count=capture ? 1u : 0u};
+    XrLirValue value={0};
+    OK(xr_lir_emit_value(c.module,block,&instruction,&value));
+    ca_return(&c,block,value);
+    OK(xr_lir_module_finish(c.module,NULL));
+    return c.module;
+}
 static XrLirModule *fixture(unsigned kind, XrLirFunction *root) {
+    if (kind>=4) return owned_fixture(root,kind==4);
     if (!kind) {
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
@@ -123,7 +152,23 @@ static void check_result(XrRbcExecution **execution, unsigned kind) {
     XrRbcOutcome *outcome = xr_rbc_execution_run(*execution);
     CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
     xr_rbc_execution_free(execution);
-    if (kind == 3) {
+    if (kind>=4) {
+        const XrtFunction *function=NULL;
+        CHECK(xr_rbc_outcome_function(outcome,&function));
+        XrtEnvironmentBorrow environment={0}; XrtValuePlanSpec shape={0};
+        CHECK(xrt_environment_borrow_owned(function->owner,&environment)==XRT_MANAGED_OK);
+        CHECK(xrt_value_plan_view(environment.plan,&shape)==XRT_MANAGED_OK);
+        CHECK(shape.kind==XRT_VALUE_ENVIRONMENT && shape.capture_count==(kind==4 ? 1u : 0u));
+        if (kind==5) CHECK(!shape.size && environment.payload==(const void *)(function->owner+1));
+        uint64_t argument=2;
+        CHECK(xr_rbc_owned_function_prepare(function,&argument,1,execution)==XR_RBC_OK);
+        xr_rbc_outcome_free(&outcome);
+        outcome=xr_rbc_execution_run(*execution);
+        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(execution);
+        uint64_t result=0;
+        CHECK(xr_rbc_outcome_bits(outcome,&result) && result==42);
+    } else if (kind == 3) {
         const XrtManagedHeader *string = NULL;
         CHECK(xr_rbc_outcome_string(outcome, &string));
         const XrtStringBacking *text = (const XrtStringBacking *)string;
@@ -134,6 +179,73 @@ static void check_result(XrRbcExecution **execution, unsigned kind) {
         CHECK(value == (kind == 1 ? 42u : kind == 2 ? 128u : 7u));
     }
     xr_rbc_outcome_free(&outcome);
+}
+static void owned_receiving_failures(void) {
+    XrRbcProgram *program=compile_fixture(4);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    const XrtFunction *function=NULL;
+    CHECK(xr_rbc_outcome_function(outcome,&function));
+    size_t baseline=tracked_live;
+    uint64_t argument=2;
+    attempts=0;
+    CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_OK);
+    size_t calls=attempts;
+    xr_rbc_execution_free(&execution);
+    CHECK(tracked_live==baseline);
+    for (size_t point=1;point<=calls;++point) {
+        attempts=0; fail_at=point;
+        CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_OUT_OF_MEMORY);
+        CHECK(!execution && tracked_live==baseline);
+    }
+    fail_at=SIZE_MAX;
+    for (unsigned mutation=0;mutation<3;++mutation) {
+        XrtFunction invalid=*function;
+        if (!mutation) invalid.entry=&argument;
+        if (mutation==1) ++invalid.environment;
+        if (mutation==2) invalid.owner=NULL;
+        CHECK(xr_rbc_owned_function_prepare(&invalid,&argument,1,&execution)==XR_RBC_INVALID);
+        CHECK(!execution && tracked_live==baseline);
+    }
+    int32_t references=atomic_load(&function->owner->references);
+    atomic_store(&function->owner->references,-INT32_MAX);
+    CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_VALUE_FAILURE && !execution);
+    atomic_store(&function->owner->references,references);
+    CHECK(tracked_live==baseline);
+    CHECK(xr_rbc_owned_function_prepare(function,&argument,1,&execution)==XR_RBC_OK);
+    xr_rbc_outcome_free(&outcome);
+    outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    uint64_t result=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&result) && result==42);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!tracked_live);
+    printf("Retired Owned Fn prepare: %zu allocation failures preserve the lender\n",calls);
+}
+static void owned_outcome_take(void) {
+    XrRbcProgram *program=compile_fixture(5);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    XrtFunction function={0};
+    CHECK(xr_rbc_outcome_take_function(outcome,&function) && function.entry && function.owner);
+    const XrtFunction *sentinel=&function;
+    CHECK(!xr_rbc_outcome_function(outcome,&sentinel) && sentinel==&function);
+    xr_rbc_outcome_free(&outcome);
+    uint64_t argument=2;
+    CHECK(xr_rbc_owned_function_prepare(&function,&argument,1,&execution)==XR_RBC_OK);
+    xrt_managed_drop(function.owner);
+    outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    uint64_t result=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&result) && result==42);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!tracked_live);
 }
 static void prepared_after_program(unsigned kind) {
     CHECK(!tracked_live);
@@ -245,6 +357,7 @@ static void failure_sweep(unsigned kind) {
 int main(void) {
     for (unsigned kind = 0; kind < 4; ++kind) { prepared_after_program(kind); failure_sweep(kind); }
     code_lease_is_leaf(); raw_borrow_and_refusal();
+    prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
     puts("CodeImage leases, independent Layout snapshots and post-Program executions passed");
     return 0;
 }

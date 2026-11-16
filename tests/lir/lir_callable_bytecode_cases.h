@@ -7,153 +7,205 @@
  * lir_callable_bytecode_cases.h - Authenticate raw function values and signatures
  */
 #include "xray_native_function.h"
-static void callable_raw_receiving(const XrRbcProgram *program) {
-    const XrRbcModule *original = xr_rbc_program_view(program);
-    CHECK(original->function_count == 3 && original->callable_type_count == 1);
-    const XrRbcFunction *root = &original->functions[0];
+#include "vm/register/xrbc_code_owner.h"
+
+typedef struct CallableRawFixture {
+    const XrRbcModule *original;
+    const XrRbcValueCode *original_code;
+    XrRbcModule module;
     XrRbcFunction functions[3];
-    uint32_t kinds[XR_RBC_REGISTER_COUNT_MAX];
-    XrRbcAggregateAccess *accesses = xr_malloc(root->aggregate_access_count * sizeof(*accesses));
-    uint32_t *code = xr_malloc(root->code_count * sizeof(*code));
-    CHECK(accesses && code);
-    uint32_t reference = UINT32_MAX;
-    for (uint32_t n = 0; n < root->aggregate_access_count; ++n)
-        if (root->aggregate_accesses[n].operation == XR_RBC_FUNCTION_REFERENCE) reference = n;
-    CHECK(reference != UINT32_MAX);
-    uint32_t result = root->aggregate_accesses[reference].result.index;
-    for (unsigned scenario = 0; scenario < 6; ++scenario) {
-        XrRbcModule module = *original;
-        memcpy(functions, original->functions, sizeof(functions));
-        memcpy(kinds, root->register_callables, root->register_count * sizeof(*kinds));
-        memcpy(accesses, root->aggregate_accesses, root->aggregate_access_count * sizeof(*accesses));
-        memcpy(code, root->code, root->code_count * sizeof(*code));
-        module.functions = functions;
-        functions[0].register_callables = kinds;
-        functions[0].aggregate_accesses = accesses;
-        functions[0].code = code;
-        if (scenario == 0) module.callable_types = NULL;
-        if (scenario == 1) functions[0].register_callable_count = root->register_count - 1;
-        if (scenario == 2) kinds[result] = 0;
-        if (scenario == 3) functions[accesses[reference].callee].callable = 0;
-        if (scenario == 4) accesses[reference].slot = 2;
-        if (scenario == 5) {
-            bool replaced = false;
-            for (size_t pc = 0; pc < root->code_count; ++pc)
-                if ((code[pc] & 255) == XR_RBC_AGGREGATE_ACCESS && (code[pc] >> 16) == reference) {
-                    CHECK(xr_rbc_encode(&code[pc], (XrRbcOperands){.op=XR_RBC_LOADI, .a=result, .immediate=1}));
-                    replaced = true;
+    const XrRbcValueCode *codes[3];
+    XrRbcCallableEntry entries[3];
+    XrRbcValueCode code;
+    XrLirValueHomes homes;
+    XrLirValueHome *values;
+    XrLirHomeBytes *bytes;
+    XrLirHomeEvent *events;
+    XrRbcValueAccess *accesses;
+    uint32_t *arguments,*words;
+    XrRbcEnvironment environment;
+} CallableRawFixture;
+static void callable_raw_reset(CallableRawFixture *raw) {
+    const XrRbcModule *original=raw->original;
+    raw->module=*original;
+    raw->module.code_lease=(XrRbcCodeLease){0};
+    memcpy(raw->functions,original->functions,original->function_count*sizeof(*raw->functions));
+    memcpy(raw->codes,original->borrowed_value_codes,original->function_count*sizeof(*raw->codes));
+    memcpy(raw->entries,original->borrowed_callable_entries,original->function_count*sizeof(*raw->entries));
+    raw->code=*raw->original_code; raw->homes=*raw->original_code->homes;
+    memcpy(raw->values,raw->homes.values,((size_t)raw->code.value_count+1)*sizeof(*raw->values));
+    memcpy(raw->bytes,raw->homes.bytes,raw->homes.byte_count*sizeof(*raw->bytes));
+    memcpy(raw->events,raw->homes.events,raw->homes.event_count*sizeof(*raw->events));
+    memcpy(raw->accesses,raw->code.accesses,raw->code.access_count*sizeof(*raw->accesses));
+    if (raw->code.argument_count) memcpy(raw->arguments,raw->code.arguments,raw->code.argument_count*sizeof(*raw->arguments));
+    memcpy(raw->words,raw->functions[0].code,raw->functions[0].code_count*sizeof(*raw->words));
+    raw->homes.values=raw->values;
+    raw->homes.bytes=raw->bytes; raw->homes.events=raw->events;
+    raw->code.homes=&raw->homes; raw->code.accesses=raw->accesses; raw->code.arguments=raw->arguments;
+    raw->codes[0]=&raw->code;
+    raw->module.functions=raw->functions;
+    raw->module.borrowed_value_codes=raw->codes;
+    raw->module.borrowed_callable_entries=raw->entries;
+    raw->functions[0].code=raw->words;
+    if (raw->functions[0].environment_count) {
+        CHECK(raw->functions[0].environment_count==1);
+        raw->environment=raw->functions[0].environments[0];
+        raw->functions[0].environments=&raw->environment;
+    }
+}
+static CallableRawFixture callable_raw_fixture(const XrRbcProgram *program) {
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    CHECK(module->function_count<=3 && module->borrowed_value_codes && module->borrowed_callable_entries);
+    const XrRbcValueCode *code=module->borrowed_value_codes[0];
+    CHECK(code && code->homes);
+    CallableRawFixture raw={.original=module,.original_code=code};
+    raw.values=xr_malloc(((size_t)code->value_count+1)*sizeof(*raw.values));
+    raw.bytes=xr_malloc((code->homes->byte_count ? code->homes->byte_count : 1)*sizeof(*raw.bytes));
+    raw.events=xr_malloc((code->homes->event_count ? code->homes->event_count : 1)*sizeof(*raw.events));
+    raw.accesses=xr_malloc(code->access_count*sizeof(*raw.accesses));
+    raw.arguments=xr_malloc((code->argument_count ? code->argument_count : 1)*sizeof(*raw.arguments));
+    raw.words=xr_malloc((module->functions[0].code_count+1)*sizeof(*raw.words));
+    CHECK(raw.values && raw.bytes && raw.events && raw.accesses && raw.arguments && raw.words);
+    return raw;
+}
+static void callable_raw_free(CallableRawFixture *raw) {
+    xr_free(raw->values); xr_free(raw->bytes); xr_free(raw->events);
+    xr_free(raw->accesses); xr_free(raw->arguments); xr_free(raw->words);
+}
+static uint32_t callable_raw_constructor(const CallableRawFixture *raw) {
+    for (size_t n=0;n<raw->code.access_count;++n)
+        if (raw->accesses[n].operation==XR_RBC_VALUE_FUNCTION_NEW) return (uint32_t)n;
+    CHECK(false); return 0;
+}
+static void callable_raw_positive(CallableRawFixture *raw,const XrRbcProgram *program) {
+    callable_raw_reset(raw);
+    CHECK(!raw->homes.owned_frame_needed && !raw->homes.frame.slot_count);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&raw->module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    uint64_t bits=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==42);
+    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+}
+static void callable_raw_receiving(const XrRbcProgram *program) {
+    CallableRawFixture raw=callable_raw_fixture(program);
+    CHECK(raw.original->function_count==3 && raw.original->callable_type_count==1);
+    callable_raw_positive(&raw,program);
+    for (unsigned scenario=0;scenario<12;++scenario) {
+        callable_raw_reset(&raw);
+        uint32_t reference=callable_raw_constructor(&raw);
+        XrRbcValueAccess *constructor=&raw.accesses[reference];
+        if (scenario==0) raw.module.callable_types=NULL;
+        if (scenario==1) --raw.functions[0].register_callable_count;
+        if (scenario==2) raw.values[constructor->result].type=0;
+        if (scenario==3) raw.functions[constructor->index].callable=0;
+        if (scenario==4) raw.entries[constructor->index].signature_type=UINT32_MAX;
+        if (scenario==5) {
+            bool replaced=false;
+            for (size_t pc=0;pc<raw.functions[0].code_count;++pc)
+                if ((raw.words[pc]&255)==XR_RBC_VALUE_ACCESS && (raw.words[pc]>>16)==reference) {
+                    CHECK(xr_rbc_encode(&raw.words[pc],(XrRbcOperands){.op=XR_RBC_LOADI,.a=0,.immediate=1}));
+                    replaced=true;
                 }
             CHECK(replaced);
         }
-        XrRbcExecution *execution = NULL;
-        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID);
+        if (scenario==6) raw.values[constructor->result].transport=XR_LIR_CALLABLE_TRANSPORT_OWNED;
+        if (scenario==7) raw.values[constructor->result].offset=raw.homes.frame.payload_size;
+        if (scenario==8) raw.bytes[raw.values[constructor->result].first_bytes].size=sizeof(uint64_t);
+        if (scenario==9) raw.values[constructor->result].temporary_first_owner=0;
+        if (scenario==10) raw.values[constructor->result].borrow_source=constructor->result;
+        if (scenario==11) raw.events[constructor->other-1].callable_materialize=true;
+        XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID);
         CHECK(!execution);
     }
-    xr_free(code);
-    xr_free(accesses);
+    callable_raw_free(&raw);
 }
-
+/* The explicit raw Frame descriptor keeps its own scalar signature. It has no
+ * compiler ValueImage to contradict when exercising the narrow call boundary. */
 static void callable_narrow_argument(const XrRbcProgram *program) {
-    XrRbcModule module = *xr_rbc_program_view(program);
-    XrRbcFunction functions[3];
-    memcpy(functions, module.functions, sizeof(functions));
-    module.functions = functions;
-    XrRbcCallableType signature = module.callable_types[0];
-    XrRbcCallableParameter parameter = signature.parameters[0];
-    parameter.value = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, XR_POD_U8};
-    signature.parameters = &parameter;
-    module.callable_types = &signature;
-    uint32_t *code = xr_malloc(functions[0].code_count * sizeof(*code));
-    CHECK(code);
-    memcpy(code, functions[0].code, functions[0].code_count * sizeof(*code));
-    functions[0].code = code;
-    bool replaced = false;
-    for (size_t pc = 0; pc < functions[0].code_count; ++pc)
-        if ((code[pc] & 255) == XR_RBC_LOADI && (code[pc] >> 16) == 40) {
-            CHECK(xr_rbc_encode(&code[pc], (XrRbcOperands){.op=XR_RBC_LOADI, .a=(code[pc] >> 8) & 255, .immediate=256}));
-            replaced = true;
-        }
-    CHECK(replaced);
-    XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_OK);
-    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_INVALID);
-    xr_rbc_outcome_free(&outcome);
-    xr_rbc_execution_free(&execution);
-    xr_free(code);
+    uint32_t root_words[4],callee_word;
+    CHECK(xr_rbc_encode(&root_words[0],(XrRbcOperands){.op=XR_RBC_AGGREGATE_ACCESS,.immediate=0}));
+    CHECK(xr_rbc_encode(&root_words[1],(XrRbcOperands){.op=XR_RBC_LOADI,.a=2,.immediate=256}));
+    CHECK(xr_rbc_encode(&root_words[2],(XrRbcOperands){.op=XR_RBC_AGGREGATE_ACCESS,.immediate=1}));
+    CHECK(xr_rbc_encode(&root_words[3],(XrRbcOperands){.op=XR_RBC_RET,.a=1}));
+    CHECK(xr_rbc_encode(&callee_word,(XrRbcOperands){.op=XR_RBC_AGGREGATE_ACCESS,.immediate=0}));
+    XrRbcAggregateAccess accesses[]={
+        {.operation=XR_RBC_FUNCTION_REFERENCE,.callee=1,.slot=1,.result={.index=0}},
+        {.operation=XR_RBC_FUNCTION_CALL,.source=0,.slot=1,.window=1}};
+    XrRbcAggregateAccess ret={.operation=XR_RBC_FUNCTION_RETURN,.source=0,.count=1,.slot=1};
+    XrRbcRegisterKind kinds[]={XR_RBC_FUNCTION,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
+    uint32_t callables[]={1,0,0};
+    XrRbcFunction functions[]={
+        {.code=root_words,.code_count=4,.register_count=3,.register_kinds=kinds,.register_kind_count=3,
+         .register_callables=callables,.register_callable_count=3,.aggregate_accesses=accesses,.aggregate_access_count=2},
+        {.code=&callee_word,.code_count=1,.register_count=1,.parameter_count=1,.callable=1,
+         .aggregate_accesses=&ret,.aggregate_access_count=1}};
+    XrRbcCallableParameter parameter={.value={XR_RBC_CALLABLE_SCALAR,XR_POD_U8}};
+    XrRbcCallableType signature={.parameters=&parameter,.parameter_count=1,.result={XR_RBC_CALLABLE_SCALAR,XR_POD_I64}};
+    XrRbcModule module={.functions=functions,.function_count=2,.callable_types=&signature,.callable_type_count=1};
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_INVALID);
+    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+    CHECK(xr_rbc_encode(&root_words[1],(XrRbcOperands){.op=XR_RBC_LOADI,.a=2,.immediate=255}));
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_OK);
+    outcome=xr_rbc_execution_run(execution);
+    uint64_t bits=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==255);
+    xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
 }
-
 static void callable_frame_receiving(const XrRbcProgram *program) {
-    const XrRbcModule *original = xr_rbc_program_view(program);
-    const XrRbcFunction *root = &original->functions[0];
-    CHECK(root->environment_count == 1 && root->environment_size == sizeof(XrtFunction) + sizeof(uint64_t));
-    XrRbcEnvironment environment = root->environments[0];
-    uint32_t callee = environment.callee, producer = environment.producer;
-    bool binding = original->functions[callee].captures[0].kind == XR_RBC_CALLABLE_BINDING;
-    XrRbcFunction functions[3];
-    XrRbcAggregateAccess *accesses = xr_malloc(root->aggregate_access_count * sizeof(*accesses));
-    XrRbcArrayLocation *operands = xr_malloc(root->aggregate_operand_count * sizeof(*operands));
-    uint32_t *code = xr_malloc((root->code_count + 1) * sizeof(*code));
-    CHECK(accesses && operands && code && callee < 3);
-    for (unsigned scenario = 0; scenario < (binding ? 14u : 11u); ++scenario) {
-        XrRbcModule module = *original;
-        memcpy(functions, original->functions, sizeof(functions));
-        memcpy(accesses, root->aggregate_accesses, root->aggregate_access_count * sizeof(*accesses));
-        memcpy(operands, root->aggregate_operands, root->aggregate_operand_count * sizeof(*operands));
-        memcpy(code, root->code, root->code_count * sizeof(*code));
-        environment = root->environments[0];
-        XrRbcCallableValue capture = functions[callee].captures[0];
-        functions[callee].captures = &capture;
-        functions[0].environments = &environment;
-        functions[0].aggregate_accesses = accesses;
-        functions[0].aggregate_operands = operands;
-        module.functions = functions;
-        if (scenario == 0) functions[callee].captures = NULL;
-        if (scenario == 1) functions[callee].capture_count = functions[callee].parameter_count + 1;
-        if (scenario == 2) capture.kind = XR_RBC_CALLABLE_REFERENCE;
-        if (scenario == 3) functions[0].environment_size = 16;
-        if (scenario == 4) environment.offset = 1;
-        if (scenario == 5) environment.producer = (uint32_t)root->aggregate_access_count;
-        if (scenario == 6) accesses[producer].destination = 0;
-        if (scenario == 7) accesses[producer].count = 0;
-        if (scenario == 8) operands[accesses[producer].first] = accesses[producer].result;
-        if (scenario >= 9) {
-            uint32_t reference = 0;
-            size_t reference_pc = 0;
-            for (size_t pc = 0; pc < root->code_count; ++pc)
-                if ((code[pc] & 255) == XR_RBC_AGGREGATE_ACCESS && (code[pc] >> 16) == producer) {
-                    reference = code[pc];
-                    reference_pc = pc;
+    CallableRawFixture raw=callable_raw_fixture(program);
+    CHECK(raw.original->functions[0].environment_count==1 &&
+        raw.original->functions[0].environment_size==sizeof(XrtFunction)+sizeof(uint64_t));
+    uint32_t callee=raw.original->functions[0].environments[0].callee;
+    bool binding=raw.original->functions[callee].captures[0].kind==XR_RBC_CALLABLE_BINDING;
+    callable_raw_positive(&raw,program);
+    for (unsigned scenario=0;scenario<(binding ? 14u : 11u);++scenario) {
+        callable_raw_reset(&raw);
+        uint32_t producer=callable_raw_constructor(&raw);
+        XrRbcValueAccess *constructor=&raw.accesses[producer];
+        XrRbcCallableValue capture=raw.functions[callee].captures[0];
+        raw.functions[callee].captures=&capture;
+        if (scenario==0) raw.functions[callee].captures=NULL;
+        if (scenario==1) raw.functions[callee].capture_count=raw.functions[callee].parameter_count+1;
+        if (scenario==2) capture.kind=XR_RBC_CALLABLE_REFERENCE;
+        if (scenario==3) raw.functions[0].environment_size=16;
+        if (scenario==4) raw.environment.offset=1;
+        if (scenario==5) raw.environment.producer=0;
+        if (scenario==6) constructor->window=0;
+        if (scenario==7) constructor->count=0;
+        if (scenario==8) raw.arguments[constructor->first]=constructor->result;
+        if (scenario==9 || scenario==10) {
+            uint32_t reference=0; size_t reference_pc=0;
+            for (size_t pc=0;pc<raw.functions[0].code_count;++pc)
+                if ((raw.words[pc]&255)==XR_RBC_VALUE_ACCESS && (raw.words[pc]>>16)==producer) {
+                    reference=raw.words[pc]; reference_pc=pc;
                 }
             CHECK(reference);
-            if (scenario == 9) {
-                code[root->code_count] = code[root->code_count - 1];
-                code[root->code_count - 1] = reference;
-                functions[0].code_count += 1;
-            } else if (scenario == 10) CHECK(xr_rbc_jump(&code[root->code_count - 1], root->code_count - 1,
-                reference_pc, root->code_count));
-            functions[0].code = code;
-            functions[0].source_ids = NULL;
-            functions[0].source_id_count = 0;
+            size_t count=raw.functions[0].code_count;
+            if (scenario==9) { raw.words[count]=raw.words[count-1]; raw.words[count-1]=reference; ++raw.functions[0].code_count; }
+            else CHECK(xr_rbc_jump(&raw.words[count-1],count-1,reference_pc,count));
+            raw.functions[0].source_ids=NULL; raw.functions[0].source_id_count=0;
         }
-        if (scenario == 11 || scenario == 12) {
-            bool replaced = false;
-            for (size_t pc = 0; pc < root->code_count; ++pc)
-                if ((code[pc] & 255) == XR_RBC_CELL_NEW) {
-                    uint32_t destination = (code[pc] >> 8) & 255;
-                    CHECK(xr_rbc_encode(&code[pc], scenario == 11 ?
-                        (XrRbcOperands){.op=XR_RBC_MOV, .a=destination, .b=destination} :
-                        (XrRbcOperands){.op=XR_RBC_LOADI, .a=destination, .immediate=1}));
-                    replaced = true;
+        if (scenario==11 || scenario==12) {
+            bool replaced=false;
+            for (size_t pc=0;pc<raw.functions[0].code_count;++pc)
+                if ((raw.words[pc]&255)==XR_RBC_CELL_NEW) {
+                    uint32_t destination=(raw.words[pc]>>8)&255;
+                    CHECK(xr_rbc_encode(&raw.words[pc],scenario==11 ?
+                        (XrRbcOperands){.op=XR_RBC_MOV,.a=destination,.b=destination} :
+                        (XrRbcOperands){.op=XR_RBC_LOADI,.a=destination,.immediate=1}));
+                    replaced=true;
                 }
             CHECK(replaced);
         }
-        if (scenario == 13) capture = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, XR_POD_I64};
-        XrRbcExecution *execution = NULL;
-        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID);
+        if (scenario==13) capture=(XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR,XR_POD_I64};
+        XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID);
         CHECK(!execution);
     }
-    xr_free(code);
-    xr_free(operands);
-    xr_free(accesses);
+    callable_raw_free(&raw);
 }

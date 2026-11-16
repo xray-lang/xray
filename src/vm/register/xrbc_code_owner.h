@@ -16,6 +16,10 @@
 #include <stdatomic.h>
 
 typedef struct XrRbcCodeOwner XrRbcCodeOwner;
+typedef struct XrRbcCallableEntry {
+    const XrRbcCodeOwner *producer; /* Borrowed enclosing code allocation. */
+    uint32_t physical_function, source_function, signature_type, environment_type;
+} XrRbcCallableEntry;
 struct XrRbcCodeOwner {
     _Atomic(uint32_t) references;
     const XrRbcFunction *functions;
@@ -23,6 +27,10 @@ struct XrRbcCodeOwner {
     XrLirValueHomes *const *value_homes;
     XrRbcValueCode *const *value_codes;
     const XrtValueImage *values;
+    const XrRbcModule *module;
+    XrtLocationOwner *locations;
+    const XrRbcCallableEntry *entries; /* Physical function indexed, raw image ids. */
+    const uint32_t *type_callables; /* Image type -> one-based RBC signature, zero for non-Fn. */
     /* The enclosing allocation owns every borrowed asset above. Retire runs
      * exactly once at zero actual references and must return normally. The
      * producer keeps its callback code live through this final retirement. */
@@ -34,4 +42,10 @@ struct XrRbcCodeOwner {
  * These operations neither infer nor authorize a new owning or borrowing fact. */
 XR_FUNC bool xr_rbc_code_owner_retain(void *);
 XR_FUNC void xr_rbc_code_owner_release(void *);
+/* A genuine producer lease protects its own raw snapshot, never a Program
+ * shell or the caller's current module. The returned owner is only borrowed. */
+XR_FUNC const XrRbcCodeOwner *xr_rbc_code_owner_borrow(XrtManagedLease);
+XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *);
+XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModule *);
+XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *);
 #endif // XRBC_CODE_OWNER_H

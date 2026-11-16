@@ -116,3 +116,49 @@ static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
     }
     return XR_RBC_COMPILE_OK;
 }
+static XrRbcCompileStatus rbc_lir_callable_entries(const XrLirModule *input,
+    const uint32_t *ids, const uint32_t *mapping, XrRbcProgram *program,
+    const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *diagnostic) {
+    if (!program->module.callable_type_count) return XR_RBC_COMPILE_OK;
+    size_t count=program->module.function_count;
+    if (count>SIZE_MAX/sizeof(*program->callable_entries))
+        return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,"callable entry map exceeds address space",(XrLirSource){0});
+    program->callable_entries=xr_calloc(count,sizeof(*program->callable_entries));
+    if (!program->callable_entries)
+        return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own callable entry map",(XrLirSource){0});
+    for (size_t n=0;n<count;++n) {
+        XrRbcCallableEntry *entry=&program->callable_entries[n];
+        entry->physical_function=(uint32_t)n; entry->source_function=ids[n];
+        XrLirClosureTarget target={0}; const XrtValuePlan *plan=NULL;
+        if (layouts && xr_lir_closure_target_view(input,(XrLirFunction){input,ids[n]},&target)==XR_LIR_OK && target.callable)
+            (void)xr_lir_value_layouts_lookup(layouts,(XrLirValueLayoutKey){target.callable,0,0},&plan,&entry->signature_type);
+    }
+    const XrtValueImage *image=program->value_image ? xr_lir_value_image_view(program->value_image) : NULL;
+    if (image && image->type_count) {
+        size_t types=image->type_count;
+        if (types>SIZE_MAX/sizeof(*program->type_callables))
+            return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,"callable type map exceeds address space",(XrLirSource){0});
+        program->type_callables=xr_calloc(types,sizeof(*program->type_callables));
+        if (!program->type_callables)
+            return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own callable type map",(XrLirSource){0});
+        for (uint32_t n=0;n<image->type_count;++n) {
+            XrLirValueLayoutKey key; const XrtValuePlan *plan=NULL;
+            if (xr_lir_value_layouts_at(layouts,n,&key,&plan)!=XR_LIR_VALUE_LAYOUT_OK)
+                return rbc_lir_error(diagnostic,XR_RBC_COMPILE_INVALID,"callable map lost its image row",(XrLirSource){0});
+            if (!key.environment_function && rbc_lir_callable_type(input,key.type))
+                program->type_callables[n]=program->physical_callables[key.type-XR_LIR_TYPE_COUNT]+1;
+        }
+    }
+    for (uint32_t t=0;image && t<image->type_count;++t) {
+        const XrtValueImageType *type=&image->types[t];
+        if (type->kind!=XRT_VALUE_ENVIRONMENT) continue;
+        uint32_t source=type->entry_ordinal;
+        if (!source || source>xr_lir_function_count(input) || !mapping[source-1] || mapping[source-1]>count)
+            return rbc_lir_error(diagnostic,XR_RBC_COMPILE_INVALID,"environment has no mapped code entry",(XrLirSource){0});
+        XrRbcCallableEntry *entry=&program->callable_entries[mapping[source-1]-1];
+        if (entry->environment_type || entry->signature_type!=type->entry_signature)
+            return rbc_lir_error(diagnostic,XR_RBC_COMPILE_INVALID,"environment differs from its exact code signature",(XrLirSource){0});
+        entry->environment_type=t+1;
+    }
+    return XR_RBC_COMPILE_OK;
+}

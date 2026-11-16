@@ -307,6 +307,13 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
     if (to->published != from->published) return false;
     uint32_t *to_scopes = rbc_scope_state(to), *from_scopes = rbc_scope_state(from);
     if (to_scopes && to_scopes[0] != from_scopes[0]) return false;
+    uint8_t *to_functions=rbc_function_liveness(to),*from_functions=rbc_function_liveness(from);
+    const XrRbcValueCode *typed=xr_rbc_module_value_code(from->module,(uint32_t)(from->function-from->module->functions));
+    for (uint32_t v=1;to_functions && v<=typed->value_count;++v) {
+        uint8_t a=to_functions[v],b=from_functions[v];
+        uint8_t merged=!a || !b ? 0 : a>b ? a : b;
+        if (merged!=a) { to_functions[v]=merged; *changed=true; }
+    }
     for (size_t n = 0; n < from->function->aggregate_value_count; ++n) {
         uint8_t initialized = to->aggregates[n] & from->aggregates[n];
         if (initialized != to->aggregates[n]) { to->aggregates[n] = initialized; *changed = true; }

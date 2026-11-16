@@ -20,7 +20,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     if (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape;
         if (xr_lir_type_view(module,type,&shape) != XR_LIR_OK) return false;
-        plain = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
+        plain = shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
@@ -49,7 +49,11 @@ static bool rbc_home_needed(const XrLirModule *input, const uint32_t *ids, uint3
 static bool rbc_home_root_append(RbcLirCompiler *c, RbcHomeVector *roots, uint8_t *seen,
     size_t array_base, XrLirValueLayoutKey key) {
     size_t index = key.type;
-    if (key.type == XR_LIR_ARRAY) {
+    if (key.environment_function) {
+        if (key.environment_function > xr_lir_function_count(c->input))
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"environment root has no exact target");
+        index = array_base + XR_RBC_ARRAY_FAMILY_COUNT + key.environment_function - 1;
+    } else if (key.type == XR_LIR_ARRAY) {
         uint32_t family = rbc_lir_array_family(key.array_element);
         if (family >= XR_RBC_ARRAY_FAMILY_COUNT)
             return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"value root Array element is unavailable");
@@ -62,21 +66,46 @@ static bool rbc_home_root_append(RbcLirCompiler *c, RbcHomeVector *roots, uint8_
     seen[index] = 1;
     return true;
 }
-static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, RbcHomeVector *roots) {
+static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, RbcHomeVector *roots,
+    const uint32_t *ids, uint32_t count) {
     const XrLirModule *input = c->input;
     size_t base = (size_t)XR_LIR_TYPE_COUNT + xr_lir_constructed_type_count(input);
-    if (base > SIZE_MAX - XR_RBC_ARRAY_FAMILY_COUNT)
+    size_t functions = xr_lir_function_count(input);
+    if (base > SIZE_MAX - XR_RBC_ARRAY_FAMILY_COUNT ||
+        functions > SIZE_MAX - base - XR_RBC_ARRAY_FAMILY_COUNT)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"value root bitmap overflows");
-    uint8_t *seen = xr_calloc(base + XR_RBC_ARRAY_FAMILY_COUNT,1);
+    uint8_t *seen = xr_calloc(base + XR_RBC_ARRAY_FAMILY_COUNT + functions,1);
     if (!seen) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own value root bitmap");
-    bool valid = true;
-    for (uint32_t f = 0; valid && f < xr_lir_function_count(input); ++f) {
+    XrLirCallableFacts *facts = NULL;
+    XrLirStatus collected = xr_lir_callable_facts_create(input,&facts);
+    bool valid = collected == XR_LIR_OK;
+    if (!valid) rbc_lir_fail(c,collected == XR_LIR_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY :
+        XR_RBC_COMPILE_INVALID,"cannot receive callable root facts");
+    for (uint32_t f = 0; valid && f < count; ++f) {
         XrLirFunction function; XrLirFunctionView view;
-        xr_lir_function_at(input,f,&function); xr_lir_function_view(input,function,&view);
+        function=(XrLirFunction){input,ids[f]}; xr_lir_function_view(input,function,&view);
         for (size_t index = 0; valid && index <= view.value_count; ++index) {
             XrLirType type = view.result; XrLirValueLayoutKey key;
             if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
             if (rbc_home_key(input,function,(uint32_t)index,type,&key)) valid = rbc_home_root_append(c,roots,seen,base,key);
+        }
+        XrLirCallableFunctionFacts callable={0};
+        if (valid && facts && xr_lir_callable_facts_function(facts,function.id,&callable)!=XR_LIR_OK)
+            valid=rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"callable roots lost their function facts");
+        for (uint32_t v=1;valid && v<=callable.value_count;++v) {
+            const XrLirCallableValueFact *fact=&callable.values[v];
+            if (fact->operation!=XR_LIR_FUNCTION_REF) continue;
+            XrLirClosureTarget target={0};
+            if (xr_lir_closure_target_view(input,(XrLirFunction){input,fact->known_target},&target)!=XR_LIR_OK)
+                valid=rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"callable root lost its exact target");
+            else {
+                XrLirValueLayoutKey key={target.callable,0,0};
+                valid=rbc_home_root_append(c,roots,seen,base,key);
+                if (valid && fact->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED) {
+                    key.environment_function=fact->known_target;
+                    valid=rbc_home_root_append(c,roots,seen,base,key);
+                }
+            }
         }
     }
     for (uint32_t i = 0; valid && state && i < state->slot_count; ++i) {
@@ -88,7 +117,7 @@ static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, Rbc
         }
         valid = rbc_home_root_append(c,roots,seen,base,key);
     }
-    xr_free(seen);
+    xr_lir_callable_facts_destroy(facts); xr_free(seen);
     return valid;
 }
 static XrRbcCompileStatus rbc_home_layout_status(XrLirValueLayoutStatus status) {
@@ -114,7 +143,7 @@ static XrRbcCompileStatus rbc_lir_prepare_values(const XrLirModule *input, XrLir
     bool receive_state = state_entry.id == entry.id && state.module_count;
     if (!receive_state && !rbc_home_needed(input,ids,count)) return XR_RBC_COMPILE_OK;
     RbcLirCompiler c = {.input=input,.diagnostic=diagnostic}; RbcHomeVector roots = {0};
-    if (!rbc_home_roots(&c,receive_state ? &state : NULL,&roots)) { xr_free(roots.data); return c.status; }
+    if (!rbc_home_roots(&c,receive_state ? &state : NULL,&roots,ids,count)) { xr_free(roots.data); return c.status; }
     XrtManagedStatus memory = xrt_billing_owner_new(NULL,SIZE_MAX,&preparation->billing);
     XrRbcCompileStatus status = memory == XRT_MANAGED_OK ? XR_RBC_COMPILE_OK :
         memory == XRT_MANAGED_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_LIMIT;
