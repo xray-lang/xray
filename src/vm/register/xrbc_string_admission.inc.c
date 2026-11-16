@@ -19,7 +19,6 @@ typedef struct RbcStringAdmission {
     const XrRbcFunction *function;
     uint8_t state[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t origin[XR_RBC_REGISTER_COUNT_MAX];
-    uint32_t published;
     RbcSpillState *spills;
     uint8_t *aggregates;
     RbcValueEdgeState *value_edges;
@@ -148,24 +147,17 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
 static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
     uint8_t *state = s->state;
-    if (v.op == XR_RBC_CELL_NEW)
-        while (s->published < f->cell_count && f->cell_kinds &&
-            rbc_indexed_cell_kind(f->cell_kinds[s->published]))
-            ++s->published;
-
     if (v.op == XR_RBC_CELL_NEW) {
         uint32_t index = (uint32_t)v.immediate;
         if (rbc_register_kind(f, v.a) == XR_RBC_I64_BINDING) {
-            if (state[v.a] != RBC_BITS || index != s->published ||
+            if (state[v.a] != RBC_BITS ||
                 !f->cell_kinds || f->cell_kinds[index] != XR_RBC_BITS) return false;
-            ++s->published;
             state[v.a] = RBC_CELL_BORROWED;
             s->origin[v.a] = index + 1;
             return true;
         }
-        if (state[v.a] != RBC_BITS || !rbc_bits_destination(s, v.a) || index > s->published ||
+        if (state[v.a] != RBC_BITS || !rbc_bits_destination(s, v.a) ||
             (f->cell_kinds && f->cell_kinds[index] != XR_RBC_BITS)) return false;
-        if (index == s->published) ++s->published;
         return true;
     }
 
@@ -305,7 +297,6 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
         *seen = *changed = true;
         return true;
     }
-    if (to->published != from->published) return false;
     uint32_t *to_scopes = rbc_scope_state(to), *from_scopes = rbc_scope_state(from);
     if (to_scopes && to_scopes[0] != from_scopes[0]) return false;
     RbcFunctionFlow *to_functions=rbc_function_liveness(to),*from_functions=rbc_function_liveness(from);
@@ -629,6 +620,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     return XR_RBC_OK;
 }
 
+#include "xrbc_cell_cfg.inc.c"
+
 /* IN facts never come from this mutable transfer state. A later predecessor
  * can remove scalar guarantees and must schedule a fresh evaluation. */
 static bool rbc_string_propagate(RbcStringGraph *g, size_t target, bool backward) {
@@ -706,7 +699,8 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
         }
     }
-    if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count && !f->environment_count)
+    if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count &&
+        !f->environment_count && !f->cell_count)
         return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
@@ -715,6 +709,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
             f->spill_count != 0 || f->aggregate_value_count != 0 ||
             f->environment_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
+    if (status==XR_RBC_OK) status=rbc_cell_constructors(&g);
     if (status == XR_RBC_OK) {
         /* This initial merge remains a virtual predecessor even for a jump to
          * pc zero. A cycle cannot manufacture definitions for the first entry. */

@@ -884,6 +884,8 @@ static void test_cells(void) {
 }
 
 
+#include "register_sparse_cell_cases.h"
+
 static void test_literal_validation(void) {
     uint32_t code[3];
     immediate(code, 0, XR_RBC_PRINT_LITERAL, 0, 0);
@@ -1187,7 +1189,7 @@ int main(int argc, char **argv) {
     }
     test_offset_window();
     test_literal_validation();
-    test_cells();
+    test_cells(); test_sparse_cell_ordinals();
     test_encoding();
     test_arithmetic();
     test_branches();

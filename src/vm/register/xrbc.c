@@ -66,7 +66,7 @@ typedef struct {
     size_t function, pc, base;
     uint32_t destination;
     size_t cell_base;
-    uint32_t initialized_cells;
+    uint32_t initialized_cells; // Actual ready count, never an ordinal prefix.
     size_t spill_base;
     size_t aggregate_base;
 } XrRbcFrame;
@@ -97,6 +97,9 @@ typedef struct {
     /* Borrowed only during execution; the pending outcome retains this owner.
      * Keeping it in cold state avoids a live dispatch register on scalar paths. */
     const XrtLocationOwner *call_locations;
+    // One byte per reserved Cell lane, in the tail of the cells allocation.
+    // Reservation alone never makes a constructor's handle readable.
+    uint8_t *cell_ready;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -150,6 +153,33 @@ static bool xr_rbc_grow(void **storage, size_t *capacity, size_t count, size_t i
     return true;
 }
 
+static bool xr_rbc_cells_reserve(XrRbcStack *stack, size_t count) {
+    if (count <= stack->cell_capacity) return true;
+    size_t stride=sizeof(*stack->cells)+sizeof(*stack->cell_ready);
+    if (count>SIZE_MAX/stride) return false;
+    size_t next=stack->cell_capacity ? stack->cell_capacity : 16;
+    while (next<count) {
+        if (next>SIZE_MAX/stride/2) { next=count; break; }
+        next*=2;
+    }
+    if (next>SIZE_MAX/stride) next=count;
+    uint8_t *storage=xr_realloc(stack->cells,next*stride);
+    if (!storage) return false;
+    uint8_t *ready=storage+next*sizeof(*stack->cells);
+    if (stack->cell_capacity)
+        memmove(ready,storage+stack->cell_capacity*sizeof(*stack->cells),stack->cell_capacity);
+    memset(ready+stack->cell_capacity,0,next-stack->cell_capacity);
+    stack->cells=(XrRbcRegister *)storage;
+    stack->cell_ready=ready;
+    stack->cell_capacity=next;
+    return true;
+}
+static void xr_rbc_cells_begin(XrRbcStack *stack, size_t base, uint32_t count) {
+    if (!count) return;
+    XR_DCHECK(base<=stack->cell_capacity && count<=stack->cell_capacity-base,
+        "the actual activation owns its complete reserved Cell range");
+    memset(stack->cell_ready+base,0,count);
+}
 static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_t cells,
     size_t spills) {
     // Use real void* objects, not a type-punned pointer-to-pointer.
@@ -161,10 +191,7 @@ static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_
     if (!xr_rbc_grow(&storage, &stack->frame_capacity, frames, sizeof(XrRbcFrame)))
         return false;
     stack->frames = storage;
-    storage = stack->cells;
-    if (!xr_rbc_grow(&storage, &stack->cell_capacity, cells, sizeof(*stack->cells)))
-        return false;
-    stack->cells = storage;
+    if (!xr_rbc_cells_reserve(stack,cells)) return false;
     storage = stack->spills;
     if (!xr_rbc_grow(&storage, &stack->spill_capacity, spills, sizeof(*stack->spills)))
         return false;
@@ -422,13 +449,13 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
     uint64_t handle, XrRbcRegisterKind expected) {
     if (!handle || handle > stack->cell_count) return NULL;
     size_t index = (size_t)handle - 1;
-    // Reserved capacity does not establish a cell's lifetime. Array-local
-    // slots may leave holes below the active owner's high-water mark; their
-    // typed handles additionally require the prepared CFG capability proof.
+    // A later constructor does not initialize earlier reserved ordinals.
+    // Each active owner must also have executed that exact slot's NEW.
     for (size_t depth = stack->depth; depth; --depth) {
         const XrRbcFrame *frame = &stack->frames[depth - 1];
-        if (index >= frame->cell_base && index - frame->cell_base < frame->initialized_cells) {
-            const XrRbcFunction *owner = &module->functions[frame->function];
+        const XrRbcFunction *owner = &module->functions[frame->function];
+        if (frame->initialized_cells && index >= frame->cell_base &&
+            index-frame->cell_base<owner->cell_count && stack->cell_ready[index]) {
             XrRbcRegisterKind actual = owner->cell_kinds ? owner->cell_kinds[index - frame->cell_base] : XR_RBC_BITS;
             if (actual != expected) return NULL;
             return &stack->cells[index];
@@ -594,6 +621,7 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     if (function->reference_spill_count)
         memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
     execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0, 0};
+    xr_rbc_cells_begin(&execution->stack,0,function->cell_count);
     execution->stack.depth = 1;
     execution->stack.cell_count = function->cell_count;
     execution->stack.spill_count = function->spill_count;
