@@ -288,6 +288,20 @@ XRAY_API void xrt_native_string_append_owned(XrtManagedFrame *frame,
     if (status == XRT_MANAGED_OK) status = xrt_string_backing_append_owned(frame, types, input);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
+XRAY_API void xrt_native_string_binding_prepare(uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+XRAY_API void xrt_native_string_append_place(XrtPlace binding, XrtManagedFrame *frame, size_t workspace,
+    const XrtStringBacking *suffix, uint32_t source_id) {
+    XrtValueRoot *owner = xrt_value_root_current(source_id);
+    const XrtBackingTypes *types = owner->managed && owner->managed->backings.string ?
+        &owner->managed->backings : NULL;
+    XrtManagedStatus status = types ? xrt_string_backing_append_place(binding, frame, workspace, types, suffix) :
+        XRT_MANAGED_ARGUMENT;
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
 
 XRAY_API void xrt_native_array_create(XrtManagedFrame *frame, size_t slot,
     const XrtArrayInput *input, uint32_t source_id) {

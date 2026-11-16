@@ -316,6 +316,32 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *fra
         "String failure and success release one registered ownership transaction");
     return status;
 }
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_place(XrtPlace binding, XrtManagedFrame *frame,
+    size_t workspace, const XrtBackingTypes *types, const XrtStringBacking *suffix) {
+    if (!types || !types->string || !suffix) return XRT_MANAGED_ARGUMENT;
+    XrtPlaceReplacement reservation = {0};
+    XrtManagedStatus status = xrt_place_replacement_begin(binding, frame, workspace, &reservation);
+    if (status != XRT_MANAGED_OK) return status;
+    StringAppendTransaction transaction = {.suffix=suffix};
+    status = xrt_managed_slot_reserved_apply(&reservation, string_append_apply, &transaction);
+    XrtManagedHeader *suffix_pin = NULL;
+    if (status == XRT_MANAGED_OK && !transaction.appended) {
+        /* The allocation-free attempt made no change on a miss. Only growth
+         * can invoke a provider; keep its distinct suffix alive first without
+         * making the actual left binding look shared. Self borrows use the
+         * source reference already held by this guarded binding. */
+        if (suffix != transaction.source) {
+            suffix_pin = (XrtManagedHeader *)&suffix->managed;
+            if (!xrt_managed_retain(suffix_pin)) { suffix_pin = NULL; status = XRT_MANAGED_REFCOUNT; }
+        }
+        if (status == XRT_MANAGED_OK) status = string_append_candidate(&reservation, types, &transaction);
+        if (status == XRT_MANAGED_OK) status = xrt_place_replacement_publish(&reservation);
+    }
+    xrt_managed_drop(suffix_pin);
+    XR_CHECK(xrt_place_replacement_end(&reservation) == XRT_MANAGED_OK,
+        "String binding retirement finishes before its actual domains leave");
+    return status;
+}
 XR_FUNCDEF XrtManagedStatus xrt_string_backing_i64_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, int64_t value) {
     uint8_t bytes[XR_TEXT_I64_DISPLAY_MAX];

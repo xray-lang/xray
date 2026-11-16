@@ -12,6 +12,7 @@
 #ifndef XNATIVE_STRING_BACKING_OPS_H
 #define XNATIVE_STRING_BACKING_OPS_H
 #include "xnative_string_backing.h"
+#include "xray_native_place.h"
 #include "xray_native_pod.h"
 
 typedef enum XrtStringTest {
@@ -72,6 +73,13 @@ XR_FUNC XrtManagedStatus xrt_string_backing_try_append_exclusive(XrtStringBackin
  * preserves source/result and clears only this operation's pending candidate. */
 XR_FUNC XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *,
     const XrtBackingTypes *, const XrtStringAppendOwned *);
+/* The admitted binding remains live and is never consumed. Its distinct
+ * candidate workspace is a true-empty slot, with no pending token. No source
+ * retain forces COW; a different suffix is pinned before candidate allocation,
+ * and the binding's real owner protects self-append. Publication and retirement
+ * finish under the same Place domains. The caller supplies mutation authority. */
+XR_FUNC XrtManagedStatus xrt_string_backing_append_place(XrtPlace, XrtManagedFrame *, size_t workspace,
+    const XrtBackingTypes *, const XrtStringBacking *suffix);
 XR_FUNC XrtManagedStatus xrt_string_backing_i64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, int64_t);
 XR_FUNC XrtManagedStatus xrt_string_backing_u64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint64_t);
 XR_FUNC XrtManagedStatus xrt_string_backing_f64_create(XrtManagedFrame *, size_t, const XrtBackingTypes *, uint64_t bits);
