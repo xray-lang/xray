@@ -99,10 +99,16 @@ typedef struct XrLirOwnershipFact {
      * BIND keep the source live. A local KEEP moves, a borrowed KEEP copies.
      * CELL_OPERATION value is the actual Cell SSA; target_value is its
      * initializer, read result, replacement or Map payload-ref result.
+     * VALUE is metadata except for its explicit alias transfer. OPERATION is
+     * the single NEW/READ/WRITE/BORROW_MAP hook. SCOPE_EXIT publishes its keep
+     * before following same-position RELEASE events, which clear real slots
+     * without reading possibly retired natural values. A normal RET first
+     * uses RETURN_TRANSFER; its scope-zero exit has no second kept value.
      * The payload type is exact and does not grant mutation permission. */
     XrLirCellOperation cell_operation;
     XrLirType cell_payload;
     XrLirCellTransport cell_transport;
+    uint32_t cell_scope;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {
@@ -120,10 +126,11 @@ typedef struct XrLirOwnershipFunction {
 } XrLirOwnershipFunction;
 
 /* The common receiving value-layout producer supplies these exact final-module
- * Record/Nullable facts from its sealed ValuePlan owned-leaf inventory. Core
+ * Record/Nullable/Cell facts from its sealed ValuePlan owned-leaf inventory. Core
  * ownership collection does not infer physical layouts or count child leaves.
  * Rows are strictly ordered by type; every used Record/Nullable requires a row,
- * including POD rows whose has_owned is false. */
+ * including POD rows whose has_owned is false. A missing Cell row preserves
+ * UNMODELED_CELL; a supplied Cell row must describe its actual owning leaf. */
 typedef struct XrLirOwnershipTypeFact {
     XrLirType type;
     bool has_owned;

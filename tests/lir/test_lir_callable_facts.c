@@ -188,6 +188,18 @@ static void facts_boundaries(const FactsFixture *f, const XrLirCallableFacts *co
         root.values[f->cell_bound.id].receiving_scope == f->inner.id &&
         root.values[f->kept.id].receiving_scope == f->outer.id &&
         root.values[f->owned.id].frame_floor == UINT32_MAX);
+    const XrLirCallableValueFact *cell_frame = &root.values[root.values[f->cell_bound.id].origin];
+    CHECK(cell_frame->kind == XR_LIR_SCOPED_VALUE_FUNCTION && cell_frame->capture_count == 1);
+    uint32_t identity = root.captures[cell_frame->first_capture];
+    CHECK(root.values[identity].kind == XR_LIR_SCOPED_VALUE_CELL &&
+        root.values[identity].cell_payload == XR_LIR_I64 && !root.values[identity].persistent &&
+        !root.values[identity].transport && root.values[identity].cell_transport == XR_LIR_CELL_TRANSPORT_OWNED &&
+        root.values[identity].owner_scope == f->inner.id);
+    XrLirCallableFunctionFacts cell_formal;
+    OK(xr_lir_callable_facts_function(copy,cell_frame->known_target,&cell_formal));
+    CHECK(cell_formal.values[1].kind == XR_LIR_SCOPED_VALUE_CELL && cell_formal.values[1].parameter == 1 &&
+        cell_formal.values[1].cell_transport == XR_LIR_CELL_TRANSPORT_BORROW && !cell_formal.values[1].owner_scope &&
+        !cell_formal.values[1].transport && !cell_formal.values[1].persistent);
     CHECK(xr_lir_callable_facts_function(copy, 0, &empty) == XR_LIR_INVALID_ARGUMENT && empty.value_count == 77);
     OK(xr_lir_callable_facts_function(copy, f->leaf.id, &empty)); CHECK(!empty.values && !empty.value_count);
 }

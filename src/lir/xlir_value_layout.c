@@ -123,6 +123,11 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
         if (shape.kind == XR_LIR_TYPE_NULLABLE) {
             XrLirValueLayoutStatus status = need_type(set, shape.element, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
+        } else if (shape.kind == XR_LIR_TYPE_CELL) {
+            XrLirCellType cell;
+            if (!xr_lir_cell_value_type(module, type, &cell)) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+            XrLirValueLayoutStatus status = need_type(set, cell.payload, type);
+            if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
         } else if (shape.kind == XR_LIR_TYPE_RECORD) {
             const XrLirRecordField *fields = NULL; uint32_t count = 0;
             if (xr_lir_record_fields(module, type, &fields, &count) != XR_LIR_OK || count != shape.count || (count && !fields))
@@ -194,7 +199,7 @@ static XrLirValueLayoutStatus environment_spec(const XrLirModule *module, const 
             return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         if (child.kind != XRT_VALUE_BOOL && child.kind != XRT_VALUE_I64 && child.kind != XRT_VALUE_U8 &&
             child.kind != XRT_VALUE_U64 && child.kind != XRT_VALUE_F64 && child.kind != XRT_VALUE_FUNCTION &&
-            child.kind != XRT_VALUE_MAP_STRING_I64) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+            child.kind != XRT_VALUE_MAP_STRING_I64 && child.kind != XRT_VALUE_CELL) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
         if (child.alignment > spec->alignment) spec->alignment = child.alignment;
         if (!align_size(&spec->size,child.alignment) || !extent_add(&spec->size,child.size,1) ||
             !extent_add(&spec->owned_count,child.owned_count,1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
@@ -226,6 +231,13 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     XrLirTypeView shape;
     if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *spec = (XrtValuePlanSpec){0};
+    if (shape.kind == XR_LIR_TYPE_CELL) {
+        XrLirCellType cell;
+        if (!xr_lir_cell_value_type(module, type, &cell)) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+        *spec = (XrtValuePlanSpec){.kind=XRT_VALUE_CELL,.size=sizeof(void *),.alignment=alignof(void *),
+            .owned_count=1,.element=dependency(set,cell.payload)};
+        return extent_add(scratch_bytes,1,sizeof(size_t)) ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    }
     if (shape.kind == XR_LIR_TYPE_SLICE) {
         if (shape.element != XR_LIR_I64 && shape.element != XR_LIR_U8) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
         spec->kind = shape.element == XR_LIR_I64 ? XRT_VALUE_SLICE_I64 : XRT_VALUE_SLICE_U8;
@@ -285,6 +297,10 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
 static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *set, XrLirType type,
     XrtValuePlanSpec *spec, void *scratch) {
     size_t *owned;
+    if (spec->kind == XRT_VALUE_CELL) {
+        owned = scratch; *owned = 0; spec->owned_offsets = owned;
+        return;
+    }
     if (spec->kind == XRT_VALUE_FUNCTION) {
         XrLirCallableType signature;
         XR_CHECK(xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK,
@@ -401,7 +417,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
         if (!set->values[i].plan) continue;
         XrtValuePlanSpec spec;
         status = memory_status(xrt_value_plan_view(set->values[i].plan, &spec));
-        if (status == XR_LIR_VALUE_LAYOUT_OK && (spec.kind == XRT_VALUE_RECORD || spec.kind == XRT_VALUE_NULLABLE)) {
+        if (status == XR_LIR_VALUE_LAYOUT_OK && (spec.kind == XRT_VALUE_RECORD || spec.kind == XRT_VALUE_NULLABLE ||
+            spec.kind == XRT_VALUE_CELL)) {
             XR_CHECK(set->type_count < set->constructed, "each ownership fact belongs to one generated constructed plan");
             set->types[set->type_count++] = (XrLirOwnershipTypeFact){(XrLirType)i, spec.owned_count != 0};
         }

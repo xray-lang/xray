@@ -153,9 +153,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
         case XR_LIR_VALUE_RETAIN:
-            return v->type == a && xr_lir_boxed_type(m, a);
+            return v->type == a && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
         case XR_LIR_VALUE_DROP:
-            return v->type == XR_LIR_UNIT && xr_lir_boxed_type(m, a);
+            return v->type == XR_LIR_UNIT && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
         case XR_LIR_RECORD_NEW: {
             const XrLirRecordField *fields;
             uint32_t count;
@@ -175,14 +175,14 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_FUNCTION_SCOPE_LEAVE: {
             XrLirCallableType signature;
             return a == XR_LIR_FUNCTION_SCOPE && (v->operand_count == 1 ? v->type == XR_LIR_UNIT :
-                v->operand_count == 2 && v->type == b && xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK);
+                v->operand_count == 2 && v->type == b && (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
+                    xr_lir_cell_value_type(m,b,NULL)));
         }
         case XR_LIR_FUNCTION_BIND: {
             XrLirCallableType signature;
-            XrLirCellType cell;
             return a == XR_LIR_FUNCTION_SCOPE && v->type == b && v->bits < UINT32_MAX &&
                 (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
-                 (xr_lir_cell_type_view(m, b, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)));
+                    xr_lir_cell_value_type(m,b,NULL));
         }
         case XR_LIR_TUPLE_NEW:
         case XR_LIR_FIXED_ARRAY_NEW: {
@@ -537,10 +537,12 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                                    bool *scopes, XrLirDiagnostic *d) {
     const XrLirFunctionData *f = &m->functions[index];
     uint32_t scope_count = 0;
-    for (uint32_t p = 0; p < f->parameter_count; ++p)
+    for (uint32_t p = 0; p < f->parameter_count; ++p) {
+        *scopes |= xr_lir_cell_value_type(m,f->parameter_types[p],NULL);
         if (!lir_definition(f, seen, f->parameters[p], f->parameter_types[p], 0, p, true))
             return xr_lir_internal_error(d, "function parameter definition is inconsistent",
                                          index + 1, 0, 0, NULL);
+    }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirBlockData *block = &f->blocks[b];
         if ((block->parameter_count && !block->parameters) || !block->instructions ||
@@ -556,14 +558,15 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                 !lir_definition(f, seen, id, f->values[id - 1].type, b + 1, p, true))
                 return xr_lir_internal_error(d, "block parameter definition is inconsistent",
                                              index + 1, b + 1, 0, NULL);
+            *scopes |= xr_lir_cell_value_type(m,f->values[id - 1].type,NULL);
         }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
             *scopes |= v->op == XR_LIR_FUNCTION_SCOPE_ENTER || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE ||
-                v->op == XR_LIR_FUNCTION_BIND;
+                v->op == XR_LIR_FUNCTION_BIND || xr_lir_cell_value_type(m,v->type,NULL);
             scope_count += v->op == XR_LIR_FUNCTION_SCOPE_ENTER;
             if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_ARRAY_CELL &&
-                v->type != XR_LIR_MAP_STRING_I64_CELL)
+                v->type != XR_LIR_MAP_STRING_I64_CELL && !xr_lir_cell_value_type(m,v->type,NULL))
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
             bool terminal = xr_lir_internal_terminal(v->op);
@@ -813,6 +816,8 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
 }
 
 static bool lir_managed_value(const XrLirModule *m, XrLirType type) {
+    /* Lexical Cell identities have COPY edges and scope retirement; they do
+     * not use this ordinary block-local owner's consuming edge protocol. */
     return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || xr_lir_boxed_type(m, type);
 }
 static bool lir_managed_cell(XrLirType type) {
@@ -976,6 +981,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 }
 
 #include "xlir_callable_facts.inc.c"
+#include "xlir_cell_verify.inc.c"
 #include "xlir_callable_scope_verify.inc.c"
 #include "xlir_slice_verify.inc.c"
 
