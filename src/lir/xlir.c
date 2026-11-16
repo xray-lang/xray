@@ -167,7 +167,7 @@ static void lir_function_free(XrLirFunctionData *f) {
     xr_free(f->parameters);
     xr_free(f->parameter_types);
     xr_free(f->callable_parameters);
-    xr_free(f->block_multiplicity);
+    xr_lir_internal_block_multiplicity_free(f->block_multiplicity);
 }
 
 XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {

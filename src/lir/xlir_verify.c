@@ -1204,6 +1204,11 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     return lir_verify(m, d, NULL, NULL);
 }
+/* The producer retires its own metadata allocation, including when a builder
+ * is compiled with an independent allocation provider for failure injection. */
+XR_FUNC void xr_lir_internal_block_multiplicity_free(uint8_t *multiplicity) {
+    xr_free(multiplicity);
+}
 
 XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *m, XrLirDiagnostic *d) {
     if (!m || m->finished || m->callable_facts)

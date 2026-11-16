@@ -78,12 +78,14 @@ add_executable(test_lir_allocations test_lir_allocations.c
     "${PROJECT_SOURCE_DIR}/src/lir/xlir_verify.c")
 add_executable(test_lir_allocations_l3 test_lir_allocations_l3.c
     "${PROJECT_SOURCE_DIR}/src/lir/xlir_verify.c")
+add_executable(test_lir_block_facts_faults test_lir_block_facts_faults.c
+    "${PROJECT_SOURCE_DIR}/src/lir/xlir.c")
 add_executable(test_lir_print test_lir_print.c)
 target_link_libraries(test_lir_print PRIVATE xray_lir)
 add_executable(test_lir_print_allocations test_lir_print_allocations.c)
 target_link_libraries(test_lir_print_allocations PRIVATE xray_lir)
 foreach(target test_lir_binding_homes test_lir_callable_bytecode test_lir_callable_facts test_lir_carriers test_lir_inline test_lir_inline_faults test_lir_sccp test_lir_sccp_faults test_lir_rebuild test_lir_rebuild_faults test_lir_string_elide lir_c_run lir_pipeline_eval test_lir_c test_lir_c_faults test_lir_core test_lir_source_input test_lir_lower test_lir_lower_allocations test_lir_lower_allocations_l3
-        test_lir_allocations test_lir_allocations_l3 test_lir_print test_lir_print_allocations test_lir_state test_lir_state_projection test_lir_value_layout test_lir_value_image test_lir_array test_lir_array_faults
+        test_lir_allocations test_lir_allocations_l3 test_lir_block_facts_faults test_lir_print test_lir_print_allocations test_lir_state test_lir_state_projection test_lir_value_layout test_lir_value_image test_lir_array test_lir_array_faults
         test_lir_ownership test_lir_ownership_faults test_lir_c_value_types test_lir_c_value_transfers)
     target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src")
     target_compile_features(${target} PRIVATE c_std_11)
@@ -98,7 +100,7 @@ foreach(target test_lir_binding_homes test_lir_callable_bytecode test_lir_callab
     endif()
 endforeach()
 # These failure-injection units compile the owning implementation directly.
-foreach(target test_lir_allocations test_lir_allocations_l3 test_lir_array_faults test_lir_rebuild_faults)
+foreach(target test_lir_allocations test_lir_allocations_l3 test_lir_block_facts_faults test_lir_array_faults test_lir_rebuild_faults)
     target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/include")
 endforeach()
 add_test(NAME test_lir_core COMMAND test_lir_core)
@@ -236,6 +238,8 @@ set_tests_properties(test_lir_inline test_lir_inline_faults PROPERTIES LABELS "u
 set_tests_properties(test_lir_sccp test_lir_sccp_faults PROPERTIES LABELS "unit;lir;fast" TIMEOUT 30)
 set_tests_properties(test_lir_rebuild test_lir_rebuild_faults test_lir_string_elide PROPERTIES LABELS "unit;lir;fast" TIMEOUT 30)
 add_test(NAME test_lir_allocations COMMAND test_lir_allocations)
+add_test(NAME lir_block_facts_faults COMMAND test_lir_block_facts_faults)
+set_tests_properties(lir_block_facts_faults PROPERTIES LABELS "unit;lir;allocation;ownership" TIMEOUT 30)
 add_test(NAME test_lir_source_input COMMAND test_lir_source_input)
 add_test(NAME test_lir_lower COMMAND test_lir_lower "${CMAKE_CURRENT_SOURCE_DIR}/programs" "${CMAKE_CURRENT_SOURCE_DIR}/golden")
 add_test(NAME test_lir_lower_allocations COMMAND test_lir_lower_allocations)
