@@ -51,10 +51,14 @@ static ScopedCellFixture scoped_cell_fixture(bool map, unsigned attack) {
     OK(xr_lir_add_block(f.c.module,f.function,parameters,2,&join));
     OK(xr_lir_block_parameter(f.c.module,join,0,&f.first)); OK(xr_lir_block_parameter(f.c.module,join,1,&f.second));
     XrLirValue outer = callable_fixture_scope(&f.c,entry,(XrLirValue){0});
-    inner = callable_fixture_scope(&f.c,entry,outer);
+    /* An outer source stays lexically visible after leaving the inner scope.
+     * Only its explicit KEEP move can make the original handle unreadable. */
+    bool outer_source = attack == 4 || attack == 5;
+    if (!outer_source) inner = callable_fixture_scope(&f.c,entry,outer);
     XrLirValue seed = map ? role(&f.c,entry,XR_LIR_MAP_OP_NEW,XR_LIR_MAP_STRING_I64,NULL,0) : ca_constant(&f.c,entry,42);
     f.source = ca_value(&f.c,entry,XR_LIR_CELL_NEW,f.cell,&seed,1);
     if (map) ca_effect(&f.c,entry,XR_LIR_MAP_DROP,seed);
+    if (outer_source) inner = callable_fixture_scope(&f.c,entry,outer);
     if (attack == 1) ca_effect(&f.c,entry,XR_LIR_VALUE_DROP,f.source);
     XrLirValue arguments[] = {f.source,f.source};
     XrLirInstruction jump = {.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,
@@ -76,7 +80,8 @@ static ScopedCellFixture scoped_cell_fixture(bool map, unsigned attack) {
     OK(xr_lir_emit_value(f.c.module,join,&(XrLirInstruction){.op=XR_LIR_FUNCTION_BIND,.type=f.cell,
         .operands=bind,.operand_count=2,.bits=77},&f.bound));
     f.kept = callable_fixture_leave(&f.c,join,inner,f.source,f.cell);
-    if (attack == 2) (void)scoped_cell_read(&f,join,f.source);
+    if (attack == 2 || attack == 4 || attack == 5 || attack == 6)
+        (void)scoped_cell_read(&f,join,attack == 2 || attack == 4 ? f.source : f.kept);
     answer = scoped_cell_read(&f,join,f.kept); (void)scoped_cell_read(&f,join,f.bound);
     if (map) answer = ca_constant(&f.c,join,42);
     (void)callable_fixture_leave(&f.c,join,outer,(XrLirValue){0},XR_LIR_UNIT);
@@ -176,11 +181,17 @@ static void scoped_cell_capture_lifetimes(void) {
 static void scoped_cells(void) {
     scoped_cell_projection(false); scoped_cell_projection(true);
     scoped_cell_capture_lifetimes();
-    for (unsigned attack = 1; attack < 4; ++attack) {
+    /* Each control has the same source placement and instruction sequence as
+     * its rejected case; only the post-KEEP read selects the receiving value. */
+    for (unsigned control = 5; control < 7; ++control) {
+        ScopedCellFixture f = scoped_cell_fixture(false,control);
+        OK(xr_lir_module_finish(f.c.module,NULL)); xr_lir_module_destroy(f.c.module);
+    }
+    for (unsigned attack = 1; attack < 5; ++attack) {
         ScopedCellFixture f = scoped_cell_fixture(attack == 3,attack); XrLirDiagnostic diagnostic;
         XrLirStatus status = xr_lir_module_finish(f.c.module,&diagnostic);
-        const char *expected = attack == 1 ? "Cell edge follows release or precedes ownership" :
-            "Cell use follows release or precedes ownership";
+        const char *expected = attack == 1 ? "Cell edge follows release or precedes ownership" : attack == 2 ?
+            "function scope parent or selected-edge lifetime is inconsistent" : "Cell use follows release or precedes ownership";
         if (status != XR_LIR_VERIFY_ERROR || !diagnostic.message || strcmp(diagnostic.message,expected))
             fprintf(stderr,"Cell lifetime attack=%u status=%u function=%u block=%u instruction=%u: %s; expected: %s\n",
                 attack,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,
