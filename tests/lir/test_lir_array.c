@@ -42,6 +42,7 @@
 #include "lir_c_map_literal_fixture.h"
 #include "lir_map_borrow_fixture.h"
 #include "lir_slice_boundary_root_fixture.h"
+#include "lir_slice_state_read_fixture.h"
 #include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
@@ -603,6 +604,12 @@ static void array_c_output(const char *name, const char *path) {
             !strcmp(name,"slice-boundary-u8") ? XR_LIR_U8 : XR_LIR_I64, &root);
         m = fixture.module; OK(xr_lir_module_finish(m, NULL));
     }
+    else if (!strncmp(name,"slice-state-",12)) {
+        SliceStateReadFixture fixture = slice_state_read_fixture(
+            strstr(name,"-u8") ? XR_LIR_U8 : XR_LIR_I64, strstr(name,"-mutable-") != NULL,
+            strstr(name,"-unready-") == NULL);
+        m = fixture.module; root = fixture.root; OK(xr_lir_module_finish(m, NULL));
+    }
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
@@ -711,6 +718,10 @@ int main(int argc, char **argv) {
     slice_c_unfinished_result_rejection(XR_LIR_TYPE_INVALID);
     slice_c_unfinished_result_rejection(XR_LIR_I64); slice_c_unfinished_result_rejection(XR_LIR_U8);
     array_c_output("slice-boundary-i64",NULL); array_c_output("slice-boundary-u8",NULL);
+    static const char *const state_slices[]={"slice-state-const-i64","slice-state-const-u8",
+        "slice-state-mutable-i64","slice-state-mutable-u8","slice-state-unready-const-i64",
+        "slice-state-unready-const-u8","slice-state-unready-mutable-i64","slice-state-unready-mutable-u8"};
+    for (size_t n=0;n<sizeof(state_slices)/sizeof(*state_slices);++n) array_c_output(state_slices[n],NULL);
     static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
         "map-formal-state","map-formal-construct","map-formal-initialize"};
     for (size_t n=0;n<sizeof(map_formals)/sizeof(*map_formals);++n) array_c_output(map_formals[n],NULL);

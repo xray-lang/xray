@@ -125,6 +125,10 @@ def main():
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
     expected = {'string-bindings': 14, 'string-ref-bindings': 2,
                 'slice-boundary-i64': 68, 'slice-boundary-u8': 68,
+                'slice-state-const-i64': 25, 'slice-state-const-u8': 25,
+                'slice-state-mutable-i64': 25, 'slice-state-mutable-u8': 25,
+                'slice-state-unready-const-i64': None, 'slice-state-unready-const-u8': None,
+                'slice-state-unready-mutable-i64': None, 'slice-state-unready-mutable-u8': None,
                 'map-formal-new': 1, 'map-formal-closure': 1, 'map-formal-write': 1, 'map-formal-ref': 1,
                 'map-formal-state': 1, 'map-formal-construct': 1, 'map-formal-initialize': 1,
                 'map-literal-explicit': 42, 'map-literal-spread': 42, 'map-literal-spread-wins': 42,
@@ -185,9 +189,12 @@ def main():
                                          'stderr': result.stderr.decode(),
                                          'sourceSHA256': hashlib.sha256(generated.read_bytes()).hexdigest()}
                 continue
-            position = (b'array-c.xr:3:1' if name.startswith('repeat-negative') else
+            position = (b'unknown source' if name.startswith('slice-state-unready-') else
+                        b'array-c.xr:3:1' if name.startswith('repeat-negative') else
                         b'array-c.xr:37:9' if name.endswith('read') else b'array-c.xr:41:7')
             assert not result.stdout and position in result.stderr, (name, result.stdout, result.stderr)
+            if name.startswith('slice-state-unready-'):
+                assert result.stderr.startswith(b'XR_RUN_6002:'), (name, result.stderr)
         else:
             expected_stdout = (str(answer) + os.linesep).encode()
             assert result.stdout == expected_stdout and not result.stderr, (name, result.stdout, result.stderr)
