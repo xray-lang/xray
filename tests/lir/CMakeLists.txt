@@ -97,6 +97,10 @@ foreach(target test_lir_binding_homes test_lir_callable_bytecode test_lir_callab
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
+# These failure-injection units compile the owning implementation directly.
+foreach(target test_lir_allocations test_lir_allocations_l3 test_lir_array_faults test_lir_rebuild_faults)
+    target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/include")
+endforeach()
 add_test(NAME test_lir_core COMMAND test_lir_core)
 add_test(NAME test_lir_state COMMAND test_lir_state)
 add_test(NAME test_lir_array COMMAND test_lir_array)
