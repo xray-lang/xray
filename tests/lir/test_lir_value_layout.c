@@ -8,6 +8,7 @@
  */
 #include "lir/xlir_value_layout.h"
 #include "lir/xlir_internal.h"
+#include "lir/xlir_builtin_admission.h"
 #include "runtime/native/xnative_string_backing.h"
 #include "xray_native_function.h"
 #include "xray_native_array_slice.h"
@@ -348,6 +349,23 @@ static void callable_layouts(void) {
     xrt_value_plan_drop((XrtValuePlan *)plan); CHECK(atomic_load(&owner.audit.final) == 1);
     printf("callable signatures: exact contracts, independent dependencies and %zu allocation rollback sites passed\n", allocations);
 }
+static void slice_builtin_admission(XrLirModule *module) {
+    CHECK(lir_module_has_builtin_abi(module)); bool checked = false;
+    for (uint32_t n = 0; n < module->intrinsic_count; ++n) {
+        XrLirSliceIntrinsic slice;
+        if (xr_lir_slice_intrinsic_view(module, module->intrinsics[n].id, &slice) != XR_LIR_OK) continue;
+        uint32_t operation = module->intrinsics[n].operation; module->intrinsics[n].operation = 0;
+        CHECK(!lir_module_has_builtin_abi(module)); module->intrinsics[n].operation = operation;
+        checked = true; break;
+    }
+    CHECK(checked && lir_module_has_builtin_abi(module));
+    XrLirModule *generic = NULL; LIR(xr_lir_module_create(NULL, &generic)); XrLirType fixed = 0;
+    LIR(xr_lir_fixed_array_type(generic, XR_LIR_U8, 4, &fixed));
+    XrLirIntrinsic entry = {.id=777,.parameters=&fixed,.parameter_count=1,.result=XR_LIR_I64,.scalar_sync=true};
+    XrLirRegistry registry = {&entry,1}; LIR(xr_lir_set_registry(generic, &registry));
+    LIR(xr_lir_module_finish(generic, NULL)); CHECK(!lir_module_has_builtin_abi(generic));
+    xr_lir_module_destroy(generic);
+}
 static void slice_layouts(void) {
     XrLirModule *module = NULL, *received = NULL;
     LIR(xr_lir_module_create(NULL, &module));
@@ -379,6 +397,7 @@ static void slice_layouts(void) {
     uint32_t unchanged = 99;
     CHECK(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_GET, XR_LIR_F64, 0, &unchanged) == XR_LIR_UNSUPPORTED && unchanged == 99);
     LIR(xr_lir_module_finish(module, NULL));
+    slice_builtin_admission(module);
     Owner owner; owner_new(&owner, SIZE_MAX);
     XrLirValueLayoutKey roots[] = {{slices[0],0,0}, {slices[1],0,0}};
     XrLirValueLayouts *set = NULL;

@@ -14,6 +14,7 @@
 #include "xlir_callable.h"
 #include "xlir_cell.h"
 #include "xlir_map.h"
+#include "xlir_view.h"
 
 static inline bool lir_builtin_signature(XrLirType result, const XrLirType *parameters,
     uint32_t count) {
@@ -63,6 +64,8 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         XrLirIntrinsic signature;
         if (xr_lir_intrinsic_at(module, i, &signature) != XR_LIR_OK) return false;
         if (xr_lir_map_intrinsic_valid(module, &signature)) continue;
+        XrLirSliceIntrinsic slice;
+        if (xr_lir_slice_intrinsic_view(module, signature.id, &slice) == XR_LIR_OK) continue;
         if (!lir_builtin_signature(signature.result, signature.parameters, signature.parameter_count))
             return false;
     }
