@@ -56,6 +56,11 @@ typedef struct XrLirHomeTransfer {
      * remain BORROW; these one-based workspace ordinals describe physical RC. */
     XrLirOwnershipTransferMode hold_transfer_mode;
     uint32_t source_workspace, target_workspace;
+    /* SIZE_MAX is absent. A borrowed Cell formal's logical COPY first retains
+     * into this real CELL_BORROW_STAGE owner. Only after all such staging
+     * succeeds may the edge MOVE that owner into its destination, using the
+     * destination's distinct temporary. The formal never acquires a slot. */
+    size_t borrowed_owner_workspace;
 } XrLirHomeTransfer;
 typedef struct XrLirHomeEdge {
     uint32_t block, edge, target_block;
@@ -79,7 +84,8 @@ typedef struct XrLirHomeBinding {
 } XrLirHomeBinding;
 typedef enum XrLirHomeWorkspaceKind {
     XR_LIR_HOME_WORKSPACE_VALUE,
-    XR_LIR_HOME_WORKSPACE_VIEW_HOLD
+    XR_LIR_HOME_WORKSPACE_VIEW_HOLD,
+    XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE
 } XrLirHomeWorkspaceKind;
 typedef struct XrLirHomeWorkspace {
     uint32_t block, instruction, type;

@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "lir/xlir_verify.h"
+#include "base/xsigned_rc.h"
 
 typedef struct ScopedCellFixture {
     CArrayFixture c;
@@ -88,6 +89,72 @@ static ScopedCellFixture scoped_cell_fixture(bool map, unsigned attack) {
     ca_return(&f.c,join,answer);
     return f;
 }
+static void scoped_cell_stage_rollback(XrtBillingOwner *billing, const XrLirValueLayouts *set,
+    XrLirType cell, const XrLirValueHomes *homes) {
+    const XrtValuePlan *plan = NULL;
+    HOME(xr_lir_value_layouts_get(set,(XrLirValueLayoutKey){cell,0,0},&plan));
+    XrtCaptureType *type = NULL; MANAGED(xrt_capture_type_new(billing,plan,&type));
+    XrtManagedRoot *root = NULL; XrtManagedFrame *caller = NULL, *frame = NULL;
+    MANAGED(xrt_managed_root_new(billing,&root)); MANAGED(xrt_managed_frame_enter(root,1,&caller));
+    MANAGED(xrt_i64_cell_create(caller,0,type,42));
+    XrtManagedHeader *source = NULL; MANAGED(xrt_managed_slot_borrow(caller,0,&source));
+    MANAGED(xrt_managed_frame_enter_layout(root,&homes->frame,&frame));
+    XrtManagedHeader *old[2] = {0}; CHECK(homes->transfer_count == 2);
+    for (size_t n = 0; n < 2; ++n) {
+        const XrLirValueHome *target = &homes->values[homes->transfers[n].target];
+        MANAGED(xrt_i64_cell_create(frame,target->first_owner,type,(int64_t)n));
+        MANAGED(xrt_managed_slot_borrow(frame,target->first_owner,&old[n]));
+    }
+    size_t allocations = xrt_billing_owner_stats(billing).allocations;
+    xrt_billing_owner_fail_after(billing,0);
+    for (unsigned pass = 0; pass < 2; ++pass) {
+        atomic_store(&source->references,pass ? 1 : INT32_MAX - 1);
+        XrtManagedStatus status = XRT_MANAGED_OK; size_t staged = 0;
+        for (size_t n = 0; n < 2; ++n) {
+            const XrLirHomeWorkspace *stage = &homes->workspaces[homes->transfers[n].borrowed_owner_workspace];
+            if (!xrt_managed_retain(source)) { status = XRT_MANAGED_REFCOUNT; break; }
+            XrtManagedHeader *incoming = source;
+            status = xrt_managed_slot_adopt(frame,stage->first_owner,&incoming);
+            if (status != XRT_MANAGED_OK) { xrt_managed_drop(incoming); break; }
+            CHECK(!incoming); ++staged;
+        }
+        if (!pass) {
+            CHECK(status == XRT_MANAGED_REFCOUNT && staged == 1);
+            while (staged) {
+                const XrLirHomeWorkspace *stage = &homes->workspaces[homes->transfers[--staged].borrowed_owner_workspace];
+                MANAGED(xrt_managed_slot_drop(frame,stage->first_owner));
+            }
+            CHECK(xr_signed_rc_read(&source->references) == INT32_MAX - 1);
+            for (size_t n = 0; n < 2; ++n) {
+                XrtManagedHeader *owner = NULL;
+                MANAGED(xrt_managed_slot_borrow(frame,homes->values[homes->transfers[n].target].first_owner,&owner));
+                CHECK(owner == old[n]);
+            }
+            atomic_store(&source->references,1);
+            continue;
+        }
+        MANAGED(status); CHECK(staged == 2);
+        XrtPlaceEdge owners[2];
+        for (size_t n = 0; n < 2; ++n) {
+            const XrLirValueHome *target = &homes->values[homes->transfers[n].target];
+            const XrLirHomeWorkspace *stage = &homes->workspaces[homes->transfers[n].borrowed_owner_workspace];
+            owners[n] = (XrtPlaceEdge){{frame,target->first_owner,NULL,XRT_PLACE_NULLABLE},
+                {frame,stage->first_owner,NULL,XRT_PLACE_NONNULL},
+                {frame,target->temporary_first_owner,NULL,XRT_PLACE_NULLABLE},XRT_PLACE_TRANSFER_MOVE};
+        }
+        MANAGED(xrt_place_edge_transfer(owners,2,NULL));
+        CHECK(xr_signed_rc_read(&source->references) == 3);
+        for (size_t n = 0; n < 2; ++n) {
+            XrtManagedHeader *owner = NULL;
+            MANAGED(xrt_managed_slot_borrow(frame,owners[n].destination.slot,&owner)); CHECK(owner == source);
+            owner = NULL; MANAGED(xrt_managed_slot_borrow(frame,owners[n].source.slot,&owner)); CHECK(!owner);
+            MANAGED(xrt_managed_slot_borrow(frame,owners[n].temporary.slot,&owner)); CHECK(!owner);
+        }
+    }
+    CHECK(xrt_billing_owner_stats(billing).allocations == allocations);
+    xrt_billing_owner_fail_after(billing,SIZE_MAX);
+    MANAGED(xrt_managed_root_destroy(&root)); xrt_capture_type_drop(&type);
+}
 static void scoped_cell_projection(bool map) {
     ScopedCellFixture f = scoped_cell_fixture(map,0); OK(xr_lir_module_finish(f.c.module,NULL));
     XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
@@ -110,7 +177,8 @@ static void scoped_cell_projection(bool map) {
     HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){f.c.module,f.target,set,plan},&formals));
     CHECK(!(homes->unmodeled & XR_LIR_OWNERSHIP_UNMODELED_CELL) && homes->transfer_count == 2 && homes->values[f.source.id].owner_count == 1);
     CHECK(homes->transfers[0].source == f.source.id && homes->transfers[1].source == f.source.id);
-    for (size_t t = 0; t < 2; ++t) CHECK(homes->transfers[t].transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY);
+    for (size_t t = 0; t < 2; ++t) CHECK(homes->transfers[t].transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY &&
+        homes->transfers[t].borrowed_owner_workspace == SIZE_MAX);
     const XrLirValueHome *formal = &formals->values[1];
     CHECK(formal->parameter == 1 && formal->cell_transport == XR_LIR_CELL_TRANSPORT_BORROW && !formal->owner_count &&
         formal->offset == SIZE_MAX && formal->first_owner == SIZE_MAX && formal->temporary_offset == SIZE_MAX &&
@@ -121,7 +189,15 @@ static void scoped_cell_projection(bool map) {
         const XrLirHomeTransfer *edge = &formals->transfers[n];
         CHECK(edge->source == 1 && edge->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY &&
             formals->values[edge->target].cell_transport == XR_LIR_CELL_TRANSPORT_OWNED &&
-            formals->values[edge->target].owner_count == 1 && formals->values[edge->target].temporary_first_owner != SIZE_MAX);
+            formals->values[edge->target].owner_count == 1 && formals->values[edge->target].temporary_first_owner != SIZE_MAX &&
+            edge->borrowed_owner_workspace < formals->workspace_count);
+        const XrLirHomeWorkspace *stage = &formals->workspaces[edge->borrowed_owner_workspace];
+        const XrLirValueHome *target = &formals->values[edge->target];
+        CHECK(stage->kind == XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE && stage->value == 1 && stage->type == target->type &&
+            stage->block == formals->edges[0].block && stage->first_owner != target->first_owner &&
+            stage->first_owner != target->temporary_first_owner && formals->frame.owned_offsets[stage->first_owner] == stage->offset &&
+            stage->temporary_offset == SIZE_MAX && stage->temporary_first_owner == SIZE_MAX);
+        if (n) CHECK(formals->transfers[n - 1].borrowed_owner_workspace != edge->borrowed_owner_workspace);
     }
     bool bound = false, kept = false, borrowed_keep = false;
     for (size_t n = 0; n < homes->event_count; ++n) {
@@ -138,6 +214,7 @@ static void scoped_cell_projection(bool map) {
         }
     }
     CHECK(bound && kept && borrowed_keep);
+    if (!map) scoped_cell_stage_rollback(billing,set,f.cell,formals);
     if (map) {
         const XrLirHomeBinding *ref = &homes->bindings[f.reference.id];
         CHECK(ref->kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW && ref->source == f.first.id &&
