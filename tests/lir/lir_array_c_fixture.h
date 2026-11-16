@@ -249,12 +249,14 @@ static void ca_unsigned(CArrayFixture *c, XrLirBlock entry, const char *name, Xr
 }
 
 /* A real owner forces selected-edge transactions while primitive phi values
- * exchange in parallel. A pointer mixed into the edge keeps legacy publication. */
-static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock entry, bool mixed) {
-    XrLirType types[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64,XR_LIR_PTR};
+ * exchange in parallel. Pointer and POD controls keep legacy publication. */
+static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock entry, unsigned mode) {
+    bool mixed=mode!=0; XrLirType extra=XR_LIR_PTR;
+    if (mode==2) OK(xr_lir_tuple_i64_type(c->module,1,&extra));
+    XrLirType types[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64,extra};
     XrLirBlock loop={0},done={0};
     OK(xr_lir_add_block(c->module,root,types,mixed ? 5 : 4,&loop));
-    XrLirType outputs[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_PTR};
+    XrLirType outputs[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,extra};
     OK(xr_lir_add_block(c->module,root,outputs,mixed ? 4 : 3,&done));
     XrLirValue values[5]={{0}},result[4]={{0}};
     for (uint32_t p=0;p<(mixed ? 5u : 4u);++p) OK(xr_lir_block_parameter(c->module,loop,p,&values[p]));
@@ -265,7 +267,9 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     XrLirValue seven=ca_constant(c,entry,7);
     XrLirValue array=ca_intrinsic(c,entry,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,&seven,1);
     XrLirValue initial[]={array,ca_constant(c,entry,10),ca_constant(c,entry,20),ca_constant(c,entry,0),{0}};
-    if (mixed) {
+    if (mode==2) {
+        initial[4]=ca_value(c,entry,XR_LIR_TUPLE_NEW,extra,&seven,1);
+    } else if (mixed) {
         XrLirInstruction null_pointer={.op=XR_LIR_CONST,.type=XR_LIR_PTR};
         OK(xr_lir_emit_value(c->module,entry,&null_pointer,&initial[4]));
     }
@@ -283,6 +287,7 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     XrLirValue total=ca_binary(c,done,XR_LIR_MUL,result[1],ca_constant(c,done,100));
     total=ca_binary(c,done,XR_LIR_ADD,total,result[2]);
     total=ca_binary(c,done,XR_LIR_ADD,total,ca_intrinsic(c,done,XR_LIR_ARRAY_OP_LEN,XR_LIR_I64,result,1));
+    if (mode==2) total=ca_binary(c,done,XR_LIR_ADD,total,ca_value(c,done,XR_LIR_TUPLE_FIELD,XR_LIR_I64,&result[3],1));
     ca_effect(c,done,XR_LIR_ARRAY_DROP,result[0]);
     ca_return(c,done,total);
 }
@@ -309,7 +314,7 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
     OK(xr_lir_add_block(c.module, *root, NULL, 0, &entry));
     OK(xr_lir_set_entry(c.module, *root, entry));
     if (!strncmp(name,"scalar-edge-",12)) {
-        ca_scalar_edges(&c,*root,entry,!strcmp(name,"scalar-edge-mixed"));
+        ca_scalar_edges(&c,*root,entry,!strcmp(name,"scalar-edge-pod") ? 2u : !strcmp(name,"scalar-edge-mixed") ? 1u : 0u);
         OK(xr_lir_module_finish(c.module,NULL)); *output=c.module; return;
     }
     if (c.element == XR_LIR_U8 || c.element == XR_LIR_U64) {
