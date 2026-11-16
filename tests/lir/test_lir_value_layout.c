@@ -471,6 +471,11 @@ static void slice_layouts(void) {
         }
         uint32_t id = 0;
         LIR(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_NEW, element, XR_LIR_ARRAY_REF, &id));
+        LIR(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_NEW, element, XR_LIR_STATE_REF, &id));
+        XrLirSliceIntrinsic state_read;
+        LIR(xr_lir_slice_intrinsic_view(module, id, &state_read));
+        CHECK(state_read.operation == XR_LIR_SLICE_OP_NEW && state_read.binding_type == XR_LIR_STATE_REF &&
+            state_read.element == element);
     }
     uint32_t unchanged = 99;
     CHECK(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_CLEANUP, XR_LIR_I64, 0, &unchanged) == XR_LIR_UNSUPPORTED && unchanged == 99);

@@ -33,8 +33,9 @@ typedef struct XrLirSliceIntrinsic {
     uint32_t id;
     XrLirSliceOperation operation;
     XrLirType element;
-    /* NEW consumes the actual ARRAY_CELL or ARRAY_REF binding. Other roles
-     * consume a Slice value and require TYPE_INVALID here. */
+    /* NEW reads the actual ARRAY_CELL, ARRAY_REF or Array STATE_REF binding.
+     * State reads require the exact slot payload and element, not write access.
+     * Other roles consume a Slice and require TYPE_INVALID here. */
     XrLirType binding_type;
 } XrLirSliceIntrinsic;
 /* NEW(binding,start,limit) receives Source-normalized Array bounds.

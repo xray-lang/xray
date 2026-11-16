@@ -20,12 +20,13 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
     XrLirType slice_parameters[LIR_SLICE_CATALOG_COUNT][4] = {{0}};
     if (flags & LIR_LIBRARY_SLICE) {
         uint32_t added = 0;
-        for (uint32_t family = 0; family < 4; ++family) {
-            XrLirType element = family < 2 ? XR_LIR_I64 : XR_LIR_U8, slice = 0;
+        for (uint32_t family = 0; family < 6; ++family) {
+            XrLirType element = family < 4 ? family < 2 ? XR_LIR_I64 : XR_LIR_U8 :
+                family == 4 ? XR_LIR_I64 : XR_LIR_U8, slice = 0;
             status = xr_lir_slice_type(m, element, &slice);
             if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
             for (uint32_t role = 1; role < XR_LIR_SLICE_OP_CLEANUP; ++role) {
-                if ((family & 1u) && role != XR_LIR_SLICE_OP_NEW) continue;
+                if (((family & 1u) || family >= 4) && role != XR_LIR_SLICE_OP_NEW) continue;
                 uint32_t encoded = family * LIR_SLICE_ROLE_STRIDE + role;
                 XrLirSliceIntrinsic shape;
                 bool decoded = lir_slice_decode(LIR_SLICE_OPERATION_BASE + encoded, &shape);

@@ -153,16 +153,17 @@ static bool lir_home_slice(LirHomeBuilder *b, XrLirValueHome *home, uint32_t val
     home->first_owner = home->temporary_first_owner = SIZE_MAX;
     return true;
 }
-static bool lir_home_map_state_binding(LirHomeCompiler *c, uint32_t value, XrLirType type) {
+static bool lir_home_state_binding(LirHomeCompiler *c, uint32_t value, XrLirType type) {
     XrLirStateReference reference;
     return type == XR_LIR_STATE_REF && xr_lir_state_reference_view(c->input,
         (XrLirValue){c->input,c->function.id,value},&reference) == XR_LIR_OK &&
-        reference.payload == XR_LIR_MAP_STRING_I64;
+        (reference.payload == XR_LIR_MAP_STRING_I64 || (reference.payload == XR_LIR_ARRAY &&
+            (reference.array_element == XR_LIR_I64 || reference.array_element == XR_LIR_U8)));
 }
 static bool lir_home_binding_type(LirHomeCompiler *c, uint32_t value, XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
-        xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value}) || lir_home_map_state_binding(c,value,type);
+        xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value}) || lir_home_state_binding(c,value,type);
 }
 static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlanSpec *spec) {
     const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key;
@@ -209,7 +210,11 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
             if (xr_lir_array_shape_view(c->input,(XrLirValue){c->input,c->function.id,v},&shape) != XR_LIR_OK)
                 return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Array element");
             key = (XrLirValueLayoutKey){XR_LIR_ARRAY,shape.element,0};
-        } else if (lir_home_map_state_binding(c,v,type)) {
+        } else if (lir_home_state_binding(c,v,type)) {
+            XrLirStateReference reference;
+            if (xr_lir_state_reference_view(c->input,(XrLirValue){c->input,c->function.id,v},&reference) != XR_LIR_OK)
+                return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"State binding lost its exact payload");
+            key = (XrLirValueLayoutKey){reference.payload,reference.array_element,0};
             bindings[v].kind = XR_LIR_HOME_BINDING_STATE_BORROW;
             bindings[v].source = v;
         }
