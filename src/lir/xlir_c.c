@@ -77,6 +77,8 @@ typedef struct LirC {
     size_t string_event_cursor, string_workspace_cursor;
     size_t map_stage_event_cursor, map_stage_workspace_cursor;
     size_t view_call_cursor, view_event_cursor;
+    /* Only a complete, unconditional Array NEW establishes this block fact. */
+    uint32_t array_frame_block;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -1151,6 +1153,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             c->block = block.id;
             if (!c_request_poll(c))
                 return;
+            c->array_frame_block = 0;
             c_format(c, "bb%" PRIu32 ": ;\n", block.id);
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;

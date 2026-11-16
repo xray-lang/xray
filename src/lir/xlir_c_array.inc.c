@@ -113,7 +113,12 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
             c_text(c,"}");
         }
         c_format(c,", %" PRIu32 "}, UINT32_C(%" PRIu32 "));\n",v->operand_count,source);
-        c_values_publish_leaf(c,v->result,source); return;
+        c_values_publish_leaf(c,v->result,source);
+        /* Both setup and publication must succeed before later instructions
+         * run. This function's Frame cannot leave until a terminating return.
+         * Merely emitting an ensure inside conditional C proves nothing. */
+        if (c->status == XR_LIR_C_OK) c->array_frame_block = c->block;
+        return;
     case XR_LIR_ARRAY_OP_LEN:
         c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
         c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
