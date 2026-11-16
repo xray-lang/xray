@@ -477,6 +477,7 @@ static void late_frame_scalar_cells(void) {
     }
 }
 #include "lir_slice_state_read_fixture.h"
+#include "lir_slice_cleanup_bytecode_cases.h"
 static void slice_state_reads(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) for (unsigned mutable=0;mutable<2;++mutable)
@@ -784,6 +785,7 @@ int main(void) {
     slice_call_boundaries();
     late_frame_scalar_cells();
     slice_state_reads();
+    slice_cleanup_bytecode();
     owned_duplicate_edge();
     scope_receiving();
     scope_keep_formal(false); scope_keep_formal(true);

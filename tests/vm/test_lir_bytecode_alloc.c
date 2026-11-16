@@ -1004,6 +1004,7 @@ static void record_compiler_failures(void) {
     attempts = 0;
 }
 #include "lir_slice_alloc_cases.h"
+#include "lir_slice_cleanup_alloc_cases.h"
 static void compacted_frame_scalar_cells(void) {
     uint32_t words[8]={0},sources[8]={0}; XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS};
     XrRbcCompileDiagnostic diagnostic={0};
@@ -1042,6 +1043,7 @@ int main(void) {
     typed_edge_spill_cycles();
     string_reference_allocation_failures();
     slice_boundary_allocation_failures();
+    slice_cleanup_allocation_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();

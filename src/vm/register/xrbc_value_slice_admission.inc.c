@@ -60,6 +60,7 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
         const XrLirHomeEvent *event=&code->homes->events[access.window-1];
         if (event->kind!=XR_LIR_OWNERSHIP_VIEW_END || event->target ||
             event->view_operation!=XR_LIR_SLICE_OP_CLEANUP ||
+            event->view_cleanup!=XR_LIR_SLICE_CLEANUP_CLEAR ||
             event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
             event->hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
             !rbc_value_slice(module,code,event->source)) return false;
@@ -89,6 +90,7 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
         if (!code->homes->events || !access.window || access.window>code->homes->event_count) return false;
         const XrLirHomeEvent *event=&code->homes->events[access.window-1];
         if (event->kind!=(construct ? XR_LIR_OWNERSHIP_VIEW_VALUE : XR_LIR_OWNERSHIP_VIEW_END) ||
+            event->view_cleanup!=XR_LIR_SLICE_CLEANUP_CLEAR ||
             event->source!=value || event->target!=(construct ? args[0] : 0) || event->view_operation!=access.index ||
             event->view_workspace!=home->view_workspace || event->view_storage!=home->view_storage ||
             event->transfer_mode!=(construct ? XR_LIR_OWNERSHIP_TRANSFER_BORROW : XR_LIR_OWNERSHIP_TRANSFER_NONE) ||
