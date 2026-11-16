@@ -62,7 +62,7 @@ static bool lower_view_cell_graph(LowerFunction *f, LowerViewCellGraph *graph) {
 
 /* This graph extends physical storage demand only. Read and mutation rights
  * still come from the checked loan verifier, never from this reachability. */
-static void lower_view_cell_demand(LowerFunction *f, LowerViewCellGraph *graph, uint32_t owner) {
+static bool lower_view_cell_demand(LowerFunction *f, LowerViewCellGraph *graph, uint32_t owner) {
     const XrLirFunctionData *function = &f->owner->module->functions[f->function.id - 1];
     uint32_t root = f->array_cells.owners[owner].id;
     size_t head = 0, tail = 1; uint32_t generation = owner + 1; bool borrowed = false;
@@ -75,14 +75,16 @@ static void lower_view_cell_demand(LowerFunction *f, LowerViewCellGraph *graph, 
             if (graph->seen[child] != generation) { graph->seen[child] = generation; graph->queue[tail++] = child; }
         }
     }
-    if (!borrowed) return;
+    if (!borrowed) return true;
     uint32_t definition_block = function->values[root - 1].block, source_block = UINT32_MAX;
     for (uint32_t b = 0; b < f->source->block_count; ++b)
         if (f->blocks[b].id == definition_block) { source_block = b; break; }
+    if (source_block == UINT32_MAX) return lower_unsupported(f->owner, "Slice source binding block");
     memset(graph->without, 0, f->source->block_count); head = tail = 0;
     if (source_block) { f->stack[tail++] = 0; graph->without[0] = 1; }
     while (head < tail) {
         uint32_t b = f->stack[head++]; const XrXirInstruction *term = lower_term(f->owner, f->source, b);
+        if (!term) return false;
         for (uint32_t e = 0; e < lower_edge_count(term); ++e) {
             uint32_t target = term->targets[e];
             if (target != source_block && !graph->without[target]) { graph->without[target] = 1; f->stack[tail++] = target; }
@@ -100,13 +102,14 @@ static void lower_view_cell_demand(LowerFunction *f, LowerViewCellGraph *graph, 
         size_t at = (size_t)b * f->array_cells.count + owner;
         if (needed && !f->array_cells.define[at]) f->array_cells.use[at] = 1;
     }
+    return true;
 }
 static bool lower_view_cell_uses(LowerFunction *f) {
     const XrLirFunctionData *function = &f->owner->module->functions[f->function.id - 1]; bool needed = false;
     for (uint32_t n = 0; n < function->value_count; ++n) needed |= xr_lir_internal_slice_type(f->owner->module, function->values[n].type);
     if (!needed) return true;
     LowerViewCellGraph graph = {0}; bool good = lower_view_cell_graph(f, &graph);
-    if (good) for (uint32_t owner = 0; owner < f->array_cells.count; ++owner) lower_view_cell_demand(f, &graph, owner);
+    for (uint32_t owner = 0; owner < f->array_cells.count && good; ++owner) good = lower_view_cell_demand(f, &graph, owner);
     xr_free(graph.heads); xr_free(graph.links); xr_free(graph.queue); xr_free(graph.seen); xr_free(graph.without);
     return good;
 }
