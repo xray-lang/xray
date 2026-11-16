@@ -363,6 +363,8 @@ def _fneg_commands(args, work, output, fp):
         crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
         flags = ['/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt]
+        if output and 'clang' not in args.compiler.name.lower():
+            flags += ['/experimental:c11atomics']
         flags += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
         flags += _f64_options(args.compiler, args.kind)
         if args.asan:
