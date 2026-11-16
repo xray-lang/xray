@@ -33,7 +33,20 @@ static bool lower_slice_source(LowerFunction *f, uint32_t ordinal, XrLirValue *o
     }
     return lower_value(f, ordinal, output);
 }
+static bool lower_view_empty_entry(LowerFunction *f, uint32_t block) {
+    if (block || f->owner->instruction) return false;
+    for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
+        const XrXirInstruction *term = lower_term(f->owner, f->source, b);
+        if (!term) return false;
+        for (uint32_t e = 0; e < lower_edge_count(term); ++e)
+            if (!term->targets[e]) return false;
+    }
+    /* No edge can revisit this activation entry. Slice formals are excluded,
+     * so every local keeper is truly empty before its first instruction. */
+    return true;
+}
 static bool lower_view_cleanup(LowerFunction *f, uint32_t block, const XrXirInstruction *op) {
+    if (lower_view_empty_entry(f, block)) return true;
     for (uint32_t n = 0; n < op->args[1]; ++n) {
         uint32_t ordinal = f->source->operands[op->args[0] + n];
         if (ordinal >= f->value_count) return lower_unsupported(f->owner, "Slice cleanup source ordinal");
