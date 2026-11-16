@@ -1,0 +1,9 @@
+fn invoke(part:Slice<i64>, callback:fn()->i64)->i64 {
+    return callback() + part[0]
+}
+fn main() {
+    var values = [1,2,3]
+    const change = fn()->i64 { values[0] = 9; return 0 }
+    print(invoke(values[0:2], change))
+}
+main()

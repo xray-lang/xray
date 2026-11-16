@@ -14,6 +14,7 @@
 #include "../base/xhash.h"
 #include "xxir_stringable_internal.h"
 #include "xxir_implementation_verify.h"
+#include "xxir_view_types_internal.h"
 
 #ifndef XXIR_EFFECT_CHECK_IMPLEMENTATION
 #define XXIR_EFFECT_CHECK_IMPLEMENTATION
@@ -443,6 +444,28 @@ static EffectCheckNode effect_check_empty_node(uint32_t function) {
 
 #include "xxir_effect_module_access.inc.c"
 
+static bool effect_check_view_module_access(EffectCheckBuild *build, bool *needed) {
+    uint8_t *flags = NULL;
+    build->status = xir_compile_view_flags_new(build->memory, build->module->types, &flags);
+    if (build->status != XR_XIR_OK) return false;
+    bool found = false;
+    for (uint32_t f = 0; flags && f < build->module->function_count && !found; ++f) {
+        const XrXirFunction *function = &build->module->functions[f];
+        const XrXirTypeNode *node = xr_xir_type_node(build->module->types, function->result);
+        found = node && (flags[(uint32_t)function->result - XR_XIR_CONSTRUCTED_TYPE_BASE] & 3u) != 0;
+        for (uint32_t p = 0; p < function->parameter_count && !found; ++p) {
+            node = xr_xir_type_node(build->module->types, function->parameters[p]);
+            found = node && (flags[(uint32_t)function->parameters[p] - XR_XIR_CONSTRUCTED_TYPE_BASE] & 3u) != 0;
+        }
+        for (uint32_t i = 0; i < function->instruction_count && !found; ++i) {
+            XrXirType type = function->instructions[i].type;
+            node = xr_xir_type_node(build->module->types, type);
+            found = node && (flags[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE] & 3u) != 0;
+        }
+    }
+    xr_compile_resources_free(flags); *needed = found; return true;
+}
+
 static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
     EffectCheckedRoots *roots = xir_compile_calloc(build->memory, 1, sizeof(*roots), &build->status);
     if (!roots) return build->status;
@@ -450,6 +473,7 @@ static XrXirStatus effect_check_allocate(EffectCheckBuild *build) {
     roots->resources = build->memory->resources;
     roots->borrowed_types = build->module->types;
     roots->module_access = build->module->declarations && build->module->declarations->slot_count != 0;
+    if (!roots->module_access && !effect_check_view_module_access(build, &roots->module_access)) return build->status;
     if (!effect_module_lent_fields(build)) return build->status;
     roots->module_access |= roots->lent_field_count != 0;
     roots->stringable_interface = roots->stringable_integer = roots->stringable_string = UINT32_MAX;

@@ -1,0 +1,18 @@
+fn tail(part:Slice<i64>)->Slice<i64> { return part[1:] }
+fn relay(part:Slice<i64>)->Slice<i64> { return tail(part) }
+fn carry(part:Slice<i64>, n:i64)->Slice<i64> {
+    if (n == 0) { return part }
+    return carry(part, n - 1)
+}
+fn invoke(part:Slice<i64>, callback:fn()->i64)->i64 {
+    const saved = part[0]
+    return saved + callback()
+}
+fn leaf()->i64 { return 7 }
+fn main() {
+    var values = [1,2,3]
+    print(len(relay(values[0:3])))
+    print(len(carry(values[0:2], 2)))
+    print(invoke(values[0:2], leaf))
+}
+main()
