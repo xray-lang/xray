@@ -28,9 +28,15 @@ static XrtManagedStatus observed_enter(XrtManagedRoot *root, size_t slots, XrtMa
     if (status == XRT_MANAGED_OK) { ++entered; ++active_frames; }
     return status;
 }
-static XrtManagedStatus observed_layout(XrtManagedRoot *root, const XrtManagedFrameSpec *spec, XrtManagedFrame **output) {
-    XrtManagedStatus status = xrt_managed_frame_enter_layout(root, spec, output);
-    if (status == XRT_MANAGED_OK) { ++entered; ++active_frames; }
+static XrtManagedStatus observed_payload(XrtManagedRoot *root, const XrtManagedFrameSpec *spec,
+    XrtManagedFrame **output, void **payload) {
+    XrtManagedStatus status = xrt_managed_frame_enter_payload(root, spec, output, payload);
+    if (status == XRT_MANAGED_OK) {
+        void *actual = NULL; size_t bytes = 0;
+        if (!*output || xrt_managed_frame_payload(*output, &actual, &bytes) != XRT_MANAGED_OK ||
+            actual != *payload) abort();
+        ++entered; ++active_frames;
+    }
     return status;
 }
 static XrtManagedStatus observed_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {
@@ -59,10 +65,10 @@ static void observed_f64(XrtManagedFrame *frame, size_t slot, uint64_t bits, uin
 #define xrt_native_string_f64_create(frame,slot,bits,source) observed_f64((frame),(slot),(bits),(source))
 '''
     text += ('#define xrt_managed_frame_enter(root,slots,out) observed_enter((root),(slots),(out))\n'
-             '#define xrt_managed_frame_enter_layout(root,spec,out) observed_layout((root),(spec),(out))\n'
+             '#define xrt_managed_frame_enter_payload(root,spec,out,payload) observed_payload((root),(spec),(out),(payload))\n'
              '#define xrt_managed_frame_leave(root,frame) observed_leave((root),(frame))\n'
              f'#include "{generated.name}"\n'
-             '#undef xrt_managed_frame_enter\n#undef xrt_managed_frame_enter_layout\n'
+             '#undef xrt_managed_frame_enter\n#undef xrt_managed_frame_enter_payload\n'
              '#undef xrt_managed_frame_leave\n')
     if watch_f64:
         text += '#undef xrt_native_string_f64_create\n'
@@ -98,7 +104,7 @@ static void observe(void *data) {
 }
 int main(void) {
     Observation o = {0}; XrtLocationOwner *locations = NULL; XrtExecutionFailure failure = {0};
-    (void)&observed_enter; (void)&observed_layout; (void)&observed_leave;
+    (void)&observed_enter; (void)&observed_payload; (void)&observed_leave;
     if (xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations) != XRT_LOCATION_OK) return 1;
     for (unsigned run = 0; run < 2; ++run) {
 '''
@@ -380,7 +386,7 @@ def main():
             assert '({' not in text and 'XrtString *' not in text and 'xrt_string_drop(' not in text
             assert 'xrt_string_append_cursor' not in text
             if 'xrt_native_string_' in text:
-                assert 'xrt_managed_frame_enter_layout(' in text and 'XrtManagedHeader *' in text
+                assert 'xrt_managed_frame_enter_payload(' in text and 'XrtManagedHeader *' in text
             main = folder / 'main.c'
             if name in frame_drops:
                 main.write_text('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'

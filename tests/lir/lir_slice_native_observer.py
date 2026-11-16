@@ -43,19 +43,21 @@ static XrtManagedRoot *observed_root(uint32_t source) {
     }
     return xrt_native_managed_root(source);
 }
-static XrtManagedStatus observed_layout(XrtManagedRoot *root, const XrtManagedFrameSpec *spec,
-    XrtManagedFrame **output) {
+static XrtManagedStatus observed_payload(XrtManagedRoot *root, const XrtManagedFrameSpec *spec,
+    XrtManagedFrame **output, void **payload) {
     ++probe.layout_calls;
     bool fail=(probe.fault==FIRST_FRAME_ALLOCATE && probe.layout_calls==1) ||
         (probe.fault==LATE_FRAME_ALLOCATE && probe.layout_calls==3);
     XrtBillingStats before=xrt_billing_owner_stats(probe.billing);
     if (fail) { ++probe.injected; xrt_billing_owner_fail_after(probe.billing,0); }
-    XrtManagedStatus status=xrt_managed_frame_enter_layout(root,spec,output);
+    XrtManagedStatus status=xrt_managed_frame_enter_payload(root,spec,output,payload);
     if (fail) {
         xrt_billing_owner_fail_after(probe.billing,SIZE_MAX);
-        REQUIRE(status==XRT_MANAGED_OOM && !*output); same_storage(before); ++probe.checked;
+        REQUIRE(status==XRT_MANAGED_OOM && !*output && !*payload); same_storage(before); ++probe.checked;
     }
     if (status==XRT_MANAGED_OK) {
+        void *actual=NULL; size_t bytes=0;
+        REQUIRE(*output && xrt_managed_frame_payload(*output,&actual,&bytes)==XRT_MANAGED_OK && actual==*payload);
         REQUIRE(probe.depth<sizeof(probe.frames)/sizeof(*probe.frames));
         probe.frames[probe.depth++]=*output; ++probe.enters;
     }
@@ -196,7 +198,7 @@ static XrtManagedStatus observed_edge(const XrtPlaceEdge *edges, size_t count,
     no_allocation(before); return status;
 }
 #define xrt_native_managed_root observed_root
-#define xrt_managed_frame_enter_layout observed_layout
+#define xrt_managed_frame_enter_payload(root,spec,out,payload) observed_payload((root),(spec),(out),(payload))
 #define xrt_managed_frame_leave observed_leave
 #define xrt_native_array_create observed_array
 #define xrt_inline_value_replace observed_replace
@@ -207,7 +209,7 @@ static XrtManagedStatus observed_edge(const XrtPlaceEdge *edges, size_t count,
 '''
     text += f'#include "{generated.name}"\n'
     text += r'''#undef xrt_native_managed_root
-#undef xrt_managed_frame_enter_layout
+#undef xrt_managed_frame_enter_payload
 #undef xrt_managed_frame_leave
 #undef xrt_native_array_create
 #undef xrt_inline_value_replace
