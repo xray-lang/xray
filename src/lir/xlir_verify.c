@@ -1167,7 +1167,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
                                   index + 1, 0, 0, NULL);
         if (status==XR_LIR_OK) {
             XrLirBlockConstructionFacts blocks={0};
-            status=lir_block_multiplicity_create(f,multiplicity && lir_cleanup_rank_needed(m,f),&blocks);
+            status=lir_block_multiplicity_create(f,multiplicity && lir_cleanup_rank_needed(f),&blocks);
             graph.multiplicity=blocks.may_repeat;graph.cleanup_rank=blocks.sink_first;
             graph.owns_multiplicity=status==XR_LIR_OK;
         }
