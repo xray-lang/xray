@@ -228,17 +228,12 @@ static void callable_frame_factory_rejection(void) {
 }
 
 static void callable_compiler_failures(void) {
+    const char *names[] = {"zero capture", "Frame scalar capture", "Frame mutable capture",
+        "Owned scalar capture", "Owned Cell capture"};
     for (unsigned capture = 0; capture < 5; ++capture) {
         XrLirModule *module = NULL;
         XrLirFunction root = {0};
         callable_fixture_capture(&module, &root, capture);
-        XrRbcProgram *program = NULL;
-        if(capture==4) {
-            // Canonical Cell captures still lack an Owned environment receiver.
-            CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
-            CHECK(!program && !live_allocations);xr_lir_module_destroy(module);continue;
-        }
-        const char *names[] = {"zero capture", "Frame scalar capture", "Frame mutable capture", "Owned scalar capture"};
         callable_allocation_failures(module, root, 42, names[capture]);
     }
 }
