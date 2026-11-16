@@ -115,11 +115,20 @@ static void check_receiving(const XrRbcProgram *program) {
     const XrRbcModule *module = xr_rbc_program_view(program);
     CHECK(!xr_rbc_module_value_code(NULL,0) && !xr_rbc_module_value_code(module,UINT32_MAX));
     XrRbcModule raw = *module; raw.code_lease = (XrRbcCodeLease){0};
-    CHECK(!xr_rbc_module_value_code(&raw,0));
+    /* Explicit raw descriptions are borrowed data. Seeing the real metadata
+     * cannot authorize the owning slots required by this managed program. */
+    const XrRbcValueCode *borrowed=xr_rbc_module_value_code(&raw,0);
+    CHECK(borrowed==xr_rbc_module_value_code(module,0) && borrowed &&
+        borrowed->homes && borrowed->homes->owned_frame_needed);
     XrRbcExecution *invalid = NULL;
     CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
+    raw.borrowed_value_codes=NULL; raw.borrowed_value_code_count=0;
+    CHECK(!xr_rbc_module_value_code(&raw,0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     raw = *module; raw.functions = NULL; CHECK(!xr_rbc_module_value_code(&raw,0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     raw = *module; --raw.function_count; CHECK(!xr_rbc_module_value_code(&raw,0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrRbcValueCode *code = xr_rbc_module_value_code(module,f);
         CHECK(code && code->homes == xr_rbc_module_value_homes(module,f));

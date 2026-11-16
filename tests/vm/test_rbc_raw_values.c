@@ -97,6 +97,13 @@ static void scalar_entry_receives_state_descriptions(void) {
         {.code=code,.code_count=2,.register_count=1}};
     module.functions = functions; module.function_count = 2;
     module.code_lease = (XrRbcCodeLease){0};
+    CHECK(module.borrowed_value_codes && module.borrowed_value_code_count == 1);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module,1,NULL,0,xr_rbc_program_locations(program),&execution) == XR_RBC_INVALID && !execution);
+    /* The new scalar function has no typed accesses. Extend the real borrowed
+     * directory with its absent description instead of reusing a short span. */
+    const struct XrRbcValueCode *codes[] = {module.borrowed_value_codes[0],NULL};
+    module.borrowed_value_codes = codes; module.borrowed_value_code_count = 2;
     XrtModuleLayoutSpec spec = *module.state_spec;
     XrtValueImage image = *spec.values;
     CHECK(image.type_count && image.type_count <= 64);
@@ -109,7 +116,6 @@ static void scalar_entry_receives_state_descriptions(void) {
     slot.offset = 0; slot.size = slot.alignment = 1;
     image.types = types; spec.values = &image; spec.slots = &slot;
     spec.payload_size = spec.payload_alignment = 1; module.state_spec = &spec;
-    XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_module_prepare(&module,1,NULL,0,xr_rbc_program_locations(program),&execution) != XR_RBC_OK && !execution);
     module.state_spec = xr_rbc_program_view(program)->state_spec;
     CHECK(xr_rbc_module_prepare(&module,1,NULL,0,xr_rbc_program_locations(program),&execution) == XR_RBC_OK);

@@ -80,7 +80,7 @@ XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module
 XR_FUNC const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *module, uint32_t function) {
     const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
     if (owner) return function < owner->function_count && owner->value_codes ? owner->value_codes[function] : NULL;
-    return module && module->borrowed_value_codes &&
+    return module && module->functions && module->borrowed_value_codes &&
         module->borrowed_value_code_count==module->function_count && function<module->function_count ?
         module->borrowed_value_codes[function] : NULL;
 }
