@@ -364,6 +364,25 @@ static int lir_home_edge_order(const void *left, const void *right) {
     if (a->edge != c->edge) return a->edge < c->edge ? -1 : 1;
     return a->argument < c->argument ? -1 : a->argument != c->argument;
 }
+static bool lir_home_cell_stage(LirHomeBuilder *b, const XrLirValueHome *source,
+    const XrLirValueHome *target, XrLirHomeWorkspace workspace, XrLirHomeTransfer *transfer) {
+    if (source->cell_transport != XR_LIR_CELL_TRANSPORT_BORROW ||
+        target->cell_transport != XR_LIR_CELL_TRANSPORT_OWNED) return true;
+    if (!source->parameter || source->owner_count || source->first_owner != SIZE_MAX ||
+        target->owner_count != 1 || transfer->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed Cell edge lost its actual formal COPY");
+    const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key; XrtValuePlanSpec spec;
+    if (xr_lir_value_layouts_at(b->layouts,target->type - 1,&key,&plan) != XR_LIR_VALUE_LAYOUT_OK ||
+        xrt_value_plan_view(plan,&spec) != XRT_MANAGED_OK || spec.kind != XRT_VALUE_CELL ||
+        spec.owned_count != 1 || spec.owned_offsets[0] != 0)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed Cell stage lost its same-image identity plan");
+    workspace.kind = XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE;
+    workspace.type = target->type; workspace.value = transfer->source;
+    workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+    if (!lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
+    transfer->borrowed_owner_workspace = b->workspaces.count;
+    return lir_home_append(b,&b->workspaces,&workspace);
+}
 static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *selected, size_t selected_count) {
     LirHomeCompiler *c = &b->compiler;
     const XrLirValueHome *values = b->homes->values;
@@ -415,7 +434,10 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         .transfer_mode=matched ? event->transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE,
                         .hold_transfer_mode=matched ? event->hold_transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE,
                         .source_workspace=slice ? values[edge.arguments[p]].view_workspace : 0,
-                        .target_workspace=slice ? values[target.parameters[p]].view_workspace : 0};
+                        .target_workspace=slice ? values[target.parameters[p]].view_workspace : 0,
+                        .borrowed_owner_workspace=SIZE_MAX};
+                    if (!lir_home_cell_stage(b,&values[transfer.source],&values[transfer.target],
+                        (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
                     if (!lir_home_append(b, &b->transfers, &transfer)) return false;
                     ++row.count;
                 }
