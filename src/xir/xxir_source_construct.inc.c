@@ -556,6 +556,10 @@ static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, X
         location.reason == XR_XIR_DIAGNOSTIC_VIEW_BOUNDARY ?
         "this view type is not supported here yet: parameters, results and local views accept only "
         "Slice<i64>, Slice<u8>, Ptr<u8> and MutPtr<u8>, and local views also MutSlice<i64> and MutSlice<u8>" :
+        location.reason == XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_VIEW ?
+        "borrowing captured Array storage is not implemented yet" :
+        location.reason == XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_TRANSPORT ?
+        "callable transport of captured Array storage is not implemented yet" :
         location.reason == XR_XIR_DIAGNOSTIC_FIELD_BORROW ?
         "ref of a class field may be reached through another path while it is lent; "
         "the run-time identity check this needs is not supported yet" : message;
