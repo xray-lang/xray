@@ -257,6 +257,38 @@ static void panic_after_growth(void) {
 }
 
 
+static void sparse_cell_admission_failures(void) {
+    uint32_t code[7];
+    XR_CHECK(xr_rbc_jump(code,0,3,7),"skip the first real constructor");
+    immediate(code,1,XR_RBC_LOADI,0,99); immediate(code,2,XR_RBC_CELL_NEW,0,0);
+    immediate(code,3,XR_RBC_LOADI,1,42); immediate(code,4,XR_RBC_CELL_NEW,1,1);
+    emit(code,5,XR_RBC_CELL_READ,2,1,0); emit(code,6,XR_RBC_RET,2,0,0);
+    XrRbcFunction function={.code=code,.code_count=7,.register_count=3,.cell_count=2};
+    XrRbcModule module={.functions=&function,.function_count=1};
+    XrtLocationOwner *locations=NULL;
+    XR_CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK,"real sparse Cell locations");
+    size_t sites=0;
+    for (size_t attempt=0;attempt<=sites;++attempt) {
+        nullable_observe=true; nullable_injected=false; nullable_attempts=0;
+        nullable_failure=attempt ? attempt-1 : SIZE_MAX;
+        XrRbcExecution *execution=NULL; XrRbcOutcome *outcome=NULL;
+        XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution);
+        if (!attempt) {
+            XR_CHECK(status==XR_RBC_OK && execution,"sparse Cell preparation succeeds");
+            sites=nullable_attempts;
+            XR_CHECK(sites && sites<64,"tiny Cell CFG has bounded actual allocation sites");
+            outcome=xr_rbc_execution_run(execution); uint64_t bits=0;
+            XR_CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK &&
+                xr_rbc_outcome_bits(outcome,&bits) && bits==42,"a later initialized Cell remains readable");
+        } else XR_CHECK(nullable_injected && status==XR_RBC_OUT_OF_MEMORY && !execution,
+            "each actual Cell CFG or preparation failure preserves an empty receiver");
+        xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+        XR_CHECK(!nullable_live,"Cell CFG and preparation failures refund every owned allocation");
+        for (size_t n=0;n<4;++n) XR_CHECK(!blocks[n].pointer && !blocks[n].size,"moving buffers retired");
+        nullable_observe=false;
+    }
+    nullable_failure=SIZE_MAX; xrt_locations_release(locations);
+}
 static void cell_growth(bool panic) {
     uint32_t root[7], body[17], ids[17] = {0};
     immediate(root, 0, XR_RBC_LOADI, 1, 7);
@@ -594,6 +626,7 @@ int main(void) {
     xrt_locations_release(owner);
     puts("register_vm_alloc: passed");
     panic_after_growth();
+    sparse_cell_admission_failures();
     cell_growth(false);
     fault = CELL_INITIAL_FAILURE;
     cell_growth(false);
