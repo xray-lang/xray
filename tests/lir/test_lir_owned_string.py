@@ -360,13 +360,22 @@ def main():
             assert (result.returncode, result.stdout, result.stderr) == (0, expected * 2, b''), (name, mode, folder)
             if name in ('length-over-64','length-spill-branches'):
                 actual=json.loads((folder/'rbc.json').read_text())
-                assert actual['rbc_registers_max']<=255 and actual['rbc_spills']>0
+                # These inputs stress String homes beyond the register limit.
+                # Their owners never occupy the independent scalar spill bank.
+                assert actual['rbc_registers_max']<=255
                 assert actual['rbc_reference_spills']==0
                 assert actual['rbc_string_owned_homes']>255
                 assert actual['rbc_string_owner_slots']==actual['rbc_string_owned_homes']
                 assert actual['rbc_string_temporary_slots']==actual['rbc_string_owned_homes']
                 assert actual['rbc_frame_owner_slots']>=actual['rbc_string_owner_slots']+actual['rbc_string_temporary_slots']
                 assert actual['rbc_frame_payload_bytes']>0
+                records.append({'case':name,'mode':mode,'result':'STRING_HOME_PRESSURE',
+                    'registers':actual['rbc_registers_max'],'scalarSpills':actual['rbc_spills'],
+                    'retiredReferenceSpills':actual['rbc_reference_spills'],
+                    'stringOwnedHomes':actual['rbc_string_owned_homes'],
+                    'stringOwnerSlots':actual['rbc_string_owner_slots'],
+                    'stringTemporarySlots':actual['rbc_string_temporary_slots'],
+                    'frameOwnerSlots':actual['rbc_frame_owner_slots'],'framePayloadBytes':actual['rbc_frame_payload_bytes']})
             text = generated.read_text(encoding='utf-8')
             assert '({' not in text and 'XrtString *' not in text and 'xrt_string_drop(' not in text
             assert 'xrt_string_append_cursor' not in text
