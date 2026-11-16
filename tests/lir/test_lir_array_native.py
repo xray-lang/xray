@@ -123,7 +123,8 @@ def main():
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
-    expected = {'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73,
+    expected = {'scalar-edge-swap': 2011, 'scalar-edge-mixed': 2011,
+                'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73,
                 'slice-boundary-i64': 68, 'slice-boundary-u8': 68,
                 'slice-state-const-i64': 25, 'slice-state-const-u8': 25,
                 'slice-state-mutable-i64': 25, 'slice-state-mutable-u8': 25,

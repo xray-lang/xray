@@ -279,13 +279,31 @@ static uint32_t c_values_scalar_count(LirC *c, const XrLirEdgeView *edge) {
         count += c->homes->values[edge->arguments[a]].type == 0;
     return count;
 }
+/* These SSA locations have no language-visible address. Mutable bindings use
+ * separate Cell/State storage, so owner retirement cannot observe these phi
+ * destinations. Keep every capability, pointer and aggregate on the guarded
+ * publication path, including an edge that mixes them with primitives. */
+static bool c_values_private_scalars(LirC *c, const XrLirEdgeView *edge) {
+    bool found = false;
+    for (uint32_t a = 0; a < edge->argument_count; ++a) {
+        if (c->homes->values[edge->arguments[a]].type) continue;
+        switch (c_value_type(c, edge->arguments[a])) {
+        case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_I16: case XR_LIR_I32: case XR_LIR_I64:
+        case XR_LIR_U8: case XR_LIR_U16: case XR_LIR_U32: case XR_LIR_U64: case XR_LIR_F64:
+            found = true; break;
+        default:
+            return false;
+        }
+    }
+    return found;
+}
 static void c_values_scalar_publication(LirC *c, const XrLirHomeEdge *edge) {
     XrLirBlockView block; XrLirInstructionView term;
     XrLirBlock id = {c->request->module, c->function.id, edge->block};
     xr_lir_block_view(c->request->module, id, &block);
     xr_lir_instruction_view(c->request->module, id, block.instruction_count - 1, &term);
     const XrLirEdgeView *selected = &term.edges[edge->edge - 1];
-    if (!c_values_scalar_count(c, selected)) return;
+    if (!c_values_scalar_count(c, selected) || c_values_private_scalars(c, selected)) return;
     c_format(c, "typedef struct XrlScalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " {\n", c->function.id, edge->block, edge->edge);
     for (uint32_t a = 0; a < selected->argument_count && c_request_poll(c); ++a)
         if (!c->homes->values[selected->arguments[a]].type) {
@@ -374,7 +392,15 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     c_text(c, "    {\n");
     c_values_ensure(c,0);
     uint32_t scalars = c_values_scalar_count(c, edge);
-    if (scalars) {
+    bool private_scalars = c_values_private_scalars(c, edge);
+    if (private_scalars) {
+        /* Snapshot all sources before the transaction or any phi assignment. */
+        for (uint32_t a = 0; a < edge->argument_count && c_request_poll(c); ++a)
+            if (!c->homes->values[edge->arguments[a]].type) {
+                c_format(c, "    %s xrl_phi_%" PRIu32 " = ", c_type(c,c_value_type(c,edge->arguments[a])), a);
+                c_value(c,edge->arguments[a]); c_text(c,";\n");
+            }
+    } else if (scalars) {
         c_format(c, "    XrlScalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " values = {", c->function.id, c->block, selected);
         bool first = true;
         for (uint32_t a = 0; a < edge->argument_count && c_request_poll(c); ++a)
@@ -389,7 +415,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         c_format(c, "    XrtPlacePublication scalar_publication = {xrl_scalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &values};\n", c->function.id, c->block, selected);
     }
     c_format(c, "    XrtManagedStatus status = xrl_edge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(xrl_frame, xrl_payload, %s",
-        c->function.id, c->block, selected, scalars ? "&scalar_publication" : "NULL");
+        c->function.id, c->block, selected, scalars && !private_scalars ? "&scalar_publication" : "NULL");
     for (size_t a = 0; a < home->count && c_request_poll(c); ++a) {
         XrLirHomeTransfer transfer = c->homes->transfers[home->first + a];
         if (transfer.borrowed_owner_workspace != SIZE_MAX && !transfer.target_workspace) {
@@ -399,6 +425,15 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         c_text(c, ", &"); c_value(c, transfer.target); c_text(c, ", &"); c_value(c, transfer.source);
     }
     c_text(c, ");\n    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n");
+    if (private_scalars) {
+        /* Failure is nonreturning. All old owners have retired successfully;
+         * only now publish the private, already snapshotted scalar values. */
+        for (uint32_t a = 0; a < edge->argument_count && c_request_poll(c); ++a)
+            if (!c->homes->values[edge->arguments[a]].type) {
+                c_text(c,"    "); c_value(c,target.parameters[a]);
+                c_format(c," = xrl_phi_%" PRIu32 ";\n",a);
+            }
+    }
     c_format(c, "    goto bb%" PRIu32 ";\n    }\n", edge->target);
     return true;
 }

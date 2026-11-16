@@ -567,6 +567,39 @@ static void slice_c_reader_has_no_owners(const char *text) {
     const char *frame = strstr(reader, "xrl_frame"), *retain = strstr(reader, "xrt_managed_retain(");
     CHECK((!frame || frame > end) && (!retain || retain > end));
 }
+static void scalar_edge_structure(const char *text,XrLirModule *module,XrLirFunction function,bool mixed) {
+    const char *cursor=strstr(text,"bb1: ;\n"); CHECK(cursor);
+    CHECK((strstr(text,"XrlScalars_") != NULL)==mixed);
+    CHECK((strstr(text,"xrl_phi_") == NULL)==mixed);
+    const uint32_t blocks[]={1,2,2},edges[]={1,1,2},targets[]={2,2,3};
+    for (size_t e=0;e<3;++e) {
+        char marker[192];
+        snprintf(marker,sizeof(marker),"XrtManagedStatus status = xrl_edge_%" PRIu32 "_%" PRIu32 "_%" PRIu32
+            "(xrl_frame, xrl_payload, %s",function.id,blocks[e],edges[e],mixed?"&scalar_publication":"NULL");
+        const char *call=strstr(cursor,marker); CHECK(call);
+        const char *failure=strstr(call,"if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n");
+        CHECK(failure);
+        snprintf(marker,sizeof(marker),"    goto bb%" PRIu32 ";\n",targets[e]);
+        const char *jump=strstr(failure,marker); CHECK(jump);
+        if (!mixed) {
+            XrLirBlockView target;
+            OK(xr_lir_block_view(module,(XrLirBlock){module,function.id,targets[e]},&target));
+            const char *failure_end=strchr(failure,'\n'); CHECK(failure_end && failure_end<jump);
+            const char *previous=cursor;
+            for (uint32_t a=1;a<target.parameter_count;++a) {
+                snprintf(marker,sizeof(marker),"    int64_t xrl_phi_%" PRIu32 " = ",a);
+                const char *snapshot=strstr(cursor,marker); CHECK(snapshot && snapshot>=previous && snapshot<call);
+                previous=snapshot+strlen(marker);
+                snprintf(marker,sizeof(marker),"    v%" PRIu32 " = xrl_phi_%" PRIu32 ";\n",target.parameters[a],a);
+                const char *publish=strstr(failure_end,marker); CHECK(publish && publish<jump);
+                const char *early=strstr(cursor,marker); CHECK(early==publish);
+            }
+            const char *null_argument=strstr(call,"xrl_payload, NULL"),*close=strstr(call,");\n");
+            CHECK(null_argument && close && null_argument+strlen("xrl_payload, NULL")==close && close<failure);
+        }
+        cursor=strchr(jump,'\n')+1;
+    }
+}
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
@@ -652,6 +685,8 @@ static void array_c_output(const char *name, const char *path) {
             CHECK(strstr(output.bytes,"xrt_managed_slot_adopt(") && strstr(output.bytes,"xrt_place_move_replace("));
     }
     if (!strncmp(name,"slice-boundary-",15)) slice_c_reader_has_no_owners(output.bytes);
+    if (!strncmp(name,"scalar-edge-",12))
+        scalar_edge_structure(output.bytes,m,root,!strcmp(name,"scalar-edge-mixed"));
     if (path) {
         FILE *file = fopen(path, "wb");
         CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
@@ -780,6 +815,8 @@ int main(int argc, char **argv) {
     static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
         "map-formal-state","map-formal-construct","map-formal-initialize"};
     for (size_t n=0;n<sizeof(map_formals)/sizeof(*map_formals);++n) array_c_output(map_formals[n],NULL);
+    array_c_output("scalar-edge-swap",NULL);
+    array_c_output("scalar-edge-mixed",NULL);
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();
@@ -823,9 +860,9 @@ int main(int argc, char **argv) {
         "state-uninitialized-read","state-uninitialized-write","repeat-i64","repeat-string",
         "repeat-empty-i64","repeat-empty-string","repeat-negative-i64","repeat-negative-string",
         "u8","u64","phi-u8","phi-u64","state-u8","state-u64","return-u8","return-u64",
-        "unsigned-spills-u8","unsigned-spills-u64"};
+        "unsigned-spills-u8","unsigned-spills-u64","scalar-edge-swap"};
     const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,19,10,0,0,0,0,
-        264,8,262,6,264,8,258,2,33586,-45150};
+        264,8,262,6,264,8,258,2,33586,-45150,2011};
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c)array_vm_fixture(cases[c],expected[c]);
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");
     return 0;
