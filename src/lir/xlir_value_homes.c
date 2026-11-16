@@ -569,6 +569,10 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(ownership, function.fact_offset + i, &fact) != XR_LIR_OK)
             return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "ownership event disappeared during projection");
+        if ((uint32_t)fact.view_cleanup>XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED ||
+            (fact.view_cleanup && (fact.kind!=XR_LIR_OWNERSHIP_VIEW_END ||
+             fact.view_operation!=XR_LIR_SLICE_OP_CLEANUP)))
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid physical Slice cleanup fact");
         if (!lir_home_binding_fact(b,fact) || !lir_home_workspace(b,fact)) return false;
         uint32_t view_workspace = 0;
         if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE || fact.kind == XR_LIR_OWNERSHIP_VIEW_END ||
@@ -582,6 +586,11 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
                 (fact.view_operation == XR_LIR_SLICE_OP_FORMAL_CLEANUP && !formal) ||
                 (fact.view_operation == XR_LIR_SLICE_OP_CLEANUP && formal))
                 return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice cleanup confused a formal and a real keeper");
+            if (fact.view_cleanup) {
+                const XrLirHomeWorkspace *workspace=&((const XrLirHomeWorkspace *)b->workspaces.data)[view_workspace-1];
+                if (formal || workspace->kind!=XR_LIR_HOME_WORKSPACE_VIEW_HOLD || workspace->value!=fact.value)
+                    return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"cleanup proof lost its independent keeper");
+            }
             if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE && view_workspace) {
                 XrLirHomeWorkspace *workspace = &((XrLirHomeWorkspace *)b->workspaces.data)[view_workspace - 1];
                 workspace->block = fact.block; workspace->instruction = fact.instruction;
@@ -603,7 +612,8 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
                 fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,
             .callable_function=fact.callable_function,.callable_scope=fact.callable_scope,
             .callable_transport=fact.callable_transport,.callable_materialize=fact.callable_materialize,.transfer_mode=fact.transfer_mode,
-            .view_operation=fact.view_operation,.view_workspace=view_workspace,.hold_transfer_mode=fact.hold_transfer_mode,
+            .view_operation=fact.view_operation,.view_workspace=view_workspace,.view_cleanup=fact.view_cleanup,
+            .hold_transfer_mode=fact.hold_transfer_mode,
             .view_storage=fact.view_storage,.view_parameter=fact.view_parameter,
             .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope};
         if (fact.cell_transport) {

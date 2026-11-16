@@ -14,7 +14,9 @@ struct XrLirOwnershipPlan {
     uint32_t type_count;
 };
 
-static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirCallableFacts **, uint8_t **);
+static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirCallableFacts **,
+    XrLirBlockConstructionFacts *);
+#include "xlir_cleanup_proof_internal.h"
 
 static void *lir_plan_allocate(size_t count, size_t size) {
     return size && count && count <= SIZE_MAX / size ? xr_calloc(count, size) : NULL;
@@ -299,12 +301,16 @@ static XrLirSliceStorage lir_plan_slice_storage(const XrLirFunctionData *f, uint
     return row->parameter && !row->block ? XR_LIR_SLICE_STORAGE_BORROWED_FORMAL : XR_LIR_SLICE_STORAGE_LOCAL_KEEPER;
 }
 static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule *m,
-    const XrLirFunctionData *f, const XrLirInstructionView *v, XrLirOwnershipFact fact) {
+    const XrLirFunctionData *f, const XrLirInstructionView *v, XrLirBlockConstructionFacts blocks,
+    XrLirOwnershipFact fact) {
     uint32_t value = 0;
     fact.view_parameter = UINT32_MAX;
     if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP) {
         fact.kind = XR_LIR_OWNERSHIP_VIEW_END; value = (uint32_t)v->bits;
         fact.view_operation = v->op == XR_LIR_SLICE_FORMAL_CLEANUP ? XR_LIR_SLICE_OP_FORMAL_CLEANUP : XR_LIR_SLICE_OP_CLEANUP;
+        if (v->op==XR_LIR_SLICE_CLEANUP &&
+            lir_cleanup_unconstructed(m,f,blocks,fact.block,fact.instruction,value))
+            fact.view_cleanup=XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED;
     } else if (v->op == XR_LIR_CALL && xr_lir_internal_slice_type(m, v->type)) {
         XrLirSliceFunctionFact callee;
         if (xr_lir_slice_function_fact(m, v->callee, &callee) != XR_LIR_OK ||
@@ -330,9 +336,13 @@ static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule 
     return lir_plan_add(plan, fact);
 }
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
-    const XrLirCallableFacts *callables, XrLirDiagnostic *d) {
+    const XrLirCallableFacts *callables, const XrLirBlockConstructionFacts *fresh, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
         const XrLirFunctionData *f = &m->functions[function - 1];
+        /* Only the private, already-finished receiver uses its immutable cache.
+         * Public collection supplies the maps from its own full verification. */
+        XrLirBlockConstructionFacts blocks=fresh ? fresh[function-1] :
+            (XrLirBlockConstructionFacts){f->block_multiplicity,f->block_cleanup_rank,f->block_multiplicity_count};
         if (!lir_plan_function(plan,m,f,function)) {
             lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"constructed ownership facts are missing");
             if (d) d->function = function;
@@ -369,7 +379,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
             }
             for (uint32_t i = 0; i < block->instruction_count; ++i) {
                 const XrLirInstructionView *v = &block->instructions[i].view;
-                if (!lir_plan_slice_boundary(plan,m,f,v,(XrLirOwnershipFact){.function=function,
+                if (!lir_plan_slice_boundary(plan,m,f,v,blocks,(XrLirOwnershipFact){.function=function,
                     .block=b + 1,.instruction=i + 1})) return XR_LIR_OUT_OF_MEMORY;
                 if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
                 if (!lir_plan_payload_binding(plan,m,f,v,(XrLirOwnershipFact){.function=function,
@@ -462,7 +472,8 @@ XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
 }
 
 static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
-    const XrLirCallableFacts *callables, XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
+    const XrLirCallableFacts *callables, const XrLirBlockConstructionFacts *fresh,
+    XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
     if (d) memset(d, 0, sizeof(*d));
     const XrLirModule *m = request ? request->module : NULL;
     if (!request || !output || *output || !xr_lir_module_is_readable(m) ||
@@ -497,7 +508,7 @@ static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
             return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "ownership plan allocation failed");
         }
     }
-    XrLirStatus status = lir_plan_collect(m, plan, callables, d);
+    XrLirStatus status = lir_plan_collect(m, plan, callables, fresh, d);
     if (status != XR_LIR_OK) {
         xr_lir_ownership_plan_destroy(plan);
         if (d && d->status == XR_LIR_OK) lir_status_error(d,status,"ownership event collection failed");
@@ -508,7 +519,7 @@ static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
 }
 XR_FUNC XrLirStatus xr_lir_internal_ownership_collect(const XrLirOwnershipRequest *request,
     XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
-    return lir_plan_receive(request,request && request->module ? request->module->callable_facts : NULL,output,d);
+    return lir_plan_receive(request,request && request->module ? request->module->callable_facts : NULL,NULL,output,d);
 }
 XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *request,
     XrLirOwnershipPlan **output, XrLirDiagnostic *d) {
@@ -516,8 +527,15 @@ XR_FUNC XrLirStatus xr_lir_ownership_plan_create(const XrLirOwnershipRequest *re
     if (!request || !output || *output || !xr_lir_module_is_readable(request->module))
         return lir_status_error(d,XR_LIR_INVALID_ARGUMENT,"invalid ownership plan request");
     XrLirCallableFacts *callables = NULL;
-    XrLirStatus status = lir_verify(request->module,d,&callables,NULL);
-    if (status == XR_LIR_OK) status = lir_plan_receive(request,callables,output,d);
+    const XrLirModule *m=request->module;
+    bool cleanup=lir_cleanup_module_rank_needed(m);
+    XrLirBlockConstructionFacts *fresh=cleanup ? lir_plan_allocate(m->function_count,sizeof(*fresh)) : NULL;
+    if (cleanup && !fresh) return lir_status_error(d,XR_LIR_OUT_OF_MEMORY,"cannot own cleanup construction facts");
+    XrLirStatus status = lir_verify(m,d,&callables,fresh);
+    if (status == XR_LIR_OK) status = lir_plan_receive(request,callables,fresh,output,d);
+    for (uint32_t f=0;fresh && f<m->function_count;++f)
+        xr_lir_internal_block_multiplicity_free(fresh[f].may_repeat);
+    xr_free(fresh);
     xr_lir_callable_facts_destroy(callables);
     return status;
 }
