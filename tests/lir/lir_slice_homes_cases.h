@@ -9,15 +9,24 @@
 static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOperation role,
     XrLirType result, const XrLirValue *args, uint32_t count) {
     uint32_t id = 0;
-    OK(xr_lir_slice_operation(c->module, role, c->element,
-        role == XR_LIR_SLICE_OP_NEW ? XR_LIR_ARRAY_CELL : 0, &id));
+    XrLirType binding = 0;
+    if (role == XR_LIR_SLICE_OP_NEW) OK(xr_lir_value_type(c->module, args[0], &binding));
+    OK(xr_lir_slice_operation(c->module, role, c->element, binding, &id));
     XrLirInstruction op = {.op=XR_LIR_CALL_INTRINSIC,.type=result,.intrinsic=id,.operands=args,.operand_count=count};
     XrLirValue value = {0};
     if (result == XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module, block, &op));
     else OK(xr_lir_emit_value(c->module, block, &op, &value));
     return value;
 }
-static XrLirModule *slice_fixture(XrLirType element, bool stale) {
+static void slice_write(CArrayFixture *c, XrLirBlock block, XrLirValue binding, bool alias) {
+    if (alias) binding = ca_value(c, block, XR_LIR_ARRAY_BORROW, XR_LIR_ARRAY_REF, &binding, 1);
+    XrLirType type; OK(xr_lir_value_type(c->module, binding, &type)); uint32_t id = 0;
+    OK(xr_lir_array_mutator(c->module, c->element, type, XR_LIR_ARRAY_OP_SET, &id));
+    XrLirValue args[] = {binding, ca_constant(c, block, 0), number(c, block, c->element, 99)};
+    XrLirInstruction write = {.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,.intrinsic=id,.operands=args,.operand_count=3};
+    OK(xr_lir_emit_effect(c->module, block, &write));
+}
+static XrLirModule *slice_fixture(XrLirType element, uint32_t invalid) {
     CArrayFixture c = {.element=element}; OK(xr_lir_module_create(NULL, &c.module));
     OK(xr_lir_slice_catalog_install(c.module)); XrLirType slice = 0;
     OK(xr_lir_slice_type(c.module, element, &slice));
@@ -38,17 +47,43 @@ static XrLirModule *slice_fixture(XrLirType element, bool stale) {
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, &original, 1);
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &original, 1);
     XrLirValue bound = slice_role(&c, join, XR_LIR_SLICE_OP_BIND, slice, &left, 1);
-    XrLirValue length = slice_role(&c, join, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, stale ? &original : &bound, 1);
+    if (invalid >= 2) slice_write(&c, join, binding, invalid == 3);
+    XrLirValue length = slice_role(&c, join, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, invalid == 1 ? &original : &bound, 1);
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &left, 1);
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &right, 1);
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &bound, 1);
     ca_return(&c, join, length);
     return c.module;
 }
+static XrLirModule *slice_state_fixture(XrLirType element, uint32_t mode) {
+    CArrayFixture c = {.element=element}; OK(xr_lir_module_create(NULL, &c.module)); OK(xr_lir_slice_catalog_install(c.module));
+    XrLirType slice = 0; OK(xr_lir_slice_type(c.module, element, &slice));
+    XrLirStateModule module = {0}; XrLirStateSlot slots[2] = {
+        {.payload=XR_LIR_ARRAY,.array_element=element,.mutable=true,.size=8,.alignment=8},
+        {.payload=XR_LIR_ARRAY,.array_element=element,.mutable=true,.offset=8,.size=8,.alignment=8}};
+    XrLirStateLayout layout = {.modules=&module,.module_count=1,.slots=slots,.slot_count=2,.payload_size=16,.payload_alignment=8};
+    OK(xr_lir_set_state_layout(c.module, &layout)); XrLirType parameter = XR_LIR_STATE; XrLirFunction fn = {0};
+    XrLirFunctionSpec signature = {.name="state_slice",.name_length=11,.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &signature, &fn)); OK(xr_lir_set_state_entry(c.module, fn));
+    OK(xr_lir_define_function(c.module, fn)); XrLirValue state = {0}; OK(xr_lir_function_parameter(c.module, fn, 0, &state));
+    XrLirBlock block = {0}; OK(xr_lir_create_block(c.module, fn, NULL, 0, &block)); OK(xr_lir_set_entry(c.module, fn, block));
+    XrLirInstruction ref = {.op=XR_LIR_STATE_REFERENCE,.type=XR_LIR_STATE_REF,.operands=&state,.operand_count=1};
+    XrLirValue reference = {0}; OK(xr_lir_emit_value(c.module, block, &ref, &reference));
+    XrLirValue binding = ca_value(&c, block, XR_LIR_ARRAY_BORROW, XR_LIR_ARRAY_REF, &reference, 1);
+    XrLirValue args[] = {binding, ca_constant(&c, block, 0), ca_constant(&c, block, 3)};
+    XrLirValue value = slice_role(&c, block, XR_LIR_SLICE_OP_NEW, slice, args, 3);
+    XrLirValue length = slice_role(&c, block, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, &value, 1);
+    if (mode == 2) (void)slice_role(&c, block, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &value, 1);
+    ref.bits = mode == 0 ? 1 : 0; OK(xr_lir_emit_value(c.module, block, &ref, &reference));
+    binding = ca_value(&c, block, XR_LIR_ARRAY_BORROW, XR_LIR_ARRAY_REF, &reference, 1);
+    slice_write(&c, block, binding, false);
+    if (mode != 2) (void)slice_role(&c, block, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &value, 1);
+    ca_return(&c, block, length); return c.module;
+}
 static void slice_homes(void) {
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_U8};
     for (size_t family = 0; family < 2; ++family) {
-        XrLirModule *module = slice_fixture(elements[family], false); OK(xr_lir_module_finish(module, NULL));
+        XrLirModule *module = slice_fixture(elements[family], 0); OK(xr_lir_module_finish(module, NULL));
         XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
         XrLirType slice = 0;
         for (uint32_t n = 0; n < xr_lir_constructed_type_count(module); ++n) {
@@ -80,9 +115,19 @@ static void slice_homes(void) {
         }
         fail_at = SIZE_MAX; xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
         xr_lir_module_destroy(module); CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
-        module = slice_fixture(elements[family], true); XrLirDiagnostic diagnostic = {0};
-        CHECK(xr_lir_module_finish(module, &diagnostic) == XR_LIR_VERIFY_ERROR &&
-            strcmp(diagnostic.message, "Slice use is outside its live loan") == 0);
-        xr_lir_module_destroy(module);
+        for (uint32_t invalid = 1; invalid <= 3; ++invalid) {
+            module = slice_fixture(elements[family], invalid); XrLirDiagnostic diagnostic = {0};
+            CHECK(xr_lir_module_finish(module, &diagnostic) == XR_LIR_VERIFY_ERROR && strcmp(diagnostic.message,
+                invalid == 1 ? "Slice use is outside its live loan" : "Array binding write conflicts with a live readonly Slice loan") == 0);
+            xr_lir_module_destroy(module);
+        }
+        for (uint32_t mode = 0; mode < 3; ++mode) {
+            module = slice_state_fixture(elements[family], mode); XrLirDiagnostic diagnostic = {0};
+            XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
+            if (mode == 1) CHECK(status == XR_LIR_VERIFY_ERROR && strcmp(diagnostic.message,
+                "Array binding write conflicts with a live readonly Slice loan") == 0);
+            else CHECK(status == XR_LIR_OK);
+            xr_lir_module_destroy(module);
+        }
     }
 }

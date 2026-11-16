@@ -358,6 +358,8 @@ static void slice_layouts(void) {
     LIR(xr_lir_import_type(received, module, slices[1], &imported));
     XrLirTypeView shape; LIR(xr_lir_type_view(received, imported, &shape));
     CHECK(shape.kind == XR_LIR_TYPE_SLICE && shape.element == XR_LIR_U8 && !shape.count);
+    XrLirType rejected_optional = 0;
+    CHECK(xr_lir_nullable_type(received, imported, &rejected_optional) == XR_LIR_INVALID_ARGUMENT && !rejected_optional);
     LIR(xr_lir_slice_catalog_install(module));
     for (uint32_t family = 0; family < 2; ++family) {
         XrLirType element = family ? XR_LIR_U8 : XR_LIR_I64;

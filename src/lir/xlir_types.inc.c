@@ -80,6 +80,7 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
     if (!xr_lir_internal_type_valid(m, payload, true) || payload >= XR_LIR_TYPE_COUNT + ordinal) return false;
     if (payload == XR_LIR_ARRAY) return xr_lir_internal_array_element(element);
     if (element) return false;
+    if (xr_lir_internal_slice_type(m, payload)) return false;
     if (payload < XR_LIR_TYPE_COUNT) return lir_pod_scalar(payload) < XR_POD_SCALAR_COUNT ||
         payload == XR_LIR_STRING || payload == XR_LIR_MAP_STRING_I64;
     return true;
@@ -127,7 +128,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
         if (!xr_pod_scalar_layout(lir_pod_scalar(shape.element), &payload)) return false;
     } else {
         XrLirTypeLayout child = m->types[shape.element - XR_LIR_TYPE_COUNT].layout;
-        if (child.managed || child.size > UINT32_MAX) return false;
+        if (child.managed || child.size > UINT32_MAX || xr_lir_internal_slice_type(m, shape.element)) return false;
         payload = (XrPodLayout){(uint32_t)child.size, child.alignment, child.scalar_count};
     }
     XrPodLayout layout;
