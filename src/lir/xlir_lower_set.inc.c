@@ -25,7 +25,8 @@ static bool lower_set_instruction(LowerFunction *f,uint32_t block,uint32_t index
     uint32_t result=f->source->parameter_count+index;*handled=false;
     if(op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE) {
         XrXirType type=op->op==XR_XIR_PLACE_WRITE?xr_xir_operand_type(f->source,op->args[0]):op->type;
-        if(!lower_set_type(c,type))return true;*handled=true;
+        if(!lower_set_type(c,type))return true;
+        *handled=true;
         if(op->op==XR_XIR_CELL_PLACE) {
             if(f->array_places && f->array_places[result]!=UINT32_MAX)return true;
             return lower_value(f,op->args[0],&f->values[result]);

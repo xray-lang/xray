@@ -83,8 +83,9 @@ static bool lir_record_declaration_consistent(const XrLirModule *m, const XrLirR
 }
 
 static char *lir_record_text_copy(XrLirModule *m, const char *text, uint32_t length) {
-    if (SIZE_MAX - (size_t)length < 1) { lir_fail(m, XR_LIR_INVALID_ARGUMENT); return NULL; }
-    char *copy = lir_allocate(m, (size_t)length + 1, 1);
+    size_t bytes = (size_t)length + 1;
+    if (bytes <= length) { lir_fail(m, XR_LIR_INVALID_ARGUMENT); return NULL; }
+    char *copy = lir_allocate(m, bytes, 1);
     if (copy) { memcpy(copy, text, length); copy[length] = 0; }
     return copy;
 }

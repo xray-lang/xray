@@ -111,7 +111,8 @@ static bool source_collection_type_failure(SourceContext *ctx,AstNode *node,cons
         if(!pass) {
             if(texts[n].used==SIZE_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"collection type diagnostic exceeds format limit");
             texts[n].capacity=texts[n].used;texts[n].bytes=source_alloc(ctx,texts[n].used+1,1);
-            if(!texts[n].bytes)return false;texts[n].used=0;
+            if(!texts[n].bytes)return false;
+            texts[n].used=0;
         }
     }
     AstNode **items=map?(key?node->as.map_literal.keys:node->as.map_literal.values):node->as.array_literal.elements;

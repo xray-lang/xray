@@ -77,7 +77,8 @@ static bool source_collection_hint_prepare(SourceContext *ctx,AstNode *node,cons
     if(binding && initializer==node) {
         size_t length=source_text_size(ctx,binding->as.var_decl.name);
         char *owned=source_alloc(ctx,length+1,1);if(!owned || !source_copy_bytes(ctx,node,owned,binding->as.var_decl.name,length))return false;
-        if(length && owned[0]>='a' && owned[0]<='z')owned[0]=(char)(owned[0]-'a'+'A');name=owned;
+        if(length && owned[0]>='a' && owned[0]<='z')owned[0]=(char)(owned[0]-'a'+'A');
+        name=owned;
     }
     *out=(SourceCollectionHint){map,!map,name,values};return true;
 }

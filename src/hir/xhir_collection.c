@@ -57,7 +57,8 @@ static XrXirStatus collection_key_equal(const XrHirCollectionEntry *a,const XrHi
     XrXirLiteral x=a->constant.string,y=b->constant.string;
     if(x.length!=y.length){*output=false;return XR_XIR_OK;}
     int order=0;XrXirStatus status=xir_receive_compare(control,x.bytes,y.bytes,x.length,&order);
-    if(status==XR_XIR_OK)*output=!order;return status;
+    if(status==XR_XIR_OK)*output=!order;
+    return status;
 }
 XR_FUNC XrXirStatus xr_hir_collection_entry_types(const XrXirTypes *types,XrHirCollectionKind kind,
     const XrHirCollectionEntry *input,XrHirCollection *out,XrHirCollectionError *error) {

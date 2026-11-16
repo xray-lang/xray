@@ -22,7 +22,8 @@ static XrXirStatus body_collection_provenance(const XrHirCollectionConstructInpu
     for(size_t offset=0;offset<literal->file.length;) {
         status=body_poll(control);if(status!=XR_XIR_OK)return status;
         size_t count=literal->file.length-offset;if(count>4096)count=4096;
-        if(memchr(literal->file.bytes+offset,0,count))return XR_XIR_BAD_STRUCTURE;offset+=count;
+        if(memchr(literal->file.bytes+offset,0,count))return XR_XIR_BAD_STRUCTURE;
+        offset+=count;
     }
     for(uint32_t n=0;n<literal->count;++n) {
         if(!(n%64)){status=body_poll(control);if(status!=XR_XIR_OK)return status;}
@@ -89,7 +90,8 @@ static XrXirStatus body_collection_map_project(const HirBodyCollection *owned,
         literal->file.length!=expected.file.length || (!!literal->file.bytes!=!!expected.file.bytes) ||
         (!!literal->items!=!!expected.items))return XR_XIR_BAD_STRUCTURE;
     int order=0;XrXirStatus status=xir_receive_compare(control,literal->file.bytes,expected.file.bytes,expected.file.length,&order);
-    if(status!=XR_XIR_OK)return status;if(order)return XR_XIR_BAD_STRUCTURE;
+    if(status!=XR_XIR_OK)return status;
+    if(order)return XR_XIR_BAD_STRUCTURE;
     for(uint32_t n=0;n<literal->count;++n) {
         if(!(n%64)){status=body_poll(control);if(status!=XR_XIR_OK)return status;}
         XrXirMapLiteralOrigin a=literal->items[n],b=expected.items[n];
