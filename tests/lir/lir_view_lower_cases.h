@@ -15,7 +15,7 @@ static void view_cold_checked_sources(const char *programs) {
     char directory[2048];
     int written = snprintf(directory, sizeof(directory), "%s/../../fixtures/lir_cli/array_lower", programs);
     CHECK(written > 0 && (size_t)written < sizeof(directory));
-    const char *names[] = {"view_return", "view_module_alias", "view_phi", "view_conditional_cleanup",
+    const char *names[] = {"view_return", "view_module_alias", "view_module_const", "view_phi", "view_conditional_cleanup",
         "view_copy_argument", "view_copy_unused_parameter", "string_append_values", "string_append_ref",
         "string_join", "string_append_loop", "string_parameter_loop", "panic_nullable_string_append", "readonly_byte_slice"};
     for (uint32_t n = 0; n < sizeof(names) / sizeof(*names); ++n) {

@@ -527,9 +527,14 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             if (xr_lir_internal_slice_intrinsic_valid(m, entry)) {
                 XrLirSliceIntrinsic slice;
                 if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result) ||
-                    xr_lir_slice_intrinsic_view(m, entry->id, &slice) != XR_LIR_OK ||
-                    (slice.operation == XR_LIR_SLICE_OP_NEW &&
-                        f->values[v->operands[0] - 1].array_element != slice.element)) goto invalid;
+                    xr_lir_slice_intrinsic_view(m, entry->id, &slice) != XR_LIR_OK) goto invalid;
+                if (slice.operation == XR_LIR_SLICE_OP_NEW) {
+                    const XrLirValueData *binding = &f->values[v->operands[0] - 1];
+                    if (slice.binding_type == XR_LIR_STATE_REF) {
+                        if (binding->state_reference.payload != XR_LIR_ARRAY ||
+                            binding->state_reference.array_element != slice.element) goto invalid;
+                    } else if (binding->array_element != slice.element) goto invalid;
+                }
                 return XR_LIR_OK;
             }
             if (entry->operation) {
