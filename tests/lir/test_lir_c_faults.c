@@ -391,6 +391,31 @@ static void managed_state_boundaries(const char *path) {
     CHECK(!runtime_live && !runtime_bytes);
     puts("State images, mixed String/reference cache edges, allocator faults and producer retirement PASS");
 }
+static void cell_memory_boundaries(void) {
+    XrLirModule *module = NULL; CHECK(xr_lir_module_create(NULL,&module) == XR_LIR_OK);
+    XrLirType cell = 0; CHECK(xr_lir_cell_type(module,(XrLirCellType){XR_LIR_I64,0},&cell) == XR_LIR_OK);
+    XrLirFunction entry = {0}; XrLirBlock block = {0};
+    CHECK(xr_lir_declare_function(module,&(XrLirFunctionSpec){.name="cell",.name_length=4,.result=XR_LIR_I64},&entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module,entry) == XR_LIR_OK);
+    CHECK(xr_lir_add_block(module,entry,NULL,0,&block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module,entry,block) == XR_LIR_OK);
+    XrLirValue seed = {0}, identity = {0}, copied = {0}, result = {0};
+    CHECK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=42},&seed) == XR_LIR_OK);
+    CHECK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=cell,.operands=&seed,.operand_count=1},&identity) == XR_LIR_OK);
+    CHECK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_VALUE_RETAIN,.type=cell,.operands=&identity,.operand_count=1},&copied) == XR_LIR_OK);
+    CHECK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_I64,.operands=&copied,.operand_count=1},&result) == XR_LIR_OK);
+    CHECK(xr_lir_emit_effect(module,block,&(XrLirInstruction){.op=XR_LIR_VALUE_DROP,.type=XR_LIR_UNIT,.operands=&copied,.operand_count=1}) == XR_LIR_OK);
+    CHECK(xr_lir_set_terminator(module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1}) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module,NULL) == XR_LIR_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module,entry,resources,"cell-publication-fault",NULL};
+    control_boundaries(&request); XrLirCOutput output = memory_boundaries(&request);
+    xr_lir_module_destroy(module); xr_compile_resources_release(resources);
+    CHECK(strstr(output.bytes,"xrt_native_cell_create") && strstr(output.bytes,"xrt_native_cell_i64_read") &&
+        strstr(output.bytes,"xrt_inline_value_replace") && output.entry_result == XR_LIR_I64);
+    xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
+}
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
         edge_control_boundaries(); return 0;
@@ -467,6 +492,7 @@ int main(int argc, char **argv) {
     CHECK(!output.bytes && !output.length && !output.entry_result && !runtime_live && !runtime_bytes);
     literal_memory_boundaries();
     fixed_memory_boundaries();
+    cell_memory_boundaries();
     puts("representative C workspace/text failures and cancellation passed");
     puts("output survives module, caller memory reference, control/context destruction; physical zero PASS");
     return 0;

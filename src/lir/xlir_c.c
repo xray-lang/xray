@@ -56,7 +56,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, maps;
-    bool string_values, inline_values, callables;
+    bool string_values, inline_values, callables, cells;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -70,6 +70,8 @@ typedef struct LirC {
     uint8_t *callable_cycles;
     const XrLirHomeEvent **callable_events;
     size_t callable_scope_event;
+    const XrLirHomeEvent **cell_events;
+    size_t cell_operation_cursor, cell_scope_cursor;
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
 } LirC;
@@ -87,6 +89,9 @@ static void c_values_ensure(LirC *, uint32_t);
 static void c_values_replace_begin(LirC *, uint32_t, uint32_t);
 static void c_values_replace_end(LirC *, uint32_t);
 static bool c_values_owned_type(LirC *, XrLirType);
+static void c_cell_scope_release(LirC *, uint32_t);
+static void c_cell_events_prepare(LirC *);
+static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -229,11 +234,27 @@ static bool c_located(const XrLirSource *source) {
 }
 static bool c_scalar(LirC *, XrLirType);
 static void c_visit(LirC *, uint32_t);
+static bool c_cell_type(const LirC *c, XrLirType type, XrLirCellType *cell) {
+    return xr_lir_cell_value_type(c->request->module,type,cell);
+}
+static bool c_cell_point(LirC *c, const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_FUNCTION_BIND || v->op == XR_LIR_FUNCTION_SCOPE_LEAVE)
+        return v->result && c_cell_type(c,v->type,NULL);
+    return (v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_MAP_BORROW ||
+        v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP) && v->operand_count &&
+        c_cell_type(c,c_value_type(c,v->operands[0]),NULL);
+}
 #include "xlir_c_fixed.inc.c"
 #include "xlir_c_nullable.inc.c"
 #include "xlir_c_callable.inc.c"
 static bool c_scalar(LirC *c, XrLirType type) {
     XrLirTypeView shape = {0};
+    XrLirCellType cell;
+    if (c_cell_type(c,type,&cell)) {
+        c->runtime = c->cells = true;
+        c->maps |= cell.payload == XR_LIR_MAP_STRING_I64;
+        return true;
+    }
     if (type == XR_LIR_FUNCTION_SCOPE || c_callable_type(c,type,NULL)) {
         c->callables = true;
         return true;
@@ -270,11 +291,6 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
-    if (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) {
-        XrLirCellType cell;
-        XrLirType type = v->op == XR_LIR_CELL_NEW ? v->type : c_value_type(c, v->operands[0]);
-        if (xr_lir_cell_type_view(c->request->module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64)) return true;
-    }
     if (c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
@@ -356,6 +372,14 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
+    if (c_cell_point(c,v)) {
+        c->runtime = c->cells = true;
+        if (c_located(&v->source)) {
+            if (c->location_count == UINT32_MAX) c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
+            else ++c->location_count;
+        }
+        return;
+    }
     if (v->op == XR_LIR_RET && v->operand_count && c_callable_type(c,c->view.result,NULL)) {
         XrLirCallableValueFact returned;
         if (!c_callable_fact(c,v->operands[0],&returned)) return;
@@ -521,6 +545,10 @@ static void c_admit(LirC *c) {
             return;
         c_view_admit_signature(c);
         c_array_admit_shapes(c);
+        if (!lir_definition_cell_captures(c->request->module,c->function,&c->view)) {
+            c_error(c,XR_LIR_C_UNSUPPORTED,"Cell values require a verified capture formal; Cell result and host ABI remain closed");
+            return;
+        }
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
             c->runtime = true;
             continue;
@@ -593,7 +621,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_callable_point(c,&v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_cell_point(c,&v) && !c_callable_point(c,&v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
                      !c_nullable_managed_point(c, &v) &&
                      !c_arithmetic_point(c, &v) &&
                      v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
@@ -820,6 +848,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
+    if (c_cell_point(c,v)) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_cell_instruction(c,v,source); return;
+    }
     if (c_callable_point(c,v)) {
         uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
         c_callable_instruction(c,v,source); return;
@@ -1041,7 +1073,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->callables) c_text(c,"#include \"xray_native_function.h\"\n");
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->string_values || c->arrays || c->maps || c->inline_values || c->views) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
+    if (c->string_values || c->arrays || c->maps || c->inline_values || c->views || c->cells) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
@@ -1079,6 +1111,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_prepare_divisors(c);
         c_values_function(c);
         c_callable_events_prepare(c);
+        c_cell_events_prepare(c);
         c_signature(c, true);
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);
@@ -1131,6 +1164,7 @@ static void c_verify_text(LirC *c) {
     c_error(c, mapped, "C output verifier could not complete");
 }
 #include "xlir_c_value_types.inc.c"
+#include "xlir_c_cell.inc.c"
 #include "xlir_c_value_transfers.inc.c"
 #include "xlir_c_values.inc.c"
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
@@ -1228,6 +1262,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.constructed_types);
     xr_compile_resources_free(c.callable_cfg);
     xr_compile_resources_free(c.callable_events);
+    xr_compile_resources_free(c.cell_events);
     c_values_destroy(&c);
     return c.status;
 }

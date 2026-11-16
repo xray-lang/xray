@@ -126,7 +126,7 @@ static void captured_cell_frame_extent(void) {
         CHECK(status == (mutation == 2 ? XR_LIR_OK : XR_LIR_VERIFY_ERROR));
         if (mutation == 2) {
             callable_rbc_unavailable(c.module, root);
-            callable_c_rejected(c.module, root, XR_LIR_C_UNSUPPORTED);
+            callable_c_supported(c.module, root, true);
         }
         xr_lir_module_destroy(c.module);
     }

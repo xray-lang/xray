@@ -37,6 +37,7 @@
 #include "lir_captured_cell_cases.h"
 #include "lir_tuple_cases.h"
 #include "lir_map_cases.h"
+#include "lir_c_cell_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -434,6 +435,10 @@ static void array_c_output(const char *name, const char *path) {
     else if (!strcmp(name, "function-owned-return")) callable_factory_fixture(&m, &root, false);
     else if (!strcmp(name, "function-scoped-owned-return")) callable_factory_fixture_mode(&m, &root, false, true);
     else if (!strcmp(name,"callable-weaken")) callable_direct_weak_fixture(&m,&root);
+    else if (!strcmp(name,"cell-i64-frame")) callable_cell_c_fixture(&m,&root,false,false);
+    else if (!strcmp(name,"cell-i64-owned")) callable_cell_c_fixture(&m,&root,false,true);
+    else if (!strcmp(name,"cell-map-frame")) callable_cell_c_fixture(&m,&root,true,false);
+    else if (!strcmp(name,"cell-map-owned")) callable_cell_c_fixture(&m,&root,true,true);
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
@@ -520,6 +525,11 @@ int main(int argc, char **argv) {
     tuple_group_admission();
     callable_owned_factory_cases();
     captured_cell_frame_extent();
+    for (unsigned shape = 0; shape < 4; ++shape) {
+        XrLirModule *cell_module = NULL; XrLirFunction cell_root = {0};
+        callable_cell_c_fixture(&cell_module,&cell_root,(shape & 1) != 0,(shape & 2) != 0);
+        callable_c_supported(cell_module,cell_root,(shape & 2) != 0); xr_lir_module_destroy(cell_module);
+    }
     callable_owned_edge_binding();
     view_receiving_owners();
     callable_backend_frontier();

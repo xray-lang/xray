@@ -155,7 +155,7 @@ static void c_values_prepare(LirC *c) {
     for (size_t t = 1; t < type_count + 4; ++t)
         if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0, 0} :
             (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count], 0};
-    bool environment_values = false;
+    bool environment_values = c->cells;
     for (uint32_t f = 0; f < function_count; ++f) if (environments[f]) {
         XrLirClosureTarget target = {0};
         if (xr_lir_closure_target_view(module,(XrLirFunction){module,f + 1},&target) != XR_LIR_OK) {
@@ -228,7 +228,8 @@ static void c_values_declarations(LirC *c) {
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
 }
 static bool c_values_declare(LirC *c, uint32_t value) {
-    if (c->homes && c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW)
+    if (c->homes && c->homes->bindings && (c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW ||
+        c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW))
         c_format(c, "    XrtExternalOwner xrl_array_binding%" PRIu32 ";\n", value);
     return c->homes && (c->homes->values[value].owner_count || c->homes->values[value].view_workspace ||
         (c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_LOCAL));
@@ -358,6 +359,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     XrLirBlockView target;
     xr_lir_block_view(c->request->module, (XrLirBlock){c->request->module, c->function.id, edge->target}, &target);
     c_text(c, "    {\n");
+    c_values_ensure(c,0);
     uint32_t scalars = c_values_scalar_count(c, edge);
     if (scalars) {
         c_format(c, "    XrlScalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " values = {", c->function.id, c->block, selected);
@@ -377,6 +379,9 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         c->function.id, c->block, selected, scalars ? "&scalar_publication" : "NULL");
     for (size_t a = 0; a < home->count && c_request_poll(c); ++a) {
         XrLirHomeTransfer transfer = c->homes->transfers[home->first + a];
+        if (transfer.borrowed_owner_workspace != SIZE_MAX) {
+            c_text(c,", &"); c_value(c,transfer.source); continue;
+        }
         if (c->homes->values[transfer.target].owner_count) continue;
         c_text(c, ", &"); c_value(c, transfer.target); c_text(c, ", &"); c_value(c, transfer.source);
     }

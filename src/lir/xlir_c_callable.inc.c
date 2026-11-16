@@ -180,12 +180,13 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
                             c_error(c,XR_LIR_C_UNSUPPORTED,"escaping callable capture has no owning lifetime"); return false;
                         }
                     }
-                    if (!scalar && type != XR_LIR_MAP_STRING_I64 && !callable) {
+                    if (!scalar && type != XR_LIR_MAP_STRING_I64 && !callable && !c_cell_type(c,type,NULL)) {
                         c_error(c,XR_LIR_C_UNSUPPORTED,"escaping capture has no admitted environment value plan"); return false;
                     }
                     continue;
                 }
-                if (type == XR_LIR_I64_CELL || type == XR_LIR_STATE || type == XR_LIR_STATE_REF || c_callable_type(c,type,NULL)) continue;
+                if (type == XR_LIR_I64_CELL || type == XR_LIR_STATE || type == XR_LIR_STATE_REF ||
+                    c_callable_type(c,type,NULL) || c_cell_type(c,type,NULL)) continue;
                 if (xr_lir_type_layout(c->request->module,type,&layout) != XR_LIR_OK || layout.managed) {
                     c_error(c,XR_LIR_C_UNSUPPORTED,"Frame capture requires an established borrowed payload lifetime"); return false;
                 }
@@ -348,5 +349,8 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint3
     } else if (v->op == XR_LIR_CELL_WRITE) {
         c_text(c,"    *"); c_value(c,v->operands[0]); c_text(c," = "); c_value(c,v->operands[1]); c_text(c,";\n");
     }
-    if (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) c_callable_scope_release(c);
+    if (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) {
+        c_callable_scope_release(c);
+        c_cell_scope_release(c,source);
+    }
 }

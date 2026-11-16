@@ -79,6 +79,29 @@ static void c_value_frame(LirC *c, const XrLirValueHomes *homes) {
         "        return cleanup == XRT_MANAGED_OK ? status : cleanup;\n    }\n"
         "    *output = frame; *payload = bytes;\n    return XRT_MANAGED_OK;\n}\n");
 }
+static const XrLirHomeWorkspace *c_value_borrow_stage(LirC *c, const XrLirValueHomes *homes,
+    XrLirHomeTransfer transfer, const XrLirHomeEdge *edge) {
+    const XrLirValueHome *source = &homes->values[transfer.source], *target = &homes->values[transfer.target];
+    if (transfer.borrowed_owner_workspace >= homes->workspace_count || source->cell_transport != XR_LIR_CELL_TRANSPORT_BORROW ||
+        !source->parameter || source->owner_count || target->cell_transport != XR_LIR_CELL_TRANSPORT_OWNED ||
+        target->owner_count != 1 || source->type != target->type || transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Cell edge lost its borrowed-source staging contract"); return NULL;
+    }
+    const XrLirHomeWorkspace *stage = &homes->workspaces[transfer.borrowed_owner_workspace];
+    if (!target->type || target->type > c->value_types->count ||
+        c->value_types->rows[target->type - 1].spec.kind != XRT_VALUE_CELL ||
+        !source->cell_payload_type || source->cell_payload_type != target->cell_payload_type) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Cell edge stage lost its same-image identity plan"); return NULL;
+    }
+    if (stage->kind != XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE || stage->type != target->type || stage->value != transfer.source ||
+        stage->block != edge->block || !stage->instruction ||
+        stage->first_owner >= homes->frame.slot_count || stage->first_owner == target->first_owner ||
+        stage->first_owner == target->temporary_first_owner || homes->frame.owned_offsets[stage->first_owner] != stage->offset ||
+        stage->temporary_offset != SIZE_MAX || stage->temporary_first_owner != SIZE_MAX) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Cell edge stage is not a distinct real owner"); return NULL;
+    }
+    return stage;
+}
 static size_t c_value_edge_owners(LirC *c, const XrLirValueHomes *homes,
     const LirCEdgeEvents *events, const XrLirHomeEdge *edge) {
     size_t count = 0;
@@ -107,7 +130,9 @@ static size_t c_value_edge_owners(LirC *c, const XrLirValueHomes *homes,
             c_error(c, XR_LIR_C_INVALID_LIR, "owned C edge has no matching final ownership event");
             return 0;
         }
-        if (source->owner_count != target->owner_count ||
+        bool staged = transfer.borrowed_owner_workspace != SIZE_MAX;
+        if (staged && !c_value_borrow_stage(c,homes,transfer,edge)) return 0;
+        if ((!staged && source->owner_count != target->owner_count) ||
             (transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY &&
              transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned C edge requires exact source leaves and a final transfer mode");
@@ -126,7 +151,11 @@ static void c_value_edge_parameters(LirC *c, const XrLirValueHomes *homes,
     bool first = !managed;
     if (managed) c_text(c, "XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars");
     for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
-        const XrLirValueHome *target = &homes->values[homes->transfers[edge->first + i].target];
+        XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
+        const XrLirValueHome *target = &homes->values[transfer.target];
+        if (transfer.borrowed_owner_workspace != SIZE_MAX) {
+            c_format(c,", const XrlValue_%" PRIu32 " *borrowed_%zu",target->type,i); continue;
+        }
         if (target->owner_count) continue;
         c_format(c, "%sXrlValue_%" PRIu32 " *destination_%zu, const XrlValue_%" PRIu32 " *source_%zu",
             first ? "" : ", ", target->type, i, target->type, i);
@@ -196,6 +225,11 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
         return;
     }
     c_text(c, "    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;\n");
+    size_t borrowed = 0;
+    for (size_t i = 0; i < edge->count; ++i) borrowed += homes->transfers[edge->first + i].borrowed_owner_workspace != SIZE_MAX;
+    if (borrowed) {
+        c_text(c,"    size_t staged = 0;\n    XrtManagedStatus status = XRT_MANAGED_OK;\n");
+    }
     c_format(c, "    XrtPlaceEdge owners[%zu] = {\n", owners);
     for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
         XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
@@ -208,10 +242,11 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
                 to->first_owner, from->first_owner, to->temporary_first_owner,
                 transfer.hold_transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY ? "XRT_PLACE_TRANSFER_COPY" : "XRT_PLACE_TRANSFER_MOVE");
         }
+        const XrLirHomeWorkspace *stage = transfer.borrowed_owner_workspace != SIZE_MAX ? c_value_borrow_stage(c,homes,transfer,edge) : NULL;
         for (size_t leaf = 0; leaf < target->owner_count && c_request_poll(c); ++leaf)
             c_format(c, "        {{frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, %s},\n",
-                target->first_owner + leaf, source->first_owner + leaf, target->temporary_first_owner + leaf,
-                transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY ? "XRT_PLACE_TRANSFER_COPY" : "XRT_PLACE_TRANSFER_MOVE");
+                target->first_owner + leaf, stage ? stage->first_owner : source->first_owner + leaf, target->temporary_first_owner + leaf,
+                !stage && transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY ? "XRT_PLACE_TRANSFER_COPY" : "XRT_PLACE_TRANSFER_MOVE");
     }
     c_text(c, "    };\n");
     c_format(c, "    XrlEdge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " context = {payload, scalars", f, b, e);
@@ -220,7 +255,32 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
             c_format(c, ", destination_%zu, source_%zu", i, i);
     c_text(c, "};\n");
     c_format(c, "    XrtPlacePublication publication = {xrl_publish_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &context};\n", f, b, e);
-    c_format(c, "    return xrt_place_edge_transfer(owners, %zu, &publication);\n}\n", owners);
+    for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
+        XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
+        if (transfer.borrowed_owner_workspace == SIZE_MAX) continue;
+        const XrLirHomeWorkspace *stage = c_value_borrow_stage(c,homes,transfer,edge);
+        if (!stage) return;
+        c_format(c,"    { XrtManagedHeader *incoming = borrowed_%zu ? *borrowed_%zu : NULL;\n",i,i);
+        c_text(c,"      if (!incoming) { status = XRT_MANAGED_ARGUMENT; goto xrl_borrow_failed; }\n"
+            "      if (!xrt_managed_retain(incoming)) { status = XRT_MANAGED_REFCOUNT; goto xrl_borrow_failed; }\n");
+        c_format(c,"      status = xrt_managed_slot_adopt(frame, %zu, &incoming);\n",stage->first_owner);
+        c_text(c,"      if (status != XRT_MANAGED_OK) { xrt_managed_drop(incoming); goto xrl_borrow_failed; }\n      ++staged;\n    }\n");
+    }
+    if (!borrowed) c_format(c, "    return xrt_place_edge_transfer(owners, %zu, &publication);\n}\n", owners);
+    else {
+        c_format(c,"    status = xrt_place_edge_transfer(owners, %zu, &publication);\n",owners);
+        c_text(c,"    if (status == XRT_MANAGED_OK) return status;\nxrl_borrow_failed:\n");
+        size_t ordinal = borrowed;
+        for (size_t n = edge->count; n && c_request_poll(c); --n) {
+            XrLirHomeTransfer transfer = homes->transfers[edge->first + n - 1];
+            if (transfer.borrowed_owner_workspace == SIZE_MAX) continue;
+            const XrLirHomeWorkspace *stage = c_value_borrow_stage(c,homes,transfer,edge);
+            if (!stage) return;
+            c_format(c,"    if (staged > %zu) { XrtManagedStatus cleanup = xrt_managed_slot_drop(frame, %zu);\n",--ordinal,stage->first_owner);
+            c_text(c,"        if (cleanup != XRT_MANAGED_OK) status = cleanup;\n    }\n");
+        }
+        c_text(c,"    return status;\n}\n");
+    }
 }
 
 static void c_value_landing_type(LirC *c, LirCValueTypes *types, uint32_t type) {
