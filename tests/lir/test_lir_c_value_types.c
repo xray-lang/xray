@@ -58,11 +58,11 @@ static Fixture fixture(void) {
     XrLirCallableType signature = {.parameters=&argument, .parameter_count=1, .result=XR_LIR_I64};
     LIR(xr_lir_callable_type(m, &signature, &f.callable));
     LIR(xr_lir_module_finish(m, NULL));
-    XrLirValueLayoutKey roots[] = {{f.nested, 0}, {optional_string, 0}, {f.pod, 0}, {optional_empty, 0},
-        {f.unit, 0}, {fixed, 0}, {tuple, 0}, {optional_f32, 0}, {XR_LIR_ARRAY, XR_LIR_I64},
-        {XR_LIR_ARRAY, XR_LIR_STRING}, {XR_LIR_ARRAY, XR_LIR_U8}, {XR_LIR_ARRAY, XR_LIR_U64},
-        {XR_LIR_MAP_STRING_I64, 0}, {XR_LIR_I8, 0}, {XR_LIR_I16, 0}, {XR_LIR_I32, 0},
-        {XR_LIR_U8, 0}, {XR_LIR_U16, 0}, {XR_LIR_U32, 0}, {XR_LIR_U64, 0}, {f.callable, 0}};
+    XrLirValueLayoutKey roots[] = {{f.nested, 0, 0}, {optional_string, 0, 0}, {f.pod, 0, 0}, {optional_empty, 0, 0},
+        {f.unit, 0, 0}, {fixed, 0, 0}, {tuple, 0, 0}, {optional_f32, 0, 0}, {XR_LIR_ARRAY, XR_LIR_I64, 0},
+        {XR_LIR_ARRAY, XR_LIR_STRING, 0}, {XR_LIR_ARRAY, XR_LIR_U8, 0}, {XR_LIR_ARRAY, XR_LIR_U64, 0},
+        {XR_LIR_MAP_STRING_I64, 0, 0}, {XR_LIR_I8, 0, 0}, {XR_LIR_I16, 0, 0}, {XR_LIR_I32, 0, 0},
+        {XR_LIR_U8, 0, 0}, {XR_LIR_U16, 0, 0}, {XR_LIR_U32, 0, 0}, {XR_LIR_U64, 0, 0}, {f.callable, 0, 0}};
     MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &f.billing));
     f.initial = xrt_billing_owner_stats(f.billing);
     LAYOUT(xr_lir_value_layouts_create(m, roots, sizeof(roots) / sizeof(roots[0]), f.billing, &f.layouts));
