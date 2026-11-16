@@ -72,6 +72,7 @@ static void *resize(void *memory, size_t bytes) {
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "../lir/lir_array_c_fixture.h"
 #include "../lir/lir_callable_fixture.h"
+#include "../lir/lir_callable_bytecode_cases.h"
 
 static XrLirModule *owned_fixture(XrLirFunction *root,bool capture) {
     CArrayFixture c={0};
@@ -147,6 +148,125 @@ static XrRbcProgram *compile_fixture(unsigned kind) {
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(module);
     return program;
+}
+static XrRbcProgram *raw_callable_program(void) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter parameter={.type=XR_LIR_I64};
+    XrLirCallableType signature={.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+    XrLirType callable=0,integer=XR_LIR_I64;
+    OK(xr_lir_callable_type(c.module,&signature,&callable));
+    XrLirFunction leaf_target=test_function(c.module,"leaf",&integer,1,integer);
+    OK(xr_lir_set_closure_target(c.module,leaf_target,(XrLirClosureTarget){.callable=callable}));
+    XrLirBlock block=test_block(c.module,leaf_target,NULL,0); OK(xr_lir_set_entry(c.module,leaf_target,block));
+    XrLirValue input={0}; OK(xr_lir_function_parameter(c.module,leaf_target,0,&input));
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,input,ca_constant(&c,block,1)));
+    XrLirType parameters[]={integer,integer};
+    XrLirFunction capture_target=test_function(c.module,"ignore_capture",parameters,2,integer);
+    OK(xr_lir_set_closure_target(c.module,capture_target,(XrLirClosureTarget){.callable=callable,.capture_count=1}));
+    block=test_block(c.module,capture_target,NULL,0); OK(xr_lir_set_entry(c.module,capture_target,block));
+    OK(xr_lir_function_parameter(c.module,capture_target,1,&input)); ca_return(&c,block,input);
+    XrLirFunction root=test_function(c.module,"root",NULL,0,integer);
+    block=test_block(c.module,root,NULL,0); OK(xr_lir_set_entry(c.module,root,block));
+    XrLirValue scope=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_ENTER,XR_LIR_FUNCTION_SCOPE,NULL,0),leaf={0},wrapper={0};
+    XrLirInstruction reference={.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=leaf_target};
+    OK(xr_lir_emit_value(c.module,block,&reference,&leaf));
+    XrLirValue captured=ca_constant(&c,block,0);
+    reference.callee=capture_target; reference.operands=&captured; reference.operand_count=1;
+    OK(xr_lir_emit_value(c.module,block,&reference,&wrapper));
+    XrLirValue operands[]={scope,wrapper};
+    XrLirValue alias=ca_value(&c,block,XR_LIR_FUNCTION_BIND,callable,operands,2);
+    XrLirValue arguments[]={alias,ca_constant(&c,block,42)};
+    XrLirValue result=ca_value(&c,block,XR_LIR_CALL_INDIRECT,integer,arguments,2);
+    ca_effect(&c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,scope); ca_return(&c,block,result);
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(c.module,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(c.module);
+    return program;
+}
+/* Keep every upstream receiver valid and pin rejection to the one changed
+ * callable instruction, rather than passing through another malformed field. */
+static void raw_callable_rejection(CallableRawFixture *raw,const XrRbcProgram *program,uint32_t access) {
+    CHECK(rbc_borrowed_values_admit(&raw->module)==XR_RBC_OK);
+    CHECK(rbc_callable_metadata_valid(&raw->module) && rbc_callable_image_valid(&raw->module));
+    CHECK(xr_rbc_state_layout_valid(&raw->module));
+    size_t rejected=0;
+    for (size_t f=0;f<raw->module.function_count;++f) {
+        const XrRbcFunction *function=&raw->functions[f];
+        CHECK(rbc_aggregate_metadata_valid(&raw->module,function) && rbc_aggregate_calls_valid(&raw->module,function));
+        for (size_t pc=0;pc<function->code_count;++pc) {
+            uint32_t word=function->code[pc];
+            bool changed=!f && (word&255)==XR_RBC_VALUE_ACCESS && (word>>16)==access;
+            CHECK(xr_rbc_instruction_valid(&raw->module,function,pc)==!changed);
+            rejected+=changed;
+        }
+        CHECK(xr_rbc_strings_valid(&raw->module,function)==XR_RBC_OK);
+    }
+    CHECK(rejected==1);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&raw->module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID);
+    CHECK(!execution);
+}
+static void raw_callable_exact_boundaries(void) {
+    CHECK(!tracked_live);
+    XrRbcProgram *program=raw_callable_program();
+    CallableRawFixture raw=callable_raw_fixture(program);
+    callable_raw_positive(&raw,program);
+    callable_raw_reset(&raw);
+    uint32_t leaf=UINT32_MAX,wrapper=UINT32_MAX,alias=UINT32_MAX;
+    for (size_t n=0;n<raw.code.access_count;++n) {
+        XrRbcValueAccess access=raw.accesses[n];
+        if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) {
+            if (!access.count) leaf=(uint32_t)n;
+            else wrapper=(uint32_t)n;
+        } else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS && access.other) alias=(uint32_t)n;
+    }
+    CHECK(leaf!=UINT32_MAX && wrapper!=UINT32_MAX && alias!=UINT32_MAX);
+    uint32_t leaf_value=raw.accesses[leaf].result,wrapper_value=raw.accesses[wrapper].result;
+    CHECK(raw.accesses[leaf].index!=raw.accesses[wrapper].index);
+    CHECK(rbc_value_signature(&raw.module,&raw.code,leaf_value)==rbc_value_signature(&raw.module,&raw.code,wrapper_value));
+    XrRbcValueAccess producer=raw.accesses[alias];
+    CHECK(producer.source==wrapper_value && raw.values[producer.result].borrow_source==wrapper_value);
+    raw.values[producer.result].borrow_source=leaf_value;
+    CHECK(!memcmp(&producer,&raw.accesses[alias],sizeof(producer)));
+    raw_callable_rejection(&raw,program,alias);
+    callable_raw_reset(&raw);
+    uint32_t callee=raw.accesses[wrapper].index;
+    const XrRbcValueCode *original=raw.codes[callee];
+    XrRbcValueCode receiver=*original; XrLirValueHomes homes=*original->homes;
+    size_t count=(size_t)receiver.value_count+1;
+    XrLirValueHome *values=xr_malloc(count*sizeof(*values));
+    XrRbcValueLocation *locations=xr_malloc(count*sizeof(*locations));
+    XrLirHomeBytes *bytes=xr_malloc((homes.byte_count+1)*sizeof(*bytes));
+    XrLirHomeEvent *events=xr_malloc((homes.event_count+2)*sizeof(*events));
+    CHECK(values && locations && bytes && events);
+    memcpy(values,homes.values,count*sizeof(*values)); memcpy(locations,receiver.locations,count*sizeof(*locations));
+    if (homes.byte_count) memcpy(bytes,homes.bytes,homes.byte_count*sizeof(*bytes));
+    if (homes.event_count) memcpy(events,homes.events,homes.event_count*sizeof(*events));
+    uint32_t formal=receiver.parameters[0],type=raw.values[leaf_value].type;
+    values[formal]=(XrLirValueHome){.type=type,.parameter=1,.offset=SIZE_MAX,.size=sizeof(XrtFunction),
+        .first_owner=SIZE_MAX,.temporary_offset=SIZE_MAX,.temporary_first_owner=SIZE_MAX,
+        .first_bytes=homes.byte_count,.byte_count=1,.transport=XR_LIR_CALLABLE_TRANSPORT_BORROW};
+    locations[formal]=(XrRbcValueLocation){XR_RBC_VALUE_NOWHERE,0};
+    bytes[homes.byte_count++]=(XrLirHomeBytes){0,sizeof(XrtFunction)};
+    events[homes.event_count++]=(XrLirHomeEvent){.kind=XR_LIR_OWNERSHIP_CALLABLE_VALUE,.source=formal,
+        .callable_transport=XR_LIR_CALLABLE_TRANSPORT_BORROW};
+    events[homes.event_count++]=(XrLirHomeEvent){.kind=XR_LIR_OWNERSHIP_PARAMETER_BORROW,.source=formal};
+    homes.values=values; homes.bytes=bytes; homes.events=events;
+    receiver.homes=&homes; receiver.locations=locations; raw.codes[callee]=&receiver;
+    XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX]; uint32_t signatures[XR_RBC_REGISTER_COUNT_MAX]={0};
+    memcpy(kinds,raw.functions[callee].register_kinds,raw.functions[callee].register_count*sizeof(*kinds));
+    kinds[0]=XR_RBC_FUNCTION; signatures[0]=rbc_value_signature(&raw.module,&raw.code,leaf_value);
+    CHECK(signatures[0]);
+    raw.functions[callee].register_kinds=kinds; raw.functions[callee].register_callables=signatures;
+    raw.functions[callee].register_callable_count=raw.functions[callee].register_count;
+    XrRbcCallableValue capture={XR_RBC_CALLABLE_FUNCTION,signatures[0]-1}; raw.functions[callee].captures=&capture;
+    raw.arguments[raw.accesses[wrapper].first]=leaf_value;
+    raw.functions[0].environment_size=(uint32_t)(sizeof(XrtFunction)*2);
+    raw_callable_rejection(&raw,program,wrapper);
+    xr_free(events); xr_free(bytes); xr_free(locations); xr_free(values);
+    callable_raw_free(&raw); xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
 }
 static void check_result(XrRbcExecution **execution, unsigned kind) {
     XrRbcOutcome *outcome = xr_rbc_execution_run(*execution);
@@ -423,6 +543,7 @@ int main(void) {
     prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
     owned_run_failures();
     scalar_callable_directory();
+    raw_callable_exact_boundaries();
     puts("CodeImage leases, independent Layout snapshots and post-Program executions passed");
     return 0;
 }
