@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 
 def fixed_value_type(text, count, aggregate):
@@ -69,7 +69,7 @@ def fixed_c_cases(args, root):
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/O2', '/W4', '/WX', crt,
+            command = [args.compiler, '/nologo', *native_c11_options(args.compiler, driver=args.kind), '/utf-8', '/O2', '/W4', '/WX', crt,
                        '/I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(binary)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi', '/clang:-fsanitize=undefined',

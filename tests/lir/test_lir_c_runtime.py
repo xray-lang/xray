@@ -13,7 +13,7 @@ from test_lir_carriers_native import _f64_profile, _f64_reject
 from test_lir_fixed_c_native import fixed_c_cases
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 MODULE_CALL_CLOSURES = {
     'closure-chain': ('fn leaf(n:i64)->i64{return n+1}\n'
@@ -251,7 +251,7 @@ def main():
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/W4', '/WX', '/O2', crt,
+            command = [args.compiler, '/nologo', *native_c11_options(args.compiler, driver=args.kind), '/utf-8', '/W4', '/WX', '/O2', crt,
                        '/I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']

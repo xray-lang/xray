@@ -89,6 +89,16 @@ def find_python() -> "str | None":
     return chosen
 
 
+def native_c11_options(compiler, *, driver: str) -> "list[str]":
+    """Use the selected driver's C11 mode, including native MSVC atomics."""
+    if driver == CC_DRIVER_MSVC:
+        options = ["/std:c11"]
+        if ntpath.basename(str(compiler)).lower() in ("cl", "cl.exe"):
+            options.append("/experimental:c11atomics")
+        return options
+    return ["-std=c11"]
+
+
 @dataclass(frozen=True)
 class CCompiler:
     """A usable C11 compiler and its syntax-check driver contract.
@@ -102,19 +112,18 @@ class CCompiler:
 
     def syntax_check_argv(self, source: Path, include_dirs: Sequence, out_obj: Path) -> "list[str]":
         if self.driver == CC_DRIVER_ZIG:
-            argv = [self.path, "cc", "-std=c11", "-c", "-o", str(out_obj)]
+            argv = [self.path, "cc", *native_c11_options(self.path, driver=self.driver), "-c", "-o", str(out_obj)]
         elif self.driver == CC_DRIVER_MSVC:
             argv = [
                 self.path,
                 "/nologo",
                 "/TC",
-                "/std:c11",
-                "/experimental:c11atomics",
+                *native_c11_options(self.path, driver=self.driver),
                 "/utf-8",
                 "/Zs",
             ]
         else:
-            argv = [self.path, "-std=c11", "-fsyntax-only"]
+            argv = [self.path, *native_c11_options(self.path, driver=self.driver), "-fsyntax-only"]
         include_prefix = "/I" if self.driver == CC_DRIVER_MSVC else "-I"
         for inc in include_dirs:
             argv.append(f"{include_prefix}{inc}")
