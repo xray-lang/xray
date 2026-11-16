@@ -223,13 +223,14 @@ static void c_values_function(LirC *c) {
     c->home_edge_cursor = 0;
     c->string_event_cursor = c->string_workspace_cursor = 0;
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
+    c->view_call_cursor = c->view_event_cursor = 0;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
         type - XR_LIR_TYPE_COUNT < c->constructed_count && c->constructed_types[type - XR_LIR_TYPE_COUNT].layout.managed);
 }
 static void c_values_declarations(LirC *c) {
-    if (c_values_owned_type(c, c->view.result)) c_text(c, "    (void)xrl_result;\n");
+    if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) c_text(c, "    (void)xrl_result;\n");
     if (!c->homes || !c->homes->owned_frame_needed) return;
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
 }
@@ -308,7 +309,9 @@ static void c_values_landing_types(LirC *c) {
     if (!c->value_types) return;
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
         const XrLirValueHomes *homes = c->value_homes[c->closure[i] - 1];
-        if (homes && homes->result_type && c->value_types->rows[homes->result_type - 1].spec.owned_count)
+        if (homes && homes->result_type && (c->value_types->rows[homes->result_type - 1].spec.owned_count ||
+            c->value_types->rows[homes->result_type - 1].spec.kind == XRT_VALUE_SLICE_I64 ||
+            c->value_types->rows[homes->result_type - 1].spec.kind == XRT_VALUE_SLICE_U8))
             c_value_landing_type(c,c->value_types,homes->result_type);
     }
     for (size_t i = 0; i < c->value_types->count && c_request_poll(c); ++i) {
@@ -327,14 +330,14 @@ static void c_values_helpers(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         c_values_function(c);
         if (!c->homes) continue;
-        if (c_values_owned_type(c, c->view.result)) {
+        if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) {
             bool returns = false;
             for (size_t event = 0; event < c->homes->event_count; ++event)
                 returns |= c->homes->events[event].kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER;
             if (!returns) c_value_landing(c, c->homes);
         }
         if (c->homes->owned_frame_needed) c_value_frame(c, c->homes);
-        if (c_values_owned_type(c, c->view.result)) c_value_returns(c, c->homes);
+        if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) c_value_returns(c, c->homes);
         if (!c->homes->owned_frame_needed) continue;
         LirCEdgeEvents events = {0}; c_edge_events_prepare(c, c->homes, &events);
         for (size_t e = 0; e < c->homes->edge_count && c_request_poll(c); ++e) {
@@ -387,7 +390,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         c->function.id, c->block, selected, scalars ? "&scalar_publication" : "NULL");
     for (size_t a = 0; a < home->count && c_request_poll(c); ++a) {
         XrLirHomeTransfer transfer = c->homes->transfers[home->first + a];
-        if (transfer.borrowed_owner_workspace != SIZE_MAX) {
+        if (transfer.borrowed_owner_workspace != SIZE_MAX && !transfer.target_workspace) {
             c_text(c,", &"); c_value(c,transfer.source); continue;
         }
         if (c->homes->values[transfer.target].owner_count) continue;
@@ -398,7 +401,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     return true;
 }
 static bool c_values_signature(LirC *c, bool definition) {
-    if (!c_values_owned_type(c, c->view.result)) return false;
+    if (!c_values_owned_type(c, c->view.result) && !c_slice_type(c, c->view.result)) return false;
     c_text(c, "static void "); c_function_name(c, c->function.id);
     c_format(c, "(XrlLanding_%" PRIu32 " xrl_result", c->function.id);
     for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
@@ -464,6 +467,9 @@ static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint
     c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
 }
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_CALL && c_slice_type(c, v->type)) {
+        c_view_call_instruction(c, v, source); return true;
+    }
     if (v->op == XR_LIR_CALL && c_values_owned_type(c, v->type)) {
         c_values_ensure(c, source);
         const XrLirValueHome *home = &c->homes->values[v->result];
@@ -476,7 +482,7 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_text(c, ");\n");
         return true;
     }
-    if (v->op == XR_LIR_RET && c_values_owned_type(c, c->view.result)) {
+    if (v->op == XR_LIR_RET && (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result))) {
         c_format(c, "    { XrtManagedStatus status = xrl_return_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(",
             c->function.id, c->block, c->instruction);
         c_text(c,c->homes->owned_frame_needed ? "xrl_root, xrl_frame, " : "NULL, NULL, ");

@@ -76,6 +76,7 @@ typedef struct LirC {
     size_t home_edge_cursor;
     size_t string_event_cursor, string_workspace_cursor;
     size_t map_stage_event_cursor, map_stage_workspace_cursor;
+    size_t view_call_cursor, view_event_cursor;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
