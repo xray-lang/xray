@@ -893,6 +893,7 @@ int main(void) {
     map_literal_semantics();
     map_literal_rejections();
     map_literal_callback_lifetimes();
+    map_literal_large_inputs();
     puts("fixed String, Array and Map backings: operations, rollback, order and retirement passed");
     return 0;
 }

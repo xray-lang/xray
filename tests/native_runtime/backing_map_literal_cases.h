@@ -84,8 +84,12 @@ static void map_literal_rejections(void) {
     BAD(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate));
     origins[1].line = 2; literal.path = "x";
     BAD(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate));
-    literal.path_length = 1; literal.count = 65537;
-    BAD(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate));
+    literal.path_length = 1; literal.count = SIZE_MAX / sizeof(*inputs) + 1;
+    CHECK(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate) == XRT_MANAGED_OVERFLOW);
+    literal.count = SIZE_MAX / sizeof(*origins) + 1;
+    CHECK(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate) == XRT_MANAGED_OVERFLOW);
+    literal.count = SIZE_MAX / sizeof(*inputs);
+    CHECK(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate) == XRT_MANAGED_OVERFLOW);
     literal.count = 2;
     OK(xrt_array_backing_u8_create(f.frame, 3, &f.types, NULL, 0, 0));
     origins[0].kind = 1; inputs[0].source.spread = (const XrtMapBacking *)borrow(&f, 3);
@@ -172,4 +176,71 @@ static void map_literal_callback_lifetimes(void) {
     map_value((const XrtMapBacking *)owned, key, true, 42);
     xrt_managed_drop(owned);
     CHECK(atomic_load(&source.audit.finalized) == 1 && atomic_load(&destination.audit.finalized) == 1);
+}
+
+typedef struct MapLiteralLargeWatch {
+    Fixture *fixture;
+    const XrtMapBacking *spread;
+    const XrtStringBacking *key;
+    XrtManagedHeader *old;
+    XrtManagedSlotLocation slot;
+    size_t allocations, retirements;
+} MapLiteralLargeWatch;
+static void map_literal_large_observe(void *context, void *memory, bool allocating) {
+    MapLiteralLargeWatch *watch = context;
+    BAD(xrt_managed_root_drain(watch->fixture->root));
+    if (allocating) {
+        ++watch->allocations;
+        CHECK(*watch->slot.owner == watch->old &&
+            xr_signed_rc_read(&watch->spread->managed.references) == 65537 &&
+            xr_signed_rc_read(&watch->key->managed.references) == 2);
+    } else if (memory == watch->old) {
+        ++watch->retirements;
+        CHECK(*watch->slot.owner != watch->old);
+        map_value((const XrtMapBacking *)*watch->slot.owner, watch->key, true, 42);
+    }
+}
+static void map_literal_large_inputs(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    XrtStringBacking *key = map_key(&f, 0, "answer", 6);
+    OK(xrt_map_backing_create(f.frame, 1, &f.types, NULL, NULL, 0));
+    OK(xrt_map_backing_create(f.frame, 2, &f.types, NULL, NULL, 0));
+    const XrtMapBacking *spread = (const XrtMapBacking *)borrow(&f, 1);
+    const size_t count = 65537;
+    XrtMapLiteralOrigin *origins = xr_calloc(count, sizeof(*origins));
+    XrtMapLiteralInput *inputs = xr_calloc(count, sizeof(*inputs));
+    CHECK(origins && inputs);
+    for (size_t n = 0; n + 1 < count; ++n) {
+        origins[n] = (XrtMapLiteralOrigin){1, 1, 1};
+        inputs[n].source.spread = spread;
+    }
+    origins[count - 1] = (XrtMapLiteralOrigin){0, 2, 1};
+    inputs[count - 1] = (XrtMapLiteralInput){{.key=key}, 42};
+    XrtMapLiteral literal = {NULL, 0, origins, count};
+    XrtMapLiteralDuplicate duplicate = {53, 59};
+    MapLiteralLargeWatch watch = {.fixture=&f, .spread=spread, .key=key, .old=borrow(&f, 2)};
+    OK(xrt_managed_slot_location(f.frame, 2, &watch.slot));
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    f.audit.observe = map_literal_large_observe; f.audit.observer = &watch;
+    xrt_billing_owner_fail_after(f.billing, 0);
+    CHECK(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate) == XRT_MANAGED_OOM);
+    CHECK(borrow(&f, 2) == watch.old && !watch.allocations && !watch.retirements &&
+        xr_signed_rc_read(&spread->managed.references) == 1 && xr_signed_rc_read(&key->managed.references) == 1 &&
+        duplicate.first == 53 && duplicate.second == 59);
+    same_bill(f.billing, before);
+    xrt_billing_owner_fail_after(f.billing, SIZE_MAX);
+    OK(xrt_map_backing_literal_create(f.frame, 2, &f.types, &literal, inputs, &duplicate));
+    f.audit.observe = NULL;
+    CHECK(watch.allocations == 1 && watch.retirements == 1 &&
+        xr_signed_rc_read(&spread->managed.references) == 1 && xr_signed_rc_read(&key->managed.references) == 2 &&
+        duplicate.first == 53 && duplicate.second == 59);
+    const XrtMapBacking *map = (const XrtMapBacking *)borrow(&f, 2);
+    CHECK(map->length == 1); map_value(map, key, true, 42);
+    XrtManagedHeader *owned = NULL; OK(xrt_managed_slot_take(f.frame, 2, &owned));
+    xr_free(inputs); xr_free(origins);
+    fixture_retire(&f);
+    CHECK(!atomic_load(&f.audit.finalized));
+    map_value((const XrtMapBacking *)owned, key, true, 42);
+    xrt_managed_drop(owned);
+    CHECK(atomic_load(&f.audit.finalized) == 1 && !atomic_load(&f.audit.bytes) && !atomic_load(&f.audit.blocks));
 }
