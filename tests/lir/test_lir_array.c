@@ -686,7 +686,7 @@ static void array_c_output(const char *name, const char *path) {
     }
     if (!strncmp(name,"slice-boundary-",15)) slice_c_reader_has_no_owners(output.bytes);
     if (!strncmp(name,"scalar-edge-",12))
-        scalar_edge_structure(output.bytes,m,root,!strcmp(name,"scalar-edge-mixed"));
+        scalar_edge_structure(output.bytes,m,root,strcmp(name,"scalar-edge-swap")!=0);
     if (path) {
         FILE *file = fopen(path, "wb");
         CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
@@ -817,6 +817,7 @@ int main(int argc, char **argv) {
     for (size_t n=0;n<sizeof(map_formals)/sizeof(*map_formals);++n) array_c_output(map_formals[n],NULL);
     array_c_output("scalar-edge-swap",NULL);
     array_c_output("scalar-edge-mixed",NULL);
+    array_c_output("scalar-edge-pod",NULL);
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();

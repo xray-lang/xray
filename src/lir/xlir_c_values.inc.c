@@ -286,8 +286,12 @@ static uint32_t c_values_scalar_count(LirC *c, const XrLirEdgeView *edge) {
 static bool c_values_private_scalars(LirC *c, const XrLirEdgeView *edge) {
     bool found = false;
     for (uint32_t a = 0; a < edge->argument_count; ++a) {
-        if (c->homes->values[edge->arguments[a]].type) continue;
-        switch (c_value_type(c, edge->arguments[a])) {
+        XrLirType type = c_value_type(c, edge->arguments[a]);
+        if (c->homes->values[edge->arguments[a]].type) {
+            if (!c_managed_leaf(type)) return false;
+            continue;
+        }
+        switch (type) {
         case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_I16: case XR_LIR_I32: case XR_LIR_I64:
         case XR_LIR_U8: case XR_LIR_U16: case XR_LIR_U32: case XR_LIR_U64: case XR_LIR_F64:
             found = true; break;
