@@ -45,6 +45,11 @@ SKIP_FILES = {
     Path("scripts/check_structural_object_json_map_boundary.py"),
 }
 
+RETIRED_JSON_NOTICE_PATH = Path("spec/source/accepted/338-recursive-json-value-and-typed-codec-cn.md")
+RETIRED_JSON_NOTICE = re.compile(
+    r"不得保旧 (?P<names>Json／JsonValue) 别名、旧 raw fallback、双签名或迁移开关。"
+)
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -63,7 +68,7 @@ RULES = (
     ),
     Rule(
         "PUBLIC_LEGACY_JSON_TYPE",
-        re.compile(r"(?<![A-Za-z0-9_.])Json(?![A-Za-z0-9_])|@derive\(Json\)"),
+        re.compile(r"(?<![A-Za-z0-9_.])(?:JsonValue|Json)(?![A-Za-z0-9_])|@derive\(Json\)"),
         ("spec", "stdlib", "src/app", "demos"),
     ),
     Rule(
@@ -146,6 +151,18 @@ def under_any_root(rel: Path, roots: tuple[str, ...]) -> bool:
     return any(value == root or value.startswith(root + "/") for root in roots)
 
 
+def has_active_match(rule: Rule, rel: Path, line: str) -> bool:
+    # The canonical prohibition names what was retired. Exempt only those name
+    # spans: active types or calls elsewhere on the same line still fail.
+    retired_spans = ()
+    if rule.name == "PUBLIC_LEGACY_JSON_TYPE" and rel == RETIRED_JSON_NOTICE_PATH:
+        retired_spans = tuple(match.span("names") for match in RETIRED_JSON_NOTICE.finditer(line))
+    return any(
+        not any(start <= match.start() and match.end() <= end for start, end in retired_spans)
+        for match in rule.pattern.finditer(line)
+    )
+
+
 def collect(root: Path) -> dict[str, list[dict[str, object]]]:
     hits: dict[str, list[dict[str, object]]] = {rule.name: [] for rule in RULES}
     for rel, path in iter_text_files(root):
@@ -170,7 +187,7 @@ def collect(root: Path) -> dict[str, list[dict[str, object]]]:
                     and stripped.startswith(("//", "/*", "*", "#"))
                 ):
                     continue
-                if rule.pattern.search(line):
+                if has_active_match(rule, rel, line):
                     hits[rule.name].append(
                         {"path": rel.as_posix(), "line": line_number, "text": line.strip()}
                     )
