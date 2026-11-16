@@ -241,20 +241,27 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     bool map = fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION &&
         (fact.map_operation == XR_LIR_MAP_OP_SET || fact.map_operation == XR_LIR_MAP_OP_REMOVE || fact.map_operation == XR_LIR_MAP_OP_CLEAR);
     bool string = fact.kind == XR_LIR_OWNERSHIP_STRING_OPERATION;
-    if (!array && !map && !string) return true;
+    bool borrowed_copy = (fact.kind == XR_LIR_OWNERSHIP_BINDING_NEW || fact.kind == XR_LIR_OWNERSHIP_BINDING_WRITE) &&
+        fact.target_value && fact.target_value <= b->homes->value_count && b->homes->values[fact.target_value].parameter;
+    if (!array && !map && !string && !borrowed_copy) return true;
     if (!fact.value || fact.value > b->homes->value_count || !b->homes->bindings || !b->homes->bindings[fact.value].type)
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"mutator has no actual binding payload");
+    uint32_t type = b->homes->bindings[fact.value].type;
+    XrtValuePlanSpec spec;
+    if (!lir_home_binding_spec(b,type,&spec)) return false;
+    if (borrowed_copy && spec.kind != XRT_VALUE_STRING) return true;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
-        .type=b->homes->bindings[fact.value].type,.value=string ? fact.value : 0};
-    if (string) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+        .type=type,.value=string || borrowed_copy ? fact.value : 0};
+    if (string || borrowed_copy) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
     if (string && (fact.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
         (fact.string_operation != XR_LIR_STRING_OP_APPEND_CELL && fact.string_operation != XR_LIR_STRING_OP_APPEND_STATE &&
          fact.string_operation != XR_LIR_STRING_OP_APPEND_REF) || !fact.target_value ||
         fact.target_value > b->homes->value_count || b->homes->values[fact.target_value].type != workspace.type))
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"String append lost its borrowed binding or suffix");
-    XrtValuePlanSpec spec;
-    if (!lir_home_binding_spec(b,workspace.type,&spec) ||
-        !lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
+    if (borrowed_copy && (b->homes->values[fact.target_value].type != workspace.type ||
+        b->homes->values[fact.target_value].offset != SIZE_MAX || b->homes->values[fact.target_value].first_owner != SIZE_MAX))
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed String copy lost its incoming formal");
+    if (!lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
     return lir_home_append(b,&b->workspaces,&workspace);
 }
 static bool lir_home_callable_rows(LirHomeBuilder *b, const XrLirOwnershipPlan *ownership, XrLirValueHome *values) {

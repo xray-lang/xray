@@ -95,8 +95,9 @@ typedef struct XrLirHomeWorkspace {
      * slot. Other workspaces keep their existing VALUE interpretation. */
     XrLirHomeWorkspaceKind kind;
     /* A String VALUE candidate names the actual nonconsumed binding here.
-     * It has one pending/owner slot and no separate temporary; the matching
-     * STRING_OPERATION event supplies the borrowed suffix. */
+     * It has one pending/owner slot and no separate temporary. The matching
+     * STRING_OPERATION supplies an append suffix; BINDING_NEW/WRITE supplies
+     * a borrowed String formal that first copies into this true-empty stage. */
     uint32_t value;
     size_t temporary_offset, temporary_first_owner;
 } XrLirHomeWorkspace;
