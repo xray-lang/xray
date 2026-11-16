@@ -12,12 +12,21 @@ static void test_sparse_cell_ordinals(void) {
     XrRbcFunction function={.code=code,.code_count=8,.register_count=3,.cell_count=2};
     CHECK(run_function(function,NULL,0)==42);
     CHECK(run_function(function,NULL,0)==42);
+    // A declared but unused ordinal remains only capacity. The real NEW at
+    // ordinal one initializes neither the skipped producer nor trailing space.
+    function.cell_count=3;
+    uint32_t previous=code[2]; immediate(code,2,XR_RBC_LOADI,0,99);
+    CHECK(run_function(function,NULL,0)==42);
+    code[2]=previous;
     XrRbcModule module={.functions=&function,.function_count=1};
     uint64_t bits=999;
     // Ordinal zero has a real static producer, but this activation skipped it.
     // A forged numeric handle must not borrow the later constructor's prefix.
     emit(code,6,XR_RBC_CELL_READ,2,0,0);
     CHECK(execute(&module,0,NULL,0,&bits)==XR_RBC_INVALID && bits==999);
+    previous=code[2]; immediate(code,2,XR_RBC_LOADI,0,99);
+    CHECK(execute(&module,0,NULL,0,&bits)==XR_RBC_INVALID && bits==999);
+    code[2]=previous;
     emit(code,6,XR_RBC_CELL_READ,2,1,0);
     immediate(code,4,XR_RBC_CELL_NEW,1,0);
     reject_prepare(&module,0,NULL,0);

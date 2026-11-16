@@ -80,7 +80,12 @@ static bool rbc_cell_components(RbcCellBlock *nodes, size_t count, uint32_t *sta
 }
 static XrRbcStatus rbc_cell_constructors(RbcStringGraph *g) {
     const XrRbcFunction *f=g->work.function;
-    if (!f->cell_count) return XR_RBC_OK;
+    bool constructed=false;
+    for (size_t pc=0;pc<f->code_count;++pc) constructed|=(f->code[pc]&255)==XR_RBC_CELL_NEW;
+    // Reserved capacity alone grants no live Cell and needs no producer proof.
+    // READ/WRITE can legally name a caller-owned ready Cell through raw BITS.
+    if (!constructed) return XR_RBC_OK;
+    if (!f->cell_count) return XR_RBC_INVALID;
     if (g->count>SIZE_MAX/sizeof(RbcCellBlock) || g->count>SIZE_MAX/sizeof(uint32_t))
         return XR_RBC_OUT_OF_MEMORY;
     uint8_t *seen=xr_calloc(f->cell_count,1);
@@ -97,10 +102,8 @@ static XrRbcStatus rbc_cell_constructors(RbcStringGraph *g) {
             (f->cell_kinds && f->cell_kinds[ordinal]!=XR_RBC_BITS)) goto done;
         seen[ordinal]=1;
     }
-    for (uint32_t c=0;c<f->cell_count;++c) {
-        if (f->cell_kinds && rbc_indexed_cell_kind(f->cell_kinds[c])) continue;
-        if ((!f->cell_kinds || f->cell_kinds[c]==XR_RBC_BITS) && !seen[c]) goto done;
-    }
+    // Unused ordinals remain unready. Only actual NEW sites need uniqueness
+    // and non-reentry; a missing constructor never grants runtime authority.
     if (!rbc_cell_successors(g,nodes) || !rbc_cell_components(nodes,g->count,stack)) goto done;
     status=XR_RBC_OK;
 done:

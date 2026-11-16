@@ -685,7 +685,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
     }
-    bool numeric_conversion = false;
+    bool numeric_conversion = false,scalar_cells=false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= rbc_managed_kind(f->register_kinds[r]) || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING_CELL ||
             f->register_kinds[r] == XR_RBC_STRING_REF || f->register_kinds[r] == XR_RBC_STATE || f->register_kinds[r] == XR_RBC_STATE_REF ||
@@ -697,6 +697,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t pc = 0; pc < f->code_count; ++pc) {
         uint32_t word = f->code[pc], op = word & 255;
         numeric_conversion |= op == XR_RBC_ITOF || op == XR_RBC_FTOI;
+        scalar_cells|=op==XR_RBC_CELL_NEW || op==XR_RBC_CELL_READ || op==XR_RBC_CELL_WRITE;
         if (op == XR_RBC_CALL) {
             const XrRbcFunction *callee = &module->functions[word >> 16];
             managed |= rbc_managed_kind(callee->result_kind);
@@ -705,7 +706,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
         }
     }
     if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count &&
-        !f->environment_count && !f->cell_count)
+        !f->environment_count && !scalar_cells)
         return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
