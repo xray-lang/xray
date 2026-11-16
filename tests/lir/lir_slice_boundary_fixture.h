@@ -9,6 +9,7 @@
 #ifndef LIR_SLICE_BOUNDARY_FIXTURE_H
 #define LIR_SLICE_BOUNDARY_FIXTURE_H
 #include "lir/xlir_internal.h"
+#include "lir/xlir_array.h"
 
 typedef struct SliceBoundaryFixture {
     XrLirModule *module;
@@ -48,8 +49,8 @@ static XrLirBlock slice_boundary_function(SliceBoundaryFixture *c, XrLirFunction
 static XrLirValue slice_boundary_parameter(SliceBoundaryFixture *c, XrLirFunction function, uint32_t ordinal) {
     XrLirValue value = {0}; OK(xr_lir_function_parameter(c->module,function,ordinal,&value)); return value;
 }
-static void slice_boundary_contracts(SliceBoundaryFixture *c) {
-    XrLirSliceFunctionFact rows[5] = {{0}};
+static void slice_boundary_contracts_for_root(SliceBoundaryFixture *c, XrLirFunction root) {
+    XrLirSliceFunctionFact rows[6] = {{0}};
     XrLirFunction functions[] = {c->leaf,c->relay,c->fanout,c->read};
     for (size_t n = 0; n < 4; ++n) rows[functions[n].id] = (XrLirSliceFunctionFact){.function=functions[n].id,
         .parameter_count=n == 1 ? 2u : 1u,.result_parameter=UINT32_MAX,.available=true};
@@ -60,10 +61,11 @@ static void slice_boundary_contracts(SliceBoundaryFixture *c) {
     /* An unused helper retains a conservative unknown write and field access.
      * Receiving copies must not erase either symbolic term into empty facts. */
     rows[c->read.id].write = (XrLirSliceEffectSpan){2,1}; rows[c->read.id].access = (XrLirSliceEffectSpan){3,1};
+    if (root.id) rows[root.id]=(XrLirSliceFunctionFact){.function=root.id,.result_parameter=UINT32_MAX,.available=true};
     OK(xr_lir_internal_slice_effects_set(c->module,(XrLirSliceFactsView){.functions=rows,
-        .function_count=4,.terms=terms,.term_count=4}));
+        .function_count=root.id ? 5u : 4u,.terms=terms,.term_count=4}));
 }
-static SliceBoundaryFixture slice_boundary_fixture(XrLirType element, bool read_after_cleanup) {
+static SliceBoundaryFixture slice_boundary_fixture_body(XrLirType element, bool read_after_cleanup) {
     SliceBoundaryFixture c = {.element=element}; OK(xr_lir_module_create(NULL,&c.module));
     OK(xr_lir_slice_catalog_install(c.module)); OK(xr_lir_slice_type(c.module,element,&c.slice));
     XrLirBlock block = slice_boundary_function(&c,&c.leaf,&c.slice,1,c.slice);
@@ -101,6 +103,10 @@ static SliceBoundaryFixture slice_boundary_fixture(XrLirType element, bool read_
     formal = slice_boundary_parameter(&c,c.read,0);
     kept = slice_boundary_role(&c,block,XR_LIR_SLICE_OP_LEN,XR_LIR_I64,formal);
     slice_boundary_cleanup(&c,block,formal); slice_boundary_cleanup(&c,block,formal);
-    slice_boundary_return(&c,block,kept); slice_boundary_contracts(&c); return c;
+    slice_boundary_return(&c,block,kept); return c;
+}
+static SliceBoundaryFixture slice_boundary_fixture(XrLirType element, bool read_after_cleanup) {
+    SliceBoundaryFixture c=slice_boundary_fixture_body(element,read_after_cleanup);
+    slice_boundary_contracts_for_root(&c,(XrLirFunction){0}); return c;
 }
 #endif // LIR_SLICE_BOUNDARY_FIXTURE_H
