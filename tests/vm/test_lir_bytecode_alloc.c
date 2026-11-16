@@ -253,11 +253,17 @@ static void callable_mutable_frame_storage(void) {
     const XrRbcModule *view = xr_rbc_program_view(program);
     const XrLirValueHomes *homes=xr_rbc_module_value_homes(view,0);
     CHECK(!homes || !homes->owned_frame_needed);
+    const XrtValueImage *image=xr_rbc_module_value_image(view);
+    CHECK(image && image->types);
+    for (uint32_t n=0;n<image->type_count;++n) CHECK(image->types[n].kind!=XRT_VALUE_ENVIRONMENT);
+    size_t compiled = live_allocations;
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
     size_t slots = 0, cells = 0, spills = 0, environments = 0;
     for (size_t f = 0; f < view->function_count; ++f) {
         const XrRbcFunction *function = &view->functions[f];
+        const XrLirValueHomes *function_homes=xr_rbc_module_value_homes(view,(uint32_t)f);
+        CHECK(!function_homes || (!function_homes->owned_frame_needed && !function_homes->frame.slot_count));
         size_t environment, bytes;
         CHECK(xr_rbc_activation_size(function, &environment, &bytes));
         slots += function->register_count;
@@ -266,20 +272,23 @@ static void callable_mutable_frame_storage(void) {
         environments += function->environment_count;
     }
     CHECK(cells == 1 && environments == 1);
-    /* The real moving allocator reserves the complete three-frame call path.
-     * Once its indexed banks exist, constructing and calling the mutable
-     * closure cannot request a separate environment or canonical object. */
+    /* Prepare has already allocated the sole outcome. Reserve the complete
+     * three-frame path before entering the real execution boundary, then fail
+     * any extra VM-bank request made while constructing or calling the cache. */
     CHECK(xr_rbc_reserve(&execution->stack, slots, view->function_count, cells, spills));
-    size_t before = attempts, retained = live_allocations;
+    size_t before = attempts;
     fail_at = before + 1;
-    XrRbcRegister result = {0};
-    CHECK(xr_rbc_execute(view, &execution->stack, execution->pending->locations,
-        &result, execution->entries) == XR_RBC_OK && result.bits == 42);
-    CHECK(attempts == before && live_allocations == retained);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    uint64_t result=0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK &&
+        xr_rbc_outcome_bits(outcome,&result) && result==42);
+    CHECK(attempts == before);
     CHECK(!execution->stack.depth && !execution->stack.cell_count);
     CHECK(!execution->stack.values && !execution->stack.closure_scope_count);
     fail_at = SIZE_MAX;
     xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(live_allocations == compiled);
     xr_rbc_program_destroy(program);
     CHECK(!live_allocations);
     puts("mutable Frame capture uses one indexed 8-byte place and no construction allocation");
@@ -988,6 +997,8 @@ static void record_compiler_failures(void) {
     attempts = 0;
 }
 int main(void) {
+    // Keep the last completed allocation fixture visible even after a fatal abort.
+    CHECK(!setvbuf(stdout,NULL,_IONBF,0));
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
