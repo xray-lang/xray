@@ -134,8 +134,8 @@ static void c_values_prepare(LirC *c) {
     }
     XrLirValueLayoutKey *roots = memory; size_t next = 0;
     for (size_t t = 1; t < type_count + 4; ++t)
-        if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0} :
-            (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count]};
+        if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0, 0} :
+            (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count], 0};
     XrtManagedAllocator provider = {c, c_value_allocate, c_value_free, {c, c_value_resources_retain, c_value_resources_drop}};
     XrtManagedStatus created = xrt_billing_owner_new(&provider, SIZE_MAX, &c->value_billing);
     (void)c_resource(c, atomic_load_explicit(&c->value_allocation_failure, memory_order_relaxed));
@@ -174,7 +174,7 @@ static void c_values_prepare(LirC *c) {
     for (size_t i = 0; i < c->value_types->count && c_request_poll(c); ++i) {
         XrLirValueLayoutKey key; const XrtValuePlan *plan = NULL;
         xr_lir_value_layouts_at(c->value_layouts, i, &key, &plan);
-        if (key.type < XR_LIR_TYPE_COUNT) continue;
+        if (key.type < XR_LIR_TYPE_COUNT || key.environment_function) continue;
         LirCConstructedType *type = &c->constructed_types[key.type - XR_LIR_TYPE_COUNT];
         XrtValuePlanSpec spec; xrt_value_plan_view(plan, &spec);
         type->layout = (XrLirTypeLayout){spec.size, (uint32_t)spec.alignment, 0, spec.owned_count != 0};
@@ -265,6 +265,24 @@ static void c_values_scalar_publication(LirC *c, const XrLirHomeEdge *edge) {
                 c_format(c, "    *values->destination_access_%" PRIu32 " = values->source_access_%" PRIu32 ";\n", a, a);
         }
     c_text(c, "}\n");
+}
+/* Function entries with an identical managed result use one compatible C
+ * parameter type, regardless of the selected worker's function identity. */
+static void c_values_landing_types(LirC *c) {
+    if (!c->value_types) return;
+    for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
+        const XrLirValueHomes *homes = c->value_homes[c->closure[i] - 1];
+        if (homes && homes->result_type && c->value_types->rows[homes->result_type - 1].spec.owned_count)
+            c_value_landing_type(c,c->value_types,homes->result_type);
+    }
+    for (size_t i = 0; i < c->value_types->count && c_request_poll(c); ++i) {
+        const XrtValuePlanSpec *spec = &c->value_types->rows[i].spec;
+        if (spec->kind != XRT_VALUE_FUNCTION) continue;
+        size_t result = c_value_type_row(c->value_types,spec->signature.result);
+        XR_CHECK(result < c->value_types->count,"a callable landing has its receiving result plan");
+        if (c->value_types->rows[result].spec.owned_count)
+            c_value_landing_type(c,c->value_types,(uint32_t)result + 1);
+    }
 }
 static void c_values_helpers(LirC *c) {
     if (!c->value_homes) return;

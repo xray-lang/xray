@@ -7,7 +7,7 @@
  * xlir_c_value_transfers.inc.c - Ordinary C around shared stable ownership homes
  *
  * KEY CONCEPT:
- *   Copied final ownership events select moves. Common homes supply all real
+ *   Copied final ownership events select copies or moves. Common homes supply real
  *   owner and temporary positions; publication changes only non-owner bytes.
  */
 typedef struct LirCEdgeEvents {
@@ -51,7 +51,8 @@ static bool c_edge_event(const LirCEdgeEvents *events, const XrLirHomeEdge *edge
     while (events->index[at]) {
         const XrLirHomeEvent *event = &events->homes->events[events->index[at] - 1];
         if (event->block == edge->block && event->edge == edge->edge && event->target == transfer.target)
-            return event->source == transfer.source && event->target_block == edge->target_block;
+            return event->source == transfer.source && event->target_block == edge->target_block &&
+                event->transfer_mode == transfer.transfer_mode;
         at = (at + 1) & (events->capacity - 1);
     }
     return false;
@@ -89,6 +90,13 @@ static size_t c_value_edge_owners(LirC *c, const XrLirValueHomes *homes,
             c_error(c, XR_LIR_C_INVALID_LIR, "owned C edge has no matching final ownership event");
             return 0;
         }
+        const XrLirValueHome *source = &homes->values[transfer.source];
+        if (source->owner_count != target->owner_count ||
+            (transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY &&
+             transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "owned C edge requires exact source leaves and a final transfer mode");
+            return 0;
+        }
         if (target->owner_count > SIZE_MAX - count) {
             c_error(c, XR_LIR_C_OVERFLOW, "C edge owner inventory exceeds machine capacity");
             return 0;
@@ -120,7 +128,7 @@ static void c_value_edge_hook(LirC *c, const XrLirValueHomes *homes, const XrLir
     c_format(c, "} XrlEdge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ";\n", f, b, e);
     c_format(c, "static void xrl_publish_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(void *context) {\n", f, b, e);
     c_format(c, "    XrlEdge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " *edge = context;\n    (void)edge;\n", f, b, e);
-    /* Sources' owner fields have moved, while all non-owner source bytes still
+    /* Incoming owner fields are installed, while all non-owner source bytes still
      * contain their old values. Stage every scalar/tag before changing any
      * destination, then clear consumed owned sources before publishing all
      * destinations. Every pass runs in the Root's existing busy interval. */
@@ -131,7 +139,7 @@ static void c_value_edge_hook(LirC *c, const XrLirValueHomes *homes, const XrLir
             for (size_t j = 0; j < target->byte_count && c_request_poll(c); ++j) {
                 XrLirHomeBytes bytes = homes->bytes[target->first_bytes + j];
                 if (pass == 1) {
-                    if (source->owner_count)
+                    if (source->owner_count && transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE)
                         c_format(c, "    memset(edge->payload + %zu, 0, %zu);\n", source->offset + bytes.offset, bytes.size);
                     continue;
                 }
@@ -176,8 +184,9 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
         XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
         const XrLirValueHome *source = &homes->values[transfer.source], *target = &homes->values[transfer.target];
         for (size_t leaf = 0; leaf < target->owner_count && c_request_poll(c); ++leaf)
-            c_format(c, "        {{frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}},\n",
-                target->first_owner + leaf, source->first_owner + leaf, target->temporary_first_owner + leaf);
+            c_format(c, "        {{frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, %s},\n",
+                target->first_owner + leaf, source->first_owner + leaf, target->temporary_first_owner + leaf,
+                transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY ? "XRT_PLACE_TRANSFER_COPY" : "XRT_PLACE_TRANSFER_MOVE");
     }
     c_text(c, "    };\n");
     c_format(c, "    XrlEdge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " context = {payload, scalars", f, b, e);
@@ -186,14 +195,21 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
             c_format(c, ", destination_%zu, source_%zu", i, i);
     c_text(c, "};\n");
     c_format(c, "    XrtPlacePublication publication = {xrl_publish_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &context};\n", f, b, e);
-    c_format(c, "    return xrt_place_edge_move(owners, %zu, &publication);\n}\n", owners);
+    c_format(c, "    return xrt_place_edge_transfer(owners, %zu, &publication);\n}\n", owners);
 }
 
-static void c_value_landing(LirC *c, const XrLirValueHomes *homes) {
-    c_format(c, "typedef struct XrlLanding_%" PRIu32 " {\n", homes->source_function);
+static void c_value_landing_type(LirC *c, LirCValueTypes *types, uint32_t type) {
+    XR_CHECK(type && type <= types->count, "a managed landing has its common result type");
+    if (types->rows[type - 1].landing_declared) return;
+    types->rows[type - 1].landing_declared = true;
+    c_format(c, "typedef struct XrlLandingValue_%" PRIu32 " {\n", type);
     c_text(c, "    XrtManagedFrame *frame;\n    size_t first_owner, temporary_first_owner;\n");
-    c_format(c, "    XrlValue_%" PRIu32 " *destination, *temporary;\n} XrlLanding_%" PRIu32 ";\n",
-        homes->result_type, homes->source_function);
+    c_format(c, "    XrlValue_%" PRIu32 " *destination, *temporary;\n} XrlLandingValue_%" PRIu32 ";\n", type, type);
+}
+static void c_value_landing(LirC *c, const XrLirValueHomes *homes) {
+    c_value_landing_type(c,c->value_types,homes->result_type);
+    c_format(c,"typedef XrlLandingValue_%" PRIu32 " XrlLanding_%" PRIu32 ";\n",
+        homes->result_type,homes->source_function);
 }
 static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
     bool declared = false;
@@ -201,7 +217,8 @@ static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
         const XrLirHomeEvent *event = &homes->events[i];
         if (event->kind != XR_LIR_OWNERSHIP_RETURN_TRANSFER) continue;
         const XrLirValueHome *source = &homes->values[event->source];
-        if (source->type != homes->result_type || !source->owner_count || source->parameter) {
+        if (source->type != homes->result_type || !source->owner_count || source->parameter ||
+            event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) {
             c_error(c, XR_LIR_C_INVALID_LIR, "C return transfer lost its exact owned receiving home");
             return;
         }
@@ -231,13 +248,13 @@ static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
             "        return XRT_MANAGED_ARGUMENT;\n");
         c_format(c, "    XrtPlaceEdge owners[%zu] = {\n", source->owner_count);
         for (size_t leaf = 0; leaf < source->owner_count && c_request_poll(c); ++leaf)
-            c_format(c, "        {{landing.frame, landing.first_owner + %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {landing.frame, landing.temporary_first_owner + %zu, NULL, XRT_PLACE_NULLABLE}},\n",
+            c_format(c, "        {{landing.frame, landing.first_owner + %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {landing.frame, landing.temporary_first_owner + %zu, NULL, XRT_PLACE_NULLABLE}, XRT_PLACE_TRANSFER_MOVE},\n",
                 leaf, source->first_owner + leaf, leaf);
         c_text(c, "    };\n");
         c_format(c, "    XrlReturn_%" PRIu32 "_%" PRIu32 "_%" PRIu32 " context = {(void *)((unsigned char *)payload + %zu), landing.destination, landing.temporary};\n",
             f, b, n, source->offset);
         c_format(c, "    XrtPlacePublication publication = {xrl_return_publish_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &context};\n", f, b, n);
-        c_format(c, "    XrtManagedStatus status = xrt_place_edge_move(owners, %zu, &publication);\n", source->owner_count);
+        c_format(c, "    XrtManagedStatus status = xrt_place_edge_transfer(owners, %zu, &publication);\n", source->owner_count);
         c_text(c, "    if (status != XRT_MANAGED_OK) return status;\n"
             "    return xrt_managed_frame_leave(root, frame);\n}\n");
     }
@@ -265,8 +282,14 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_value_transfers(const XrLirCValueTransfersReq
     }
     LirCValueTypes types = {0}; LirCEdgeEvents events = {0};
     if (c_request_poll(&c)) c_value_types_prepare(&c, request->layouts, &types);
+    c.value_types = &types;
     if (c_request_poll(&c)) c_edge_events_prepare(&c, homes, &events);
     c_text(&c, "#include <stddef.h>\n#include <stdint.h>\n");
+    for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
+        if (types.rows[i].spec.kind == XRT_VALUE_FUNCTION) {
+            c_text(&c, "#include \"xray_native_function.h\"\n");
+            break;
+        }
     if (homes->owned_frame_needed) c_text(&c, "#include <string.h>\n#include \"xray_native_place.h\"\n");
     else c_text(&c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)

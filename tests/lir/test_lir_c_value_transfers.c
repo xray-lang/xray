@@ -72,10 +72,15 @@ static Fixture fixture(bool pod) {
     OK(xr_lir_emit_effect(m, blocks[2], &drop));
     if (!pod) { drop.operands = &exit[4]; OK(xr_lir_emit_effect(m, blocks[2], &drop)); }
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&exit[0], .operand_count=1};
-    OK(xr_lir_set_terminator(m, blocks[2], &ret)); OK(xr_lir_module_finish(m, NULL));
+    OK(xr_lir_set_terminator(m, blocks[2], &ret));
+    XrLirType callable = 0;
+    OK(xr_lir_callable_type(m, &(XrLirCallableType){.result=XR_LIR_I64}, &callable));
+    OK(xr_lir_module_finish(m, NULL));
     XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
-    XrLirValueLayoutKey roots[] = {{record, 0}, {XR_LIR_I1, 0}, {plain, 0}};
-    LAYOUT(xr_lir_value_layouts_create(m, roots, pod ? 2 : 3, billing, &f.layouts));
+    /* A module image can include a Fn even when this function has no Fn value.
+     * Its declaration still needs the canonical header and must not add RC. */
+    XrLirValueLayoutKey roots[] = {{record, 0, 0}, {XR_LIR_I1, 0, 0}, {plain, 0, 0}, {callable, 0, 0}};
+    LAYOUT(xr_lir_value_layouts_create(m, roots, 4, billing, &f.layouts));
     for (size_t i = 0; i < xr_lir_value_layouts_count(f.layouts); ++i) {
         XrLirValueLayoutKey key; const XrtValuePlan *plan;
         LAYOUT(xr_lir_value_layouts_at(f.layouts, i, &key, &plan));
@@ -144,8 +149,10 @@ static void run(bool pod, const char *path) {
     XrLirCOutput output = {0}; XrLirCDiagnostic diagnostic;
     CHECK(xr_lir_emit_c_value_transfers(&request, &output, &diagnostic) == XR_LIR_C_OK);
     CHECK(strstr(output.bytes, "xrl_edge_1_2_1") && !strstr(output.bytes, "Xir") && !strstr(output.bytes, "../src"));
+    CHECK(strstr(output.bytes, "#include \"xray_native_function.h\"") && strstr(output.bytes, "typedef XrtFunction"));
     if (pod) CHECK(!strstr(output.bytes, "XrtManagedRoot") && !strstr(output.bytes, "xrt_place_") && !strstr(output.bytes, "XrlLanding_"));
-    else CHECK(strstr(output.bytes, "xrt_place_edge_move") && strstr(output.bytes, "xrl_return_1_3_3"));
+    else CHECK(strstr(output.bytes, "xrt_place_edge_transfer") && strstr(output.bytes, "XRT_PLACE_TRANSFER_MOVE") &&
+        strstr(output.bytes, "xrl_return_1_3_3"));
     if (path) write_fixture(path, &f, &output);
     xr_lir_value_homes_destroy(f.homes); xr_lir_value_layouts_destroy(f.layouts);
     xr_compile_resources_release(resources);

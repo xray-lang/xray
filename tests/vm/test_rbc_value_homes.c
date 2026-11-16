@@ -215,7 +215,7 @@ static void selected_edge_sources(void) {
     XrLirFunction function; XrLirModule *module = selected_edge_fixture(&function);
     XrtBillingOwner *billing = NULL; XrLirValueLayouts *layouts = NULL; XrLirOwnershipPlan *ownership = NULL;
     MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
-    XrLirValueLayoutKey roots[] = {{XR_LIR_TYPE_COUNT, 0}, {XR_LIR_I64, 0}, {XR_LIR_I1, 0}};
+    XrLirValueLayoutKey roots[] = {{XR_LIR_TYPE_COUNT, 0, 0}, {XR_LIR_I64, 0, 0}, {XR_LIR_I1, 0, 0}};
     CHECK(xr_lir_value_layouts_create(module, roots, 3, billing, &layouts) == XR_LIR_VALUE_LAYOUT_OK);
     const XrLirOwnershipTypeFact *facts = NULL; uint32_t count = 0;
     CHECK(xr_lir_value_layouts_ownership(layouts, &facts, &count) == XR_LIR_VALUE_LAYOUT_OK);
@@ -234,13 +234,15 @@ static void selected_edge_sources(void) {
     XrtPlaceEdge edge[2];
     for (size_t i = 0; i < 2; ++i) {
         XrLirHomeTransfer transfer = homes->transfers[second.first + i];
+        CHECK(transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+        edge[i].transfer = XRT_PLACE_TRANSFER_MOVE;
         MANAGED(xr_rbc_value_home_place((XrRbcHomeLocation){homes, frame, transfer.source, false}, 0, XRT_PLACE_NONNULL, &edge[i].source));
         MANAGED(xr_rbc_value_home_place((XrRbcHomeLocation){homes, frame, transfer.target, false}, 0, XRT_PLACE_NONNULL, &edge[i].destination));
         MANAGED(xr_rbc_value_home_place((XrRbcHomeLocation){homes, frame, transfer.target, true}, 0, XRT_PLACE_NONNULL, &edge[i].temporary));
         CHECK(homes->values[transfer.target].byte_count == 0 && edge[i].temporary.slot != edge[i].source.slot);
         MANAGED(xrt_string_backing_create(frame, edge[i].source.slot, &types, "ab", i + 1, 0));
     }
-    MANAGED(xrt_place_edge_move(edge, 2, NULL));
+    MANAGED(xrt_place_edge_transfer(edge, 2, NULL));
     for (size_t i = 0; i < 2; ++i) {
         const XrtManagedHeader *header = NULL; MANAGED(xrt_place_borrow(edge[i].destination, &header));
         CHECK(((const XrtStringBacking *)header)->length == i + 1 && xr_signed_rc_read(&header->references) == 1);
@@ -256,7 +258,7 @@ static void common_home_allocation_failures(void) {
     XrLirFunction function; XrLirModule *module = record_fixture(&function);
     XrtBillingOwner *billing = NULL; XrLirValueLayouts *layouts = NULL; XrLirOwnershipPlan *ownership = NULL;
     MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
-    XrLirValueLayoutKey roots[] = {{XR_LIR_TYPE_COUNT, 0}, {XR_LIR_TYPE_COUNT + 1, 0}};
+    XrLirValueLayoutKey roots[] = {{XR_LIR_TYPE_COUNT, 0, 0}, {XR_LIR_TYPE_COUNT + 1, 0, 0}};
     CHECK(xr_lir_value_layouts_create(module, roots, 2, billing, &layouts) == XR_LIR_VALUE_LAYOUT_OK);
     const XrLirOwnershipTypeFact *types = NULL; uint32_t count = 0;
     CHECK(xr_lir_value_layouts_ownership(layouts, &types, &count) == XR_LIR_VALUE_LAYOUT_OK);
@@ -391,6 +393,7 @@ static void complete_multi_leaf_return(void) {
     watch.source = source_bytes; watch.destination = destination_bytes;
     XrtPlaceEdge edge[2];
     for (size_t i = 0; i < 2; ++i) {
+        edge[i].transfer = XRT_PLACE_TRANSFER_MOVE;
         MANAGED(xr_rbc_value_home_place(incoming, i, XRT_PLACE_NONNULL, &edge[i].source));
         MANAGED(xr_rbc_value_home_place(landing, i, XRT_PLACE_NONNULL, &edge[i].destination));
         MANAGED(xr_rbc_value_home_place(staging, i, XRT_PLACE_NONNULL, &edge[i].temporary));
@@ -412,13 +415,13 @@ static void complete_multi_leaf_return(void) {
         }
         XrtManagedHeader *pending = NULL;
         MANAGED(xrt_managed_slot_prepare(source, edge[0].source.slot, types.string, sizeof(XrtStringBacking) + 1, &pending));
-        CHECK(xrt_place_edge_move(edge, 2, &hook) == XRT_MANAGED_ARGUMENT);
+        CHECK(xrt_place_edge_transfer(edge, 2, &hook) == XRT_MANAGED_ARGUMENT);
         CHECK(watch.destination->first.payload == watch.old[0] && watch.destination->second.payload == watch.old[1]);
         CHECK(publication.published == iteration && watch.destination->score == (iteration ? 900 : -1));
         MANAGED(xrt_managed_slot_abort(source, edge[0].source.slot));
         watch.active = true; size_t observed = watch.observed;
         xrt_billing_owner_fail_after(billing, 0);
-        MANAGED(xrt_place_edge_move(edge, 2, &hook));
+        MANAGED(xrt_place_edge_transfer(edge, 2, &hook));
         xrt_billing_owner_fail_after(billing, SIZE_MAX); watch.active = false;
         CHECK(watch.observed == observed + 2 && publication.published == iteration + 1);
         for (size_t i = 0; i < 2; ++i) {

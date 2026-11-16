@@ -13,6 +13,7 @@
 typedef struct LirCValueTypeRow {
     const XrtValuePlan *plan;
     XrtValuePlanSpec spec;
+    bool landing_declared;
 } LirCValueTypeRow;
 typedef struct LirCValueTypes {
     LirCValueTypeRow *rows;

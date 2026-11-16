@@ -77,6 +77,7 @@ static void c_values_declarations(LirC *);
 static bool c_values_declare(LirC *, uint32_t);
 static bool c_values_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_values_helpers(LirC *);
+static void c_values_landing_types(LirC *);
 static bool c_values_signature(LirC *, bool);
 static void c_values_root(LirC *);
 static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t);
@@ -1056,6 +1057,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
     c_constructed_types(c);
+    c_values_landing_types(c);
     c_callable_types(c);
     c_values_helpers(c);
     c_locations(c);
