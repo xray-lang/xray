@@ -224,6 +224,13 @@ static XrLirModule *loop_fixture(void) {
 
 static size_t attempts,fail_at=SIZE_MAX,live;
 static struct { void *memory; size_t bytes; } buffers[4096];
+static size_t home_live_bytes(void) {
+    size_t bytes=0;
+    for (size_t i=0;i<4096;++i) if (buffers[i].memory) {
+        CHECK(buffers[i].bytes<=SIZE_MAX-bytes); bytes+=buffers[i].bytes;
+    }
+    return bytes;
+}
 static size_t buffer_index(void *memory) {
     for (size_t i=0;i<4096;++i) if (buffers[i].memory==memory) return i;
     CHECK(false); return 0;
@@ -389,18 +396,27 @@ static void project(XrLirModule *module,bool faults) {
     HOME(xr_lir_value_layouts_ownership(set,&facts,&count));
     XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){module,facts,count},&plan,NULL));
     size_t functions=xr_lir_function_count(module); CHECK(functions<=8); XrLirValueHomes *homes[8]={0};
+    size_t owned_blocks[8]={0},owned_bytes[8]={0};
     XrtValueKind workspace_kinds[8][8]={{0}};
     for (uint32_t f=0;f<functions;++f) {
         XrLirFunction function={0}; OK(xr_lir_function_at(module,f,&function));
+        /* Earlier functions remain owned until the source-retirement checks. */
+        size_t baseline_blocks=live,baseline_bytes=home_live_bytes();
         XrLirValueHomesRequest request={module,function,set,plan}; attempts=0;
         HOME(xr_lir_value_homes_create(&request,&homes[f])); size_t total=attempts;
+        CHECK(live>=baseline_blocks && home_live_bytes()>=baseline_bytes);
+        owned_blocks[f]=live-baseline_blocks; owned_bytes[f]=home_live_bytes()-baseline_bytes;
         if (faults) {
-            xr_lir_value_homes_destroy(homes[f]); homes[f]=NULL; CHECK(!live);
+            xr_lir_value_homes_destroy(homes[f]); homes[f]=NULL;
+            CHECK(live==baseline_blocks && home_live_bytes()==baseline_bytes);
             for (size_t n=1;n<=total;++n) {
                 attempts=0; fail_at=n;
-                CHECK(xr_lir_value_homes_create(&request,&homes[f])==XR_LIR_VALUE_LAYOUT_OOM && !homes[f] && !live);
+                CHECK(xr_lir_value_homes_create(&request,&homes[f])==XR_LIR_VALUE_LAYOUT_OOM && !homes[f]);
+                CHECK(live==baseline_blocks && home_live_bytes()==baseline_bytes);
             }
             fail_at=SIZE_MAX; HOME(xr_lir_value_homes_create(&request,&homes[f]));
+            CHECK(live>=baseline_blocks && home_live_bytes()>=baseline_bytes);
+            CHECK(live-baseline_blocks==owned_blocks[f] && home_live_bytes()-baseline_bytes==owned_bytes[f]);
             printf("binding home allocation rollback sites: %zu\n",total);
         }
         CHECK(homes[f] && homes[f]->workspace_count<=8);
@@ -412,8 +428,15 @@ static void project(XrLirModule *module,bool faults) {
     }
     XrtBackingTypes types={0}; MANAGED(xrt_backing_types_init(billing,&types));
     xr_lir_module_destroy(module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
-    for (size_t f=0;f<functions;++f) { CHECK(homes[f]); check_projection(homes[f],billing,&types,workspace_kinds[f],string_type); xr_lir_value_homes_destroy(homes[f]); }
-    xrt_backing_types_drop(&types); CHECK(!live); XrtBillingStats stats=xrt_billing_owner_stats(billing); CHECK(stats.blocks==1); xrt_billing_owner_drop(billing);
+    for (size_t f=0;f<functions;++f) {
+        CHECK(homes[f]); check_projection(homes[f],billing,&types,workspace_kinds[f],string_type);
+        size_t before_blocks=live,before_bytes=home_live_bytes();
+        CHECK(before_blocks>=owned_blocks[f] && before_bytes>=owned_bytes[f]);
+        xr_lir_value_homes_destroy(homes[f]);
+        CHECK(live==before_blocks-owned_blocks[f] && home_live_bytes()==before_bytes-owned_bytes[f]);
+    }
+    xrt_backing_types_drop(&types); CHECK(!live && !home_live_bytes());
+    XrtBillingStats stats=xrt_billing_owner_stats(billing); CHECK(stats.blocks==1); xrt_billing_owner_drop(billing);
 }
 static void string_borrow_only(XrLirType type) {
     XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
