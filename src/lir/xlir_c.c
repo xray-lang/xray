@@ -27,7 +27,6 @@
 #include "xray_native_array_slice.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
-#include "../shared/xr_utf8_core.h"
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -56,8 +55,8 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, string_library, maps;
-    bool string_cursor, string_values, inline_values, callables;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, maps;
+    bool string_values, inline_values, callables;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -258,8 +257,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->sets |= type==XR_LIR_SET_I64 || type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF;
     c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
     c->views |= c_slice_type(c, type);
-    c->string_library |= type == XR_LIR_STRING_REF;
-    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views || c->maps || c->sets;
+    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views || c->maps;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -271,7 +269,6 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
-static bool c_string_literal(LirC *, uint32_t);
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) {
         XrLirCellType cell;
@@ -376,7 +373,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c_callable_type(c,v->type,NULL) && v->op != XR_LIR_CALL && v->op != XR_LIR_STATE_READ) {
         c_error(c,XR_LIR_C_UNSUPPORTED,"callable result requires owned environment transport"); return;
     }
-    if (xr_lir_string_role(c->request->module, v)) {
+    uint32_t string_role = xr_lir_string_role(c->request->module, v);
+    if (string_role && string_role != XR_LIR_STRING_OP_APPEND_OWNED) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "String operation has no target execution binding");
         return;
     }
@@ -399,7 +397,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) return;
     if (c_map_point(c, v)) { c->maps = true; return; }
-    if (xr_lir_string_role(c->request->module, v)) { c->string_library = true; return; }
+    if (string_role) return;
     if (c_view_point(c, v)) return;
     switch (v->op) {
         case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
@@ -641,25 +639,9 @@ static bool c_literal_value(LirC *c, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
     return definition && definition->op == XR_LIR_LITERAL_ADDR;
 }
-/* Literal identity is used only by the currently unbound append-cursor code.
- * Admitted String values always have real owners in their common homes. */
-static bool c_string_literal(LirC *c, uint32_t id) {
-    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
-    const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
-    return definition && definition->op == XR_LIR_STRING_LITERAL;
-}
-static void c_prepare_string_cursor(LirC *c) {
-    c->string_cursor = false;
-    const XrLirFunctionData *f = &c->request->module->functions[c->function.id - 1];
-    for (uint32_t b = 0; b < f->block_count && !c->string_cursor; ++b)
-        for (uint32_t i = 0; i < f->blocks[b].instruction_count && !c->string_cursor; ++i)
-            c->string_cursor = c_string_cursor_append(c, &f->blocks[b].instructions[i].view);
-}
 static void c_declarations(LirC *c) {
     c_values_declarations(c);
     c_callable_declarations(c);
-    if (c->string_cursor)
-        c_text(c, "    XrtStringAppendCursor xrl_append = {0};\n    (void)&xrl_append;\n");
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
             return;
@@ -668,9 +650,8 @@ static void c_declarations(LirC *c) {
             parameter |= c->view.parameters[p] == id;
         if (!parameter) {
             if (c_values_declare(c, id)) continue;
-            c_format(c, "    %s v%" PRIu32 "%s;\n",
-                c_literal_value(c, id) ? "const void *" : c_type(c, c_value_type(c, id)), id,
-                c_string_literal(c, id) ? " = NULL" : "");
+            c_format(c, "    %s v%" PRIu32 ";\n",
+                c_literal_value(c, id) ? "const void *" : c_type(c, c_value_type(c, id)), id);
             c_format(c, "    (void)&v%" PRIu32 ";\n", id);
         }
         if (c_value_type(c, id) == XR_LIR_STATE_REF) {
@@ -779,12 +760,6 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned edge lost its common transfer");
             return;
         }
-    if (c->string_cursor) {
-        bool retained = false;
-        for (uint32_t a = 0; a < edge->argument_count; ++a)
-            retained |= c_string_literal(c, edge->arguments[a]);
-        if (retained) c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
-    }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
@@ -845,14 +820,6 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
-    /* Only nontrapping scalar work and selected-edge moves preserve the
-     * exclusive borrow. Every other operation commits before it can observe,
-     * alias, replace or retire the current owner. */
-    bool scalar = v->op >= XR_LIR_CONST && v->op <= XR_LIR_FCAST && !c_arithmetic_point(c, v);
-    bool literal_drop = v->op == XR_LIR_STRING_DROP && c_string_literal(c, v->operands[0]);
-    if (c->string_cursor && !scalar && v->op != XR_LIR_BR && v->op != XR_LIR_CONDBR &&
-        v->op != XR_LIR_STRING_LITERAL && !literal_drop && !c_string_cursor_append(c, v))
-        c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
     if (c_callable_point(c,v)) {
         uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
         c_callable_instruction(c,v,source); return;
@@ -1078,7 +1045,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
-    if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
     if (c->views) c_text(c, "#include \"xray_native_array_slice.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
@@ -1113,7 +1079,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_prepare_divisors(c);
         c_values_function(c);
         c_callable_events_prepare(c);
-        c_prepare_string_cursor(c);
         c_signature(c, true);
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);
