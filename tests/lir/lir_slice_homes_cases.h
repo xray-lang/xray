@@ -135,6 +135,15 @@ static void slice_conditional_cleanup(XrLirType element, bool malformed) {
 
 }
 static void slice_homes(void) {
+    for (uint32_t mode = 0; mode < 2; ++mode) {
+        XrLirModule *empty = NULL; OK(xr_lir_module_create(NULL, &empty)); XrLirFunction function = {0};
+        XrLirFunctionSpec spec = {.name="empty",.name_length=5,.result=XR_LIR_UNIT};
+        OK(xr_lir_declare_function(empty, &spec, &function)); OK(xr_lir_define_function(empty, function));
+        XrLirSliceCleanupInsertion cleanup = {.block={empty,function.id,1},.target={empty,function.id,1}};
+        if (mode) function.module = NULL;
+        CHECK(xr_lir_internal_slice_cleanup_batch(empty, function, &cleanup, 1) == XR_LIR_INVALID_ARGUMENT);
+        xr_lir_module_destroy(empty);
+    }
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_U8};
     for (size_t family = 0; family < 2; ++family) {
         slice_conditional_cleanup(elements[family], false);

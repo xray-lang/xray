@@ -13,6 +13,7 @@
 static bool lower_physical_cell(XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
+#include "xlir_lower_view_cells.inc.c"
 static bool lower_array_cells_inventory(LowerFunction *f) {
     Lower *c = f->owner;
     const XrLirFunctionData *function = &c->module->functions[f->function.id - 1];
@@ -60,6 +61,7 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
                 cells->define[(size_t)b * count + owner - 1] = 1;
         }
     }
+    if (!lower_view_cell_uses(f)) return false;
     bool changed = true;
     while (changed) {
         changed = false;
