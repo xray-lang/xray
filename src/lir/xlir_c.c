@@ -24,6 +24,7 @@
 #include "xlir_value_layout.h"
 #include "xlir_value_homes.h"
 #include "xlir_value_image.h"
+#include "xray_native_array_slice.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include "../shared/xr_utf8_core.h"
@@ -204,7 +205,7 @@ static void c_value(LirC *c, uint32_t id) {
             return;
         }
     }
-    if (c->homes && c->homes->values[id].owner_count) {
+    if (c->homes && (c->homes->values[id].owner_count || c->homes->values[id].view_workspace)) {
         const XrLirValueHome *home = &c->homes->values[id];
         /* Project only the consumed home; rebuilding every address at each
          * acquisition point makes generated code quadratic in owned values. */
@@ -219,6 +220,10 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
     XrLirStatus status = xr_lir_value_type(c->request->module, value, &type);
     XR_CHECK(status == XR_LIR_OK, "validated C operand has a type");
     return type;
+}
+static bool c_slice_type(const LirC *c, XrLirType type) {
+    return type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count &&
+        c->constructed_types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
 }
 static bool c_located(const XrLirSource *source) {
     return source->path && source->path_length && source->line && source->column;
@@ -252,7 +257,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
     c->sets |= type==XR_LIR_SET_I64 || type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF;
     c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
-    c->views |= type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
+    c->views |= c_slice_type(c, type);
     c->string_library |= type == XR_LIR_STRING_REF;
     c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || c->state || c->arrays || c->views || c->maps || c->sets;
     return c->status == XR_LIR_C_OK;
@@ -516,6 +521,7 @@ static void c_admit(LirC *c) {
         }
         if (!c_request_poll(c))
             return;
+        c_view_admit_signature(c);
         c_array_admit_shapes(c);
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
             c->runtime = true;
@@ -1068,12 +1074,12 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->callables) c_text(c,"#include \"xray_native_function.h\"\n");
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->string_values || c->arrays || c->maps || c->inline_values) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
+    if (c->string_values || c->arrays || c->maps || c->inline_values || c->views) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->string_library) c_text(c, "#include \"xray_native_string.h\"\n");
-    if (c->views) c_text(c, "#include \"xray_native_view.h\"\n\n");
+    if (c->views) c_text(c, "#include \"xray_native_array_slice.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
