@@ -532,6 +532,22 @@ static void slice_c_raw_entry_rejection(XrLirType element) {
     CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_BAD_ARGUMENT && !output.bytes && !output.length);
     xr_compile_resources_release(resources); xr_lir_module_destroy(fixture.module);
 }
+static void slice_c_unfinished_result_rejection(XrLirType element) {
+    XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
+    XrLirType result = XR_LIR_SLICE_I64;
+    if (element != XR_LIR_TYPE_INVALID) OK(xr_lir_slice_type(module, element, &result));
+    XrLirFunction entry = {0};
+    XrLirFunctionSpec spec = {.name="unpublished", .name_length=11, .result=result};
+    OK(xr_lir_declare_function(module, &spec, &entry)); OK(xr_lir_define_function(module, entry));
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=module, .entry=entry, .resources=resources,
+        .translation_unit="unpublished-slice-result.c"};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_BAD_ARGUMENT && !output.bytes && !output.length);
+    xr_compile_resources_release(resources); xr_lir_module_destroy(module);
+}
 static void slice_c_reader_has_no_owners(const char *text) {
     const char *needle = "static int64_t xrl_f4(", *reader = strstr(text, needle);
     while (reader) {
@@ -687,6 +703,8 @@ int main(int argc, char **argv) {
     array_c_output("string-bindings",NULL);
     array_c_output("string-ref-bindings",NULL);
     slice_c_raw_entry_rejection(XR_LIR_I64); slice_c_raw_entry_rejection(XR_LIR_U8);
+    slice_c_unfinished_result_rejection(XR_LIR_TYPE_INVALID);
+    slice_c_unfinished_result_rejection(XR_LIR_I64); slice_c_unfinished_result_rejection(XR_LIR_U8);
     array_c_output("slice-boundary-i64",NULL); array_c_output("slice-boundary-u8",NULL);
     static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
         "map-formal-state","map-formal-construct","map-formal-initialize"};
