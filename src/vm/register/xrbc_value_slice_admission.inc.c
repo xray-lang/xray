@@ -32,13 +32,19 @@ static bool rbc_value_slice(const XrRbcModule *module,const XrRbcValueCode *code
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!home || !image || !image->types || !home->type || home->type>image->type_count ||
-        home->parameter || home->owner_count || home->first_owner!=SIZE_MAX || home->temporary_first_owner!=SIZE_MAX ||
+        home->owner_count || home->first_owner!=SIZE_MAX || home->temporary_first_owner!=SIZE_MAX ||
         home->size!=sizeof(XrtReadonlyArraySlice) || code->locations[value].kind!=XR_RBC_VALUE_NOWHERE) return false;
     const XrtValueImageType *type=&image->types[home->type-1];
     if ((type->kind!=XRT_VALUE_SLICE_I64 && type->kind!=XRT_VALUE_SLICE_U8) || type->owned_count ||
         type->size!=sizeof(XrtReadonlyArraySlice) || type->alignment!=_Alignof(XrtReadonlyArraySlice) ||
         home->byte_count!=1 || !code->homes->bytes || home->first_bytes>=code->homes->byte_count ||
         code->homes->bytes[home->first_bytes].offset || code->homes->bytes[home->first_bytes].size!=sizeof(XrtReadonlyArraySlice)) return false;
+    if (home->parameter)
+        return home->view_storage==XR_LIR_SLICE_STORAGE_BORROWED_FORMAL &&
+            home->parameter<=code->parameter_count && code->parameters && code->parameters[home->parameter-1]==value &&
+            home->view_parameter==home->parameter-1 && !home->view_workspace &&
+            home->offset==SIZE_MAX && home->temporary_offset==SIZE_MAX;
+    if (home->view_storage!=XR_LIR_SLICE_STORAGE_LOCAL_KEEPER || home->view_parameter!=UINT32_MAX) return false;
     const XrLirHomeWorkspace *workspace=rbc_value_slice_workspace(code,home->view_workspace);
     return workspace && workspace->value==value && workspace->type==home->type &&
         workspace->offset==home->offset && workspace->temporary_offset==home->temporary_offset;
@@ -46,7 +52,7 @@ static bool rbc_value_slice(const XrRbcModule *module,const XrRbcValueCode *code
 static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (!xr_rbc_module_code_owner(module) || access.source || access.other ||
-        access.index<=XR_LIR_SLICE_OP_NONE || access.index>=XR_LIR_SLICE_OP_COUNT) return false;
+        access.index<=XR_LIR_SLICE_OP_NONE || access.index>XR_LIR_SLICE_OP_CLEANUP) return false;
     if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
         if (access.result || access.first || access.count || !code->homes || !code->homes->events ||
             !access.window || access.window>code->homes->event_count) return false;
@@ -78,7 +84,7 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
         const XrLirHomeEvent *event=&code->homes->events[access.window-1];
         if (event->kind!=(construct ? XR_LIR_OWNERSHIP_VIEW_VALUE : XR_LIR_OWNERSHIP_VIEW_END) ||
             event->source!=value || event->target!=(construct ? args[0] : 0) || event->view_operation!=access.index ||
-            event->view_workspace!=home->view_workspace ||
+            event->view_workspace!=home->view_workspace || event->view_storage!=home->view_storage ||
             event->transfer_mode!=(construct ? XR_LIR_OWNERSHIP_TRANSFER_BORROW : XR_LIR_OWNERSHIP_TRANSFER_NONE) ||
             event->hold_transfer_mode!=(construct ? XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_NONE)) return false;
     } else if (access.window) return false;
@@ -92,4 +98,60 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
         return rbc_value_array(module,code,access.result,true) && rbc_value_kind(module,code,access.result)==
             (kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8);
     return access.index!=XR_LIR_SLICE_OP_END || !access.result;
+}
+
+static const XrLirHomeWorkspace *rbc_value_slice_stage(const XrRbcValueCode *code,XrLirHomeTransfer transfer) {
+    const XrLirValueHomes *homes=code->homes;
+    const XrLirValueHome *source=rbc_value_home(code,transfer.source),*target=rbc_value_home(code,transfer.target);
+    if (!homes || !homes->workspaces || transfer.borrowed_owner_workspace>=homes->workspace_count ||
+        !source || !target || source->view_storage!=XR_LIR_SLICE_STORAGE_BORROWED_FORMAL ||
+        transfer.source_storage!=source->view_storage || !source->parameter || source->view_workspace ||
+        target->view_storage!=XR_LIR_SLICE_STORAGE_LOCAL_KEEPER) return NULL;
+    const XrLirHomeWorkspace *destination=rbc_value_slice_workspace(code,target->view_workspace);
+    const XrLirHomeWorkspace *workspace=&homes->workspaces[transfer.borrowed_owner_workspace];
+    if (!destination || workspace->kind!=XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE ||
+        workspace->type!=source->type || workspace->value!=transfer.source || !workspace->block || !workspace->instruction ||
+        workspace->temporary_offset!=SIZE_MAX || workspace->temporary_first_owner!=SIZE_MAX ||
+        !homes->frame.owned_offsets || workspace->first_owner>=homes->frame.slot_count ||
+        workspace->first_owner==destination->first_owner || workspace->first_owner==destination->temporary_first_owner ||
+        workspace->offset%_Alignof(XrtManagedHeader *) || workspace->offset>homes->frame.payload_size ||
+        sizeof(XrtManagedHeader *)>homes->frame.payload_size-workspace->offset ||
+        homes->frame.owned_offsets[workspace->first_owner]!=workspace->offset) return NULL;
+    return workspace;
+}
+static const XrLirHomeCall *rbc_value_slice_call(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcValueCode *callee,XrRbcValueAccess access) {
+    if (!callee || !callee->homes || !code || !code->homes || !code->homes->calls || !access.other ||
+        access.other>code->homes->call_count || !rbc_value_slice(module,code,access.result)) return NULL;
+    const XrLirHomeCall *call=&code->homes->calls[access.other-1];
+    const XrLirValueHome *result=rbc_value_home(code,access.result);
+    uint32_t parameter=call->view_result_parameter;
+    if (!result || result->parameter || !call->block || !call->instruction || call->result!=access.result ||
+        call->callee!=callee->homes->source_function || call->view_result_workspace!=result->view_workspace ||
+        !call->view_result_workspace || parameter!=callee->homes->view_result_parameter || parameter>=access.count ||
+        call->count!=access.count || call->first>code->homes->argument_count ||
+        call->count>code->homes->argument_count-call->first || !code->homes->arguments ||
+        !callee->parameters || parameter>=callee->parameter_count ||
+        !rbc_value_slice(module,callee,callee->parameters[parameter]) ||
+        callee->homes->result_type!=result->type) return NULL;
+    for (uint32_t p=0;p<access.count;++p)
+        if (code->homes->arguments[call->first+p]!=code->arguments[access.first+p]) return NULL;
+    uint32_t source=code->arguments[access.first+parameter];
+    return call->view_result_source_argument==source && rbc_value_slice(module,code,source) &&
+        rbc_value_home(code,source)->type==result->type ? call : NULL;
+}
+static bool rbc_value_slice_return_valid(const XrRbcModule *module,const XrRbcValueCode *code,XrRbcValueAccess access) {
+    if (!rbc_value_slice(module,code,access.source) || !code->homes->events || !access.index ||
+        access.index>code->homes->event_count) return false;
+    const XrLirValueHome *home=rbc_value_home(code,access.source);
+    const XrLirHomeEvent *event=&code->homes->events[access.index-1];
+    uint32_t parameter=code->homes->view_result_parameter;
+    return parameter<code->parameter_count && code->parameters &&
+        rbc_value_slice(module,code,code->parameters[parameter]) &&
+        rbc_value_home(code,code->parameters[parameter])->type==home->type &&
+        code->homes->result_type==home->type && event->kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER &&
+        event->view_operation==XR_LIR_SLICE_OP_RETURN && event->source==access.source && !event->target &&
+        event->view_parameter==parameter && event->view_storage==home->view_storage &&
+        event->view_workspace==home->view_workspace && event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW &&
+        event->hold_transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY;
 }

@@ -47,7 +47,10 @@ typedef struct XrRbcValueAccess {
     uint32_t result, source, other;
     /* Literal/module-slot/callee/selected-home-edge ordinal, according to op.
      * CALL arguments are SSA ids in the immutable arguments span; window is
-     * its ordinary physical call window. RETURN source names its SSA result.
+     * its ordinary physical call window. A Slice result also uses other for
+     * its one-based common HomeCall, including the proven actual origin and
+     * caller landing. RETURN source names its SSA result and Slice index its
+     * one-based common RETURN_TRANSFER event.
      * EDGE uses first/count source/target SSA pairs, count measuring pairs,
      * for type-zero transport absent from common typed homes. Its index is
      * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */

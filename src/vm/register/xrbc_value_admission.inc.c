@@ -212,7 +212,7 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
                 to->temporary_offset == SIZE_MAX) return false;
             if (rbc_value_cell(module,code,target,true)) {
                 if (!rbc_value_cell(module,code,source,false) || transfer.transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY ||
-                    transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE || transfer.source_workspace || transfer.target_workspace)
+                    transfer.source_storage!=XR_LIR_SLICE_STORAGE_NONE || transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE || transfer.source_workspace || transfer.target_workspace)
                     return false;
                 if (from->parameter) {
                     const XrLirHomeWorkspace *stage=rbc_value_cell_stage(code,transfer);
@@ -220,12 +220,18 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
                 } else if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
                 continue;
             }
-            if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
             if (rbc_value_slice(module,code,target)) {
                 if (!rbc_value_slice(module,code,source) || transfer.transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
                     transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY ||
-                    transfer.source_workspace!=from->view_workspace || transfer.target_workspace!=to->view_workspace) return false;
-            } else if (transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE || transfer.source_workspace || transfer.target_workspace) return false;
+                    transfer.source_workspace!=from->view_workspace || transfer.target_workspace!=to->view_workspace ||
+                    transfer.source_storage!=from->view_storage) return false;
+                if (from->view_storage==XR_LIR_SLICE_STORAGE_BORROWED_FORMAL) {
+                    const XrLirHomeWorkspace *stage=rbc_value_slice_stage(code,transfer);
+                    if (!stage || stage->block!=edge->block) return false;
+                } else if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
+            } else if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
+            else if (transfer.source_storage!=XR_LIR_SLICE_STORAGE_NONE || transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+                transfer.source_workspace || transfer.target_workspace) return false;
             else if (to->transport!=XR_LIR_CALLABLE_TRANSPORT_NONE) {
                 if (to->borrow_source || transfer.transfer_mode!=(from->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ?
                         XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_BORROW)) return false;
@@ -407,6 +413,9 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!rbc_value_scalar(code,function,source,kind)) return false;
             }
         }
+        if (callee && rbc_value_slice(module,code,a.result))
+            return rbc_value_slice_call(module,code,callee,a)!=NULL;
+        if (a.other) return false;
         if (callee && rbc_value_inline(module,code,a.result,true))
             return callee->homes->result_type==rbc_value_home(code,a.result)->type;
         if (target->aggregate_result_type)
@@ -422,6 +431,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return rbc_value_inline_access_valid(module,code,function,a);
     case XR_RBC_VALUE_RETURN:
         if (a.result || a.other) return false;
+        if (rbc_value_slice(module,code,a.source)) return rbc_value_slice_return_valid(module,code,a);
         if (rbc_value_function(module,code,a.source,false) || rbc_value_cell(module,code,a.source,false)) {
             const XrLirHomeEvent *event=rbc_value_event(code,a.index,XR_LIR_OWNERSHIP_RETURN_TRANSFER);
             return event && event->source==a.source && code->homes->result_type==rbc_value_home(code,a.source)->type &&
