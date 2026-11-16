@@ -56,8 +56,11 @@ typedef struct XrtModuleLayoutView {
 /* Binding copies all input descriptions and names through the supplied billing
  * owner. Code pins the raw input throughout provider callbacks; only plans that
  * need executable code keep that lease afterwards. Layout never owns State.
- * All payload owner fields are declared XrtManagedHeader*. Fn, Cell and View
- * payloads are unsupported until their complete target plans are admitted. */
+ * All payload owner fields are declared XrtManagedHeader*. Function payloads
+ * are complete caller-admitted values with factory-owned environments; the
+ * caller also admits their exact signature and executable entry lifetime.
+ * Environment and Cell rows are metadata context, not direct State payloads.
+ * View payloads still require their complete target plans. */
 XRAY_API XrtModuleStatus xrt_module_layout_new(XrtBillingOwner *, const XrtModuleLayoutSpec *,
     XrtManagedLease code, XrtModuleLayout **);
 XRAY_API bool xrt_module_layout_retain(XrtModuleLayout *);

@@ -14,6 +14,8 @@
 #define XRAY_NATIVE_VALUES_H
 #include "xray_native_managed_root.h"
 #include "xray_native_string_value.h"
+#include "xray_native_function.h"
+#include "xray_native_value_image.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +52,28 @@ XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id);
+
+typedef struct XrtModuleState XrtModuleState;
+typedef struct XrtNativeEnvironmentInput {
+    const XrtValueImage *image;
+    XrtModuleState *state;
+    XrtManagedLease code;
+    const void *entry, *captures;
+    uint32_t type;
+} XrtNativeEnvironmentInput;
+/* Entry is the admitted immutable backend entry object for this exact Env row,
+ * not a function-pointer cast. Code pins that object and the raw image through
+ * this execution; static executable data already has permanent lifetime. With
+ * State, type belongs to its bound image and no second image is bound here.
+ * The caller holds Code or State and every input owner throughout this whole
+ * synchronous call, including callbacks. Captures are complete admitted values
+ * borrowed until return. Success puts
+ * one Env owner in the true-empty frame slot and returns a full Function borrow
+ * of that owner. Only the slot owns it; copying the result does not retain.
+ * Frame environments do not call this factory. Cold setup is execution-owned,
+ * while every produced Env independently keeps its Plan and code alive. */
+XRAY_API XrtFunction xrt_native_environment_create(XrtManagedFrame *, size_t slot,
+    const XrtNativeEnvironmentInput *, uint32_t source_id);
 
 #ifdef __cplusplus
 }
