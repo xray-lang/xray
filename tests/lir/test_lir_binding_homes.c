@@ -421,8 +421,8 @@ static void string_borrow_only(XrLirType type) {
     XrLirFunctionSpec spec={.name="borrow_only",.name_length=11,.parameters=&type,.parameter_count=1,.result=XR_LIR_UNIT};
     OK(xr_lir_declare_function(module,&spec,&function)); OK(xr_lir_define_function(module,function));
     XrLirBlock block={0}; OK(xr_lir_add_block(module,function,NULL,0,&block)); OK(xr_lir_set_entry(module,function,block));
-    CArrayFixture fixture={.module=module}; ca_return(&fixture,block,(XrLirValue){0}); OK(xr_lir_module_finish(module,NULL));
     XrLirValue parameter={0}; OK(xr_lir_function_parameter(module,function,0,&parameter));
+    CArrayFixture fixture={.module=module}; ca_return(&fixture,block,(XrLirValue){0}); OK(xr_lir_module_finish(module,NULL));
     CHECK(xr_lir_string_binding(module,parameter) && !xr_lir_string_binding(NULL,parameter));
     XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=module},&plan,NULL));
     XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
