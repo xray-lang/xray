@@ -358,6 +358,30 @@ static bool view_loan_borrowed(const XirViewLoanTransport *a, XrXirType type) {
         (a->flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u)!=0;
 }
 
+static bool view_loan_scalar(XrXirType type) {
+    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING ||
+        xr_xir_type_is_integer(type) || type==XR_XIR_F32 || type==XR_XIR_F64;
+}
+/* An actual scalar Cell constructor has no borrowed descendants. Its storage
+ * identity can still conflict with a live loan; the access checker owns that
+ * separate obligation. A formal or unknown Cell is not grounded by its type. */
+static bool view_loan_scalar_cell(XirViewLoanTransport *a,XirStorageReference reference,XrXirType type) {
+    if (!xr_xir_type_is_cell(a->module->types,type)) return false;
+    XrXirType element=xr_xir_cell_element(a->module->types,type);
+    if (element==XR_XIR_STRING || !view_loan_scalar(element)) return false;
+    const XrXirFunction *function=a->module->functions+reference.function;
+    uint32_t value=reference.value;
+    while (value>=function->parameter_count && view_loan_transport_step(a)) {
+        uint32_t index=value-function->parameter_count;
+        if (index>=function->instruction_count) {a->status=XR_XIR_BAD_STRUCTURE;return false;}
+        const XrXirInstruction *op=function->instructions+index;
+        if (op->op==XR_XIR_CELL_NEW) return true;
+        if ((op->op!=XR_XIR_COPY && op->op!=XR_XIR_OWNED_RETAIN) || op->args[0]>=value ||
+            xr_xir_operand_type(function,op->args[0])!=type) return false;
+        value=op->args[0];
+    }
+    return false;
+}
 static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand) {
     if (a->states[id].grounded) return true;
     XirStorageReference reference=a->states[id].reference;
@@ -370,13 +394,13 @@ static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirVi
         (reference.function != demand->function || reference.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT)) {
         a->status=XR_XIR_UNRESOLVED;return false;
     }
-    bool scalar=type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING ||
-        xr_xir_type_is_integer(type) || type==XR_XIR_F32 || type==XR_XIR_F64;
+    bool scalar=view_loan_scalar(type),cell=view_loan_scalar_cell(a,reference,type);
+    if (a->status!=XR_XIR_OK) return false;
     /* The physical receiver retains its owner at this observation. Access
      * obligations still consume receiver effects and actual alias facts. */
     bool receiver=xr_xir_type_is_class(a->module->types,type) &&
         reference.function == demand->function && reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT;
-    if (!borrowed && !callable && !scalar && !receiver) {a->status=XR_XIR_UNRESOLVED;return false;}
+    if (!borrowed && !callable && !scalar && !cell && !receiver) {a->status=XR_XIR_UNRESOLVED;return false;}
     if (callable && !xr_xir_type_is_c_callable(a->module->types,type)) {
         bool complete=false;uint32_t remainder=0;
         ViewLoanCaptures walk={a,id};

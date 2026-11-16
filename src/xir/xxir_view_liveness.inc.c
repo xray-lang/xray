@@ -24,7 +24,7 @@ typedef struct ViewLive {
     void *user;
     XrCompileRequestControl *control;
     uint32_t progress;
-    XrXirDiagnostic location;
+    XrXirDiagnostic location,pending_location;
     uint32_t *indices,*values,*graph,*queue,*heads,*predecessors,*next;
     uint8_t *reachable,*queued;
     uint64_t *storage,*inputs,*outputs,*current,*edge,*after;
@@ -116,7 +116,14 @@ static XrXirStatus view_live_callable_loans(ViewLive *a,uint32_t instruction,uin
     XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
         .frame_bytes=a->frame_bytes,.physical=view_live_loan_physical,.context=a};
     XrXirStatus status=xir_view_loan_transport_use(a->loan_transport,&use);
-    if (status==XR_XIR_UNRESOLVED) {a->pending_loans=true;return XR_XIR_OK;}
+    if (status==XR_XIR_UNRESOLVED) {
+        if (!a->pending_loans) {
+            a->pending_location=a->location;
+            a->pending_location.instruction=instruction;
+            a->pending_location.status=status;
+        }
+        a->pending_loans=true;return XR_XIR_OK;
+    }
     return status;
 }
 static void view_live_enqueue(ViewLive *a,uint32_t block) {
@@ -295,6 +302,7 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
     XirViewLoanTransport *transport=NULL;
     if (loans) status=xir_view_loan_transport_new(context,module,loans,flags,request->control,&transport);
     bool pending=false;
+    XrXirDiagnostic pending_location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
         if (module->declarations && module->declarations->functions[f].native_callable) {
@@ -307,6 +315,7 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
         if (status==XR_XIR_OK && a.count) status=view_live_graph(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_solve(&a);
         if (status==XR_XIR_OK && a.count) status=view_live_visit(&a);
+        if (!pending && a.pending_loans) pending_location=a.pending_location;
         pending|=a.pending_loans;
         if (request->diagnostic && status!=XR_XIR_OK) {
             *request->diagnostic=a.location;request->diagnostic->status=status;
@@ -314,7 +323,11 @@ static XrXirStatus view_liveness_run(const XrXirCompileContext *context,
         view_live_free(&a);
     }
     xir_view_loan_transport_free(transport);xr_compile_resources_free(flags);
-    return status==XR_XIR_OK && pending ? XR_XIR_UNRESOLVED : status;
+    if (status==XR_XIR_OK && pending) {
+        if (request->diagnostic) *request->diagnostic=pending_location;
+        return XR_XIR_UNRESOLVED;
+    }
+    return status;
 }
 XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
