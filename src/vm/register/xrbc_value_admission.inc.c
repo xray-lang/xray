@@ -137,7 +137,7 @@ static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess ac
             if (transfer.source != source || transfer.target != target || to->parameter ||
                 to->temporary_offset == SIZE_MAX) return false;
             if (to->transport!=XR_LIR_CALLABLE_TRANSPORT_NONE) {
-                if (transfer.transfer_mode!=(from->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ?
+                if (to->borrow_source || transfer.transfer_mode!=(from->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ?
                         XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_BORROW)) return false;
             } else if (transfer.transfer_mode!=(to->owner_count ?
                     XR_LIR_OWNERSHIP_TRANSFER_MOVE : XR_LIR_OWNERSHIP_TRANSFER_NONE)) return false;
@@ -200,7 +200,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     XrRbcValueAccess a = code->accesses[index];
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
         a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
-        a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL && (a.first || a.count || a.window)) return false;
+        a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
+        a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&

@@ -307,12 +307,18 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
     if (to->published != from->published) return false;
     uint32_t *to_scopes = rbc_scope_state(to), *from_scopes = rbc_scope_state(from);
     if (to_scopes && to_scopes[0] != from_scopes[0]) return false;
-    uint8_t *to_functions=rbc_function_liveness(to),*from_functions=rbc_function_liveness(from);
+    RbcFunctionFlow *to_functions=rbc_function_liveness(to),*from_functions=rbc_function_liveness(from);
     const XrRbcValueCode *typed=xr_rbc_module_value_code(from->module,(uint32_t)(from->function-from->module->functions));
     for (uint32_t v=1;to_functions && v<=typed->value_count;++v) {
-        uint8_t a=to_functions[v],b=from_functions[v];
-        uint8_t merged=!a || !b ? 0 : a>b ? a : b;
-        if (merged!=a) { to_functions[v]=merged; *changed=true; }
+        RbcFunctionFlow a=to_functions[v],b=from_functions[v],merged={0};
+        if (a.storage && b.storage) {
+            merged.storage=a.storage>b.storage ? a.storage : b.storage;
+            XrRbcFunctionScopes shape=rbc_function_scopes(from->module,from->function);
+            if (rbc_scope_contains(shape,a.scope,b.scope)) merged.scope=b.scope;
+            else if (rbc_scope_contains(shape,b.scope,a.scope)) merged.scope=a.scope;
+            else return false;
+        }
+        if (merged.storage!=a.storage || merged.scope!=a.scope) { to_functions[v]=merged; *changed=true; }
     }
     for (size_t n = 0; n < from->function->aggregate_value_count; ++n) {
         uint8_t initialized = to->aggregates[n] & from->aggregates[n];
@@ -547,6 +553,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     g->incoming[previous].end = f->code_count;
     g->work.spills = g->spills;
     size_t homes = rbc_flow_state_bytes(g->work.module, f);
+    const XrRbcValueCode *typed=rbc_value_code(g->work.module,f);
     if (homes == SIZE_MAX) return XR_RBC_OUT_OF_MEMORY;
     if (homes) {
         if (rows > SIZE_MAX / homes) return XR_RBC_OUT_OF_MEMORY;
@@ -555,6 +562,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
             for (size_t n = 0; n < f->aggregate_access_count; ++n)
                 binding_count += f->aggregate_accesses[n].operation == XR_RBC_FUNCTION_BIND ||
                     f->aggregate_accesses[n].operation == XR_RBC_CAPTURED_CELL_BIND;
+        for (size_t n=0;typed && n<typed->access_count;++n)
+            binding_count+=typed->accesses[n].operation==XR_RBC_VALUE_FUNCTION_ALIAS && typed->accesses[n].other;
         size_t bytes = rows * homes;
         if (binding_count > (SIZE_MAX - bytes) / (2 * sizeof(uint32_t))) return XR_RBC_OUT_OF_MEMORY;
         g->aggregates = xr_calloc(bytes + binding_count * 2 * sizeof(uint32_t), 1);
@@ -568,6 +577,12 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
                 bindings[count * 2] = access.destination;
                 bindings[count++ * 2 + 1] = access.window;
             }
+            for (size_t n=0;typed && n<typed->access_count;++n) {
+                XrRbcValueAccess access=typed->accesses[n];
+                if (access.operation!=XR_RBC_VALUE_FUNCTION_ALIAS || !access.other) continue;
+                bindings[count*2]=access.other;
+                bindings[count++*2+1]=access.window;
+            }
             qsort(bindings, count, 2 * sizeof(*bindings), rbc_scope_binding_compare);
             for (size_t n = 1; n < count; ++n)
                 if (!rbc_scope_binding_compare(bindings + (n - 1) * 2, bindings + n * 2)) return XR_RBC_INVALID;
@@ -577,6 +592,11 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
             g->incoming[b].state.aggregates = g->aggregates + (b + 1) * homes;
         for (size_t n = 0; n < f->aggregate_parameter_count; ++n)
             g->work.aggregates[f->aggregate_parameters[n]] = 1;
+    }
+    RbcFunctionFlow *functions=rbc_function_liveness(&g->work);
+    for (uint32_t p=0;functions && p<typed->parameter_count;++p) {
+        uint32_t value=typed->parameters[p];
+        if (rbc_value_function(g->work.module,typed,value,false)) functions[value]=(RbcFunctionFlow){0,2};
     }
     for (uint32_t r = 0; r < f->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(f,r);

@@ -56,7 +56,7 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
         const XrRbcFunction *callee=&module->functions[access.index];
         const XrRbcValueCode *receiver=xr_rbc_module_value_code(module,access.index);
         if (!receiver || receiver->parameter_count!=callee->parameter_count) return false;
-        if (event->callable_transport!=home->transport || access.count!=callee->capture_count+callee->state_capture ||
+        if (home->borrow_source || event->callable_transport!=home->transport || access.count!=callee->capture_count+callee->state_capture ||
             !rbc_callable_accepts(module,rbc_value_signature(module,code,access.result),callee->callable)) return false;
         for (uint32_t p=0;p<access.count;++p) {
             uint32_t value=code->arguments[access.first+p];
@@ -68,7 +68,9 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
             if (callee->captures[p].kind==XR_RBC_CALLABLE_BINDING) {
                 if (home->transport!=XR_LIR_CALLABLE_TRANSPORT_FRAME ||
                     !rbc_value_scalar(code,function,value,XR_RBC_I64_BINDING)) return false;
-            } else if (!rbc_value_callable_argument(module,code,function,value,callee->captures[p])) return false;
+            } else if ((callee->captures[p].kind==XR_RBC_CALLABLE_FUNCTION &&
+                    home->transport!=XR_LIR_CALLABLE_TRANSPORT_OWNED) ||
+                !rbc_value_callable_argument(module,code,function,value,callee->captures[p])) return false;
         }
         if (home->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED) {
             const XrtValueImage *image=xr_rbc_module_value_image(module);
@@ -102,19 +104,23 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
     }
     if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS) {
         const XrLirHomeEvent *event=rbc_value_event(code,access.index,XR_LIR_OWNERSHIP_CALLABLE_VALUE);
-        if (!event || access.first || access.count || access.window || event->source!=access.result ||
+        if (!event || access.first || access.count || event->source!=access.result ||
             event->target!=access.source || !rbc_value_function(module,code,access.result,true) ||
             !rbc_callable_accepts(module,rbc_value_signature(module,code,access.result),rbc_value_signature(module,code,access.source))) return false;
+        const XrLirValueHome *home=rbc_value_home(code,access.result);
+        if (home->borrow_source!=(home->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ? 0 : access.source)) return false;
         if (event->operation==XR_LIR_FUNCTION_BIND)
-            return rbc_value_scope(module,code,function,access.other,event->callable_scope) &&
+            return access.window!=UINT32_MAX && rbc_value_scope(module,code,function,access.other,event->callable_scope) &&
                 (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
-        return event->operation==XR_LIR_FUNCTION_WEAKEN && !access.other &&
+        return event->operation==XR_LIR_FUNCTION_WEAKEN && !access.other && !access.window &&
             (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
     }
     const XrLirHomeEvent *event=rbc_value_event(code,access.index,XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT);
     if (!event || access.first || access.count || access.window || event->source!=access.source ||
         event->target!=access.result || !rbc_value_scope(module,code,function,access.other,event->callable_scope)) return false;
     if (!access.source) return !access.result;
+    const XrLirValueHome *home=rbc_value_home(code,access.result);
     return rbc_value_function(module,code,access.source,false) && rbc_value_function(module,code,access.result,true) &&
+        home->borrow_source==(home->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ? 0 : access.source) &&
         (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
 }

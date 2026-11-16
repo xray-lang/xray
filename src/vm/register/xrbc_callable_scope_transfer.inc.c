@@ -5,23 +5,30 @@
  *
  * xrbc_callable_scope_transfer.inc.c - Scope geometry in the existing CFG rows
  */
+/* Lexical use belongs to each SSA value even when its bytes borrow an earlier
+ * home. These temporary CFG facts never become runtime owner slots. */
+typedef struct RbcFunctionFlow { uint32_t scope; uint8_t storage; } RbcFunctionFlow;
 static size_t rbc_flow_function_offset(const XrRbcModule *module, const XrRbcFunction *function) {
     size_t homes = function->aggregate_value_count + function->environment_count;
     if (homes < function->aggregate_value_count) return SIZE_MAX;
-    if (!rbc_function_scopes(module, function).count) return homes;
-    size_t scopes = ((size_t)function->register_count + 1) * sizeof(uint32_t);
-    if (homes > SIZE_MAX - 3u || ((homes + 3u) & ~(size_t)3u) > SIZE_MAX - scopes) return SIZE_MAX;
-    return ((homes + 3u) & ~(size_t)3u) + scopes;
+    if (rbc_function_scopes(module, function).count) {
+        size_t scopes = ((size_t)function->register_count + 1) * sizeof(uint32_t);
+        if (homes > SIZE_MAX - 3u || ((homes + 3u) & ~(size_t)3u) > SIZE_MAX - scopes) return SIZE_MAX;
+        homes=((homes+3u)&~(size_t)3u)+scopes;
+    }
+    size_t alignment=_Alignof(RbcFunctionFlow);
+    return homes>SIZE_MAX-(alignment-1) ? SIZE_MAX : (homes+alignment-1)&~(alignment-1);
 }
 static size_t rbc_flow_state_bytes(const XrRbcModule *module,const XrRbcFunction *function) {
     size_t bytes=rbc_flow_function_offset(module,function);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,(uint32_t)(function-module->functions));
     size_t values=code && code->homes ? (size_t)code->value_count+1 : 0;
-    return bytes>SIZE_MAX-values ? SIZE_MAX : bytes+values;
+    return values>(SIZE_MAX-bytes)/sizeof(RbcFunctionFlow) ? SIZE_MAX : bytes+values*sizeof(RbcFunctionFlow);
 }
-static uint8_t *rbc_function_liveness(const RbcStringAdmission *state) {
+static RbcFunctionFlow *rbc_function_liveness(const RbcStringAdmission *state) {
     const XrRbcValueCode *code=xr_rbc_module_value_code(state->module,(uint32_t)(state->function-state->module->functions));
-    return code && code->homes ? state->aggregates+rbc_flow_function_offset(state->module,state->function) : NULL;
+    return code && code->homes ? (RbcFunctionFlow *)(state->aggregates+
+        rbc_flow_function_offset(state->module,state->function)) : NULL;
 }
 static uint32_t *rbc_scope_state(const RbcStringAdmission *state) {
     if (!rbc_function_scopes(state->module, state->function).count) return NULL;
@@ -82,6 +89,10 @@ static bool rbc_callable_scope_transfer(RbcStringAdmission *state, XrRbcAggregat
     if (access.operation == XR_RBC_FUNCTION_SCOPE_LEAVE) {
         if (access.destination != current) return false;
         receiving = shape.parents[current - 1];
+        RbcFunctionFlow *functions=rbc_function_liveness(state);
+        const XrRbcValueCode *code=rbc_value_code(state->module,state->function);
+        for (uint32_t v=1;functions && v<=code->value_count;++v)
+            if (functions[v].storage && functions[v].scope==current) functions[v]=(RbcFunctionFlow){0};
         for (uint32_t r = 0; r < state->function->register_count; ++r)
             if ((rbc_function_state(state->state[r]) || state->state[r] == RBC_CAPTURED_CELL ||
                     state->state[r] == RBC_ARRAY_REF_CAPTURED) &&

@@ -235,6 +235,48 @@ static void scope_leave(CArrayFixture *c, XrLirBlock block, XrLirValue scope) {
         .operands=&scope,.operand_count=1};
     OK(xr_lir_emit_effect(c->module,block,&instruction));
 }
+static void scope_keep_formal(bool owned) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter parameter={.type=XR_LIR_I64};
+    XrLirCallableType signature={.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
+    XrLirType callable=0,scalar=XR_LIR_I64;
+    OK(xr_lir_callable_type(c.module,&signature,&callable));
+    XrLirFunction target={0},helper={0},root={0};
+    XrLirFunctionSpec spec={.name="plus_one",.name_length=8,.parameters=&scalar,.parameter_count=1,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&target));
+    OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=callable}));
+    OK(xr_lir_define_function(c.module,target)); XrLirBlock block={0};
+    OK(xr_lir_add_block(c.module,target,NULL,0,&block)); OK(xr_lir_set_entry(c.module,target,block));
+    XrLirValue input={0}; OK(xr_lir_function_parameter(c.module,target,0,&input));
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,input,ca_constant(&c,block,1)));
+    XrLirType parameters[]={callable,scalar};
+    spec=(XrLirFunctionSpec){.name="keep_formal",.name_length=11,.parameters=parameters,.parameter_count=2,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&helper)); OK(xr_lir_define_function(c.module,helper));
+    OK(xr_lir_add_block(c.module,helper,NULL,0,&block)); OK(xr_lir_set_entry(c.module,helper,block));
+    XrLirValue callback={0}; OK(xr_lir_function_parameter(c.module,helper,0,&callback));
+    OK(xr_lir_function_parameter(c.module,helper,1,&input));
+    XrLirValue outer=scope_enter(&c,block,(XrLirValue){0}),inner=scope_enter(&c,block,outer);
+    XrLirValue operands[]={outer,callback};
+    XrLirValue alias=ca_value(&c,block,XR_LIR_FUNCTION_BIND,callable,operands,2);
+    operands[0]=inner; operands[1]=alias;
+    alias=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,callable,operands,2);
+    operands[0]=outer; operands[1]=alias;
+    alias=ca_value(&c,block,XR_LIR_FUNCTION_SCOPE_LEAVE,callable,operands,2);
+    XrLirValue arguments[]={alias,input};
+    ca_return(&c,block,ca_value(&c,block,XR_LIR_CALL_INDIRECT,scalar,arguments,2));
+    spec=(XrLirFunctionSpec){.name="root",.name_length=4,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_define_function(c.module,root));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,root,block));
+    XrLirInstruction instruction={.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target,
+        .bits=owned ? XR_LIR_CLOSURE_OWNED : XR_LIR_CLOSURE_FRAME};
+    OK(xr_lir_emit_value(c.module,block,&instruction,&arguments[0])); arguments[1]=ca_constant(&c,block,41);
+    instruction=(XrLirInstruction){.op=XR_LIR_CALL,.type=scalar,.callee=helper,.operands=arguments,.operand_count=2};
+    XrLirValue result={0}; OK(xr_lir_emit_value(c.module,block,&instruction,&result));
+    ca_return(&c,block,result); OK(xr_lir_module_finish(c.module,NULL));
+    XrRbcProgram *program=compile(c.module,root); xr_lir_module_destroy(c.module);
+    if (!owned) { CallableRawFixture raw=callable_raw_fixture(program); callable_raw_positive(&raw,program); callable_raw_free(&raw); }
+    execute(program,42);
+}
 static XrRbcProgram *scoped_code(bool owned) {
     CArrayFixture c = {0};
     OK(xr_lir_module_create(NULL,&c.module));
@@ -270,6 +312,9 @@ static XrRbcProgram *scoped_code(bool owned) {
     OK(xr_lir_emit_value(c.module,entry,&instruction,&code));
     XrLirValue bind[] = {outer,code};
     code = ca_value(&c,entry,XR_LIR_FUNCTION_BIND,callable,bind,2);
+    bind[1]=code;
+    instruction=(XrLirInstruction){.op=XR_LIR_FUNCTION_BIND,.type=callable,.operands=bind,.operand_count=2,.bits=1};
+    OK(xr_lir_emit_value(c.module,entry,&instruction,&code));
     XrLirValue condition = {0};
     instruction = (XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1};
     OK(xr_lir_emit_value(c.module,entry,&instruction,&condition));
@@ -336,6 +381,31 @@ static void scope_receiving(void) {
         XrRbcExecution *execution=NULL;
         CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
     }
+    callable_raw_reset(&raw);
+    size_t call_pc=SIZE_MAX,leave_pc=SIZE_MAX;
+    for (size_t pc=0;pc<root->code_count;++pc) {
+        uint32_t word=raw.words[pc];
+        if ((word&255)!=XR_RBC_VALUE_ACCESS) continue;
+        XrRbcValueAccess access=raw.accesses[word>>16];
+        if (access.operation==XR_RBC_VALUE_FUNCTION_CALL) call_pc=pc;
+        if (access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT && access.other==1) leave_pc=pc;
+    }
+    CHECK(call_pc!=SIZE_MAX && leave_pc!=SIZE_MAX && call_pc<leave_pc);
+    uint32_t word=raw.words[call_pc]; raw.words[call_pc]=raw.words[leave_pc]; raw.words[leave_pc]=word;
+    XrRbcExecution *stale=NULL;
+    CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&stale)==XR_RBC_INVALID);
+    CHECK(!stale);
+    callable_raw_reset(&raw);
+    uint32_t first_identity=UINT32_MAX; bool duplicate=false;
+    for (size_t n=0;n<raw.code.access_count;++n) {
+        XrRbcValueAccess *access=&raw.accesses[n];
+        if (access->operation!=XR_RBC_VALUE_FUNCTION_ALIAS || access->other!=1) continue;
+        if (first_identity==UINT32_MAX) first_identity=access->window;
+        else { access->window=first_identity; duplicate=true; break; }
+    }
+    CHECK(duplicate);
+    CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&stale)==XR_RBC_INVALID);
+    CHECK(!stale);
     xr_free(aggregate); callable_raw_free(&raw); execute(program,42);
     execute(scoped_code(true),42);
 }
@@ -347,6 +417,7 @@ int main(void) {
     supported_and_rejected_captures();
     owned_duplicate_edge();
     scope_receiving();
+    scope_keep_formal(false); scope_keep_formal(true);
     puts("callable bytecode: Frame borrows, real Owned environments, scope CFG and raw receiving PASS");
     return 0;
 }
