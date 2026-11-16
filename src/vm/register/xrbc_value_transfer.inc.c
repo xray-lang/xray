@@ -174,8 +174,13 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         if (access.index==XR_LIR_SLICE_OP_CLEANUP) return true;
         const uint32_t *args=code->arguments+access.first;
         if (access.index==XR_LIR_SLICE_OP_NEW) {
-            if (!rbc_value_flow_binding(state,code,args[0],false) ||
-                !rbc_value_flow_bits(state,code,args[1]) || !rbc_value_flow_bits(state,code,args[2])) return false;
+            bool binding;
+            if (access.source==XR_LIR_STATE_REF) {
+                XrtValueKind kind=rbc_value_kind(state->module,code,access.result);
+                binding=rbc_value_flow_reference(state,code,args[0],
+                    kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8,false);
+            } else binding=rbc_value_flow_binding(state,code,args[0],false);
+            if (!binding || !rbc_value_flow_bits(state,code,args[1]) || !rbc_value_flow_bits(state,code,args[2])) return false;
         } else {
             if (!rbc_value_flow_read(state,code,args[0],&incoming) || incoming.value.state!=RBC_SLICE_BORROWED) return false;
             for (uint32_t p=1;p<access.count;++p) if (!rbc_value_flow_bits(state,code,args[p])) return false;

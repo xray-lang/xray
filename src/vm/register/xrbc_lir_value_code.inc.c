@@ -196,6 +196,7 @@ static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *
 static bool rbc_lir_slice_access(RbcLirCompiler *c, const XrLirInstructionView *instruction,
     XrLirSliceIntrinsic shape, XrRbcValueAccess *access) {
     *access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_SLICE,.result=instruction->result,
+        .source=shape.operation==XR_LIR_SLICE_OP_NEW && shape.binding_type==XR_LIR_STATE_REF ? XR_LIR_STATE_REF : 0,
         .index=(uint32_t)shape.operation,.count=instruction->operand_count};
     if (!rbc_lir_value_arguments(c,instruction->operands,instruction->operand_count,&access->first)) return false;
     bool construct=shape.operation==XR_LIR_SLICE_OP_NEW || shape.operation==XR_LIR_SLICE_OP_REBORROW ||
