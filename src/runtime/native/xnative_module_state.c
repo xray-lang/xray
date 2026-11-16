@@ -221,12 +221,13 @@ XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void 
             &state->scratch_busy, module_scratch_guard, state};
         state->edges[i] = (XrtPlaceEdge){.destination={.external=&state->destinations[i], .nulls=XRT_PLACE_NULLABLE},
             .source={.external=&state->sources[i], .nulls=XRT_PLACE_NULLABLE},
-            .temporary={.frame=state->temporary_frame, .slot=i, .nulls=XRT_PLACE_NULLABLE}};
+            .temporary={.frame=state->temporary_frame, .slot=i, .nulls=XRT_PLACE_NULLABLE},
+            .transfer=XRT_PLACE_TRANSFER_MOVE};
     }
     ModulePublication context = {state, type, module_payload(state, reference->slot)};
     XrtPlacePublication publication = {module_publish_bytes, &context};
     if (!type->spec.owned_count) state->busy = true;
-    status = xrt_place_edge_move(state->edges, type->spec.owned_count, &publication);
+    status = xrt_place_edge_transfer(state->edges, type->spec.owned_count, &publication);
     if (!type->spec.owned_count) state->busy = false;
     state->busy = true;
     xrt_value_drop(type->plan, state->scratch);
