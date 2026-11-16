@@ -45,7 +45,7 @@ static void cleanup_end(XrLirBlock block,XrLirValue target) {
 }
 static SliceCleanupFixture slice_cleanup_fixture(XrLirType element,SliceCleanupCase shape,bool take_definition) {
     SliceCleanupFixture c={0};XrLirModule *m=NULL;XrLirType slice=0;
-    OK(xr_lir_array_module_create(NULL,&m));c.module=m;OK(xr_lir_slice_catalog_install(m));
+    OK(xr_lir_module_create(NULL,&m));c.module=m;OK(xr_lir_slice_catalog_install(m));
     OK(xr_lir_slice_type(m,element,&slice));
     XrLirType cell_type=XR_LIR_ARRAY_CELL;
     OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup_root",.name_length=12,.result=XR_LIR_I64},&c.root));
