@@ -7,7 +7,7 @@ static XrXirStatus access_temporary_operation(const XrXirCompileContext *context
 }
 static XrXirStatus declarations_temporary_operation(const XrXirCompileContext *context,void *opaque) {
     AccessTemporaryFixture *f=opaque;
-    return xr_xir_compile_declarations_verify(context,f->module->declarations,f->module->types,2,f->module->linkage_kind);
+    return xr_xir_compile_declarations_verify(context,f->module->declarations,f->module->types,2,f->module->linkage_kind, NULL);
 }
 static void access_temporary_cases(void) {
     XrXirNominalDeclaration nominal={.module={"a",1},.name={"S",1}};XrXirNominalTable table={&nominal,1,NULL};
@@ -33,7 +33,7 @@ static void access_temporary_cases(void) {
     XrXirFunctionIdentity cycle_ids[3]={{0},{.module=1},{0}};
     XrXirDeclarations cycle={.modules=modules,.module_count=2,.functions=cycle_ids,.entry_function=2};
     allocation_compile_owner_new(&owner,&allocation_compile_limits);
-    CHECK(xr_xir_compile_declarations_verify(&owner.context,&cycle,NULL,3,XR_XIR_PROGRAM)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_declarations_verify(&owner.context,&cycle,NULL,3,XR_XIR_PROGRAM, NULL)==XR_XIR_BAD_STRUCTURE);
     cycle_ids[2].module=1;cycle.root_module=1;
     XrXirModule private_scope={.stage=XR_XIR_CHECKED,.function_count=3,.declarations=&cycle,.types=&types};
     CHECK(xr_xir_compile_type_access(&owner.context,&private_scope,2,type)==XR_XIR_BAD_TYPE);

@@ -1,5 +1,5 @@
 fn make(seed:i64)->fn(i64)->i64 {
-    var cache = #{"value":seed}
+    var cache = {"value":seed}
     const before = cache
     const frame = fn() { cache.set("value",seed+1) }
     frame()

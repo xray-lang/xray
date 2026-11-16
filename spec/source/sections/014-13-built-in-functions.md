@@ -8,7 +8,7 @@ order: 014
 
 ## 13. 内置函数 (Built-in Functions)
 
-> 真值源：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
+> 实现参考：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
 
 不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，只是文档占位符，不是源码中的类型名。
 
@@ -56,6 +56,7 @@ order: 014
 
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
+<!-- xr-source:example builtin-typeOf-is -->
 ```xray @id=builtin-typeOf-is
 var x = 42
 print(typeOf(x) == Type.i64)    // true
@@ -63,6 +64,7 @@ print(typeName(x))              // "i64"
 print(x is i64)                 // true
 // typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
+<!-- /xr-source -->
 
 ### 13.4 协程
 
@@ -120,7 +122,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 ## 13. Built-in Functions
 
-> Source of truth: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
+> Implementation reference: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
 
 These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value"; it is a documentation placeholder rather than a writable source-language type.
 
@@ -168,6 +170,7 @@ Generic Array<T>/callable<T> family names are available at the definition. Queri
 
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
+<!-- xr-source:example builtin-typeOf-is -->
 ```xray @id=builtin-typeOf-is
 var x = 42
 print(typeOf(x) == Type.i64)    // true
@@ -175,6 +178,7 @@ print(typeName(x))              // "i64"
 print(x is i64)                 // true
 // typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
+<!-- /xr-source -->
 
 ### 13.4 Coroutines
 

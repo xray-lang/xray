@@ -181,7 +181,7 @@ fn test_array_nullable_elements() {
 
 @test
 fn test_map_nullable_values() {
-    var m = #{"a": 1, "b": null}
+    var m: Map<string, i64?> = {"a": 1, "b": null}
     assertEqual(m.get("a"), 1)
     assertEqual(m.get("b"), null)
     assertEqual(m.get("c"), null)

@@ -118,7 +118,8 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
             --fixed;
         }
         if (a->ordinal>=fixed || !f->parameters || h->parameter_count || h->parameters ||
-            fi->cleanup_owner || fi->method_kind==XR_XIR_MEMBER_HELPER ||
+            fi->cleanup_owner || (fi->method_kind==XR_XIR_MEMBER_HELPER&&!fi->capture_owner) ||
+            a->ordinal<fi->capture_count ||
             (fi->method_kind==XR_XIR_READ_METHOD && !a->ordinal) ||
             hi->module!=fi->module || hi->nominal_owner!=fi->nominal_owner ||
             hi->member_access!=fi->member_access || hi->exported || hi->cleanup_owner || hi->promises ||
@@ -261,4 +262,5 @@ XR_FUNC XrXirStatus xir_compile_default_call_origin(const XrXirCompileContext *c
 }
 
 #include "xxir_construction_internal.h"
+#include "xxir_constant_key.h"
 #include "xxir_nominal_initializers.inc.c"

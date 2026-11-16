@@ -1,3 +1,8 @@
+struct Row {
+    name: string?
+    score: i64
+}
+
 fn snapshot(name:string?)->string? { return name }
 fn greet(name:string?)->string {
     if(name==null) { return "guest" }
@@ -6,11 +11,11 @@ fn greet(name:string?)->string {
 var name:string?=null
 print(greet(snapshot(name)))
 name="alice"
-const saved={name:snapshot(name),score:95}
+const saved=Row{name:snapshot(name),score:95}
 name=null
 print(greet(saved.name))
 print(saved.score)
 fn some<T>(value:T)->T? { return value }
-const outer=some({name:some("alice"),score:7})
+const outer=some(Row{name:some("alice"),score:7})
 print(outer!.name!)
 print(outer!.score)

@@ -1,8 +1,8 @@
 const ch = Channel<i64>(0)
 var sent = ch.sendTimeout(7, 10)
 print(match (sent) {
-    SendResult.Sent -> "sent"
-    SendResult.Timeout -> "timeout"
-    _ -> "closed"
+    SendResult.Sent => "sent",
+    SendResult.Timeout => "timeout",
+    _ => "closed",
 })
 ch.close()

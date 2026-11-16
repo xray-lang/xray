@@ -1723,7 +1723,7 @@ static void closure_report_lifetime(void) {
         "fn answer<T>(tag:T) throws(Fault)->i64{\r\n"
         "var offset=2\r\n"
         "/*\303\251\360\237\230\200*/ const a=fn(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
-        "/*\303\251\360\237\230\200*/ const b=(value:i64,value:i64)->value+offset\r\n"
+        "/*\303\251\360\237\230\200*/ const b=(value:i64,value:i64)=>value+offset\r\n"
         "/*\303\251\360\237\230\200*/ fn local(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
         "return try a(1,2)+b(1,2)+try local(1,2)\r\n"
         "}\r\n"

@@ -6,8 +6,8 @@ print("========== 测试2：Channel const 零拷贝共享 ==========")
 
 fn recvValue(ch) {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 

@@ -13,9 +13,9 @@ class Simple {
     }
 }
 class Complex {
-    _map: Map<string, i64> = #{}
+    _map: Map<string, i64> = {}
     _arr: Array<i64> = []
-    _config: Map<string, i64> = #{"debug": 0, "port": 8080}
+    _config: Map<string, i64> = {"debug": 0, "port": 8080}
 
     init() {
         // 字段已自动初始化
@@ -71,7 +71,7 @@ class Counter {
 
 class NoCtorDefaults {
     nums: Array<i64> = [1, 2]
-    settings: Map<string, i64> = #{"port": 8080}
+    settings: Map<string, i64> = {"port": 8080}
 }
 
 @test

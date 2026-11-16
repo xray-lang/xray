@@ -74,11 +74,37 @@ static XrXirValueStatus hash_allocate(XrXirType type, size_t capacity,
 static uint64_t hash_entry_hash(const XirHash *map, size_t index) {
     uint64_t hash = 0; memcpy(&hash, hash_entry(map, index), sizeof(hash)); return hash;
 }
+/* The Map arena pins every presealed empty-variant descriptor for this
+ * synchronous borrow. Compact enum tags are never native object pointers. */
+static bool hash_key_borrow(const XrXirTypeArena *arena,XrXirType type,
+    const unsigned char *bytes,uint32_t size,XrXirValue *output) {
+    if(xr_xir_key_builtin_type(type))return storage_leaf_value(arena,type,bytes,size,output);
+    if(!xr_xir_compile_type_arena_key_eligible(arena,type)||size>sizeof(uint32_t)||
+        (size&&!bytes))return false;
+    uint32_t variant=0;if(size)memcpy(&variant,bytes,size);
+    const XirNominalValue *record=xr_xir_compile_type_arena_empty_variant(arena,type,variant);
+    if(!record)return false;
+    XrXirValue result={(uint32_t)type,0,0};memcpy(&result.payload,&record,sizeof(record));*output=result;
+    return true;
+}
 static XrXirValueStatus hash_probe(const XirHash *map, const XrXirValue *key,
     XrXirValueAdmission *admission, HashProbe *out) {
-    if (!key || key->type != (uint32_t)map->key_type) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(!key)return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(xr_xir_key_builtin_type(map->key_type)) {
+        if(key->type!=(uint32_t)map->key_type)return XR_XIR_VALUE_BAD_ARGUMENT;
+    } else {
+        /* Reject a foreign logical key before any generic value traversal.
+         * The charged enum receiver below validates the actual sealed record. */
+        if(key->reserved||!key->payload)return XR_XIR_VALUE_BAD_ARGUMENT;
+        const XirObject *object=object_pointer(key);
+        if((uint32_t)object->type!=key->type||object->kind!=XR_XIR_TYPE_NOMINAL||
+            !xir_type_arena_same_type(object->arena,(XrXirType)key->type,
+                map->object.arena,map->key_type))return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     HashProbe probe = {0};
-    XrXirValueStatus status = key_hash_graph_operation(key, admission, &probe.hash);
+    XrXirValueAdmission receiving=*admission;receiving.arena=map->object.arena;
+    XrXirValueStatus status = key_hash_graph_operation(key, &receiving, &probe.hash);
+    admission->work=receiving.work;
     if (status != XR_XIR_VALUE_OK) return status;
     if (!map->capacity) { *out = probe; return XR_XIR_VALUE_OK; }
     size_t mask = map->capacity - 1;
@@ -95,9 +121,13 @@ static XrXirValueStatus hash_probe(const XirHash *map, const XrXirValue *key,
             XR_CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout),
                 "sealed hash keys retain their exact storage layout");
             XrXirValue stored={0};
-            if (!storage_leaf_value(map->object.arena,map->key_type,
-                hash_span(map,probe.entry,false).bytes,layout.size,&stored)) return XR_XIR_VALUE_BAD_ARGUMENT;
-            status = key_equal_graph_operation(&stored, key, admission, &probe.found);
+            if(!hash_key_borrow(map->object.arena,map->key_type,hash_span(map,probe.entry,false).bytes,
+                layout.size,&stored))return XR_XIR_VALUE_BAD_ARGUMENT;
+            /* Stored enum descriptors are borrowed from the live Map arena;
+             * this synchronous probe never acquires or drops an extra owner. */
+            receiving=*admission;receiving.arena=map->object.arena;
+            status = key_equal_graph_operation(&stored, key, &receiving, &probe.found);
+            admission->work=receiving.work;
             if (status != XR_XIR_VALUE_OK) return status;
             if (probe.found) { *out = probe; return XR_XIR_VALUE_OK; }
         }

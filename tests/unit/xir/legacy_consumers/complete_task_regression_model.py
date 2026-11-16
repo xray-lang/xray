@@ -796,32 +796,32 @@ _PLAIN_SCOPE_TRANSFORMS = [('    assertEqual(recv_sum(ch, 3), 111)\n',
   '    assertEqual(p19PlainScopeSum, 111)\n'
   '    print(p19PlainScopeSum)\n'),
  ('        match (result) {\n'
-  '            TaskResult.Failed { error: _ } -> {}\n'
-  '            _ -> { assert(false, "failed task should be observed through TaskResult") }\n'
+  '            TaskResult.Failed { error: _ } => {},\n'
+  '            _ => { assert(false, "failed task should be observed through TaskResult") },\n'
   '        }\n',
   '        match (result) {\n'
-  '            TaskResult.Failed { error: _ } -> {}\n'
-  '            _ -> { assert(false, "failed task should be observed through TaskResult") }\n'
+  '            TaskResult.Failed { error: _ } => {},\n'
+  '            _ => { assert(false, "failed task should be observed through TaskResult") },\n'
   '        }\n'
   '        print(match (result) {\n'
-  '            TaskResult.Failed { error: _ } -> true\n'
-  '            _ -> false\n'
+  '            TaskResult.Failed { error: _ } => true,\n'
+  '            _ => false,\n'
   '        })\n'),
  ('    assertEqual(recv_sum(ch, 1), 5)\n',
   '    var p19PlainScopeFive = recv_sum(ch, 1)\n'
   '    assertEqual(p19PlainScopeFive, 5)\n'
   '    print(p19PlainScopeFive)\n'),
  ('        match (result) {\n'
-  '            TaskResult.Cancelled -> {}\n'
-  '            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }\n'
+  '            TaskResult.Cancelled => {},\n'
+  '            _ => { assert(false, "cancelled task should report TaskResult.Cancelled") },\n'
   '        }\n',
   '        match (result) {\n'
-  '            TaskResult.Cancelled -> {}\n'
-  '            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }\n'
+  '            TaskResult.Cancelled => {},\n'
+  '            _ => { assert(false, "cancelled task should report TaskResult.Cancelled") },\n'
   '        }\n'
   '        print(match (result) {\n'
-  '            TaskResult.Cancelled -> true\n'
-  '            _ -> false\n'
+  '            TaskResult.Cancelled => true,\n'
+  '            _ => false,\n'
   '        })\n')]
 
 
@@ -1136,20 +1136,20 @@ _TASK_LINK_AUTHORITIES = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/015-14-built-in-type-methods.md',
  'stdlib/types/coroutine.xr',
  'stdlib/time/time.xr')
-_TASK_LINK_TRANSFORMS = [('    match (r) {\n        TaskResult.Cancelled ->',
+_TASK_LINK_TRANSFORMS = [('    match (r) {\n        TaskResult.Cancelled =>',
   '    print(match (r) {\n'
-  '        TaskResult.Cancelled -> true\n'
-  '        _ -> false\n'
+  '        TaskResult.Cancelled => true,\n'
+  '        _ => false,\n'
   '    })\n'
   '    match (r) {\n'
-  '        TaskResult.Cancelled ->'),
- ('    match (r) {\n        TaskResult.Failed { error: _ } ->',
+  '        TaskResult.Cancelled =>'),
+ ('    match (r) {\n        TaskResult.Failed { error: _ } =>',
   '    print(match (r) {\n'
-  '        TaskResult.Failed { error: _ } -> true\n'
-  '        _ -> false\n'
+  '        TaskResult.Failed { error: _ } => true,\n'
+  '        _ => false,\n'
   '    })\n'
   '    match (r) {\n'
-  '        TaskResult.Failed { error: _ } ->'),
+  '        TaskResult.Failed { error: _ } =>'),
  ('    assert(r1 == 42)', '    print(r1)\n    assert(r1 == 42)'),
  ('    assert(r2 == 42)', '    print(r2)\n    assert(r2 == 42)')]
 _TASK_LINK_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',

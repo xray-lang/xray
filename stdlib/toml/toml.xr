@@ -81,7 +81,7 @@ export class TomlTable {
     values: Map<string, TomlValue>
 
     init() {
-        this.values = #{}
+        this.values = {}
     }
 
     get(key: string) -> TomlValue? {
@@ -343,7 +343,7 @@ class TomlParser {
         this.root = TomlValue.Table(table)
         this.current = table
         this.errors = []
-        this.definedTables = #{}
+        this.definedTables = {}
         this.keyCount = 0
     }
 

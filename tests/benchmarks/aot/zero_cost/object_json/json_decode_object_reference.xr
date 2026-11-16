@@ -1,4 +1,7 @@
-type Profile = { id: i64, active: bool }
+struct Profile {
+    id: i64
+    active: bool
+}
 
 fn run(n: i64) -> i64 {
     var object = JSON.parseObject("{\"id\":7,\"active\":true}")

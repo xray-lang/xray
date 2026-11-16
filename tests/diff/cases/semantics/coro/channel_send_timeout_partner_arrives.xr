@@ -12,14 +12,14 @@ go fn() {
 }()
 var first = ch.sendTimeout(7, 2000)
 print(match (first) {
-    SendResult.Sent -> "sent"
-    SendResult.Timeout -> "first-timeout"
-    _ -> "first-closed"
+    SendResult.Sent => "sent",
+    SendResult.Timeout => "first-timeout",
+    _ => "first-closed",
 })
 var second = ch.sendTimeout(8, 10)
 print(match (second) {
-    SendResult.Sent -> "second-sent"
-    SendResult.Timeout -> "second-timeout"
-    _ -> "second-closed"
+    SendResult.Sent => "second-sent",
+    SendResult.Timeout => "second-timeout",
+    _ => "second-closed",
 })
 ch.close()

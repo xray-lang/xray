@@ -8,6 +8,7 @@
  */
 #include "xhir_literal.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_data_union.h"
 #include "../xir/xxir_float.h"
 #include "../xir/xxir_compile_memory.h"
 #include "../shared/xr_decimal_float.h"
@@ -40,6 +41,18 @@ XR_FUNC XrXirStatus xr_hir_literal_check(const XrXirTypes *types,const XrHirLite
     XrXirStatus status=literal_poll(control,reason);if(status!=XR_XIR_OK)return status;
     XrXirType expected=input->expected?input->expected_type:XR_XIR_UNIT;
     if(xr_xir_type_is_nullable(types,expected))expected=xr_xir_nullable_element(types,expected);
+    const XrXirTypeNode *data=xr_xir_type_node(types,expected);
+    if(data && data->kind==XR_XIR_TYPE_DATA_UNION) {
+        if(!xr_xir_data_union_shape(types,expected))return literal_failure(reason,XR_XIR_BAD_TYPE,"invalid data-union literal context");
+        XrXirType integer=XR_XIR_UNIT,floating=XR_XIR_UNIT;
+        for(uint32_t p=0;p<data->parameter_count;++p) {
+            XrXirType member=data->parameters[p].type;
+            if(xr_xir_type_is_integer(member))integer=member;
+            if(xr_xir_float_bits(member))floating=member;
+        }
+        expected=input->decimal?floating:integer!=XR_XIR_UNIT?integer:floating;
+        if(expected==XR_XIR_UNIT)return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
+    }
     XrHirLiteral literal={.origin=input->origin,.kind=XR_HIR_LITERAL_INTEGER,.type=XR_XIR_I64};
     if(input->decimal) {
         literal.kind=XR_HIR_LITERAL_FLOAT;literal.type=input->expected && xr_xir_float_bits(expected)?expected:XR_XIR_F64;

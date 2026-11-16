@@ -102,14 +102,14 @@ static void constant_initializer_failures(void) {
 }
 static void diagnostic_copy_failure(void) {
     SourceFixture fixture = source_fixture(
-        "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n");
+        "fn answer()->i64{const values=Set<f64>()\nreturn len(values)}\nprint(answer())\n");
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
     attempts = 0;
     fail_at = SIZE_MAX;
     CHECK(xr_lir_lower_program_checked(&request, &output, &failure) == XR_LIR_UNSUPPORTED);
-    CHECK(strstr(failure.diagnostic.message,"STRUCT_NEW"));
+    CHECK(strstr(failure.diagnostic.message,"SET_NEW"));
     CHECK(!output.module && failure.owned_path && failure.diagnostic.source.path == failure.owned_path);
     CHECK(attempts > 0);
     size_t path_point = attempts - 1;
@@ -303,7 +303,7 @@ static void callable_lower_failures(void) {
         "fn run(){make(0)\nconst cb=choose(true)\nprint(cb(2))}\nrun()\n",
         "fn makeCounter()->fn()->i64{var count=0\nreturn fn()->i64{count=count+1\nreturn count}}\n"
         "var counter=makeCounter()\nprint(counter())\nprint(counter())\n",
-        "fn make(seed:i64)->fn()->i64{var table=#{\"value\":seed}\n"
+        "fn make(seed:i64)->fn()->i64{var table={\"value\":seed}\n"
         "return fn()->i64{table.set(\"value\",seed+1)\nreturn table.get(\"value\") ?? 0}}\n"
         "const callback=make(40)\nprint(callback())\n",
         "fn make(seed:i64)->fn(i64)->i64{var callback=fn(n:i64)->i64{if(n==0){return seed}\n"
@@ -355,7 +355,7 @@ static void composition_lower_failures(void) {
 }
 
 static void map_lower_failures(void) {
-    SourceFixture fixture = source_fixture("var state=#{\"x\":40}\n"
+    SourceFixture fixture = source_fixture("var state={\"x\":40}\n"
         "fn change(items:ref Map<string,i64>){items.set(\"x\",42)}\n"
         "fn value(items:Map<string,i64>)->Map<string,i64>{return items}\n"
         "change(ref state)\nprint(value(state).get(\"x\"))\n");
@@ -385,10 +385,11 @@ static void tuple_lower_failures(void) {
 }
 
 static void record_lower_failures(void) {
-    SourceFixture fixture = source_fixture("fn snapshot<T>(value:T)->T{return value}\n"
+    SourceFixture fixture = source_fixture("struct SnapshotRow{name:string?;score:i64}\n"
+        "fn snapshot<T>(value:T)->T{return value}\n"
         "fn some<T>(value:T)->T?{return value}\n"
-        "var current={name:some(\"alice\"),score:41}\n"
-        "const saved=some(snapshot(current))\nvar empty:string?=null\ncurrent={name:empty,score:99}\n"
+        "var current=SnapshotRow{name:some(\"alice\"),score:41}\n"
+        "const saved=some(snapshot(current))\nvar empty:string?=null\ncurrent=SnapshotRow{name:empty,score:99}\n"
         "print(saved!.name!)\nprint(saved!.score)\n");
     attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
     size_t total = attempts;

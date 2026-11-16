@@ -1,7 +1,10 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn makeObjectReturnLocalPlan() -> User {
-    return { name: "ada", age: 7 }
+    return User{ name: "ada", age: 7 }
 }
 
 fn objectReturnLocalPlan() -> i64 {

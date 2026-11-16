@@ -1,12 +1,11 @@
-"""Complete structural calls, typed narrowing, hash keys and unused signatures.
+"""Independent retained nominal calls, JSON values and unused declarations.
 
-The model uses logical fields and explicit JSON decoding, not physical field
-ordinals or erased object predicates. Two declaration-only programs retain
-signature admission duties without claiming an argument/body ever executed.
-Class key copies stop at identity; no ABI, generic lowering, dispatch, borrow,
-lifetime, resource, safety or provider qualification follows from these values.
+Structural width matching and shape-based union narrowing were removed. Current
+models use actual Named/User/Tagged declaration identities. Original source and
+archive digests remain historical identities through explicit Task342 records;
+these value observations confer no Source, ownership, ABI or product pass.
 """
-from frozen_derivation_inputs import resolve as resolve_derivation
+from task342_responsibility_migration import verify_input
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib,json,re
@@ -50,21 +49,43 @@ _INPUTS={'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e62
  'tests/unit/xir/legacy_consumers/independent_observation_format.py': '09843df7bf351411b39877696ae17e489ee982062827d3a6ab8e8cad7ab1f68b'}
 
 
-def satisfies(value,schema,exact=True):
-    if type(value) is not dict:return False
-    if exact and set(value)!=set(schema) or not set(schema)<=set(value):return False
-    return all(codec.decode(value[name],kind) is not codec.INVALID for name,kind in schema.items())
+@dataclass(frozen=True)
+class Named:
+    name: str
+    age: int=0
+    zzz: int=0
+    id: int=0
+    def __post_init__(self):
+        if type(self.name) is not str:raise ValueError('Named.name requires string')
+        for value in (self.age,self.zzz,self.id):declared_i64(value)
 
 
-def project(value,name,required):
-    if name not in required:raise ValueError('Generic definition cannot access an unconstrained field')
-    if not satisfies(value,required,exact=False):raise ValueError('Concrete shape does not satisfy exact required field types')
-    return value[name]
+def read_name(value):
+    if type(value) is not Named:raise ValueError('Named declaration identity required')
+    return value.name
+
+
+@dataclass(frozen=True)
+class User:
+    name: str
+    age: int
+    def __post_init__(self):
+        if type(self.name) is not str:raise ValueError('User.name requires string')
+        declared_i64(self.age)
+
+
+@dataclass(frozen=True)
+class Tagged:
+    kind: str
+    n: int
+    def __post_init__(self):
+        if type(self.kind) is not str:raise ValueError('Tagged.kind requires string')
+        declared_i64(self.n)
 
 
 def describe(value):
-    if satisfies(value,{'kind':'string','n':'i64'}):return 'tagged:'+str(value['n'])
-    if satisfies(value,{'name':'string','age':'i64'}):return 'user:'+value['name']
+    if type(value) is Tagged:return 'tagged:'+str(value.n)
+    if type(value) is User:return 'user:'+value.name
     return 'neither'
 
 
@@ -125,12 +146,11 @@ def declared_selector_trace():
 
 
 def observations():
-    required={'name':'string'}
     concrete=[{'name':'ada','age':1},{'name':'bob','zzz':2},{'age':3,'name':'cat'},{'id':4,'name':'dot'}]
-    names=[project(value,'name',required) for value in concrete]
+    names=[read_name(Named(**value)) for value in concrete]
     width={'observations':[''.join(names)],'concrete_fields_in_written_order':[list(x) for x in concrete],
-        'all_original_field_values':concrete,'required_generic_fields':required,'original_projection_calls':4,
-        'dot_and_constant_bracket_share_name_lookup':True,'no_physical_ordinal_assumed':True}
+        'all_original_field_values':concrete,'current_nominal_declaration':'Named','original_projection_calls':4,
+        'declared_nominal_field_reads':True,'no_physical_ordinal_assumed':True}
     schema={'name':'string','age':'i64'}
     inputs=[json.loads(text) for text in ['{"name":"Alice","age":30}','{"name":"Bob"}',
         '{"name":"Carol","age":7,"extra":true}','{"name":"Dan","age":"not an int"}']]
@@ -143,9 +163,8 @@ def observations():
         'wrongKind decodes User='+str(codec.decode(wrong,schema) is not codec.INVALID).lower(),
         'narrowed='+narrowed['name']+'/'+str(narrowed['age']),
         'scalar decodes User='+str(codec.decode(42,schema) is not codec.INVALID).lower(),
-        describe({'kind':'t','n':9}),describe({'name':'Eve','age':1})]
-    shape={'observations':values,'JSON_schema_boundary_inputs':inputs,'exact_static_union_shapes':[
-        {'kind':'t','n':9},{'name':'Eve','age':1}],'unknown_fields_default':'REJECT','explicit_ignore_retains_known_fields':True}
+        describe(Tagged('t',9)),describe(User('Eve',1))]
+    shape={'observations':values,'JSON_schema_boundary_inputs':inputs,'nominal_union_declarations':['Tagged','User'],'unknown_fields_default':'REJECT','explicit_ignore_retains_known_fields':True}
     token=Token('original-token',7);table=KeyTable();table.set(token,99)
     values=[table.contains(token),table.get(token)]
     if table.contains(token):values.append(table.get(token))
@@ -168,8 +187,7 @@ def observations():
 def expected_rows():
     if (set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values())|{GOLDEN} or set(_PROGRAMS)!=_NAMES or len(_PROGRAMS)!=6 or tuple(_PROGRAMS.items())!=_IDENTITIES):
         raise ValueError('Complete structural-call source or authority identities changed')
-    for path,digest in _INPUTS.items():
-        if hashlib.sha256(resolve_derivation(ROOT, path, digest).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Structural complete source or normative input changed: '+path)
+    for path,digest in _INPUTS.items():verify_input(ROOT,path,digest)
     derived=observations();rows=[]
     for name,source in _PROGRAMS.items():
         trace=derived[name];text=(ROOT/source).read_text(encoding='utf-8')
@@ -182,7 +200,7 @@ def expected_rows():
         rows.append({'id':'complete_structural_calls_'+name,'source':source,'required_target':None,
             'expected':{'exit_code':0,'stdout_utf8':stdout,'stderr_utf8':''},'observation_count':len(trace['observations']),
             'required_semantic_trace':{k:v for k,v in trace.items() if k!='observations'},
-            'model':'Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.'})
+            'model':'Retained original output observations with nominal Named field calls,explicit JSON decoding,nominal User/Tagged union membership,custom hash/equality and identity-stopping class copy,or unused READ signature. Structural width/shape/destructure language duties are retired; historical names do not restore them. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.'})
         if name==_DECLARED_NAME:
             rows[-1]['model']='Complete unchanged original Box field default,declared fill/contains bodies,spread/holds helpers,main and all three prints;independent receiver arithmetic and exact i64 equality. Same spelling does not grant container semantics. No internal intrinsic stamp,ABI,class ownership,FI,lifetime,safety or provider qualification inferred.'
     return rows

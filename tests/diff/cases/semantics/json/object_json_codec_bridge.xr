@@ -3,10 +3,17 @@
 // to a shaped JSON.Value through its field table, decodes back through the same bridge
 // shape, and survives a full roundtrip including a nested Object.
 
-type Address = { city: string, zip: i64 }
-type User = { name: string, age: i64, address: Address }
+struct Address {
+    city: string
+    zip: i64
+}
+struct User {
+    name: string
+    age: i64
+    address: Address
+}
 
-var user: User = { name: "Ada", age: 37, address: { city: "Hangzhou", zip: 310000 } }
+var user: User = User{ name: "Ada", age: 37, address: Address{ city: "Hangzhou", zip: 310000 } }
 
 // Object -> JSON.Value field-table encode is observable as a shaped JSON.
 var encoded = JSON.value(user)

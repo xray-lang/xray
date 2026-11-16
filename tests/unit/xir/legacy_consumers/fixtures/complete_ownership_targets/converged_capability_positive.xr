@@ -16,8 +16,8 @@ fn run() {
     const ch: Channel<i64> = Channel(1)
     ch.send(7)
     match (ch.recv()) {
-        Recv.Value { value: value } -> print(value)
-        _ -> assert(false)
+        Recv.Value { value: value } => print(value),
+        _ => assert(false),
     }
     ch.close()
 

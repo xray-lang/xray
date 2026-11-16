@@ -4,27 +4,27 @@ const maxForState = Atomic<i64>(0)
 const maxMapState = Atomic<i64>(0)
 const maxReduceState = Atomic<i64>(0)
 
-var plan = parallel.Plan<i64>(parallel.Options(128), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(128), (lane) => lane)
 
-plan.forEach(0..128, (state, i) -> {
+plan.forEach(0..128, (state, i) => {
     if (state > maxForState.load(Ordering.Relaxed)) {
         maxForState.store(state, Ordering.Relaxed)
     }
 })
 
-var mapped = plan.map(0..128, (state, i) -> {
+var mapped = plan.map(0..128, (state, i) => {
     if (state > maxMapState.load(Ordering.Relaxed)) {
         maxMapState.store(state, Ordering.Relaxed)
     }
     return i
 })
 
-var reduced = plan.reduce(0..128, "", (state, i) -> {
+var reduced = plan.reduce(0..128, "", (state, i) => {
     if (state > maxReduceState.load(Ordering.Relaxed)) {
         maxReduceState.store(state, Ordering.Relaxed)
     }
     return "x"
-}, (a, b) -> a + b)
+}, (a, b) => a + b)
 
 print(maxForState.load(Ordering.Relaxed))
 print(len(mapped))

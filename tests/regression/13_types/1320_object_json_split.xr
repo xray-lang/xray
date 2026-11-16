@@ -1,12 +1,15 @@
 // 1320_object_json_split.xr
-// Test: object literals are exact shapes; schema-less JSON objects use Map storage.
+// Test: named structs hold known fields; schema-less JSON objects use Map storage.
 
-type User = { id: i64, name: string }
+struct User {
+    id: i64
+    name: string
+}
 
 @test
 fn test_default_object() {
-    var user = { id: 1, name: "Ada" }
-    assertEqual(typeName(user), "object")
+    var user = User{ id: 1, name: "Ada" }
+    assertEqual(typeName(user), "User")
     assertEqual(user.id, 1)
     assertEqual(user.name, "Ada")
     user.name = "Grace"
@@ -15,8 +18,8 @@ fn test_default_object() {
 
 @test
 fn test_object_alias_assignment() {
-    var user: User = { id: 7, name: "Lin" }
-    assertEqual(typeName(user), "object")
+    var user: User = User{ id: 7, name: "Lin" }
+    assertEqual(typeName(user), "User")
     assertEqual(user.id, 7)
     assertEqual(user.name, "Lin")
 }
@@ -40,7 +43,7 @@ fn test_json_decode_object() {
     var data = JSON.parseValue("{\"id\": 9, \"name\": \"Ray\"}")
     var user = JSON.decode<User>(data)
     assert(user != null)
-    assertEqual(typeName(user), "object")
+    assertEqual(typeName(user), "User")
     assertEqual(user!.id, 9)
     assertEqual(user!.name, "Ray")
 }

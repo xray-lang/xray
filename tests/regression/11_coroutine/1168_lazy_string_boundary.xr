@@ -4,8 +4,8 @@ fn make_key(n: i64) -> string {
 
 fn recv_string(ch: Channel<string>) -> string {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> ""
+        Recv.Value { value: v } => v,
+        _ => "",
     }
 }
 
@@ -15,7 +15,7 @@ fn build_message(prefix: string, n: i64) -> string {
 
 fn map_worker(seed: string) -> Map<string, string> {
     var k = make_key(3)
-    var m: Map<string, string> = #{}
+    var m: Map<string, string> = {}
     m.set(k, seed + "_value")
     Coro.yield()
     return m
@@ -24,7 +24,7 @@ fn map_worker(seed: string) -> Map<string, string> {
 @test
 fn test_lazy_string_map_set_content_keys() {
     var key = make_key(1)
-    var m: Map<string, i64> = #{}
+    var m: Map<string, i64> = {}
     m.set(key, 7)
     m.set(make_key(1), 11)
 
@@ -34,7 +34,7 @@ fn test_lazy_string_map_set_content_keys() {
     assertEqual(m.delete("k1"), true)
     assertEqual(m.containsKey(make_key(1)), false)
 
-    var s: Set<string> = #[]
+    var s: Set<string> = Set()
     s.add(make_key(2))
     s.add("k2")
     assertEqual(len(s), 1)

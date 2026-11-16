@@ -2,6 +2,6 @@ import parallel
 
 const ch: Channel<i64> = Channel<i64>(4)
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     ch.send(i)
 }, parallel.Options(2))

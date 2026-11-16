@@ -4,7 +4,7 @@ fn reader(t: Map<i64, i64>) -> i64 {
     return len(t)
 }
 
-var local: Map<i64, i64> = #{}
+var local: Map<i64, i64> = {}
 local.set(1, 10)
 local.set(2, 20)
 const table: Map<i64, i64> = copy(local)

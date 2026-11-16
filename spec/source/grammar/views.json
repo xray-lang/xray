@@ -1,0 +1,436 @@
+{
+  "020-appendix-a-ebnf-grammar-01": [
+    "SourceFile",
+    "Comment",
+    "Identifier",
+    "IdStart",
+    "IdContinue",
+    "IntLiteral",
+    "DecimalInt",
+    "HexInt",
+    "BinInt",
+    "OctInt",
+    "FloatLiteral",
+    "Exponent",
+    "BigIntLiteral",
+    "QuotedLiteral",
+    "StringLiteral",
+    "FixedByteLiteral",
+    "StringPrefix",
+    "FixedBytePrefix",
+    "InlineQuoted",
+    "BlockQuoted",
+    "QuoteRun",
+    "BlockClose",
+    "CharLiteral",
+    "CharBody",
+    "RegexLiteral",
+    "BoolLiteral",
+    "NullLiteral"
+  ],
+  "020-appendix-a-ebnf-grammar-02": [
+    "Type",
+    "UnionType",
+    "IntersectionType",
+    "NullableType",
+    "PrimaryType",
+    "FFIPointerType",
+    "CFunctionType",
+    "NamedType",
+    "FunctionType",
+    "FunctionTypeParams",
+    "TupleType",
+    "QualifiedIdent",
+    "TypeArgs",
+    "TypeList"
+  ],
+  "020-appendix-a-ebnf-grammar-03": [
+    "Expression",
+    "AssignExpr",
+    "AssignOp",
+    "TernaryExpr",
+    "NullCoalesceExpr",
+    "LogicOrExpr",
+    "LogicAndExpr",
+    "BitOrExpr",
+    "BitXorExpr",
+    "BitAndExpr",
+    "EqualityExpr",
+    "RelationalExpr",
+    "RangeExpr",
+    "ShiftExpr",
+    "AdditiveExpr",
+    "MultiplicativeExpr",
+    "UnaryExpr",
+    "TryExpr",
+    "GoExpr",
+    "GoOptions",
+    "GoOption",
+    "CallExpr",
+    "PostfixExpr",
+    "PostfixOp",
+    "Primary",
+    "ArrayLit",
+    "ArrayElem",
+    "MapLit",
+    "MapEntry",
+    "StructLit",
+    "StructEntry",
+    "ArrowLambda",
+    "ArrowParams",
+    "ArrowParam",
+    "FnExpression",
+    "ComptimeExpr",
+    "MatchExpr",
+    "MatchArm",
+    "ArgList",
+    "CallArg",
+    "NamedCallArg",
+    "PositionalCallArg",
+    "ArgumentValue"
+  ],
+  "020-appendix-a-ebnf-grammar-04": [
+    "Pattern",
+    "LiteralPattern",
+    "RangePattern",
+    "EnumPattern",
+    "EnumVariantPath",
+    "EnumFieldPatternList",
+    "EnumFieldPattern",
+    "TypePattern",
+    "WildcardPattern",
+    "BindingPattern",
+    "MultiPattern",
+    "TuplePattern",
+    "ArrayPattern",
+    "ArrayPatternItem"
+  ],
+  "020-appendix-a-ebnf-grammar-05": [
+    "Statement",
+    "ExprStmt",
+    "IncDecStmt",
+    "Block",
+    "IfStmt",
+    "LoopLabel",
+    "WhileStmt",
+    "ForStmt",
+    "ForInStmt",
+    "ForInPairStmt",
+    "ForRefStmt",
+    "MatchStmt",
+    "ReturnStmt",
+    "BreakStmt",
+    "ContinueStmt",
+    "ThrowStmt",
+    "TryStmt",
+    "CatchClause",
+    "CatchHeader",
+    "DeferStmt",
+    "ScopeStmt",
+    "TryScopeStmt",
+    "SelectStmt",
+    "SelectArm",
+    "YieldStmt"
+  ],
+  "020-appendix-a-ebnf-grammar-06": [
+    "Visibility",
+    "VarDecl",
+    "ConstDecl",
+    "Binding",
+    "DeclarationPattern",
+    "FnDecl",
+    "ExternBlock",
+    "ExternFnDecl",
+    "ParamList",
+    "Param",
+    "ParamType",
+    "ParamMode",
+    "ThrowsClause",
+    "ReturnType",
+    "Modifier",
+    "TypeParams",
+    "TypeParam",
+    "AliasTypeParams",
+    "ClassDecl",
+    "ClassMember",
+    "StaticBlock",
+    "FieldDecl",
+    "MethodDecl",
+    "InitDecl",
+    "StructDecl",
+    "InterfaceDecl",
+    "InterfaceMember",
+    "EnumDecl",
+    "EnumVariant",
+    "EnumFieldDecl",
+    "EnumMethod",
+    "BackingValue",
+    "TypeAliasDecl",
+    "ImportDecl",
+    "ExportDecl",
+    "ExportSpec",
+    "ImportMembers",
+    "ImportMember",
+    "ImportModule",
+    "AttrList",
+    "PublicAttribute"
+  ],
+  "002-1-lexical-structure-grammar-01": [
+    "Identifier",
+    "IdStart",
+    "IdContinue"
+  ],
+  "002-1-lexical-structure-grammar-02": [
+    "IntLiteral",
+    "DecimalInt",
+    "HexInt",
+    "OctInt",
+    "BinInt"
+  ],
+  "002-1-lexical-structure-grammar-03": [
+    "FloatLiteral",
+    "Exponent"
+  ],
+  "002-1-lexical-structure-grammar-04": [
+    "BigIntLiteral"
+  ],
+  "002-1-lexical-structure-grammar-05": [
+    "InlineEscapedString",
+    "StrChar",
+    "EscapeSeq",
+    "Interpolation"
+  ],
+  "002-1-lexical-structure-grammar-06": [
+    "InlineRawString",
+    "RawChar"
+  ],
+  "002-1-lexical-structure-grammar-07": [
+    "QuotedLiteral",
+    "LiteralPrefix",
+    "InlineQuoted",
+    "BlockQuoted",
+    "QuoteRun",
+    "BlockClose"
+  ],
+  "002-1-lexical-structure-grammar-08": [
+    "CharLiteral",
+    "CharBody"
+  ],
+  "002-1-lexical-structure-grammar-09": [
+    "RegexLiteral"
+  ],
+  "004-3-expressions-grammar-01": [
+    "UnaryExpr"
+  ],
+  "004-3-expressions-grammar-02": [
+    "BinaryExpr",
+    "BinOp"
+  ],
+  "004-3-expressions-grammar-03": [
+    "AssignExpr",
+    "AssignLValue",
+    "TupleAssignStmt",
+    "TupleAssignTarget",
+    "CompoundLValue",
+    "CompoundOp"
+  ],
+  "004-3-expressions-grammar-04": [
+    "TernaryExpr"
+  ],
+  "004-3-expressions-grammar-05": [
+    "OptionalChain"
+  ],
+  "004-3-expressions-grammar-06": [
+    "IsExpr"
+  ],
+  "004-3-expressions-grammar-07": [
+    "AsExpr"
+  ],
+  "004-3-expressions-grammar-08": [
+    "RangeExpr"
+  ],
+  "004-3-expressions-grammar-09": [
+    "ArrayLit",
+    "ArrayElem",
+    "MapLit",
+    "MapEntry",
+    "StructLit",
+    "StructEntry"
+  ],
+  "004-3-expressions-grammar-10": [
+    "CallExpr",
+    "ArgList",
+    "CallArg"
+  ],
+  "004-3-expressions-grammar-11": [
+    "MemberAccess"
+  ],
+  "004-3-expressions-grammar-12": [
+    "IndexAccess"
+  ],
+  "004-3-expressions-grammar-13": [
+    "Slice"
+  ],
+  "004-3-expressions-grammar-14": [
+    "AnonFunction",
+    "ArrowLambda",
+    "ArrowBody",
+    "ArrowParams",
+    "ArrowParam",
+    "ParamMode",
+    "FnExpression"
+  ],
+  "004-3-expressions-grammar-15": [
+    "MatchExpr",
+    "MatchArm"
+  ],
+  "004-3-expressions-grammar-16": [
+    "ConstructExpr"
+  ],
+  "005-4-statements-grammar-01": [
+    "ExprStmt",
+    "IncDecStmt",
+    "Block"
+  ],
+  "005-4-statements-grammar-02": [
+    "IfStmt",
+    "ElseIfChain",
+    "ElseClause"
+  ],
+  "005-4-statements-grammar-03": [
+    "LoopLabel",
+    "WhileStmt"
+  ],
+  "005-4-statements-grammar-04": [
+    "ForStmt",
+    "ForInit",
+    "ForStep"
+  ],
+  "005-4-statements-grammar-05": [
+    "ForInStmt"
+  ],
+  "005-4-statements-grammar-06": [
+    "ForInPairStmt",
+    "ForInTupleStmt"
+  ],
+  "005-4-statements-grammar-07": [
+    "ForRefStmt"
+  ],
+  "005-4-statements-grammar-08": [
+    "MatchStmt",
+    "MatchArm"
+  ],
+  "005-4-statements-grammar-09": [
+    "ReturnStmt",
+    "ReturnValue"
+  ],
+  "005-4-statements-grammar-10": [
+    "ThrowStmt",
+    "TryStmt",
+    "CatchClause",
+    "CatchHeader"
+  ],
+  "005-4-statements-grammar-11": [
+    "DeferStmt"
+  ],
+  "006-5-declarations-grammar-01": [
+    "VarDecl",
+    "ConstDecl",
+    "Binding",
+    "DeclarationPattern"
+  ],
+  "006-5-declarations-grammar-02": [
+    "FnDecl",
+    "ThrowsClause",
+    "ParamList",
+    "Param",
+    "ParamType",
+    "ParamMode",
+    "ReturnType",
+    "TypeParams",
+    "AttrList"
+  ],
+  "006-5-declarations-grammar-03": [
+    "ClassDecl",
+    "ClassMember",
+    "StaticBlock",
+    "FieldDecl",
+    "MethodDecl",
+    "InitDecl",
+    "Modifier"
+  ],
+  "006-5-declarations-grammar-04": [
+    "StructDecl"
+  ],
+  "006-5-declarations-grammar-05": [
+    "InterfaceDecl",
+    "InterfaceMember"
+  ],
+  "006-5-declarations-grammar-06": [
+    "EnumDecl",
+    "EnumVariant",
+    "EnumFieldDecl",
+    "EnumMethod"
+  ],
+  "006-5-declarations-grammar-07": [
+    "TypeAliasDecl",
+    "AliasTypeParams"
+  ],
+  "010-9-generics-grammar-01": [
+    "TypeParams",
+    "TypeParam",
+    "ConstraintList",
+    "TypeArgs",
+    "AliasTypeParams"
+  ],
+  "010-9-generics-grammar-02": [
+    "WhereClause",
+    "WhereItem"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-01": [
+    "GoExpr",
+    "GoOptions",
+    "GoOption"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-02": [
+    "AwaitExpr"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-03": [
+    "ChannelType",
+    "ChannelNew"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-04": [
+    "SelectStmt",
+    "SelectArm",
+    "RecvArm",
+    "SendArm",
+    "TimeoutArm",
+    "DefaultArm"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-05": [
+    "ScopeStmt",
+    "TryScopeStmt"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-06": [
+    "MoveExpr"
+  ],
+  "011-10-concurrency-and-coroutines-grammar-07": [
+    "TaskYieldCall"
+  ],
+  "012-11-modules-grammar-01": [
+    "ImportStmt",
+    "ImportMembers",
+    "ImportMember",
+    "ImportModule",
+    "ModuleName"
+  ],
+  "012-11-modules-grammar-02": [
+    "Declaration",
+    "Visibility",
+    "ReexportDecl",
+    "ExportSpec"
+  ],
+  "013-12-testing-grammar-01": [
+    "TestDecl"
+  ]
+}

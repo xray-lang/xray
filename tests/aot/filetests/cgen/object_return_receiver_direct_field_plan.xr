@@ -1,7 +1,10 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn makeObjectReturnReceiverPlan() -> User {
-    return { name: "ada", age: 7 }
+    return User{ name: "ada", age: 7 }
 }
 
 fn objectReturnReceiverPlan() -> i64 {

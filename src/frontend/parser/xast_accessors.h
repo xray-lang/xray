@@ -56,7 +56,6 @@
 #define AST_AS_INDEX_SET(n) (XR_AST_ASSERT(n, AST_INDEX_SET), &(n)->as.index_set)
 #define AST_AS_ARRAY(n) (XR_AST_ASSERT(n, AST_ARRAY_LITERAL), &(n)->as.array_literal)
 #define AST_AS_MAP(n) (XR_AST_ASSERT(n, AST_MAP_LITERAL), &(n)->as.map_literal)
-#define AST_AS_OBJECT(n) (XR_AST_ASSERT(n, AST_OBJECT_LITERAL), &(n)->as.object_literal)
 #define AST_AS_NEW(n) (XR_AST_ASSERT(n, AST_NEW_EXPR), &(n)->as.new_expr)
 #define AST_AS_CLASS(n) (XR_AST_ASSERT(n, AST_CLASS_DECL), &(n)->as.class_decl)
 #define AST_AS_STRUCT(n) (XR_AST_ASSERT(n, AST_STRUCT_DECL), &(n)->as.struct_decl)

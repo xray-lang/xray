@@ -94,7 +94,9 @@ static XrXirStatus construction_module_slots(
 
         const XrXirSlot *slot=&d->slots[s];
         if (facts->rows[s].slot!=s || slot->module>=d->module_count || slot->mutable>1 ||
-            (facts->rows[s].exported && slot->mutable)) return XR_XIR_BAD_STRUCTURE;
+            (facts->rows[s].exported && slot->mutable) ||
+            (slot->mutable && facts->rows[s].constant_key.kind!=XR_XIR_KEY_DYNAMIC) ||
+            !xir_constant_key_type(module->types,slot->type,facts->rows[s].constant_key)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
@@ -120,11 +122,6 @@ XR_FUNC XrXirStatus xir_construction_verify(
 
         const XrXirNominalDeclaration *owner = &table->declarations[n];
         const XrXirConstructionRow *row = xr_xir_compile_construction_row(construction, n);
-        if (owner->flags & XR_XIR_NOMINAL_RECORD) {
-            if (row->default_initializer) return XR_XIR_BAD_TYPE;
-            for (uint32_t f=0;f<owner->field_count;++f)
-                if (row->field_initializers[f]) return XR_XIR_BAD_TYPE;
-        }
         XrXirStatus status = nominal_initializer_target(context,m,n,row->default_initializer,NULL);
         if (status != XR_XIR_OK) return status;
         /* An ordinary definition has one constructor identity at most. An

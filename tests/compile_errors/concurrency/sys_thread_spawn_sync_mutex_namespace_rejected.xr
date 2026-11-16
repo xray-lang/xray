@@ -3,6 +3,6 @@ import sync
 
 var t = sys.Thread.spawn(fn() -> i64 {
     var m = sync.Mutex<i64>(1)
-    return m.lock((v) -> v)
+    return m.lock((v) => v)
 })
 print(t.join())

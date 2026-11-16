@@ -315,7 +315,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         !code->locations || (code->homes && code->homes->value_count != code->value_count)) return false;
     XrRbcValueAccess a = code->accesses[index];
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
-        a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
+        a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
         a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
@@ -427,6 +427,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.source || rbc_value_owner(module,code,a.source,false) || rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_access_valid(module,code,function,a);
     case XR_RBC_VALUE_MAP: return rbc_value_map_access_valid(module,code,function,a);
+    case XR_RBC_VALUE_MAP_LITERAL: return rbc_value_map_literal_valid(module,code,function,a);
     case XR_RBC_VALUE_DISPLAY: return rbc_value_display_valid(module,code,function,a);
     case XR_RBC_VALUE_BINDING_NEW: case XR_RBC_VALUE_BINDING_READ:
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:

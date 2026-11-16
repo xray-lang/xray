@@ -1,3 +1,6 @@
+// Guard: a configuration Map cannot replace flat named parameters.
 import csv
 
-csv.parse("a,b", {header: true})
+var opts: Map<string, bool> = {"header": true}
+var doc = try csv.parse("a,b", options: opts)
+print(doc)

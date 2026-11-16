@@ -6,8 +6,8 @@ print("========== 测试4：闭包 upvalue 隔离 ==========")
 
 fn recvValue(ch) {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 

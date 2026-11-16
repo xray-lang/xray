@@ -21,7 +21,7 @@ fn test_caught() -> i64 {
         throw AppErr.Bad { code: 7 }
         result = 10
     } catch (e) {
-        match (e) { AppErr.Bad { code: c } -> { result = c } }
+        match (e) { AppErr.Bad { code: c } => { result = c }, }
     }
     return result
 }

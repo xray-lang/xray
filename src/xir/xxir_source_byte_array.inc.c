@@ -22,8 +22,8 @@ static bool source_byte_array_call(SourceContext *ctx,AstNode *node,
         if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},&view_type))return false;
         parameters[0]=view_type;
     }
-    if (!source_native_read_arguments(ctx,node,parameters,count,count,args,&supplied,
-        "byte bulk method requires its exact declared arguments"))return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=count,.maximum=count,
+        .values=args,.supplied=&supplied,.diagnostic="byte bulk method requires its exact declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY}))return false;
     if (!repeat) {
         SourceValue zero,borrow[3],temporary,snapshot;
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero))return false;

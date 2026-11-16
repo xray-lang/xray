@@ -25,6 +25,8 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_data_union.h"
+#include "xxir_json_domain.h"
 #include "xxir_class_hierarchy_internal.h"
 #include "xxir_class_method_internal.h"
 #include "xxir_class_stage_internal.h"
@@ -41,6 +43,7 @@
 #include "xxir_slot_access_internal.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_constraint_proof_internal.h"
+#include "xxir_hashable_internal.h"
 #include "xxir_type_scratch_internal.h"
 #include "xxir_implementation_verify.h"
 #include "../base/xmalloc.h"
@@ -139,6 +142,11 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (op->op == XR_XIR_CONST_STRING)
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
             XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    if(op->op==XR_XIR_MAP_LITERAL) {
+        if(!d || op->immediate<0 || (uint64_t)op->immediate>=d->map_literal_count)return XR_XIR_BAD_STRUCTURE;
+        uint32_t caller=(uint32_t)(function-module->functions);
+        return d->functions[caller].module==d->map_literals[op->immediate].module?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
     if (op->op != XR_XIR_SLOT_LOAD && op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
         op->op != XR_XIR_SLOT_PLACE)
         return XR_XIR_OK;
@@ -461,7 +469,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INTRINSIC &&
                op->op != XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op!=XR_XIR_CHANNEL_SELECT && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
-               op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
+               op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_MAP_LITERAL && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
                op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD &&
@@ -1182,6 +1190,16 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
                     xr_xir_nullable_element(context->module->types,op->type),expected)) return XR_XIR_BAD_TYPE;
         }
     }
+    if(op->op==XR_XIR_JSON_NULL && op->type!=XR_XIR_JSON_VALUE)return XR_XIR_BAD_TYPE;
+    if(op->op==XR_XIR_JSON_VALUE_INJECT) {
+        expected=xr_xir_operand_type(function,op->args[0]);
+        if(op->type!=XR_XIR_JSON_VALUE ||
+            xr_xir_json_inject_arm(context->module->types,expected)==XR_XIR_JSON_ARM_COUNT)return XR_XIR_BAD_TYPE;
+    }
+    if(op->op==XR_XIR_DATA_UNION_INJECT) {
+        expected=xr_xir_operand_type(function,op->args[0]);
+        if(!xr_xir_data_union_contains(context->module->types,op->type,expected))return XR_XIR_BAD_TYPE;
+    }
     if (op->op == XR_XIR_NULLABLE_SOME)
         expected = xr_xir_nullable_element(context->module->types, op->type);
     if (op->op == XR_XIR_F64_TRY_PARSE) expected = XR_XIR_STRING;
@@ -1451,6 +1469,12 @@ static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCo
         const XrXirFunction *function = &module->functions[f];
         if (!!function->parameters != !!function->parameter_count) { status = XR_XIR_BAD_STRUCTURE; break; }
         if (function->parameter_count > remaining->limits.parameters) { status = XR_XIR_BUDGET; break; }
+        const XrXirParameterNames *names=xr_xir_parameter_names_find(module->declarations,
+            XR_XIR_PARAMETER_FUNCTION,f,0);
+        if(names && (names->parameter_offset>function->parameter_count ||
+            names->count!=function->parameter_count-names->parameter_offset)) {
+            status=XR_XIR_BAD_STRUCTURE;break;
+        }
         if (module->declarations && (module->declarations->functions[f].promises & XR_XIR_FUNCTION_REST) &&
             (!function->parameter_count || !xr_xir_type_is_array(module->types,
                 function->parameters[function->parameter_count-1]))) {status=XR_XIR_BAD_TYPE;break;}
@@ -1511,13 +1535,14 @@ static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirC
                 if (module->types->nodes[t].parameter_span) status = XR_XIR_BAD_TYPE;
     }
     if (status == XR_XIR_OK) {
-        status = xr_xir_compile_declarations_verify(&context->remaining, module->declarations, module->types, module->function_count, module->linkage_kind);
+        status = xr_xir_compile_declarations_verify(&context->remaining, module->declarations, module->types, module->function_count, module->linkage_kind, context->control);
     }
     if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context->remaining);
     if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&context->remaining, module);
     if (status == XR_XIR_OK) status = verify_metadata_parameter_count(module, &context->remaining);
     if (status == XR_XIR_OK) status = verify_signature_structure(module, &context->remaining);
     if(status==XR_XIR_OK)status=xir_compile_class_declarations_verify(module,&context->location,context->control);
+    if (status == XR_XIR_OK) status = xir_hashable_witnesses_verify(&context->remaining,module,context->control);
     if (status == XR_XIR_OK) status = verify_interface_access(module, &context->remaining);
     if (status == XR_XIR_OK && module->stage == XR_XIR_LOWERED && module->declarations &&
         module->declarations->implementations) status = XR_XIR_BAD_STAGE;

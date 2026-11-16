@@ -16,7 +16,7 @@ static void default_receivers(void) {
     XrXirDefaultBinding records[]={{.owner_kind=XR_XIR_DEFAULT_PARAMETER,.owner=1,.ordinal=0,.function=0},
         {.owner_kind=XR_XIR_DEFAULT_PARAMETER,.owner=1,.ordinal=1,.function=0}};
     XrXirDefaultTable defaults={.records=records,.count=2};XrXirInterfaceTable interfaces={0};
-    XrHirBodyDeclarations declarations={&view,&identity_view,&function_count,&module_count,&defaults,&interfaces,&slots,&slot_count};
+    XrHirBodyDeclarations declarations={&view,&identity_view,&function_count,&module_count,&defaults,&interfaces,&slots,&slot_count,NULL,NULL,NULL};
     XrHirBody *body=NULL;CHECK(xr_hir_body_new(resources,&types,&body)==XR_XIR_OK);
     CHECK(xr_hir_body_declarations(body,&declarations)==XR_XIR_OK);
     XrHirBodyScope scope={0};CHECK(xr_hir_body_scope(body,scope,(XrHirBodyOrigin){0},NULL,&scope)==XR_XIR_OK);

@@ -32,12 +32,12 @@ fn mergeInMatch() {
     })
     var handle = oldMatch
     match (1) {
-        0 -> {
+        0 => {
             handle = target
-        }
-        _ -> {
+        },
+        _ => {
             handle = target
-        }
+        },
     }
     print(handle.join())
 }
@@ -51,10 +51,10 @@ fn mergeInSelect() {
     })
     var handle = oldSelect
     select {
-        msg from aliasMergeCh -> {
+        msg from aliasMergeCh => {
             handle = target
         }
-        _ -> {
+        _ => {
             handle = target
         }
     }

@@ -1,0 +1,20 @@
+type User = { name: string, age: i64 }
+
+var u: User = { name: "Alice", age: 30 }
+print(u.name)         // OK
+// u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
+
+var u2 = { name: "Alice", age: 30 }      // exact 对象形状
+// u2.extra = "x"     // 编译错误
+
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // 约束只暴露已声明字段
+    print(value["name"])                  // 与 .name 相同
+    // print(value.age)                    // 编译错误：隐藏字段不可见
+}
+showName(u)                               // OK：u 的 concrete exact shape 更宽
+
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK：Map 动态键
+var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域

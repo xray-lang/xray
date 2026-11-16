@@ -146,49 +146,12 @@ export class YamlParseReport {
     }
 }
 
-// ===== Options =====
-
-export type YamlOptions = {
-    strict: bool
-}
-
-export type YamlWriteOptions = {
-    indent: i64
-}
-
-fn _defaultOptions() -> YamlOptions {
-    var options: YamlOptions = {
-        strict: false
-    }
-    return options
-}
-
-fn _defaultWriteOptions() -> YamlWriteOptions {
-    var options: YamlWriteOptions = {
-        indent: 2
-    }
-    return options
-}
-
-// Option resolution is done inside the module (private default providers cannot
-// be referenced from a caller's scope as a default-argument expression), so the
-// public API takes nullable options and falls back to the defaults here.
-fn _resolveOptions(options: YamlOptions?) -> YamlOptions {
-    if (options == null) { return _defaultOptions() }
-    return (copy options)!
-}
-
-fn _resolveWriteOptions(options: YamlWriteOptions?) -> YamlWriteOptions {
-    if (options == null) { return _defaultWriteOptions() }
-    return (copy options)!
-}
-
 fn _isFatalKind(kind: YamlErrorKind) -> bool {
     return match (kind) {
-        YamlErrorKind.UnsupportedTag     -> true,
-        YamlErrorKind.UnsupportedFeature -> true,
-        YamlErrorKind.MaxDepthExceeded   -> true,
-        _                                -> false
+        YamlErrorKind.UnsupportedTag     => true,
+        YamlErrorKind.UnsupportedFeature => true,
+        YamlErrorKind.MaxDepthExceeded   => true,
+        _                                => false,
     }
 }
 
@@ -211,36 +174,36 @@ fn _emptyStrings() -> Array<string> {
 
 export fn isNull(value: YamlValue) -> bool {
     return match (value) {
-        YamlValue.Null -> true,
-        _              -> false
+        YamlValue.Null => true,
+        _              => false,
     }
 }
 
 export fn asBool(value: YamlValue) -> bool? {
     return match (value) {
-        YamlValue.Boolean { value: b } -> b,
-        _                    -> null
+        YamlValue.Boolean { value: b } => b,
+        _                    => null,
     }
 }
 
 export fn asInt(value: YamlValue) -> i64? {
     return match (value) {
-        YamlValue.Integer { value: n } -> n,
-        _                    -> null
+        YamlValue.Integer { value: n } => n,
+        _                    => null,
     }
 }
 
 export fn asFloat(value: YamlValue) -> f64? {
     return match (value) {
-        YamlValue.Float { value: f } -> f,
-        _                  -> null
+        YamlValue.Float { value: f } => f,
+        _                  => null,
     }
 }
 
 export fn asString(value: YamlValue) -> string? {
     return match (value) {
-        YamlValue.String { value: s } -> s,
-        _                   -> null
+        YamlValue.String { value: s } => s,
+        _                   => null,
     }
 }
 
@@ -249,16 +212,16 @@ export fn asString(value: YamlValue) -> string? {
 // contaminates the enum payload-field type globally.
 export fn asSequence(value: YamlValue) -> Array<YamlValue>? {
     match (value) {
-        YamlValue.Sequence { items } -> { return items }
-        _                         -> { return null }
+        YamlValue.Sequence { items } => { return items },
+        _                         => { return null },
     }
     return null
 }
 
 export fn asMapping(value: YamlValue) -> YamlMapping? {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return m }
-        _                    -> { return null }
+        YamlValue.Mapping { mapping: m } => { return m },
+        _                    => { return null },
     }
     return null
 }
@@ -266,8 +229,8 @@ export fn asMapping(value: YamlValue) -> YamlMapping? {
 // Value bound to `key` inside a Mapping (null for non-mappings / missing key).
 export fn get(value: YamlValue, key: string) -> YamlValue? {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return m.get(key) }
-        _                    -> { return null }
+        YamlValue.Mapping { mapping: m } => { return m.get(key) },
+        _                    => { return null },
     }
     return null
 }
@@ -275,11 +238,11 @@ export fn get(value: YamlValue, key: string) -> YamlValue? {
 // Element at `index` inside a Sequence (null when out of range / not a sequence).
 export fn at(value: YamlValue, index: i64) -> YamlValue? {
     match (value) {
-        YamlValue.Sequence { items } -> {
+        YamlValue.Sequence { items } => {
             if (index < 0 || index >= len(items)) { return null }
             return items[index]
-        }
-        _ -> { return null }
+        },
+        _ => { return null },
     }
     return null
 }
@@ -287,9 +250,9 @@ export fn at(value: YamlValue, index: i64) -> YamlValue? {
 // Element count of a Sequence or Mapping (0 otherwise).
 export fn length(value: YamlValue) -> i64 {
     match (value) {
-        YamlValue.Sequence { items } -> { return len(items) }
-        YamlValue.Mapping { mapping: m }      -> { return m.size() }
-        _                         -> { return 0 }
+        YamlValue.Sequence { items } => { return len(items) },
+        YamlValue.Mapping { mapping: m }      => { return m.size() },
+        _                         => { return 0 },
     }
     return 0
 }
@@ -297,8 +260,8 @@ export fn length(value: YamlValue) -> i64 {
 // Ordered keys of a Mapping (empty otherwise).
 export fn keys(value: YamlValue) -> Array<string> {
     match (value) {
-        YamlValue.Mapping { mapping: m } -> { return copy m.keys }
-        _                    -> { return _emptyStrings() }
+        YamlValue.Mapping { mapping: m } => { return copy m.keys },
+        _                    => { return _emptyStrings() },
     }
     return _emptyStrings()
 }
@@ -1170,16 +1133,16 @@ fn _binaryText(bytes: Array<u8>) -> string {
 
 fn _scalarText(value: YamlValue) -> string {
     return match (value) {
-        YamlValue.Null          -> "null",
-        YamlValue.Boolean { value: b }    -> _boolText(b),
-        YamlValue.Integer { value: n }    -> string(n),
-        YamlValue.Float { value: f }      -> string(f),
-        YamlValue.String { value: s }     -> _quoteString(s),
-        YamlValue.Binary { bytes } -> _binaryText(bytes),
-        YamlValue.Sequence { items: xs }  -> "[]",
-        YamlValue.Mapping { mapping: m }    -> "{}",
-        YamlValue.Tagged { tagged: tg }    -> _taggedText(tg),
-        YamlValue.Alias { anchor: a }      -> _aliasText(a)
+        YamlValue.Null          => "null",
+        YamlValue.Boolean { value: b }    => _boolText(b),
+        YamlValue.Integer { value: n }    => string(n),
+        YamlValue.Float { value: f }      => string(f),
+        YamlValue.String { value: s }     => _quoteString(s),
+        YamlValue.Binary { bytes } => _binaryText(bytes),
+        YamlValue.Sequence { items: xs }  => "[]",
+        YamlValue.Mapping { mapping: m }    => "{}",
+        YamlValue.Tagged { tagged: tg }    => _taggedText(tg),
+        YamlValue.Alias { anchor: a }      => _aliasText(a),
     }
 }
 
@@ -1189,9 +1152,9 @@ fn _taggedText(tagged: YamlTagged) -> string {
 
 fn _isBlockValue(value: YamlValue) -> bool {
     match (value) {
-        YamlValue.Sequence { items } -> { return len(items) > 0 }
-        YamlValue.Mapping { mapping: m }      -> { return m.size() > 0 }
-        _                         -> { return false }
+        YamlValue.Sequence { items } => { return len(items) > 0 },
+        YamlValue.Mapping { mapping: m }      => { return m.size() > 0 },
+        _                         => { return false },
     }
     return false
 }
@@ -1247,12 +1210,11 @@ fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {
 // parse is strict about unsupported features (YAML tags, depth overflow) which
 // always enter the typed error channel via
 // `throw YamlError.Parse { diagnostic: value }`. With
-// `options.strict = true` every recorded diagnostic is fatal.
-export fn parse(data: string, options: YamlOptions? = null) -> YamlValue {
-    var config = _resolveOptions(options)
+// `strict: true` every recorded diagnostic is fatal.
+export fn parse(data: string, strict: bool = false) -> YamlValue {
     var parser = YamlParser(data)
     parser.parseDocument()
-    var err = _firstError(parser, config.strict)
+    var err = _firstError(parser, strict)
     if (err != null) {
         throw YamlError.Parse { diagnostic: err! }
     }
@@ -1304,19 +1266,18 @@ export fn parseAll(data: string) -> Array<YamlValue> {
     return docs
 }
 
-export fn parseFile(path: Path, options: YamlOptions? = null) -> YamlValue {
+export fn parseFile(path: Path, strict: bool = false) -> YamlValue {
     var content = io.readFile(path)
     if (content == null) {
         throw YamlError.Io { message: "Failed to read file" }
     }
-    return parse(content!, options)
+    return parse(content!, strict: strict)
 }
 
-export fn stringify(value: YamlValue, options: YamlWriteOptions? = null) -> string {
-    var config = _resolveWriteOptions(options)
-    var indent = config.indent
-    if (indent <= 0) { indent = 2 }
-    return _emitValue(value, 0, indent)
+export fn stringify(value: YamlValue, indent: i64 = 2) -> string {
+    var resolvedIndent = indent
+    if (resolvedIndent <= 0) { resolvedIndent = 2 }
+    return _emitValue(value, 0, resolvedIndent)
 }
 
 export fn writeFile(path: Path, value: YamlValue) -> bool {

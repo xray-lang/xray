@@ -1,6 +1,10 @@
 // Static object fields and explicit JSON paths agree across hot VM/JIT code.
 
-type State = { count: i64, last: i64?, flag: bool }
+struct State {
+    count: i64
+    last: i64?
+    flag: bool
+}
 
 fn update(state: ref State, value: i64) {
     state.count += 1
@@ -10,7 +14,7 @@ fn update(state: ref State, value: i64) {
 
 @test
 fn test_static_object_hot_updates() {
-    var state: State = { count: 0, last: null, flag: false }
+    var state: State = State{ count: 0, last: null, flag: false }
     for (i in 0..100) { update(ref state, i) }
     assertEqual(state.count, 100)
     assertEqual(state.last, 99)

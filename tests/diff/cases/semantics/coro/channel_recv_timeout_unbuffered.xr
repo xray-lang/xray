@@ -3,8 +3,8 @@
 const ch = Channel<i64>(0)
 var got = ch.recvTimeout(10)
 print(match (got) {
-    Recv.Timeout -> "timeout"
-    Recv.Closed -> "closed"
-    _ -> "value"
+    Recv.Timeout => "timeout",
+    Recv.Closed => "closed",
+    _ => "value",
 })
 ch.close()

@@ -1,8 +1,11 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 class ObjectMethodReturnFactory {
     makeUser() -> User {
-        return { name: "ada", age: 7 }
+        return User{ name: "ada", age: 7 }
     }
 }
 

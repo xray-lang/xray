@@ -93,7 +93,7 @@ fn discarded_owned_results() {
     var s = "a,b,c"
     s.split(",")
     s.slice(0, 2)
-    var m = #{"k": [1, 2]}
+    var m = {"k": [1, 2]}
     m.get("k")
     m.keys()
     m.values()

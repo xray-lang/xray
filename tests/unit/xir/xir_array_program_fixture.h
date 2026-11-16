@@ -123,7 +123,7 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,.native_callable=0}};
     XrXirSlot slots[] = {{1,a,0},{0,cell,1},{0,cell,1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
-    XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL};
+    XrXirDeclarations declarations = {.modules=modules, .module_count=2, .functions=identities, .slots=slots, .slot_count=3, .literals=literals, .literal_count=3, .root_module=0, .entry_function=2, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};

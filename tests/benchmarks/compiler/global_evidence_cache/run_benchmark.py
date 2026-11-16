@@ -62,7 +62,7 @@ fn added_decl(x: i64) -> i64 {
 SUMMARY_RE = re.compile(r"evidence cache summary: (.*)")
 
 CLASS_TEMPLATE = """interface Shape {{
-    area() -> i64
+    area() => i64
 }}
 
 class Circle implements Shape {{
@@ -70,7 +70,7 @@ class Circle implements Shape {{
     constructor(r: i64) {{
         this.r = r
     }}
-    area() -> i64 {{
+    area() => i64 {{
         return this.r * this.r + {body}
     }}
 }}
@@ -80,7 +80,7 @@ class Square implements Shape {{
     constructor(side: i64) {{
         this.side = side
     }}
-    area() -> i64 {{
+    area() => i64 {{
         return this.side * this.side
     }}
 }}
@@ -102,7 +102,7 @@ GENERIC_TEMPLATE = """class Box<T> {{
     constructor(value: T) {{
         this.value = value
     }}
-    get() -> T {{
+    get() => T {{
         return this.value
     }}
 }}

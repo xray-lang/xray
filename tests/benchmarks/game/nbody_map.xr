@@ -8,12 +8,12 @@ const PI = 3.141592653589793
 const DAYS_PER_YEAR = 365.24
 const SOLAR_MASS = 4.0 * PI * PI
 
-fn createBody(x, y, z, vx, vy, vz, mass) {
-    return {"x" => x, "y" => y, "z" => z, "vx" => vx, "vy" => vy, "vz" => vz, "mass" => mass}
+fn createBody(x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64) -> Map<string, f64> {
+    return {"x" : x, "y" : y, "z" : z, "vx" : vx, "vy" : vy, "vz" : vz, "mass" : mass}
 }
 
-fn createBodies() {
-    var bodies = []
+fn createBodies() -> Array<Map<string, f64>> {
+    var bodies: Array<Map<string, f64>> = []
     bodies.push(createBody(0, 0, 0, 0, 0, 0, SOLAR_MASS))
     bodies.push(createBody(4.84143, -1.16032, -0.103622, 0.00166008 * DAYS_PER_YEAR, 0.00769901 * DAYS_PER_YEAR, -6.9046e-05 * DAYS_PER_YEAR, 0.000954792 * SOLAR_MASS))
     bodies.push(createBody(8.34337, 4.1248, -0.403523, -0.00276743 * DAYS_PER_YEAR, 0.00499853 * DAYS_PER_YEAR, 2.30417e-05 * DAYS_PER_YEAR, 0.000285886 * SOLAR_MASS))
@@ -22,7 +22,7 @@ fn createBodies() {
     return bodies
 }
 
-fn offsetMomentum(bodies) {
+fn offsetMomentum(bodies: ref Array<Map<string, f64>>) {
     var px = 0.0
     var py = 0.0
     var pz = 0.0
@@ -39,7 +39,7 @@ fn offsetMomentum(bodies) {
     bodies[0]["vz"] = -pz / SOLAR_MASS
 }
 
-fn energy(bodies): f64 {
+fn energy(bodies: Array<Map<string, f64>>) -> f64 {
     var e = 0.0
     var nbodies = len(bodies)
     var i = 0
@@ -61,7 +61,7 @@ fn energy(bodies): f64 {
     return e
 }
 
-fn advance(bodies, dt: f64) {
+fn advance(bodies: ref Array<Map<string, f64>>, dt: f64) {
     var nbodies = len(bodies)
     var i = 0
     while (i < nbodies) {
@@ -81,8 +81,10 @@ fn advance(bodies, dt: f64) {
             bj["vx"] = bj["vx"] + dx * bi["mass"] * mag
             bj["vy"] = bj["vy"] + dy * bi["mass"] * mag
             bj["vz"] = bj["vz"] + dz * bi["mass"] * mag
+            bodies[j] = bj
             j = j + 1
         }
+        bodies[i] = bi
         i = i + 1
     }
     i = 0
@@ -91,6 +93,7 @@ fn advance(bodies, dt: f64) {
         b["x"] = b["x"] + dt * b["vx"]
         b["y"] = b["y"] + dt * b["vy"]
         b["z"] = b["z"] + dt * b["vz"]
+        bodies[i] = b
         i = i + 1
     }
 }
@@ -98,11 +101,11 @@ fn advance(bodies, dt: f64) {
 fn main() {
     var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500000 : 500000
     var bodies = createBodies()
-    offsetMomentum(bodies)
+    offsetMomentum(ref bodies)
     print(energy(bodies))
     var i = 0
     while (i < n) {
-        advance(bodies, 0.01)
+        advance(ref bodies, 0.01)
         i = i + 1
     }
     print(energy(bodies))

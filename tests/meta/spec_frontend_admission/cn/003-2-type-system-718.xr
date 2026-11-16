@@ -1,0 +1,2 @@
+var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) => string(n)

@@ -1,9 +1,20 @@
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct ExtendedPoint {
+    x: i64
+    y: i64
+    z: i64
+}
+
 fn run(n: i64) -> i64 {
     var i = 0
     var total = 0
     while (i < n) {
-        var base = { x: i, y: i + 1 }
-        var expanded = { ...base, z: i + 2 }
+        var base = Point{ x: i, y: i + 1 }
+        var expanded = ExtendedPoint{ ...base, z: i + 2 }
         total = total + expanded.z - expanded.x
         i = i + 1
     }

@@ -12,16 +12,16 @@ if (len(process.args) > 1) {
 
 fn recv_timeout_worker(ch: Channel<i64>, timeout_ms: i64) -> bool {
     return match (ch.recvTimeout(timeout_ms)) {
-        Recv.Timeout -> true
-        Recv.Value { value: _ } -> false
-        _ -> true
+        Recv.Timeout => true,
+        Recv.Value { value: _ } => false,
+        _ => true,
     }
 }
 
 fn send_timeout_worker(ch: Channel<i64>, timeout_ms: i64, value: i64) -> bool {
     return match (ch.sendTimeout(value, timeout_ms)) {
-        SendResult.Sent -> false
-        _ -> true
+        SendResult.Sent => false,
+        _ => true,
     }
 }
 
@@ -58,8 +58,8 @@ fn run_send_storm(count: i64, timeout_ms: i64) -> i64 {
         }
     }
     var _drain = match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
     ch.close()
     return timeouts

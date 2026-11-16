@@ -84,9 +84,9 @@ def main():
                              ('integer_literal_exceeds_uint64', 'integer literal exceeds u64 range')):
             run(name, [binary, 'check', root/'tests/compile_errors/type'/(name+'.xr')], refusal=reason)
         for name, text, reason in (
-                ('pattern-f32-inexact', 'enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{x:16777217}->1,E.A{}->2}}\n',
+                ('pattern-f32-inexact', 'enum E{A{x:f32}}\nfn f(v:E)->i64{return match(v){E.A{x:16777217}=>1,E.A{}=>2,}}\n',
                  'integer literal is not exactly representable in its floating context'),
-                ('pattern-u8-overflow', 'enum E{A{x:u8}}\nfn f(v:E)->i64{return match(v){E.A{x:0..256}->1,E.A{}->2}}\n',
+                ('pattern-u8-overflow', 'enum E{A{x:u8}}\nfn f(v:E)->i64{return match(v){E.A{x:0..256}=>1,E.A{}=>2,}}\n',
                  'integer literal is outside its contextual type')):
             source = directory/(name+'.xr')
             source.write_text(text)

@@ -29,8 +29,8 @@ fn worker(n: i64) -> Outcome {
 fn run() -> i64 {
     var result = worker(41)
     return match (result) {
-        Outcome.Echo { id: _id, generation: _generation, payload } -> len(payload!.asBytes()),
-        _ -> 0
+        Outcome.Echo { id: _id, generation: _generation, payload } => len(payload!.asBytes()),
+        _ => 0,
     }
 }
 

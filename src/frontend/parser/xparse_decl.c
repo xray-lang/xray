@@ -956,20 +956,6 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                                     if (!xr_parser_healthy(parser)) return NULL;
                                 } while (0);
                                 break;
-                            case AST_SET_LITERAL:
-                                do {
-                                    param->type = xr_tref_named(parser->compiler_session, "Set");
-                                    if (!xr_parser_healthy(parser)) return NULL;
-                                } while (0);
-                                break;
-                            case AST_OBJECT_LITERAL:
-                                if (dv->as.object_literal.count == 0)
-                                    do {
-                                        param->type = xr_tref_object(parser->compiler_session, NULL,
-                                                                 NULL, NULL, 0);
-                                        if (!xr_parser_healthy(parser)) return NULL;
-                                    } while (0);
-                                break;
                             default:
                                 break;
                         }
@@ -1000,12 +986,12 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
-    // The unified arrow `->` is the only legal separator.
+    // The type arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -1232,6 +1218,69 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
     return argument;
 }
 
+AstNode *xr_parse_labeled_call_argument(Parser *parser, XrCallArgAccess *access,
+                                       XrParsedCallLabels *state, int index) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    XrCallArgLabel label = {0};
+    Token original;
+    if (!xr_parser_source_token(parser, &parser->current, &original)) return NULL;
+    label.span = (XrNameSpan){original.line, original.column};
+    if (xr_parser_check(parser, TK_NAME)) {
+        Scanner lookahead;
+        if (xr_compile_state_copy(parser->state, &lookahead, &parser->scanner,
+                                  sizeof(lookahead)) != XR_COMPILE_RESOURCE_OK) return NULL;
+        Token next = xr_scanner_scan(&lookahead);
+        if (!xr_parser_healthy(parser)) return NULL;
+        if (next.type == TK_COLON) {
+            label.name = xr_parser_token_string(parser, &parser->current);
+            if (!xr_parser_healthy(parser)) return NULL;
+            xr_parser_advance(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+            xr_parser_consume(parser, TK_COLON, "expected ':' after argument label");
+            if (!xr_parser_healthy(parser)) return NULL;
+        }
+    }
+    if (!state->labels) {
+        if (index < 8) state->inline_spans[index] = label.span;
+        else {
+            if (index >= state->span_capacity) {
+                int next = xr_parser_grow_capacity(parser, state->span_capacity ? state->span_capacity : 8);
+                if (!xr_parser_healthy(parser)) return NULL;
+                const XrNameSpan *old = state->overflow_spans ? state->overflow_spans : state->inline_spans;
+                XrNameSpan *grown = ast_array_grow(parser->compiler_session, old, sizeof(*grown),
+                    (size_t)index, (size_t)next);
+                if (!xr_parser_healthy(parser) || !grown) return NULL;
+                state->overflow_spans = grown;
+                state->span_capacity = next;
+            }
+            state->overflow_spans[index] = label.span;
+        }
+    }
+    /* Positional-only calls allocate no label storage. A later first label
+     * backfills the preceding positional slots before publishing the array. */
+    if (label.name || state->labels) {
+        if (index >= state->capacity) {
+            int next = xr_parser_grow_capacity(parser, state->capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
+            while (index >= next) {
+                next = xr_parser_grow_capacity(parser, next);
+                if (!xr_parser_healthy(parser)) return NULL;
+            }
+            XrCallArgLabel *grown = ast_array_grow(parser->compiler_session, state->labels,
+                sizeof(*grown), state->labels ? (size_t)index : 0, (size_t)next);
+            if (!xr_parser_healthy(parser) || !grown) return NULL;
+            if (!state->labels) {
+                const XrNameSpan *spans = state->overflow_spans ? state->overflow_spans : state->inline_spans;
+                for (int i = 0; i < index; ++i) grown[i] = (XrCallArgLabel){NULL, spans[i]};
+            }
+            state->labels = grown;
+            state->capacity = next;
+        }
+        (state->labels)[index] = label;
+    }
+    return xr_parse_call_argument_with_access(parser, access);
+}
+
 AstNode *xr_parse_call_argument(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     return xr_parse_call_argument_with_access(parser, NULL);
@@ -1279,6 +1328,7 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
     int column = callee && callee->column > 0 ? callee->column : opening.column;
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
+    XrParsedCallLabels labels = {0};
     XrNameSpan *boundaries = NULL;
     XrParseArgumentSyntax *argument_syntax = NULL;
     int arg_count = 0, arg_capacity = 0, access_count = 0, access_capacity = 0;
@@ -1293,7 +1343,7 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
         do {
             Token first = parser->current;
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            AstNode *arg = xr_parse_labeled_call_argument(parser, &access, &labels, arg_count);
             if (!xr_parser_healthy(parser)) return NULL;
             if (parser->call_syntax_callback && arg && parser->error_count == before_errors) {
                 Token last = parser->previous;
@@ -1331,6 +1381,8 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
                                 arg_count, line);
     }
     if (!xr_parser_healthy(parser) || !call) return NULL;
+    if (call->type == AST_NEW_EXPR) call->as.new_expr.arg_labels = labels.labels;
+    else call->as.call_expr.arg_labels = labels.labels;
     call->column = column;
     call->end_line = closing.line;
     call->end_column = closing.column + closing.length;
@@ -1380,514 +1432,96 @@ static AstNode *parse_array_element(Parser *parser) {
     return xr_parse_expression(parser);
 }
 
-// Parse array literal or Map literal (smart detection)
-// [1, 2, 3] -> array, ["key": value, ...] -> Map, [...a, x] -> array spread
+// Parse an Array literal, repetition or positional spread.
 AstNode *xr_parse_array_literal(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_array_literal: NULL parser");
-    int line = parser->previous.line;
-
-    if (xr_parser_match(parser, TK_RBRACKET)) {
-        return xr_ast_array_literal(parser->compiler_session, NULL, 0, line);
-    }
-
-    // A leading spread `[...a` is unambiguously an array literal (a Map key
-    // can never be a spread), so commit to the array branch immediately.
-    if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
-        AstNode **elements = NULL;
-        int count = 0;
-        int capacity = 0;
-        do {
-            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+    Token opening;
+    if (!xr_parser_source_token(parser,&parser->previous,&opening)) return NULL;
+    AstNode **elements=NULL;XrExpressionSpan *spans=NULL;
+    int count=0,capacity=0,span_count=0,span_capacity=0;
+    while (!xr_parser_check(parser,TK_RBRACKET) && !xr_parser_check(parser,TK_EOF)) {
+        Token first,last;
+        if (!xr_parser_source_token(parser,&parser->current,&first)) return NULL;
+        AstNode *value=parse_array_element(parser);
+        if (!xr_parser_healthy(parser) || !value || !xr_parser_source_token(parser,&parser->previous,&last)) return NULL;
+        if (!count && value->type!=AST_SPREAD_EXPR && xr_parser_match(parser,TK_SEMICOLON)) {
+            AstNode *repeat=xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser) || !repeat) return NULL;
+            xr_parser_consume(parser,TK_RBRACKET,"expected ']' after array repeat count");
             if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA)) {
-            if (xr_parser_check(parser, TK_RBRACKET))
-                break;
-            do {
-                XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
+            return xr_ast_array_repeat_literal(parser->compiler_session,value,repeat,opening.line);
         }
-        do {
-            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return xr_ast_array_literal(parser->compiler_session, elements, count, line);
-    }
-
-    // Parse first expression, then check ':' for Map or ',' for array
-    AstNode *first_expr = xr_parse_expression(parser);
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (xr_parser_match(parser, TK_SEMICOLON)) {
-        AstNode *repeat_count = xr_parse_expression(parser);
+        if (xr_parser_check(parser,TK_COLON)) {
+            xr_parser_error_at_current(parser,"Map literals use braces: {key: value}");return NULL;
+        }
+        XrExpressionSpan span={{first.line,first.column},{last.line,last.column+last.length}};
+        XR_PARSE_PUSH(parser,elements,count,capacity,value);
+        XR_PARSE_PUSH(parser,spans,span_count,span_capacity,span);
         if (!xr_parser_healthy(parser)) return NULL;
-        do {
-            xr_parser_consume(parser, TK_RBRACKET, "expected ']' after array repeat count");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return xr_ast_array_repeat_literal(parser->compiler_session, first_expr, repeat_count,
-                                           line);
+        if (!xr_parser_match(parser,TK_COMMA)) break;
     }
-
-    if (xr_parser_match(parser, TK_COLON)) {
-        // Map: ["key": value, ...]
-        AstNode **keys = NULL;
-        AstNode **values = NULL;
-        int count = 0;
-        int capacity = 4;
-
-        do {
-            keys = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                            (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        do {
-            values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                              (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        keys[0] = first_expr;
-        do {
-            values[0] = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        count = 1;
-
-        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET)) {
-            if (count >= capacity) {
-                int old_capacity = capacity;
-                capacity *= 2;
-
-                AstNode **_new_keys = (AstNode **) ast_alloc_array(
-                    parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-                if (old_capacity > 0 && keys)
-                    do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
-                keys = _new_keys;
-
-                AstNode **_new_values = (AstNode **) ast_alloc_array(
-                    parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-                if (old_capacity > 0 && values)
-                    do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
-                values = _new_values;
-            }
-
-            do {
-                keys[count] = xr_parse_expression(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-            if (!xr_parser_match(parser, TK_COLON)) {
-                do {
-                    xr_parser_error(parser, "expected ':' after Map key");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return xr_ast_map_literal(parser->compiler_session, NULL, NULL, 0, line);
-            }
-
-            do {
-                values[count] = xr_parse_expression(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            count++;
-        }
-
-        do {
-            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Map literal");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
-
-    } else {
-        // Array: [1, 2, 3]
-        AstNode **elements = NULL;
-        int count = 0;
-        int capacity = 4;
-
-        do {
-            elements = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
-                                                (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        elements[0] = first_expr;
-        count = 1;
-
-        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA)) {
-            if (xr_parser_check(parser, TK_RBRACKET)) {
-                break;
-            }
-
-            do {
-                XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        }
-
-        do {
-            xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        return xr_ast_array_literal(parser->compiler_session, elements, count, line);
-    }
+    xr_parser_consume(parser,TK_RBRACKET,"expected ']' at end of array");
+    if (!xr_parser_healthy(parser)) return NULL;
+    Token closing;
+    if (!xr_parser_source_token(parser,&parser->previous,&closing)) return NULL;
+    AstNode *node=xr_ast_array_literal(parser->compiler_session,elements,count,opening.line);
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->as.array_literal.element_spans=spans;node->column=opening.column;
+    node->end_line=closing.line;node->end_column=closing.column+closing.length;
+    return node;
 }
 
-/*
- * Parse an exact structural object literal `{ key: value }`.
- * Map literals use the prefixed `#{ key: value }` form.
- */
-AstNode *xr_parse_object_literal(Parser *parser) {
+/* Braces in expression position construct Maps. Keys are expressions;
+ * spread entries preserve their source-order position without a sentinel key. */
+AstNode *xr_parse_map_literal(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_object_literal: NULL parser");
-    int line = parser->previous.line;
-
-    // '{' already consumed
-
-    // Empty exact structural object.
-    if (xr_parser_match(parser, TK_RBRACE)) {
-        return xr_ast_object_literal(parser->compiler_session, NULL, NULL, 0, line);
-    }
-
-    // Collect key-value pairs
-    AstNode **keys = NULL;
-    AstNode **values = NULL;
-    int count = 0;
-    int capacity = 0;
-
-    do {
-        // Expand capacity
-        if (count >= capacity) {
-            int _old_cap_capacity = (int) capacity;
-            do {
-                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            AstNode **_new_keys = (AstNode **) ast_alloc_array(
-                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (_old_cap_capacity > 0 && keys)
-                do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
-            keys = _new_keys;
-
-            AstNode **_new_values = (AstNode **) ast_alloc_array(
-                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (_old_cap_capacity > 0 && values)
-                do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
-            values = _new_values;
-        }
-
-        // Spread entry: `{ ...base }` splices another object's fields in.
-        // Represented as a NULL key with an AST_SPREAD_EXPR value; later
-        // entries override earlier ones at merge time.
-        if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
-            int spread_line = parser->current.line;
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);  // consume '...'
-            AstNode *src = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (!src)
-                return xr_ast_literal_null(parser->compiler_session, line);
-            keys[count] = NULL;
-            do {
-                values[count] = xr_ast_spread_expr(parser->compiler_session, src, spread_line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            count++;
-            continue;
-        }
-
-        // Parse key
-        AstNode *key = NULL;
-        const char *shorthand_name = NULL;
-
-        // Computed keys belong to Map literals, never structural objects.
-        if (xr_parser_match(parser, TK_LBRACKET)) {
-            do {
-                xr_parser_error(
-                parser, "structural object keys must be static; use `#{ [key]: value }` for Map");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_ast_literal_null(parser->compiler_session, line);
-        }
-        // String literal as key
-        else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
-            Token key_token = parser->current;
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            XrParsedQuoted payload = {0};
-            const char *error = NULL;
-            bool decode_escapes = key_token.escape_mode == XR_LITERAL_ESCAPED;
-            if (xr_parser_decode_quoted(parser, &key_token, decode_escapes, &payload, &error) != XR_QUOTED_OK) {
-                do {
-                    xr_parser_error_at_previous(parser, error ? error : "invalid object key literal");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return xr_ast_literal_null(parser->compiler_session, line);
-            }
-            if (xr_parser_find_byte(parser, payload.bytes, '\0', payload.length) != NULL ||
-                !xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
-
-                do {
-                    xr_parser_error_at_previous(parser,
-                                            "object key must be valid UTF-8 without NUL bytes");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return xr_ast_literal_null(parser->compiler_session, line);
-            }
-            char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, key_str, payload.bytes, payload.length)) return NULL; } while (0);
-            do { key_str[payload.length] = '\0'; } while (0);
-            do {
-                key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
-                                        key_token.source_form, line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-        }
-        // Numeric literal as key: only Map allows this, and Map literals must
-        // use the `#{ ... }` prefix form.
-        else if (xr_parser_check(parser, TK_LITERAL_INT) ||
-                 xr_parser_check(parser, TK_LITERAL_FLOAT)) {
-            do {
-                xr_parser_error(
-                parser,
-                "structural object does not support numeric keys; use `#{ key: value }` for Map");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_ast_literal_null(parser->compiler_session, line);
-        }
-        // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
-        else if (xr_parser_check(parser, TK_NAME) ||
-                 (parser->current.type >= TK_I8 && parser->current.type <= TK_USIZE) ||
-                 // Type keywords
-                 xr_parser_check(parser, TK_TYPE_ALIAS) || xr_parser_check(parser, TK_STRING) ||
-                 xr_parser_check(parser, TK_BOOL) ||
-                 // Common keywords
-                 xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_ENUM) ||
-                 xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_AS) ||
-                 xr_parser_check(parser, TK_IN) || xr_parser_check(parser, TK_IS)) {
-            Token key_token = parser->current;
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-            char *key_str =
-                (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, key_str, key_token.start, key_token.length)) return NULL; } while (0);
-            do { key_str[key_token.length] = '\0'; } while (0);
-            do {
-                key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
-                                        XR_LITERAL_INLINE, line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (key_token.type == TK_NAME)
-                shorthand_name = key_str;
+    Token opening;
+    if (!xr_parser_source_token(parser, &parser->previous, &opening)) return NULL;
+    AstNode **keys = NULL, **values = NULL;
+    XrMapLiteralEntrySpan *spans = NULL;
+    int count = 0, capacity = 0, value_count = 0, value_capacity = 0;
+    int span_count = 0, span_capacity = 0;
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        Token key_token, value_token;
+        if (!xr_parser_source_token(parser, &parser->current, &key_token)) return NULL;
+        AstNode *key = NULL, *value = NULL;
+        if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+            AstNode *inner = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser) || !inner) return NULL;
+            value = xr_ast_spread_expr(parser->compiler_session, inner, key_token.line);
+            if (!xr_parser_healthy(parser) || !value) return NULL;
+            value->column = key_token.column;
+            value_token = key_token;
         } else {
-            do {
-                xr_parser_error(
-                parser,
-                "literal key must be identifier, string, number or [expr] computed property");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_ast_literal_null(parser->compiler_session, line);
-        }
-
-        keys[count] = key;
-
-        // `{ ... }` is always a structural-object literal in Xray.
-        // The only legal key-value separator is `:`. Map literals must use
-        // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
-        // for function / branch arrows and is rejected here with a hint.
-        if (xr_parser_match(parser, TK_COLON)) {
-        } else if (xr_parser_check(parser, TK_ARROW)) {
-            do {
-                xr_parser_error(
-                parser,
-                "`->` is not a valid separator in object literal; use `#{ key: value }` for Map");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_ast_literal_null(parser->compiler_session, line);
-        } else if (shorthand_name &&
-                   (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
-            do {
-                values[count] = xr_ast_variable(parser->compiler_session, shorthand_name, line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            count++;
-            continue;
-        } else {
-            do {
-                xr_parser_error(parser, "expected ':' after key in object literal");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_ast_literal_null(parser->compiler_session, line);
-        }
-
-        // Parse value expression
-        do {
-            values[count] = xr_parse_expression(parser);
+            key = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser) || !key) return NULL;
+            xr_parser_consume(parser, TK_COLON, "expected ':' after Map key");
             if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        count++;
-
-    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
-
-    // Expect closing brace
-    do {
-        xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
+            if (!xr_parser_source_token(parser, &parser->current, &value_token)) return NULL;
+            value = xr_parse_expression(parser);
+            if (!xr_parser_healthy(parser) || !value) return NULL;
+        }
+        Token value_end;
+        if(!xr_parser_source_token(parser,&parser->previous,&value_end))return NULL;
+        XrMapLiteralEntrySpan span = {{key_token.line, key_token.column},
+            {value_token.line, value_token.column},{value_end.line,value_end.column+value_end.length}};
+        XR_PARSE_PUSH(parser, keys, count, capacity, key);
+        XR_PARSE_PUSH(parser, values, value_count, value_capacity, value);
+        XR_PARSE_PUSH(parser, spans, span_count, span_capacity, span);
         if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values, count, line);
-    if (!xr_parser_healthy(parser)) return NULL;
-
-    // Free temporary array
-
-    return result;
-}
-
-/*
- * Parse Map literal.
- * Syntax: #{} or #{"key": value, ...}
- */
-AstNode *xr_parse_empty_map_literal(Parser *parser) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    int line = parser->previous.line;
-
-    // '#{' already consumed
-
-    // Empty Map: #{}
-    if (xr_parser_match(parser, TK_RBRACE)) {
-        return xr_ast_map_literal(parser->compiler_session, NULL, NULL, 0, line);
+        if (!xr_parser_match(parser, TK_COMMA)) break;
     }
-
-    // Non-empty Map: #{"key": value, ...}
-    AstNode **keys = NULL;
-    AstNode **values = NULL;
-    int count = 0;
-    int capacity = 0;
-
-    do {
-        // Expand capacity
-        if (count >= capacity) {
-            int _old_cap_capacity = (int) capacity;
-            do {
-                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            AstNode **_new_keys = (AstNode **) ast_alloc_array(
-                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (_old_cap_capacity > 0 && keys)
-                do { if (!ast_copy(parser->compiler_session, _new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
-            keys = _new_keys;
-
-            AstNode **_new_values = (AstNode **) ast_alloc_array(
-                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (_old_cap_capacity > 0 && values)
-                do { if (!ast_copy(parser->compiler_session, _new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
-            values = _new_values;
-        }
-
-        // Parse key expression
-        do {
-            keys[count] = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        // Expect ':' as the key-value separator inside `#{ ... }` Map literal.
-        // The `#` prefix disambiguates a Map from a structural-object literal.
-        do {
-            xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        // Parse value expression
-        do {
-            values[count] = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        count++;
-
-    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
-
-    // Expect '}'
-    do {
-        xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of Map literal");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    // Create Map literal node
-    return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
-}
-
-/*
- * Parse new Set literal #[]
- * Syntax: #[] or #[element, ...]
- */
-AstNode *xr_parse_set_literal_new(Parser *parser) {
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of Map literal");
     if (!xr_parser_healthy(parser)) return NULL;
-    int line = parser->previous.line;
-
-    // '#[' already consumed
-
-    // Empty Set: #[]
-    if (xr_parser_match(parser, TK_RBRACKET)) {
-        // Create empty Set literal
-        return xr_ast_set_literal(parser->compiler_session, NULL, 0, line);
-    }
-
-    // Collect elements
-    AstNode **elements = NULL;
-    int count = 0;
-    int capacity = 0;
-
-    do {
-        // Expand capacity
-        if (count >= capacity) {
-            int _old_cap_capacity = (int) capacity;
-            do {
-                capacity = xr_parser_grow_capacity(parser, _old_cap_capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            AstNode **_new_elements = (AstNode **) ast_alloc_array(
-                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (_old_cap_capacity > 0 && elements)
-                do { if (!ast_copy(parser->compiler_session, _new_elements, elements, sizeof(AstNode *) * (size_t) _old_cap_capacity)) return NULL; } while (0);
-            elements = _new_elements;
-        }
-
-        // Parse element expression
-        do {
-            elements[count++] = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACKET));
-
-    // Expect ']'
-    do {
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Set literal");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    // Create Set literal node
-    return xr_ast_set_literal(parser->compiler_session, elements, count, line);
+    Token closing;
+    if (!xr_parser_source_token(parser, &parser->previous, &closing)) return NULL;
+    AstNode *node = xr_ast_map_literal(parser->compiler_session, keys, values, count, opening.line);
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->column = opening.column;
+    node->end_line = closing.line;
+    node->end_column = closing.column + closing.length;
+    node->as.map_literal.entry_spans = spans;
+    return node;
 }
 
 /*
@@ -2323,16 +1957,6 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
 
     // Patch the placeholder with the actual type definition.
     alias_entry->type_ref = type_definition;
-    if (type_definition->kind == XR_TREF_OBJECT) {
-        char *type_name = (char *) ast_alloc(parser->compiler_session, xr_parser_string_length(parser, alias_name) + 1);
-        if (!xr_parser_healthy(parser)) return NULL;
-        do {
-            xr_parser_copy_string(parser, type_name, alias_name);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        type_definition->name = type_name;
-    }
-
     // Create AST node so analyzer/LSP can see the declaration.
     // Stash the resolved type in TypeAliasNode::resolved_type so that
     // the analyzer can read it without going through any backchannel
@@ -2693,7 +2317,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
             do {
                 xr_parser_error_at_current(
                 parser,
-                "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
+                "'lambda' is not supported. Use 'fn(params) { }' or '(params) => expr' in Xray");
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             return NULL;

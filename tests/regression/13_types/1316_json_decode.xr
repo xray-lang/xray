@@ -1,7 +1,10 @@
 // 1316_json_decode.xr
 // Test: JSON.decode<T>() compiler-generated typed decode
 
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 @test
 fn test_sanity() {
@@ -48,7 +51,11 @@ fn test_decode_non_object() {
 }
 
 // Optional fields and more types
-type Config = { host: string, port: i64, debug: bool }
+struct Config {
+    host: string
+    port: i64
+    debug: bool
+}
 
 @test
 fn test_decode_bool_field() {
@@ -60,7 +67,10 @@ fn test_decode_bool_field() {
     assertEqual(cfg!.debug, true)
 }
 
-type Point = { x: f64, y: f64 }
+struct Point {
+    x: f64
+    y: f64
+}
 
 @test
 fn test_decode_float_fields() {
@@ -71,8 +81,14 @@ fn test_decode_float_fields() {
     assertEqual(pt!.y, 2.7)
 }
 
-type Address = { city: string, zip: i64 }
-type Profile = { name: string, address: Address }
+struct Address {
+    city: string
+    zip: i64
+}
+struct Profile {
+    name: string
+    address: Address
+}
 
 @test
 fn test_decode_nested_object_field() {
@@ -98,7 +114,9 @@ fn test_decode_nested_object_wrong_kind() {
     assertEqual(profile, null)
 }
 
-type JsonBag = { items: Array<JSON.Value> }
+struct JsonBag {
+    items: Array<JSON.Value>
+}
 
 @test
 fn test_decode_array_json_field() {
@@ -115,7 +133,12 @@ fn test_decode_array_json_field_rejects_non_array() {
     assertEqual(bag, null)
 }
 
-type MixedProfile = { name: string, tags: Array<JSON.Value>, address: Address, active: bool }
+struct MixedProfile {
+    name: string
+    tags: Array<JSON.Value>
+    address: Address
+    active: bool
+}
 
 @test
 fn test_decode_mixed_nested_object_and_array_json_fields() {

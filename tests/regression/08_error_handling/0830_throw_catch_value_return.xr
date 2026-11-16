@@ -84,8 +84,8 @@ fn safe_div(a: i64, b: i64) -> i64 {
         msg = lookup("")
     } catch (e: AppErr) {
         msg = match (e) {
-            AppErr.NotFound { key: s } -> "not found: ${s}",
-            AppErr.Timeout -> "timeout",
+            AppErr.NotFound { key: s } => "not found: ${s}",
+            AppErr.Timeout => "timeout",
         }
     }
     assertEqual(msg, "not found: empty key")

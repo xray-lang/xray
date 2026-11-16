@@ -13,7 +13,7 @@
 #ifndef XXIR_CONSTRUCTION_H
 #define XXIR_CONSTRUCTION_H
 #include "xxir.h"
-#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 5u
+#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 6u
 
 typedef struct XrXirConstruction XrXirConstruction;
 /* Complete slot names belong to the actual dense module storage inventory.
@@ -24,6 +24,7 @@ typedef struct XrXirSlotFact {
     const char *name;
     uint32_t name_length;
     uint32_t exported;
+    XrXirConstantKey constant_key;
 } XrXirSlotFact;
 typedef struct XrXirSlotFacts {
     const XrXirSlotFact *rows;
@@ -87,7 +88,7 @@ typedef struct XrXirConstructionSpec {
  * exact dense ordinal. All input rows and name bytes are copied to the receiver.
  * Complete module admission also checks the actual slot denominator and owner.
  * Even a zero-row construction produces a real immutable receiving owner. */
-XR_FUNC XrXirStatus xr_xir_compile_construction_new_v5(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_construction_new_v6(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
     const XrXirSlotFacts *complete_slots, XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction);

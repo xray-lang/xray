@@ -1,6 +1,11 @@
 // Test trailing commas in all supported positions
 
 // 1. Function declaration with trailing comma in params
+struct Person {
+    name: string
+    age: i64
+}
+
 fn add(a: i64, b: i64,) -> i64 {
     return a + b
 }
@@ -23,7 +28,7 @@ fn test_array_trailing_comma() {
 // 4. Object literal (already supported, verify still works)
 @test
 fn test_object_trailing_comma() {
-    var obj = {name: "Alice", age: 18,}
+    var obj = Person{name: "Alice", age: 18,}
     assert(obj.name == "Alice")
     assert(obj.age == 18)
 }
@@ -69,6 +74,6 @@ fn test_new_trailing_comma() {
 // 8. Arrow function with trailing comma in params
 @test
 fn test_arrow_trailing_comma() {
-    var f = (a: i64, b: i64,) -> a + b
+    var f = (a: i64, b: i64,) => a + b
     assert(f(3, 4) == 7)
 }

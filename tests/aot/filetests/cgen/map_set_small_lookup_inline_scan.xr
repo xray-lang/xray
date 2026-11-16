@@ -1,6 +1,6 @@
 fn smallLookup() -> i64 {
-    var scores = #{"ada": 7, "lin": 9}
-    var seen: Set<string> = #["ada", "lin"]
+    var scores = {"ada": 7, "lin": 9}
+    var seen: Set<string> = Set(["ada", "lin"])
     var fromIndex = scores["ada"]
     var viaGet = scores.get("lin")
     var total = fromIndex + viaGet!

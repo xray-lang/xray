@@ -1,17 +1,60 @@
 // 0650_object_literal.xr
 // 作者：xingleixu@gmail.com
-// 测试：精确结构对象字面量
+// 测试：具名 struct 字面量
 // ===== 基本对象 =====
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct ActivePerson {
+    name: string
+    age: i64
+    active: bool
+}
+
+struct Person {
+    name: string
+    age: i64
+}
+
+struct Size {
+    width: i64
+    height: i64
+}
+
+struct Rectangle {
+    origin: Point
+    size: Size
+}
+
+struct SingleValue {
+    value: i64
+}
+
+struct MixedValues {
+    count: i64
+    ratio: f64
+    name: string
+    flag: bool
+    empty: i64?
+}
+
+struct Dashboard {
+    users: Array<string>
+    count: i64
+}
+
 @test
 fn test_basic_object() {
-    var point = { "x": 10, "y": 20 }
+    var point = Point{ x: 10, y: 20 }
     assertEqual(point.x, 10)
     assertEqual(point.y, 20)
 }
 
 @test
 fn test_object_field_modify() {
-    var point = { "x": 10, "y": 20 }
+    var point = Point{ x: 10, y: 20 }
     point.x = 100
     point.y = 200
     assertEqual(point.x, 100)
@@ -21,7 +64,7 @@ fn test_object_field_modify() {
 // ===== 多字段对象 =====
 @test
 fn test_multi_field_object() {
-    var person = { "name": "Alice", "age": 25, "active": true }
+    var person = ActivePerson{ name: "Alice", age: 25, active: true }
     assertEqual(person.name, "Alice")
     assertEqual(person.age, 25)
     assertEqual(person.active, true)
@@ -29,7 +72,7 @@ fn test_multi_field_object() {
 
 @test
 fn test_object_field_update() {
-    var person = { "name": "Bob", "age": 30 }
+    var person = Person{ name: "Bob", age: 30 }
     person.age = 31
     assertEqual(person.age, 31)
 }
@@ -37,7 +80,7 @@ fn test_object_field_update() {
 // ===== 嵌套对象 =====
 @test
 fn test_nested_object() {
-    var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
+    var rect = Rectangle{ origin: Point{ x: 0, y: 0 }, size: Size{ width: 100, height: 50 } }
     assertEqual(rect.origin.x, 0)
     assertEqual(rect.origin.y, 0)
     assertEqual(rect.size.width, 100)
@@ -46,7 +89,7 @@ fn test_nested_object() {
 
 @test
 fn test_nested_object_modify() {
-    var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
+    var rect = Rectangle{ origin: Point{ x: 0, y: 0 }, size: Size{ width: 100, height: 50 } }
     rect.origin.x = 10
     rect.size.width = 200
     assertEqual(rect.origin.x, 10)
@@ -56,7 +99,7 @@ fn test_nested_object_modify() {
 // ===== 单字段对象 =====
 @test
 fn test_single_field_object() {
-    var single = { "value": 42 }
+    var single = SingleValue{ value: 42 }
     assertEqual(single.value, 42)
     single.value = 99
     assertEqual(single.value, 99)
@@ -65,7 +108,7 @@ fn test_single_field_object() {
 // ===== 不同类型值 =====
 @test
 fn test_mixed_types() {
-    var data = { "count": 100, "ratio": 0.5, "name": "test", "flag": true, "empty": null }
+    var data = MixedValues{ count: 100, ratio: 0.5, name: "test", flag: true, empty: null }
     assertEqual(data.count, 100)
     assertEqual(data.ratio, 0.5)
     assertEqual(data.name, "test")
@@ -76,18 +119,18 @@ fn test_mixed_types() {
 // ===== 对象作为函数参数 =====
 @test
 fn test_object_as_param() {
-    fn getX(p: { x: i64, y: i64 }) -> i64 {
+    fn getX(p: Point) -> i64 {
         return p.x
     }
-    var point = { x: 42, y: 0 }
+    var point = Point{ x: 42, y: 0 }
     assertEqual(getX(point), 42)
 }
 
 // ===== 对象作为返回值 =====
 @test
 fn test_object_as_return() {
-    fn makePoint(x: i64, y: i64) -> { x: i64, y: i64 } {
-        return { x, y }
+    fn makePoint(x: i64, y: i64) -> Point {
+        return Point{x: x, y: y}
     }
     var p = makePoint(3, 4)
     assertEqual(p.x, 3)
@@ -97,7 +140,7 @@ fn test_object_as_return() {
 // ===== 对象数组 =====
 @test
 fn test_object_array() {
-    var points = [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }, { "x": 2, "y": 2 }]
+    var points = [Point{ x: 0, y: 0 }, Point{ x: 1, y: 1 }, Point{ x: 2, y: 2 }]
     assertEqual(len(points), 3)
     assertEqual(points[0].x, 0)
     assertEqual(points[2].y, 2)
@@ -107,7 +150,7 @@ fn test_object_array() {
 fn test_object_field_shorthand() {
     var users = ["alice", "bob"]
     var orders = [1, 2, 3]
-    var dashboard = { users, count: len(orders) }
+    var dashboard = Dashboard{ users: users, count: len(orders) }
     assertEqual(len(dashboard.users), 2)
     assertEqual(dashboard.users[0], "alice")
     assertEqual(dashboard.count, 3)

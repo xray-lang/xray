@@ -58,7 +58,7 @@ static bool source_program_seal(SourceContext *ctx,const XrXirArtifact *source,X
     XrXirConstructionSpec input={original->rows,original->count,original->materializations,original->materialization_count,&merged,
         &original->borrow_returns};
     XrXirConstruction *construction=NULL;
-    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,source->module.types,&input,
+    XrXirStatus status=xr_xir_compile_construction_new_v6(&ctx->compile,source->module.types,&input,
         xr_xir_compile_construction_slots(original),&construction,ctx->request);
     if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&ctx->compile,&source->module,construction,output,NULL,ctx->request);
     xr_xir_compile_construction_free(construction);

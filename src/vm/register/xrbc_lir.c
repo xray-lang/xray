@@ -18,6 +18,7 @@
 #include "lir/xlir_state.h"
 #include "lir/xlir_array.h"
 #include "lir/xlir_map.h"
+#include "xray_native_map.h"
 #include "lir/xlir_view.h"
 #include "lir/xlir_display.h"
 #include "lir/xlir_pod.h"
@@ -274,6 +275,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
 
 #include "xrbc_lir_array.inc.c"
 #include "xrbc_lir_map.inc.c"
+#include "xrbc_lir_map_literals.inc.c"
 #include "xrbc_lir_aggregate.inc.c"
 #include "xrbc_lir_callable_scope.inc.c"
 
@@ -609,6 +611,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
         return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);
     }
+    case XR_LIR_MAP_LITERAL_NEW:
+        return i->type == XR_LIR_MAP_STRING_I64 && i->bits && i->bits <= xr_lir_map_literal_count(input);
     case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
@@ -1587,6 +1591,11 @@ static void rbc_code_clear(XrRbcModule module, XrtLocationOwner *locations) {
     for (size_t i = 0; i < module.literal_count; ++i)
         xr_free((void *)module.literals[i].bytes);
     xr_free((void *)module.literals);
+    for (size_t i = 0; i < module.map_literal_count; ++i) {
+        xr_free((void *)module.map_literals[i].path);
+        xr_free((void *)module.map_literals[i].items);
+    }
+    xr_free((void *)module.map_literals);
     xr_free((void *)module.aggregate_types);
     xr_free((void *)module.callable_results);
     for (size_t f = 0; f < module.function_scope_count; ++f)
@@ -1931,6 +1940,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         goto done;
     }
     status = rbc_lir_prepare_values(input, entry, ids, count, p, &preparation, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    status = rbc_lir_map_literals(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_aggregate_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;

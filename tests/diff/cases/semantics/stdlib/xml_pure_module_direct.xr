@@ -3,12 +3,12 @@ import { XmlNode, XmlName, XmlAttribute } from xml
 
 fn nodeKind(node: XmlNode) -> string {
     return match (node) {
-        XmlNode.Document { children: kids }              -> "document",
-        XmlNode.Element { name, attributes: attrs, children: kids }  -> "element",
-        XmlNode.Text { content: s }                     -> "text",
-        XmlNode.Comment { content: s }                  -> "comment",
-        XmlNode.CData { content: s }                    -> "cdata",
-        XmlNode.ProcessingInstruction { target: t, data: d } -> "pi"
+        XmlNode.Document { children: kids }              => "document",
+        XmlNode.Element { name, attributes: attrs, children: kids }  => "element",
+        XmlNode.Text { content: s }                     => "text",
+        XmlNode.Comment { content: s }                  => "comment",
+        XmlNode.CData { content: s }                    => "cdata",
+        XmlNode.ProcessingInstruction { target: t, data: d } => "pi",
     }
 }
 
@@ -23,12 +23,12 @@ print(nodeKind(kids[1]))
 print(xml.nodeText(kids[1]) ?? "")
 
 var cdataAsText = xml.parse("<root><![CDATA[plain]]></root>",
-    { preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true })
+    preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true)
 print(nodeKind(xml.children(cdataAsText)[0]))
 print(xml.textContent(cdataAsText))
 
 var comments = xml.parse("<root><!-- keep --><leaf/></root>",
-    { preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true })
+    preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true)
 print(len(xml.children(comments)))
 print(nodeKind(xml.children(comments)[0]))
 
@@ -49,6 +49,6 @@ print(nodeKind(textNode))
 print(xml.nodeText(textNode) ?? "")
 
 var round = xml.stringify(xml.parse("<msg>Hello&lt;World</msg>"),
-    { indent: 0, declaration: false, encoding: "UTF-8" })
+    indent: 0, declaration: false, encoding: "UTF-8")
 print(round)
-print(xml.stringify(made, { indent: 0, declaration: false, encoding: "UTF-8" }))
+print(xml.stringify(made, indent: 0, declaration: false, encoding: "UTF-8"))

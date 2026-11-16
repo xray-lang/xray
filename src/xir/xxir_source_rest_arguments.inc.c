@@ -17,7 +17,7 @@ static bool source_call_rest_pack(SourceContext *ctx,AstNode *node,const SourceC
     uint32_t count=(uint32_t)call->arg_count,ordinary=count-(plan->rest_array!=UINT32_MAX?1u:0u);
     if(first>ordinary||(ordinary<last&&first!=ordinary)||plan->value_offset||plan->parameter_offset)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"rest operand prefix is inconsistent");
-    if(!source_copy_bytes(ctx,node,physical,plan->values,(size_t)first*sizeof(*physical)))return false;
+    if(!plan->named_arguments&&!source_copy_bytes(ctx,node,physical,plan->values,(size_t)first*sizeof(*physical)))return false;
     XrXirType array;
     if(source_call_caller_parameters(plan))array=plan->function_parameters[last];
     else if(!source_substitute(ctx,&plan->substitution,plan->function_parameters[last],0,&array))return false;

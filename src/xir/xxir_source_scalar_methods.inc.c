@@ -68,8 +68,8 @@ static bool source_scalar_call(SourceContext *ctx,AstNode *node,SourceValue rece
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"floating operation requires the declared f64 receiver");
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
     uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
-        "scalar method requires its exact admitted ordinary declaration")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=NULL,.minimum=0,.maximum=0,
+        .values=NULL,.supplied=&supplied,.diagnostic="scalar method requires its exact admitted ordinary declaration",.native_owner=native->id})) return false;
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);
     switch (member->operation) {
     case XR_NATIVE_OPERATION_RUNE_IS_WHITESPACE:

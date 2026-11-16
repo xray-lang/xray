@@ -1,7 +1,7 @@
 import parallel
 
 fn apply(f: escaping fn(i64) -> i64) {
-    parallel.forEach(0..4, (i) -> {
+    parallel.forEach(0..4, (i) => {
         print(f(i))
     }, parallel.Options(2))
 }

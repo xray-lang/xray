@@ -20,24 +20,24 @@ fn test_cancel_result() {
     t.cancel()
     var r = t.awaitResult()
     print(match (r) {
-        TaskResult.Cancelled -> true
-        _ -> false
+        TaskResult.Cancelled => true,
+        _ => false,
     })
     match (r) {
-        TaskResult.Cancelled -> assert(true, "cancelled task should return TaskResult.Cancelled")
-        _ -> assert(false, "cancelled task should not return a value")
+        TaskResult.Cancelled => assert(true, "cancelled task should return TaskResult.Cancelled"),
+        _ => assert(false, "cancelled task should not return a value"),
     }
 }
 fn test_failed_result() {
     var t = go failing()
     var r = t.awaitResult()
     print(match (r) {
-        TaskResult.Failed { error: _ } -> true
-        _ -> false
+        TaskResult.Failed { error: _ } => true,
+        _ => false,
     })
     match (r) {
-        TaskResult.Failed { error: _ } -> assert(true, "failed task should return TaskResult.Failed")
-        _ -> assert(false, "failed task should not return success")
+        TaskResult.Failed { error: _ } => assert(true, "failed task should return TaskResult.Failed"),
+        _ => assert(false, "failed task should not return success"),
     }
 }
 fn test_both_ok() {

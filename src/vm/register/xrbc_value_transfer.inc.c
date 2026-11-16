@@ -136,6 +136,10 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     XrRbcValueAccess access=code->accesses[index];
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
+    case XR_RBC_VALUE_MAP_LITERAL:
+        for (uint32_t p=0; p<access.count; ++p)
+            if (!rbc_value_flow_read(state,code,code->arguments[access.first+p],&incoming)) return false;
+        return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_CELL: {
         const XrLirHomeEvent *event=&code->homes->events[access.index-1];
         if (event->kind==XR_LIR_OWNERSHIP_RELEASE) return true;

@@ -21,8 +21,8 @@
     },
     {
       "heading": "Example",
-      "code": [
-        "import parallel\n\nvar options = parallel.Options(4)\nvar squares = parallel.map(0..8, (i) -> i * i, options)\nvar total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\nprint(squares[3])\nprint(total)"
+      "source_examples": [
+        "knowledge-parallel-4-1"
       ]
     }
   ]

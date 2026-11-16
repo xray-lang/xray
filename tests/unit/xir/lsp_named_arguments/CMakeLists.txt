@@ -1,0 +1,18 @@
+add_executable(test_lsp_named_arguments test_named_arguments.c)
+target_include_directories(test_lsp_named_arguments PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_link_libraries(test_lsp_named_arguments PRIVATE xray_lsp_document_open)
+target_compile_features(test_lsp_named_arguments PRIVATE c_std_11)
+if(WIN32)
+    target_link_libraries(test_lsp_named_arguments PRIVATE bcrypt)
+endif()
+if(MSVC)
+    target_compile_options(test_lsp_named_arguments PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_named_arguments PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_named_arguments COMMAND "${XRAY_PYTHON}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_named_arguments.py" "$<TARGET_FILE:test_lsp_named_arguments>"
+    "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(test_lsp_named_arguments PROPERTIES TIMEOUT 40 LABELS "unit;lsp;source;ownership;required")
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()

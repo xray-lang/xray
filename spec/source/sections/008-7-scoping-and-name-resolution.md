@@ -32,6 +32,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 - `var` / `const` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-001 -->
 ```xray
 main()                    // OK：使用提升后的 fn
 fn main() { ... }
@@ -39,11 +40,13 @@ fn main() { ... }
 var y = x                 // 错误：x 未声明
 var x = 10
 ```
+<!-- /xr-source -->
 
 #### Shadow 规则
 
 嵌套块可 shadow 外层同名变量：
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-002 -->
 ```xray
 var x = 1
 {
@@ -52,6 +55,7 @@ var x = 1
 }
 print(x)                     // 1
 ```
+<!-- /xr-source -->
 
 ### 7.2 闭包捕获语义
 
@@ -61,6 +65,7 @@ print(x)                     // 1
 
 可变 `var` 按 **共享 cell 引用捕获**，`const` 按值捕获：
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-003 -->
 ```xray
 fn make_counter() -> (() -> i64) {
     var count = 0
@@ -74,6 +79,7 @@ var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
+<!-- /xr-source -->
 
 - 闭包与原变量**共享**。
 - 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
@@ -116,7 +122,6 @@ XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭�
 环的处理分三层。L0 静态排除不可能成环的类型，L1 通过 `weak` 显式断开引用，L2 在任务结束时清空已登记身份对象的拥有式出边，再由普通引用计数释放。只有可能成环的身份对象进入 L2，具体边界见 §16.3。当前实现资格见 §17。
 
 READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，保存其逻辑值快照，不执行方法体。所得函数签名只包含显式参数与返回类型，结构体泛型实参先替换；原绑定后续写入不改变快照，身份句柄仍保持其身份语义。私有/protected访问在绑定处检查，声明内部可显式返回已授权的函数值，调用者不会因此取得直接成员访问权。函数值仍受所属Instance的撤销与清理约束，不隐含Sendable/no_suspend承诺。ref/move接收者不得退化为READ绑定。
-
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -148,6 +153,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 - `var` / `const` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-001 -->
 ```xray
 main()                    // OK: uses the hoisted fn
 fn main() { ... }
@@ -155,11 +161,13 @@ fn main() { ... }
 var y = x                 // error: x is not declared
 var x = 10
 ```
+<!-- /xr-source -->
 
 #### Shadow rules
 
 A nested block may shadow a same-named variable in an outer scope:
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-002 -->
 ```xray
 var x = 1
 {
@@ -168,6 +176,7 @@ var x = 1
 }
 print(x)                     // 1
 ```
+<!-- /xr-source -->
 
 ### 7.2 Closure Capture Semantics
 
@@ -177,6 +186,7 @@ A closure captures variables from outer scopes as **upvalues**.
 
 Ordinary `var` captures retain a shared cell; copyable non-view `const` and ordinary read parameters are captured by logical value copy:
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-003 -->
 ```xray
 fn make_counter() -> (() -> i64) {
     var count = 0
@@ -190,6 +200,7 @@ var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
+<!-- /xr-source -->
 
 - The closure and the original variable **share state**.
 - After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
@@ -234,5 +245,4 @@ On scope exit, bindings release the values they own under §16.8, excluding bind
 Cycle handling has three layers. L0 statically excludes types that cannot form cycles, L1 uses `weak` to break references explicitly, and L2 clears owned outgoing edges of registered identity objects at task completion before ordinary reference counting releases them. Only potentially cyclic identity objects enter L2, under the boundaries in §16.3. Current implementation qualification is specified in §17.
 
 A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
-
 <!-- /xr-spec:en -->

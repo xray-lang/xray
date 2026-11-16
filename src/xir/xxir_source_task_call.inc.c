@@ -117,7 +117,8 @@ static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_
         !source_instantiation_prove(ctx,call,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,*target,0},substitution)) return false;
     SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,storage.values,count,0,true};
     if (!source_call_conversions(ctx,call,&conversions) || !source_hir_call_commit(ctx,call,&plan,storage.values,count,count)) return false;
-    *output=(SourceDirectArguments){substitution,storage.values,count,result,0,plan.signature};return true;
+    *output=(SourceDirectArguments){substitution,storage.values,count,result,0,plan.signature,
+        plan.display_argument_formals,plan.display_argument_count,plan.display_argument_binding_known};return true;
 }
 static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     SourceName *binding, *target;

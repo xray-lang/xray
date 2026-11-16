@@ -268,7 +268,9 @@ static bool cell_proof_raw_pass(CellProofBuild *build,uint32_t f,
     if (!((build)->status == XR_XIR_OK)) return false;
     if (actual.types!=read->domain.types || actual.declarations!=read->domain.declarations ||
         actual.generics!=read->domain.generics || actual.defaults!=read->domain.defaults ||
-        actual.function_count!=read->domain.function_count || read->resources!=build->context->resources)
+        actual.function_count!=read->domain.function_count ||
+        actual.signature_owner!=read->domain.signature_owner || actual.signature!=read->domain.signature ||
+        read->resources!=build->context->resources)
         return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
     const XrXirFunction *body=&module->functions[f];
     if (body->parameters!=head->parameters || body->parameter_count!=head->parameter_count ||

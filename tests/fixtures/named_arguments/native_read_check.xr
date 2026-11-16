@@ -1,0 +1,8 @@
+const empty=Array<i64>.withCapacity(capacity:8)
+print(len(empty))
+print("abcdef".slice(end:4,start:1))
+print("abcdef".slice(start:3))
+print("ababa".indexOf(start:1,search:"ba"))
+print("ababa".lastIndexOf(search:"ba"))
+print("ha".repeat(count:2))
+print((5).min(other:3))

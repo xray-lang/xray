@@ -98,6 +98,7 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
                         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history slot binding is not relocated");
                     binding->index=ctx->history->map->slots[source->index];
                     if (!source_library_type(ctx,types,source->type,&binding->type)) return false;
+                    if(!source_collection_key_copy(ctx,source->constant_key,&binding->constant_key))return false;
                     XrHirBodyBinding typed={0};if(!source_hir_binding_register(ctx,binding,&typed))return false;
                 } else {
                     binding->module=source_history_target(ctx,source->module);

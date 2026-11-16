@@ -9,8 +9,8 @@ var task = go sleeper()
 task.cancel()
 var value = task.awaitResult()
 print(match (value) {
-    TaskResult.Cancelled -> true
-    _ -> false
+    TaskResult.Cancelled => true,
+    _ => false,
 })
 print(task.done)
 print(task.status)

@@ -15,7 +15,7 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
     const char *rejected[] = {
         "fn make() { const x = 1; const f = fn() { x = 2 } }\n",
         "const f = fn(x) { return x }\n",
-        "const f = (x) -> x\n",
+        "const f = (x) => x\n",
         "const f = fn(x:ref i64) { return x }\n",
         "const f = fn(x:move string) { return x }\n",
         "const f = fn<T>(x:T)->T { return x }\n",
@@ -49,7 +49,7 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         "fn make() { var x = 1; const f = fn() { x++ } }\n",
         "fn make() { var x = 1; const f = fn() { const g = fn()->i64 { return x } } }\n",
         "fn make() { var unused = 1; const f = fn()->i64 { return 7 } }\n",
-        "fn make(x:i64) { const f = (x:i64) -> x + 1 }\n",
+        "fn make(x:i64) { const f = (x:i64) => x + 1 }\n",
         "fn make() { var x = 1; const f = fn() { const x = 2; return x } }\n",
         "fn make(x:i64) { const f = fn() { const x = x + 1; return x } }\n",
         "fn make(x:i64) { const f = fn() { return x + x } }\n",
@@ -59,7 +59,7 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         "var x = 1; const f = fn() { return x }\n",
         ("import \"./lib\" as lib\nfn make<T:Sendable>(x:T)->fn()->T { return fn() { return lib.required<T>(x) } }\n"
         "const f = make<string>(\"owned\"); const n = make<i64>(7)\n"),
-        "fn make() { const f = fn() { return }; const g = () -> 7 }\n"
+        "fn make() { const f = fn() { return }; const g = () => 7 }\n"
     };
     const unsigned captures[] = {1, 1, 1, 1, 2, 0, 0, 0, 1, 1, 2, 0, 1, 0, 1, 0};
     for (unsigned i = 0; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {

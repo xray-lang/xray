@@ -37,7 +37,7 @@ typedef struct XlspSourceCallSyntax {
 XR_FUNC XrXirStatus xlsp_source_syntax_call(const XlspSyntaxSnapshot *,XrLspPosition,XlspSourceCallSyntax *);
 typedef struct XlspSourceArgumentSyntax {
     XrLspRange range,variable;
-    bool has_variable;
+    bool has_variable,has_label;
 } XlspSourceArgumentSyntax;
 typedef struct XlspSourceArgumentCall {
     XlspSourceCallSyntax call;

@@ -70,21 +70,10 @@ static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t 
         source_substitute(ctx, substitution, ctx->functions[index].parameters[parameter], 0, &op.type) &&
         source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value);
 }
-static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
-    uint32_t end = *next;
-    for (uint32_t f = (uint32_t)ctx->graph->spec_count; f < end; ++f) {
-        SourceFunction *body = &ctx->bodies[f];
-        if (body->checked_library || ctx->identities[f].method_kind == XR_XIR_CONSTRUCTOR_FIELDS) continue;
-        AstNode *node = body->node;
-        XrParamNode **parameters = NULL;
-        uint32_t count = 0, offset = 0;
-        if (node->type == AST_FUNCTION_DECL) {
-            parameters = node->as.function_decl.params; count = (uint32_t)node->as.function_decl.param_count;
-        } else if (node->type == AST_METHOD_DECL) {
-            parameters = node->as.method_decl.params; count = (uint32_t)node->as.method_decl.param_count;
-            offset = node->as.method_decl.is_constructor || node->as.method_decl.is_static ? 0 : 1;
-        } else continue;
-        bool seen = false;
+static bool source_owner_argument_functions(SourceContext *ctx,uint32_t f,XrParamNode **parameters,
+    uint32_t count,uint32_t offset,uint32_t *next) {
+    SourceFunction *body=&ctx->bodies[f];AstNode *node=body->node;
+    bool seen = false;
         for (uint32_t p = 0; p < count; ++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             AstNode *expression = parameters[p]->default_value;
@@ -115,6 +104,28 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             ctx->identities[helper].capture_owner = ctx->identities[helper].capture_count = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
         }
+    return true;
+}
+static bool source_nested_argument_functions(SourceContext *ctx,uint32_t function) {
+    AstNode *node=ctx->bodies[function].node;
+    return source_owner_argument_functions(ctx,function,node->as.function_decl.params,
+        (uint32_t)node->as.function_decl.param_count,ctx->identities[function].capture_count,&ctx->next_nested_default);
+}
+static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
+    uint32_t end = *next;
+    for (uint32_t f = (uint32_t)ctx->graph->spec_count; f < end; ++f) {
+        SourceFunction *body = &ctx->bodies[f];
+        if (body->checked_library || ctx->identities[f].method_kind == XR_XIR_CONSTRUCTOR_FIELDS) continue;
+        AstNode *node = body->node;
+        XrParamNode **parameters = NULL;
+        uint32_t count = 0, offset = 0;
+        if (node->type == AST_FUNCTION_DECL) {
+            parameters = node->as.function_decl.params; count = (uint32_t)node->as.function_decl.param_count;
+        } else if (node->type == AST_METHOD_DECL) {
+            parameters = node->as.method_decl.params; count = (uint32_t)node->as.method_decl.param_count;
+            offset = node->as.method_decl.is_constructor || node->as.method_decl.is_static ? 0 : 1;
+        } else continue;
+        if(!source_owner_argument_functions(ctx,f,parameters,count,offset,next))return false;
     }
     return true;
 }

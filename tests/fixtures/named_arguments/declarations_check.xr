@@ -1,0 +1,34 @@
+interface Join {
+    join(left: i64, right: i64) -> i64
+}
+struct Mixer implements Join {
+    join(a: i64, b: i64) -> i64 { return a * 10 + b }
+}
+fn viaInterface<T: Join>(value: T) -> i64 {
+    return value.join(right: 2, left: 1)
+}
+struct Box {
+    value: i64
+    init(a: i64, b: i64 = 2, c: i64 = 3) {
+        this.value = a * 100 + b * 10 + c
+    }
+    add(left: i64, right: i64 = 2) -> i64 {
+        return this.value + left * 10 + right
+    }
+}
+var box = Box(c: 9, a: 1)
+print(box.add(right: 4, left: 3))
+print(viaInterface(Mixer{}))
+class Base {
+    value: i64
+    init(a: i64, b: i64 = 2, c: i64 = 3) {
+        this.value = a * 100 + b * 10 + c
+    }
+}
+class Child extends Base {
+    init(a: i64) {
+        super(c: 9, a: a)
+    }
+}
+var child = Child(a: 1)
+print(child.value)

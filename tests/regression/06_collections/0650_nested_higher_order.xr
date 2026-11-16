@@ -2,6 +2,36 @@
 // Author: xingleixu@gmail.com
 // Test: Complex nested higher-order functions for type inference
 // ===== Deep Chained Operations (3+ levels) =====
+struct DoubledValue {
+    value: i64
+    doubled: i64
+}
+
+struct ScoredUser {
+    name: string
+    scores: Array<i64>
+}
+
+struct IndexedValue {
+    index: i64
+    value: string
+}
+
+struct CategorizedItem {
+    category: string
+    name: string
+}
+
+struct Customer {
+    name: string
+    purchases: Array<i64>
+}
+
+struct PurchaseTotal {
+    name: string
+    total: i64
+}
+
 @test
 fn test_triple_chain_map() {
     var arr = [1, 2, 3, 4, 5]
@@ -136,7 +166,7 @@ fn test_flatten_with_reduce() {
 fn test_map_to_objects_then_filter() {
     var nums = [1, 2, 3, 4, 5]
     var objects = nums.map(fn(n) {
-        return ({ "value": n, "doubled": n * 2 })
+        return (DoubledValue{ value: n, doubled: n * 2 })
     })
     var filtered = objects.filter(fn(obj) {
         return obj.doubled > 4
@@ -165,7 +195,7 @@ fn test_chain_with_type_change() {
 @test
 fn test_reduce_to_map() {
     var pairs = [("a", 1), ("b", 2), ("c", 3)]
-    var seed: Map<string, i64> = #{}
+    var seed: Map<string, i64> = {}
     var obj = pairs.reduce(fn(acc, pair) {
         var next = copy(acc)
         next.set(pair.0, pair.1)
@@ -275,7 +305,7 @@ fn test_some_with_nested_check() {
 
 @test
 fn test_find_with_complex_predicate() {
-    var data = [{ "name": "Alice", "scores": [85, 90, 95] }, { "name": "Bob", "scores": [70, 75, 80] }, { "name": "Carol", "scores": [90, 92, 94] }]
+    var data = [ScoredUser{ name: "Alice", scores: [85, 90, 95] }, ScoredUser{ name: "Bob", scores: [70, 75, 80] }, ScoredUser{ name: "Carol", scores: [90, 92, 94] }]
     var highAchiever = data.find(fn(person) {
         return person.scores.every(fn(s) {
             return s >= 90
@@ -381,10 +411,10 @@ fn test_nested_foreach() {
 @test
 fn test_foreach_with_index_simulation() {
     var arr = ["a", "b", "c"]
-    var indexed: Array<{ index: i64, value: string }> = []
+    var indexed: Array<IndexedValue> = []
     var idx = 0
     arr.forEach(fn(item) {
-        indexed.push({ "index": idx, "value": item })
+        indexed.push(IndexedValue{ index: idx, value: item })
         idx++
     })
     assertEqual(indexed[0].index, 0)
@@ -395,7 +425,7 @@ fn test_foreach_with_index_simulation() {
 // ===== Complex Data Transformations =====
 @test
 fn test_group_by_simulation() {
-    var items = [{ "category": "fruit", "name": "apple" }, { "category": "vegetable", "name": "carrot" }, { "category": "fruit", "name": "banana" }, { "category": "vegetable", "name": "broccoli" }]
+    var items = [CategorizedItem{ category: "fruit", name: "apple" }, CategorizedItem{ category: "vegetable", name: "carrot" }, CategorizedItem{ category: "fruit", name: "banana" }, CategorizedItem{ category: "vegetable", name: "broccoli" }]
     var fruits = items.filter(fn(item) {
         return item.category == "fruit"
     })
@@ -410,7 +440,7 @@ fn test_group_by_simulation() {
 @test
 fn test_unique_via_reduce() {
     var arr = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]
-    var seen: Set<i64> = #[]
+    var seen: Set<i64> = Set()
     var unique = arr.filter(fn(x) {
         if (seen.contains(x)) {
             return false
@@ -426,7 +456,7 @@ fn test_unique_via_reduce() {
 @test
 fn test_count_by_reduce() {
     var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
-    var seed: Map<string, i64> = #{}
+    var seed: Map<string, i64> = {}
     var counts = words.reduce(fn(acc, word) {
         var next = copy(acc)
         next.set(word, (next.get(word) ?? 0) + 1)
@@ -468,13 +498,13 @@ fn test_boolean_chain() {
 // ===== Deeply Nested with Multiple Types =====
 @test
 fn test_complex_data_pipeline() {
-    var users = [{ "name": "Alice", "purchases": [100, 200, 300] }, { "name": "Bob", "purchases": [50, 150] }, { "name": "Carol", "purchases": [500, 600, 700, 800] }]
+    var users = [Customer{ name: "Alice", purchases: [100, 200, 300] }, Customer{ name: "Bob", purchases: [50, 150] }, Customer{ name: "Carol", purchases: [500, 600, 700, 800] }]
     // Calculate total per user, filter high spenders, get names
     var highSpenders = users.map(fn(user) {
         var total = user.purchases.reduce(fn(a, b) {
             return a + b
         }, 0)
-        return { "name": user.name, "total": total }
+        return PurchaseTotal{ name: user.name, total: total }
     }).filter(fn(user) {
         return user.total > 500
     }).map(fn(user) {

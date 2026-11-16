@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from spec_sources import render_sections
+
 FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 BLOCK_RE = re.compile(r"<!--\s*xr-spec:(?P<name>[a-z_]+)\s*-->\n(?P<body>.*?)\n<!--\s*/xr-spec:(?P=name)\s*-->\n?", re.S)
 FENCE_ID_RE = re.compile(r"^```xray[ \t]+@id=(?P<id>[A-Za-z0-9_-]+)(?:[ \t]+@(?:run|check|fragment|error=E\d{4}))?[ \t]*$\n(?P<code>.*?)\n```[ \t]*$", re.M | re.S)
@@ -24,8 +27,9 @@ KNOWLEDGE_ROOT_FILES = ("README.md",)
 CARD_SUBDIRS = ("topics", "resources", "stdlib")
 
 
-def parse_frontmatter(path: Path) -> tuple[dict[str, str], str]:
-    text = path.read_text(encoding="utf-8")
+def parse_frontmatter(path: Path, text: str | None = None) -> tuple[dict[str, str], str]:
+    if text is None:
+        text = path.read_text(encoding="utf-8")
     match = FRONT_RE.match(text)
     if not match:
         raise ValueError(f"{path}: missing frontmatter")
@@ -115,14 +119,14 @@ def check_parity(path: Path, blocks: dict[str, str]) -> list[str]:
     return errors
 
 
-def load_spec_units(source: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
+def load_spec_units(source: Path, projections: dict[Path, str] | None = None) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
     units: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     seen_orders: set[str] = set()
     fence_registry: dict[str, dict[str, str]] = {}
     sections = source / "sections"
     for path in sorted(sections.rglob("*.md")):
-        meta, body = parse_frontmatter(path)
+        meta, body = parse_frontmatter(path, projections.get(path) if projections else None)
         if "id" not in meta:
             raise ValueError(f"{path}: missing id")
         if "order" not in meta:
@@ -159,6 +163,8 @@ def write_or_check(path: Path, text: str, check: bool, errors: list[str]) -> Non
         current = normalize_text(path.read_text(encoding="utf-8"))
         if current != text:
             errors.append(f"{path}: stale generated output")
+        return
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -210,16 +216,21 @@ def render_card_section(section: dict[str, Any], fence_registry: dict[str, dict[
         out.append("```xray")
         out.append(lookup_fence(fence_registry, fid, lang, card_path).rstrip())
         out.append("```")
-    for code in section.get("code", []):
-        out.append("```xray")
-        out.append(code.rstrip("\n"))
-        out.append("```")
+    if section.get("code"):
+        raise ValueError(f"{card_path}: inline examples must reference shared sources")
+    if section.get("source_examples"):
+        from spec_sources import Sources
+        sources = Sources(card_path.parents[4])
+        for key in section["source_examples"]:
+            if key not in sources.examples:
+                raise ValueError(f"{card_path}: unknown shared example {key}")
+            out.append(sources.render("example", key, lang))
     after = section.get("after_text")
     if after:
         out.append(after.rstrip())
     for bullet in section.get("bullets", []):
         out.append(f"- {bullet}")
-    if heading is None and not (before or markdown or after) and not section.get("fences") and not section.get("code") and not section.get("bullets"):
+    if heading is None and not (before or markdown or after) and not section.get("fences") and not section.get("source_examples") and not section.get("bullets"):
         raise ValueError(f"{card_path}: section has no content")
     return out
 
@@ -381,17 +392,22 @@ def generate(root: Path, check: bool, parity: str = "warn") -> list[str]:
     source = root / "spec" / "source"
     if not source.is_dir():
         raise ValueError(f"{source}: missing spec source directory")
-    units, fence_registry = load_spec_units(source)
     errors: list[str] = []
+    # Validate every input before publishing any shared-source projection.
+    sections = render_sections(root)
+    units, fence_registry = load_spec_units(source, sections)
     parity_errors: list[str] = []
     for unit in units:
         parity_errors.extend(check_parity(unit["path"], unit["blocks"]))
     if parity_errors:
         if parity == "strict":
             errors.extend(parity_errors)
+            return errors
         else:
             for err in parity_errors:
                 print(f"warning: {err}", file=sys.stderr)
+    for path, text in sections.items():
+        write_or_check(path, text, check, errors)
     for lang, rel in SPEC_OUTPUTS.items():
         write_or_check(root / rel, render_spec(units, lang), check, errors)
     generate_knowledge(root, source, fence_registry, check, errors)

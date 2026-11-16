@@ -51,54 +51,26 @@ export enum CsvError {
     FieldCountMismatch { byteOffset: i64, line: i64, record: i64, column: i64, message: string }
 }
 
-export type CsvParseOptions = {
-    delimiter: CsvDelimiter,
-    quoteChar: rune,
-    escapeChar: rune,
-    header: CsvHeader,
-    trimFields: bool,
-    skipEmptyLines: bool,
-    commentPrefix: string,
-    skipRecords: i64,
-    maxRecords: i64,
-    maxInputBytes: i64,
-    maxFieldBytes: i64,
+struct _CsvParseConfig {
+    delimiter: CsvDelimiter
+    quoteChar: rune
+    escapeChar: rune
+    header: CsvHeader
+    trimFields: bool
+    skipEmptyLines: bool
+    commentPrefix: string
+    skipRecords: i64
+    maxRecords: i64
+    maxInputBytes: i64
+    maxFieldBytes: i64
     maxColumns: i64
 }
 
-export type CsvWriteOptions = {
-    delimiter: rune,
-    quoteChar: rune,
-    escapeChar: rune,
+struct _CsvWriteConfig {
+    delimiter: rune
+    quoteChar: rune
+    escapeChar: rune
     linebreak: string
-}
-
-export fn defaultParseOptions() -> CsvParseOptions {
-    var options: CsvParseOptions = {
-        delimiter: CsvDelimiter.Exact { delimiter: ',' },
-        quoteChar: '"',
-        escapeChar: '"',
-        header: CsvHeader.None,
-        trimFields: false,
-        skipEmptyLines: true,
-        commentPrefix: "",
-        skipRecords: 0,
-        maxRecords: 0,
-        maxInputBytes: 16 * 1024 * 1024,
-        maxFieldBytes: 1024 * 1024,
-        maxColumns: 16384
-    }
-    return options
-}
-
-export fn defaultWriteOptions() -> CsvWriteOptions {
-    var options: CsvWriteOptions = {
-        delimiter: ',',
-        quoteChar: '"',
-        escapeChar: '"',
-        linebreak: "\n"
-    }
-    return options
 }
 
 export class CsvDocument {
@@ -165,14 +137,14 @@ class _CsvState {
     }
 }
 
-fn _validateParseOptions(options: CsvParseOptions) throws(CsvError) {
+fn _validateParseOptions(options: _CsvParseConfig) throws(CsvError) {
     if (options.skipRecords < 0 || options.maxRecords < 0 || options.maxInputBytes < 0 ||
         options.maxFieldBytes < 0 || options.maxColumns < 0) {
         throw CsvError.InvalidOption { message: "CSV limits and record counts must be non-negative" }
     }
 }
 
-fn _validateWriteOptions(options: CsvWriteOptions) throws(CsvError) {
+fn _validateWriteOptions(options: _CsvWriteConfig) throws(CsvError) {
     if (options.delimiter == options.quoteChar) {
         throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
     }
@@ -229,10 +201,10 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
     return best
 }
 
-fn _resolveDelimiter(data: string, options: CsvParseOptions) throws(CsvError) -> rune {
+fn _resolveDelimiter(data: string, options: _CsvParseConfig) throws(CsvError) -> rune {
     var delimiter = match (options.delimiter) {
-        CsvDelimiter.Exact { delimiter: value } -> value,
-        CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
+        CsvDelimiter.Exact { delimiter: value } => value,
+        CsvDelimiter.Auto         => _detectDelimiter(data, options.quoteChar, options.escapeChar),
     }
     if (delimiter == options.quoteChar) {
         throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
@@ -243,8 +215,8 @@ fn _resolveDelimiter(data: string, options: CsvParseOptions) throws(CsvError) ->
 fn _explicitHeaders(header: CsvHeader) -> Array<string> {
     var empty: Array<string> = []
     return match (header) {
-        CsvHeader.Explicit { names: values } -> copy values,
-        _                          -> empty
+        CsvHeader.Explicit { names: values } => copy values,
+        _                          => empty,
     }
 }
 
@@ -270,7 +242,7 @@ fn _addRecordDiagnostic(state: ref _CsvState, kind: CsvErrorKind, record: i64, m
     ))
 }
 
-fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) throws(CsvError) {
+fn _checkFieldLimit(state: _CsvState, options: _CsvParseConfig) throws(CsvError) {
     if (options.maxFieldBytes > 0 && state.currentFieldBytes > options.maxFieldBytes) {
         throw CsvError.FieldLimitExceeded { limit: options.maxFieldBytes }
     }
@@ -285,20 +257,20 @@ fn _utf8Width(value: rune) -> i64 {
 }
 
 fn _appendRune(state: ref _CsvState, field: ref string, value: rune,
-               options: CsvParseOptions) throws(CsvError) {
+               options: _CsvParseConfig) throws(CsvError) {
     field += "${value}"
     state.currentFieldBytes = state.currentFieldBytes + _utf8Width(value)
     try _checkFieldLimit(state, options)
 }
 
 fn _appendText(state: ref _CsvState, field: ref string, value: string,
-               options: CsvParseOptions) throws(CsvError) {
+               options: _CsvParseConfig) throws(CsvError) {
     field += value
     state.currentFieldBytes = state.currentFieldBytes + len(value.bytes())
     try _checkFieldLimit(state, options)
 }
 
-fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref string) throws(CsvError) {
+fn _finishField(state: ref _CsvState, options: _CsvParseConfig, field: ref string) throws(CsvError) {
     if (options.maxColumns > 0 && state.currentColumn + 1 > options.maxColumns) {
         throw CsvError.ColumnLimitExceeded { limit: options.maxColumns }
     }
@@ -339,7 +311,7 @@ fn _isEmptyRow(row: Array<string>) -> bool {
     return len(row) == 0 || (len(row) == 1 && len(row[0]) == 0)
 }
 
-fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
+fn _consumeRow(state: ref _CsvState, options: _CsvParseConfig) -> bool {
     var row = state.currentRow
     var record = state.currentRecord
     state.currentRecord = state.currentRecord + 1
@@ -361,8 +333,8 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
     }
 
     var headerConsumed = match (options.header) {
-        CsvHeader.FirstRow -> len(state.document.headers) == 0,
-        _                  -> false
+        CsvHeader.FirstRow => len(state.document.headers) == 0,
+        _                  => false,
     }
     if (headerConsumed) {
         state.document.headers = copy row
@@ -391,7 +363,7 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
     return false
 }
 
-fn _parseImpl(data: string, options: CsvParseOptions) throws(CsvError) -> CsvParseReport {
+fn _parseImpl(data: string, options: _CsvParseConfig) throws(CsvError) -> CsvParseReport {
     try _validateParseOptions(options)
     if (options.maxInputBytes > 0 && len(data.bytes()) > options.maxInputBytes) {
         throw CsvError.InputLimitExceeded { limit: options.maxInputBytes }
@@ -521,8 +493,32 @@ fn _parseImpl(data: string, options: CsvParseOptions) throws(CsvError) -> CsvPar
 
 // parseReport explicitly opts into recovery and returns any partial document
 // together with typed diagnostics.
-export fn parseReport(data: string, options: CsvParseOptions? = null) throws(CsvError) -> CsvParseReport {
-    var resolved = options == null ? defaultParseOptions() : options!
+export fn parseReport(data: string, delimiter: CsvDelimiter = CsvDelimiter.Exact { delimiter: ',' },
+                      quoteChar: rune = '"',
+                      escapeChar: rune = '"',
+                      header: CsvHeader = CsvHeader.None,
+                      trimFields: bool = false,
+                      skipEmptyLines: bool = true,
+                      commentPrefix: string = "",
+                      skipRecords: i64 = 0,
+                      maxRecords: i64 = 0,
+                      maxInputBytes: i64 = 16 * 1024 * 1024,
+                      maxFieldBytes: i64 = 1024 * 1024,
+                      maxColumns: i64 = 16384) throws(CsvError) -> CsvParseReport {
+    var resolved = _CsvParseConfig{
+        delimiter: delimiter,
+        quoteChar: quoteChar,
+        escapeChar: escapeChar,
+        header: header,
+        trimFields: trimFields,
+        skipEmptyLines: skipEmptyLines,
+        commentPrefix: commentPrefix,
+        skipRecords: skipRecords,
+        maxRecords: maxRecords,
+        maxInputBytes: maxInputBytes,
+        maxFieldBytes: maxFieldBytes,
+        maxColumns: maxColumns
+    }
     return try _parseImpl(data, resolved)
 }
 
@@ -538,8 +534,32 @@ fn _throwDiagnostic(diagnostic: CsvDiagnostic) throws(CsvError) {
 
 // parse is strict: the first recoverable syntax diagnostic enters the enum
 // value error channel.
-export fn parse(data: string, options: CsvParseOptions? = null) throws(CsvError) -> CsvDocument {
-    var resolved = options == null ? defaultParseOptions() : options!
+export fn parse(data: string, delimiter: CsvDelimiter = CsvDelimiter.Exact { delimiter: ',' },
+                      quoteChar: rune = '"',
+                      escapeChar: rune = '"',
+                      header: CsvHeader = CsvHeader.None,
+                      trimFields: bool = false,
+                      skipEmptyLines: bool = true,
+                      commentPrefix: string = "",
+                      skipRecords: i64 = 0,
+                      maxRecords: i64 = 0,
+                      maxInputBytes: i64 = 16 * 1024 * 1024,
+                      maxFieldBytes: i64 = 1024 * 1024,
+                      maxColumns: i64 = 16384) throws(CsvError) -> CsvDocument {
+    var resolved = _CsvParseConfig{
+        delimiter: delimiter,
+        quoteChar: quoteChar,
+        escapeChar: escapeChar,
+        header: header,
+        trimFields: trimFields,
+        skipEmptyLines: skipEmptyLines,
+        commentPrefix: commentPrefix,
+        skipRecords: skipRecords,
+        maxRecords: maxRecords,
+        maxInputBytes: maxInputBytes,
+        maxFieldBytes: maxFieldBytes,
+        maxColumns: maxColumns
+    }
     var report = try _parseImpl(data, resolved)
     if (len(report.diagnostics) > 0) {
         try _throwDiagnostic(report.diagnostics[0])
@@ -547,7 +567,7 @@ export fn parse(data: string, options: CsvParseOptions? = null) throws(CsvError)
     return report.document
 }
 
-fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
+fn _needsQuoting(value: string, options: _CsvWriteConfig) -> bool {
     var iter = value.runes()
     if (!iter.hasNext()) { return false }
     var first = true
@@ -565,7 +585,7 @@ fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
     return previous == ' ' || previous == '\t'
 }
 
-fn _writeField(out: ref string, value: string, options: CsvWriteOptions) {
+fn _writeField(out: ref string, value: string, options: _CsvWriteConfig) {
     if (!_needsQuoting(value, options)) {
         out += value
         return
@@ -585,7 +605,7 @@ fn _writeField(out: ref string, value: string, options: CsvWriteOptions) {
     out += "${options.quoteChar}"
 }
 
-fn _writeRow(out: ref string, row: Array<string>, options: CsvWriteOptions) {
+fn _writeRow(out: ref string, row: Array<string>, options: _CsvWriteConfig) {
     for (var i = 0; i < len(row); i++) {
         if (i > 0) { out += "${options.delimiter}" }
         _writeField(ref out, row[i], options)
@@ -595,8 +615,16 @@ fn _writeRow(out: ref string, row: Array<string>, options: CsvWriteOptions) {
 
 // stringify accepts only CsvDocument and never guesses how arbitrary values
 // should be coerced.
-export fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) throws(CsvError) -> string {
-    var resolved = options == null ? defaultWriteOptions() : options!
+export fn stringify(document: CsvDocument, delimiter: rune = ',',
+                      quoteChar: rune = '"',
+                      escapeChar: rune = '"',
+                      linebreak: string = "\n") throws(CsvError) -> string {
+    var resolved = _CsvWriteConfig{
+        delimiter: delimiter,
+        quoteChar: quoteChar,
+        escapeChar: escapeChar,
+        linebreak: linebreak
+    }
     try _validateWriteOptions(resolved)
     var out = ""
     if (len(document.headers) > 0) {

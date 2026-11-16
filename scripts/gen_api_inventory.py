@@ -661,7 +661,7 @@ def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str
         ("fn", re.compile(r"fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("const", re.compile(r"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("handle", re.compile(r"handle\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
-        ("object", re.compile(r"object\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("struct", re.compile(r"struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("enum", re.compile(r"enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
     )
     for path in sorted(defs_dir.glob("*.def")):
@@ -706,7 +706,7 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
         entries,
         constants,
         handles,
-        object_shapes,
+        nominal_structs,
         enums,
         _type_methods,
         _native_classes,
@@ -794,34 +794,34 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
                     doc_module=doc_module,
                 )
             )
-    for object_shape in object_shapes:
-        source, line = source_for("object", object_shape.module, object_shape.name, object_shape)
-        category, surface, doc_module = module_inventory_surface(object_shape.module)
+    for nominal_struct in nominal_structs:
+        source, line = source_for("struct", nominal_struct.module, nominal_struct.name, nominal_struct)
+        category, surface, doc_module = module_inventory_surface(nominal_struct.module)
         out.append(
             item(
                 category=category,
-                namespace=object_shape.module,
-                name=object_shape.name,
+                namespace=nominal_struct.module,
+                name=nominal_struct.name,
                 kind="type",
-                signature="{ "
-                + ", ".join(f"{field.name}: {field.type}" for field in object_shape.fields)
+                signature=f"struct {nominal_struct.name} {{ "
+                + "; ".join(f"{field.name}: {field.type}" for field in nominal_struct.fields)
                 + " }",
-                summary=object_shape.doc,
+                summary=nominal_struct.doc,
                 source=source,
                 line=line,
                 doc_surface=surface,
                 doc_module=doc_module,
             )
         )
-        for field in object_shape.fields:
+        for field in nominal_struct.fields:
             out.append(
                 item(
                     category=category,
-                    namespace=object_shape.module,
-                    name=f"{object_shape.name}.{field.name}",
+                    namespace=nominal_struct.module,
+                    name=f"{nominal_struct.name}.{field.name}",
                     kind="field",
                     signature=f"{'const ' if field.is_const else ''}{field.type}",
-                    summary="Object field",
+                    summary="Struct field",
                     source=source,
                     line=line,
                     doc_surface=surface,
@@ -867,7 +867,7 @@ def collect_stdlib_metadata(root: Path) -> list[dict[str, Any]]:
             )
     internal_owners = {
         (entry.module, entry.name)
-        for group in (entries, constants, handles, object_shapes, enums)
+        for group in (entries, constants, handles, nominal_structs, enums)
         for entry in group if entry.is_internal
     }
     for row in out:
@@ -1143,19 +1143,18 @@ def collect_interfaces(root: Path) -> list[dict[str, Any]]:
 
 
 def collect_keywords(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/frontend/lexer/xkeywords.def"
-    text = path.read_text(encoding="utf-8")
+    from spec_sources import reserved_keywords
     out: list[dict[str, Any]] = []
-    for match in re.finditer(r'XR_KW\(\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*([A-Z_]+)\s*\)', text):
+    for keyword in reserved_keywords(root):
         out.append(
             item(
                 category="language-keyword",
                 namespace="keyword",
-                name=match.group(1),
+                name=keyword["name"],
                 kind="keyword",
-                signature=match.group(3),
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
+                signature=keyword["token"],
+                source=keyword["source"],
+                line=keyword["line"],
             )
         )
     return out

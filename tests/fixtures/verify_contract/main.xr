@@ -69,5 +69,5 @@ export class WeakBrokenNode {
 
 export class MapEdgeNode {
     peers: Map<string, MapEdgeNode>
-    init() { this.peers = #{} }
+    init() { this.peers = {} }
 }

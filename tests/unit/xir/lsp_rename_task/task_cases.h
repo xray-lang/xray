@@ -53,8 +53,8 @@ static void rename_task_fixture(RenameTaskFixture *f,const RenameTaskOptions *o)
         "}\n"
         "var made = Result.Ok { code: 7, value: 42 }\n"
         "var selected = match (made) {\n"
-        "    Result.Ok { value, code: _ } -> value\n"
-        "    Result.Err { value: message } -> 0\n"
+        "    Result.Ok { value, code: _ } => value,\n"
+        "    Result.Err { value: message } => 0,\n"
         "}\n";
     add_document(&f->server,o->uri,text,7);
     add_document(&f->server,o->library,"export fn target(value:i64)->i64{return value}\n",9);

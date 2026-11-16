@@ -14,6 +14,7 @@
 #include "xnative_module_state.h"
 #include "xnative_status.h"
 #include "xnative_values.h"
+#include "xray_native_string_value.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
 #include "shared/xr_time_offset.h"
@@ -41,7 +42,24 @@ XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source
     binding->failure->detail.value.source_id = source_id;
     longjmp(*binding->target, 1);
 }
-static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecutionFailure *failure);
+static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure);
+XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {
+    if (!failure) return;
+    XrtManagedHeader *message = failure->kind == XRT_FAILURE_MESSAGE_PANIC ? failure->detail.message.message : NULL;
+    *failure = (XrtExecutionFailure){0};
+    xrt_managed_drop(message);
+}
+XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && binding->target && code == 434 && source_id <= binding->map.count && owned && *owned,
+        "message panic consumes a genuine String owner at its active source point");
+    XrtManagedHeader *message = *owned; *owned = NULL;
+    binding->failure->kind = XRT_FAILURE_MESSAGE_PANIC;
+    binding->failure->detail.message.code = code;
+    binding->failure->detail.message.source_id = source_id;
+    binding->failure->detail.message.message = message;
+    longjmp(*binding->target, 1);
+}
 XRAY_API_NORET void xrt_fixed_array_bounds(uint32_t source_id) {
     xrt_value_failure(XR_XIR_VALUE_BOUNDS, source_id);
 }
@@ -160,7 +178,7 @@ static int panic_write(void *context, const void *bytes, size_t length) {
     (void)context;
     return !xrt_io_write(2, bytes, length).failed;
 }
-static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecutionFailure *failure) {
+static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure) {
     if (failure->kind == XRT_FAILURE_OUTPUT)
         xrt_output_exit(map, failure->detail.output.io,
             failure->detail.output.operation, failure->detail.output.source_id);
@@ -176,8 +194,18 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
         xrt_value_failure_report(failure->detail.value.status, source);
         _Exit(1);
     }
-    XR_CHECK(failure->kind == XRT_FAILURE_TYPED_PANIC, "Native failure has a known physical carrier");
     XrValueFormatSink sink = {NULL, panic_write};
+    if (failure->kind == XRT_FAILURE_MESSAGE_PANIC) {
+        const XrtStringBacking *message = (const XrtStringBacking *)failure->detail.message.message;
+        if (!xr_value_format_panic(sink, failure->detail.message.code, 0, 0, 0, 1,
+            (const uint8_t *)message->bytes, message->length, 0)) {
+            static const char fallback[] = "XR_RUN_6005: cannot render uncaught message panic\n";
+            (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
+        }
+        xrt_execution_failure_drop(failure);
+        _Exit(1);
+    }
+    XR_CHECK(failure->kind == XRT_FAILURE_TYPED_PANIC, "Native failure has a known physical carrier");
     if (!xr_value_format_panic(sink, failure->detail.panic.code, 0, 0, 0, 0, NULL, 0, 0)) {
         static const char fallback[] = "XR_RUN_6005: cannot render uncaught typed panic\n";
         (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);

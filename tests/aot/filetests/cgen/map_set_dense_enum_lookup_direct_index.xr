@@ -7,14 +7,14 @@ enum Color {
 }
 
 fn denseEnumLookup() -> i64 {
-    var scores = #{
+    var scores = {
         Color.Red: 10,
         Color.Green: 11,
         Color.Blue: 12,
         Color.Yellow: 13,
         Color.Purple: 14
     }
-    var seen: Set<Color> = #[Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Purple]
+    var seen: Set<Color> = Set([Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Purple])
     var fromIndex = scores[Color.Blue]
     var viaGet = scores.get(Color.Purple)
     var total = fromIndex + viaGet!

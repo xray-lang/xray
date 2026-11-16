@@ -1,0 +1,6 @@
+match (p) {
+    { x, y } => print(x, y),             // 对象字段解构（簡寫绑定）
+    { name: n, age } => print(n, age),    // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest,] => print(a, b, rest), // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] => print(mid),           // 元素位通配
+}

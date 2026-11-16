@@ -18,7 +18,7 @@ fn outer() -> string {
         return "no-throw"
     } catch (e) {
         match (e) {
-            AppErr.Msg { s } -> { return "caught:" + s }
+            AppErr.Msg { s } => { return "caught:" + s },
         }
     }
 }

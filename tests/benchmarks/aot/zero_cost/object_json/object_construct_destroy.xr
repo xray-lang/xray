@@ -1,8 +1,13 @@
+struct Point {
+    x: i64
+    y: i64
+}
+
 fn run(n: i64) -> i64 {
     var i = 0
     var sum = 0
     while (i < n) {
-        var point = { x: i, y: i + 1 }
+        var point = Point{ x: i, y: i + 1 }
         sum = sum + point.y - point.x
         i = i + 1
     }

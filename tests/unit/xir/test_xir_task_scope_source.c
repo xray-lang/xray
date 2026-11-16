@@ -123,9 +123,9 @@ static void rejections(const XrXirCompileContext *context) {
             "scope{go worker();print(values[0])};view[0]=1}",XR_XIR_BAD_VALUE},
         {"fn run(){var values=[42];const view:Slice<i64> =values[:];scope{go fn(){print(view[0])}()}}",XR_XIR_BAD_TYPE},
         {"fn worker(){}\nfn run(){const callback:nosuspend fn()=fn(){scope{go worker()}};callback()}",XR_XIR_BAD_TYPE}
-        ,{"fn run(){const f:nosuspend fn()=fn(){const ch=Channel<i64>(1);select{v from ch->{} _->{}}};f()}",XR_XIR_BAD_TYPE}
-        ,{"fn run(){const ch=Channel<i64>(1);select{true to ch->{} _->{}}}",XR_XIR_BAD_TYPE}
-        ,{"fn run(){const ch=Channel<i64>(1);select{v from ch->{} after 0->{} _->{}}}",XR_XIR_BAD_STRUCTURE}
+        ,{"fn run(){const f:nosuspend fn()=fn(){const ch=Channel<i64>(1);select{v from ch=>{} _=>{}}};f()}",XR_XIR_BAD_TYPE}
+        ,{"fn run(){const ch=Channel<i64>(1);select{true to ch=>{} _=>{}}}",XR_XIR_BAD_TYPE}
+        ,{"fn run(){const ch=Channel<i64>(1);select{v from ch=>{} after 0=>{} _=>{}}}",XR_XIR_BAD_STRUCTURE}
         ,{"fn worker()->i64{return 42}\nfn run() {var tasks=[go worker()];"
             "const result=try Task.all((move tasks))}",XR_XIR_BAD_TYPE}
         ,{"fn worker()->i64{return 42}\nfn run() {var tasks=[go worker()];"

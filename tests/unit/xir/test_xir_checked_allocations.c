@@ -73,6 +73,7 @@ static void packet_free(void *p) {
 #include "xir/xxir_view_affine.c"
 #include "xir/xxir_constraints.c"
 #include "xir/xxir_constraint_proof.c"
+#include "xir/xxir_hashable.c"
 #include "xir/xxir_implementation.c"
 #include "xir/xxir_implementation_verify.c"
 #include "xir/xxir_interface.c"

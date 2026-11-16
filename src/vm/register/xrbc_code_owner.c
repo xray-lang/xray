@@ -45,6 +45,7 @@ XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *module
     if (!raw || owner->functions != module->functions || owner->function_count != module->function_count ||
         raw->natives!=module->natives || raw->native_count!=module->native_count ||
         raw->literals!=module->literals || raw->literal_count!=module->literal_count ||
+        raw->map_literals!=module->map_literals || raw->map_literal_count!=module->map_literal_count ||
         raw->aggregate_types!=module->aggregate_types || raw->aggregate_type_count!=module->aggregate_type_count ||
         raw->callable_types!=module->callable_types || raw->callable_type_count!=module->callable_type_count ||
         raw->callable_results!=module->callable_results || raw->callable_result_count!=module->callable_result_count ||

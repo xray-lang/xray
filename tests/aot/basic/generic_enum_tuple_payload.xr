@@ -11,21 +11,21 @@ fn readPair() -> DecodeResult<(i64, i64)> {
 
 var r = readPair()
 match (r) {
-    DecodeResult.Ok { value: p } -> {
+    DecodeResult.Ok { value: p } => {
         print(p.0)
         print(p.1)
-    }
-    DecodeResult.Err { error: e } -> {
+    },
+    DecodeResult.Err { error: e } => {
         print(e)
-    }
+    },
 }
 
 match (readPair()) {
-    DecodeResult.Ok { value: (a, b) } -> {
+    DecodeResult.Ok { value: (a, b) } => {
         print(a + b)
-    }
-    DecodeResult.Err { error: e } -> {
+    },
+    DecodeResult.Err { error: e } => {
         print(e)
-    }
+    },
 }
 

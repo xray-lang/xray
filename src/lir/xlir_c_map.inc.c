@@ -10,6 +10,74 @@
  *   Actual bindings supply Places; snapshots and results use stable frame
  *   owners. GET transports its scalar presence through the ordinary POD type.
  */
+static void c_path(LirC *, const XrLirSource *);
+static bool c_map_literal_view(LirC *c, uint64_t ordinal, XrLirMapLiteral *literal) {
+    if (!ordinal || ordinal > UINT32_MAX || ordinal > xr_lir_map_literal_count(c->request->module) ||
+        xr_lir_map_literal_view(c->request->module, (uint32_t)ordinal, literal) != XR_LIR_OK ||
+        (literal->path_length != 0) != (literal->path != NULL) ||
+        (literal->count != 0) != (literal->items != NULL) || literal->count > 65536) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "Map literal lost its exact module provenance ordinal"); return false;
+    }
+    return true;
+}
+static bool c_map_literal_admit(LirC *c, const XrLirInstructionView *v) {
+    XrLirMapLiteral literal = {0};
+    if (v->type != XR_LIR_MAP_STRING_I64 || !v->result || (v->operand_count && !v->operands) ||
+        !c_map_literal_view(c, v->bits, &literal)) {
+        if (c->status == XR_LIR_C_OK) c_error(c, XR_LIR_C_INVALID_LIR, "Map literal requires its fixed Map result");
+        return false;
+    }
+    uint32_t operand = 0;
+    for (uint32_t n = 0; n < literal.count && c_request_poll(c); ++n) {
+        XrLirMapLiteralOrigin origin = literal.items[n];
+        uint32_t width = origin.kind ? 1u : 2u;
+        XrLirType key_type = origin.kind ? XR_LIR_MAP_STRING_I64 : XR_LIR_STRING;
+        if (origin.kind > 1 || !origin.line || !origin.column || operand > v->operand_count ||
+            width > v->operand_count - operand ||
+            c_value_type(c, v->operands[operand]) != key_type ||
+            (!origin.kind && c_value_type(c, v->operands[operand + 1]) != XR_LIR_I64)) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "Map literal inputs differ from their fixed provenance rows"); return false;
+        }
+        operand += width;
+    }
+    if (!c_request_poll(c)) return false;
+    if (operand != v->operand_count) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "Map literal operand span has unmatched values"); return false;
+    }
+    if (!c->used_map_literals) {
+        void *used = NULL;
+        if (!c_resource(c, xr_compile_resources_calloc(c->request->resources,
+            xr_lir_map_literal_count(c->request->module), 1, &used))) return false;
+        c->used_map_literals = used;
+    }
+    c->used_map_literals[(uint32_t)v->bits - 1] = 1;
+    return true;
+}
+static void c_map_literals(LirC *c) {
+    if (!c->used_map_literals) return;
+    uint32_t count = xr_lir_map_literal_count(c->request->module);
+    for (uint32_t index = 0; index < count && c_request_poll(c); ++index) {
+        if (!c->used_map_literals[index]) continue;
+        uint32_t ordinal = index + 1;
+        XrLirMapLiteral literal = {0};
+        if (!c_map_literal_view(c, ordinal, &literal)) return;
+        if (literal.count) {
+            c_format(c, "static const XrtMapLiteralOrigin xrl_map_items_%" PRIu32 "[] = {", ordinal);
+            for (uint32_t n = 0; n < literal.count && c_request_poll(c); ++n) {
+                XrLirMapLiteralOrigin origin = literal.items[n];
+                c_format(c, "%s{UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")}",
+                    n ? ", " : "", origin.kind, origin.line, origin.column);
+            }
+            c_text(c, "};\n");
+        }
+        c_format(c, "static const XrtMapLiteral xrl_map_literal_%" PRIu32 " = {", ordinal);
+        if (literal.path_length) c_path(c, &(XrLirSource){.path=literal.path, .path_length=literal.path_length});
+        else c_text(c, "NULL");
+        c_format(c, ", (size_t)UINT32_C(%" PRIu32 "), ", literal.path_length);
+        if (literal.count) c_format(c, "xrl_map_items_%" PRIu32, ordinal); else c_text(c, "NULL");
+        c_format(c, ", (size_t)UINT32_C(%" PRIu32 ")};\n", literal.count);
+    }
+}
 static uint32_t c_map_role(LirC *c, const XrLirInstructionView *v) {
     XrLirIntrinsic entry;
     return v->op == XR_LIR_CALL_INTRINSIC &&
@@ -17,7 +85,7 @@ static uint32_t c_map_role(LirC *c, const XrLirInstructionView *v) {
         xr_lir_map_intrinsic_valid(c->request->module, &entry) ? entry.operation : 0;
 }
 static bool c_map_point(LirC *c, const XrLirInstructionView *v) {
-    return c_map_role(c, v) || v->op == XR_LIR_MAP_RETAIN || v->op == XR_LIR_MAP_BORROW ||
+    return c_map_role(c, v) || v->op == XR_LIR_MAP_LITERAL_NEW || v->op == XR_LIR_MAP_RETAIN || v->op == XR_LIR_MAP_BORROW ||
         v->op == XR_LIR_MAP_REF_READ || v->op == XR_LIR_MAP_REF_WRITE ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_MAP_STRING_I64_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_MAP_STRING_I64) ||
@@ -86,6 +154,45 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
     c_text(c, "    }\n");
 }
 static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (c->status != XR_LIR_C_OK) return;
+    if (v->op == XR_LIR_MAP_LITERAL_NEW) {
+        XrLirMapLiteral literal = {0};
+        if (!c_map_literal_view(c, v->bits, &literal)) return;
+        const XrLirValueHome *home = &c->homes->values[v->result];
+        const XrtValuePlan *plan = NULL;
+        XrtValuePlanSpec shape = {0};
+        uint32_t type_id = 0;
+        bool typed = xr_lir_value_layouts_lookup(c->value_layouts,
+            (XrLirValueLayoutKey){XR_LIR_MAP_STRING_I64,0,0},&plan,&type_id) == XR_LIR_VALUE_LAYOUT_OK &&
+            xrt_value_plan_view(plan,&shape) == XRT_MANAGED_OK && shape.kind == XRT_VALUE_MAP_STRING_I64;
+        const XrtManagedFrameSpec *frame = &c->homes->frame;
+        if (!typed || !home->type || type_id != home->type ||
+            home->parameter || home->owner_count != 1 || home->size != sizeof(XrtManagedHeader *) ||
+            !frame->owned_offsets || home->first_owner >= frame->slot_count ||
+            home->temporary_first_owner >= frame->slot_count || home->first_owner == home->temporary_first_owner ||
+            frame->owned_offsets[home->first_owner] != home->offset ||
+            frame->owned_offsets[home->temporary_first_owner] != home->temporary_offset) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "Map literal lost its distinct common receiving temporary"); return;
+        }
+        c_values_ensure(c, source);
+        c_format(c, "    xrt_native_map_literal_create(xrl_frame, %zu, &xrl_map_literal_%" PRIu64 ", ",
+            home->temporary_first_owner, v->bits);
+        if (!literal.count) c_text(c, "NULL");
+        else {
+            c_text(c, "(const XrtMapLiteralInput[]){"); uint32_t operand = 0;
+            for (uint32_t n = 0; n < literal.count && c_request_poll(c); ++n) {
+                bool spread = literal.items[n].kind != 0;
+                c_format(c, "%s{.source={.%s=(const %s *)", n ? ", " : "", spread ? "spread" : "key",
+                    spread ? "XrtMapBacking" : "XrtStringBacking");
+                c_value(c, v->operands[operand++]); c_text(c, "}, .value=");
+                if (spread) c_text(c, "INT64_C(0)"); else c_value(c, v->operands[operand++]);
+                c_text(c, "}");
+            }
+            c_text(c, "}");
+        }
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        c_values_publish_leaf(c, v->result, source); return;
+    }
     uint32_t role = c_map_role(c, v);
     if (role) { c_map_call(c, v, role, source); return; }
     if (v->op == XR_LIR_MAP_REF_WRITE && c->homes->bindings[v->operands[0]].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {

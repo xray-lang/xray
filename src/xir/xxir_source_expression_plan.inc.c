@@ -306,6 +306,14 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
         checked_conversion=plan->conversion;
         if (context.present && context.type!=checked_conversion.target)
             result=source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"prepared expression context changed");
+    } else if(result && plan->collection_element) {
+        const char *reason=NULL;
+        XrXirStatus status=source_conversion_check_bound(ctx,node,plan->value.type,plan->collection_expected,false,&checked_conversion,&reason);
+        if(status==XR_XIR_BAD_TYPE && plan->value.type!=plan->collection_expected.type) {
+            /* The complete literal checker receives this actual type once;
+             * child failures and resource failures are never deferred. */
+            checked_conversion=(XrHirConversion){.source=plan->value.type,.target=plan->value.type};
+        } else if(status!=XR_XIR_OK)result=source_fail(ctx,node,status,reason);
     } else if (result) result=source_conversion_plan(ctx,node,plan->value.type,context,&checked_conversion);
     if (result && checked_conversion.kind!=XR_HIR_CONVERSION_IDENTITY) {
         if (checked_conversion.kind==XR_HIR_CONVERSION_NULLABLE) ++plan->present_prefix;
@@ -330,6 +338,26 @@ static bool source_plan_expression(SourceContext *ctx, AstNode *node, SourceExpe
     if (!source_request_poll(ctx, node)) return false;
     SourceExpressionPlan *plan=source_plan_collect(ctx,node,context);
     return plan && source_plan_complete(ctx,plan,value);
+}
+static bool source_collection_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,bool inferred,SourceValue *value) {
+    if(!inferred || !expected.present)return source_plan_expression(ctx,node,expected,value);
+    if(!source_request_poll(ctx,node))return false;
+    SourceExpectedType context=expected;
+    AstNode *root=node;while(root && root->type==AST_GROUPING)root=root->as.grouping;
+    if(root && ((root->type==AST_ARRAY_LITERAL && !xr_xir_type_is_array(&ctx->types,expected.type)) ||
+        (root->type==AST_MAP_LITERAL && !xr_xir_type_is_map(&ctx->types,expected.type))))context=(SourceExpectedType){0};
+    SourceExpectedType ground={0};
+    if(!source_ground_type(ctx,node,0,&ground))return false;
+    if(ground.present && ground.type!=expected.type) {
+        XrHirConversion conversion;const char *reason=NULL;
+        XrXirStatus status=source_conversion_check_bound(ctx,node,ground.type,expected,false,&conversion,&reason);
+        if(status==XR_XIR_BAD_TYPE)context=(SourceExpectedType){0};
+        else if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason);
+    }
+    SourceExpressionPlan *plan=source_plan_collect(ctx,node,context);
+    if(!plan)return false;
+    plan->collection_element=true;plan->collection_expected=expected;
+    return source_plan_complete(ctx,plan,value);
 }
 
 static bool source_plan_discard(SourceContext *ctx,uint32_t first) {

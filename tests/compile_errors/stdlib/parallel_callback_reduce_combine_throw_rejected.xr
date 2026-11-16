@@ -7,8 +7,8 @@ enum ParallelErr {
 var total = parallel.reduce(
     0..4,
     0,
-    (i) -> i,
-    (a, b) -> {
+    (i) => i,
+    (a, b) => {
         throw ParallelErr.Boom
         return a + b
     },

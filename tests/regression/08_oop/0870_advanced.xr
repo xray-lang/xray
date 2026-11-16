@@ -298,7 +298,7 @@ class MapUser {
 
 @test
 fn test_object_in_map() {
-    var users: Map<string, MapUser> = #{}  // 使用 #{} 创建 Map，不是 {}
+    var users: Map<string, MapUser> = {}  // {} creates an empty Map with the declared key/value types.
     users["alice"] = MapUser("Alice", 10)
     users["bob"] = MapUser("Bob", 5)
 

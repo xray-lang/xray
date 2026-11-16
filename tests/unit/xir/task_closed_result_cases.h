@@ -38,7 +38,7 @@ static void task_closed_fixture_new(TaskFixture *fixture) {
     for (unsigned i = 1; i < 6; ++i) functions[i].exported = 1;
     functions[6].cleanup_owner = 6;
     const XrXirSourceModule module = {"task-test", 9, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
-    XrXirDeclarations declarations = {&module, 1, functions, NULL, 0, NULL, 0, 0, 3, NULL};
+    XrXirDeclarations declarations = {.modules=&module, .module_count=1, .functions=functions, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=3, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64, .result = XR_XIR_NEVER},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING, .result = XR_XIR_NEVER}};
     const XrXirTypes types = {nodes, 2, NULL, NULL};

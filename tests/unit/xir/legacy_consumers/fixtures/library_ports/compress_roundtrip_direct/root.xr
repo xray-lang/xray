@@ -16,7 +16,7 @@ fn compressionInvalidData(body: fn()) -> bool {
         return false
     } catch (e: CompressionError) {
         return match (e) {
-            CompressionError.InvalidData -> true
+            CompressionError.InvalidData => true,
         }
     }
 }

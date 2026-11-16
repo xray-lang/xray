@@ -285,8 +285,8 @@ int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--channel-resources")) {
         const char code[]="fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
             "fn main()->i64 { const ch=Channel<i64>(); const task=go send(ch); "
-            "const n=match(ch.recv()) { Recv.Value { value:item } -> item, Recv.Empty -> -1, "
-            "Recv.Timeout -> -2, Recv.Closed -> -3 }; await task; ch.close(); return n+ch.recvOr(0) }\nprint(main())\n";
+            "const n=match(ch.recv()) { Recv.Value { value:item } => item, Recv.Empty => -1, "
+            "Recv.Timeout => -2, Recv.Closed => -3, }; await task; ch.close(); return n+ch.recvOr(0) }\nprint(main())\n";
         expect_output(code,"42\n",3,0,false);
         tool_faults(code); same_owner_faults(code); axes(code); return 0;
     }

@@ -345,7 +345,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         XrXirTypeNode source=pool->types.nodes[frame->index];
         uint32_t components=source.kind==XR_XIR_TYPE_NOMINAL ? source.nominal.argument_count :
             source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+2 :
-            (source.kind==XR_XIR_TYPE_TUPLE || source.kind==XR_XIR_TYPE_UNION) ? source.parameter_count :
+            (source.kind==XR_XIR_TYPE_TUPLE || source.kind==XR_XIR_TYPE_UNION || source.kind==XR_XIR_TYPE_DATA_UNION) ? source.parameter_count :
             (source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) ? 2 : 1;
         if (frame->next==components) {
             if (pool->cache_count>=size || depth>size-pool->cache_count) {
@@ -363,7 +363,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         if ((source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) && frame->next)
             child=source.result;
         else if (source.kind==XR_XIR_TYPE_NOMINAL) child=source.nominal.arguments[frame->next];
-        else if (source.kind==XR_XIR_TYPE_TUPLE || source.kind==XR_XIR_TYPE_UNION) child=source.parameters[frame->next].type;
+        else if (source.kind==XR_XIR_TYPE_TUPLE || source.kind==XR_XIR_TYPE_UNION || source.kind==XR_XIR_TYPE_DATA_UNION) child=source.parameters[frame->next].type;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next<=source.parameter_count)
             child=frame->next==source.parameter_count ? source.result : source.parameters[frame->next].type;
         if (!effect_term_ready(pool,child,arguments,cache,&result)) {
@@ -376,7 +376,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         if (source.kind==XR_XIR_TYPE_NOMINAL) ((XrXirType *)frame->node.nominal.arguments)[frame->next]=result;
         else if ((source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) && frame->next)
             frame->node.result=result;
-        else if (source.kind!=XR_XIR_TYPE_CALLABLE && source.kind!=XR_XIR_TYPE_TUPLE && source.kind!=XR_XIR_TYPE_UNION) frame->node.element=result;
+        else if (source.kind!=XR_XIR_TYPE_CALLABLE && source.kind!=XR_XIR_TYPE_TUPLE && source.kind!=XR_XIR_TYPE_UNION && source.kind!=XR_XIR_TYPE_DATA_UNION) frame->node.element=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next>source.parameter_count) frame->node.element=result;
         else ((XrXirCallableParameter *)frame->node.parameters)[frame->next]=

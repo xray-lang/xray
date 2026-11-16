@@ -166,17 +166,9 @@ XR_FUNC AstNode *xr_ast_tuple_literal(XrCompilerSession *session, AstNode **elem
 // evaluate to a tuple of statically known arity.
 XR_FUNC AstNode *xr_ast_spread_expr(XrCompilerSession *session, AstNode *expr, int line);
 
-// Create object literal node
-XR_FUNC AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
-                                       int count, int line);
-
 // Create Map literal node
 XR_FUNC AstNode *xr_ast_map_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
                                     int count, int line);
-
-// Create Set literal node
-XR_FUNC AstNode *xr_ast_set_literal(XrCompilerSession *session, AstNode **elements, int count,
-                                    int line);
 
 // Create index access node
 XR_FUNC AstNode *xr_ast_index_get(XrCompilerSession *session, AstNode *array, AstNode *index,
@@ -332,9 +324,6 @@ XR_FUNC XrDestructurePattern *xr_pattern_array(XrCompilerSession *session,
                                                XrDestructurePattern **elements, int count);
 XR_FUNC XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session,
                                                XrDestructurePattern **elements, int count);
-XR_FUNC XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **fields,
-                                                XrDestructurePattern **patterns, int count,
-                                                bool use_shorthand);
 XR_FUNC XrDestructurePattern *xr_pattern_identifier(XrCompilerSession *session, const char *name,
                                                     XrTypeRef *type);
 XR_FUNC XrDestructurePattern *xr_pattern_skip(XrCompilerSession *session);
@@ -375,10 +364,6 @@ XR_FUNC AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patt
 XR_FUNC AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant,
                                     char **field_names, const XrNameSpan *field_name_spans,
                                     AstNode **patterns, int count, int line);
-
-// Create object match pattern node: { x, y } / { x: sub }
-XR_FUNC AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names,
-                                       AstNode **patterns, int count, int line);
 
 // Create array match pattern node: [a, b, ..rest]
 XR_FUNC AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, int count,

@@ -17,6 +17,7 @@
 #include "xxir_type_arena_internal.h"
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_class_hierarchy_internal.h"
+#include "xxir_key.h"
 
 #include "xxir_view_types_internal.h"
 
@@ -31,6 +32,7 @@ struct XrXirTypeArena {
     XirTypeIdentity *identities;
     uint8_t *borrowed;
     uint8_t *enum_sendable;
+    uint8_t *key_eligible;
     bool native_i64_views;
 };
 
@@ -82,6 +84,7 @@ static XrXirValueStatus arena_pool_walk(
     XirNominalValue ***empty_variants = arena_empty_variants(&cursor, types, arena);
     XrXirStorageLayout *storage = arena_storage(&cursor, types);
     uint8_t *enum_sendable=arena_nominal_span(&cursor,count,sizeof(*enum_sendable),_Alignof(uint8_t));
+    uint8_t *key_eligible=arena_nominal_span(&cursor,count,sizeof(*key_eligible),_Alignof(uint8_t));
     if (cursor.status != XR_XIR_VALUE_OK) return cursor.status;
     if (arena) {
         if (!((&cursor)->status == XR_XIR_VALUE_OK))
@@ -90,6 +93,12 @@ static XrXirValueStatus arena_pool_walk(
         arena->empty_variants = empty_variants;
         arena->storage = storage;
         arena->enum_sendable=enum_sendable;
+        arena->key_eligible=key_eligible;
+        /* The structural verifier admitted the complete source before either
+         * walk. Seal one O(1) classification per node into this same allocation;
+         * no new per-variant or per-argument walk is performed or retained. */
+        for(uint32_t i=0;i<count;++i)key_eligible[i]=(uint8_t)xir_key_admitted_type(
+            &arena->types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i));
     }
     *size = (size_t)cursor.offset;
     return XR_XIR_VALUE_OK;
@@ -155,6 +164,11 @@ XR_FUNC bool xr_xir_compile_type_arena_has_borrowed(const XrXirTypeArena *arena)
 }
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena) {
     return arena ? &arena->types : NULL;
+}
+XR_FUNC bool xr_xir_compile_type_arena_key_eligible(const XrXirTypeArena *arena,XrXirType type) {
+    if(xr_xir_key_builtin_type(type))return true;
+    return arena && arena->key_eligible && xr_xir_type_node(&arena->types,type) &&
+        arena->key_eligible[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]!=0;
 }
 XR_FUNC bool xr_xir_compile_type_arena_enum_sendable(const XrXirTypeArena *arena,XrXirType type) {
     return arena && arena->enum_sendable && xr_xir_type_is_enum(&arena->types,type) &&

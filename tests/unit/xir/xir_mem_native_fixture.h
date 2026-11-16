@@ -90,7 +90,7 @@ static XrXirArtifact *mem_native_fixture(const XrXirCompileContext *context) {
     identities[1].exported=1;
     static const char identity[]="stdlib-module-v1:module=3:mem:path=10:mem/mem.xr";
     const XrXirSourceModule source={.name=identity,.name_length=sizeof(identity)-1,.initializer=0};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=16,.declarations=&declarations,
         .types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};

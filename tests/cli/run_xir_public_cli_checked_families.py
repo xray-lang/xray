@@ -40,7 +40,7 @@ def main() -> int:
         cases = [
             ('nominal', 'import "std/io/output" as Lib\nenum User { Ready, Done }\n'
              'fn emit<T>(value:T)->T { Lib.writeStdout("A\\0B"); return value }\n'
-             'print(match(emit(User.Ready)){User.Ready->73,User.Done->0})\n'
+             'print(match(emit(User.Ready)){User.Ready=>73,User.Done=>0,})\n'
              'print(emit(7))\n', b'A\0B73\nA\0B7\n'),
             ('values', 'import "std/io/output" as Lib\n'
              'fn emit<T>(value:T)->T { Lib.writeStdout("+"); return value }\n'

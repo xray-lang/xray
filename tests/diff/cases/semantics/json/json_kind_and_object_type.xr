@@ -1,18 +1,24 @@
-var structural = { name: "Ada", age: 37 }
-var dynamicObject: JSON.Value = JSON.value({ name: "Ada", age: 37 })
+struct User {
+    name: string
+    age: i64
+}
+
+var structural = User{ name: "Ada", age: 37 }
+var dynamicObject: JSON.Value = JSON.value(User{ name: "Ada", age: 37 })
 
 print(typeName(structural))
 print(typeName(dynamicObject))
 print(typeName<JSON.Value>())
-print(typeOf(structural) == Type.object)
-print(typeOf(dynamicObject) == Type.object)
+print(typeOf(structural) == typeOf<User>())
+print(typeOf(dynamicObject) == Type.Map)
 
 var jnull: JSON.Value = null
 var jbool: JSON.Value = true
 var jint: JSON.Value = 7
 var jfloat: JSON.Value = 1.5
 var jstring: JSON.Value = "x"
-var jarray: JSON.Value = JSON.value([1, true, null])
+var jsonItems: Array<JSON.Value> = [1, true, null]
+var jarray: JSON.Value = JSON.value(jsonItems)
 
 print(JSON.kindOf(jnull))
 print(JSON.kindOf(jbool))

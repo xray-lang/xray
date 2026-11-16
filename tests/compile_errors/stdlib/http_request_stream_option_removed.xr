@@ -1,2 +1,2 @@
 import http
-http.request({ "url": "http://example.com/", "stream": true })
+http.request(url: "http://example.com/", stream: true)

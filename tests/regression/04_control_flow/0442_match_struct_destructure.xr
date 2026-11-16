@@ -1,37 +1,46 @@
 // 0442_match_struct_destructure.xr
-// 测试：match 中的对象/数组结构解构（D44）
-// 覆盖：对象字段簡寫/重命名、可反驳字段子模式、数组按长度匹配、..rest、通配元素位、guard
+// 测试：具名 struct 字段投影与数组解构；对象模式已删除。
+// 覆盖：显式字段读取、标量 match、数组长度匹配、..rest、通配元素位与 guard。
 
 // ===== 对象字段解构（簡寫） =====
+struct Point {
+    x: i64
+    y: i64
+}
+
+struct Person {
+    name: string
+    age: i64
+}
+
+struct Config {
+    mode: i64
+    label: string
+}
+
 @test
-fn test_match_object_shorthand() {
-    var p = {x: 3, y: 4}
-    var r = match (p) {
-        { x, y } -> x + y
-        _ -> 0
-    }
+fn test_struct_field_projection() {
+    var p = Point{x: 3, y: 4}
+    var r = p.x + p.y
     assertEqual(r, 7)
 }
 
 // ===== 对象字段重命名 + 簡寫混用 =====
 @test
-fn test_match_object_rename() {
-    var user = {name: "Bob", age: 5}
-    var r = match (user) {
-        { name: n, age } -> n + ":" + string(age)
-        _ -> "none"
-    }
+fn test_struct_named_fields() {
+    var user = Person{name: "Bob", age: 5}
+    var r = user.name + ":" + string(user.age)
     assertEqual(r, "Bob:5")
 }
 
 // ===== 对象可反驳字段子模式 =====
 @test
-fn test_match_object_refutable_field() {
-    var cfg = {mode: 2, label: "go"}
-    var r = match (cfg) {
-        { mode: 1 } -> "one"
-        { mode: 2, label } -> "two:" + label
-        _ -> "other"
+fn test_match_struct_discriminant() {
+    var cfg = Config{mode: 2, label: "go"}
+    var r = match (cfg.mode) {
+        1 => "one",
+        2 => "two:" + cfg.label,
+        _ => "other",
     }
     assertEqual(r, "two:go")
 }
@@ -41,13 +50,13 @@ fn test_match_object_refutable_field() {
 fn test_match_array_rest() {
     var a = [10, 20, 30]
     match (a) {
-        [first, ..rest] -> {
+        [first, ..rest] => {
             assertEqual(first, 10)
             assertEqual(len(rest), 2)
             assertEqual(rest[0], 20)
             assertEqual(rest[1], 30)
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -56,9 +65,9 @@ fn test_match_array_rest() {
 fn test_match_array_length_select() {
     var pair = [1, 2]
     var r = match (pair) {
-        [x] -> x
-        [x, y] -> x * 10 + y
-        _ -> 0
+        [x] => x,
+        [x, y] => x * 10 + y,
+        _ => 0,
     }
     assertEqual(r, 12)
 }
@@ -68,11 +77,11 @@ fn test_match_array_length_select() {
 fn test_match_array_empty_rest() {
     var single = [99]
     match (single) {
-        [head, ..tail] -> {
+        [head, ..tail] => {
             assertEqual(head, 99)
             assertEqual(len(tail), 0)
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -81,8 +90,8 @@ fn test_match_array_empty_rest() {
 fn test_match_array_wildcards() {
     var triple = [7, 8, 9]
     var r = match (triple) {
-        [_, mid, _] -> mid
-        _ -> 0
+        [_, mid, _] => mid,
+        _ => 0,
     }
     assertEqual(r, 8)
 }
@@ -92,9 +101,9 @@ fn test_match_array_wildcards() {
 fn test_match_array_guard() {
     var a = [5, 6]
     var r = match (a) {
-        [x, y] if (x > 10) -> "big"
-        [x, y] -> "small:" + string(x + y)
-        _ -> "none"
+        [x, y] if (x > 10) => "big",
+        [x, y] => "small:" + string(x + y),
+        _ => "none",
     }
     assertEqual(r, "small:11")
 }

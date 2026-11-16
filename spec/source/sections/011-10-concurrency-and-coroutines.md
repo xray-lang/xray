@@ -25,14 +25,17 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 
 ### 10.2 `go` — 启动协程
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-01 -->
 ```ebnf
-GoExpr   ::= 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
-GoOption ::= 'name' ':' StringLiteral
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 ```
+<!-- /xr-source -->
 
 `go` 是**表达式**，返回 `Task<T, E>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
+<!-- xr-source:example coro-go-forms -->
 ```xray @id=coro-go-forms @fragment
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
@@ -50,24 +53,29 @@ var t3 = go fn() -> i64 {
 // 可选调试名称
 var named = go(name: "worker-1") worker(1, channel)
 ```
+<!-- /xr-source -->
 
 **按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，无需额外复制标记。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
+<!-- xr-source:example coro-move-argument -->
 ```xray @id=coro-move-argument @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
 }(data)            // 保存逻辑副本，调用方 data 仍可使用
 ```
+<!-- /xr-source -->
 
 `go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，参数按声明的 READ 或消费模式处理：
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-003 -->
 ```xray
 var n = 10
 var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T, E>`，其中 `T` 是被调函数的返回类型，`E` 是其声明的错误类型，默认 `Never`。返回 Unit 的任务仍保留 Unit 成功值，不把它映射成 `null`。
@@ -79,12 +87,15 @@ var task = go fn(x: i64) -> i64 {
 
 ### 10.3 `await` — 等待结果
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-02 -->
 ```ebnf
 AwaitExpr ::= 'await' UnaryExpr
 ```
+<!-- /xr-source -->
 
 `await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。`E = Never` 时 `await t` 不抛业务错误，不写 `try`；否则传播标记顺序固定为 `try await t`，在 `try { }` 区域内可直接写 `await t`。
 
+<!-- xr-source:example coro-await-forms -->
 ```xray @id=coro-await-forms @fragment
 var job = go compute(1)            // Task<i64, Never>
 var n = await job                  // 不抛业务错误，不写 try
@@ -98,6 +109,7 @@ var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
+<!-- /xr-source -->
 
 - 等待的业务错误类型就是 Task 的 `E`，无需从任务创建点或函数体反推错误集合。取消不是业务错误，不进入这个类型。
 - 子任务的 enum 错误沿值错误通道传播，panic 沿 panic 通道传播。成功的 `null` 是真实 Optional 结果，不表示任务取消或失败。
@@ -134,11 +146,13 @@ var bounded = try Task.timeout(task, 1000)
 | `t.poll()` | `fn() -> TaskResult<T, E>?` | 非阻塞；未完成时返回 `null` |
 | `t.awaitResult()` | `fn() -> TaskResult<T, E>` | 挂起等待终态，以值报告而不重抛子任务的错误或 panic |
 
+<!-- xr-source:example coro-task-handle -->
 ```xray @id=coro-task-handle @fragment
 var t = go fetch(url)
 if (t.poll() == null) { print("running") }
 var outcome = t.awaitResult()
 ```
+<!-- /xr-source -->
 
 `TaskResult<T, E>` 只有四种终态：`Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`。括号表示载荷类型，不是构造语法或字段名声明；未完成由 `poll()` 的外层 Optional 表达，超时由 `Task.timeout` 的错误表达。`awaitResult()` 返回终态不意味着当前等待者免于取消展开。
 
@@ -150,18 +164,22 @@ var outcome = t.awaitResult()
 
 ### 10.5 Channel
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-03 -->
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
+<!-- /xr-source -->
 
 Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
+<!-- xr-source:example channel-decl-variants -->
 ```xray @id=channel-decl-variants
 const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
 const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
 const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 ```
+<!-- /xr-source -->
 
 构造时必须能确定元素类型：写 `Channel<T>(n)`，或由类型上下文给出；不从后续 `send` 推断。
 
@@ -187,11 +205,13 @@ const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
+<!-- xr-source:example channel-param-type -->
 ```xray @id=channel-param-type
 fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - **MPMC**（多生产者多消费者）。
@@ -204,26 +224,33 @@ fn producer(ch: Channel<i64>) {
 
 `select` 在多个 channel 操作中多路复用；非阻塞分支用 `_` 占位。
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-04 -->
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
+<!-- /xr-source -->
 
-```xray @id=coro-select
+<!-- xr-source:example coro-select -->
+```xray @id=coro-select @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
-    msg from ch2 -> { print("got from ch2:", msg) }      // 接收分支
-    100  to   ch1 -> { print("sent 100 to ch1") }        // 发送分支
-    _ -> { print("no channel ready") }                   // 默认分支（非阻塞）
+    msg from ch1 => { print("got from ch1:", msg) }      // 接收分支
+    msg from ch2 => { print("got from ch2:", msg) }      // 接收分支
+    100  to   ch1 => { print("sent 100 to ch1") }        // 发送分支
+    _ => { print("no channel ready") }                   // 默认分支（非阻塞）
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
@@ -235,10 +262,12 @@ select {
 
 `scope` 只表示结构化并发；普通词法作用域直接写 `{ ... }`。scope 子任务是在该块中、不含嵌套函数正文的 `go` 所启动的任务。块内没有这样的 `go` 时编译报错并提示改用普通块。
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-05 -->
 ```ebnf
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
+<!-- /xr-source -->
 
 两种 scope 都是语句，不返回聚合值；退出前等待所有成员任务终结和清理完成。会传播业务错误时写 `try scope`，或者将 scope 放入真实 `try { }` 的保护区域。`try scope` 只标记 scope 退出处的隐式传播，不建立保护区域；主体内会抛业务错误的调用仍须有 `try` / `try?` / `try!`，或处于外层真实 try 主体的词法保护区域。保护范围不进入嵌套函数或闭包，也不包含该 try 的同级 handler。
 
@@ -251,6 +280,7 @@ TryScopeStmt ::= 'try' ScopeStmt
 
 正常块末仅 join 成员；主体 Error、Panic 或向外 return/break/continue 时，两种 scope 都取消并 drain 已接管成员。isolated 的子失败本身不取消兄弟。待履行的正常控制转移必须拥有其值并保活主体帧和有效借用；只有 drain 后没有更高优先级失败才履行，不能用 return 吞掉子 panic。多个 panic 选择首个成功发布者，不承诺墙钟顺序；其余失败保留原始载荷用于次级诊断并按唯一拥有责任释放。isolated 主体错误直接传播时，子业务错误仅作次级诊断，不隐式包装主体错误。
 
+<!-- xr-source:example coro-scope -->
 ```xray @id=coro-scope @check
 fn worker(n: i64) -> i64 { return n + 1 }
 fn main() {
@@ -264,6 +294,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 完整类型及操作族的当前实现资格见 §17。
 
@@ -271,9 +302,11 @@ scope 自身引起的子任务取消不算失败，独立取消的成员也不�
 
 ### 10.8 `move` — 所有权转移
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-06 -->
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
+<!-- /xr-source -->
 
 `move x` 保证转移时不复制，并使源绑定失效。允许的源是当前函数已初始化的局部变量、局部常量和消费参数，且不能穿过活动借用。字段、索引、调用结果、模块绑定及 READ/ref 参数不能作为源。被拒绝的移动保持源状态。
 
@@ -299,11 +332,13 @@ Mutex 与 RwLock 的回调默认不逃逸。写回调的 `ref T` 指向锁内实
 
 **声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-010 -->
 ```xray
 const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
 const rate = Atomic(3.14)         // Atomic<f64>
 ```
+<!-- /xr-source -->
 
 **方法一览**（完整签名见 §14.19）：
 
@@ -322,6 +357,7 @@ const rate = Atomic(3.14)         // Atomic<f64>
 
 所有接受 `ord?` 参数的方法均可传入 `Ordering` 枚举指定内存序，默认 `SeqCst`（最强保证）。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-011 -->
 ```xray
 enum Ordering {
     Relaxed,          // 无跨线程排序保证
@@ -331,6 +367,7 @@ enum Ordering {
     SeqCst,           // 顺序一致（默认）
 }
 ```
+<!-- /xr-source -->
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
@@ -362,25 +399,31 @@ i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap �
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-012 -->
 ```xray
 const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
+<!-- /xr-source -->
 
 
 ### 10.10 `Task.yieldNow()` — 让出 CPU
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-07 -->
 ```ebnf
 TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example coro-yield-loop -->
 ```xray @id=coro-yield-loop @fragment
 for (i in 0..1000) {
     do_chunk(i)
     Task.yieldNow()                // 主动 safepoint，让其他协程有机会跑
 }
 ```
+<!-- /xr-source -->
 
 `Task.yieldNow()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
@@ -442,14 +485,17 @@ A call through an interface value or an overridable method may suspend if any im
 
 ### 10.2 `go` — start a coroutine
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-01 -->
 ```ebnf
-GoExpr   ::= 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
-GoOption ::= 'name' ':' StringLiteral
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 ```
+<!-- /xr-source -->
 
 `go` is an **expression** returning a `Task<T, E>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
 
+<!-- xr-source:example coro-go-forms -->
 ```xray @id=coro-go-forms @fragment
 // Form 1: call an existing function
 var t1 = go worker(0, channel)
@@ -467,24 +513,29 @@ var t3 = go fn() -> i64 {
 // Optional debugging name
 var named = go(name: "worker-1") worker(1, channel)
 ```
+<!-- /xr-source -->
 
 **Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without an additional copying marker. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
+<!-- xr-source:example coro-move-argument -->
 ```xray @id=coro-move-argument @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
 }(data)            // retain a logical copy; the caller can still use data
 ```
+<!-- /xr-source -->
 
 `go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and handle arguments through their declared READ or consuming mode:
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-003 -->
 ```xray
 var n = 10
 var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Every `go` yields `Task<T, E>` where `T` is the return type and `E` is the declared error type, defaulting to `Never`. A Unit result stays Unit, not `null`.
@@ -496,12 +547,15 @@ var task = go fn(x: i64) -> i64 {
 
 ### 10.3 `await` — wait for a result
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-02 -->
 ```ebnf
 AwaitExpr ::= 'await' UnaryExpr
 ```
+<!-- /xr-source -->
 
 `await` accepts only `Task<T, E>` and produces `T` on success. Waiting may suspend without blocking an OS thread. When `E = Never`, `await t` throws no business error and takes no `try`; otherwise the propagation marker order is `try await t`, and inside a protected `try { }` region `await t` needs no additional marker.
 
+<!-- xr-source:example coro-await-forms -->
 ```xray @id=coro-await-forms @fragment
 var job = go compute(1)            // Task<i64, Never>
 var n = await job                  // no business error, no try
@@ -515,6 +569,7 @@ var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
+<!-- /xr-source -->
 
 - The business error type is exactly the Task's `E`; no inference from the spawn site or worker body is needed. Cancellation is not a business error and never enters this type.
 - Child enum errors use the value-error channel; child panic uses the panic channel. A successful `null` is a real Optional result, not cancellation or failure.
@@ -551,11 +606,13 @@ The first three functions accept homogeneous `Array<Task<T, E>>`, without implic
 | `t.poll()` | `fn() -> TaskResult<T, E>?` | Nonblocking; `null` while unfinished |
 | `t.awaitResult()` | `fn() -> TaskResult<T, E>` | Suspend until terminal; report child errors and panic as values |
 
+<!-- xr-source:example coro-task-handle -->
 ```xray @id=coro-task-handle @fragment
 var t = go fetch(url)
 if (t.poll() == null) { print("running") }
 var outcome = t.awaitResult()
 ```
+<!-- /xr-source -->
 
 `TaskResult<T, E>` has exactly four terminal variants: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. Parentheses describe payload types, not construction syntax or field names. The outer Optional of `poll()` represents unfinished work; `Task.timeout` represents timeout as an error. Returning a terminal outcome does not exempt the waiter from its own cancellation unwinding.
 
@@ -567,18 +624,22 @@ Loop backedges are not cancellation checkpoints. Long loops may check `Task.isCa
 
 ### 10.5 Channel
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-03 -->
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
+<!-- /xr-source -->
 
 Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
+<!-- xr-source:example channel-decl-variants -->
 ```xray @id=channel-decl-variants
 const ch  = Channel<i64>(10)    // buffered, capacity = 10
 const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
 const cha: Channel<i64> = Channel(3)   // element type from the type context
 ```
+<!-- /xr-source -->
 
 The element type must be known at construction: write `Channel<T>(n)` or provide a type context. It is never inferred from a later `send`.
 
@@ -604,11 +665,13 @@ Current implementation qualification of complete type and operation families is 
 
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
+<!-- xr-source:example channel-param-type -->
 ```xray @id=channel-param-type
 fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - **MPMC** (multi-producer, multi-consumer).
@@ -621,26 +684,33 @@ fn producer(ch: Channel<i64>) {
 
 `select` multiplexes multiple channel operations. The non-blocking default branch uses `_`.
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-04 -->
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
+<!-- /xr-source -->
 
-```xray @id=coro-select
+<!-- xr-source:example coro-select -->
+```xray @id=coro-select @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
-    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
-    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
-    _ -> { print("no channel ready") }                   // default arm (non-blocking)
+    msg from ch1 => { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 => { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 => { print("sent 100 to ch1") }        // send arm
+    _ => { print("no channel ready") }                   // default arm (non-blocking)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
@@ -652,10 +722,12 @@ select {
 
 `scope` means structured concurrency only; use `{ ... }` for ordinary lexical scope. Member tasks are started by `go` within the block, excluding nested function bodies. A block with no such `go` is a compile error with a suggestion to use an ordinary block.
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-05 -->
 ```ebnf
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
+<!-- /xr-source -->
 
 Both forms are statements without an aggregate value and wait for all members to terminate and finish cleanup before exit. A business-error-producing scope requires `try scope` or an enclosing real protected `try { }` region. `try scope` marks only the implicit exit propagation and creates no protected region: throwing calls in its body still require `try` / `try?` / `try!` or lexical protection by an outer real try body. Protection excludes nested function and closure bodies and that try statement's sibling handlers.
 
@@ -668,6 +740,7 @@ Let B be the business errors escaping the body after local catches, including er
 
 Normal block completion only joins members. Body Error, Panic or an outward return/break/continue cancels and drains accepted members in both forms. An isolated child failure alone does not cancel siblings. A pending normal control transfer must own its value and retain the body frame and valid loans; it is fulfilled only after draining finds no higher-priority failure, so return cannot swallow child panic. Multiple panics select the first successful publisher without promising wall-clock order. Other failures retain their original payloads for secondary diagnostics and release under unique ownership. When an isolated body error propagates directly, child business errors are secondary diagnostics; the body error is not implicitly wrapped.
 
+<!-- xr-source:example coro-scope -->
 ```xray @id=coro-scope @check
 fn worker(n: i64) -> i64 { return n + 1 }
 fn main() {
@@ -681,6 +754,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 Current implementation qualification of complete type and operation families is specified in §17.
 
@@ -688,9 +762,11 @@ Scope-induced child cancellation is not a failure, and independently cancelled m
 
 ### 10.8 `move` — Ownership Transfer
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-06 -->
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
+<!-- /xr-source -->
 
 `move x` guarantees transfer without copying and invalidates the source binding. Sources are initialized local variables, local constants and consuming parameters of the current function, with no active loan crossed. Fields, indices, call results, module bindings and READ/ref parameters cannot be sources. A rejected move preserves source state.
 
@@ -716,11 +792,13 @@ Mutex and RwLock callbacks are nonescaping by default. A writing callback's `ref
 
 **Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-010 -->
 ```xray
 const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
 const rate = Atomic(3.14)         // Atomic<f64>
 ```
+<!-- /xr-source -->
 
 **Method overview** (full signatures in §14.19):
 
@@ -739,6 +817,7 @@ const rate = Atomic(3.14)         // Atomic<f64>
 
 All methods accepting an `ord?` parameter take an `Ordering` enum to specify memory ordering. Default is `SeqCst` (strongest guarantee).
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-011 -->
 ```xray
 enum Ordering {
     Relaxed,          // No cross-thread ordering guarantee
@@ -748,6 +827,7 @@ enum Ordering {
     SeqCst,           // Sequential consistency (default)
 }
 ```
+<!-- /xr-source -->
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
@@ -779,25 +859,31 @@ When the target cannot provide lock-free atomics of the required width, a progra
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-012 -->
 ```xray
 const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
+<!-- /xr-source -->
 
 
 ### 10.10 `Task.yieldNow()` — yield the CPU
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-07 -->
 ```ebnf
 TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example coro-yield-loop -->
 ```xray @id=coro-yield-loop @fragment
 for (i in 0..1000) {
     do_chunk(i)
     Task.yieldNow()                // explicit safepoint, lets other coroutines run
 }
 ```
+<!-- /xr-source -->
 
 `Task.yieldNow()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 

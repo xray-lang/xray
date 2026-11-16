@@ -143,6 +143,10 @@ typedef struct XrXirSourceDeclaration {
      * Imported definitions retain absent lexical spans and no synthetic this. */
     uint32_t checked_receiver_count;
     uint32_t flags;
+    /* Receiving-owned declaration display only. Hidden physical parameters have
+     * NULL names; this vector never grants a callable value named-argument rights. */
+    const char *const *parameter_names;
+    const uint32_t *parameter_modes;
 } XrXirSourceDeclaration;
 #define XR_XIR_SOURCE_DECL_REST 1u
 typedef enum XrXirSourceAccess {

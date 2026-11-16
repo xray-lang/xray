@@ -42,6 +42,14 @@ typedef struct XrNameSpan {
     int line;
     int column;
 } XrNameSpan;
+typedef struct XrExpressionSpan { XrNameSpan start,end; } XrExpressionSpan;
+
+/* Labels are syntax owned by the AST arena, in written argument order.
+ * A missing name denotes a positional argument. */
+typedef struct XrCallArgLabel {
+    char *name;
+    XrNameSpan span;
+} XrCallArgLabel;
 
 typedef struct BinaryNode {
     AstNode *left;
@@ -117,20 +125,11 @@ typedef struct XrDestructurePattern {
         } array;
 
         struct {
-            char **field_names;
-            struct XrDestructurePattern **patterns;
-            int field_count;
-            bool use_shorthand;
-        } object;
-
-        struct {
             char *name;
             XrTypeRef *type;
             uint32_t symbol_id;
         } identifier;
     } as;
-    /* An object field selection is distinct from the local binding token. */
-    XrNameSpan field_span;
     /* Parser-owned exact binding token span; never grants type permissions. */
     int line, column, end_line, end_column;
 } XrDestructurePattern;

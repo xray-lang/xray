@@ -5,10 +5,10 @@ fn run() {
     var sum = 0
     for (i in 0..20) {
         match (i % 4) {
-            0 -> { sum = sum + 1 }
-            1 -> { sum = sum + 10 }
-            2 -> { break }
-            _ -> { sum = sum + 100 }
+            0 => { sum = sum + 1 },
+            1 => { sum = sum + 10 },
+            2 => { break },
+            _ => { sum = sum + 100 },
         }
     }
     print(sum)

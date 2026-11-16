@@ -26,7 +26,7 @@ var server = http.Server()
 server.route("GET", "/plaintext", "Hello, World!")
 
 // Static JSON route (the generic static route serializer owns this value).
-server.route("GET", "/json", { message: "Hello, World!" })
+server.route("GET", "/json", { "message": "Hello, World!" })
 
 server.routeHandler("POST", "/echo", fn(req: HttpRequest) -> HttpResponse {
     return HttpResponse(HttpVersion.Http1, 200, "OK", Headers(), req.body)

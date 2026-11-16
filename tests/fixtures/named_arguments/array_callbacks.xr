@@ -1,0 +1,18 @@
+fn mark(value:i64)->i64 { print(value); return value }
+fn addition()->fn(i64,i64)->i64 {
+    print(77)
+    return (acc,item)=>acc+item
+}
+const values=[1,2,3]
+const mapped=values.map(callback:(item,index)=>item+index)
+print(mapped[2])
+const filtered=values.filter(callback:(item)=>item>1)
+print(len(filtered))
+print(values.reduce(initial:mark(10),callback:addition()))
+print(values.reduce(callback:addition(),initial:mark(20)))
+print(values.reduce((acc,item)=>acc+item,initial:30))
+print(values.find(callback:(item)=>item==2)!)
+print(values.findIndex(callback:(item)=>item==3))
+print(values.every(callback:(item)=>item>0))
+print(values.some(callback:(item)=>item==9))
+values.forEach(callback:(item,index)=>print(item+index))

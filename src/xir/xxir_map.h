@@ -23,6 +23,14 @@ XR_FUNC XrXirType xr_xir_set_element(const XrXirTypes *types, XrXirType type);
  * and replace their value. Every operation uses the receiving finite owner. */
 XR_FUNC XrXirValueStatus xr_xir_map_new(XrXirType type, const XrXirValue *keys,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission, XrXirValue *output);
+typedef enum XrXirMapLiteralKind { XR_XIR_MAP_LITERAL_ENTRY, XR_XIR_MAP_LITERAL_SPREAD } XrXirMapLiteralKind;
+typedef struct XrXirMapLiteralDuplicate { size_t first, second; } XrXirMapLiteralDuplicate;
+/* NULL kinds denotes explicit entries only. A spread has a Unit key and a Map
+ * value. Explicit duplicates return DUPLICATE_KEY and the two input ordinals;
+ * every other failure preserves both outputs. The result stays Unit on conflict.
+ * Spread writes overwrite values without erasing earlier explicit provenance. */
+XR_FUNC XrXirValueStatus xr_xir_map_literal_new(XrXirType,const XrXirValue *,const XrXirValue *,
+    const XrXirMapLiteralKind *,size_t,XrXirValueAdmission *,XrXirValue *,XrXirMapLiteralDuplicate *);
 XR_FUNC XrXirValueStatus xr_xir_set_new(XrXirType type, const XrXirValue *elements,
     size_t count, XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_hash_len(const XrXirValue *container,

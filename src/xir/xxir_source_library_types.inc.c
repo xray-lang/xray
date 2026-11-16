@@ -10,6 +10,8 @@ struct SourceLibraryUnit {
     XrXirType *types;
     uint32_t type_count;
     XrXirImplementationTable implementations;
+    XrXirHashableWitness *hashable_witnesses;
+    uint32_t hashable_witness_count;
     XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
     XrXirComptimeTable comptime;
@@ -22,7 +24,6 @@ static bool source_hir_nominal_imports(SourceContext *ctx,XrHirNominalImport *in
             if (!source_request_poll(ctx, NULL))
                 return false;
             uint32_t target = unit->nominals[n];
-            if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
             if(target>=count||inputs[target].construction)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal owner mapping changed");
             inputs[target]=(XrHirNominalImport){unit->library->types,unit->construction,n};
         }
@@ -111,13 +112,6 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
          * actually reached module views. It adds no initialization edges. */
         if (m==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library nominal declaration is outside selected module closure");
         ctx->module=m;
-        if(in->flags&XR_XIR_NOMINAL_RECORD) {
-            XrXirLiteral *keys=in->field_count?source_alloc(ctx,in->field_count,sizeof(*keys)):NULL;
-            if(in->field_count&&!keys)return false;
-            for(uint32_t f=0;f<in->field_count;++f)keys[f]=in->fields[f].name;
-            if(!source_record_schema(ctx,NULL,keys,in->field_count,&unit->nominals[n]))return false;
-            continue;
-        }
         char *name=source_library_name(ctx,in->name);
         if (!name) return false;
         SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
@@ -228,7 +222,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             out.nominal.declaration=unit->nominals[in->nominal.declaration];
             if (!source_library_type_arguments(ctx,unit,in->nominal.arguments,in->nominal.argument_count,
                 &out.nominal.arguments)) return false;
-        } else if (in->kind==XR_XIR_TYPE_CALLABLE || in->kind==XR_XIR_TYPE_TUPLE || in->kind==XR_XIR_TYPE_UNION) {
+        } else if (in->kind==XR_XIR_TYPE_CALLABLE || in->kind==XR_XIR_TYPE_TUPLE || in->kind==XR_XIR_TYPE_UNION || in->kind==XR_XIR_TYPE_DATA_UNION) {
             XrXirCallableParameter *parameters=in->parameter_count ? source_alloc(ctx,in->parameter_count,sizeof(*parameters)) : NULL;
             if (in->parameter_count && !parameters) return false;
             for (uint32_t p=0; p<in->parameter_count; ++p) {
@@ -329,7 +323,6 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
     const XrXirNominalTable *table=unit->library->types->nominals;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
         uint32_t target=unit->nominals[n];SourceName *symbol=ctx->nominal_sources[target];
         ctx->module=symbol->module;ctx->function=symbol->module;
         const XrXirNominalDeclaration *in=&table->declarations[n];
@@ -415,7 +408,18 @@ static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *uni
             if (!source_query_declare(ctx,member,XR_XIR_SOURCE_MEMBER,owner->declaration,
                 (XrXirSourceRange){owner->module,0,0,0,0})) return false;
             ids[m]=member->declaration;
+            if (!source_parameter_names_import_requirement(ctx,unit->library,i,target,m)) return false;
             if (!source_interface_method_query(ctx,owner,m,&methods[m])) return false;
+            if(target<ctx->imported_parameter_owner_count&&ctx->imported_parameter_names[target]&&
+                ctx->imported_parameter_names[target][m].present) {
+                const XrXirParameterNames *names=&ctx->imported_parameter_names[target][m].row;
+                const XrXirTypeNode *callable=xr_xir_callable_signature(&ctx->types,methods[m].signature);
+                if(!callable||callable->parameter_count!=names->count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"interface display namespace arity diverged");
+                uint32_t *modes=names->count?source_alloc(ctx,names->count,sizeof(*modes)):NULL;
+                if(names->count&&!modes)return false;
+                for(uint32_t p=0;p<names->count;++p)modes[p]=callable->parameters[p].mode;
+                if(!source_library_display_names(ctx,member->declaration,names->names,modes,names->count))return false;
+            }
             /* Query binders come from installed metadata, without synthesizing AST names. */
             uint32_t generic_owner=methods[m].own_parameter_count ? member->declaration :
                 in->parameter_count ? owner->declaration : 0;

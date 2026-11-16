@@ -1,4 +1,7 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 class Holder {
     user: User
@@ -13,7 +16,7 @@ class Holder {
 }
 
 fn mainValue() -> i64 {
-    var user: User = { name: "ada", age: 7 }
+    var user: User = User{ name: "ada", age: 7 }
     return Holder(user).objectFieldReceiverPlan()
 }
 

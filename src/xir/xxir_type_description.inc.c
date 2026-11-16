@@ -1,3 +1,4 @@
+#include "xxir_data_union.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -15,10 +16,11 @@ XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *c
     if (!node) {
         if (type != XR_XIR_UNIT && type != XR_XIR_NEVER && type != XR_XIR_BOOL && type != XR_XIR_RUNE &&
             !xr_xir_type_is_number(type) && type != XR_XIR_STRING &&
-            type != XR_XIR_ERROR && type != XR_XIR_PANIC_INFO && type != XR_XIR_BUFFER_STORAGE) return XR_XIR_BAD_TYPE;
+            type != XR_XIR_ERROR && type != XR_XIR_PANIC_INFO && type != XR_XIR_BUFFER_STORAGE && type != XR_XIR_JSON_VALUE) return XR_XIR_BAD_TYPE;
     } else {
-        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_FIXED_ARRAY)
+        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_DATA_UNION)
             return XR_XIR_BAD_TYPE;
+        if(node->kind==XR_XIR_TYPE_DATA_UNION && !xr_xir_data_union_shape(types,type))return XR_XIR_BAD_TYPE;
         description.kind = node->kind; description.node = node;
         if (node->kind == XR_XIR_TYPE_TUPLE) {
             if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;

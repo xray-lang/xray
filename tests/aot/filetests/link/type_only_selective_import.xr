@@ -4,4 +4,4 @@ fn total(config: TypeOnlyConfig) -> i64 {
     return len(config.name) + config.count
 }
 
-print(total({ name: "cluster", count: 7 }))
+print(total(TypeOnlyConfig{ name: "cluster", count: 7 }))

@@ -5,17 +5,17 @@ type V = i64 | string
 
 fn f(v: V) -> string {
     return match (v) {
-        is i64 n -> "int: ${n}"
-        is string -> "a string"
-        _ -> "?"
+        is i64 n => "int: ${n}",
+        is string => "a string",
+        _ => "?",
     }
 }
 
 fn g(v: V) -> string {
     return match (v) {
-        is i64 n -> "i${n}"
-        is string s -> "s${s}"
-        _ -> "?"
+        is i64 n => "i${n}",
+        is string s => "s${s}",
+        _ => "?",
     }
 }
 

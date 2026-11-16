@@ -59,7 +59,7 @@ static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *cont
     XrXirSourceModule source = {"alpha", 5, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[4] = {{0}}; identities[3].exported = 1;
     XrXirLiteral literal = {"generic",7};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 0, NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=&literal, .literal_count=1, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule built = {XR_XIR_BUILT, functions, 4, &declarations, generics, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);

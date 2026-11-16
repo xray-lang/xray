@@ -154,6 +154,28 @@ static bool source_intern_type_raw(SourceContext *ctx, XrXirTypeNode node, XrXir
     *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + ctx->types.count++); return true;
 }
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
+    if(node.kind==XR_XIR_TYPE_DATA_UNION) {
+        if(!node.parameter_count || !node.parameters)return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"data union members are missing");
+        XrXirType *members=source_alloc(ctx,node.parameter_count,sizeof(*members));
+        if(!members)return false;
+        for(uint32_t p=0;p<node.parameter_count;++p) {
+            if(node.parameters[p].mode || node.parameters[p].escaping) {
+                source_retire_array(ctx,members);
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"data union member has a passing mode");
+            }
+            members[p]=node.parameters[p].type;
+        }
+        XrXirDataUnion normalized={0};
+        XrXirStatus status=xr_xir_compile_data_union(&ctx->compile,&ctx->types,members,node.parameter_count,ctx->request,&normalized);
+        source_retire_array(ctx,members);
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"E0390: data union requires distinguishable closed scalar or string members");
+        if(normalized.count==1) {*type=normalized.members[0];return true;}
+        XrXirCallableParameter *owned=source_alloc(ctx,normalized.count,sizeof(*owned));
+        if(!owned)return false;
+        for(uint32_t p=0;p<normalized.count;++p)owned[p]=(XrXirCallableParameter){normalized.members[p],0,0};
+        return source_intern_type_raw(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_DATA_UNION,
+            .parameters=owned,.parameter_count=normalized.count},type);
+    }
     if (node.kind != XR_XIR_TYPE_UNION) return source_intern_type_raw(ctx,node,type);
     XrXirType *members = node.parameter_count ? source_alloc(ctx,node.parameter_count,sizeof(*members)) : NULL;
     if (node.parameter_count && (!members || !node.parameters)) return false;

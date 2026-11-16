@@ -1,0 +1,22 @@
+{
+  "knowledge-net-5-1": {
+    "fence": "xray",
+    "code": "import net\n\nfn serve(conn: NetConn) {\n    defer net.close(conn)\n    net.copy(conn, conn)\n}\n\nvar listener = net.listen(9001, 1024)!\nwhile (true) {\n    var conn = net.accept(listener)\n    if (conn != null) {\n        go serve(conn!)\n    }\n}"
+  },
+  "knowledge-parallel-4-1": {
+    "fence": "xray",
+    "code": "import parallel\n\nvar options = parallel.Options(4)\nvar squares = parallel.map(0..8, (i) -> i * i, options)\nvar total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\nprint(squares[3])\nprint(total)"
+  },
+  "knowledge-simd-5-1": {
+    "fence": "xray",
+    "code": "import { Capabilities, U32x4 } from simd\n\nfn main() {\n    var words = Array<u32>([1, 2, 3, 4])\n    var view: Slice<u32> = words[:]\n    var result = U32x4.load(view).add(U32x4.splat(10))\n\n    print(result.extract(2))\n    print(Capabilities.nativeBytes() >= 16)\n}\n\nmain()"
+  },
+  "knowledge-string-1-1": {
+    "fence": "xray",
+    "code": "var card = r\"\"\"\n<div class=\"card\">\n  ${title}\n</div>\n\"\"\""
+  },
+  "knowledge-string-1-2": {
+    "fence": "xray",
+    "code": "var path = br\"C:\\\\raw\\\\path\"\nvar asset = cr\"asset-name\""
+  }
+}

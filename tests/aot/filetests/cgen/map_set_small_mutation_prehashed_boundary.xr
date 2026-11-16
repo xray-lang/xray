@@ -1,10 +1,10 @@
 fn smallMutationBoundary() -> i64 {
-    var scores = #{"ada": 7, "lin": 9}
+    var scores = {"ada": 7, "lin": 9}
     scores.set("grace", 11)
     scores["lin"] = 10
     var removedMap = scores.delete("ada")
 
-    var seen: Set<string> = #["ada", "lin"]
+    var seen: Set<string> = Set(["ada", "lin"])
     seen.add("grace")
     var removedSet = seen.delete("lin")
 

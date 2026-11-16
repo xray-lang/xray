@@ -30,6 +30,13 @@ static XrXirStatus source_calls_publish(SourceContext *ctx,XrXirSourceSnapshot *
         XrXirSourceFunctionRange value={range,true};
         if(!source_copy_bytes(ctx,NULL,fact,&value,sizeof(value)))return ctx->diagnostic.status;
     }
+    /* A binding alone has no display ordinal without an observed signature.
+     * Keep unsupported native display surfaces explicitly unknown. */
+    for(uint32_t i=0;i<ctx->calls.count;++i) {
+        XrXirSourceCall *call=(XrXirSourceCall *)&ctx->calls.items[i];
+        if(call->signature.known)continue;
+        call->argument_formals=NULL;call->argument_count=0;call->argument_binding_known=false;
+    }
     XrXirSourceCalls calls=ctx->calls;calls.functions=functions;calls.declaration_count=count;
     return xr_xir_compile_source_snapshot_calls_copy(snapshot,&calls);
 }

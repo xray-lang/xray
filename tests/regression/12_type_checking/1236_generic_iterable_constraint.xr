@@ -74,7 +74,7 @@ fn test_iterate_array_through_type_param() {
 
 @test
 fn test_iterate_set_through_type_param() {
-    var s: Set<i64> = #[1, 2, 3]
+    var s: Set<i64> = Set([1, 2, 3])
     assertEqual(total(s), 6)
 }
 
@@ -94,7 +94,7 @@ fn test_iterate_range_value_through_type_param() {
 // ===== Iterable<string>: string-keyed domains =====
 @test
 fn test_iterate_map_keys_through_type_param() {
-    var m: Map<string, i64> = #{"aa": 1, "bbb": 2}
+    var m: Map<string, i64> = {"aa": 1, "bbb": 2}
     assertEqual(keyLengths(m), 5)
 }
 
@@ -115,7 +115,7 @@ fn sumValues<T: Iterable<string>>(xs: T) -> i64 {
 
 @test
 fn test_keyvalue_iteration_through_type_param() {
-    var m: Map<string, i64> = #{"x": 4, "y": 5}
+    var m: Map<string, i64> = {"x": 4, "y": 5}
     assertEqual(sumValues(m), 9)
 }
 
@@ -135,8 +135,8 @@ fn test_constraint_element_type_flows_into_body() {
 // ===== Lengthable =====
 @test
 fn test_lengthable_builtin_domains() {
-    var m: Map<string, i64> = #{"x": 1, "y": 2}
-    var s: Set<i64> = #[1, 2, 3]
+    var m: Map<string, i64> = {"x": 1, "y": 2}
+    var s: Set<i64> = Set([1, 2, 3])
     var j: JSON.Object = JSON.parseObject("{\"a\":1}")
     assertEqual(sizeOf([1, 2, 3]), 3)
     assertEqual(sizeOf("hey"), 3)
@@ -198,7 +198,7 @@ fn test_nested_generic_uses_runtime_protocol() {
         }
         return n
     }
-    var s: Set<i64> = #[4, 5]
+    var s: Set<i64> = Set([4, 5])
     assertEqual(nestedTotal([1, 2, 3]), 6)
     assertEqual(nestedTotal(s), 9)
 }

@@ -7,14 +7,23 @@
 
 import runtime
 
-type InnerRecord = { key: string, idx: i64 }
-type NestedContainer = {
-    map: InnerRecord,
-    arr: Array<i64>,
-    name: string,
+struct InnerRecord {
+    key: string
+    idx: i64
 }
-type PhaseRecord = { id: i64, data: string }
-type CycleRecord = { cycle: i64, idx: i64 }
+struct NestedContainer {
+    map: InnerRecord
+    arr: Array<i64>
+    name: string
+}
+struct PhaseRecord {
+    id: i64
+    data: string
+}
+struct CycleRecord {
+    cycle: i64
+    idx: i64
+}
 
 class ChainNode {
     value: i64
@@ -32,9 +41,9 @@ class ChainNode {
 fn test_nested_object_survival() {
     var containers: Array<NestedContainer> = []
     for (var i = 0; i < 200; i++) {
-        var inner_map: InnerRecord = { key: "value_" + string(i), idx: i }
+        var inner_map: InnerRecord = InnerRecord{ key: "value_" + string(i), idx: i }
         var inner_arr = [i, i * 2, i * 3]
-        containers.push({ map: inner_map,
+        containers.push(NestedContainer{ map: inner_map,
             arr: inner_arr,
             name: "container_" + string(i) })
     }
@@ -56,13 +65,13 @@ fn test_nested_object_survival() {
 fn test_alloc_interleaved_phases() {
     var phase1: Array<PhaseRecord> = []
     for (var i = 0; i < 100; i++) {
-        phase1.push({ id: i, data: "phase1_" + string(i) })
+        phase1.push(PhaseRecord{ id: i, data: "phase1_" + string(i) })
     }
 
 
     var phase2: Array<PhaseRecord> = []
     for (var i = 0; i < 100; i++) {
-        phase2.push({ id: i + 100, data: "phase2_" + string(i) })
+        phase2.push(PhaseRecord{ id: i + 100, data: "phase2_" + string(i) })
     }
 
 
@@ -127,7 +136,7 @@ fn test_repeated_alloc_rounds() {
     for (var cycle = 0; cycle < 10; cycle++) {
         var data: Array<CycleRecord> = []
         for (var i = 0; i < 100; i++) {
-            data.push({ cycle: cycle, idx: i })
+            data.push(CycleRecord{ cycle: cycle, idx: i })
         }
         // Verify last batch
         assertEqual(data[99].cycle, cycle)

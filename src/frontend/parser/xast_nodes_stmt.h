@@ -173,17 +173,6 @@ typedef struct PatternTupleNode {
 
 /* Named ADT variant destructure. Field names and patterns retain source order;
  * the analyzer resolves every field to its declaration slot. */
-// Object match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
-// source field; patterns[i] is the sub-pattern bound to that field value (a
-// bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
-// `{ x: sub }`). Uses only statically known fields; it does not grant schema-less access.
-typedef struct PatternObjectNode {
-    char **field_names;
-    AstNode **patterns;
-    int count;
-    XrNameSpan *field_name_spans;
-} PatternObjectNode;
-
 // Array match pattern: `[a, b, ..rest]`. patterns[i] are positional element
 // sub-patterns. has_rest enables a trailing rest binding capturing the tail as a
 // new array; rest_name is the binding (NULL for a bare `..` that drops the tail).

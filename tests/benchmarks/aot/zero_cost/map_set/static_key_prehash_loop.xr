@@ -1,4 +1,4 @@
-const SCORES: Map<string, i64> = #{"ada": 1}
+const SCORES: Map<string, i64> = {"ada": 1}
 
 fn run(n: i64) -> i64 {
     var i = 0

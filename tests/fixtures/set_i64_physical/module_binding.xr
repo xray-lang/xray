@@ -1,0 +1,4 @@
+var values = Set([1, 2, 2])
+values.add(3)
+print(len(values))
+print(values.contains(3))

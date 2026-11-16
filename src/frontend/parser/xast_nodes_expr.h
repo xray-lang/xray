@@ -68,6 +68,7 @@ typedef struct CallExprNode {
     AstNode *callee;
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
+    XrCallArgLabel *arg_labels;
     int arg_count;
     int supplied_arg_count;
     int default_arg_count;
@@ -107,6 +108,7 @@ typedef struct ComptimeExprNode {
 // Array literal node
 typedef struct ArrayLiteralNode {
     AstNode **elements;
+    XrExpressionSpan *element_spans;
     int count;
     AstNode *repeat_value;
     AstNode *repeat_count;
@@ -174,23 +176,17 @@ typedef struct TemplateStringNode {
     XrLiteralSourceForm source_form;
 } TemplateStringNode;
 
-// Object / Map / Set literals
-typedef struct ObjectLiteralNode {
-    AstNode **keys;
-    AstNode **values;
-    int count;
-} ObjectLiteralNode;
+typedef struct XrMapLiteralEntrySpan {
+    XrNameSpan key, value,value_end;
+} XrMapLiteralEntrySpan;
 
+/* A NULL key marks a spread entry whose value is AST_SPREAD_EXPR. */
 typedef struct MapLiteralNode {
     AstNode **keys;
     AstNode **values;
+    XrMapLiteralEntrySpan *entry_spans;
     int count;
 } MapLiteralNode;
-
-typedef struct SetLiteralNode {
-    AstNode **elements;
-    int count;
-} SetLiteralNode;
 
 // Struct literal node: Point{x: 1.0, y: 2.0} or pkg.Pair<int, string>{first: 1}
 typedef struct StructLiteralNode {
@@ -202,6 +198,7 @@ typedef struct StructLiteralNode {
     struct AstNode *type_path;
     char *struct_name;
     char **field_names;
+    XrNameSpan *field_name_spans;
     AstNode **field_values;
     int field_count;
     XrTypeRef **type_args;  // Generic type arguments (for monomorphization)

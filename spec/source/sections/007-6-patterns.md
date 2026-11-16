@@ -8,36 +8,40 @@ order: 007
 
 ## 6. 模式 (Patterns)
 
-> 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
+> 实现参考：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
 模式出现在 `match` 表达式/语句、`var` / `const` 解构，以及括号内的 `catch` 头部（仅 enum variant pattern，见 §8.1.2）中。
 
 ### 6.1 字面量模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-001 -->
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 匹配使用与 `==` 相同的语义。
 - `null` 模式只匹配 `null` 本身。
 
 ### 6.2 范围模式 `a..b` / `a..=b`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-002 -->
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
+<!-- /xr-source -->
 
 - `a..b` 为半开区间 `[a, b)`；`a..=b` 为闭区间 `[a, b]`。
 - 仅整数。
@@ -46,13 +50,15 @@ match (age) {
 
 #### 6.3.1 简单变体（无 payload）
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-003 -->
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
+<!-- /xr-source -->
 
 - 需完整限定 `EnumName.Variant`。
 
@@ -62,33 +68,35 @@ match (color) {
 
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-004 -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // 同名 binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // 只列需要观察的字段
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
+<!-- /xr-source -->
 
 #### 6.3.3 穷举性检查
 
@@ -97,7 +105,8 @@ match (msg) {
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-005 -->
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -106,49 +115,56 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
+<!-- /xr-source -->
 
 > 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-006 -->
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // 绑定窄化值
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // 绑定窄化值
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
+<!-- /xr-source -->
 
 - 检查动态类型；可选绑定窄化变量。
 
 ### 6.5 守卫条件 `if`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-007 -->
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 守卫表达式必须是 `bool`，nullable 值须显式比较（见 §2.3.3），与 `if` / `while` 条件规则一致。
 - 失败时继续尝试下一分支。
 
 ### 6.6 多值模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-008 -->
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 按源码顺序尝试备选，首次成功后不再尝试该 arm 的其他备选。
 - 所有备选必须绑定相同的名称集合，且每个同名绑定的确切静态类型相同；绑定不可变，属于该 arm 的共同作用域。
@@ -163,38 +179,34 @@ match (x) {
 
 ### 6.8 变量绑定模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-009 -->
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
+<!-- /xr-source -->
 
 - 裸 `Identifier` 总匹配并绑定为值。
 
 ### 6.9 解构模式
 
-```xray
+数组与 tuple 绑定沿 §5.1.3；匿名对象解构、对象模式和 struct 解构不属于语言语法。ADT 变体的具名 payload 字段模式仍按 §6.3，不受删除对象族的影响。
+
+<!-- xr-source:example 007-6-patterns-example-010 -->
+```xray @fragment
 var [a, b, c] = some_array
 var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
-
-```xray
 match (p) {
-    { x, y } -> ...           // 对象字段解构（簡寫绑定）
-    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
-    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
-    [_, mid, _] -> ...        // 元素位通配
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
+<!-- /xr-source -->
 
-- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
-- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
-- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
+数组模式按长度匹配：没有 `..rest` 时长度必须等于元素数，有 rest 时长度至少为元素数。非 rest 元素只能是绑定或通配；按值判断使用守卫。Map 不提供字段模式；静态字段数据使用名义 struct 并通过普通字段访问取得值。or-pattern `|` 不在本任务引入。
 
 ### 6.10 穷举性与匹配失败
 
@@ -208,36 +220,40 @@ match (p) {
 
 ## 6. Patterns
 
-> Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
+> Implementation reference: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
 Patterns appear in `match` expressions/statements, in `var` / `const` destructuring, and in parenthesized `catch` headers (enum variant patterns only, see §8.1.2).
 
 ### 6.1 Literal Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-001 -->
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - Matching uses the same semantics as `==`.
 - The `null` pattern matches only `null` itself.
 
 ### 6.2 Range Patterns `a..b` / `a..=b`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-002 -->
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
+<!-- /xr-source -->
 
 - `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
 - Integer-only.
@@ -246,13 +262,15 @@ match (age) {
 
 #### 6.3.1 Simple variants (no payload)
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-003 -->
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
+<!-- /xr-source -->
 
 - Must be fully qualified as `EnumName.Variant`.
 
@@ -262,33 +280,35 @@ The scrutinee is evaluated once. Pattern bindings are immutable values scoped to
 
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-004 -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // Same-name binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // List only fields that are observed
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
+<!-- /xr-source -->
 
 #### 6.3.3 Exhaustiveness check
 
@@ -297,7 +317,8 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-005 -->
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -306,49 +327,56 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```
+<!-- /xr-source -->
 
 > Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-006 -->
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // bind the narrowed value
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // bind the narrowed value
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
+<!-- /xr-source -->
 
 - Tests the dynamic type; optionally binds a narrowed variable.
 
 ### 6.5 Guard Conditions `if`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-007 -->
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - The guard must be `bool`; nullable values require an explicit comparison (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-008 -->
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - Alternatives are tried in source order; the first success skips the remaining alternatives of that arm.
 - Every alternative must bind the same names with exactly the same static types. Bindings are immutable and belong to the common arm scope.
@@ -363,38 +391,34 @@ match (x) {
 
 ### 6.8 Variable-binding Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-009 -->
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
+<!-- /xr-source -->
 
 - A bare `Identifier` always matches and binds the value.
 
 ### 6.9 Destructuring Patterns
 
-```xray
+Array and tuple bindings follow §5.1.3. Anonymous-object destructuring, object patterns and struct destructuring are not syntax. Named payload-field patterns of ADT variants remain governed by §6.3 and are unaffected by removing structural objects.
+
+<!-- xr-source:example 007-6-patterns-example-010 -->
+```xray @fragment
 var [a, b, c] = some_array
 var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
-
-```xray
 match (p) {
-    { x, y } -> ...           // object field destructure (shorthand binding)
-    { name: n, age } -> ...   // field rename + shorthand mixed
-    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
-    [_, mid, _] -> ...        // element-position wildcards
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
+<!-- /xr-source -->
 
-- An object pattern matches an exact structural object whose static type contains the named fields. For schema-less JSON, first commit the structure with `JSON.get/require` or `JSON.decodeObject<T>`. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
-- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
-- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
+Array patterns match length: exactly the element count without `..rest`, and at least that count with a rest. Non-rest entries are bindings or wildcards; use guards for value tests. Maps provide no field pattern. Use nominal structs and ordinary field access for fixed fields. This change does not introduce or-pattern `|`.
 
 ### 6.10 Exhaustiveness and Match Failure
 

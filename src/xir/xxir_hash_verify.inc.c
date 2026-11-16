@@ -10,7 +10,8 @@ static XrXirStatus hash_uses(const Graph *graph, const XrXirFunction *function,
     VerifyContext *context, uint32_t instruction) {
     const XrXirInstruction *op = &function->instructions[instruction];
     const XrXirTypes *types = context->module->types;
-    bool constructing = op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW;
+    bool literal=op->op==XR_XIR_MAP_LITERAL;
+    bool constructing = op->op == XR_XIR_MAP_NEW || literal || op->op == XR_XIR_SET_NEW;
     uint32_t receiver = xr_xir_op_uses_operand_table(op->op) && !constructing ?
         function->operands[op->args[0]] : op->args[0];
     XrXirType container = constructing ? op->type : xr_xir_operand_type(function, receiver);
@@ -23,7 +24,7 @@ static XrXirStatus hash_uses(const Graph *graph, const XrXirFunction *function,
     bool binary_set = op->op >= XR_XIR_SET_UNION && op->op <= XR_XIR_SET_IS_SUPERSET;
     if (binary_set && (map || op->type != (op->op >= XR_XIR_SET_IS_SUBSET ? XR_XIR_BOOL : container)))
         return XR_XIR_BAD_TYPE;
-    if (((op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_MAP_GET || op->op == XR_XIR_MAP_INDEX ||
+    if (((op->op == XR_XIR_MAP_NEW || literal || op->op == XR_XIR_MAP_GET || op->op == XR_XIR_MAP_INDEX ||
         op->op == XR_XIR_MAP_SET || op->op == XR_XIR_HASH_KEYS || op->op == XR_XIR_MAP_ENTRIES) && !map) ||
         ((op->op == XR_XIR_SET_NEW || op->op == XR_XIR_SET_ADD) && map)) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_MAP_CONTAINS_VALUE && (!map || op->type != XR_XIR_BOOL)) return XR_XIR_BAD_TYPE;
@@ -55,6 +56,21 @@ static XrXirStatus hash_uses(const Graph *graph, const XrXirFunction *function,
             return XR_XIR_BAD_TYPE;
     }
     uint32_t count = operand_count(function, op, context->module);
+    if(literal) {
+        const XrXirMapLiteral *origin=&context->module->declarations->map_literals[op->immediate];uint32_t operand=0;
+        if(node->result==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
+        for(uint32_t n=0;n<origin->count;++n) {
+            bool spread=origin->items[n].kind!=0;uint32_t width=spread?1u:2u;
+            if(operand>count || width>count-operand)return XR_XIR_BAD_STRUCTURE;
+            status=role_operand(function,graph,context,instruction,operand++,spread?container:node->element);
+            if(status!=XR_XIR_OK)return status;
+            if(!spread) {
+                status=role_operand(function,graph,context,instruction,operand++,node->result);
+                if(status!=XR_XIR_OK)return status;
+            }
+        }
+        return operand==count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
     if (op->op == XR_XIR_MAP_NEW && ((count & 1u) || node->result == XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
 
     for (uint32_t a = 0; a < count; ++a) {

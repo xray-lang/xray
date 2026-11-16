@@ -1,4 +1,4 @@
-const m = #{"a": 1}
+const m = {"a": 1}
 var n = m
 n["b"] = 2
 print(len(m))

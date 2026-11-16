@@ -85,7 +85,7 @@ static void make_packet(unsigned kind) {
     };
     XrXirSourceModule source = {canonical[kind],(uint32_t)strlen(canonical[kind]),NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0, 0, 0},{0,1,0,0,0,0,0, 0, 0}};
-    XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=names, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=UINT32_MAX, .entry_function=UINT32_MAX, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(&context, &module, &artifact, NULL) == XR_XIR_OK);

@@ -1,6 +1,6 @@
 import { Options, Plan } from parallel
 
-var plan = Plan<i64>(Options(2), (lane) -> lane)
+var plan = Plan<i64>(Options(2), (lane) => lane)
 
 fn body(state: i64, item: i64) {
     print(state + item)

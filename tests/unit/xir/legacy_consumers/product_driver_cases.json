@@ -26113,7 +26113,15 @@
       "remaining_gates": [
         "Complete original CLI/VM/real C/native against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
-      ]
+      ],
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+        "current_source_lf_sha256": "636d53c6264fb10f1e7a1ba5fdded70438597cb27851c0e195fe73dc062c80ad",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "f0111fe78a6eb7e824178accc3f8c5c9a8cc547d524042f89d31b39ed2eac471",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_inputs_object_width_nullable_field_omission",
@@ -26147,7 +26155,15 @@
       "remaining_gates": [
         "Complete original CLI/VM/real C/native against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
-      ]
+      ],
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+        "current_source_lf_sha256": "46a04a1f524ad7500854dc03acfcab270f7ee8fe671f92440f0e5cd05f8d9cd5",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "a639d105c31383cc77f81290a57fa36dc682303d10da64992ff6506e093f8581",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_inputs_object_destructure",
@@ -26181,7 +26197,15 @@
       "remaining_gates": [
         "Complete original CLI/VM/real C/native against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
-      ]
+      ],
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/object/object_destructure.xr",
+        "current_source_lf_sha256": "6ba70c47bb8697fedd8366d6985c34a892fca0dcf6c2be46fc8ca1c128ca36ff",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "c163e9de6e5b796f74f4d2dca99a2312ca502bc33ab5e68b47e531f0ff1f8231",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_inputs_tbaa_raw_pointer_store_kills_array_load",
@@ -29330,7 +29354,15 @@
         "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
       ],
       "source_context": "original_absolute",
-      "independent_observation_count": 1
+      "independent_observation_count": 1,
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr",
+        "current_source_lf_sha256": "884a6e2db9f7b942e52a66e1176fe013029bb3451305f07003cda3529090e4e2",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "3d865fcd62b556cefef18a632cd33fd24b6c652eedec8eb63bc47f3545c08247",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_calls_object_shape_test_and_narrow",
@@ -29364,7 +29396,15 @@
         "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
       ],
       "source_context": "original_absolute",
-      "independent_observation_count": 9
+      "independent_observation_count": 9,
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr",
+        "current_source_lf_sha256": "b2730c9c1e765b90ab2dc3cb6f1ce1a4ac535272afb3c1dd99bd668bca335b39",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "a44a8f2ce1319e6ba8a1f83320c4b9449d4465d796b6846ea2ec3d1f13432222",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_calls_hashable_contract",
@@ -29399,7 +29439,15 @@
         "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
       ],
       "source_context": "original_absolute",
-      "independent_observation_count": 5
+      "independent_observation_count": 5,
+      "task342_current_target": {
+        "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json",
+        "current_source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
+        "current_source_lf_sha256": "7abaeecf02230af6a2b648fa2ca046eb72bec024bd29e0be33379750684488f7",
+        "qualification": "INDEPENDENT_OBSERVATIONS_NOT_CURRENT_PRODUCT_PASS",
+        "base_source_lf_sha256": "565be502da48d3e7ff398ecc3dc41e38938af86aba7e53a2c882931a12bb9d6a",
+        "responsibility": "Use the explicit nominal/Map migration record; preserve original input and output identities. This routing record does not qualify product execution."
+      }
     },
     {
       "id": "complete_structural_calls_1471_default_read_rest_param",
@@ -33329,7 +33377,7 @@
       "id": "complete_channel_timeout_after_sleep",
       "oracle_id": "complete_channel_timeout_after_sleep",
       "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
-      "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd",
+      "source_lf_sha256": "a8b3218bf60679cc8674670ada2e5be13c05bd622d3c41a0296847c32e3ec1cf",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "Recv.Value(11)\nsent\nrecv-value\nempty-timeout\n",
@@ -33347,7 +33395,7 @@
       "independent_execution_model": "Complete unchanged sleep/channel original:capacity1,all four sleep5calls,untimed11send/wholeRecvprint,timed22send50,queuedrecv50,emptyrecv10,all threematches/fourprints/finalclose. Independent finite FIFO andcompletion provenance drop only preceding sleep status before a channel operation while preserving a genuine newchannel timeout. Canonical recv returns Recv<i64>,so first direct print is Recv.Value(11),not an unwrapped scalar. No host clock orproduct output oracle;logical tickets do not prove physical timer count,scheduler latency,cleanup,cancel,lifetime,FI,safety,providers or mixed execution.",
       "preserved_original_identity": {
         "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
-        "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd"
+        "source_lf_sha256": "a8b3218bf60679cc8674670ada2e5be13c05bd622d3c41a0296847c32e3ec1cf"
       },
       "remaining_gates": [
         "Complete four sleeps/untimed andtimedchanneloperations/directRecvprint/threematches/finalclose retained. New genuineChannel timeout must remain distinct from preceding sleep status;actualscheduler/latency/cancel/cleanup/lifetime/FI/resources/safety/providers/mixed remainopen."

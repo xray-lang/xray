@@ -207,7 +207,7 @@ TEST(template_string_round_trip) {
         "var n = \"x\";\nvar s = \"${n}-${n}-${n}\";\n",
         "var x = 1;\nvar s = \"start ${x} mid ${x + 1} end\";\n",
         "var s = \"${\"quoted\"}\";\n",
-        "var m = #{\"k\": \"value\"};\nvar s = \"${m[\"k\"]}\";\n",
+        "var m = {\"k\": \"value\"};\nvar s = \"${m[\"k\"]}\";\n",
     };
     int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {

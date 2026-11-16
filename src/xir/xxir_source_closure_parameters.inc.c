@@ -24,7 +24,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         XrXirType type;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if ((param->passing_mode != XR_PARAM_READ && param->passing_mode != XR_PARAM_REF && param->passing_mode!=XR_PARAM_MOVE) ||
-            param->default_value || param->pattern ||
+            (param->default_value&&(node->type!=AST_FUNCTION_DECL||param->passing_mode==XR_PARAM_REF||param->is_rest)) || param->pattern ||
             (param->is_rest && (node->type!=AST_FUNCTION_DECL || i+1!=decl->param_count ||
                 param->passing_mode!=XR_PARAM_READ || !param->type)) || (!param->type && !context))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");

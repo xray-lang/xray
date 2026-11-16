@@ -1,0 +1,59 @@
+{
+  "007-6-patterns-example-001": {
+    "fence": "xray @fragment",
+    "code": "match (x) {\n    0 => \"zero\",\n    3.14 => \"pi\",\n    \"hello\" => \"greeting\",\n    true => \"yes\",\n    null => \"nothing\",\n    _ => \"other\",\n}"
+  },
+  "007-6-patterns-example-002": {
+    "fence": "xray @fragment",
+    "code": "match (age) {\n    0..13 => \"child\",\n    13..20 => \"teen\",\n    20..=65 => \"adult\",\n    _ => \"senior\",\n}"
+  },
+  "007-6-patterns-example-003": {
+    "fence": "xray @fragment",
+    "code": "match (color) {\n    Color.Red   => \"red\",\n    Color.Green => \"green\",\n    Color.Blue  => \"blue\",\n}"
+  },
+  "007-6-patterns-example-004": {
+    "fence": "xray @fragment",
+    "code": "match (event) {\n    NetEvent.Connected                         => print(\"connected\"),\n    NetEvent.Disconnected { reason }           => print(\"by:\", reason),\n    NetEvent.DataReceived { bytes }            => process(bytes),\n    NetEvent.Error { code, message: msg }      => log.error(code, msg),\n}\n\n// 同名 binding shorthand\nmatch (opt) {\n    Option.Some { value: v } => print(\"got:\", v),\n    Option.None    => print(\"nothing\"),\n}\n\n// 只列需要观察的字段\nmatch (event) {\n    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },\n    _                                        => { continue },\n}\n\n// 嵌套解构\nmatch (msg) {\n    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),\n    Option.None                                           => skip(),\n    _                                                     => skip(),\n}",
+    "trivia": {
+      "en": {
+        "61": "\n\n// Same-name binding shorthand\n",
+        "92": "\n\n// List only fields that are observed\n",
+        "129": "\n\n// Nested destructuring\n"
+      }
+    }
+  },
+  "007-6-patterns-example-005": {
+    "fence": "xray @fragment",
+    "code": "enum NetEvent {\n    Connected,\n    Disconnected { reason: string },\n    DataReceived { bytes: Array<u8> },\n    Error { code: i64, message: string },\n}\n\nmatch (event) {\n    NetEvent.Connected                     => \"ok\",\n    NetEvent.Disconnected { reason: r }    => \"down: ${r}\",\n    // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底\n}",
+    "trivia": {
+      "en": {
+        "56": "\n    // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all\n"
+      }
+    }
+  },
+  "007-6-patterns-example-006": {
+    "fence": "xray @fragment",
+    "code": "match (value) {\n    is i64 n => \"i64: ${n}\",       // 绑定窄化值\n    is string => \"a string\",\n    is User u => \"user: ${u.name}\",\n    _ => \"unknown\",\n}",
+    "trivia": {
+      "en": {
+        "11": "       // bind the narrowed value\n    "
+      }
+    }
+  },
+  "007-6-patterns-example-007": {
+    "fence": "xray @fragment",
+    "code": "match (x) {\n    n if (n > 0 && n < 10) => \"small positive\",\n    n if (n < 0) => \"negative\",\n    _ => \"other\",\n}"
+  },
+  "007-6-patterns-example-008": {
+    "fence": "xray @fragment",
+    "code": "match (x) {\n    1, 2, 3 => \"small\",\n    Color.Red, Color.Yellow => \"warm\",\n    _ => \"other\",\n}"
+  },
+  "007-6-patterns-example-009": {
+    "fence": "xray @fragment",
+    "code": "match (http_status) {\n    200 => \"ok\",\n    code if (code >= 400) => \"error: ${code}\",\n    code => \"other: ${code}\",\n}"
+  },
+  "007-6-patterns-example-010": {
+    "fence": "xray @fragment",
+    "code": "var [a, b, c] = some_array\nvar (q, r) = divmod(17, 5)\nmatch (p) {\n    [a, b, ..rest,] => print(a, b, rest),\n    [_, mid, _] => print(mid),\n}"
+  }
+}

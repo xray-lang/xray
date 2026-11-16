@@ -13,6 +13,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_source_calls.h"
 #include "xir/xxir_source_corpus.h"
+#include "xir/xxir_source_query_internal.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,33 @@ static uint32_t root_find(const XrXirModule *module,const char *name) {
     for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==length&&!memcmp(module->functions[f].name,name,length))return f;
     fprintf(stderr,"root oracle missing function %s\n",name);return UINT32_MAX;
+}
+static XrXirStatus root_call_snapshot_copy(const XrXirSourceSnapshot *source,XrXirSourceSnapshot **output) {
+    XrXirSourceSnapshot *copy=NULL;
+    XrXirStatus status=xr_xir_compile_source_snapshot_copy_v2(&effect_context,
+        xr_xir_compile_source_snapshot_view(source),xr_xir_compile_source_snapshot_construction(source),&copy);
+    if(status==XR_XIR_OK)status=xr_xir_compile_source_snapshot_syntax_copy(copy,
+        xr_xir_compile_source_snapshot_syntax(source));
+    if(status==XR_XIR_OK)status=xr_xir_compile_source_snapshot_calls_copy(copy,
+        xr_xir_compile_source_snapshot_calls(source));
+    if(status!=XR_XIR_OK){xr_xir_compile_source_snapshot_free(copy);return status;}
+    *output=copy;return XR_XIR_OK;
+}
+static XrXirSourceSnapshot *root_generator_call_owner(const XrXirSourceSnapshot *source) {
+    EffectMark baseline=effect_mark();XrXirSourceSnapshot *copy=NULL;
+    attempts=0;injected=false;
+    CHECK(root_call_snapshot_copy(source,&copy)==XR_XIR_OK);
+    size_t sites=attempts;xr_xir_compile_source_snapshot_free(copy);effect_mark_check(baseline);
+    for(size_t site=0;site<sites;++site) {
+        copy=NULL;attempts=0;injected=false;fail_at=site;
+        XrXirStatus status=root_call_snapshot_copy(source,&copy);fail_at=SIZE_MAX;
+        if(status!=XR_XIR_OUT_OF_MEMORY||!injected||copy)
+            fprintf(stderr,"generator call snapshot site%zu/%zu status%u injected%d\n",site,sites,(unsigned)status,injected);
+        CHECK(status==XR_XIR_OUT_OF_MEMORY&&injected&&!copy);effect_mark_check(baseline);
+    }
+    attempts=0;injected=false;CHECK(root_call_snapshot_copy(source,&copy)==XR_XIR_OK);
+    printf("captured generator call snapshot: %zu allocation failures PASS\n",sites);
+    return copy;
 }
 static XrXirArtifact *root_source_expect(const char *file,XrXirStatus expected,const char *message) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_ROOT_EFFECT_FIXTURES,file)>0);
@@ -39,18 +67,41 @@ static XrXirArtifact *root_source_expect(const char *file,XrXirStatus expected,c
     if (message && strcmp(diagnostic.message,message)) fprintf(stderr,"root source %s diagnostic: %s\n",file,diagnostic.message);
     CHECK(!message || !strcmp(diagnostic.message,message));
     CHECK(expected==XR_XIR_OK?(source.checked!=NULL):(!source.checked&&!source.snapshot));
+    XrXirSourceSnapshot *retained_calls=NULL;
     if (expected==XR_XIR_OK) {
         CHECK(xr_xir_compile_source_snapshot_calls(source.snapshot)==NULL);
         XrXirSourceCorpusRequest corpus={&request,NULL,0,NULL,0};
         XrXirSourceResult observed={0};
-        CHECK(xr_xir_compile_source_check_corpus(&corpus,&observed,NULL,NULL)==XR_XIR_OK);
+        XrXirSourceDiagnostic observed_diagnostic={0};
+        XrXirStatus observed_status=xr_xir_compile_source_check_corpus(&corpus,&observed,&observed_diagnostic,NULL);
+        if(observed_status!=XR_XIR_OK)fprintf(stderr,"root observed source %s status%u %d:%d %s\n",
+            file,(unsigned)observed_status,observed_diagnostic.line,observed_diagnostic.column,observed_diagnostic.message);
+        CHECK(observed_status==XR_XIR_OK);
         const XrXirSourceCalls *calls=xr_xir_compile_source_snapshot_calls(observed.snapshot);
         const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(observed.snapshot);
         CHECK(calls && view && calls->declaration_count==view->declaration_count);
+        if(!strcmp(file,"entry_cell_footprints.xr"))retained_calls=root_generator_call_owner(observed.snapshot);
         xr_xir_compile_source_result_free(&observed);
     }
     XrXirArtifact *checked=source.checked;source.checked=NULL;
     xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
+    if(retained_calls) {
+        const XrXirSourceCalls *calls=xr_xir_compile_source_snapshot_calls(retained_calls);
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(retained_calls);
+        const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(retained_calls);
+        bool found=false;
+        for(uint32_t c=0;c<calls->count;++c) {
+            const XrXirSourceCall *call=&calls->items[c];if(call->reference==UINT32_MAX)continue;
+            uint32_t target=view->references[call->reference].target;
+            const XrXirSourceDeclaration *declaration=&view->declarations[target-1];
+            if(strcmp(declaration->name,"values"))continue;
+            CHECK(declaration->kind==XR_XIR_SOURCE_FUNCTION&&syntax->declarations[target-1].role==XR_XIR_SOURCE_SYNTAX_NAME);
+            CHECK(!declaration->parameter_count&&call->signature.known&&!call->signature.parameter_count&&
+                call->signature.result.known&&call->signature.result.type==declaration->type.type);
+            found=true;
+        }
+        CHECK(found);xr_xir_compile_source_snapshot_free(retained_calls);
+    }
     return checked;
 }
 static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {

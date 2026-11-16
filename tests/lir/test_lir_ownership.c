@@ -419,8 +419,11 @@ static void boxed_lifetimes(void) {
 
 static void boxed_selected_edges(void) {
     XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
-    XrLirType type; XrLirRecordField field={"value",5,XR_LIR_STRING};
-    OK(xr_lir_record_type(m,&field,1,&type));
+    XrLirType type; XrLirRecordField field={"value",5,XR_LIR_STRING, 0};
+    OK(xr_lir_record_type(m,
+        &(XrLirRecordIdentity){.module="tests.lir.ownership", .module_length=sizeof("tests.lir.ownership")-1,
+            .name="SelectedRecord", .name_length=sizeof("SelectedRecord")-1},
+        &field,1,&type));
     XrLirType parameters[]={type,XR_LIR_I1};
     XrLirFunction function={0}; XrLirFunctionSpec spec={.name="record_edges",.name_length=12,
         .parameters=parameters,.parameter_count=2,.result=type};
@@ -536,8 +539,11 @@ static void pod_function(XrLirModule *m,XrLirType type,const char *name) {
 
 static void pod_facts(void) {
     XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
-    XrLirType record,optional,integer_optional; XrLirRecordField field={"score",5,XR_LIR_I64};
-    OK(xr_lir_record_type(m,&field,1,&record)); OK(xr_lir_nullable_type(m,record,&optional));
+    XrLirType record,optional,integer_optional; XrLirRecordField field={"score",5,XR_LIR_I64, 0};
+    OK(xr_lir_record_type(m,
+        &(XrLirRecordIdentity){.module="tests.lir.ownership", .module_length=sizeof("tests.lir.ownership")-1,
+            .name="PodRecord", .name_length=sizeof("PodRecord")-1},
+        &field,1,&record)); OK(xr_lir_nullable_type(m,record,&optional));
     OK(xr_lir_nullable_type(m,XR_LIR_I64,&integer_optional));
     pod_function(m,record,"pod_record"); pod_function(m,optional,"pod_record_optional"); pod_function(m,integer_optional,"pod_i64_optional");
     OK(xr_lir_module_finish(m,NULL));

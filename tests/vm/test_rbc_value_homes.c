@@ -187,8 +187,11 @@ static void state_snapshots_and_ref_boundaries(void) {
 }
 static XrLirModule *selected_edge_fixture(XrLirFunction *output) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
-    XrLirType type; XrLirRecordField field = {"name", 4, XR_LIR_STRING};
-    OK(xr_lir_record_type(module, &field, 1, &type));
+    XrLirType type; XrLirRecordField field = {"name", 4, XR_LIR_STRING, 0};
+    OK(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
+            .name="SelectedRecord", .name_length=sizeof("SelectedRecord")-1},
+        &field, 1, &type));
     XrLirFunction function; XrLirFunctionSpec spec = {.name="edges", .name_length=5, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(module, &spec, &function)); OK(xr_lir_define_function(module, function));
     XrLirBlock entry, join; XrLirType parameters[] = {type, type};
@@ -291,7 +294,10 @@ static void common_home_allocation_failures(void) {
 }
 static void pod_needs_no_owner_frame(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
-    XrLirType type; XrLirRecordField field = {"score", 5, XR_LIR_I64}; OK(xr_lir_record_type(module, &field, 1, &type));
+    XrLirType type; XrLirRecordField field = {"score", 5, XR_LIR_I64, 0}; OK(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
+            .name="PodRecord", .name_length=sizeof("PodRecord")-1},
+        &field, 1, &type));
     XrLirFunction function; XrLirFunctionSpec spec = {.name="pod", .name_length=3, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(module, &spec, &function)); OK(xr_lir_define_function(module, function));
     XrLirBlock block; OK(xr_lir_add_block(module, function, NULL, 0, &block)); OK(xr_lir_set_entry(module, function, block));
@@ -349,8 +355,11 @@ static void return_publish(void *context) {
 static XrRbcProgram *multi_return_fixture(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
     XrLirType optional, record; OK(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
-    XrLirRecordField fields[] = {{"first",5,optional}, {"score",5,XR_LIR_I64}, {"second",6,optional}};
-    OK(xr_lir_record_type(module, fields, 3, &record));
+    XrLirRecordField fields[] = {{"first",5,optional, 0}, {"score",5,XR_LIR_I64, 0}, {"second",6,optional, 0}};
+    OK(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
+            .name="ReturnRecord", .name_length=sizeof("ReturnRecord")-1},
+        fields, 3, &record));
     XrLirFunction root, helper; XrLirFunctionSpec spec = {.name="return_root", .name_length=11, .result=XR_LIR_I64};
     OK(xr_lir_declare_function(module, &spec, &root));
     spec = (XrLirFunctionSpec){.name="return_copy", .name_length=11, .parameters=&record, .parameter_count=1, .result=record};

@@ -19,3 +19,12 @@ if(MSVC)
 else()
     target_compile_options(xray_frontend_format PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
+
+add_executable(xray_arrow_syntax EXCLUDE_FROM_ALL
+    ${PROJECT_SOURCE_DIR}/tools/arrow-syntax/main.c)
+target_link_libraries(xray_arrow_syntax PRIVATE xray_compiler_parser)
+target_compile_features(xray_arrow_syntax PRIVATE c_std_11)
+if(MSVC)
+    target_compile_definitions(xray_arrow_syntax PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(xray_arrow_syntax PRIVATE /W4 /WX /utf-8)
+endif()

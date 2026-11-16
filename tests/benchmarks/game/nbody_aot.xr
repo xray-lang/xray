@@ -7,9 +7,17 @@ const PI: f64 = 3.141592653589793
 const SOLAR_MASS: f64 = 4.0 * PI * PI
 const DAYS_PER_YEAR: f64 = 365.24
 
-type Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
+struct Body {
+    x: f64
+    y: f64
+    z: f64
+    vx: f64
+    vy: f64
+    vz: f64
+    mass: f64
+}
 
-fn applyPair(bi: Body, bj: Body, dt: f64) {
+fn applyPair(bi: ref Body, bj: ref Body, dt: f64) {
     var dx = bi.x - bj.x
     var dy = bi.y - bj.y
     var dz = bi.z - bj.z
@@ -24,17 +32,17 @@ fn applyPair(bi: Body, bj: Body, dt: f64) {
     bj.vz = bj.vz + dz * bi.mass * mag
 }
 
-fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: f64) {
-    applyPair(b0, b1, dt)
-    applyPair(b0, b2, dt)
-    applyPair(b0, b3, dt)
-    applyPair(b0, b4, dt)
-    applyPair(b1, b2, dt)
-    applyPair(b1, b3, dt)
-    applyPair(b1, b4, dt)
-    applyPair(b2, b3, dt)
-    applyPair(b2, b4, dt)
-    applyPair(b3, b4, dt)
+fn advance(b0: ref Body, b1: ref Body, b2: ref Body, b3: ref Body, b4: ref Body, dt: f64) {
+    applyPair(ref b0, ref b1, dt)
+    applyPair(ref b0, ref b2, dt)
+    applyPair(ref b0, ref b3, dt)
+    applyPair(ref b0, ref b4, dt)
+    applyPair(ref b1, ref b2, dt)
+    applyPair(ref b1, ref b3, dt)
+    applyPair(ref b1, ref b4, dt)
+    applyPair(ref b2, ref b3, dt)
+    applyPair(ref b2, ref b4, dt)
+    applyPair(ref b3, ref b4, dt)
     b0.x = b0.x + dt * b0.vx; b0.y = b0.y + dt * b0.vy; b0.z = b0.z + dt * b0.vz
     b1.x = b1.x + dt * b1.vx; b1.y = b1.y + dt * b1.vy; b1.z = b1.z + dt * b1.vz
     b2.x = b2.x + dt * b2.vx; b2.y = b2.y + dt * b2.vy; b2.z = b2.z + dt * b2.vz
@@ -42,7 +50,7 @@ fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: f64) {
     b4.x = b4.x + dt * b4.vx; b4.y = b4.y + dt * b4.vy; b4.z = b4.z + dt * b4.vz
 }
 
-fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): f64 {
+fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body) -> f64 {
     var e = 0.5 * b0.mass * (b0.vx*b0.vx + b0.vy*b0.vy + b0.vz*b0.vz)
     e = e + 0.5 * b1.mass * (b1.vx*b1.vx + b1.vy*b1.vy + b1.vz*b1.vz)
     e = e + 0.5 * b2.mass * (b2.vx*b2.vx + b2.vy*b2.vy + b2.vz*b2.vz)
@@ -75,17 +83,17 @@ fn run(n: i64) {
     var sm = SOLAR_MASS
     var dpy = DAYS_PER_YEAR
 
-    var sun: Body = { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, mass: sm }
-    var jup: Body = { x: 4.84143144246472090e+00, y: -1.16032004402742839e+00, z: -1.03622044471123109e-01,
+    var sun: Body = Body{ x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, mass: sm }
+    var jup: Body = Body{ x: 4.84143144246472090e+00, y: -1.16032004402742839e+00, z: -1.03622044471123109e-01,
                       vx: 1.66007664274403694e-03 * dpy, vy: 7.69901118419740425e-03 * dpy, vz: -6.90460016972063023e-05 * dpy,
                       mass: 9.54791938424326609e-04 * sm }
-    var sat: Body = { x: 8.34336671824457987e+00, y: 4.12479856412430479e+00, z: -4.03523417114321381e-01,
+    var sat: Body = Body{ x: 8.34336671824457987e+00, y: 4.12479856412430479e+00, z: -4.03523417114321381e-01,
                       vx: -2.76742510726862411e-03 * dpy, vy: 4.99852801234917238e-03 * dpy, vz: 2.30417297573763929e-05 * dpy,
                       mass: 2.85885980666130812e-04 * sm }
-    var ura: Body = { x: 1.28943695621391310e+01, y: -1.51111514016986312e+01, z: -2.23307578892655734e-01,
+    var ura: Body = Body{ x: 1.28943695621391310e+01, y: -1.51111514016986312e+01, z: -2.23307578892655734e-01,
                       vx: 2.96460137564761618e-03 * dpy, vy: 2.37847173959480950e-03 * dpy, vz: -2.96589568540237556e-05 * dpy,
                       mass: 4.36624404335156298e-05 * sm }
-    var nep: Body = { x: 1.53796971148509165e+01, y: -2.59193146099879641e+01, z: 1.79258772950371181e-01,
+    var nep: Body = Body{ x: 1.53796971148509165e+01, y: -2.59193146099879641e+01, z: 1.79258772950371181e-01,
                       vx: 2.68067772490389322e-03 * dpy, vy: 1.62824170038242295e-03 * dpy, vz: -9.51592254519715870e-05 * dpy,
                       mass: 5.15138902046611451e-05 * sm }
 
@@ -98,7 +106,7 @@ fn run(n: i64) {
 
     print(energy(sun, jup, sat, ura, nep))
     for (var i = 0; i < n; i++) {
-        advance(sun, jup, sat, ura, nep, 0.01)
+        advance(ref sun, ref jup, ref sat, ref ura, ref nep, 0.01)
     }
     print(energy(sun, jup, sat, ura, nep))
 }

@@ -29,7 +29,7 @@ server.routeHandler("GET", "/plaintext", fn(req: HttpRequest) -> HttpResponse {
 
 // Dynamic JSON response
 server.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
-    return http.jsonResponse({ message: "Hello, World!" })
+    return http.jsonResponse({ "message": "Hello, World!" })
 })
 
 // Path params + string concatenation

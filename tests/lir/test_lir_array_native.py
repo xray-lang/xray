@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -85,7 +86,10 @@ def main():
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
-    expected = {'callable-nonentry-frame': 42, 'callable-loop-before-frame': 42,
+    expected = {'map-literal-explicit': 42, 'map-literal-spread': 42, 'map-literal-spread-wins': 42,
+                'map-literal-empty': 0,
+                'map-literal-duplicate': None, 'map-literal-unknown-duplicate': None,
+                'callable-nonentry-frame': 42, 'callable-loop-before-frame': 42,
                 'cell-i64-frame': 42, 'cell-i64-owned': 42, 'cell-map-frame': 42, 'cell-map-owned': 42,
                 'callable-weaken': 42, 'i64': 1202, 'string': 511, 'large': 1500, 'state-i64': 1202,
                 'state-string': 511, 'state-layout': 9, 'return-i64': 13, 'return-string': 7,
@@ -104,6 +108,11 @@ def main():
         run([args.driver, name, generated], work)
         text = generated.read_text(encoding='ascii')
         assert '({' not in text
+        if name.startswith('map-literal-'):
+            assert 'xrt_native_map_literal_create(' in text
+            assert 'static const XrtMapLiteral xrl_map_literal_2' in text
+            assert 'xrl_map_literal_1' not in text
+            assert not re.search(r'\b(?:XrtMap|XrtString)\b', text)
         if name == 'large':
             assert ', 300}, UINT32_C(' in text and '(int64_t[]){' in text
         client.write_text(adapter(name, generated), encoding='ascii')
@@ -126,6 +135,15 @@ def main():
         run(command, work)
         result = run([binary], work, 1 if answer is None else 0)
         if answer is None:
+            if name.startswith('map-literal-'):
+                sites = (b'entries at 3:12 and 5:16' if name == 'map-literal-unknown-duplicate' else
+                         'entries at map-\u00e9.xr:3:12 and map-\u00e9.xr:5:16'.encode())
+                assert not result.stdout and b'E0434' in result.stderr and sites in result.stderr, (
+                    name, result.stdout, result.stderr)
+                record['cases'][name] = {'stdout': result.stdout.decode(), 'exit': result.returncode,
+                                         'stderr': result.stderr.decode(),
+                                         'sourceSHA256': hashlib.sha256(generated.read_bytes()).hexdigest()}
+                continue
             position = (b'array-c.xr:3:1' if name.startswith('repeat-negative') else
                         b'array-c.xr:37:9' if name.endswith('read') else b'array-c.xr:41:7')
             assert not result.stdout and position in result.stderr, (name, result.stdout, result.stderr)

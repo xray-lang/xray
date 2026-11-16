@@ -1,0 +1,15 @@
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // 输出：95
+    print(len(scores))                 // 输出：3
+
+    var seen = Set<i64>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // 输出：2
+    print(seen.contains(1))   // 输出：true
+}
+
+main()

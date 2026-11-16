@@ -24,6 +24,7 @@ typedef struct ProvenanceMatch {
     XrXirDiagnostic *diagnostic;
     XrXirTypeMatchScratch scratch;
     const XrXirProvenance *instance;
+    XrCompileRequestControl *control;
 } ProvenanceMatch;
 #include "xxir_provenance_comptime.inc.c"
 
@@ -594,6 +595,56 @@ static XrXirStatus provenance_origin_insert(ProvenanceMatch *c,uint32_t *index,u
     return XR_XIR_BAD_STRUCTURE;
 }
 
+/* Signature/body correspondence and nominal catalogs are already independent
+ * priors. A metadata edge must still select the Source's actual witness pair
+ * with exactly the closed subject's substitutions before it can be reachable. */
+static XrXirStatus provenance_hashable_step(ProvenanceMatch *c,uint64_t *steps) {
+    if(!*steps)return XR_XIR_BUDGET;
+    --*steps;return xir_receive_poll(c->control);
+}
+static XrXirStatus provenance_hashable(ProvenanceMatch *c) {
+    const XrXirDeclarations *from=c->source->declarations,*to=c->destination->declarations;
+    if(!to || !to->hashable_witness_count)return XR_XIR_OK;
+    if(!from || !from->hashable_witnesses)return XR_XIR_BAD_STRUCTURE;
+    uint64_t steps=c->remaining->limits.instructions;
+    for(uint32_t i=0;i<to->hashable_witness_count;++i) {
+        XrXirStatus step=provenance_hashable_step(c,&steps);if(step!=XR_XIR_OK)return step;
+        const XrXirHashableWitness *row=&to->hashable_witnesses[i];
+        const XrXirTypeNode *node=xr_xir_type_node(c->destination->types,row->nominal_type);
+        if(!node || node->kind!=XR_XIR_TYPE_NOMINAL || node->parameter_span ||
+            row->equals_function>=c->count || row->hash_function>=c->count)return XR_XIR_BAD_STRUCTURE;
+        const XrXirOrigin *equals=&c->origins[row->equals_function],*hash=&c->origins[row->hash_function];
+        uint32_t lo=0,hi=from->hashable_witness_count;
+        while(lo<hi) {
+            step=provenance_hashable_step(c,&steps);if(step!=XR_XIR_OK)return step;
+            uint32_t mid=lo+(hi-lo)/2;
+            const XrXirTypeNode *n=xr_xir_type_node(c->source->types,from->hashable_witnesses[mid].nominal_type);
+            if(n->nominal.declaration<node->nominal.declaration)lo=mid+1;else hi=mid;
+        }
+        bool found=false;
+        for(;lo<from->hashable_witness_count;++lo) {
+            step=provenance_hashable_step(c,&steps);if(step!=XR_XIR_OK)return step;
+            const XrXirHashableWitness *raw=&from->hashable_witnesses[lo];
+            const XrXirTypeNode *n=xr_xir_type_node(c->source->types,raw->nominal_type);
+            if(n->nominal.declaration!=node->nominal.declaration)break;
+            if(raw->equals_function!=equals->function || raw->hash_function!=hash->function)continue;
+            uint32_t count=n->parameter_span?node->nominal.argument_count:0;
+            if(equals->argument_count!=count || hash->argument_count!=count)return XR_XIR_BAD_STRUCTURE;
+            for(uint32_t a=0;a<count;++a) {
+                step=provenance_hashable_step(c,&steps);if(step!=XR_XIR_OK)return step;
+                if(equals->arguments[a]!=node->nominal.arguments[a] || hash->arguments[a]!=node->nominal.arguments[a])
+                    return XR_XIR_BAD_STRUCTURE;
+            }
+            XirTypeMatchRead request={c->source->types,c->destination->types,equals->arguments,count,
+                raw->nominal_type,row->nominal_type,NULL};
+            XrXirStatus status=xir_type_match_read_controlled(c->remaining,&request,c->control,NULL,NULL);
+            if(status!=XR_XIR_OK)return status;
+            found=true;break;
+        }
+        if(!found)return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
     XrXirStatus allocation_status = XR_XIR_OK;
     uint64_t bytes = (uint64_t)c->count * (2*sizeof(uint32_t) + 1) + c->source->function_count;
@@ -629,6 +680,19 @@ static XrXirStatus provenance_reachable(ProvenanceMatch *c) {
         bool cleanup=c->source->declarations && c->source->declarations->functions[f].cleanup_owner;
         if (!cleanup && (!c->source->generics || !c->source->generics[f].parameter_count) && !roots[f]) {
             status = XR_XIR_BAD_STRUCTURE; goto done;
+        }
+    }
+    if(c->destination->declarations) {
+        const XrXirDeclarations *d=c->destination->declarations;
+        uint64_t steps=c->remaining->limits.instructions;
+        for(uint32_t i=0;i<d->hashable_witness_count;++i) {
+            status=provenance_hashable_step(c,&steps);if(status!=XR_XIR_OK)goto done;
+            uint32_t targets[2]={d->hashable_witnesses[i].equals_function,d->hashable_witnesses[i].hash_function};
+            for(uint32_t a=0;a<2;++a) {
+                uint32_t target=targets[a];
+                if(target>=c->count){status=XR_XIR_BAD_STRUCTURE;goto done;}
+                if(!seen[target]){seen[target]=1;queue[tail++]=target;}
+            }
         }
     }
     for (uint32_t head = 0; head < tail; ++head) {
@@ -678,6 +742,7 @@ static XrXirStatus provenance_match(ProvenanceMatch *match) {
     XrXirStatus status=provenance_nominals(match);
     if (status==XR_XIR_OK) status=provenance_functions_match(match);
     if (status==XR_XIR_OK) status=provenance_declarations(match);
+    if (status==XR_XIR_OK) status=provenance_hashable(match);
     if (status==XR_XIR_OK) status=provenance_lexical_match(match);
     if (status==XR_XIR_OK) status=provenance_reachable(match);
     if (status==XR_XIR_OK) status=provenance_evaluation_root(match);
@@ -686,7 +751,7 @@ static XrXirStatus provenance_match(ProvenanceMatch *match) {
 
 static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *compile_context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
-    XrXirDiagnostic *diagnostic) {
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -716,7 +781,7 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
         if (status==XR_XIR_OK && (instance->bindings || instance->binding_count)) status=XR_XIR_BAD_STRUCTURE;
         if (status == XR_XIR_OK) {
             ProvenanceMatch context = {source, destination, origins, destination->function_count, remaining, &location,
-                {remaining->resources, NULL}, instance};
+                {remaining->resources, NULL}, instance,control};
             status = provenance_match(&context);
             xr_xir_type_match_scratch_free(&context.scratch);
         }
@@ -729,7 +794,7 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
 XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance,
     XrXirDiagnostic *diagnostic) {
-    return provenance_functions_match_owned(context,source,destination,instance,diagnostic);
+    return provenance_functions_match_owned(context,source,destination,instance,diagnostic,NULL);
 }
 
 /* Raw verification creates and retires its fresh Source derivation.
@@ -754,7 +819,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
         templated ? xir_compile_verify_owned_effects_input(context,(XirEffectInput){&source->module,source->construction,control},&effects,diagnostic) :
         xir_compile_verify_effects_input(context,(XirEffectInput){&source->module,source->construction,control},NULL,diagnostic);
     if (status==XR_XIR_OK)
-        status=provenance_functions_match_owned(context,&source->module,destination,instance,diagnostic);
+        status=provenance_functions_match_owned(context,&source->module,destination,instance,diagnostic,control);
     xr_xir_compile_effects_free(effects);
     return status;
 }

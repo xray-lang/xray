@@ -1261,8 +1261,8 @@ TEST(enum_record_fields_share_one_semantic_identity) {
                           "}\n"
                           "var made = Result.Ok { code: 7, value: 42 }\n"
                           "var selected = match (made) {\n"
-                          "    Result.Ok { value, code: _ } -> value\n"
-                          "    Result.Err { value: message } -> 0\n"
+                          "    Result.Ok { value, code: _ } => value,\n"
+                          "    Result.Err { value: message } => 0,\n"
                           "}\n";
     XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);
@@ -1496,8 +1496,8 @@ TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order) {
                           "}\n"
                           "var made = Result.Ok { value: 1 }\n"
                           "var selected = match (made) {\n"
-                          "    Result.Ok { value } -> value\n"
-                          "    Result.Err { message } -> 0\n"
+                          "    Result.Ok { value } => value,\n"
+                          "    Result.Err { message } => 0,\n"
                           "}\n";
     XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
     ASSERT(doc != NULL);

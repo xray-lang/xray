@@ -11,8 +11,8 @@ fn answer() -> i64 {
  for (var index = 0; index < 2; index++) { score += 4 }
  while (score < 13) { score += 1 }
  for (var index = 0; ; index++) { break }
- var extra = match (score) { value if (value == 13) -> 29
- _ -> 0 }
+ var extra = match (score) { value if (value == 13) => 29,
+ _ => 0, }
  return score + selected + extra
 }
 export fn consumerAnswer() -> i64 { return answer() }

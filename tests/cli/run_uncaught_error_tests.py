@@ -94,8 +94,8 @@ fn fail() -> i64 {
 
 var task = go fail()
 match (task.awaitResult()) {
-    TaskResult.Failed { error: err } -> print("caught")
-    _ -> print("unexpected")
+    TaskResult.Failed { error: err } => print("caught"),
+    _ => print("unexpected"),
 }
 '''
 

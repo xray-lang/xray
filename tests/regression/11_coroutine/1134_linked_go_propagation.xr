@@ -17,8 +17,8 @@ fn test_linked_go_fail() {
     var t = linked go failing()
     var r = t.awaitResult()
     match (r) {
-        TaskResult.Failed { error: _ } -> assert(true, "failed linked go should report TaskResult.Failed")
-        _ -> assert(false, "failed linked go should not return null or success")
+        TaskResult.Failed { error: _ } => assert(true, "failed linked go should report TaskResult.Failed"),
+        _ => assert(false, "failed linked go should not return null or success"),
     }
 }
 fn test_linked_go_success() {

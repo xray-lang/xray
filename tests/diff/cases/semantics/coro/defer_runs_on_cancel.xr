@@ -14,12 +14,12 @@ fn body() -> i64 {
 
 var t = go body()
 match (started.recv()) {
-    Recv.Value { value: v } -> {}
-    _ -> {}
+    Recv.Value { value: v } => {},
+    _ => {},
 }
 t.cancel()
 match (t.awaitResult()) {
-    TaskResult.Cancelled -> print("cancelled")
-    _ -> print("other")
+    TaskResult.Cancelled => print("cancelled"),
+    _ => print("other"),
 }
 started.close()

@@ -1,5 +1,11 @@
-type Address = { city: string, zip: i64 }
-type Profile = { name: string, address: Address }
+struct Address {
+    city: string
+    zip: i64
+}
+struct Profile {
+    name: string
+    address: Address
+}
 
 fn main() -> JSON.Value {
     var data: JSON.Value = JSON.parseValue("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"zip\":310000}}")

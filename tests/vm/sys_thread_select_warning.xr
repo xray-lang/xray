@@ -7,10 +7,10 @@ fn closeOnlyInOneSelectCase() {
         return 42
     })
     select {
-        msg from ch -> {
+        msg from ch => {
             print(t.join())
         }
-        _ -> {
+        _ => {
             print("select-open")
         }
     }

@@ -4,8 +4,8 @@ import time
 
 fn sleeper(ch: Channel<i64>) -> i64 {
     var got = match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> 0
+        Recv.Value { value: v } => v,
+        _ => 0,
     }
     return got
 }
@@ -16,8 +16,8 @@ var t = go sleeper(ch)
 time.sleep(5)
 t.cancel()
 var res = match (t.awaitResult()) {
-    TaskResult.Cancelled -> "cancelled"
-    _ -> "other"
+    TaskResult.Cancelled => "cancelled",
+    _ => "other",
 }
 print(res)
 ch.close()

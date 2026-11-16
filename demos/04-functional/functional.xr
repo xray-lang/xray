@@ -53,7 +53,7 @@ print("sum of even squares: ${result}")
 
 // === Memoization pattern ===
 fn makeFibMemo() -> fn(i64) -> i64 {
-    var cache = #{"0": 0, "1": 1}
+    var cache = {"0": 0, "1": 1}
     var fib_inner = fn(n: i64) -> i64 {
         var key = string(n)
         var cached = cache.get(key)

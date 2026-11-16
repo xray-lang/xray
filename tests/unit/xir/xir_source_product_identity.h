@@ -251,7 +251,7 @@ static void product_layout_vector(void) {
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0}};
     const XrXirSourceModule source={"m",1,NULL,0,1};
     const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0},{0},{0}};
-    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL};
+    const XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=ids, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=2, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     size_t live=runtime_live,bytes=runtime_bytes;

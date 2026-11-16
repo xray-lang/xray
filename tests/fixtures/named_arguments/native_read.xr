@@ -1,0 +1,18 @@
+fn mark(value:i64)->i64 { print(value); return value }
+fn scenario() {
+    var xs=[0,1,2,3]
+    xs.fill(end:mark(3),value:mark(9))
+    print(xs[0]);print(xs[2]);print(xs[3])
+    xs.fill(start:1,value:8)
+    print(xs[0]);print(xs[3])
+    xs.fill(end:2,start:1,value:7)
+    print(xs[0]);print(xs[1]);print(xs[2])
+    xs.set(value:mark(6),index:mark(0))
+    print(xs.get(index:0))
+    xs.resize(fill:mark(4),length:mark(6))
+    print(len(xs));print(xs[5])
+    xs.push(value:5)
+    print(xs.get(index:6))
+    print(xs.join(separator:":"))
+}
+scenario()

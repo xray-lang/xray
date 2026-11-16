@@ -13,6 +13,7 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     uint32_t factory=ctx->next_closure++,outer=ctx->function;bool returned=ctx->returned;
     SourceFunction *original=&ctx->bodies[producer],*body=&ctx->bodies[factory];
     body->node=node;body->module=original->module;body->type_owner=original->type_owner;
+    body->call_declaration=original->declaration;
     body->generic_owner=original->generic_owner;body->type_parameters=original->type_parameters;
     body->type_parameter_count=original->type_parameter_count;body->parameters=original->parameters;
     /* The shared capture parameters retain their inference classification. */

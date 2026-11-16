@@ -1,0 +1,13 @@
+interface Drawable { draw() -> () }
+
+class Square implements Drawable {        // 必须显式 implements
+    draw() { print("square") }
+}
+
+class Wrong {
+    draw() { print("wrong") }
+}
+
+fn render(d: Drawable) { d.draw() }
+render(Square())     // OK
+// render(Wrong())   // 编译错误：Wrong 不是 Drawable

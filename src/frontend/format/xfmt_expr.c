@@ -142,8 +142,12 @@ static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAccess *accesses,
-                              int index) {
+                              XrCallArgLabel *labels, int index) {
     if (!xfmt_healthy(ctx)) return;
+    if (labels && labels[index].name) {
+        xfmt_write_str(ctx, labels[index].name);
+        xfmt_write_str(ctx, ": ");
+    }
     XrCallArgAccess access = accesses ? accesses[index] : XR_CALL_ARG_PLAIN;
     if (access == XR_CALL_ARG_REF) {
         xfmt_write_str(ctx, "ref ");
@@ -158,7 +162,7 @@ static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAcc
  * CallExpr it is printing. */
 static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_args,
                           int type_arg_count, AstNode **arguments, XrCallArgAccess *arg_accesses,
-                          int arg_count) {
+                          XrCallArgLabel *arg_labels, int arg_count) {
     if (!xfmt_healthy(ctx)) return;
     bool saved_force_fn_expr = ctx->force_fn_expr;
     xfmt_emit_expression(ctx, callee);
@@ -177,7 +181,7 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
     for (int i = 0; xfmt_healthy(ctx) && (i < arg_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        fmt_call_argument(ctx, arguments[i], arg_accesses, i);
+        fmt_call_argument(ctx, arguments[i], arg_accesses, arg_labels, i);
     }
     xfmt_write_char(ctx, ')');
 
@@ -197,7 +201,7 @@ static void fmt_call_like(XrFmtContext *ctx, AstNode *callee, XrTypeRef **type_a
     ctx->indent_level++;
     for (int i = 0; xfmt_healthy(ctx) && (i < arg_count); i++) {
         xfmt_write_indent(ctx);
-        fmt_call_argument(ctx, arguments[i], arg_accesses, i);
+        fmt_call_argument(ctx, arguments[i], arg_accesses, arg_labels, i);
         if (ctx->config->multiline_trailing_comma || i < arg_count - 1)
             xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
@@ -212,7 +216,7 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     if (!xfmt_healthy(ctx)) return;
     CallExprNode *call = &node->as.call_expr;
     fmt_call_like(ctx, call->callee, call->type_args, call->type_arg_count, call->arguments,
-                  call->arg_accesses, call->arg_count);
+                  call->arg_accesses, call->arg_labels, call->arg_count);
 }
 
 static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
@@ -238,7 +242,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; xfmt_healthy(ctx) && (i < new_expr->arg_count); i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
+        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, new_expr->arg_labels, i);
     }
     xfmt_write_char(ctx, ')');
 
@@ -251,7 +255,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level++;
     for (int i = 0; xfmt_healthy(ctx) && (i < new_expr->arg_count); i++) {
         xfmt_write_indent(ctx);
-        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
+        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, new_expr->arg_labels, i);
         if (ctx->config->multiline_trailing_comma || i < new_expr->arg_count - 1)
             xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
@@ -341,7 +345,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     }
 
     // Pass 2: real emission. Pad each arm's head to max_width before
-    // writing " -> body".
+    // writing " => body".
     for (int i = 0; xfmt_healthy(ctx) && (i < arm_count); i++) {
         MatchArmNode *ma = &arms[i]->as.match_arm;
 
@@ -352,13 +356,14 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
             for (int j = 0; xfmt_healthy(ctx) && (j < pad); j++)
                 xfmt_write_char(ctx, ' ');
         }
-        xfmt_write_str(ctx, " -> ");
+        xfmt_write_str(ctx, " => ");
 
         if (ma->body->type == AST_BLOCK) {
             xfmt_emit_block(ctx, ma->body);
         } else {
             xfmt_emit_expression(ctx, ma->body);
         }
+        xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
     }
 
@@ -481,7 +486,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; xfmt_healthy(ctx) && (i < sc->arg_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
+                fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, sc->arg_labels, i);
             }
             xfmt_write_char(ctx, ')');
             if (sc_wrap && !xfmt_fits_on_line(ctx, &sc_snap)) {
@@ -491,7 +496,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; xfmt_healthy(ctx) && (i < sc->arg_count); i++) {
                     xfmt_write_indent(ctx);
-                    fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
+                    fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, sc->arg_labels, i);
                     if (ctx->config->multiline_trailing_comma || i < sc->arg_count - 1)
                         xfmt_write_char(ctx, ',');
                     xfmt_write_newline(ctx);
@@ -585,80 +590,41 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
-        // Object literal
-        case AST_OBJECT_LITERAL: {
-            xfmt_write_indent(ctx);
-            ObjectLiteralNode *obj = &node->as.object_literal;
-            if (obj->count == 0) {
-                xfmt_write_str(ctx, "{}");
-                break;
-            }
-            bool obj_wrap = ctx->config && ctx->config->wrap_long_lines;
-            XfmtSnapshot obj_snap;
-            if (obj_wrap)
-                xfmt_snapshot(ctx, &obj_snap);
-            xfmt_write_str(ctx, "{ ");
-            for (int i = 0; xfmt_healthy(ctx) && (i < obj->count); i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, obj->keys[i]);
-                xfmt_write_str(ctx, ": ");
-                xfmt_emit_expression(ctx, obj->values[i]);
-            }
-            xfmt_write_str(ctx, " }");
-            if (obj_wrap && !xfmt_fits_on_line(ctx, &obj_snap)) {
-                xfmt_rollback(ctx, &obj_snap);
-                xfmt_write_char(ctx, '{');
-                xfmt_write_newline(ctx);
-                ctx->indent_level++;
-                for (int i = 0; xfmt_healthy(ctx) && (i < obj->count); i++) {
-                    xfmt_write_indent(ctx);
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                    xfmt_write_str(ctx, ": ");
-                    xfmt_emit_expression(ctx, obj->values[i]);
-                    if (ctx->config->multiline_trailing_comma || i < obj->count - 1)
-                        xfmt_write_char(ctx, ',');
-                    xfmt_write_newline(ctx);
-                }
-                ctx->indent_level--;
-                xfmt_write_indent(ctx);
-                xfmt_write_char(ctx, '}');
-            }
-            break;
-        }
-
-        // Map literal — always emit with `#{ ... }` prefix and `: ` separator
-        // so Json and Map are visually consistent while remaining
-        // unambiguous through the leading `#` (task 082).
         case AST_MAP_LITERAL: {
             xfmt_write_indent(ctx);
             MapLiteralNode *map = &node->as.map_literal;
             if (map->count == 0) {
-                xfmt_write_str(ctx, "#{}");
+                xfmt_write_str(ctx, "{}");
                 break;
             }
             bool map_wrap = ctx->config && ctx->config->wrap_long_lines;
             XfmtSnapshot map_snap;
             if (map_wrap)
                 xfmt_snapshot(ctx, &map_snap);
-            xfmt_write_str(ctx, "#{ ");
+            xfmt_write_str(ctx, "{ ");
             for (int i = 0; xfmt_healthy(ctx) && (i < map->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, map->keys[i]);
-                xfmt_write_str(ctx, ": ");
+                if (map->keys[i]) {
+                    if (map->keys[i]) {
+                        xfmt_emit_expression(ctx, map->keys[i]);
+                        xfmt_write_str(ctx, ": ");
+                    }
+                }
                 xfmt_emit_expression(ctx, map->values[i]);
             }
             xfmt_write_str(ctx, " }");
             if (map_wrap && !xfmt_fits_on_line(ctx, &map_snap)) {
                 xfmt_rollback(ctx, &map_snap);
-                xfmt_write_str(ctx, "#{");
+                xfmt_write_str(ctx, "{");
                 xfmt_write_newline(ctx);
                 ctx->indent_level++;
                 for (int i = 0; xfmt_healthy(ctx) && (i < map->count); i++) {
                     xfmt_write_indent(ctx);
-                    xfmt_emit_expression(ctx, map->keys[i]);
-                    xfmt_write_str(ctx, ": ");
+                    if (map->keys[i]) {
+                        xfmt_emit_expression(ctx, map->keys[i]);
+                        xfmt_write_str(ctx, ": ");
+                    }
                     xfmt_emit_expression(ctx, map->values[i]);
                     if (ctx->config->multiline_trailing_comma || i < map->count - 1)
                         xfmt_write_char(ctx, ',');
@@ -667,40 +633,6 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level--;
                 xfmt_write_indent(ctx);
                 xfmt_write_char(ctx, '}');
-            }
-            break;
-        }
-
-        // Set literal
-        case AST_SET_LITERAL: {
-            xfmt_write_indent(ctx);
-            SetLiteralNode *set = &node->as.set_literal;
-            bool set_wrap = ctx->config && ctx->config->wrap_long_lines && set->count > 0;
-            XfmtSnapshot set_snap;
-            if (set_wrap)
-                xfmt_snapshot(ctx, &set_snap);
-            xfmt_write_str(ctx, "#[");
-            for (int i = 0; xfmt_healthy(ctx) && (i < set->count); i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, set->elements[i]);
-            }
-            xfmt_write_char(ctx, ']');
-            if (set_wrap && !xfmt_fits_on_line(ctx, &set_snap)) {
-                xfmt_rollback(ctx, &set_snap);
-                xfmt_write_str(ctx, "#[");
-                xfmt_write_newline(ctx);
-                ctx->indent_level++;
-                for (int i = 0; xfmt_healthy(ctx) && (i < set->count); i++) {
-                    xfmt_write_indent(ctx);
-                    xfmt_emit_expression(ctx, set->elements[i]);
-                    if (ctx->config->multiline_trailing_comma || i < set->count - 1)
-                        xfmt_write_char(ctx, ',');
-                    xfmt_write_newline(ctx);
-                }
-                ctx->indent_level--;
-                xfmt_write_indent(ctx);
-                xfmt_write_char(ctx, ']');
             }
             break;
         }
@@ -908,7 +840,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_space(ctx);
                 xfmt_emit_block(ctx, fn->body);
             } else {
-                /* Arrow form: emit params then -> body. */
+                /* Arrow form: emit params then => body. */
                 bool bare = fn->param_count == 1 && !has_param_metadata;
                 if (bare) {
                     xfmt_write_str(ctx, fn->params[0]->name);
@@ -921,9 +853,12 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     }
                     xfmt_write_char(ctx, ')');
                 }
-                xfmt_write_str(ctx, " -> ");
+                xfmt_write_str(ctx, " => ");
                 if (is_expr_body) {
+                    bool literal = arrow_expr->type == AST_MAP_LITERAL;
+                    if (literal) xfmt_write_char(ctx, '(');
                     xfmt_emit_expression(ctx, arrow_expr);
+                    if (literal) xfmt_write_char(ctx, ')');
                 } else {
                     xfmt_emit_block(ctx, fn->body);
                 }
@@ -1117,29 +1052,6 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
-        // Object destructure pattern: `{ x, y }` or `{ x: sub }`
-        case AST_PATTERN_OBJECT: {
-            PatternObjectNode *po = &node->as.pattern_object;
-            xfmt_write_str(ctx, "{ ");
-            for (int i = 0; xfmt_healthy(ctx) && (i < po->count); i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                AstNode *sub = po->patterns[i];
-                bool shorthand =
-                    sub && sub->type == AST_PATTERN_LITERAL && sub->as.pattern_literal.value &&
-                    sub->as.pattern_literal.value->type == AST_VARIABLE && po->field_names[i] &&
-                    xfmt_compare(ctx, sub->as.pattern_literal.value->as.variable.name, po->field_names[i]) ==
-                        0;
-                xfmt_write_str(ctx, po->field_names[i]);
-                if (!shorthand) {
-                    xfmt_write_str(ctx, ": ");
-                    xfmt_emit_expression(ctx, sub);
-                }
-            }
-            xfmt_write_str(ctx, " }");
-            break;
-        }
-
         // Array destructure pattern: `[a, b, ..rest]`
         case AST_PATTERN_ARRAY: {
             PatternArrayNode *pa = &node->as.pattern_array;
@@ -1208,8 +1120,12 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; xfmt_healthy(ctx) && (i < sl->field_count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, sl->field_names[i]);
-                xfmt_write_str(ctx, ": ");
+                if (sl->field_names[i]) {
+                    if (sl->field_names[i]) {
+                        xfmt_write_str(ctx, sl->field_names[i]);
+                        xfmt_write_str(ctx, ": ");
+                    }
+                }
                 xfmt_emit_expression(ctx, sl->field_values[i]);
             }
             xfmt_write_char(ctx, '}');
@@ -1220,8 +1136,10 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; xfmt_healthy(ctx) && (i < sl->field_count); i++) {
                     xfmt_write_indent(ctx);
-                    xfmt_write_str(ctx, sl->field_names[i]);
-                    xfmt_write_str(ctx, ": ");
+                    if (sl->field_names[i]) {
+                        xfmt_write_str(ctx, sl->field_names[i]);
+                        xfmt_write_str(ctx, ": ");
+                    }
                     xfmt_emit_expression(ctx, sl->field_values[i]);
                     if (ctx->config->multiline_trailing_comma || i < sl->field_count - 1)
                         xfmt_write_char(ctx, ',');

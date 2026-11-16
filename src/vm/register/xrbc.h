@@ -300,6 +300,7 @@ typedef struct XrRbcCodeLease {
 
 struct XrRbcValueCode;
 struct XrRbcCallableEntry;
+struct XrtMapLiteral;
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
@@ -337,6 +338,9 @@ typedef struct {
     const struct XrtValueImage *borrowed_value_image;
     const struct XrRbcCallableEntry *borrowed_callable_entries;
     const uint32_t *borrowed_type_callables;
+    /* Immutable provenance shares the authentic code owner's lifetime. */
+    const struct XrtMapLiteral *map_literals;
+    size_t map_literal_count;
 } XrRbcModule;
 
 typedef enum {
@@ -347,7 +351,8 @@ typedef enum {
     XR_RBC_NULL_UNWRAP,
     XR_RBC_OUTPUT_FAILURE,
     XR_RBC_HOST_CLOCK_FAILURE,
-    XR_RBC_VALUE_FAILURE
+    XR_RBC_VALUE_FAILURE,
+    XR_RBC_MESSAGE_PANIC
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -421,6 +426,8 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *, uint32_t *code,
+    const char **bytes, size_t *length, uint32_t *source, const XrtLocationOwner **);
 XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,

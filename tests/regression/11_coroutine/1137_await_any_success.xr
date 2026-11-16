@@ -36,8 +36,8 @@ fn test_await_any_success() {
     var t5 = go success()
     var failed = t4.awaitResult()
     assert(match (failed) {
-        TaskResult.Failed { error: _ } -> true
-        _ -> false
+        TaskResult.Failed { error: _ } => true,
+        _ => false,
     })
     await t5
     var r3 = await anySuccess [t4, t5]

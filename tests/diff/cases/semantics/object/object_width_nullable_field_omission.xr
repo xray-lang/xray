@@ -1,10 +1,13 @@
 // anchor: object-width-nullable-omission
 // A nullable Object field may be omitted; every other field must match exactly.
-type Opt = { name: string, age: i64? }
+struct Opt {
+    name: string
+    age: i64?
+}
 
 fn main() {
-    var full: Opt = { name: "Ann", age: 30 }
-    var partial: Opt = { name: "Bo" }
+    var full: Opt = Opt{ name: "Ann", age: 30 }
+    var partial: Opt = Opt{ name: "Bo" }
     print(full.name)
     print(full.age!)
     print(partial.name)

@@ -24,22 +24,22 @@ server.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
 // JSON response
 server.routeHandler("GET", "/api/hello", fn(req: HttpRequest) -> HttpResponse {
     return http.jsonResponse({
-        message: "Hello from Xray!",
-        method: string(req.method),
-        path: req.path
+        "message": "Hello from Xray!",
+        "method": string(req.method),
+        "path": req.path
     })
 })
 
 // Echo back request body
 server.routeHandler("POST", "/api/echo", fn(req: HttpRequest) -> HttpResponse {
     var body = req.text()
-    return http.jsonResponse({ echo: body, length: len(body) })
+    return http.jsonResponse({ "echo": body, "length": len(body) })
 })
 
 // Dynamic path (query params)
 server.routeHandler("GET", "/api/greet", fn(req: HttpRequest) -> HttpResponse {
     var name = req.query.get("name") ?? "World"
-    return http.jsonResponse({ greeting: "Hello, ${name}!" })
+    return http.jsonResponse({ "greeting": "Hello, ${name}!" })
 })
 
 // 302 redirect with Location header

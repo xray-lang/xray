@@ -1,6 +1,6 @@
 enum DataChoice { Number { value:i64 }, Text { text:string }, Empty }
 fn choiceScore(value:DataChoice)->i64 {
-    return match(value){DataChoice.Number{value}->value,DataChoice.Text{text}->len(text),DataChoice.Empty->-7}
+    return match(value){DataChoice.Number{value}=>value,DataChoice.Text{text}=>len(text),DataChoice.Empty=>-7,}
 }
 fn inspect()->i64 {
     var pair:(i64,string)=(11,"old")

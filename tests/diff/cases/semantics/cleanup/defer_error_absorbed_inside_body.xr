@@ -21,7 +21,7 @@ try {
     f()
 } catch (e) {
     match (e) {
-        BodyErr.Boom -> { print("body-error-survives-cleanup") }
+        BodyErr.Boom => { print("body-error-survives-cleanup") },
     }
 }
 print("done")

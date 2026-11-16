@@ -7,8 +7,8 @@ fn passProcess(p: Process) -> Process {
 
 fn chooseProcess(p: Process, tag: i64) -> Process {
     return match (tag) {
-        0 -> passProcess(p),
-        _ -> passProcess(p)
+        0 => passProcess(p),
+        _ => passProcess(p),
     }
 }
 
@@ -18,8 +18,8 @@ fn passPipe(p: Pipe) -> Pipe {
 
 fn choosePipe(p: Pipe, tag: i64) -> Pipe {
     return match (tag) {
-        0 -> passPipe(p),
-        _ -> passPipe(p)
+        0 => passPipe(p),
+        _ => passPipe(p),
     }
 }
 

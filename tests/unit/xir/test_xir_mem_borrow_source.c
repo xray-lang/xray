@@ -60,7 +60,7 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
             rows[2]=rows[1];rows[1]=rows[0];rows[0].function=0;table.count=3;
         }
         specification.borrow_returns=&table;XrXirConstruction *received=NULL;
-        XrXirStatus status=xr_xir_compile_construction_new_v5(context,module->types,&specification,
+        XrXirStatus status=xr_xir_compile_construction_new_v6(context,module->types,&specification,
             xr_xir_compile_construction_slots(construction),&received,NULL);
         if (status==XR_XIR_OK) {
             XrXirArtifact *output=NULL;
@@ -71,11 +71,11 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
     XrXirConstructionSpec specification=*base;specification.borrow_returns=original;
     Cancel state={0,UINT32_MAX};XrCompileRequestControl control=request_control(&state);
     XrXirConstruction *received=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&specification,
+    CHECK(xr_xir_compile_construction_new_v6(context,module->types,&specification,
         xr_xir_compile_construction_slots(construction),&received,&control)==XR_XIR_OK && received);
     xr_xir_compile_construction_free(received);CHECK(state.polls>2 && held(context->resources)==baseline);
     state=(Cancel){0,state.polls/2};control=request_control(&state);received=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&specification,
+    CHECK(xr_xir_compile_construction_new_v6(context,module->types,&specification,
         xr_xir_compile_construction_slots(construction),&received,&control)==XR_XIR_CANCELLED && !received);
     CHECK(held(context->resources)==baseline);
     state=(Cancel){0,UINT32_MAX};control=request_control(&state);
@@ -185,7 +185,7 @@ int main(int argc,char **argv) {
     XrXirConstructionSpec specification={rows,count,materializations,bindings,
         xr_xir_compile_construction_comptime(construction),NULL};
     XrXirConstruction *missing=NULL;
-    CHECK(xr_xir_compile_construction_new_v5(&context,module->types,&specification,
+    CHECK(xr_xir_compile_construction_new_v6(&context,module->types,&specification,
         xr_xir_compile_construction_slots(construction),&missing,NULL)==XR_XIR_OK);
     XrXirArtifact *rejected=NULL;
     CHECK(xr_xir_compile_recheck_v2(&context,module,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);

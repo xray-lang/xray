@@ -1,0 +1,9 @@
+fn main() {
+    var values = Set([1, 2, 2])
+    const mutate = fn() -> i64 {
+        values.add(3)
+        return len(values)
+    }
+    print(mutate())
+}
+main()

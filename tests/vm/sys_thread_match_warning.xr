@@ -5,12 +5,12 @@ fn closeOnlyInOneMatchArm(tag: i64) {
         return 42
     })
     match (tag) {
-        0 -> {
+        0 => {
             print(t.join())
-        }
-        _ -> {
+        },
+        _ => {
             print("match-open")
-        }
+        },
     }
     print("after-match")
 }

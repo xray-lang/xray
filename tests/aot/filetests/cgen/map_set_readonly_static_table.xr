@@ -1,5 +1,5 @@
-const SCORES: Map<string, i64> = #{"ada": 7, "lin": 9}
-const SEEN: Set<string> = #["ada", "lin"]
+const SCORES: Map<string, i64> = {"ada": 7, "lin": 9}
+const SEEN: Set<string> = Set(["ada", "lin"])
 
 print(SCORES["ada"])
 print(SEEN.contains("lin"))

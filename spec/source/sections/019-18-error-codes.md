@@ -53,6 +53,9 @@ order: 019
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Map 字面量中静态可确定的两个显式键重复 |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | 无上下文的集合字面量无法取得同一元素、键或值类型 |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | 命名实参绑定错误：未知、重复、顺序、rest 或间接调用 |
 
 #### 错误签名诊断（编号已登记，实现待接通）
 
@@ -149,6 +152,7 @@ order: 019
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Map 字面量构造时发现两个显式键重复；消息含两处源位置 |
 
 #### 系统、调用、coroutine 与 stdlib
 
@@ -257,6 +261,9 @@ Ordinary entries follow the header; the error-signature numbers below are regist
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Two statically determined explicit Map literal keys are equivalent |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | A context-free collection literal has incompatible element, key or value types |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | Invalid named argument binding: unknown, duplicate, order, rest or indirect call |
 
 #### Error-signature diagnostics (registered numbers, implementation pending)
 
@@ -353,6 +360,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Duplicate explicit Map literal keys during construction; message includes both source locations |
 
 #### System, Calls, Coroutines, and Stdlib
 

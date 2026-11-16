@@ -1,4 +1,12 @@
-type Profile = { name: string, age: i64?, nested: { id: i64 }? }
+struct NestedId {
+    id: i64
+}
+
+struct Profile {
+    name: string
+    age: i64?
+    nested: NestedId?
+}
 
 var parts = JSON.parseWithRest<Profile>(
     "{\"name\":\"ada\",\"extra\":7,\"nested\":{\"id\":1,\"ignored\":true}}",

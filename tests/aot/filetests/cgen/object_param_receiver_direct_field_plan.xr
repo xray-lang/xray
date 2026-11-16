@@ -1,11 +1,14 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn objectParamReceiverPlan(user: User) -> i64 {
     return user.age
 }
 
 fn mainValue() -> i64 {
-    var user: User = { name: "ada", age: 7 }
+    var user: User = User{ name: "ada", age: 7 }
     return objectParamReceiverPlan(user)
 }
 

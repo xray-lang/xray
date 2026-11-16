@@ -27,8 +27,8 @@ export enum Envelope {
 }
 export fn cold(node: Envelope) -> i64 {
     return match (node) {
-        Envelope.Some { payload } -> payload.value,
-        _ -> 0
+        Envelope.Some { payload } => payload.value,
+        _ => 0,
     }
 }''',
     }, case_timeouts={"cold_io_dependency": 180}))

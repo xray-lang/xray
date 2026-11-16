@@ -1292,12 +1292,12 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -1488,6 +1488,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
 
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
+    XrParsedCallLabels labels = {0};
     int arg_count = 0;
     int arg_capacity = 0;
     int access_count = 0;
@@ -1496,7 +1497,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            AstNode *arg = xr_parse_labeled_call_argument(parser, &access, &labels, arg_count);
             if (!xr_parser_healthy(parser)) return NULL;
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
@@ -1519,7 +1520,8 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     // so release our copy of module_name here.
     AstNode *node = xr_ast_new_expr(parser->compiler_session, module_name, class_name, arguments,
                                     arg_accesses, arg_count, type_args, type_arg_count, line);
-    if (!xr_parser_healthy(parser)) return NULL;
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->as.new_expr.arg_labels = labels.labels;
     return node;
 }
 
@@ -1588,6 +1590,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     // Parse arguments
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
+    XrParsedCallLabels labels = {0};
     int arg_count = 0;
     int arg_capacity = 0;
     int access_count = 0;
@@ -1596,7 +1599,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            AstNode *arg = xr_parse_labeled_call_argument(parser, &access, &labels, arg_count);
             if (!xr_parser_healthy(parser)) return NULL;
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
@@ -1615,8 +1618,11 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     } while (0);
 
     // Create super call node
-    return xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_accesses,
-                             arg_count, line);
+    AstNode *node = xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_accesses,
+                                      arg_count, line);
+    if (!xr_parser_healthy(parser) || !node) return NULL;
+    node->as.super_call.arg_labels = labels.labels;
+    return node;
 }
 
 /* ========== Operator Method Parsing ========== */
@@ -2014,12 +2020,12 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2286,7 +2292,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         XrThrowsClause throws_clause = {0};
         if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
         do {
-            xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
+            if (!xr_parser_match_arrow(parser, false))
+                xr_parser_error_at_current(parser, "expected '->' after 'operator len()'");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         XrTypeRef *return_type = xr_parse_type_annotation(parser);
@@ -2405,12 +2412,12 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     XrThrowsClause throws_clause = {0};
     if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
 
-    // Parse return type (optional) — unified arrow `->`.
+    // Parse return type (optional) — type arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
     AstBorrowOriginRef *borrow_origins = NULL;
     int borrow_origin_count = 0;
-    if (xr_parser_match(parser, TK_ARROW)) {
+    if (xr_parser_match_arrow(parser, false)) {
         do {
             return_type = xr_parse_type_annotation(parser);
             if (!xr_parser_healthy(parser)) return NULL;

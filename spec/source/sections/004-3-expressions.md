@@ -8,11 +8,11 @@ order: 004
 
 ## 3. 表达式 (Expressions)
 
-> 真值源：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
+> 实现参考：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
 
 ### 3.0 求值顺序
 
-> 真值源：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
+> 实现参考：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
 
 xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）或未定义（undefined）的求值顺序，VM 与 AOT 后端必须产生完全相同的副作用序列。
 
@@ -46,6 +46,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 
 **E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
+<!-- xr-source:example eval-order-rules -->
 ```xray @id=eval-order-rules
 fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -67,6 +68,7 @@ arr[t("index", 0)] = t("value", 5)                     // index, value
 // E6：复杂 receiver 只求值一次
 mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```
+<!-- /xr-source -->
 
 ### 3.1 优先级与结合性
 
@@ -96,15 +98,18 @@ mk("receiver").hits += t("delta", 1)                   // receiver, delta
 
 ### 3.2 一元表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-01 -->
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'move' UnaryExpr
-            | 'await' UnaryExpr
-            | 'go' GoOptions? CallExpr
-            | 'unsafe' Block
-            | 'comptime' (Expression | Block)
-            | PostfixExpr
+           |  TryExpr
+           |  'copy' UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
 ```
+<!-- /xr-source -->
 
 | 运算符 | 适用类型 | 结果类型 | 备注 |
 |--|--|--|--|
@@ -118,6 +123,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 `unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `extern "C"` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
+<!-- xr-source:example 004-3-expressions-example-002 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -131,6 +137,7 @@ unsafe {
     free(p)                       // extern 调用必须在 unsafe 内
 }
 ```
+<!-- /xr-source -->
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
@@ -142,22 +149,27 @@ unsafe {
 
 可导出结果是准入的标量、String、Unit、Tuple、Nullable、Array及关闭的struct/enum数据；有限递归nominal数据遵守§17.68。内部Class/Function/Cell等可以按其专属规则参与计算，但其身份或外部资源句柄不能成为常量结果。私有字段的常量重放使用§17.67的真实声明绑定，不给使用方私有构造权。类型描述与派生服务不由此成为任意CTFE值或字段权限。
 
+<!-- xr-source:example 004-3-expressions-example-003 -->
 ```xray
 fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
+<!-- /xr-source -->
 
 块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域中的comptime不捕获外围运行期值。外围类型参数保留原lexical含义；依赖它们的Program表达式先进入普通泛型检查，经实际特化和唯一Lowered CTFE逐关闭实例执行，再以完整规范键接回私有literal provider（17.78）。自身完全关闭的thunk仍按17.71执行。Library未来泛型实例仍待完整重定位，不能以一个站点单一Value或运行期fallback代替实际结果。
 
+<!-- xr-source:example 004-3-expressions-example-004 -->
 ```xray
 fn noop() {}
 export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+<!-- /xr-source -->
 
 步骤、整个调用栈的深度/frame、临时堆、逻辑输出和类型/字段遍历都向原编译作业收费，返回与失败不重置累计费用。无限循环、深递归或巨大输出会确定性地拒绝并保全空结果，墙钟watchdog另记环境失败。准入、target/profile、完整预算、输出policy2、失败清理及独立重放细则见§17的CTFE执行条款。
 
 ### 3.3 二元表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-02 -->
 ```ebnf
 BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
@@ -167,6 +179,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&&' | '||'
        | '??'
 ```
+<!-- /xr-source -->
 
 #### 3.3.1 算术运算符
 
@@ -220,9 +233,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.5 空值合并 `??`
 
+<!-- xr-source:example expr-null-coalesce -->
 ```xray @id=expr-null-coalesce
 var v = nullable_expr ?? default_value
 ```
+<!-- /xr-source -->
 
 - 当 `nullable_expr` 为 `null` 时返回 `default_value`，否则返回 `nullable_expr` 本身。
 - **短路**：`default_value` 只在前者为 null 时求值。
@@ -231,9 +246,9 @@ var v = nullable_expr ?? default_value
 
 ### 3.4 赋值与复合赋值
 
+<!-- xr-source:grammar 004-3-expressions-grammar-03 -->
 ```ebnf
-AssignExpr   ::= AssignLValue '=' Expression
-               | CompoundLValue CompoundOp Expression
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
 TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
 TupleAssignTarget ::= Identifier | '_'
@@ -241,6 +256,7 @@ CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。Array 赋值保存逻辑副本；目标与表达式结果各自保有值责任，不能让结果借用一个随后可被覆盖的元素槽。实现可复用已持有的右侧结果，所有可能失败的持有工作必须先于存储提交，提交后再释放被替换的旧值。失败不回滚此前完成的右侧副作用。
@@ -257,13 +273,17 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 ### 3.5 三元 `? :`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-04 -->
 ```ebnf
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-006 -->
 ```xray
 var max = a > b ? a : b
 ```
+<!-- /xr-source -->
 
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
 - 条件必须是 `bool`。条件恰好求值一次，只执行被选择的分支；两个分支都参与静态检查，包括常量条件未选中的分支。
@@ -276,16 +296,20 @@ var max = a > b ? a : b
 
 #### 可选链 `?.` / `?[`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-05 -->
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expression ']')+
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-optional-chain -->
 ```xray @id=expr-optional-chain
 var city = user?.address        // 可选属性访问
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
 var road = user?.address.street // 整链短路：user 为 null 时结果为 null
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 若 `?.` 或 `?[` 左侧为 `null`，**整条后缀链**短路返回 `null`，链上后续的 `.` / `[` / `(` 一律不求值。
@@ -302,9 +326,11 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 
 #### 强制解包 `expr!`
 
+<!-- xr-source:example 004-3-expressions-example-008 -->
 ```xray
 var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 ```
+<!-- /xr-source -->
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
 
@@ -312,16 +338,20 @@ var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 
 #### `is` 运行时类型检查
 
+<!-- xr-source:grammar 004-3-expressions-grammar-06 -->
 ```ebnf
 IsExpr ::= UnaryExpr 'is' Type
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-009 -->
 ```xray
 if (v is User) {
     // 此分支内 v 窄化为 User
     print(v.name)
 }
 ```
+<!-- /xr-source -->
 
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
@@ -330,15 +360,19 @@ if (v is User) {
 
 #### `as` 类型转换
 
+<!-- xr-source:grammar 004-3-expressions-grammar-07 -->
 ```ebnf
 AsExpr ::= UnaryExpr 'as' Type
         |  UnaryExpr 'as' Type '?'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-010 -->
 ```xray
 var n = v as i64           // 失败抛 TypeError
 var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 ```
+<!-- /xr-source -->
 
 | 形式 | 失败行为 | 用途 |
 |--|--|--|
@@ -355,10 +389,13 @@ var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 
 #### 范围 `a..b` / `a..=b`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-08 -->
 ```ebnf
-RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-range -->
 ```xray @id=expr-range
 var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）
 var closed = 0..=10    // 闭区间（包含 0 和 10）
@@ -368,6 +405,7 @@ for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
+<!-- /xr-source -->
 
 - 类型 `Range`（仅 i64 范围）。
 - **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
@@ -389,116 +427,123 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 - tuple 展开在其书写位置单次求值，按源 tuple 的静态字段顺序接入结果；普通元素和每个展开字段仍按其结果位置执行既有上下文类型检查与转换。嵌套的 tuple 字面量展开可以消费外层对应位置的上下文，不能靠运行期值决定字段数。`()` 展开零个字段，但其求值副作用保留；一个普通 `()` 元素仍占一个 Unit 字段。展开后的总字段数须与期望 tuple 精确匹配；零字段结果为 Unit，单字段结果仍是单元素 tuple。值复制、class/同步身份、挂起、错误及失败清理沿普通规则，不发布部分结果或撤销此前副作用；无约束泛型不能凭实例化实参假设自己是 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
 - 数组展开沿普通 `Array<T>` 拼接的精确元素类型合同；期望 `Array<T>` 时，展开源须为同一 `Array<T>`，普通元素按既有 `T` 上下文检查，不隐式转换整个 `Array<U>`。没有期望类型时沿既有字面量推导规则确定 `T`。所有普通元素与展开源先在其书写位置各求值一次并保存拥有式值快照，再构造结果；后续表达式的重绑或写入不替换先前快照。挂起、错误和失败清理使用普通调用与所有权规则，失败不发布部分结果且不撤销已完成的副作用。结果与输入可独立修改，嵌套值按值复制，class/同步身份只复制引用；不承诺保留源数组容量。
-- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+- **Map 展开**：`{...base, "x": 1}` 按书写顺序覆盖；**struct 展开**：`T{...src, field: value}` 按固定目标字段检查，显式字段优先。具体规则见 §3.10。
 
-```xray @id=expr-spread-collections
+<!-- xr-source:example expr-spread-collections -->
+```xray @id=expr-spread-collections @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
+<!-- /xr-source -->
 
 ### 3.10 字面量构造
 
-#### Array `[...]`
+表达式位置的 `{` 开始 Map 字面量；语句开头及 `=>` 后紧跟的 `{` 开始块。直接返回 Map 写 `x => ({"key": x})`。struct 字面量必须有类型名前缀，字段名不作变量求值。`#{}`、`#[]`、匿名结构对象及字段简写均不属于语言语法。
 
+<!-- xr-source:grammar 004-3-expressions-grammar-09 -->
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-array-lit
+<!-- xr-source:example expr-array-lit -->
+```xray @id=expr-array-lit @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // 类型 Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
+<!-- /xr-source -->
 
-#### Map `#{k: v, ...}` 与 `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
+<!-- xr-source:example expr-map-lit -->
+```xray @id=expr-map-lit @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-map-lit
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // 空 Map
+<!-- xr-source:example expr-set-lit -->
+```xray @id=expr-set-lit @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
+<!-- /xr-source -->
 
-**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+<!-- xr-source:example expr-struct-lit -->
+```xray @id=expr-struct-lit @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-set-lit
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### 键、上下文与重复
 
-#### Object（结构化对象）`{ field: value, ... }`
+- Map 键是任意表达式，先求键、再求值；条目与展开源按书写顺序各求值一次。裸标识符取其绑定的值。未定义的裸键附提示：若想写字符串键，使用 `"name"`。
+- 空 Array、Map 与无类型实参的 Set 构造需要类型上下文。没有上下文时，Array 元素须有同一类型，Map 的键和值分别须有同一类型；不自动生成联合类型。有上下文时沿用该类型的转换规则；`JSON.Object` 中标量值按已有 JSON widening 进入 `JSON.Value`。
+- 两个显式键在既有键等价关系下相同就是重复。字符串、整数、rune、bool 字面量、无载荷 enum 变体、`comptime` 表达式，以及初值直接或传递地属于这些形式的 const 绑定，是由语法确定的编译期键；这类键的重复报 `E0325: duplicate key "name" in Map literal`。主位置在后一个键，note `the key first appears here` 指向前一个。
+- 其他重复在构造时 panic E0434，消息含键及两个显式项的位置，例如 `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`。检查复用插入时已有的命中结果，不额外查询；来源位置的存储与失败清理由构造器负责。
+- Map 展开按书写顺序覆盖。展开项与显式项相互覆盖不触发重复错误；两个显式项即使被展开隔开也必须互不相同。
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` 合并字段
-```
+#### struct 展开
 
-```xray @id=expr-object-lit
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+`T{...src, field: value}` 中来源必须是 struct。来源的每个字段须为 T 中同名、同类型的字段；class、Map、tuple 或含额外字段的来源被拒绝。T 的每个字段来自显式字段或唯一一个提供它的来源；显式字段优先于全部来源，与书写先后无关。两个来源提供同一字段且没有显式字段覆盖时报错；没有显式值或来源的字段按 §5.4 的既有声明默认值与可空字段缺省规则处理，仍未得到值的必需字段报错。所有来源与显式表达式仍按书写顺序各求值一次。
 
-- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
-- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
+这只是目标类型写明的逐字段构造，不产生结构化身份、宽度子类型、隐式 interface 实现或 struct 解构，也不改变 struct 已有的字段缺省规则。
 
-#### Array<u8> `Array<u8>(...)`
+#### 类型不一致的诊断
 
-详见 §2.4.6 与 §14.5。
+无上下文且无法取得同一类型时，报一个 E0326，主位置为第一个与首值不一致的值；note 指向首值。例如 `Map literal values have different types: string and i64`，附 `the first value is string; without a declared Map type, every value must be string`。
 
-#### Channel `Channel<T>(buf?)`
+修法按条件依次给出：所有键均为合法标识符的字符串字面量时，建议声明 struct 并使用其字面量（名字取绑定名首字母大写，无绑定名用 Record）；全部值可进入 JSON.Value 时建议标注 JSON.Object；各类型可组成合法 union 时建议显式 Map<K, A | B>。不满足条件的 note 不出现。键类型不一致使用 `Map literal keys have different types: ...`，修法只提示声明 Map<K, V>。数组使用 `Array literal elements have different types: ...`，固定元素数时提示 tuple，可组成合法 union 时提示显式 Array<A | B>。
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-详见 §10.5。
+Array<u8> 与 Channel 构造沿用 §2.4.6、§10.5。
 
 ### 3.11 调用 / 成员访问 / 索引 / 切片
 
 #### 函数调用
 
+<!-- xr-source:grammar 004-3-expressions-grammar-10 -->
 ```ebnf
-CallExpr ::= Primary '(' ArgList? ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
 ```
+<!-- /xr-source -->
 
-- 参数按位置传递；不支持命名参数。
-- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
-- rest 参数收集多余参数到数组。
-- 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
+调用可写 `f(a, name: value)`。位置实参在前，命名实参在后；名字取自直接调用的具名函数、方法或构造器声明。未知名字、重复绑定（包括先按位置给出）、命名实参后的普通位置实参，均报 E0327。rest 只能按位置给出。函数值调用没有参数名，即使值来自具名函数的 const 别名，也不能用命名实参。
+
+接收者或被调表达式先求值；所有显式实参按书写顺序各求值一次，再按声明顺序计算省略的默认值。参数映射不重排求值，泛型推导与期望类型按映射后的形参位置取得证据。`ref` / `move` 写在值之前，如 `swap(left: ref a, right: ref b)`；真实 place、借用存活与模式权限沿用原规则。参数名是导出 API 的一部分，跨模块调用使用同一声明参数名。
+
+静态 tuple 展开与真实 rest 的末尾 Array 展开沿 §3.9；展开不能为 rest 参数引入命名形式，也不改变动态 Array 展开必须位于末尾的规则。缺失的必需参数仍是错误，只有声明了默认值的参数可以省略。
 
 #### 成员访问
 
+<!-- xr-source:grammar 004-3-expressions-grammar-11 -->
 ```ebnf
 MemberAccess ::= Primary '.' Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-017 -->
 ```xray
 obj.field
 obj.method(args)
 ClassName.staticMethod()
 EnumName.MemberName
 ```
+<!-- /xr-source -->
 
 - 字段访问：编译期检查类型有此字段。
 - 方法调用：解析为 invoke（带 IC 缓存优化）。
@@ -507,10 +552,13 @@ EnumName.MemberName
 
 #### 索引访问
 
+<!-- xr-source:grammar 004-3-expressions-grammar-12 -->
 ```ebnf
-IndexAccess ::= Primary '[' Expr ']'
+IndexAccess ::= Primary '[' Expression ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-index-access -->
 ```xray @id=expr-index-access
 arr[0]
 arr[0] = 10
@@ -518,6 +566,7 @@ map["key"]
 var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
+<!-- /xr-source -->
 
 - `Array<T>` 索引的类型为 `i64`，合法范围为 `0 <= i < len(array)`。读取产生 T 的逻辑副本；写入要求可写 place，右侧按 T 检查及转换。负索引及等于长度的索引均进入 `E0430` panic 通道，不是业务 throw。
 - 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
@@ -525,6 +574,7 @@ bytes[i]                // 显式 byte 视图索引
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 用户类型：不能定义下标；以方法提供元素访问。
 
+<!-- xr-source:example array-read-receiver-snapshot -->
 ```xray @id=array-read-receiver-snapshot
 var a: Array<string> = ["old"]
 fn replaceForIndex() -> i64 {
@@ -535,7 +585,9 @@ fn replaceForIndex() -> i64 {
 print(a[replaceForIndex()])  // 依次输出 index、old
 print(a[0])                 // new
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding -->
 ```xray @id=array-write-current-binding
 var a: Array<string> = ["old"]
 fn index() -> i64 { print("index"); return 1 }
@@ -547,25 +599,33 @@ fn replacement() -> string {
 var written = (a[index()] = replacement())
 print(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding-bounds -->
 ```xray @id=array-write-current-binding-bounds
 var a: Array<string> = ["old0", "old1"]
 fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
 a[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 ["new"] 不回滚
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-read-parameter-mutation-rejected -->
 ```xray @id=array-read-parameter-mutation-rejected
 fn invalid(values: Array<string>) {
     values.push("x")       // 编译错误：普通 read 参数不是可写 receiver
 }
 ```
+<!-- /xr-source -->
 
 #### 切片
 
+<!-- xr-source:grammar 004-3-expressions-grammar-13 -->
 ```ebnf
-Slice ::= Primary '[' Expr? ':' Expr? ']'
+Slice ::= Primary '[' Expression? ':' Expression? ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-slice -->
 ```xray @id=expr-slice
 arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
@@ -573,6 +633,7 @@ arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全长视图（不是拷贝）
 var view: Slice<i64> = arr[1:4]
 ```
+<!-- /xr-source -->
 
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。省略的 start 为 0，省略的 end 为来源长度；两端均夹到 `[0, len]`，若 start 大于 end 则结果为空。普通借用先选定来源位置，再按 start、end 的顺序各求值一次，边界成功后借用该位置的当前值。`copy` 范围先读取来源的逻辑快照，再按同序求边界；边界副作用改绑原位置不会改变这个快照。此数值归一化规则针对 Array，不推广到既有借用视图的子切片。
@@ -582,27 +643,32 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 匿名函数与 Lambda
 
-xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x -> expr` 与 `(x) -> expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
+xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x => expr` 与 `(x) => expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
 
+<!-- xr-source:grammar 004-3-expressions-grammar-14 -->
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowBody     ::= Expression | Block
-ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
-ArrowParam    ::= Identifier (':' ParamMode? Type)?
-ParamMode     ::= 'ref' | 'move'
-FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+ParamMode ::= 'ref' | 'move'
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-lambda-forms
+<!-- xr-source:example expr-lambda-forms -->
+```xray @id=expr-lambda-forms @fragment
 // ── arrow lambda：每个参数都可独立标注或推断 ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
 var inc = fn(x: i64) -> i64 {
@@ -611,41 +677,47 @@ var inc = fn(x: i64) -> i64 {
 }
 var identity = fn<T>(x: T) -> T { return x }     // 泛型
 ```
+<!-- /xr-source -->
 
 **选择规则**：
 
 | 概念 | 语法 | 能力与选择条件 |
 |------|------|----------------|
-| arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
+| arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
-- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
-- arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
-- `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `->` 只引入类型；`=>` 引入表达式或块，右结合。`x => y => x + y` 表示返回 lambda 的 lambda，函数体延伸到包含它的表达式结束。紧跟 `=>` 的 `{` 一律是块；要返回字面量表达式，须用括号包裹。值位置的 `->` 与类型位置的 `=>` 均拒绝，并在错误箭头处提示替换。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) => ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) => ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
+- arrow 没有返回类型位置。`(x: T): R => ...` 与 `(x: T) => R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
+- `=> expr` 隐式返回表达式值。`=> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) => x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) => { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获遵循 §7.4。`go` 实参与捕获必须满足 Sendable，闭包不得捕获外层 `var`。可复制值保留逻辑副本，身份类型保持身份。借用与同步规则继续适用，当前实现资格见 §17。
 
 ### 3.13 `match` 表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-15 -->
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-match
+<!-- xr-source:example expr-match -->
+```xray @id=expr-match @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // 多值
-    10..20 -> "teen",                 // 范围
-    n if (n > 100) -> "big",          // 守卫
-    Color.Red -> "red",               // 枚举
-    is User -> "a user",              // 类型模式
-    _ -> "default"                    // 通配符
+    1 => "one",
+    2, 3, 4 => "few",                 // 多值
+    10..20 => "teen",                 // 范围
+    n if (n > 100) => "big",          // 守卫
+    Color.Red => "red",               // 枚举
+    is User => "a user",              // 类型模式
+    _ => "default",                    // 通配符
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 自上而下匹配第一个成功的分支。
@@ -655,18 +727,22 @@ var result = match (x) {
 
 ### 3.14 构造表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-16 -->
 ```ebnf
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
+<!-- /xr-source -->
 
 构造与普通函数调用同形：`TypeName(args)`。`new` 是保留字，不构成合法表达式。
 
+<!-- xr-source:example expr-new -->
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<i64>()
 const ch = Channel<i64>(10)
 var m = Map<string, i64>()
 ```
+<!-- /xr-source -->
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
@@ -674,19 +750,24 @@ var m = Map<string, i64>()
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
-```xray @id=expr-literal-constructor-relation
+<!-- xr-source:example expr-literal-constructor-relation -->
+```xray @id=expr-literal-constructor-relation @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // 等价 Array<i64>() + push
-var m = #{}                    // 等价 Map<...>()
+var m: Map<string, i64> = {}    // 空 Map 需要类型上下文
 var p = Point{x: 1, y: 2}      // struct literal
 ```
+<!-- /xr-source -->
 
 ### 3.15 字符串插值
 
 详见 §1.6.5。简要：
 
+<!-- xr-source:example expr-string-interpolation -->
 ```xray @id=expr-string-interpolation
 var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
+<!-- /xr-source -->
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
 - `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
@@ -694,9 +775,11 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 
 ### 3.16 `yield` 语句
 
+<!-- xr-source:example expr-yield -->
 ```xray @id=expr-yield
 yield expr                  // 生成器产出一个值并挂起
 ```
+<!-- /xr-source -->
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.5）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
@@ -726,11 +809,11 @@ producer拥有独立frame，由原Instance执行器推进；I/O或Timer等真实
 
 ## 3. Expressions
 
-> Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
+> Implementation reference: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
 ### 3.0 Evaluation Order
 
-> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+> Implementation reference: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
 
 xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
 
@@ -764,6 +847,7 @@ The initial execution subset may restrict a GET-place index to a literal or ordi
 
 **E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
+<!-- xr-source:example eval-order-rules -->
 ```xray @id=eval-order-rules
 fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -785,6 +869,7 @@ arr[t("index", 0)] = t("value", 5)                     // index, value
 // E6: a complex receiver is evaluated exactly once
 mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```
+<!-- /xr-source -->
 
 ### 3.1 Precedence and Associativity
 
@@ -814,15 +899,18 @@ Full precedence table (highest → lowest; operators at the same level share ass
 
 ### 3.2 Unary Expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-01 -->
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'move' UnaryExpr
-            | 'await' UnaryExpr
-            | 'go' GoOptions? CallExpr
-            | 'unsafe' Block
-            | 'comptime' (Expression | Block)
-            | PostfixExpr
+           |  TryExpr
+           |  'copy' UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
 ```
+<!-- /xr-source -->
 
 | Operator | Applicable types | Result type | Notes |
 |--|--|--|--|
@@ -836,6 +924,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 `unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `extern "C"` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
+<!-- xr-source:example 004-3-expressions-example-002 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -849,6 +938,7 @@ unsafe {
     free(p)                       // extern calls must be inside unsafe
 }
 ```
+<!-- /xr-source -->
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
@@ -860,22 +950,27 @@ Admitted ordinary and higher-order calls, finite recursion and loops use the sam
 
 Exportable results are admitted scalars, String, Unit, Tuple, Nullable, Array and closed struct/enum data; finite recursive nominal data follows17.68. Internal Class/Function/Cell values may participate under their specific rules, but their identities or external resource handles cannot become constant results. Private-field constant replay uses authentic declaration bindings from17.67 without granting private construction authority to consumers. Type-description and derivation services do not thereby become arbitrary CTFE values or field permissions.
 
+<!-- xr-source:example 004-3-expressions-example-003 -->
 ```xray
 fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
+<!-- /xr-source -->
 
 Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. Comptime in a generic source scope captures no enclosing runtime values. Enclosing type parameters retain their lexical meaning. Program expressions depending on them undergo ordinary generic checking, actual specialization and the sole Lowered CTFE for each closed instance, then bind private literal providers through complete canonical keys (17.78). Already closed thunks follow17.71. Future Library instances still require complete relocation; neither one Value per syntax site nor runtime fallback represents actual instance results.
 
+<!-- xr-source:example 004-3-expressions-example-004 -->
 ```xray
 fn noop() {}
 export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+<!-- /xr-source -->
 
 Steps, whole-stack depth/frame, temporary heap, logical output and type/field traversal all charge the original compiler job; returns and failures reset no cumulative quota. Infinite loops, excessive recursion and huge output deterministically refuse while preserving an empty result; the wall-clock watchdog records a separate environment failure. Admission, target/profile, complete budgets, output policy2, failure cleanup and independent replay follow the CTFE execution provisions in section17.
 
 ### 3.3 Binary Expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-02 -->
 ```ebnf
 BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
@@ -885,6 +980,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&&' | '||'
        | '??'
 ```
+<!-- /xr-source -->
 
 #### 3.3.1 Arithmetic Operators
 
@@ -938,9 +1034,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.5 Null Coalescing `??`
 
+<!-- xr-source:example expr-null-coalesce -->
 ```xray @id=expr-null-coalesce
 var v = nullable_expr ?? default_value
 ```
+<!-- /xr-source -->
 
 - Returns `default_value` when `nullable_expr` is `null`; otherwise returns `nullable_expr` itself.
 - **Short-circuit**: `default_value` is evaluated only when the left side is null.
@@ -949,9 +1047,9 @@ var v = nullable_expr ?? default_value
 
 ### 3.4 Assignment and Compound Assignment
 
+<!-- xr-source:grammar 004-3-expressions-grammar-03 -->
 ```ebnf
-AssignExpr   ::= AssignLValue '=' Expression
-               | CompoundLValue CompoundOp Expression
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
 TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
 TupleAssignTarget ::= Identifier | '_'
@@ -959,6 +1057,7 @@ CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`). Array assignment saves a logical copy. The destination and expression result each retain their value obligations; the result must not borrow an element slot that can later be overwritten. An implementation may reuse the already owned right-hand result. All fallible ownership acquisition precedes the store commit; the replaced value is released afterwards. Failure does not undo earlier right-hand side effects.
@@ -975,13 +1074,17 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 ### 3.5 Ternary `? :`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-04 -->
 ```ebnf
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-006 -->
 ```xray
 var max = a > b ? a : b
 ```
+<!-- /xr-source -->
 
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
 - The condition must be `bool`. The condition is evaluated once and only the selected branch executes; both branches are statically checked, including branches skipped by a constant condition.
@@ -994,16 +1097,20 @@ See §3.3.5 (`??`) and below (`?.` / `?[`).
 
 #### Optional chaining `?.` / `?[`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-05 -->
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expression ']')+
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-optional-chain -->
 ```xray @id=expr-optional-chain
 var city = user?.address        // optional property access
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
 var road = user?.address.street // whole-chain short-circuit: null when user is null
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - If the LHS of `?.` or `?[` is `null`, the **entire postfix chain** short-circuits to `null`; every later `.` / `[` / `(` in the chain is skipped.
@@ -1020,9 +1127,11 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 
 #### Force unwrap `expr!`
 
+<!-- xr-source:example 004-3-expressions-example-008 -->
 ```xray
 var v: i64 = nullable_int!      // panics with E0413 when null
 ```
+<!-- /xr-source -->
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
 
@@ -1030,16 +1139,20 @@ Legal only when `expr` is known to be a nullable type (`T?`) at compile time; us
 
 #### `is` runtime type check
 
+<!-- xr-source:grammar 004-3-expressions-grammar-06 -->
 ```ebnf
 IsExpr ::= UnaryExpr 'is' Type
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-009 -->
 ```xray
 if (v is User) {
     // v is narrowed to User in this branch
     print(v.name)
 }
 ```
+<!-- /xr-source -->
 
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
@@ -1048,15 +1161,19 @@ if (v is User) {
 
 #### `as` type cast
 
+<!-- xr-source:grammar 004-3-expressions-grammar-07 -->
 ```ebnf
 AsExpr ::= UnaryExpr 'as' Type
         |  UnaryExpr 'as' Type '?'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-010 -->
 ```xray
 var n = v as i64           // throws TypeError on failure
 var n = v as i64?          // returns null on failure (the "as nullable" safe form)
 ```
+<!-- /xr-source -->
 
 | Form | Failure behavior | Use case |
 |--|--|--|
@@ -1073,10 +1190,13 @@ var n = v as i64?          // returns null on failure (the "as nullable" safe fo
 
 #### Range `a..b` / `a..=b`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-08 -->
 ```ebnf
-RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-range -->
 ```xray @id=expr-range
 var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)
 var closed = 0..=10    // closed interval (includes both 0 and 10)
@@ -1086,6 +1206,7 @@ for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
+<!-- /xr-source -->
 
 - Type: `Range` (i64 ranges only).
 - **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
@@ -1107,116 +1228,123 @@ Allowed in the following positions only:
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
 - Array spread uses the exact element-type contract of ordinary `Array<T>` concatenation. Under an expected `Array<T>`, a spread source must be that same `Array<T>`; ordinary elements use the existing `T` context, without an implicit conversion of a whole `Array<U>`. Without an expected type, existing literal inference determines `T`. Evaluate every ordinary element and spread source once at its written position and retain owned value snapshots before constructing the result. Later rebinding or mutation does not replace earlier snapshots. Suspension, errors and failed cleanup use ordinary call and ownership rules; failure publishes no partial result and does not roll back completed effects. Inputs and the result can be modified independently, nested values copy by value, and class/synchronization identities copy references only. Source array capacity is not preserved by contract.
-- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Map spread**: `{...base, "x": 1}` overwrites in written order. **Struct spread**: `T{...src, field: value}` checks a fixed nominal target and gives explicit fields priority. See §3.10.
 
-```xray @id=expr-spread-collections
+<!-- xr-source:example expr-spread-collections -->
+```xray @id=expr-spread-collections @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
+<!-- /xr-source -->
 
 ### 3.10 Literal Construction
 
-#### Array `[...]`
+An expression-leading `{` begins a Map literal. A statement-leading brace or a brace immediately after `=>` begins a block; return a Map directly with `x => ({"key": x})`. A struct literal requires its type-name prefix, and field names are not evaluated as variables. Hash-prefixed Map/Set literals, anonymous structural objects, and field shorthand are not syntax.
 
+<!-- xr-source:grammar 004-3-expressions-grammar-09 -->
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-array-lit
+<!-- xr-source:example expr-array-lit -->
+```xray @id=expr-array-lit @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // type Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
+<!-- /xr-source -->
 
-#### Map `#{k: v, ...}` and `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+<!-- xr-source:example expr-map-lit -->
+```xray @id=expr-map-lit @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-map-lit
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // empty Map
+<!-- xr-source:example expr-set-lit -->
+```xray @id=expr-set-lit @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
+<!-- /xr-source -->
 
-**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+<!-- xr-source:example expr-struct-lit -->
+```xray @id=expr-struct-lit @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-set-lit
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### Keys, Context, and Duplicates
 
-#### Object (structured object) `{ field: value, ... }`
+- Every Map key is an expression. Evaluate each key before its value, and all entries and spread sources once in written order. A bare identifier reads its binding. An undefined bare key receives a note suggesting a quoted string key such as `"name"`.
+- Empty Arrays, Maps, and Set construction without type arguments require an expected type. Without context, Array elements need one type, and Map keys and values each need one type; inference does not silently form unions. Existing contextual conversions apply, including scalar widening into JSON.Value in a JSON.Object literal.
+- Two explicit keys equivalent under existing key equivalence are duplicates. The syntactically defined compile-time classes are string, integer, rune and bool literals, payload-free enum variants, comptime expressions, and const bindings initialized directly or transitively from these forms. Duplicates in these classes report `E0325: duplicate key "name" in Map literal`, at the later key, with `the key first appears here` at the first key.
+- Other duplicates panic with E0434 during construction. The message includes the key and both explicit-entry positions, for example `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`. Reuse the insertion probe's hit result without another lookup; the constructor owns provenance storage and failure cleanup.
+- Map spreads overwrite in written order. Overwriting between a spread and an explicit entry is allowed. Two explicit entries must remain distinct even when a spread separates them.
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` merges fields
-```
+#### Struct Spread
 
-```xray @id=expr-object-lit
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+In `T{...src, field: value}`, every source must be a struct whose fields all occur in T with identical names and types. Reject classes, Maps, tuples, and sources with extra fields. Each target field comes from an explicit field or one unique source. Explicit fields override all sources regardless of position. Multiple sources for a field without an explicit override are errors. A field with neither an explicit value nor a source follows the existing declaration-default and nullable-field omission rules in §5.4; a required field still lacking a value is an error. Evaluate every source and explicit expression once in written order.
 
-- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
-- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
-- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+This is field-by-field construction of a named target, not structural identity, width subtyping, implicit interface implementation, or struct destructuring. Existing struct field-omission rules remain unchanged.
 
-#### Array<u8> `Array<u8>(...)`
+#### Heterogeneous Literal Diagnostics
 
-See §2.4.6 and §14.5.
+If a context-free literal cannot obtain one type, report one E0326 at the first value differing from the first value's type, with a note at the first value. For example, `Map literal values have different types: string and i64`, followed by `the first value is string; without a declared Map type, every value must be string`.
 
-#### Channel `Channel<T>(buf?)`
+Offer repairs in order and only when applicable: a struct declaration and literal when every key is a string literal spelling a legal identifier (capitalize the binding name, or use Record without a binding); JSON.Object when all values enter JSON.Value; an explicit Map<K, A | B> when the types form a legal union. Omit inapplicable notes. Incompatible keys use `Map literal keys have different types: ...` with only a declared Map<K, V> repair. Arrays use `Array literal elements have different types: ...`, suggesting a tuple for a fixed element count and an explicit Array<A | B> only for a legal union.
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-See §10.5.
+Array<u8> and Channel construction follow §2.4.6 and §10.5.
 
 ### 3.11 Calls / Member Access / Indexing / Slicing
 
 #### Function call
 
+<!-- xr-source:grammar 004-3-expressions-grammar-10 -->
 ```ebnf
-CallExpr ::= Primary '(' ArgList? ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
 ```
+<!-- /xr-source -->
 
-- Arguments are passed positionally; named arguments are not supported.
-- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
-- A rest parameter collects extra arguments into an array.
-- Argument-count mismatch → compile error `E0307` / `E0450`.
+A call may use `f(a, name: value)`. Positional arguments precede named arguments. Names come from the directly called named function, method, or constructor declaration. Unknown names, duplicate bindings (including a parameter already supplied positionally), and positional arguments after named arguments are E0327. Rest arguments are positional only. Function values have no parameter names, including const aliases of named functions.
+
+Evaluate the receiver or callee first, every explicit argument once in written order, and omitted defaults afterwards in declaration order. Binding does not reorder evaluation. Expected types and generic inference use the mapped formal position. Place `ref` / `move` before the value, as in `swap(left: ref a, right: ref b)`; existing place, lifetime and mode permissions remain. Parameter names are exported API and retain their declaration spelling across modules.
+
+Static tuple spread and a real rest parameter's final Array spread follow §3.9. Spreading grants no named rest form and does not relax the final-position rule for dynamic Array spread. Missing required parameters remain errors; only declared defaults permit omission.
 
 #### Member access
 
+<!-- xr-source:grammar 004-3-expressions-grammar-11 -->
 ```ebnf
 MemberAccess ::= Primary '.' Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-017 -->
 ```xray
 obj.field
 obj.method(args)
 ClassName.staticMethod()
 EnumName.MemberName
 ```
+<!-- /xr-source -->
 
 - Field access: compile-time check that the type has the field.
 - Method call: resolved to invoke (with IC cache optimization).
@@ -1225,10 +1353,13 @@ EnumName.MemberName
 
 #### Index access
 
+<!-- xr-source:grammar 004-3-expressions-grammar-12 -->
 ```ebnf
-IndexAccess ::= Primary '[' Expr ']'
+IndexAccess ::= Primary '[' Expression ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-index-access -->
 ```xray @id=expr-index-access
 arr[0]
 arr[0] = 10
@@ -1236,6 +1367,7 @@ map["key"]
 var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
+<!-- /xr-source -->
 
 - An `Array<T>` index has type `i64`, with valid range `0 <= i < len(array)`. Reading produces a logical copy of T. Writing requires a writable place and checks/converts the right-hand value against T. Negative indices and indices equal to the length enter the `E0430` panic channel, not a business throw.
 - Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
@@ -1243,6 +1375,7 @@ bytes[i]                // explicit byte-view index
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User types: cannot define indexing; element access is provided through methods.
 
+<!-- xr-source:example array-read-receiver-snapshot -->
 ```xray @id=array-read-receiver-snapshot
 var a: Array<string> = ["old"]
 fn replaceForIndex() -> i64 {
@@ -1253,7 +1386,9 @@ fn replaceForIndex() -> i64 {
 print(a[replaceForIndex()])  // Prints index, then old
 print(a[0])                 // new
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding -->
 ```xray @id=array-write-current-binding
 var a: Array<string> = ["old"]
 fn index() -> i64 { print("index"); return 1 }
@@ -1265,25 +1400,33 @@ fn replacement() -> string {
 var written = (a[index()] = replacement())
 print(written, a[1])        // Prints index, rhs, then stored stored; no old-length rejection
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding-bounds -->
 ```xray @id=array-write-current-binding-bounds
 var a: Array<string> = ["old0", "old1"]
 fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
 a[1] = shrink()             // Prints rhs, then E0430 panic; rebinding to ["new"] remains
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-read-parameter-mutation-rejected -->
 ```xray @id=array-read-parameter-mutation-rejected
 fn invalid(values: Array<string>) {
     values.push("x")       // Compile error: a read parameter is not a writable receiver
 }
 ```
+<!-- /xr-source -->
 
 #### Slice
 
+<!-- xr-source:grammar 004-3-expressions-grammar-13 -->
 ```ebnf
-Slice ::= Primary '[' Expr? ':' Expr? ']'
+Slice ::= Primary '[' Expression? ':' Expression? ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-slice -->
 ```xray @id=expr-slice
 arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
@@ -1291,6 +1434,7 @@ arr[2:]                 // from index 2 to the end
 arr[:]                  // full-length view (not a copy)
 var view: Slice<i64> = arr[1:4]
 ```
+<!-- /xr-source -->
 
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range. Omitted start is 0 and omitted end is the source length; both endpoints clamp to `[0, len]`, and start greater than end produces an empty result. An ordinary borrow selects the source position, evaluates start and end once in order, then borrows that position's current value. A `copy` range first reads a logical snapshot and then evaluates the bounds in the same order; rebinding the original position does not change that snapshot. This normalization is specific to Array and does not extend the existing subrange behavior of borrowed views.
@@ -1300,27 +1444,32 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 Anonymous Functions and Lambdas
 
-Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x => expr` and `(x) => expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
 
+<!-- xr-source:grammar 004-3-expressions-grammar-14 -->
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowBody     ::= Expression | Block
-ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
-ArrowParam    ::= Identifier (':' ParamMode? Type)?
-ParamMode     ::= 'ref' | 'move'
-FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+ParamMode ::= 'ref' | 'move'
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-lambda-forms
+<!-- xr-source:example expr-lambda-forms -->
+```xray @id=expr-lambda-forms @fragment
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
 var inc = fn(x: i64) -> i64 {
@@ -1329,41 +1478,47 @@ var inc = fn(x: i64) -> i64 {
 }
 var identity = fn<T>(x: T) -> T { return x }     // generic
 ```
+<!-- /xr-source -->
 
 **Selection rule**:
 
 | Concept | Syntax | Capability and selection rule |
 |---------|--------|-------------------------------|
-| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| Arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
-- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
-- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
-- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `->` introduces only a type. `=>` introduces an expression or block and associates to the right: `x => y => x + y` returns a lambda. Its body extends to the end of the containing expression. A `{` immediately after `=>` always opens a block; parenthesize a literal expression to return it. A type arrow in value position or value arrow in type position is rejected at that arrow with a replacement hint.
+- Arrow parameter annotations are independent, so `(x: i64, y) => ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) => ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R => ...` and `(x: T) => R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `=> expr` implicitly returns the expression value. `=> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) => x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) => { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Captures follow §7.4. `go` arguments and captures must satisfy Sendable, and closures cannot capture outer `var` bindings. Copyable values preserve logical copies and identity types retain identity. Loan and synchronization rules continue to apply, with current qualification in §17.
 
 ### 3.13 `match` Expression
 
+<!-- xr-source:grammar 004-3-expressions-grammar-15 -->
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
-```xray @id=expr-match
+<!-- xr-source:example expr-match -->
+```xray @id=expr-match @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // multi-value
-    10..20 -> "teen",                 // range
-    n if (n > 100) -> "big",          // guard
-    Color.Red -> "red",               // enum
-    is User -> "a user",              // type pattern
-    _ -> "default"                    // wildcard
+    1 => "one",
+    2, 3, 4 => "few",                 // multi-value
+    10..20 => "teen",                 // range
+    n if (n > 100) => "big",          // guard
+    Color.Red => "red",               // enum
+    is User => "a user",              // type pattern
+    _ => "default",                    // wildcard
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Matches top-down, taking the first successful arm.
@@ -1373,18 +1528,22 @@ var result = match (x) {
 
 ### 3.14 Construction expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-16 -->
 ```ebnf
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
+<!-- /xr-source -->
 
 Construction has the same form as a function call: `TypeName(args)`. `new` is reserved and does not form an expression.
 
+<!-- xr-source:example expr-new -->
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<i64>()
 const ch = Channel<i64>(10)
 var m = Map<string, i64>()
 ```
+<!-- /xr-source -->
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
@@ -1392,19 +1551,24 @@ var m = Map<string, i64>()
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
-```xray @id=expr-literal-constructor-relation
+<!-- xr-source:example expr-literal-constructor-relation -->
+```xray @id=expr-literal-constructor-relation @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // equivalent to Array<i64>() + push
-var m = #{}                    // equivalent to Map<...>()
+var m: Map<string, i64> = {}    // an empty Map requires a type context
 var p = Point{x: 1, y: 2}      // struct literal
 ```
+<!-- /xr-source -->
 
 ### 3.15 String Interpolation
 
 See §1.6.5. In brief:
 
+<!-- xr-source:example expr-string-interpolation -->
 ```xray @id=expr-string-interpolation
 var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
+<!-- /xr-source -->
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
 - Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
@@ -1412,9 +1576,11 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 
 ### 3.16 `yield` Statement
 
+<!-- xr-source:example expr-yield -->
 ```xray @id=expr-yield
 yield expr                  // produce one generator value and suspend
 ```
+<!-- /xr-source -->
 
 `yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.5). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 

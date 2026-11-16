@@ -26,7 +26,7 @@ Xray 面向脚本、服务和命令行程序，适合需要静态类型、语言
 
 ## 主要特性
 
-- **静态类型**：支持类型推断、可空类型（`T?`）、Union、泛型、Tuple、Record 和控制流类型收窄，不提供通用 `any` 类型。
+- **静态类型**：支持类型推断、可空类型（`T?`）、Union、泛型、Tuple、名义 struct 和控制流类型收窄，不提供通用 `any` 类型。
 - **显式并发**：`go`、`await`、`Channel<T>`、`select`、`scope` 和所有权感知的跨边界传递规则都是语言组成部分。
 - **语言级数据建模**：支持 `class`、`struct`、`interface`、代数数据类型风格的 `enum`、模式匹配、集合字面量和模块。
 - **结构化错误处理**：类型化 enum 错误通过值返回 `throw` / `try` / `catch` 通道传播；运行时故障使用 `PanicInfo`；`defer` 用于确定性清理。
@@ -113,6 +113,11 @@ xray toolchain doctor                   # 检查 AOT 工具链
 ## 语言一瞥
 
 ```xray
+struct User {
+    name: string
+    score: i64
+}
+
 fn greet(name: string?) -> string {
     if (name == null) {
         return "hello, guest"
@@ -120,15 +125,18 @@ fn greet(name: string?) -> string {
     return "hello, ${name!}"
 }
 
-var scores = #{ "alice": 95, "bob": 88 }
-var user = { "name": "alice", "score": scores["alice"] }
-for (i in 1..=3) {
-    print(i)
+fn main() {
+    var scores = { "alice": 95, "bob": 88 }
+    var user = User{ name: "alice", score: scores["alice"] }
+    for (i in 1..=3) {
+        print(i)
+    }
+    print(greet(user.name))
 }
-print(greet(user.name))
+main()
 ```
 
-区间运算符 `a..b` 不包含右端点 `b`，`a..=b` 包含右端点。数组、Set 和 Map 字面量分别写作 `[value]`、`#[value]` 和 `#{ key: value }`。`{ "name": "alice", "score": 95 }` 这样的 Record 字面量会按照结构类型进行检查。
+区间运算符 `a..b` 不包含右端点 `b`，`a..=b` 包含右端点。数组使用 `[value]`，Map 使用 `{ key: value }`，Set 使用 `Set([value])` 构造。固定的具名字段使用名义 `struct` 声明，以及 `User{ name: "alice", score: 95 }` 这样的具名初始化式。
 
 ### 并发与数据传递
 
@@ -140,17 +148,17 @@ go fn() {
     ch.send(42)
 }()
 select {
-    value from ch -> {
+    value from ch => {
         print("received ${value}")
     }
-    after 1000    -> {
+    after 1000    => {
         print("timeout")
     }
 }
 ch.close()
 ```
 
-在 `select` 中，`value from ch` 表示接收，`value to ch` 表示发送，`after milliseconds` 表示超时，`_ ->` 表示立即执行的默认分支。`scope` 会在退出作用域前等待其中启动的协程结束。
+在 `select` 中，`value from ch` 表示接收，`value to ch` 表示发送，`after milliseconds` 表示超时，`_ =>` 表示立即执行的默认分支。`scope` 会在退出作用域前等待其中启动的协程结束。
 
 ### 内存管理
 

@@ -7,7 +7,7 @@ fn test_implicit_language_core() {
     var values: Array<i64> = [3, 1, 2]
     values.sort()
 
-    var mapping: Map<string, i64> = #{"x": values[0]}
+    var mapping: Map<string, i64> = {"x": values[0]}
     var ordering = Ordering.SeqCst
 
     assertEqual(len(values), 3)

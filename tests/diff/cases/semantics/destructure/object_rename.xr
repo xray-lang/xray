@@ -1,12 +1,20 @@
 // anchor: destructure-object-rename
-var user = { name: "Alice", age: 30, city: "Shanghai" }
+struct User {
+    name: string
+    age: i64
+    city: string
+}
 
-var { name: localName, age } = user
+var user = User{ name: "Alice", age: 30, city: "Shanghai" }
+
+var localName = user.name
+var age = user.age
 print(localName)
 print(age)
 
 var otherName = ""
 var otherCity = ""
-{ name: otherName, city: otherCity } = user
+otherName = user.name
+otherCity = user.city
 print(otherName)
 print(otherCity)

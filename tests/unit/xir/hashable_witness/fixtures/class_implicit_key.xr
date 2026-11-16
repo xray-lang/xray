@@ -1,0 +1,8 @@
+class Token {
+ value:i64
+ init(value:i64){this.value=value}
+ equals(other:Token)->bool{return this.value==other.value}
+ hash()->i64{return this.value}
+}
+var counts:Map<Token,i64>={}
+counts.set(Token(7),99)

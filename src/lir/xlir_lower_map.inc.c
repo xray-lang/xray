@@ -11,6 +11,20 @@
  *   The existing managed flow owns snapshots and selected-edge transfers.
  *   Mutations read the real binding after argument evaluation.
  */
+static bool lower_map_literals(Lower *c) {
+    const XrXirDeclarations *declarations=c->source->declarations;
+    for(uint32_t n=0;n<declarations->map_literal_count;++n) {
+        XrXirMapLiteral source=declarations->map_literals[n];
+        XrLirMapLiteralOrigin *items=source.count?lower_alloc(c,source.count,sizeof(*items)):NULL;
+        if(source.count && !items)return false;
+        for(uint32_t p=0;p<source.count;++p)items[p]=(XrLirMapLiteralOrigin){source.items[p].kind,source.items[p].line,source.items[p].column};
+        XrLirMapLiteral literal={source.file.bytes,source.file.length,items,source.count};uint32_t ordinal=0;
+        bool good=lower_build(c,xr_lir_map_literal_add(c->module,&literal,&ordinal));xr_free(items);
+        if(!good)return false;
+        if(ordinal!=n+1)return lower_error(c,XR_LIR_VERIFY_ERROR,"Map provenance ordinal changed"),false;
+    }
+    return true;
+}
 static bool lower_map_read(LowerFunction *f, uint32_t block, XrLirValue receiver, XrLirValue *output) {
     XrLirType type = lower_value_type(f, receiver);
     if (type == XR_LIR_MAP_STRING_I64) { *output = receiver; return true; }
@@ -29,6 +43,18 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     const XrXirInstruction *op = &f->source->instructions[index];
     uint32_t result = f->source->parameter_count + index;
     *handled = false;
+    if(op->op==XR_XIR_MAP_LITERAL) {
+        *handled=true;
+        if(!lower_map_type(c,op->type))return lower_unsupported(c,"Map operation requires the String/I64 physical family");
+        XrLirValue *args=lower_alloc(c,op->args[1],sizeof(*args));
+        if(op->args[1] && !args)return false;
+        bool good=true;
+        for(uint32_t n=0;n<op->args[1] && good;++n)good=lower_value(f,f->source->operands[op->args[0]+n],&args[n]);
+        XrLirInstruction literal={.op=XR_LIR_MAP_LITERAL_NEW,.type=XR_LIR_MAP_STRING_I64,
+            .bits=(uint64_t)op->immediate+1,.operands=args,.operand_count=op->args[1],.source=lower_source(c)};
+        if(good)good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[block],&literal,&f->values[result]));
+        xr_free(args);return good;
+    }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f->source, op->args[0]) : op->type;
         if (!lower_map_type(c, type)) return true;

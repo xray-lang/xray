@@ -63,21 +63,21 @@ fn test_array_nested() {
 // ===== Map Inference =====
 @test
 fn test_map_basic() {
-    var m = #{"a": 1, "b": 2}
+    var m = {"a": 1, "b": 2}
     assertEqual(typeName(m), "Map")
     assertEqual(m.get("a"), 1)
 }
 
 @test
 fn test_map_empty() {
-    var m: Map<string, i64> = #{}
+    var m: Map<string, i64> = {}
     assertEqual(typeName(m), "Map")
 }
 
 // ===== Set Inference =====
 @test
 fn test_set_basic() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assertEqual(typeName(s), "Set")
     assertEqual(len(s), 3)
 }

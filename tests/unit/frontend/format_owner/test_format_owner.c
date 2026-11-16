@@ -46,10 +46,10 @@ static void observe_free(void *memory) {
 
 static const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
 static const char source[] =
-    "// retained\nfn value(n: i64) -> i64 {\nreturn match (n) {\n0 -> 1\n12 -> 2\n_ -> 3\n}\n}\n"
+    "// retained\nfn value(n: i64) -> i64 {\nreturn match (n) {\n0 => 1,\n12 => 2,\n_ => 3,\n}\n}\n"
     "const short_name = 1 // alpha\nconst long_name = 2 // beta\n";
 static const char expected[] =
-    "// retained\nfn value(n: i64) -> i64 {\n    return match (n) {\n        0  -> 1\n        12 -> 2\n        _  -> 3\n    }\n}\n\n"
+    "// retained\nfn value(n: i64) -> i64 {\n    return match (n) {\n        0  => 1,\n        12 => 2,\n        _  => 3,\n    }\n}\n\n"
     "const short_name = 1  // alpha\nconst long_name = 2   // beta\n";
 
 static void reset(void) { CHECK(!physical); total = peak = attempts = 0; failure = SIZE_MAX; }
@@ -129,8 +129,8 @@ static void growth_and_types(void) {
     char text[8500]; size_t length=0;
     memcpy(text,"const text = \"",14); length=14;
     memset(text+length,'z',6000); length+=6000;
-    memcpy(text+length,"\"\ntype T = { ",13); length+=13;
-    for(unsigned i=0;i<70;++i) length+=(size_t)snprintf(text+length,sizeof(text)-length,"field%u: i64%s",i,i==69?" }\n":", ");
+    length+=(size_t)snprintf(text+length,sizeof(text)-length,"\"\nstruct T { ");
+    for(unsigned i=0;i<70;++i) length+=(size_t)snprintf(text+length,sizeof(text)-length,"field%u: i64%s",i,i==69?" }\n":"; ");
     AstNode *ast=NULL;
     CHECK(xr_compile_parse_with_trivia(session,text,"growth.xr",NULL,&ast)==XR_PARSE_OK);
     XrFmtOutput out={0};
@@ -166,9 +166,9 @@ static void scratch_faults_and_depth(void) {
     char text[10000]; size_t used=0;
     memcpy(text,"// trivia\nconst s=\"",19); used=19;
     memset(text+used,'x',6000); used+=6000;
-    used+=(size_t)snprintf(text+used,sizeof(text)-used,"\"\ntype T={");
-    for(unsigned i=0;i<70;++i)used+=(size_t)snprintf(text+used,sizeof(text)-used,"field%u:i64%s",i,i==69?"}\n":",");
-    static const char select[]="fn main(){select{v from ch1->{print(v)}\n100 to ch2->{print(1)}\nafter 10->{print(2)}\n_->{print(3)}\n}}\n";
+    used+=(size_t)snprintf(text+used,sizeof(text)-used,"\"\nstruct T{");
+    for(unsigned i=0;i<70;++i)used+=(size_t)snprintf(text+used,sizeof(text)-used,"field%u:i64%s",i,i==69?"}\n":";");
+    static const char select[]="fn main(){select{v from ch1=>{print(v)}\n100 to ch2=>{print(1)}\nafter 10=>{print(2)}\n_=>{print(3)}\n}}\n";
     const char *fixtures[]={text,select};
     for(unsigned f=0;f<2;++f) {
         size_t count=growth_fixture(fixtures[f],SIZE_MAX,true);

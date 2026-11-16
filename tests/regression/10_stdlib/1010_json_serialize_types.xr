@@ -3,11 +3,20 @@
 
 import datetime
 
+struct ColorEnvelope {
+    color: Color
+}
+
+struct DatedItem {
+    created: string
+    name: string
+}
+
 enum Color { Red, Green, Blue }
 
 @test
 fn test_stringify_enum() {
-    var obj = { color: Color.Red }
+    var obj = ColorEnvelope{ color: Color.Red }
     var s = JSON.stringify(obj)
     assertEqual(s, "{\"color\":\"Red\"}")
 }
@@ -30,7 +39,7 @@ fn test_stringify_datetime_projection() {
 @test
 fn test_stringify_datetime_projection_in_object() {
     var dt = datetime.createUTC(2026, 1, 15, 12, 30, 0)
-    var obj = { created: dt.toISOString(), name: "test" }
+    var obj = DatedItem{ created: dt.toISOString(), name: "test" }
     var s = JSON.stringify(obj)
     assert(s.contains("\"created\""))
     assert(s.contains("2026"))

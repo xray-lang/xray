@@ -1,6 +1,11 @@
 // anchor: eval-order-literals
 // §3.0 E7: literal elements in source order; key before value in each
 // Map/object entry; a spread is evaluated in place.
+struct OrderedFields {
+    first: i64
+    second: i64
+}
+
 fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn ts(tag: string, v: string) -> string { print(tag); return v }
 fn three(a: i64, b: i64, c: i64) -> i64 { return a + b + c }
@@ -11,15 +16,15 @@ fn main() {
     print(len(arr))
 
     print("-- set --")
-    var s = #[t("s1", 1), t("s2", 2)]
+    var s = Set([t("s1", 1), t("s2", 2)])
     print(len(s))
 
     print("-- map: key before value --")
-    var m = #{ts("k1", "a"): t("v1", 1), ts("k2", "b"): t("v2", 2)}
+    var m = {ts("k1", "a"): t("v1", 1), ts("k2", "b"): t("v2", 2)}
     print(len(m))
 
     print("-- object literal --")
-    var o = {first: t("o1", 1), second: t("o2", 2)}
+    var o = OrderedFields{first: t("o1", 1), second: t("o2", 2)}
     print(o.first)
 
     print("-- tuple --")

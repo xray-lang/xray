@@ -295,7 +295,7 @@ fn test_generic_with_map() {
         }
         return defaultVal
     }
-    var m = #{"a": 1, "b": 2}
+    var m = {"a": 1, "b": 2}
     assertEqual(getOrDefault(m, "a", 0), 1)
     assertEqual(getOrDefault(m, "z", -1), -1)
 }

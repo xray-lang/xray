@@ -4,32 +4,32 @@
 // ===== 创建 =====
 @test
 fn test_set_literal() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assertEqual(len(s), 3)
 }
 
 @test
 fn test_empty_set() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     assertEqual(len(s), 0)
 }
 
 @test
 fn test_single_element() {
-    var s = #[42]
+    var s = Set([42])
     assertEqual(len(s), 1)
 }
 
 @test
 fn test_set_dedup() {
-    var s = #[1, 2, 2, 3, 3, 3]
+    var s = Set([1, 2, 2, 3, 3, 3])
     assertEqual(len(s), 3)
 }
 
 // ===== 添加 =====
 @test
 fn test_add_new() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     s.add(1)
     s.add(2)
     s.add(3)
@@ -38,7 +38,7 @@ fn test_add_new() {
 
 @test
 fn test_add_duplicate() {
-    var s = #[1, 2]
+    var s = Set([1, 2])
     s.add(2)
     // 重复
     assertEqual(len(s), 2)
@@ -47,21 +47,21 @@ fn test_add_duplicate() {
 // ===== 检查 =====
 @test
 fn test_has() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     assertEqual(s.contains(2), true)
     assertEqual(s.contains(5), false)
 }
 
 @test
 fn test_has_empty() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     assertEqual(s.contains(1), false)
 }
 
 // ===== 删除 =====
 @test
 fn test_delete() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     s.delete(2)
     assertEqual(len(s), 2)
     assertEqual(s.contains(2), false)
@@ -71,7 +71,7 @@ fn test_delete() {
 
 @test
 fn test_delete_missing() {
-    var s = #[1, 2]
+    var s = Set([1, 2])
     s.delete(5)
     // 不存在
     assertEqual(len(s), 2)
@@ -80,7 +80,7 @@ fn test_delete_missing() {
 // ===== 遍历 =====
 @test
 fn test_iterate() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     var sum = 0
     for (x in s) {
         sum += x
@@ -90,7 +90,7 @@ fn test_iterate() {
 
 @test
 fn test_iterate_empty() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     var count = 0
     for (x in s) {
         count++
@@ -101,7 +101,7 @@ fn test_iterate_empty() {
 // ===== 清空 =====
 @test
 fn test_clear() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     s.clear()
     assertEqual(len(s), 0)
 }
@@ -109,7 +109,7 @@ fn test_clear() {
 // ===== 字符串元素 =====
 @test
 fn test_string_elements() {
-    var s = #["apple", "banana", "cherry"]
+    var s = Set(["apple", "banana", "cherry"])
     assertEqual(len(s), 3)
     assertEqual(s.contains("apple"), true)
     assertEqual(s.contains("grape"), false)
@@ -118,7 +118,7 @@ fn test_string_elements() {
 // ===== 转换为数组 =====
 @test
 fn test_to_array() {
-    var s = #[1, 2, 3]
+    var s = Set([1, 2, 3])
     var arr = s.toArray()
     assertEqual(len(arr), 3)
 }
@@ -126,7 +126,7 @@ fn test_to_array() {
 // ===== 边界条件 =====
 @test
 fn test_many_elements() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     for (var i = 0; i < 100; i++) {
         s.add(i)
     }
@@ -136,7 +136,7 @@ fn test_many_elements() {
 
 @test
 fn test_add_and_delete() {
-    var s: Set<i64> = #[]
+    var s: Set<i64> = Set()
     s.add(1)
     s.add(2)
     s.delete(1)

@@ -7,7 +7,7 @@ export fn answer()->i64 {
  const c=choose(fn(v){return v+1},true?n:n)
  const source=item()
  const value:i64=999
- const d=choose(fn(v){return v+1},match(source){Choice.Left{value}->value,Choice.Right{value}->value})
+ const d=choose(fn(v){return v+1},match(source){Choice.Left{value}=>value,Choice.Right{value}=>value,})
  const e=pair(first(),second())
  const r=receiver().choose(argument())
  const narrow:i8=d

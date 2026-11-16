@@ -18,7 +18,7 @@ static void source_unit_context_cases(XrXirSourceRequest *request) {
  "var count=0\nfn nop(){count+=1}\n"
  "fn grouped(){return (nop())}\n"
  "fn conditional(){return true ? grouped() : nop()}\n"
- "fn matched(){return match(true){true->{conditional()},false->nop()}}\n"
+ "fn matched(){return match(true){true=>{conditional()},false=>nop(),}}\n"
  "fn invoke(f:fn()){return f()}\n"
  "export fn genericMethodNumber()->i64{matched();invoke(fn(){return matched()});return count+39}\n"
  "export fn genericMethodText()->string{return \"mapped\"}\n");
@@ -26,7 +26,7 @@ static void source_unit_context_cases(XrXirSourceRequest *request) {
   "fn bad(){return []}\n",
   "fn bad(){return ([])}\n",
   "fn bad(){return true ? [] : []}\n",
-  "fn bad(){return match(true){true->[],false->[]}}\n",
+  "fn bad(){return match(true){true=>[],false=>[],}}\n",
   "fn nop(){}\nfn bad(){return true ? nop() : 41}\n",
   "fn bad(){return fn(x){return x}}\n",
   "fn bad(){const value:()=41}\n",

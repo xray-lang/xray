@@ -290,8 +290,8 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation requires its exact ordinary declaration");
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
     XrXirType parameter=XR_XIR_I64;SourceValue other={0};uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,&parameter,unary ? 0u : 1u,unary ? 0u : 1u,
-        &other,&supplied,"integer operation requires its exact ordinary declaration")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=unary ? 0u : 1u,.maximum=unary ? 0u : 1u,
+        .values=&other,.supplied=&supplied,.diagnostic="integer operation requires its exact ordinary declaration",.native_owner=native->id})) return false;
     if (bits && unary) return source_integer_bits(ctx,member->operation,receiver,(SourceValue){0},value);
     if (absolute) return source_integer_abs(ctx,receiver,value);
     if (hex) return source_integer_hex(ctx,node,receiver,value);

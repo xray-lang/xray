@@ -21,4 +21,7 @@
  * mutation permission; no reference, allocation or provider callback occurs. */
 XR_FUNC XrtManagedStatus xrt_managed_producer_borrow(const XrtManagedHeader *,
     bool (*retain)(void *), void (*drop)(void *), const XrtRuntimeTypeSpec **empty);
+/* Compare immutable physical schemas of a real live owner. This neither proves
+ * a producer identity nor grants a borrow or mutation permission. */
+XR_FUNC bool xrt_managed_layout_matches(const XrtManagedHeader *, const XrtRuntimeTypeSpec *);
 #endif // XNATIVE_MANAGED_H

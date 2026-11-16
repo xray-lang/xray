@@ -1,6 +1,6 @@
 fn wait_timeout() -> i64 {
     select {
-        after 1 -> {
+        after 1 => {
             return 7
         }
     }

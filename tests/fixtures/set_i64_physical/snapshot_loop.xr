@@ -1,0 +1,13 @@
+fn main() {
+    var input = [3, 1, 3, 2]
+    var seen = Set(input)
+    input[0] = 99
+    print(seen.contains(3))
+    print(len(seen))
+    for (var i = 0; i < 3; i = i + 1) {
+        var inner = Set([i])
+        inner.add(i)
+        print(len(inner))
+    }
+}
+main()

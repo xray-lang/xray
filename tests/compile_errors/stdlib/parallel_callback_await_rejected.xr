@@ -6,7 +6,7 @@ fn worker() -> i64 {
 
 fn main_logic() {
     const task = go worker()
-    parallel.forEach(0..4, (i) -> {
+    parallel.forEach(0..4, (i) => {
         var value = await task
         print(value)
     }, parallel.Options(2))

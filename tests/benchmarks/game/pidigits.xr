@@ -1,43 +1,51 @@
 // pidigits - Exact translation from Lua version
 // Signed BigInt: {sign: 1|-1, digits: [low..high]}
-fn bigint(n: i64) {
-    var sign = 1
-    var digits = []
-    if (n < 0) {
-        sign = -1
-        n = 0 - n
-    }
-    if (n == 0) {
-        digits.push(0)
-    } else {
-        while (n > 0) {
-            digits.push(n % 10)
-            n = n / 10
-        }
-    }
-    return { "sign": sign, "digits": digits }
+struct BigInt {
+    sign: i64
+    digits: Array<i64>
 }
 
-fn bigint_clone(a) {
-    var nd = []
+fn bigint(n: i64) -> BigInt {
+    var remaining = n
+    var sign = 1
+    var digits: Array<i64> = []
+    if (remaining < 0) {
+        sign = -1
+        remaining = 0 - remaining
+    }
+    if (remaining == 0) {
+        digits.push(0)
+    } else {
+        while (remaining > 0) {
+            digits.push(remaining % 10)
+            remaining = remaining / 10
+        }
+    }
+    return BigInt{ sign: sign, digits: digits }
+}
+
+fn bigint_clone(a: BigInt) -> BigInt {
+    var nd: Array<i64> = []
     for (i in 0..len(a.digits)) {
         nd.push(a.digits[i])
     }
-    return { "sign": a.sign, "digits": nd }
+    return BigInt{ sign: a.sign, digits: nd }
 }
 
-fn normalize(a) {
-    var d = a.digits
+fn normalize(a: BigInt) -> BigInt {
+    var result = a
+    var d = result.digits
     while (len(d) > 1 && d[len(d) - 1] == 0) {
         d.pop()
     }
     if (len(d) == 1 && d[0] == 0) {
-        a.sign = 1
+        result.sign = 1
     }
-    return a
+    result.digits = d
+    return result
 }
 
-fn compare_abs(a, b): i64 {
+fn compare_abs(a: BigInt, b: BigInt) -> i64 {
     var da = a.digits
     var db = b.digits
     if (len(da) > len(db)) {
@@ -59,10 +67,10 @@ fn compare_abs(a, b): i64 {
     return 0
 }
 
-fn add_abs(a, b) {
+fn add_abs(a: BigInt, b: BigInt) -> BigInt {
     var da = a.digits
     var db = b.digits
-    var rd = []
+    var rd: Array<i64> = []
     var carry = 0
     var count = len(da)
     if (len(db) > count) {
@@ -84,13 +92,13 @@ fn add_abs(a, b) {
     if (carry > 0) {
         rd.push(carry)
     }
-    return { "sign": 1, "digits": rd }
+    return BigInt{ sign: 1, digits: rd }
 }
 
-fn sub_abs(a, b) {
+fn sub_abs(a: BigInt, b: BigInt) -> BigInt {
     var da = a.digits
     var db = b.digits
-    var rd = []
+    var rd: Array<i64> = []
     var borrow = 0
     for (i in 0..len(da)) {
         var vb = 0
@@ -106,10 +114,10 @@ fn sub_abs(a, b) {
         }
         rd.push(diff)
     }
-    return normalize({ "sign": 1, "digits": rd })
+    return normalize(BigInt{ sign: 1, digits: rd })
 }
 
-fn bigint_add(a, b) {
+fn bigint_add(a: BigInt, b: BigInt) -> BigInt {
     if (a.sign == b.sign) {
         var r = add_abs(a, b)
         r.sign = a.sign
@@ -130,7 +138,7 @@ fn bigint_add(a, b) {
     }
 }
 
-fn bigint_sub(a, b) {
+fn bigint_sub(a: BigInt, b: BigInt) -> BigInt {
     var nb = bigint_clone(b)
     if (len(b.digits) == 1 && b.digits[0] == 0) {
         nb.sign = 1
@@ -140,20 +148,21 @@ fn bigint_sub(a, b) {
     return bigint_add(a, nb)
 }
 
-fn bigint_mul_int(a, n: i64) {
-    if (n == 0) {
+fn bigint_mul_int(a: BigInt, n: i64) -> BigInt {
+    var factor = n
+    if (factor == 0) {
         return bigint(0)
     }
     var rs = a.sign
-    if (n < 0) {
+    if (factor < 0) {
         rs = 0 - rs
-        n = 0 - n
+        factor = 0 - factor
     }
     var da = a.digits
-    var rd = []
+    var rd: Array<i64> = []
     var carry = 0
     for (i in 0..len(da)) {
-        var prod = da[i] * n + carry
+        var prod = da[i] * factor + carry
         rd.push(prod % 10)
         carry = prod / 10
     }
@@ -161,27 +170,27 @@ fn bigint_mul_int(a, n: i64) {
         rd.push(carry % 10)
         carry = carry / 10
     }
-    return normalize({ "sign": rs, "digits": rd })
+    return normalize(BigInt{ sign: rs, digits: rd })
 }
 
-fn bigint_div(a, b) {
+fn bigint_div(a: BigInt, b: BigInt) -> BigInt {
     var rs = a.sign * b.sign
     if (compare_abs(a, b) < 0) {
         return bigint(0)
     }
     var da = a.digits
-    var qd = []
+    var qd: Array<i64> = []
     for (i in 0..len(da)) {
         qd.push(0)
     }
-    var rem = { "sign": 1, "digits": [] }
+    var rem = BigInt{ sign: 1, digits: [] }
     for (pos in 0..len(da)) {
         var idx = len(da) - 1 - pos
         var nrd = [da[idx]]
         for (j in 0..len(rem.digits)) {
             nrd.push(rem.digits[j])
         }
-        rem = normalize({ "sign": 1, "digits": nrd })
+        rem = normalize(BigInt{ sign: 1, digits: nrd })
         var q = 0
         while (compare_abs(rem, b) >= 0) {
             rem = sub_abs(rem, b)
@@ -189,10 +198,10 @@ fn bigint_div(a, b) {
         }
         qd[idx] = q
     }
-    return normalize({ "sign": rs, "digits": qd })
+    return normalize(BigInt{ sign: rs, digits: qd })
 }
 
-fn bigint_to_int(a): i64 {
+fn bigint_to_int(a: BigInt) -> i64 {
     var d = a.digits
     var r = 0
     var base = 1
@@ -209,14 +218,14 @@ var lft_r = bigint(0)
 var lft_s = bigint(0)
 var lft_t = bigint(1)
 
-fn extract(x: i64): i64 {
+fn extract(x: i64) -> i64 {
     var num = bigint_add(bigint_mul_int(lft_q, x), lft_r)
     var den = bigint_add(bigint_mul_int(lft_s, x), lft_t)
     var quot = bigint_div(num, den)
     return bigint_to_int(quot)
 }
 
-fn is_safe(digit: i64): bool {
+fn is_safe(digit: i64) -> bool {
     return extract(4) == digit
 }
 

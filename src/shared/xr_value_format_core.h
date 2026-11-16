@@ -71,7 +71,6 @@ typedef enum XrValueFormatKind {
     XR_VALUE_FORMAT_TUPLE,
     XR_VALUE_FORMAT_MAP,
     XR_VALUE_FORMAT_SET,
-    XR_VALUE_FORMAT_RECORD,
 } XrValueFormatKind;
 
 typedef struct XrValueFormatView {
@@ -166,12 +165,12 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
         }
         case XR_VALUE_FORMAT_LITERAL:
             return xr_value_format_write(sink, view.name, view.name_size);
-        case XR_VALUE_FORMAT_ARRAY:case XR_VALUE_FORMAT_TUPLE:case XR_VALUE_FORMAT_MAP:case XR_VALUE_FORMAT_SET:case XR_VALUE_FORMAT_RECORD: {
+        case XR_VALUE_FORMAT_ARRAY:case XR_VALUE_FORMAT_TUPLE:case XR_VALUE_FORMAT_MAP:case XR_VALUE_FORMAT_SET: {
             if (xr_value_format_depth_exceeded(depth))
                 return xr_value_format_text(sink, "...");
-            bool pairs=view.kind==XR_VALUE_FORMAT_MAP || view.kind==XR_VALUE_FORMAT_RECORD;
-            const char *open=view.kind==XR_VALUE_FORMAT_TUPLE?"(":view.kind==XR_VALUE_FORMAT_MAP?"#{":view.kind==XR_VALUE_FORMAT_RECORD?"{":view.kind==XR_VALUE_FORMAT_SET?"#[":"[";
-            const char *close=view.kind==XR_VALUE_FORMAT_TUPLE?")":pairs?"}":"]";
+            bool pairs=view.kind==XR_VALUE_FORMAT_MAP;
+            const char *open=view.kind==XR_VALUE_FORMAT_TUPLE?"(":view.kind==XR_VALUE_FORMAT_MAP?"{":view.kind==XR_VALUE_FORMAT_SET?"Set([":"[";
+            const char *close=view.kind==XR_VALUE_FORMAT_TUPLE?")":pairs?"}":view.kind==XR_VALUE_FORMAT_SET?"])":"]";
             if (view.unsigned_value > INT64_MAX || !xr_value_format_text(sink, open))
                 return 0;
             int64_t shown = xr_value_format_limit_count((int64_t)view.unsigned_value);

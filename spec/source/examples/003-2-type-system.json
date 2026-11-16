@@ -1,0 +1,302 @@
+{
+  "types-explicit-conditions": {
+    "fence": "xray @id=types-explicit-conditions",
+    "code": "var ok = true\nif (ok) { }\n\nvar user: User? = findUser()\nif (user != null) {      // 显式存在性检查\n    print(user.name)     // 此分支 user 窄化为 User\n}\n\nvar flag: bool? = maybeFlag()\nif (flag == true) { }    // OK\nif (flag != null) { }    // OK\n// if (flag) { }         // 编译错误：裸 bool? 不能作条件\n\nvar s = \"\"\nif (len(s) != 0) { }     // OK\n// if (s) { }            // 编译错误",
+    "trivia": {
+      "en": {
+        "26": "      // explicit presence check\n    ",
+        "32": "     // user is narrowed to User here\n",
+        "58": "    // OK\n// if (flag) { }         // compile error: bare bool? cannot be a condition\n\n",
+        "73": "     // OK\n// if (s) { }            // compile error"
+      }
+    }
+  },
+  "003-2-type-system-example-002": {
+    "fence": "xray",
+    "code": "var a: rune = 'a'\nvar zh = '中'\nvar smile = '\\u{1F600}'\nprint(typeName(a))        // \"rune\"\nprint(smile.toUInt32())   // 128512"
+  },
+  "003-2-type-system-example-003": {
+    "fence": "xray",
+    "code": "fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回\nfn ping() { print(\"pong\") }                  // 省略返回类型 = ()\nvar r: () = log(\"hi\")                        // 允许；r 是 Unit 值",
+    "trivia": {
+      "en": {
+        "16": "   // explicit Unit return\n",
+        "26": "                  // omitted return type = ()\n",
+        "36": "                        // allowed; r is a Unit value"
+      }
+    }
+  },
+  "003-2-type-system-example-004": {
+    "fence": "xray",
+    "code": "extern \"C\" {\n    fn malloc(n: usize) -> MutPtr<u8>\n    fn free(p: MutPtr<u8>)\n}\n\nvar p = unsafe { malloc(4) }\nunsafe {\n    p[0] = 42\n    print(p.deref())\n    free(p)\n}"
+  },
+  "types-array": {
+    "fence": "xray @id=types-array",
+    "code": "var a: Array<i64> = [1, 2, 3]\nvar b = a                        // b 是逻辑副本\nb[0] = 9                         // a[0] 仍为 1\nvar c: Array<string> = []         // 显式空数组",
+    "trivia": {
+      "en": {
+        "19": "                        // b is a logical copy\n",
+        "25": "                         // a[0] is still 1\n",
+        "35": "         // explicit empty array"
+      }
+    }
+  },
+  "types-slice": {
+    "fence": "xray @id=types-slice",
+    "code": "fn main() {\n    var arr: Array<i64> = [10, 20, 30, 40]\n    var view: Slice<i64> = arr[1:3]\n    print(view[0])                         // 20；view 的最后一次使用\n    var writable: MutSlice<i64> = arr[1:3]\n    writable[1] = 31                       // writable 的最后一次使用\n    print(arr[2])                          // 31\n    var owned: Array<i64> = copy arr[1:3] // 物化拥有式副本\n    arr.push(50)                           // 没有存活借用\n    print(len(owned))                      // 2\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "43": "                         // 20; last use of view\n    ",
+        "63": "                       // last use of writable\n    ",
+        "85": " // materialize an owned copy\n    ",
+        "91": "                           // no live borrow\n    "
+      }
+    }
+  },
+  "types-map": {
+    "fence": "xray @id=types-map @check",
+    "code": "var m: Map<string, i64> = {\"a\": 1, \"b\": 2}\nvar m2 = {\"a\": 1, \"b\": 2}\nvar empty: Map<string, i64> = {}\nm[\"c\"] = 3\nvar v = m[\"a\"]\nvar maybe = m.get(\"missing\")"
+  },
+  "types-set": {
+    "fence": "xray @id=types-set @check",
+    "code": "var s: Set<i64> = Set([1, 2, 3])\nvar empty = Set<i64>()"
+  },
+  "types-channel": {
+    "fence": "xray @id=types-channel",
+    "code": "const ch: Channel<i64> = Channel<i64>(10)"
+  },
+  "003-2-type-system-example-010": {
+    "fence": "xray",
+    "code": "var buf = Array<u8>(1024)\nvar init = Array<u8>([72, 101, 108, 108, 111])"
+  },
+  "types-json-object": {
+    "fence": "xray @id=types-json-object @check",
+    "code": "struct User {\n    name: string\n    age: i64\n}\nvar user = User{name: \"Alice\", age: 30}\nvar data: JSON.Object = {\"name\": \"Alice\", \"age\": 30}\ndata[\"traceId\"] = \"req-1\""
+  },
+  "types-range": {
+    "fence": "xray @id=types-range",
+    "code": "var halfOpen = 1..4       // 1, 2, 3\nvar inclusive = 1..=4     // 1, 2, 3, 4\n\nprint(len(halfOpen))              // 3\nprint(inclusive.contains(4))      // true\nprint(inclusive.toArray())        // [1, 2, 3, 4]\n\nfor (i in 3..=5) {\n    print(i)\n}"
+  },
+  "types-nullable": {
+    "fence": "xray @id=types-nullable",
+    "code": "var x: i64? = null      // OK\nvar y: i64? = 42        // OK\nvar z: i64 = null       // 编译错误：null 不是 i64",
+    "trivia": {
+      "en": {
+        "20": "       // compile error: null is not i64"
+      }
+    }
+  },
+  "003-2-type-system-example-014": {
+    "fence": "xray",
+    "code": "// 1. 空合并\nvar v = x ?? 0\n\n// 2. 可选链（整链短路，结果可空）\nvar city = user?.address.city\n\n// 3. 强制解包\nvar v: i64 = x!           // 若 x 为 null，运行时 panic NullError\n\n// 4. 流敏感收窄（完整规则见 §2.13）\nif (x != null) {\n    print(x + 1)          // 此分支内 x 已收窄为 i64\n}\nif (x is i64) {\n    print(x + 1)\n}",
+    "trivia": {
+      "en": {
+        "0": "// 1. Null coalescing\n",
+        "6": "\n\n// 2. Optional chaining (whole-chain short-circuit, nullable result)\n",
+        "14": "\n\n// 3. Force unwrap\n",
+        "21": "           // panics with NullError at runtime if x is null\n\n// 4. Flow-sensitive narrowing (full rules in §2.13)\n",
+        "34": "          // x is narrowed to i64 in this branch\n"
+      }
+    }
+  },
+  "types-union-basic": {
+    "fence": "xray @id=types-union-basic",
+    "code": "var v: i64 | string = 42\nv = \"hello\"             // OK"
+  },
+  "003-2-type-system-example-016": {
+    "fence": "xray @fragment",
+    "code": "var v: i64 | string = 1\nmatch (v) {\n    is i64    => print(\"i64: ${v}\"),\n    is string => print(\"str: ${v}\"),\n}"
+  },
+  "003-2-type-system-example-017": {
+    "fence": "xray",
+    "code": "var a: i64 | f64 = 1        // 精确匹配 i64\nvar b: i64 | f64 = 1.0      // 精确匹配 f64\nvar c: i32 | string = 7       // 唯一整数族成员：i32\nvar d: f32 | string = 1.5     // 唯一浮点族成员：f32",
+    "trivia": {
+      "en": {
+        "8": "        // exact match: i64\n",
+        "16": "      // exact match: f64\n",
+        "24": "       // sole integer-family member: i32\n",
+        "32": "     // sole f64-family member: f32"
+      }
+    }
+  },
+  "types-tuple": {
+    "fence": "xray @id=types-tuple",
+    "code": "// 字面量\nvar t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)\nvar h = (10, \"hi\", true)          // 异构元组\nvar single = (99,)                // 单元素元组：注意尾逗号\n\n// 类型注解\nvar p: (i64, string) = (7, \"ok\")\n\n// 字段访问：.N（N 是编译期常量整数下标）\nvar first = t.0                   // 1\nvar mid   = t.1                   // 2\nvar nest  = ((1, 2), (3, 4))\nvar a     = nest.0.0              // 1\nvar b     = nest.1.1              // 4\n\n// 函数返回与解构\nfn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }\nvar (q, r) = divmod(17, 5)        // tuple destructure\n\n// 泛型\nfn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }\nvar p2 = pair(1, \"x\")             // (i64, string)",
+    "trivia": {
+      "en": {
+        "0": "// Literals\n",
+        "10": "                 // type inferred as (i64, i64, i64)\n",
+        "20": "          // heterogeneous tuple\n",
+        "27": "                // single-element tuple: note trailing comma\n\n// Type annotation\n",
+        "41": "\n\n// Field access: .N (N is a compile-time constant integer index)\n",
+        "81": "              // 4\n\n// Function return and destructuring\n",
+        "123": "        // tuple destructure\n\n// Generic\n"
+      }
+    }
+  },
+  "003-2-type-system-example-019": {
+    "fence": "xray",
+    "code": "fn main() {\n    var pair = (1, \"hello\")\n    print(pair.0)   // 输出：1\n    print(pair.1)   // 输出：hello\n    var (a, b) = pair    // 解构\n    print(a)        // 输出：1\n    print(b)        // 输出：hello\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "19": "   // prints 1\n    ",
+        "25": "   // prints hello\n    ",
+        "33": "    // destructuring\n    ",
+        "37": "        // prints 1\n    ",
+        "41": "        // prints hello\n"
+      }
+    }
+  },
+  "types-alias": {
+    "fence": "xray @id=types-alias @check",
+    "code": "type Result = i64 | string\ntype Mapper = fn(i64) -> i64\nstruct Point { x: f64; y: f64 }\ntype Position = Point\ntype Pair<T> = (T, T)\ntype Mapper2<T, U> = fn(T) -> U"
+  },
+  "003-2-type-system-example-021": {
+    "fence": "xray @fragment",
+    "code": "var p: Pair<i64> = (1, 2)                 // 等价于 (i64, i64)\nvar f: Mapper2<i64, string> = (n) => string(n)",
+    "trivia": {
+      "en": {
+        "13": "                 // equivalent to (i64, i64)\n"
+      }
+    }
+  },
+  "types-nonescaping-parameters": {
+    "fence": "xray @id=types-nonescaping-parameters",
+    "code": "fn apply(callback: fn() -> i64) -> i64 {\n    const thunk = fn() -> i64 { return callback() + 1 }\n    return thunk()\n}\nfn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) -> i64 {\n    return fn(x: i64) -> i64 { return f(g(x)) }\n}"
+  },
+  "003-2-type-system-example-023": {
+    "fence": "xray @fragment",
+    "code": "fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {\n    var out: Array<U> = []\n    for (x in xs) { out.push(try f(x)) }\n    return out\n}"
+  },
+  "types-inference": {
+    "fence": "xray @id=types-inference @check",
+    "code": "var x = 1               // x: i64\nvar y = 1.5             // y: f64\nvar z = \"hello\"         // z: string\nvar a = [1, 2, 3]       // a: Array<i64>\nvar m = {\"a\": 1}    // m: Map<string, i64>\nstruct Named { name: string }\nvar p = Named{name: \"A\"} // p: Named\nvar f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断",
+    "trivia": {
+      "en": {
+        "56": "   // f: fn(i64) -> i64 — explicit parameter, inferred return"
+      }
+    }
+  },
+  "types-cast": {
+    "fence": "xray @id=types-cast",
+    "code": "var n = x as i64        // 失败抛 TypeError\nvar n = x as i64?       // 失败返回 null（安全转换）",
+    "trivia": {
+      "en": {
+        "6": "        // throws TypeError on failure\n",
+        "13": "       // returns null on failure (safe cast)"
+      }
+    }
+  },
+  "003-2-type-system-example-026": {
+    "fence": "xray",
+    "code": "if (v is User) {\n    // 编译器在此分支窄化 v 的类型为 User\n}",
+    "trivia": {
+      "en": {
+        "7": "\n    // In this branch the compiler narrows v's type to User\n"
+      }
+    }
+  },
+  "003-2-type-system-example-027": {
+    "fence": "xray",
+    "code": "typeOf(value)     // 返回 Type 枚举值（i64 表示）\ntypeName(value)   // 返回类型名字符串",
+    "trivia": {
+      "en": {
+        "4": "     // returns a Type enum value (an i64 representation)\n",
+        "8": "   // returns the type name as a string"
+      }
+    }
+  },
+  "narrowing-extract-binding": {
+    "fence": "xray @id=narrowing-extract-binding",
+    "code": "class Address { city: string\n    init(city: string) { this.city = city } }\nclass User { address: Address?\n    init(address: Address?) { this.address = address } }\n\nfn show(u: User) {\n    var addr = u.address          // 提取为简单绑定\n    if (addr != null) {\n        print(addr.city)          // OK：addr 已收窄为 Address\n    }\n}",
+    "trivia": {
+      "en": {
+        "56": "          // extract into a simple binding\n    ",
+        "69": "          // OK: addr is narrowed to Address\n    "
+      }
+    }
+  },
+  "narrowing-short-circuit": {
+    "fence": "xray @id=narrowing-short-circuit",
+    "code": "fn check(a: string?) -> bool {\n    if (a != null && len(a) > 0) { return true }     // e2 在 a: string 下分析\n    if (a == null || len(a) == 0) { return false }   // e2 在 a: string 下分析\n    return true\n}",
+    "trivia": {
+      "en": {
+        "28": "     // e2 analyzed with a: string\n    ",
+        "45": "   // e2 analyzed with a: string\n    "
+      }
+    }
+  },
+  "narrowing-early-return": {
+    "fence": "xray @id=narrowing-early-return",
+    "code": "fn nameLen(s: string?) -> i64 {\n    if (s == null) { return 0 }\n    return len(s)                 // 此处 s 已收窄为 string\n}",
+    "trivia": {
+      "en": {
+        "26": "                 // s is narrowed to string here\n"
+      }
+    }
+  },
+  "narrowing-loop": {
+    "fence": "xray @id=narrowing-loop",
+    "code": "fn drain(first: string?) {\n    var cur = first\n    while (cur != null) {         // 循环体入口 cur: string\n        print(cur)\n        cur = null                // 回边贡献 null，循环头重新合流\n    }\n}",
+    "trivia": {
+      "en": {
+        "20": "         // cur is string at loop-body entry\n        ",
+        "27": "                // back edge contributes null; header re-joins\n    "
+      }
+    }
+  },
+  "narrowing-invalidation": {
+    "fence": "xray @id=narrowing-invalidation",
+    "code": "fn f(a: string?) {\n    if (a != null) {\n        print(len(a))             // OK\n        a = null                  // 赋值使收窄失效\n        print(a ?? \"\")            // 必须重新解包\n    }\n}",
+    "trivia": {
+      "en": {
+        "26": "                  // assignment invalidates the narrowing\n        ",
+        "32": "            // must be unwrapped again\n    "
+      }
+    }
+  },
+  "003-2-type-system-example-033": {
+    "fence": "xray",
+    "code": "var a = [1, 2, 3]\nvar b = a\nconst snapshot = a\nb[0] = 9\na.push(a[0])                 // 先求值实参，再建立 ref receiver 的独占访问\nprint(snapshot[0])          // 1\nprint(len(snapshot))        // 3\nprint(b[0])                 // 9\nprint(len(a))               // 4",
+    "trivia": {
+      "en": {
+        "33": "                 // evaluate arguments before exclusive receiver access\n"
+      }
+    }
+  },
+  "003-2-type-system-example-034": {
+    "fence": "xray",
+    "code": "fn main() {\n    var nums = [1, 2, 3]\n    nums.push(4)\n    print(nums)          // 输出：[1, 2, 3, 4]\n    print(len(nums))     // 输出：4\n    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })\n    print(doubled)       // 输出：[2, 4, 6, 8]\n    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })\n    print(evens)         // 输出：[2, 4]\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "25": "          // prints [1, 2, 3, 4]\n    ",
+        "32": "     // prints 4\n    ",
+        "58": "       // prints [2, 4, 6, 8]\n    ",
+        "86": "         // prints [2, 4]\n"
+      }
+    }
+  },
+  "types-map-set-usage": {
+    "fence": "xray @id=types-map-set-usage @run",
+    "code": "fn main() {\n    var scores = {\"alice\": 95, \"bob\": 88}\n    scores.set(\"carol\", 77)\n    print(scores.get(\"alice\") ?? 0)   // 输出：95\n    print(len(scores))                 // 输出：3\n\n    var seen = Set<i64>()\n    seen.add(1)\n    seen.add(2)\n    seen.add(2)\n    print(len(seen))          // 输出：2\n    print(seen.contains(1))   // 输出：true\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "36": "   // prints 95\n    ",
+        "43": "                 // prints 3\n\n    ",
+        "77": "          // prints 2\n    ",
+        "86": "   // prints true\n"
+      }
+    },
+    "output": "95\n3\n2\ntrue\n"
+  },
+  "003-2-type-system-example-036": {
+    "fence": "xray",
+    "code": "fn main() {\n    var name: string? = null\n    print(name ?? \"anonymous\")   // 输出：anonymous\n    var city: string? = \"NYC\"\n    print(city ?? \"unknown\")     // 输出：NYC\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "18": "   // prints anonymous\n    ",
+        "31": "     // prints NYC\n"
+      }
+    }
+  }
+}

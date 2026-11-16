@@ -14,7 +14,7 @@ int main(void) {
         "enum Flag { Off, On }\n"
         "fn choose()->Flag { return Flag.On }\n"
         "export fn answer()->i64 { const flag=comptime choose();"
-        " return match(flag){Flag.Off -> 0, Flag.On -> 42} }\n";
+        " return match(flag){Flag.Off => 0, Flag.On => 42,} }\n";
     XrSourceCompileOptions options=xray_source_compile_options_default();
     options.stdlib_path=XR_PUBLIC_STDLIB;
     XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,

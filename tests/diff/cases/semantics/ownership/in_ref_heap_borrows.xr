@@ -43,7 +43,7 @@ print(sum(values))
 values.push(4)
 print(sum(values))
 
-var table: Map<string, i64> = #{}
+var table: Map<string, i64> = {}
 put(ref table, "x", 7)
 print(hasKey(table, "x"))
 print(table["x"])

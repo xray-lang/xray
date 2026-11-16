@@ -15,6 +15,7 @@
 #include "xnative_locations.h"
 #include "os/os_native_output.h"
 #include "xnative_value.h"
+#include "xnative_managed.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
 typedef struct XrtOutputFailure {
@@ -40,7 +41,8 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_TYPED_PANIC,
     XRT_FAILURE_HOST_CLOCK,
     XRT_FAILURE_VALUE,
-    XRT_FAILURE_NULL_UNWRAP
+    XRT_FAILURE_NULL_UNWRAP,
+    XRT_FAILURE_MESSAGE_PANIC
 } XrtExecutionFailureKind;
 
 typedef struct XrtExecutionFailure {
@@ -50,8 +52,17 @@ typedef struct XrtExecutionFailure {
         XrtArithmeticPanic panic;
         XrtHostClockFailure clock;
         struct { XrXirValueStatus status; uint32_t source_id; } value;
+        struct { uint32_t code, source_id; XrtManagedHeader *message; } message;
     } detail;
 } XrtExecutionFailure;
+/* A message failure owns one genuine fixed String reference independently of
+ * execution retirement. Clear the owner before drop callbacks; repeated drop
+ * is harmless. A receiver must drop or transfer it before reusing failure. */
+XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
+/* Consume an independently owned fixed String, publish it to preowned failure
+ * storage, then leave the active execution. Only duplicate-key code 434 is
+ * admitted here. No allocation or owner lookup occurs during the transfer. */
+XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id);
 
 typedef enum XrtExecutionStatus {
     XRT_EXECUTION_COMPLETED,

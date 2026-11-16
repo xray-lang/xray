@@ -1,1 +1,1 @@
-var f = x -> i64 { return x }
+var f = x => i64 { return x }

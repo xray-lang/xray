@@ -32,6 +32,20 @@ typedef struct XrtMapInput {
 } XrtMapInput;
 typedef struct XrtMapBackingRow XrtMapBackingRow;
 typedef struct XrtMapBacking XrtMapBacking;
+typedef struct XrtMapLiteralOrigin { uint32_t kind, line, column; } XrtMapLiteralOrigin;
+typedef struct XrtMapLiteral {
+    const char *path;
+    size_t path_length;
+    const XrtMapLiteralOrigin *items;
+    size_t count;
+} XrtMapLiteral;
+/* Kind zero consumes an explicit key/value; kind one consumes a spread Map.
+ * Inputs and provenance remain live and unchanged through the synchronous call. */
+typedef struct XrtMapLiteralInput {
+    union { const XrtStringBacking *key; const XrtMapBacking *spread; } source;
+    int64_t value;
+} XrtMapLiteralInput;
+typedef struct XrtMapLiteralDuplicate { size_t first, second; } XrtMapLiteralDuplicate;
 #ifndef __cplusplus
 struct XrtMapBackingRow {
     XrtStringBacking *key;
@@ -65,6 +79,10 @@ extern "C" {
  * INDEX preserves the missing-key typed panic. All borrows survive the call. */
 XRAY_API void xrt_native_map_create(XrtManagedFrame *, size_t slot,
     const XrtMapInput *, uint32_t source_id);
+/* Literal inputs keep explicit provenance through spreads. A duplicate leaves
+ * the constructor transaction before creating the full owned E0434 message. */
+XRAY_API void xrt_native_map_literal_create(XrtManagedFrame *, size_t slot,
+    const XrtMapLiteral *, const XrtMapLiteralInput *, uint32_t source_id);
 XRAY_API bool xrt_native_map_get(const XrtManagedHeader *, const XrtStringBacking *,
     int64_t *value, uint32_t source_id);
 XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *, const XrtStringBacking *, uint32_t source_id);

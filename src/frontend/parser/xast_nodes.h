@@ -97,9 +97,7 @@ struct AstNode {
         SliceExprNode slice_expr;
         MemberAccessNode member_access;
         TemplateStringNode template_str;
-        ObjectLiteralNode object_literal;
         MapLiteralNode map_literal;
-        SetLiteralNode set_literal;
         ClassDeclNode class_decl;
         ClassDeclNode struct_decl;
         ClassDeclNode union_decl;
@@ -134,7 +132,6 @@ struct AstNode {
         PatternMultiNode pattern_multi;
         PatternTupleNode pattern_tuple;
         PatternAdtNode pattern_adt;
-        PatternObjectNode pattern_object;
         PatternArrayNode pattern_array;
         PatternTypeNode pattern_type;
         TernaryNode ternary;

@@ -466,7 +466,9 @@ static void inline_code_retirement(void) {
 }
 #include "lir_slice_bytecode_cases.h"
 #include "lir_string_append_cases.h"
+#include "rbc_map_literal_cases.h"
 int main(void) {
+    receiving_map_provenance(); receiving_map_message_lifetime();
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
     const XrRbcValueCode *callee = xr_rbc_module_value_code(xr_rbc_program_view(program),1);

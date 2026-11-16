@@ -10,8 +10,8 @@ class Key {
 }
 
 fn main() {
-    var values: Map<Key, i64> = #{}
-    var keys: Set<Key> = #[]
+    var values: Map<Key, i64> = {}
+    var keys: Set<Key> = Set()
     var inserted = Key(7, "alpha")
     values.set(inserted, 41)
     keys.add(inserted)

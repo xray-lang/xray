@@ -8,7 +8,7 @@ order: 002
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字表，52 条）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字表，12 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 实现参考：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字声明）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字声明）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -36,13 +36,16 @@ xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达�
 
 条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`++`、`--`、`(`、`[`。因此：
 
+<!-- xr-source:example 002-1-lexical-structure-example-001 -->
 ```xray
 var x = a
 !b            // 两条语句；不是 var x = a!
 ```
+<!-- /xr-source -->
 
 行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`/`、`as`、`is` 等）时不存在歧义，续行照常工作：
 
+<!-- xr-source:example 002-1-lexical-structure-example-002 -->
 ```xray
 var ok = check(a)
     && check(b)      // 续行
@@ -53,13 +56,16 @@ var total = base +
 var quotient = total
     / 2              // 除法只有中缀角色，续行
 ```
+<!-- /xr-source -->
 
 若需要以 `-` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
 
+<!-- xr-source:example 002-1-lexical-structure-example-003 -->
 ```xray
 var d = (total
     - used)          // 括号组内行结尾透明
 ```
+<!-- /xr-source -->
 
 > 表达式语句的值会被丢弃，因此**没有任何效果的表达式语句是错误**（`E0208`）。这条规则与上面的语句边界规则配套：被正确断开的续行不会变成静默的空操作，而是立刻报错并提示改写方式。REPL 例外——它会打印末尾裸表达式的值，该值属于被观察的结果。
 
@@ -67,12 +73,14 @@ var d = (total
 
 xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
+<!-- xr-source:example 002-1-lexical-structure-example-004 -->
 ```xray
 // 行注释，从 // 到行尾
 /* 块注释，
    可跨行；
    支持 /* 嵌套 */ 到任意合理深度 */
 ```
+<!-- /xr-source -->
 
 注释可出现在任何空白能出现的地方。formatter 与 LSP 可以读取注释 trivia；trivia 不参与语法分析。
 
@@ -80,15 +88,18 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ### 1.4 标识符
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-01 -->
 ```ebnf
-Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
-IdentCont  ::= IdentStart | '0'..'9'
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 ```
+<!-- /xr-source -->
 
 输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
-**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`isolated`、`after` 可作为普通标识符）。
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`ref`、`move`、`isolated`、`after` 可作为普通标识符）。
 
 字符 `_` 是**专用通配符 token**，不是普通标识符：
 
@@ -100,64 +111,123 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **64 个保留关键字**，按用途分组如下：
+<!-- xr-source:keywords count -->
+当前词法实现保留 **63 个关键字**。完整名单由词法声明生成，见附录 B；目标分类的变更不代表已实现。
+<!-- /xr-source -->
 
 #### 1.5.1 声明与流程控制
 
+<!-- xr-source:keywords group-1 -->
 | 关键字 | 用途 |
 |--|--|
-| `var` | 可变变量声明 |
-| `const` | 固定绑定及其值语义部分 |
+| `break` | 循环控制 |
 | `comptime` | 强制编译期求值的表达式前缀 |
+| `const` | 固定绑定及其值语义部分 |
+| `continue` | 循环控制 |
+| `else` | 条件分支 |
 | `fn` | 函数声明 |
-| `return` | 函数返回 |
-| `yield` | 生成器产值语句 |
-| `if` `else` | 条件分支 |
-| `while` | 循环 |
-| `for` `in` | 循环（C 风格 + for-in） |
-| `break` `continue` | 循环控制 |
+| `for` | 循环（C 风格 + for-in） |
+| `if` | 条件分支 |
+| `in` | 循环（C 风格 + for-in） |
 | `match` | 模式匹配 |
+| `return` | 函数返回 |
+| `var` | 可变变量声明 |
+| `while` | 循环 |
+| `yield` | 生成器产值语句 |
+<!-- /xr-source -->
+
 
 #### 1.5.2 面向对象与类型
 
+<!-- xr-source:keywords group-2 -->
 | 关键字 | 用途 |
 |--|--|
-| `class` `struct` | 类/结构体声明 |
-| `packed` `union` | FFI 布局声明 |
-| `extends` | 类继承 |
-| `interface` `implements` | 接口声明/实现 |
+| `as` | 运行时类型检查 / 转换 |
+| `class` | 类/结构体声明 |
 | `enum` | 枚举声明 |
-| `type` | 类型别名 |
-| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
-| `this` `super` | 自我/父类引用 |
-| `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
-| `const` | 不可变字段/绑定修饰符 |
+| `extends` | 类继承 |
 | `final` | `final class` 禁止继承 |
+| `implements` | 接口声明/实现 |
+| `interface` | 接口声明/实现 |
+| `is` | 运行时类型检查 / 转换 |
+| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `operator` | 保留字；语言不提供运算符重载 |
-| `is` `as` | 运行时类型检查 / 转换 |
+| `packed` | FFI 布局声明 |
+| `private` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `static` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `struct` | 类/结构体声明 |
+| `super` | 自我/父类引用 |
+| `this` | 自我/父类引用 |
+| `type` | 类型别名 |
+| `union` | FFI 布局声明 |
+| `where` | 类型与泛型规则 |
+<!-- /xr-source -->
+
 
 `abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
 
 #### 1.5.3 错误处理
 
-`try` `catch` `throw` `defer`
+<!-- xr-source:keywords group-3 -->
+| 关键字 | 用途 |
+|--|--|
+| `catch` | 错误处理 |
+| `defer` | 错误处理 |
+| `throw` | 错误处理 |
+| `try` | 错误处理 |
+<!-- /xr-source -->
+
 
 `throws` 是签名位置的上下文关键字（§1.5.8），不是全局保留字。
 
 #### 1.5.4 模块系统
 
-`import` `export`
+<!-- xr-source:keywords group-4 -->
+| 关键字 | 用途 |
+|--|--|
+| `export` | 模块导入与导出 |
+| `import` | 模块导入与导出 |
+<!-- /xr-source -->
+
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe`
+<!-- xr-source:keywords group-5 -->
+| 关键字 | 用途 |
+|--|--|
+| `await` | 并发与底层能力 |
+| `go` | 并发与底层能力 |
+| `scope` | 并发与底层能力 |
+| `select` | 并发与底层能力 |
+| `unsafe` | 并发与底层能力 |
+<!-- /xr-source -->
+
 
 `parallel` 是需要显式 import 的标准库模块名，不是词法关键字。
 
 #### 1.5.6 类型名（保留）
 
-`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
-`f32` `f64` `bool` `string` `rune`
+<!-- xr-source:keywords group-6 -->
+| 关键字 | 用途 |
+|--|--|
+| `bool` | 内建标量类型 |
+| `f32` | 内建标量类型 |
+| `f64` | 内建标量类型 |
+| `i16` | 内建标量类型 |
+| `i32` | 内建标量类型 |
+| `i64` | 内建标量类型 |
+| `i8` | 内建标量类型 |
+| `isize` | 内建标量类型 |
+| `rune` | 内建标量类型 |
+| `string` | 内建标量类型 |
+| `u16` | 内建标量类型 |
+| `u32` | 内建标量类型 |
+| `u64` | 内建标量类型 |
+| `u8` | 内建标量类型 |
+| `usize` | 内建标量类型 |
+<!-- /xr-source -->
+
 
 `Never` 是预置的无值底类型名，不是词法关键字；它可用于 `throws(Never)`（§2.2.2）。
 
@@ -172,43 +242,58 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.7 字面量关键字
 
-`true` `false` `null`
+<!-- xr-source:keywords group-7 -->
+| 关键字 | 用途 |
+|--|--|
+| `false` | 字面量 |
+| `null` | 字面量 |
+| `true` | 字面量 |
+<!-- /xr-source -->
+
 
 #### 1.5.8 上下文敏感关键字
 
-不在 lexer 关键字表中，由 parser 按位置识别。**可以**作为普通标识符使用：
-
-| Token | 出现位置 |
+<!-- xr-source:keywords contextual -->
+| 关键字 | 用途 |
 |--|--|
 | `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
-| `default` | 保留，当前未启用 |
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `isolated` | `scope(isolated)` 选项（§10.7） |
-| `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `after` | `select` 的超时分支 (`after 1000 => ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 | `escaping` | 参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存 |
+| `copy` | 位置的显式复制表达式（§2.14） |
+| `nosuspend` | 函数类型的无挂起承诺前缀 |
+| `override` | 类实例方法的显式覆写标记 |
+<!-- /xr-source -->
+
+不在 lexer 关键字表中，由 parser 按位置识别。**可以**作为普通标识符使用：
+
 
 ### 1.6 字面量
 
 #### 1.6.1 整数字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-02 -->
 ```ebnf
-IntLiteral ::= DecLit | HexLit | OctLit | BinLit
-DecLit ::= Digit (Digit | '_')*
-HexLit ::= '0x' HexDigit (HexDigit | '_')*
-OctLit ::= '0o' OctDigit (OctDigit | '_')*
-BinLit ::= '0b' BinDigit (BinDigit | '_')*
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 ```
+<!-- /xr-source -->
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 无唯一数值上下文的整数字面量默认类型为 `i64`。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：默认 `i64` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
 - 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `i64` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
 
+<!-- xr-source:example 002-1-lexical-structure-example-005 -->
 ```xray
 42
 0xFF
@@ -216,46 +301,57 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 0o77
 1_000_000      // 一百万
 ```
+<!-- /xr-source -->
 
 #### 1.6.2 浮点字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-03 -->
 ```ebnf
-FloatLiteral ::= Digit+ '.' Digit* Exp?
-              | Digit+ Exp
-              | '.' Digit+ Exp?
-Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 ```
+<!-- /xr-source -->
 
 无唯一浮点上下文时，字面量类型为 `f64`（IEEE-754 双精度）；唯一的 `f32`/`f64` 上下文直接选择舍入精度，完整拼写和舍入合同见 §17.25。词法目标包含前导/尾随点号形式；当前 XIR 源码子集尚未准入这些形式，不能将转换核心的支持计为完整词法实现。
 
+<!-- xr-source:example 002-1-lexical-structure-example-006 -->
 ```xray
 3.14
 1.0e10
 2.5E-3
 .5             // 等价 0.5
 ```
+<!-- /xr-source -->
 
 #### 1.6.3 BigInt 字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-04 -->
 ```ebnf
-BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-007 -->
 ```xray
 123n
 0xFFn
 0b1010n
 ```
+<!-- /xr-source -->
 
 任意精度整数，运算永不溢出。类型见 §14.8。
 
 #### 1.6.4 布尔与 null 字面量
 
+<!-- xr-source:example 002-1-lexical-structure-example-008 -->
 ```xray
 true
 false
 null
 ```
+<!-- /xr-source -->
 
 - `true` / `false`：类型 `bool`。
 - `null`：类型 `null`（语义上是所有可空类型 `T?` 的零值）。
@@ -266,9 +362,10 @@ Xray 的 quoted literal 只使用双引号；单引号专用于 `rune`，反引�
 
 ##### Inline escaped string（Q = 1）
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-05 -->
 ```ebnf
 InlineEscapedString ::= '"' StrChar* '"'
-StrChar ::= 任何非双引号、非反斜杠、非换行符
+StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -277,11 +374,13 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
                   | 'u{' HexDigit{1,6} '}')
 Interpolation ::= '${' Expression '}'
 ```
+<!-- /xr-source -->
 
 - inline literal 不能跨物理行；需要换行时使用 escape 或 block form。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
 - `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
+<!-- xr-source:example 002-1-lexical-structure-example-009 -->
 ```xray
 "hello"
 "Hello, ${name}! ${1 + 2}"
@@ -289,44 +388,52 @@ Interpolation ::= '${' Expression '}'
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
+<!-- /xr-source -->
 
 插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
 
 ##### Inline raw string（`r` prefix，Q = 1）
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-06 -->
 ```ebnf
 InlineRawString ::= 'r' '"' RawChar* '"'
-RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
+RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
+<!-- /xr-source -->
 
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
 - 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
 - raw string 使用 `r"..."`；单引号只解析为 `rune`。
 
+<!-- xr-source:example 002-1-lexical-structure-example-010 -->
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
 r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
 ```
+<!-- /xr-source -->
 
 ##### 统一 prefix 与可变 quote delimiter
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-07 -->
 ```ebnf
-QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
 LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
 InlineQuoted ::= '"' InlinePayload* '"' | '""'
 BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
 QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
+<!-- /xr-source -->
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。字段标识符和 C literal 仍遵守各自的无 NUL 限制。
 - `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
 - `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
 
+<!-- xr-source:example 002-1-lexical-structure-example-011 -->
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // 反斜杠原样，仍插值
@@ -335,15 +442,19 @@ br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
 c"puts"                   // [u8; 5]，最后一项是 appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
+<!-- /xr-source -->
 
 一个双引号是 inline delimiter；两个连续双引号只表示当前 prefix family 的空 payload，不是 block opener：
 
+<!-- xr-source:example 002-1-lexical-structure-example-012 -->
 ```xray
 "" r"" b"" br"" c"" cr""
 ```
+<!-- /xr-source -->
 
 三个及以上连续双引号形成 block delimiter。opener 后必须立即是 LF 或 CRLF；closer 必须从自己的行开始，形状只能是“margin + 与 opener 完全相同数量的双引号 + 换行或 EOF”。closer 行不能有尾随空白、注释、逗号、分号或括号；后续 token 从下一行开始。
 
+<!-- xr-source:example 002-1-lexical-structure-example-013 -->
 ```xray
 const HTML = r"""
 <div class="card">
@@ -356,6 +467,7 @@ echo ${HOME}
 """
 """"
 ```
+<!-- /xr-source -->
 
 opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统一为 LF。closer 前的 spaces/tabs 是 margin；每个非空正文行必须以完全相同的 byte prefix 开头，移除后才形成 payload。tabs 与 spaces 不按可视列等价。
 
@@ -365,10 +477,12 @@ opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统�
 
 #### 1.6.6 `rune` 字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-08 -->
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
+<!-- /xr-source -->
 
 - `'a'` 的类型是 `rune`，表示一个 Unicode scalar value。
 - 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
@@ -376,11 +490,13 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
 - rune 字面量不支持 `${...}` 插值。
 
+<!-- xr-source:example 002-1-lexical-structure-example-014 -->
 ```xray
 var a: rune = 'a'
 var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
+<!-- /xr-source -->
 
 ##### 字符串插值
 
@@ -388,14 +504,18 @@ var smile: rune = '\u{1F600}'
 
 #### 1.6.7 正则字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-09 -->
 ```ebnf
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-015 -->
 ```xray @fragment
 var letters = re"(?i)[a-z]+"
 var decimal = re"\d+\.\d+"
 ```
+<!-- /xr-source -->
 
 - `re` 后面紧跟双引号时识别为正则字面量；其他位置的 `re` 是普通标识符。
 - 内容是合法 UTF-8，按 raw 规则保留反斜杠，不解释字符串转义，也不进行 `${...}` 插值。inline / block 引号、物理换行及缩进裁剪规则与 §1.6.5 的 raw 引号形式相同。
@@ -412,7 +532,7 @@ var decimal = re"\d+\.\d+"
 | Token | 用途 |
 |--|--|
 | `(` `)` | 分组、调用、参数列表 |
-| `{` `}` | 块、对象字面量 |
+| `{` `}` | 块、Map 与带类型名的 struct 字面量 |
 | `[` `]` | 数组字面量、索引 |
 | `,` | 分隔符 |
 | `.` | 成员访问 |
@@ -462,7 +582,8 @@ var decimal = re"\d+\.\d+"
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`i64 \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
+| `->` | 类型箭头：函数、方法及 fn lambda 的返回类型；函数类型写 `fn(T) -> R`，返回 unit 时省略箭头（`fn(T)`） |
+| `=>` | 值箭头：箭头 lambda、`match` 与 `select` 分支；按最长匹配识别为一个 token |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -471,19 +592,16 @@ var decimal = re"\d+\.\d+"
 
 `!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
 
-#### 1.7.9 集合字面量起始符
+#### 1.7.9 集合字面量边界
 
-| Token | 用途 |
-|--|--|
-| `#{` | 空 Map 字面量 |
-| `#[` | Set 字面量起始 |
+Array 使用 `[` 与 `]`；Map 使用普通 `{` 与 `}`，不添加前缀 token；Set 使用普通具名构造。语句位置及值箭头后的 `{` 是块，Map 表达式的上下文规则见 §3.10。
 
-例：
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+<!-- xr-source:example 002-1-lexical-structure-example-016 -->
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
+<!-- /xr-source -->
 
 #### 1.7.10 模式
 
@@ -494,6 +612,7 @@ var primes = #[2, 3, 5, 7]
 #### 1.7.11 操作符优先级
 
 完整优先级表见 [§3.1](#31-优先级与结合性)。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -501,7 +620,7 @@ var primes = #[2, 3, 5, 7]
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (52 general keywords), `src/shared/xr_exact_scalar_registry.def` (12 exact scalar keywords), and `src/frontend/lexer/xlex.c` (scanner implementation).
+> Implementation reference: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (general keyword declarations), `src/shared/xr_exact_scalar_registry.def` (exact scalar keyword declarations), and `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -529,13 +648,16 @@ A line ending **terminates** the current expression if and only if all of the fo
 
 Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `++`, `--`, `(`, `[`. Hence:
 
+<!-- xr-source:example 002-1-lexical-structure-example-001 -->
 ```xray
 var x = a
 !b            // two statements; NOT var x = a!
 ```
+<!-- /xr-source -->
 
 When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `/`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
 
+<!-- xr-source:example 002-1-lexical-structure-example-002 -->
 ```xray
 var ok = check(a)
     && check(b)      // continuation
@@ -546,13 +668,16 @@ var total = base +
 var quotient = total
     / 2              // division has only an infix role; continuation
 ```
+<!-- /xr-source -->
 
 To continue a line with `-`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
 
+<!-- xr-source:example 002-1-lexical-structure-example-003 -->
 ```xray
 var d = (total
     - used)          // line endings are transparent inside a bracket group
 ```
+<!-- /xr-source -->
 
 > The value of an expression statement is discarded, so **an expression statement with no effect is an error** (`E0208`). This pairs with the boundary rule above: a continuation line that was correctly split off does not become a silent no-op — it is reported immediately, with the rewrite suggested. The REPL is exempt, since it prints the value of a trailing bare expression and that value is therefore observed.
 
@@ -560,12 +685,14 @@ var d = (total
 
 Xray supports two kinds of comments: line comments do not nest; block comments nest:
 
+<!-- xr-source:example 002-1-lexical-structure-example-004 -->
 ```xray
 // line comment, from // to end-of-line
 /* block comment,
    may span lines;
    supports /* nested */ layers to any reasonable depth */
 ```
+<!-- /xr-source -->
 
 Comments may appear wherever whitespace is allowed. Formatters and language servers may read comment trivia; trivia does not participate in parsing.
 
@@ -573,15 +700,18 @@ Doc comments (no syntactic difference from ordinary comments): conventionally `/
 
 ### 1.4 Identifiers
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-01 -->
 ```ebnf
-Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
-IdentCont  ::= IdentStart | '0'..'9'
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 ```
+<!-- /xr-source -->
 
 After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
-**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `isolated`, `after`).
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `ref`, `move`, `isolated`, `after`).
 
 The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
@@ -593,64 +723,123 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **64 reserved keywords** in total, grouped by purpose below:
+<!-- xr-source:keywords count -->
+The current lexer reserves **63 keywords**. Appendix B is generated from the lexical declarations; a target classification change does not imply implementation.
+<!-- /xr-source -->
 
 #### 1.5.1 Declarations and Control Flow
 
+<!-- xr-source:keywords group-1 -->
 | Keyword | Purpose |
 |--|--|
-| `var` | mutable variable declaration |
-| `const` | fixes the binding and its value-semantic components |
+| `break` | loop control |
 | `comptime` | expression prefix that forces compile-time evaluation |
+| `const` | immutable field/binding modifier |
+| `continue` | loop control |
+| `else` | conditional branches |
 | `fn` | function declaration |
-| `return` | function return |
-| `yield` | generator value-yield statement |
-| `if` `else` | conditional branches |
-| `while` | loop |
-| `for` `in` | loops (C-style + for-in) |
-| `break` `continue` | loop control |
+| `for` | loops (C-style + for-in) |
+| `if` | conditional branches |
+| `in` | loops (C-style + for-in) |
 | `match` | pattern matching |
+| `return` | function return |
+| `var` | mutable variable declaration |
+| `while` | loop |
+| `yield` | generator value-yield statement |
+<!-- /xr-source -->
+
 
 #### 1.5.2 Object Orientation and Types
 
+<!-- xr-source:keywords group-2 -->
 | Keyword | Purpose |
 |--|--|
-| `class` `struct` | class / struct declaration |
-| `packed` `union` | FFI layout declarations |
-| `extends` | class inheritance |
-| `interface` `implements` | interface declaration / implementation |
+| `as` | runtime type check / cast |
+| `class` | class / struct declaration |
 | `enum` | enum declaration |
-| `type` | type alias |
-| `new` | reserved; construct objects with `T(...)` (see §3.14) |
-| `this` `super` | self / parent reference |
-| `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
-| `const` | immutable field/binding modifier |
+| `extends` | class inheritance |
 | `final` | `final class` cannot be inherited |
+| `implements` | interface declaration / implementation |
+| `interface` | interface declaration / implementation |
+| `is` | runtime type check / cast |
+| `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `operator` | reserved; the language has no operator overloading |
-| `is` `as` | runtime type check / cast |
+| `packed` | FFI layout declarations |
+| `private` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `static` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `struct` | class / struct declaration |
+| `super` | self / parent reference |
+| `this` | self / parent reference |
+| `type` | type alias |
+| `union` | FFI layout declarations |
+| `where` | Type and generic rules |
+<!-- /xr-source -->
+
 
 `abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
 
 #### 1.5.3 Error Handling
 
-`try` `catch` `throw` `defer`
+<!-- xr-source:keywords group-3 -->
+| Keyword | Purpose |
+|--|--|
+| `catch` | Error handling |
+| `defer` | Error handling |
+| `throw` | Error handling |
+| `try` | Error handling |
+<!-- /xr-source -->
+
 
 `throws` is contextual in signatures (§1.5.8), not globally reserved.
 
 #### 1.5.4 Module System
 
-`import` `export`
+<!-- xr-source:keywords group-4 -->
+| Keyword | Purpose |
+|--|--|
+| `export` | Module imports and exports |
+| `import` | Module imports and exports |
+<!-- /xr-source -->
+
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe`
+<!-- xr-source:keywords group-5 -->
+| Keyword | Purpose |
+|--|--|
+| `await` | Concurrency and low-level operations |
+| `go` | Concurrency and low-level operations |
+| `scope` | Concurrency and low-level operations |
+| `select` | Concurrency and low-level operations |
+| `unsafe` | Concurrency and low-level operations |
+<!-- /xr-source -->
+
 
 `parallel` is an explicitly imported standard-library module name, not a lexical keyword.
 
 #### 1.5.6 Type Names (reserved)
 
-`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
-`f32` `f64` `bool` `string` `rune`
+<!-- xr-source:keywords group-6 -->
+| Keyword | Purpose |
+|--|--|
+| `bool` | Built-in scalar type |
+| `f32` | Built-in scalar type |
+| `f64` | Built-in scalar type |
+| `i16` | Built-in scalar type |
+| `i32` | Built-in scalar type |
+| `i64` | Built-in scalar type |
+| `i8` | Built-in scalar type |
+| `isize` | Built-in scalar type |
+| `rune` | Built-in scalar type |
+| `string` | Built-in scalar type |
+| `u16` | Built-in scalar type |
+| `u32` | Built-in scalar type |
+| `u64` | Built-in scalar type |
+| `u8` | Built-in scalar type |
+| `usize` | Built-in scalar type |
+<!-- /xr-source -->
+
 
 `Never` is a predefined uninhabited bottom-type name, not a lexical keyword; it can appear in `throws(Never)` (§2.2.2).
 
@@ -665,43 +854,58 @@ Writing `unknown` in a type annotation is rejected by the parser; it is not a le
 
 #### 1.5.7 Literal Keywords
 
-`true` `false` `null`
+<!-- xr-source:keywords group-7 -->
+| Keyword | Purpose |
+|--|--|
+| `false` | Literal |
+| `null` | Literal |
+| `true` | Literal |
+<!-- /xr-source -->
+
 
 #### 1.5.8 Context-sensitive Keywords
 
-These are not in the lexer keyword table; the parser recognizes them by position. They **may** be used as ordinary identifiers:
-
-| Token | Where it appears |
+<!-- xr-source:keywords contextual -->
+| Keyword | Purpose |
 |--|--|
 | `init` | class/struct initializer member declaration; ordinary identifier elsewhere |
 | `from` | `select` receive arm (`x from ch`); also in named import / re-export (`import { x } from "module"`) |
 | `to` | `select` send arm (`value to ch`) |
-| `default` | reserved, currently disabled |
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `isolated` | `scope(isolated)` option (§10.7) |
-| `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `after` | `select` timeout arm (`after 1000 => ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 | `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
+| `copy` | Explicit copy expression on a place (§2.14) |
+| `nosuspend` | Non-suspending function type prefix |
+| `override` | Explicit override marker on an instance method |
+<!-- /xr-source -->
+
+These are not in the lexer keyword table; the parser recognizes them by position. They **may** be used as ordinary identifiers:
+
 
 ### 1.6 Literals
 
 #### 1.6.1 Integer Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-02 -->
 ```ebnf
-IntLiteral ::= DecLit | HexLit | OctLit | BinLit
-DecLit ::= Digit (Digit | '_')*
-HexLit ::= '0x' HexDigit (HexDigit | '_')*
-OctLit ::= '0o' OctDigit (OctDigit | '_')*
-BinLit ::= '0b' BinDigit (BinDigit | '_')*
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 ```
+<!-- /xr-source -->
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - An integer literal without a unique numeric context defaults to `i64`. The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: the default `i64` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
 - When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `i64` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
+<!-- xr-source:example 002-1-lexical-structure-example-005 -->
 ```xray
 42
 0xFF
@@ -709,46 +913,57 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 0o77
 1_000_000      // one million
 ```
+<!-- /xr-source -->
 
 #### 1.6.2 Floating-Point Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-03 -->
 ```ebnf
-FloatLiteral ::= Digit+ '.' Digit* Exp?
-              | Digit+ Exp
-              | '.' Digit+ Exp?
-Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 ```
+<!-- /xr-source -->
 
 Without a unique floating context the literal type is `f64` (IEEE-754 double precision); a unique `f32`/`f64` context directly selects rounding precision. Complete spelling and rounding follow §17.25. The lexical target includes leading/trailing-dot forms; the current XIR source subset does not yet admit them, and converter support does not qualify the full lexical grammar.
 
+<!-- xr-source:example 002-1-lexical-structure-example-006 -->
 ```xray
 3.14
 1.0e10
 2.5E-3
 .5             // equivalent to 0.5
 ```
+<!-- /xr-source -->
 
 #### 1.6.3 BigInt Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-04 -->
 ```ebnf
-BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-007 -->
 ```xray
 123n
 0xFFn
 0b1010n
 ```
+<!-- /xr-source -->
 
 Arbitrary-precision integers; arithmetic never overflows. See §14.8 for the type.
 
 #### 1.6.4 Boolean and Null Literals
 
+<!-- xr-source:example 002-1-lexical-structure-example-008 -->
 ```xray
 true
 false
 null
 ```
+<!-- /xr-source -->
 
 - `true` / `false`: type `bool`.
 - `null`: type `null` (semantically the zero value of every nullable type `T?`).
@@ -759,6 +974,7 @@ Xray quoted literals use double quotes only; single quotes are reserved for `run
 
 ##### Inline escaped strings (Q = 1)
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-05 -->
 ```ebnf
 InlineEscapedString ::= '"' StrChar* '"'
 StrChar ::= any character that is not a double quote, backslash, or newline
@@ -770,11 +986,13 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
                   | 'u{' HexDigit{1,6} '}')
 Interpolation ::= '${' Expression '}'
 ```
+<!-- /xr-source -->
 
 - An inline literal cannot cross a physical line; use an escape or block form for line breaks.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
 - `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
+<!-- xr-source:example 002-1-lexical-structure-example-009 -->
 ```xray
 "hello"
 "Hello, ${name}! ${1 + 2}"
@@ -782,36 +1000,43 @@ Interpolation ::= '${' Expression '}'
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
+<!-- /xr-source -->
 
 Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
 ##### Inline raw strings (`r` prefix, Q = 1)
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-06 -->
 ```ebnf
 InlineRawString ::= 'r' '"' RawChar* '"'
 RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
+<!-- /xr-source -->
 
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
 - The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
 - Raw strings use `r"..."`; single-quoted strings continue to use the ordinary escape rules.
 
+<!-- xr-source:example 002-1-lexical-structure-example-010 -->
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
+<!-- /xr-source -->
 
 ##### Unified prefixes and variable quote delimiters
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-07 -->
 ```ebnf
-QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
 LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
 InlineQuoted ::= '"' InlinePayload* '"' | '""'
 BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
 QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
+<!-- /xr-source -->
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
 - Decoded string payloads carry explicit byte lengths in the AST and subsequent value boundaries. A storage terminator is not a content boundary; copying, equality, signatures and formatting must not truncate at embedded NUL. Structural field names and C literals retain their separate no-NUL restrictions.
@@ -820,6 +1045,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
 - `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
 
+<!-- xr-source:example 002-1-lexical-structure-example-011 -->
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
@@ -828,15 +1054,19 @@ br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
 c"puts"                   // [u8; 5], ending in the appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
+<!-- /xr-source -->
 
 One quote is the inline delimiter. Two consecutive quotes represent only an empty payload in the selected prefix family and never open a block:
 
+<!-- xr-source:example 002-1-lexical-structure-example-012 -->
 ```xray
 "" r"" b"" br"" c"" cr""
 ```
+<!-- /xr-source -->
 
 Three or more consecutive quotes form a block delimiter. The opener must be followed immediately by LF or CRLF. The closer must start on its own line and may contain only “margin + exactly the opener's quote count + line ending or EOF”. No trailing whitespace, comment, comma, semicolon, or bracket is allowed on the closer line; subsequent tokens start on the next line.
 
+<!-- xr-source:example 002-1-lexical-structure-example-013 -->
 ```xray
 const HTML = r"""
 <div class="card">
@@ -849,6 +1079,7 @@ echo ${HOME}
 """
 """"
 ```
+<!-- /xr-source -->
 
 The structural newline after the opener and before the closer is not part of the value. CRLF inside the body normalizes to LF. Spaces/tabs before the closer define the margin; every non-empty body line must begin with that exact byte prefix, which is removed from the payload. Tabs and spaces are not compared by visual columns.
 
@@ -858,10 +1089,12 @@ Interpolation expressions are scanned in expression mode with balanced braces; n
 
 #### 1.6.6 `rune` Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-08 -->
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
+<!-- /xr-source -->
 
 - `'a'` has type `rune` and represents one Unicode scalar value.
 - The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
@@ -869,11 +1102,13 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
 - Char literals do not support `${...}` interpolation.
 
+<!-- xr-source:example 002-1-lexical-structure-example-014 -->
 ```xray
 var a: rune = 'a'
 var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
+<!-- /xr-source -->
 
 ##### String interpolation
 
@@ -881,14 +1116,18 @@ String templates use ordinary double quotes with `${...}` interpolation.
 
 #### 1.6.7 Regex Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-09 -->
 ```ebnf
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-015 -->
 ```xray @fragment
 var letters = re"(?i)[a-z]+"
 var decimal = re"\d+\.\d+"
 ```
+<!-- /xr-source -->
 
 - `re` immediately followed by a double quote starts a regex literal; elsewhere `re` is an ordinary identifier.
 - The body is valid UTF-8 and preserves backslashes under raw rules, without string escape processing or `${...}` interpolation. Inline / block fences, physical line endings and indentation stripping follow the raw quoted forms in §1.6.5.
@@ -905,7 +1144,7 @@ Full token table (by category):
 | Token | Use |
 |--|--|
 | `(` `)` | grouping, calls, parameter lists |
-| `{` `}` | blocks, object literals |
+| `{` `}` | blocks, Maps and type-prefixed struct literals |
 | `[` `]` | array literals, indexing |
 | `,` | separator |
 | `.` | member access |
@@ -955,7 +1194,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`i64 \| string`) / bitwise or |
-| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
+| `->` | Type arrow: return types of functions, methods and fn lambdas; function types use `fn(T) -> R` and omit the arrow for unit (`fn(T)`) |
+| `=>` | Value arrow: arrow lambdas and `match` / `select` arms; recognized as one token by longest match |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |
@@ -964,19 +1204,16 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 
 `!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
 
-#### 1.7.9 Collection-literal Starters
+#### 1.7.9 Collection Literal Boundaries
 
-| Token | Use |
-|--|--|
-| `#{` | empty Map literal |
-| `#[` | Set literal start |
+Arrays use `[` and `]`. Maps use ordinary `{` and `}` without a prefix token. Sets use ordinary named construction. Statement braces and braces after a value arrow begin blocks; Map expression contexts follow §3.10.
 
-Examples:
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+<!-- xr-source:example 002-1-lexical-structure-example-016 -->
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
+<!-- /xr-source -->
 
 #### 1.7.10 Patterns
 
@@ -987,4 +1224,5 @@ var primes = #[2, 3, 5, 7]
 #### 1.7.11 Operator Precedence
 
 The full precedence table is in [§3.1](#31-precedence-and-associativity).
+
 <!-- /xr-spec:en -->

@@ -163,24 +163,24 @@ class NativeDeclarations(unittest.TestCase):
         with self.assertRaises(ValueError):
             schema.array_recipe_contracts('U')
         cases = [
-            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
-             'map(fn: fn(item: T, index: i64) -> Unknown) -> Array<Unknown>'),
-            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
-             'map(fn: fn(item: T, index: i64) -> T) -> Array<T>'),
-            ('map(fn: fn(item: T, index: i64) -> U) -> Array<U>',
-             'map(fn: fn(item: T, index: i64) -> U) -> Array<T>'),
-            ('filter(fn: fn(item: T, index: i64) -> bool)', 'filter(fn: fn(item: T, index: i64) -> i64)'),
-            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
-             'reduce(fn: fn(acc: T, item: T) -> T, initial: T) -> T'),
-            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
-             'reduce(fn: fn(acc: U, item: T) -> U, initial: T) -> U'),
-            ('reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U',
-             'reduce(initial: U, fn: fn(acc: U, item: T) -> U) -> U'),
-            ('forEach(fn: fn(item: T, index: i64))', 'forEach(fn: fn(item: T, index: i64) -> T)'),
-            ('find(fn: fn(item: T) -> bool) -> T?', 'find(fn: fn(item: T) -> bool) -> T'),
-            ('findIndex(fn: fn(item: T) -> bool) -> i64', 'findIndex(fn: fn(item: T) -> bool) -> bool'),
-            ('every(fn: fn(item: T) -> bool)', 'every(fn: fn(item: T, index: i64) -> bool)'),
-            ('some(fn: fn(item: T) -> bool)', 'some(fn: fn(item: T) -> U)'),
+            ('map(callback: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(callback: fn(item: T, index: i64) -> Unknown) -> Array<Unknown>'),
+            ('map(callback: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(callback: fn(item: T, index: i64) -> T) -> Array<T>'),
+            ('map(callback: fn(item: T, index: i64) -> U) -> Array<U>',
+             'map(callback: fn(item: T, index: i64) -> U) -> Array<T>'),
+            ('filter(callback: fn(item: T, index: i64) -> bool)', 'filter(callback: fn(item: T, index: i64) -> i64)'),
+            ('reduce(callback: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(callback: fn(acc: T, item: T) -> T, initial: T) -> T'),
+            ('reduce(callback: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(callback: fn(acc: U, item: T) -> U, initial: T) -> U'),
+            ('reduce(callback: fn(acc: U, item: T) -> U, initial: U) -> U',
+             'reduce(initial: U, callback: fn(acc: U, item: T) -> U) -> U'),
+            ('forEach(callback: fn(item: T, index: i64))', 'forEach(callback: fn(item: T, index: i64) -> T)'),
+            ('find(callback: fn(item: T) -> bool) -> T?', 'find(callback: fn(item: T) -> bool) -> T'),
+            ('findIndex(callback: fn(item: T) -> bool) -> i64', 'findIndex(callback: fn(item: T) -> bool) -> bool'),
+            ('every(callback: fn(item: T) -> bool)', 'every(callback: fn(item: T, index: i64) -> bool)'),
+            ('some(callback: fn(item: T) -> bool)', 'some(callback: fn(item: T) -> U)'),
             ('contains(value: T)', 'contains(value?: T)'),
             ('indexOf(value: T)', 'indexOf(...value: T)'),
             ('join(separator?: string)', 'join(separator: string)'),
@@ -317,7 +317,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_unused_rows_still_require_valid_syntax_and_unique_names(self):
         for before, after in [('iterator() -> Iterator<T>', 'iterator() -> Iterator<T'),
                               ('capacity: i64', 'get(index: i64) -> T'),
-                              ('map(fn:', 'map(value@fn:')]:
+                              ('map(callback:', 'map(value@callback:')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(self.source.replace(before, after), self.prelude)
 

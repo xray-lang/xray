@@ -139,31 +139,30 @@ static bool source_hash_call(SourceContext *ctx, AstNode *node, const SourceValu
     const XrNativeMemberDeclaration *member = native ? source_native_member(ctx, native, access->name) : NULL;
     if (!member || member->operation == XR_NATIVE_OPERATION_NONE || !member->is_method || member->is_static || !member->is_public)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash member has no admitted operation contract");
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
-        (uint32_t)call->arg_count != member->parameter_count)
+    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 || member->parameter_count>2)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash method requires its declared ordinary arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash method arguments are READ values");
     if (member->operation == XR_NATIVE_OPERATION_HASH_FOR_EACH)
         return source_hash_for_each(ctx, node, evaluated, receiver_type, value) &&
             source_hash_reference(ctx, call->callee, native, member);
     SourceValue operands[3] = {{0}};
     bool write = member->receiver == XR_NATIVE_RECEIVER_REF;
     if (evaluated && !write) operands[0] = *evaluated;
-    else if (!source_array_receiver(ctx, access->object, call->arg_count ? call->arguments[0] : NULL, write, &operands[0])) return false;
+    else if (!source_array_receiver(ctx, access->object, NULL, write, &operands[0])) return false;
     if (operands[0].type != receiver_type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash receiver type changed during planning");
     const XrXirTypeNode *container = xr_xir_type_node(&ctx->types, receiver_type);
     /* Planning an argument can grow the type pool. Copy both identities first. */
     XrXirType key = container->element, element = container->result;
     bool binary_set = member->operation >= XR_NATIVE_OPERATION_SET_UNION &&
         member->operation <= XR_NATIVE_OPERATION_SET_IS_SUPERSET;
-    for (int i = 0; i < call->arg_count; ++i) {
-        XrXirType expected = binary_set ? receiver_type :
+    XrXirType parameters[2]={XR_XIR_UNIT,XR_XIR_UNIT};
+    for (uint32_t i = 0; i < member->parameter_count; ++i) {
+        parameters[i] = binary_set ? receiver_type :
             member->operation == XR_NATIVE_OPERATION_MAP_CONTAINS_VALUE || i ? element : key;
-        if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){true, expected, false, false}, &operands[i + 1])) return false;
-        if (operands[i + 1].type != expected) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash argument requires its exact declared type");
     }
+    uint32_t supplied=0;
+    if(!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,
+        .minimum=member->parameter_count,.maximum=member->parameter_count,.native_owner=native->id,
+        .values=operands+1,.supplied=&supplied,.diagnostic="hash method requires its declared ordinary arguments"}))return false;
     XrXirOp op; XrXirType result = XR_XIR_UNIT;
     switch (member->operation) {
     case XR_NATIVE_OPERATION_MAP_CONTAINS_VALUE: op = XR_XIR_MAP_CONTAINS_VALUE; result = XR_XIR_BOOL; break;
@@ -199,57 +198,16 @@ static bool source_hash_call(SourceContext *ctx, AstNode *node, const SourceValu
     }
     bool ok = op == XR_XIR_MAP_SET ? source_recipe_group(ctx,
         (XrXirInstruction){op, result, {0}, {0}, 0, {0}}, operands, 3, value) :
-        source_recipe_record(ctx, (XrXirInstruction){op, result, {operands[0].id, call->arg_count ? operands[1].id : 0}, {0}, 0, {0}}, value);
+        source_recipe_record(ctx, (XrXirInstruction){op, result, {operands[0].id, supplied ? operands[1].id : 0}, {0}, 0, {0}}, value);
     return ok && source_hash_reference(ctx, call->callee, native, member);
 }
-static bool source_hash_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
-    bool map = node->type == AST_MAP_LITERAL;
-    int count = map ? node->as.map_literal.count : node->as.set_literal.count;
-    AstNode **keys = map ? node->as.map_literal.keys : node->as.set_literal.elements;
-    AstNode **elements = map ? node->as.map_literal.values : NULL;
-    if (count < 0 || count > (map ? 32768 : 65536) || (count && (!keys || (map && !elements))))
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "hash literal has no finite complete element list");
-    if (expected.present && !(map ? xr_xir_type_is_map(&ctx->types, expected.type) : xr_xir_type_is_set(&ctx->types, expected.type)))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash literal requires its own container context");
-    if (!count && !expected.present) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty hash literal requires a type context");
-    XrXirType key = XR_XIR_UNIT, element = XR_XIR_UNIT;
-    if (expected.present) {
-        const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, expected.type);
-        key = type->element; element = type->result;
-    }
-    uint32_t width = map ? 2u : 1u;
-    SourceValue *operands = count ? source_alloc(ctx, (size_t)count * width, sizeof(*operands)) : NULL;
-    if (count && !operands) return false;
-    for (int i = 0; i < count; ++i) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        SourceValue *entry = &operands[(uint32_t)i * width];
-        if (!source_plan_expression(ctx, keys[i], (SourceExpectedType){expected.present || i != 0, key, false, expected.inferred}, entry)) return false;
-        if (!i && !expected.present) key = entry->type;
-        if (entry->type != key) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash keys require one exact type");
-        if ((!expected.present || expected.inferred) && !source_root_join_record(ctx, entry)) return false;
-        if (map) {
-            if (!source_plan_expression(ctx, elements[i], (SourceExpectedType){expected.present || i != 0, element, false, expected.inferred}, entry + 1)) return false;
-            if (!i && !expected.present) element = entry[1].type;
-            if (entry[1].type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash values require one exact type");
-            if ((!expected.present || expected.inferred) && !source_root_join_record(ctx, entry + 1)) return false;
-        }
-    }
-    if (key == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, key) ||
-        (map && (element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, element))))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash literal elements must be ordinary storable values");
-    XrXirType type = XR_XIR_UNIT;
-    if (!source_intern_type(ctx, (XrXirTypeNode){.kind = map ? XR_XIR_TYPE_MAP : XR_XIR_TYPE_SET,
-        .element = key, .result = element}, &type)) return false;
-    const XrNativeTypeDeclaration *native = source_hash_native(ctx, type); uint32_t declaration = 0;
-    return native && source_native_hash_declaration(ctx, native, &declaration) &&
-        source_recipe_group(ctx, (XrXirInstruction){map ? XR_XIR_MAP_NEW : XR_XIR_SET_NEW, type, {0}, {0}, 0, {0}},
-            operands, (uint32_t)count * width, value) &&
-        source_query_target_token_reference(ctx, node, declaration, XR_XIR_SOURCE_TYPE_USE);
-}
+#include "xxir_source_map_literal.inc.c"
+static bool source_set_construct(SourceContext *ctx, AstNode *node,
+    SourceExpectedType expected, SourceValue *value);
 static bool source_hash_construct(SourceContext *ctx, AstNode *node, SourceValue *value) {
     NewExprNode *call = &node->as.new_expr;
     const XrNativeTypeDeclaration *native = call->class_name ? source_native_find(ctx, call->class_name) : NULL;
-    if (!native || (native->id != XR_NATIVE_DECLARATION_MAP && native->id != XR_NATIVE_DECLARATION_SET) ||
+    if (!native || native->id != XR_NATIVE_DECLARATION_MAP ||
         call->is_type_namespace || call->module_name || call->type_arg_count != (int)native->parameter_count ||
         !call->type_args || call->arg_count < 0 || call->arg_count > 1 || (call->arg_count && !call->arguments))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash construction requires its exact type arguments and optional literal");
@@ -259,10 +217,10 @@ static bool source_hash_construct(SourceContext *ctx, AstNode *node, SourceValue
     if (!source_native_hash_type(ctx, &reference, &type)) return false;
     if (call->arg_count) {
         if ((call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN) ||
-            call->arguments[0]->type != (native->id == XR_NATIVE_DECLARATION_MAP ? AST_MAP_LITERAL : AST_SET_LITERAL))
+            call->arguments[0]->type != AST_MAP_LITERAL)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "hash construction argument must be its literal");
-        return source_hash_literal(ctx, call->arguments[0], (SourceExpectedType){true, type, false, false}, value);
+        return source_map_literal(ctx, call->arguments[0], (SourceExpectedType){true, type, false, false}, value);
     }
-    return source_recipe_group(ctx, (XrXirInstruction){native->id == XR_NATIVE_DECLARATION_MAP ? XR_XIR_MAP_NEW : XR_XIR_SET_NEW,
+    return source_recipe_group(ctx, (XrXirInstruction){XR_XIR_MAP_NEW,
         type, {0}, {0}, 0, {0}}, NULL, 0, value);
 }

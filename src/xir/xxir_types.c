@@ -35,6 +35,7 @@ XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
 #include "../shared/xnative_declaration.h"
 
 #include "xxir_type_union.inc.c"
+#include "xxir_data_union.inc.c"
 
 static XrXirStatus callable_weakening_head(const XrXirTypes *types,
     XrXirType source, XrXirType target, const XrXirTypeNode **from, const XrXirTypeNode **to) {
@@ -218,10 +219,10 @@ XR_FUNC bool xr_xir_type_is_class(const XrXirTypes *types, XrXirType type) {
 }
 bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return type == XR_XIR_STRING || type == XR_XIR_BUFFER_STORAGE || type == XR_XIR_ERROR ||
+    return type == XR_XIR_JSON_VALUE || type == XR_XIR_STRING || type == XR_XIR_BUFFER_STORAGE || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL || node->kind==XR_XIR_TYPE_FIXED_ARRAY ||
-                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+                  node->kind == XR_XIR_TYPE_DATA_UNION || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
                   node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
                   node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR)));
 }
@@ -267,12 +268,12 @@ uint32_t xr_xir_type_span(const XrXirTypes *types, XrXirType type) {
 static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     uint32_t id = (uint32_t) type;
     if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
-        type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE) return true;
+        type == XR_XIR_JSON_VALUE || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE) return true;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_FIXED_ARRAY ||
-         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+         node->kind == XR_XIR_TYPE_DATA_UNION || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR));
 }
@@ -332,6 +333,10 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         span = xr_xir_type_span(types, node->element);
         uint32_t value_span = node->kind == XR_XIR_TYPE_MAP ? xr_xir_type_span(types, node->result) : 0;
         if (value_span > span) span = value_span;
+    } else if (node->kind == XR_XIR_TYPE_DATA_UNION) {
+        if (!xr_xir_data_union_shape(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index))) return XR_XIR_BAD_TYPE;
+        if (node->parameter_count>remaining->limits.parameters) return XR_XIR_BUDGET;
+        remaining->limits.parameters-=node->parameter_count;
     } else if (node->kind == XR_XIR_TYPE_UNION) {
         if (!error_union_shape(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index))) return XR_XIR_BAD_TYPE;
         if (node->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;

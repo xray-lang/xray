@@ -9,8 +9,8 @@
 #ifndef MCP_TIMED_CHANNEL_CASES_H
 #define MCP_TIMED_CHANNEL_CASES_H
 static const char mcp_timed_channel_code[] =
-    "fn sent(result:SendResult)->i64 { return match(result) { SendResult.Sent -> 1, SendResult.Full -> -1, SendResult.Timeout -> -2, SendResult.Closed -> -3 } }\n"
-    "fn take(ch:Channel<i64>)->i64 { return match(ch.recvTimeout(5)) { Recv.Value { value:item } -> item, Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> -3 } }\n"
+    "fn sent(result:SendResult)->i64 { return match(result) { SendResult.Sent => 1, SendResult.Full => -1, SendResult.Timeout => -2, SendResult.Closed => -3, } }\n"
+    "fn take(ch:Channel<i64>)->i64 { return match(ch.recvTimeout(5)) { Recv.Value { value:item } => item, Recv.Empty => -1, Recv.Timeout => -2, Recv.Closed => -3, } }\n"
     "fn tick(counter:Atomic<i64>) { counter.add(1) }\n"
     "fn main() throws(Error)->i64 {\n"
     " const buffered=Channel<i64>(1)\n"

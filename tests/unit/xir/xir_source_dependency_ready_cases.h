@@ -74,12 +74,12 @@ static void source_dependency_ready_cases(XrXirSourceRequest *request) {
             "export fn genericMethodText()->string{return \"mapped\"}\n");
         source_generic_requirement_run(request,
             "fn choose<T>(f:fn(T)->T,seed:T)->T{return f(seed)}\n"
-            "export fn genericMethodNumber()->i64{const n:i8=40;const result=choose(fn(v){return v+1},match(true){true->n,false->n});const narrow:i8=result;return narrow}\n"
+            "export fn genericMethodNumber()->i64{const n:i8=40;const result=choose(fn(v){return v+1},match(true){true=>n,false=>n,});const narrow:i8=result;return narrow}\n"
             "export fn genericMethodText()->string{return \"mapped\"}\n");
         source_generic_requirement_run(request,
             "enum Item{Left{value:i8},Right{value:i8}}\n"
             "fn choose<T>(f:fn(T)->T,seed:T)->T{return f(seed)}\n"
-            "export fn genericMethodNumber()->i64{const item=Item.Right{value:40};const value:i64=999;const result=choose(fn(v){return v+1},match(item){Item.Left{value}->value,Item.Right{value}->value});const narrow:i8=result;return narrow}\n"
+            "export fn genericMethodNumber()->i64{const item=Item.Right{value:40};const value:i64=999;const result=choose(fn(v){return v+1},match(item){Item.Left{value}=>value,Item.Right{value}=>value,});const narrow:i8=result;return narrow}\n"
             "export fn genericMethodText()->string{return \"mapped\"}\n");
         const char *negative[] = {
             "fn pair<T>(a:T,b:T)->T{return b}\nfn bad()->i64{const a:i8=1;const b:i64=41;return pair(a,b)}\n",

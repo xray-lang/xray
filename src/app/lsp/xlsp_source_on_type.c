@@ -83,14 +83,14 @@ static XrXirStatus on_type_lex(OnTypeWork *w) {
         if(token.type==TK_EOF)break;
         if(token.start<prefix||token.start>prefix+w->prefix||token.length<0||(size_t)token.length>(size_t)(prefix+w->prefix-token.start)){status=XR_XIR_BAD_STRUCTURE;goto done;}
         last=token;last_start=(size_t)(token.start-prefix);
-        if(token.type==TK_LBRACE||token.type==TK_EMPTY_MAP_START){if(depth==INT32_MAX){status=XR_XIR_BUDGET;goto done;}++depth;}
+        if(token.type==TK_LBRACE){if(depth==INT32_MAX){status=XR_XIR_BUDGET;goto done;}++depth;}
         else if(token.type==TK_RBRACE){if(!depth)unmatched=true;else --depth;if(last_start==w->whitespace&&token.length==1)closing=true;}
     }
     if(unmatched)goto done;
     if(input->trigger=='}') {if(!closing)goto done;w->indent=depth*input->tab_size;}
     else {
         status=on_type_previous_indent(w);if(status!=XR_XIR_OK)goto done;
-        if(last_start>=w->previous&&(last.type==TK_LBRACE||last.type==TK_EMPTY_MAP_START))w->indent+=input->tab_size;
+        if(last_start>=w->previous&&(last.type==TK_LBRACE))w->indent+=input->tab_size;
     }
     if(w->indent>INT32_MAX){status=XR_XIR_BUDGET;goto done;}w->edit=true;
 done:

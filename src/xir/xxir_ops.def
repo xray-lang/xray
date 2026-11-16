@@ -153,6 +153,7 @@ XR_XIR_OP(CELL_PROJECT,7,VALUE,1,0,0)
 /* Reserved operations have no admitted stage until their implementation is present. */
 XR_XIR_OP(CELL_STRING_APPEND,7,UNIT,2,0,0)
 XR_XIR_OP(MAP_NEW,7,OWNED,0,0,0)
+XR_XIR_OP(MAP_LITERAL,7,OWNED,0,0,0)
 XR_XIR_OP(SET_NEW,7,OWNED,0,0,0)
 XR_XIR_OP(MAP_GET,7,OWNED,2,0,0)
 XR_XIR_OP(HASH_CONTAINS,7,BOOL,2,0,0)
@@ -233,3 +234,10 @@ XR_XIR_OP(CHANNEL_SELECT,7,OWNED,0,0,0)
 XR_XIR_OP(CLASS_METHOD_REF,7,VALUE,1,0,0)
 XR_XIR_OP(BYTE_ARRAY_APPEND,7,ARRAY,2,0,0)
 XR_XIR_OP(BYTE_ARRAY_REPEAT,7,ARRAY,0,0,0)
+
+/* Static typed injection; no Storage-stage or executable carrier yet. */
+XR_XIR_OP(DATA_UNION_INJECT,3,VALUE,1,0,0)
+
+/* Exact folded JSON facts; physical lowering remains explicitly unsupported. */
+XR_XIR_OP(JSON_NULL,3,VALUE,0,0,0)
+XR_XIR_OP(JSON_VALUE_INJECT,3,VALUE,1,0,0)

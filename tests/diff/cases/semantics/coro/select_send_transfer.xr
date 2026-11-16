@@ -10,25 +10,25 @@ fn main() {
 
     var a = [1, 2, 3]
     select {
-        copy(a) to ch -> { print("copy sent") }
-        _ -> { print("copy full") }
+        copy(a) to ch => { print("copy sent") }
+        _ => { print("copy full") }
     }
     a[0] = 99  // mutate original; the boundary copy must stay unaffected
 
     var b = [4, 5, 6]
     select {
-        move b to ch -> { print("move sent") }
-        _ -> { print("move full") }
+        move b to ch => { print("move sent") }
+        _ => { print("move full") }
     }
 
     select {
-        7 to sch -> { print("scalar sent") }
-        _ -> { print("scalar full") }
+        7 to sch => { print("scalar sent") }
+        _ => { print("scalar full") }
     }
 
-    var r1 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
-    var r2 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
-    var r3 = match (sch.tryRecv()) { Recv.Value { value: v } -> v  _ -> -1 }
+    var r1 = match (ch.tryRecv()) { Recv.Value { value: v } => v[0],  _ => -1, }
+    var r2 = match (ch.tryRecv()) { Recv.Value { value: v } => v[0],  _ => -1, }
+    var r3 = match (sch.tryRecv()) { Recv.Value { value: v } => v,  _ => -1, }
 
     ch.close()
     sch.close()

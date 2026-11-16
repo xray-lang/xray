@@ -1,0 +1,545 @@
+SourceFile ::= Statement*
+
+Comment ::= '//' [^\n]*
+         |  '/*' .* '*/'
+
+Identifier ::= IdStart IdContinue*
+
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
+
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
+
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
+
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
+
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
+
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+
+StringPrefix ::= '' | 'r'
+
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+
+QuoteRun ::= '"'{Q}                         // Q >= 3
+
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+
+CharLiteral ::= "'" CharBody "'"
+
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
+
+BoolLiteral ::= 'true' | 'false'
+
+NullLiteral ::= 'null'
+
+Type ::= UnionType
+
+UnionType ::= IntersectionType ('|' IntersectionType)*
+
+IntersectionType ::= NullableType
+
+NullableType ::= PrimaryType '?'?
+
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
+
+FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
+
+CFunctionType ::= 'CFn' '<' FunctionType '>'
+
+NamedType   ::= QualifiedIdent TypeArgs?
+
+FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+
+FunctionTypeParams ::= ParamType (',' ParamType)* ','?
+                     | (ParamType ',')* '...' Type ','?
+
+TupleType   ::= '(' Type (',' Type)+ ')'
+
+QualifiedIdent ::= Identifier ('.' Identifier)*
+
+TypeArgs    ::= '<' Type (',' Type)* '>'
+
+TypeList    ::= Type (',' Type)*
+
+Expression ::= AssignExpr
+
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
+
+AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
+            |  '&=' | '|=' | '^=' | '<<=' | '>>='
+
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
+
+LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
+
+LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
+
+BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
+
+BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
+
+BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
+
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
+
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+
+ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+
+AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
+
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
+
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  TryExpr
+           |  'copy' UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
+
+TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
+
+GoExpr    ::= 'go' GoOptions? CallExpr
+
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
+
+PostfixExpr ::= Primary PostfixOp*
+
+PostfixOp   ::= '(' ArgList? ')'              // call
+             |  '.' Identifier                 // member
+             |  '?.' Identifier                 // optional chain property
+             |  '?.' Identifier '(' ArgList? ')'  // optional chain method
+             |  '?[' Expression ']'            // optional chain index
+             |  '[' Expression ']'             // index
+             |  '[' Expression? ':' Expression? ']'  // slice
+             |  '!'                            // force unwrap
+
+Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
+         |  BoolLiteral | NullLiteral
+         |  Identifier
+         |  ArrayLit | MapLit | StructLit
+         |  ArrowLambda
+         |  FnExpression
+         |  ComptimeExpr
+         |  MatchExpr
+         |  '(' Expression ')'
+         |  '(' Expression (',' Expression)+ ')'  // tuple
+
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+
+ArrayElem ::= '...' Expression | Expression
+
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+
+MapEntry ::= '...' Expression | Expression ':' Expression
+
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+
+StructEntry ::= '...' Expression | Identifier ':' Expression
+
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
+
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+
+ArrowParam  ::= Identifier (':' ParamType)?
+
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
+
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
+
+ArgList ::= CallArg (',' CallArg)* ','?
+
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+
+NamedCallArg ::= Identifier ':' ArgumentValue
+
+PositionalCallArg ::= ArgumentValue
+
+ArgumentValue ::= ('ref' | 'move')? Expression
+
+Pattern ::= LiteralPattern
+         |  RangePattern
+         |  EnumPattern
+         |  TypePattern
+         |  WildcardPattern
+         |  BindingPattern
+         |  MultiPattern
+         |  TuplePattern
+         |  ArrayPattern
+
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
+
+RangePattern    ::= Expression ('..' | '..=') Expression
+
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
+
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
+
+TypePattern     ::= 'is' Type Identifier?
+
+WildcardPattern ::= '_'
+
+BindingPattern  ::= Identifier
+
+MultiPattern    ::= Pattern (',' Pattern)+
+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
+
+Statement ::= ExprStmt
+           |  IncDecStmt
+           |  VarDecl
+           |  ConstDecl
+           |  FnDecl
+           |  ExternBlock
+           |  ClassDecl
+           |  StructDecl
+           |  InterfaceDecl
+           |  EnumDecl
+           |  TypeAliasDecl
+           |  ImportDecl
+           |  ExportDecl
+           |  IfStmt
+           |  WhileStmt
+           |  ForStmt
+           |  ForInStmt
+           |  ForRefStmt
+           |  ForInTupleStmt
+           |  ForInPairStmt
+           |  MatchStmt
+           |  ScopeStmt
+           |  TryScopeStmt
+           |  SelectStmt
+           |  ReturnStmt
+           |  BreakStmt
+           |  ContinueStmt
+           |  ThrowStmt
+           |  TryStmt
+           |  DeferStmt
+           |  YieldStmt
+           |  Block
+           // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
+
+// LineBreak is not a token: it is the outcome of deciding that a line ending
+// terminates the statement here. That decision (previous token can end an
+// expression + the new line's first token can begin one + not inside '(' / '[')
+// is normative; see §1.2.1 for the full definition.
+
+ExprStmt ::= Expression (';' | LineBreak)
+
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+
+Block    ::= '{' Statement* '}'
+
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
+
+LoopLabel ::= Identifier ':'
+
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+
+ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
+             | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
+
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
+
+BreakStmt    ::= 'break' Identifier?
+
+ContinueStmt ::= 'continue' Identifier?
+
+ThrowStmt ::= 'throw' Expression
+
+TryStmt   ::= 'try' Block CatchClause+
+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
+
+DeferStmt ::= 'defer' Block
+
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
+
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+
+TryScopeStmt ::= 'try' ScopeStmt
+
+SelectStmt ::= 'select' '{' SelectArm+ '}'
+
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
+
+YieldStmt ::= 'yield' Expression
+
+Visibility ::= 'export'
+
+VarDecl ::= 'var' Binding
+
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
+
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+
+ParamList ::= Param (',' Param)* ','?
+
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
+
+ParamMode ::= 'ref' | 'move'
+
+ThrowsClause ::= 'throws' ('(' Type ')')?
+
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
+
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
+
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
+              '{' ClassMember* '}'
+
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
+
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
+
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
+
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+
+EnumFieldDecl  ::= Identifier ':' Type
+
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
+
+ImportDecl ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+
+ExportSpec ::= Identifier ('as' Identifier)?
+
+ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
+
+ImportMember  ::= Identifier ('as' Identifier)?
+
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
+
+AttrList ::= PublicAttribute*
+
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
+
+InlineEscapedString ::= '"' StrChar* '"'
+
+StrChar ::= any character that is not a double quote, backslash, or newline
+          | EscapeSeq
+          | Interpolation
+
+EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
+                  | 'x' HexDigit{2}
+                  | 'u' HexDigit{4}
+                  | 'u{' HexDigit{1,6} '}')
+
+Interpolation ::= '${' Expression '}'
+
+InlineRawString ::= 'r' '"' RawChar* '"'
+
+RawChar ::= any character except double quote (including `\`, which is not processed)
+
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+
+BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
+
+BinOp ::= '+' | '-' | '*' | '/' | '%'
+       | '&' | '|' | '^' | '<<' | '>>'
+       | '<' | '<=' | '>' | '>='
+       | '==' | '!='
+       | '&&' | '||'
+       | '??'
+
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+
+TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
+
+TupleAssignTarget ::= Identifier | '_'
+
+CompoundLValue ::= Identifier | MemberAccess
+
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expression ']')+
+
+IsExpr ::= UnaryExpr 'is' Type
+
+AsExpr ::= UnaryExpr 'as' Type
+        |  UnaryExpr 'as' Type '?'
+
+MemberAccess ::= Primary '.' Identifier
+
+IndexAccess ::= Primary '[' Expression ']'
+
+Slice ::= Primary '[' Expression? ':' Expression? ']'
+
+AnonFunction  ::= ArrowLambda | FnExpression
+
+ArrowBody     ::= Expression | Block
+
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
+
+ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
+
+ElseClause  ::= 'else' Block
+
+ForInit ::= VarDecl | Expression
+
+ForStep ::= Expression | Identifier ('++' | '--')
+
+ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+
+ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
+
+ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
+
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+
+WhereItem   ::= Identifier ':' ConstraintList
+
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
+
+AwaitExpr ::= 'await' UnaryExpr
+
+ChannelType ::= 'Channel' '<' Type '>'
+
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
+
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+
+SendArm    ::= Expression 'to' Expression '=>' Block
+
+TimeoutArm ::= 'after' Expression '=>' Block
+
+DefaultArm ::= '_' '=>' Block
+
+MoveExpr ::= 'move' Identifier
+
+TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
+
+ImportStmt ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+
+ModuleName    ::= Identifier
+
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
+
+TestDecl ::= '@test' FnDecl
+
+StaticBlock ::= 'static' Block

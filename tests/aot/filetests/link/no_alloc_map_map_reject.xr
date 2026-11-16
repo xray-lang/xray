@@ -6,6 +6,6 @@ fn xray_no_alloc_map_map_reject(values: Map<i64, i64>) -> i64 {
     return len(values.map(xray_no_alloc_map_map_bump))
 }
 
-var xray_no_alloc_map_map_values: Map<i64, i64> = #{}
+var xray_no_alloc_map_map_values: Map<i64, i64> = {}
 xray_no_alloc_map_map_values.set(1, 2)
 print(xray_no_alloc_map_map_reject(xray_no_alloc_map_map_values))

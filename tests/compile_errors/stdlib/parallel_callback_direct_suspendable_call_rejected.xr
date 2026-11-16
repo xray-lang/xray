@@ -9,6 +9,6 @@ fn suspends() -> i64 {
     return value
 }
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     print(suspends())
 }, parallel.Options(2))

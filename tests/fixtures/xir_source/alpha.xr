@@ -199,7 +199,7 @@ export fn failEvent<T:Sendable>(value:T) throws(Error)->i64 {
 }
 export fn event<T:Sendable>(v:T)->Event<T> { return Event<T>.Data { label:"owned", value:v } }
 export fn eventValue<T:Sendable>(v:Event<T>,fallback:T)->T {
-    return match(v) { Event.Data { value } -> value, Event.Empty -> fallback }
+    return match(v) { Event.Data { value } => value, Event.Empty => fallback, }
 }
 
 fn conditionalIdentity<T:Sendable>(value:T)->T { return value }

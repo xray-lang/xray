@@ -11,8 +11,8 @@ enum TestErr {
 fn test_enum_basic_construct() {
     var e = TestErr.Msg { s: "hi" }
     match (e) {
-        TestErr.Msg { s } -> { assertEqual(s, "hi") }
-        _ -> { assert(false) }
+        TestErr.Msg { s } => { assertEqual(s, "hi") },
+        _ => { assert(false) },
     }
 }
 
@@ -20,11 +20,11 @@ fn test_enum_basic_construct() {
 fn test_enum_multi_field() {
     var e = TestErr.Wrapped { msg: "outer", cause: "inner" }
     match (e) {
-        TestErr.Wrapped { msg, cause } -> {
+        TestErr.Wrapped { msg, cause } => {
             assertEqual(msg, "outer")
             assertEqual(cause, "inner")
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -33,14 +33,14 @@ fn test_enum_cause_chain() {
     var inner = TestErr.Msg { s: "inner" }
     var outer = TestErr.Wrapped { msg: "outer", cause: "inner" }
     match (outer) {
-        TestErr.Wrapped { msg, cause } -> {
+        TestErr.Wrapped { msg, cause } => {
             assertEqual(msg, "outer")
             match (inner) {
-                TestErr.Msg { s } -> { assertEqual(s, cause) }
-                _ -> { assert(false) }
+                TestErr.Msg { s } => { assertEqual(s, cause) },
+                _ => { assert(false) },
             }
-        }
-        _ -> { assert(false) }
+        },
+        _ => { assert(false) },
     }
 }
 
@@ -57,7 +57,7 @@ fn test_enum_throw_and_catch() {
     try {
         throw TestErr.Msg { s: "oops" }
     } catch (e) {
-        match (e) { TestErr.Msg { s } -> { caught_msg = s } }
+        match (e) { TestErr.Msg { s } => { caught_msg = s }, }
     }
     assertEqual(caught_msg, "oops")
 }
@@ -70,10 +70,10 @@ fn test_enum_throw_with_wrapped() {
         throw TestErr.Wrapped { msg: "wrapped", cause: "primary" }
     } catch (e) {
         match (e) {
-            TestErr.Wrapped { msg, cause } -> {
+            TestErr.Wrapped { msg, cause } => {
                 primary_msg = msg
                 cause_msg = cause
-            }
+            },
         }
     }
     assertEqual(primary_msg, "wrapped")
@@ -99,7 +99,7 @@ fn make_failure(msg: string) -> TestErr {
 fn test_enum_function_return() {
     var e = make_failure("via fn")
     match (e) {
-        TestErr.Msg { s } -> { assertEqual(s, "via fn") }
-        _ -> { assert(false) }
+        TestErr.Msg { s } => { assertEqual(s, "via fn") },
+        _ => { assert(false) },
     }
 }

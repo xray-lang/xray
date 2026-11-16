@@ -50,7 +50,7 @@ static void source_catch_cases(XrXirSourceRequest *request, const char *path, co
         {"fn run(){try {} catch(e:i64){}}\nrun()\n",false,NULL},
         {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e:Error){}}\nrun()\n",false,NULL},
         {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e:E){e=E.Bad}}\nrun()\n",false,NULL},
-        {"enum E<T> { Bad {value:T} }\nfn run<T>(v:T)->T {try {throw E<T>.Bad{value:v}} catch(e:E<T>){return match(e){E.Bad{value:x}->x}}}\nrun<i64>(1)\n",true,NULL},
+        {"enum E<T> { Bad {value:T} }\nfn run<T>(v:T)->T {try {throw E<T>.Bad{value:v}} catch(e:E<T>){return match(e){E.Bad{value:x}=>x,}}}\nrun<i64>(1)\n",true,NULL},
         {"enum E { Bad }\nfn run(){try {throw E.Bad} catch(e){} catch(later:E){const x=missing}}\nrun()\n",false,NULL},
         {"enum E<T:Sendable> { Bad }\nfn unused<T>() {try {} catch(e:E<T>){}}\n",false,NULL},
         {"enum E<T:Sendable> { Bad }\nfn unused<T:Sendable>() {try {} catch(e:E<T>){}}\n",true,NULL},

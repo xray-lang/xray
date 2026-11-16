@@ -1,8 +1,8 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Fresh BUILT functions repeat the actual Channel-to-carrier relationship. */
 static void scope_select_controls(const XrXirCompileContext *context) {
-    const char *text="fn run(){const ch=Channel<i64>(1);select{v from ch->{} _->{}}}\n"
-        "fn other(){const ch=Channel<string>(1);select{v from ch->{} _->{}}}";
+    const char *text="fn run(){const ch=Channel<i64>(1);select{v from ch=>{} _=>{}}}\n"
+        "fn other(){const ch=Channel<string>(1);select{v from ch=>{} _=>{}}}";
     XrXirSourceResult source={0};CHECK(check(context,text,&source,NULL)==XR_XIR_OK);
     const XrXirModule *original=xr_xir_compile_artifact_module(source.checked);
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source.checked);

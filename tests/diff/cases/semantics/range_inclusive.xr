@@ -35,9 +35,9 @@ print(boundary_count)
 
 fn bucket(x: i64) -> string {
     return match (x) {
-        1..=3 -> "low"
-        4..6 -> "mid"
-        _ -> "other"
+        1..=3 => "low",
+        4..6 => "mid",
+        _ => "other",
     }
 }
 

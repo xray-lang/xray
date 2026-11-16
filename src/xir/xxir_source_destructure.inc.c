@@ -42,27 +42,14 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
         return true;
     }
     bool tuple=pattern->type==PATTERN_TUPLE,array=pattern->type==PATTERN_ARRAY;
-    bool object=pattern->type==PATTERN_OBJECT;
-    int count=tuple || array ? pattern->as.array.element_count : object ? pattern->as.object.field_count : -1;
+    int count=tuple || array ? pattern->as.array.element_count : -1;
     if (array && depth)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array binding requires a flat declaration pattern");
-    if (count<0 || (count && (tuple || array ? !pattern->as.array.elements :
-        (!pattern->as.object.field_names || !pattern->as.object.patterns))))
+    if (count<0 || (count && !pattern->as.array.elements))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding fields are missing");
     for (int i=0;i<count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (object) {
-            size_t length=0;
-            if (!pattern->as.object.field_names[i] ||
-                !source_text_length(ctx,node,pattern->as.object.field_names[i],&length) || !length)
-                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"object binding field name is missing");
-            for (int j=0;j<i;++j) {
-                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-                if (source_text_same(ctx,node,pattern->as.object.field_names[i],pattern->as.object.field_names[j]))
-                    return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate object binding field");
-            }
-        }
-        const XrDestructurePattern *child=tuple || array ? pattern->as.array.elements[i] : pattern->as.object.patterns[i];
+        const XrDestructurePattern *child=pattern->as.array.elements[i];
         if (array && (!child || (child->type!=PATTERN_IDENTIFIER && child->type!=PATTERN_SKIP)))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array binding requires names or discards");
         if (!source_destructure_collect(ctx,node,child,plan,depth+1)) return false;
@@ -71,16 +58,13 @@ static bool source_destructure_collect(SourceContext *ctx,AstNode *node,
 }
 static bool source_destructure_pattern(SourceContext *ctx,AstNode *node,SourceDestructurePlan *plan) {
     const XrDestructurePattern *pattern=node->as.destructure_decl.pattern;
-    if (!pattern || (pattern->type!=PATTERN_TUPLE && pattern->type!=PATTERN_OBJECT && pattern->type!=PATTERN_ARRAY) ||
+    if (!pattern || (pattern->type!=PATTERN_TUPLE && pattern->type!=PATTERN_ARRAY) ||
         !node->as.destructure_decl.initializer)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding and initializer required");
     return source_destructure_collect(ctx,node,pattern,plan,0);
 }
 static XrXirSourceRange source_destructure_range(SourceContext *ctx,const XrDestructurePattern *field) {
     return (XrXirSourceRange){ctx->module,field->line,field->column,field->end_line,field->end_column};
-}
-static bool source_destructure_object_type(SourceContext *ctx,XrXirType type) {
-    return xr_xir_type_is_struct(&ctx->types,type) || xr_xir_type_is_class(&ctx->types,type);
 }
 static bool source_destructure_array_length(SourceContext *ctx,AstNode *node,
     SourceValue initial,uint32_t count) {
@@ -112,20 +96,6 @@ static bool source_destructure_array_field(SourceContext *ctx,AstNode *node,
     return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,
         {initial.id,selector.id},{0},0,{0}},value) && source_hir_place_emitted(ctx,&action,value,before);
 }
-static bool source_destructure_object_field(SourceContext *ctx,AstNode *node,
-    SourceValue receiver,const char *name,const XrDestructurePattern *pattern,SourceValue *value) {
-    AstNode selection={0};AstNode *site=node;
-    if (pattern->field_span.line>0) {
-        selection.type=AST_MEMBER_ACCESS;selection.line=pattern->field_span.line;
-        selection.column=pattern->field_span.column;
-        selection.end_line=selection.line;selection.end_column=selection.column+(int)source_text_size(ctx,name);
-        selection.as.member_access.name=(char *)name;selection.as.member_access.name_span=pattern->field_span;
-        site=&selection;
-    }
-    uint32_t index=0;XrXirType type;
-    return source_struct_field(ctx,site,receiver.type,name,false,&index,&type) &&
-        source_hir_nominal_get(ctx,site,receiver,index,0,value);
-}
 static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     const XrDestructurePattern *pattern,SourceValue initial,SourceDestructurePlan *plan,uint32_t depth) {
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -140,7 +110,8 @@ static bool source_destructure_project(SourceContext *ctx,AstNode *node,
         plan->fields[plan->next].value=initial;plan->fields[plan->next++].type=initial.type;return true;
     }
     bool tuple=pattern->type==PATTERN_TUPLE,array=pattern->type==PATTERN_ARRAY;
-    uint32_t count=(uint32_t)(tuple || array ? pattern->as.array.element_count : pattern->as.object.field_count);
+    if (!tuple && !array)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding requires a Tuple or Array pattern");
+    uint32_t count=(uint32_t)pattern->as.array.element_count;
     if (tuple) {
         XrXirStatus status=xr_hir_tuple_arity(&ctx->types,initial.type,count,ctx->request,NULL);
         if(status!=XR_XIR_OK)return source_fail(ctx,node,status,count?
@@ -148,18 +119,15 @@ static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     } else if (array) {
         /* The exact count check dominates every read and binding initialization. */
         if (!source_destructure_array_length(ctx,node,initial,count)) return false;
-    } else if (!source_destructure_object_type(ctx,initial.type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"object binding requires statically known fields");
+    }
     for (uint32_t i=0;i<count;++i) {
-        SourceValue value;const XrDestructurePattern *child=tuple || array ?
-            pattern->as.array.elements[i] : pattern->as.object.patterns[i];
+        SourceValue value;const XrDestructurePattern *child=pattern->as.array.elements[i];
         if (array && child->type==PATTERN_SKIP) continue;
         if (tuple) {
             if (!source_tuple_projection(ctx,node,initial,i,&value)) return false;
-        } else if (array) {
+        } else {
             if (!source_destructure_array_field(ctx,node,initial,i,&value)) return false;
-        } else if (!source_destructure_object_field(ctx,node,initial,pattern->as.object.field_names[i],child,&value))
-            return false;
+        }
         if (!source_destructure_project(ctx,node,child,value,plan,depth+1)) return false;
     }
     return true;

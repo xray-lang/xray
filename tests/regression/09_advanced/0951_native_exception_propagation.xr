@@ -1,6 +1,11 @@
 // 0951_native_exception_propagation.xr
 // Regression: C primitive methods must propagate exceptions to try/catch.
 
+struct MixedRecord {
+    a: i64
+    b: string
+}
+
 @test
 fn test_json_parse_value_catches_malformed_input() {
     var caught = false
@@ -28,7 +33,7 @@ fn test_json_parse_object_catches_non_object_root() {
 
 @test
 fn test_json_stringify_succeeds() {
-    var result = JSON.stringify({a: 1, b: "hello"})
+    var result = JSON.stringify(MixedRecord{a: 1, b: "hello"})
     assertEqual(len(result) > 0, true)
 }
 

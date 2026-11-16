@@ -8,12 +8,12 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d:%s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_sdk_resource_test.h"
 static const char *const texts[]={
-    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}->value }\n",
-    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:alias}->alias }\n",
-    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}->value }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value}->value }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}, E.B {value}->value }\n",
-    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value:value}->value }\n"
+    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}=>value, }\n",
+    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:alias}=>alias, }\n",
+    "enum E { A { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}=>value, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value}=>value, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value:value}, E.B {value}=>value, }\n",
+    "enum E { A { value:i64 }, B { value:i64 } }\nvar x=E.A {value:1}\nvar y=match(x){ E.A {value}, E.B {value:value}=>value, }\n"
 };
 static int run(int argc,char **argv){
     CHECK(argc==3);unsigned mode=(unsigned)strtoul(argv[2],NULL,10);CHECK(mode<6);

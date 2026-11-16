@@ -60,7 +60,7 @@ print(success.ordinal)
 print(error.ordinal)
 print(panic.ordinal)
 print(cancelled.ordinal)
-print(match (success) { TaskResult.Success { value } -> value _ -> -1 })
+print(match (success) { TaskResult.Success { value } => value, _ => -1, })
 print(unitResult().ordinal)
 print(nestedResult().ordinal)
 print(len(resultArray()))
@@ -85,7 +85,7 @@ export fn unsafeConstruct() -> TaskResult<null,Never> {
     return TaskResult<null,Never>.Panic { info: info }
 }
 export fn rethrowA(result: TaskResult<i64,A>) throws(A) -> i64 {
-    return match (result) { TaskResult.Error { error } -> { throw error } _ -> 0 }
+    return match (result) { TaskResult.Error { error } => { throw error }, _ => 0, }
 }
 
 fn divideZero(value: i64) -> i64 { return 1 / value }
@@ -110,5 +110,5 @@ export fn ownAwaitResult() -> TaskResult<i64,Never> {
 export fn replacedGraph() -> Error? {
     var task = go cleanupPanic()
     const result = task.awaitResult()
-    return match (result) { TaskResult.Panic { info } -> info.replacedError _ -> null }
+    return match (result) { TaskResult.Panic { info } => info.replacedError, _ => null, }
 }

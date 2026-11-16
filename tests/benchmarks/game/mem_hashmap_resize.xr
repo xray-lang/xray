@@ -5,7 +5,13 @@
 //
 // Usage: xray gc_hashmap_resize.xr -- [iterations]
 
-type DataRecord = { data: i64 }
+struct ValueRecord {
+    v: i64
+}
+
+struct DataRecord {
+    data: i64
+}
 
 fn run(n: i64) {
     // Phase 1: Build a long-lived map, then repeatedly overwrite values
@@ -23,7 +29,7 @@ fn run(n: i64) {
     while (round < n) {
         i = 0
         while (i < 1000) {
-            bigMap.set("key_" + i.toString(), JSON.value({ v: round * 1000 + i }))
+            bigMap.set("key_" + i.toString(), JSON.value(ValueRecord{ v: round * 1000 + i }))
             i = i + 1
         }
         round = round + 1
@@ -54,7 +60,7 @@ fn run(n: i64) {
         var inner: Map<string, DataRecord> = Map()
         var j = 0
         while (j < 10) {
-            inner["field_" + j.toString()] = { data: i * 10 + j }
+            inner["field_" + j.toString()] = DataRecord{ data: i * 10 + j }
             j = j + 1
         }
         root["node_" + (i % 100).toString()] = inner

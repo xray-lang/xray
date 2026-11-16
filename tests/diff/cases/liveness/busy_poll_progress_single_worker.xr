@@ -19,13 +19,13 @@ var running = true
 while (running) {
     var r = ch.tryRecv()
     match (r) {
-        Recv.Value { value: v } -> {
+        Recv.Value { value: v } => {
             got = v
             running = false
-        }
-        _ -> {
+        },
+        _ => {
             got = got
-        }
+        },
     }
 }
 print(got)

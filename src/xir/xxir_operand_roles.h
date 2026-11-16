@@ -134,7 +134,7 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
         op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || op==XR_XIR_CHANNEL_TRY_SEND ||
         op==XR_XIR_CHANNEL_SEND || op==XR_XIR_CHANNEL_RECV_OR ||
         op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT ||
-        op == XR_XIR_MAP_NEW || op == XR_XIR_SET_NEW || op == XR_XIR_MAP_SET ||
+        op == XR_XIR_MAP_NEW || op == XR_XIR_MAP_LITERAL || op == XR_XIR_SET_NEW || op == XR_XIR_MAP_SET ||
         op == XR_XIR_VIEW_NEW || op == XR_XIR_VIEW_REBORROW || op == XR_XIR_VIEW_SET || op == XR_XIR_VIEW_CLEANUP ||
         (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }

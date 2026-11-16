@@ -10,29 +10,29 @@ print("========== 测试10：死锁场景与检测 ==========")
 
 fn recvValue(ch) {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 
 fn recvTimeoutValue(ch, timeout_ms) {
     return match (ch.recvTimeout(timeout_ms)) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 
 fn isSent(r: SendResult) -> bool {
     return match (r) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     }
 }
 

@@ -36,11 +36,12 @@
 #include "parser_resources_observer.h"
 
 static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
-static const char source[] = "// retained trivia\ntype Thing = { value: i64 }\nconst answer = 42\nconst text = \"value ${answer}\"\n";
+static const char source[] = "// retained trivia\nstruct Thing { value: i64 }\nconst answer = 42\nconst text = \"value ${answer}\"\n";
 static const char nul_source[] =
     "const escaped = \"a\\0b\"\n"
     "const unicode = \"a\\u{0}b\"\n"
-    "const template = \"a\\u{0}b${1}c\\0d\"\n";
+    "const template = \"a\\u{0}b${1}c\\0d\"\n"
+    "const map = {\"a\\u{0}b\": 1}\n";
 
 static XrCompileResourceStatus pipeline(const XrCompileResourceLimits *limits, XrCompileResourceStats *observed) {
     XrCompileResources *resources = NULL;
@@ -98,6 +99,13 @@ static void faults(void) {
     reset(); CHECK(pipeline(&limits, &observed) == XR_COMPILE_RESOURCE_MEMORY_LIMIT);
 }
 
+static void bounded_recovery_diagnostic(void *data, int line, int column,
+    int end_line, int end_column, const char *message) {
+    (void)line; (void)column; (void)end_line; (void)end_column; (void)message;
+    unsigned *count = data;
+    CHECK(++*count < 16);
+}
+
 static void recoverable_and_rollback(void) {
     reset();
     XrCompileResources *resources = NULL;
@@ -114,6 +122,15 @@ static void recoverable_and_rollback(void) {
     AstNode *partial = NULL;
     CHECK(xr_compile_parse_recoverable(&parser, &partial) == XR_PARSE_RECOVERED);
     CHECK(partial && !partial->as.program.owns_arena && partial->as.program.arena == &arena);
+    xr_compile_parser_close(&parser);
+    parser = (Parser) {0};
+    unsigned diagnostic_count = 0;
+    CHECK(xr_compile_parser_open(&parser, session, "scope {}\nlinked scope {}\n}\nconst next = 1",
+                                 NULL, &arena) == XR_PARSE_OK);
+    xr_parser_set_error_callback(&parser, bounded_recovery_diagnostic, &diagnostic_count, 0);
+    partial = NULL;
+    CHECK(xr_compile_parse_recoverable(&parser, &partial) == XR_PARSE_RECOVERED);
+    CHECK(partial && diagnostic_count > 0 && diagnostic_count < 16);
     xr_compile_parser_close(&parser);
     parser = (Parser) {0};
     CHECK(xr_compile_parser_open(&parser, session, "const value = 1", NULL, &arena) == XR_PARSE_OK);
@@ -272,7 +289,7 @@ static XrParseStatus fixture(const char *text, const XrCompileResourceLimits *li
 }
 
 static void check_nul_literals(const AstNode *program) {
-    CHECK(program && program->type == AST_PROGRAM && program->as.program.count == 3);
+    CHECK(program && program->type == AST_PROGRAM && program->as.program.count == 4);
     for (unsigned i = 0; i < 2; ++i) {
         const AstNode *literal = program->as.program.statements[i]->as.var_decl.initializer;
         CHECK(literal && literal->type == AST_LITERAL_STRING);
@@ -287,6 +304,11 @@ static void check_nul_literals(const AstNode *program) {
     CHECK(!memcmp(first->as.literal.raw_value.string_val, "a\0b", 3));
     CHECK(!memcmp(last->as.literal.raw_value.string_val, "c\0d", 3));
     CHECK(template->as.template_str.parts[1]->type == AST_LITERAL_INT);
+    const AstNode *map = program->as.program.statements[3]->as.var_decl.initializer;
+    CHECK(map && map->type == AST_MAP_LITERAL && map->as.map_literal.count == 1);
+    const AstNode *key = map->as.map_literal.keys[0];
+    CHECK(key && key->type == AST_LITERAL_STRING && key->as.literal.string_length == 3);
+    CHECK(!memcmp(key->as.literal.raw_value.string_val, "a\0b", 3));
 }
 
 static void nul_literal_lifetime(void) {
@@ -312,7 +334,6 @@ static void nul_literal_lifetime(void) {
         "const invalid = \"a\\xFF${1}b\"\n",
         "const invalid = c\"a\\u{0}b\"\n",
         "const invalid = c\"a\\0b\"\n",
-        "const invalid = {\"a\\u{0}b\": 1}\n",
         "import { value } from \"./a\\u{0}b\"\n",
     };
     for (size_t i = 0; i < sizeof(rejected) / sizeof(*rejected); ++i) {
@@ -321,7 +342,7 @@ static void nul_literal_lifetime(void) {
     }
     reset(); XrCompileResourceStats observed = {0};
     CHECK(fixture("const raw_c = cr\"a\\0b\"\n", &unlimited, &observed) == XR_PARSE_OK);
-    puts("NUL plain/template AST bytes survive source, Session and producer destruction; UTF8/C/field/import boundaries PASS");
+    puts("NUL plain/template/Map key AST bytes survive source, Session and producer destruction; UTF8/C/import boundaries PASS");
 }
 
 static void syntax_boundaries(void) {
@@ -690,7 +711,10 @@ static void this_ref_positions(void) {
     printf("parser real ref THIS marker spans: allocations=%zu full FI/held boundary/producer death/physical zero passed\n",sites);
 }
 
+#include "parser_resources_collections.h"
+
 int main(void) {
+    collection_metadata_ownership();
     recovered_positions();
     this_positions();
     this_ref_positions();

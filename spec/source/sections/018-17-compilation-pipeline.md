@@ -8,7 +8,7 @@ order: 018
 
 ## 17. 编译流水线 (Compilation Pipeline)
 
-> 真值源：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
+> 实现参考：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
 
 ### 17.1 两条执行路径
 
@@ -1180,7 +1180,6 @@ map/filter/reduce/forEach/find/findIndex/every/some的普通READ实参及Tuple�
 Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展开传递相应字段上下文并在原位置求值，原Tuple值来源保一次求值与真实投影。共同完成器按顺序消费同一计划，零字段展开不擦除副作用，普通Unit仍是逻辑参数。闭包参数上下文可以保持返回结果开放，最终转换仅填入实际结果，原参数模式、完整callable执行契约和效果/ROOT检查仍生效；无上下文或开放结果字段保真实ROOT合并证据。所有存储、观察、效果及转换向原账本计费，不预执行或用AST替身改变求值。
 
 回调中的局部可变捕获仍按真实Cell/借用、cleanup及CTFE闭包权限处理；脚本运行期副作用例不授库var或编译期外部状态。上述参数路径不代表全部库模板、未准入Array成员、完整资源/性能/安全门、P12或322保护已经完成。
-
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -2530,5 +2529,4 @@ Ordinary READ arguments and Tuple spreads of map/filter/reduce/forEach/find/find
 Tuple literal fields keep their original syntax, owner and expression plans. Nested spreads receive the corresponding field contexts and evaluate in place; existing Tuple value sources evaluate once and supply authentic projections. The common completion worker consumes the same plans in order. Zero-field spreads retain effects and ordinary Unit retains logical arity. A closure parameter context may leave the result open; final conversion fills only the actual result while preserving parameter modes, the complete callable execution contract and effect/ROOT checks. Uncontextualized or open-result fields retain authentic ROOT join evidence. Original ledgers charge storage, observation, effects and conversion without pre-execution or synthetic AST evaluation.
 
 Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closure authority. Runtime script effects grant neither library private variables nor compiler external-state access. This argument path does not complete all library templates, unadmitted Array members, full resource/performance/safety gates, P12 or322 protection.
-
 <!-- /xr-spec:en -->

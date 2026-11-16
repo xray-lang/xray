@@ -3,7 +3,7 @@ fn lookup<K: Hashable, V>(items: Map<K, V>, key: K, fallback: V) -> V {
 }
 
 fn run(n: i64) -> i64 {
-    var values: Map<i64, i64> = #{}
+    var values: Map<i64, i64> = {}
     var seed = 0
     while (seed < 64) {
         values.set(seed, (seed % 17) + 1)

@@ -1,7 +1,13 @@
 // Unknown JSON is decoded through an explicit schema boundary. Structural
 // object unions continue to use `is` and `as` for ordinary static narrowing.
-type User = { name: string, age: i64 }
-type Tagged = { kind: string, n: i64 }
+struct User {
+    name: string
+    age: i64
+}
+struct Tagged {
+    kind: string
+    n: i64
+}
 
 var ok: JSON.Value = JSON.parseValue("{\"name\":\"Alice\",\"age\":30}")
 var missingField: JSON.Value = JSON.parseValue("{\"name\":\"Bob\"}")
@@ -27,7 +33,7 @@ fn describe(v: User | Tagged) -> string {
     if (v is User) { return "user:" + (v as User).name }
     return "neither"
 }
-var t: User | Tagged = { kind: "t", n: 9 }
-var u: User | Tagged = { name: "Eve", age: 1 }
+var t: User | Tagged = Tagged{ kind: "t", n: 9 }
+var u: User | Tagged = User{ name: "Eve", age: 1 }
 print(describe(t))
 print(describe(u))

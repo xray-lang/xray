@@ -6,13 +6,10 @@ import {
     CsvDocument,
     CsvError,
     CsvErrorKind,
-    CsvHeader,
-    defaultParseOptions
+    CsvHeader
 } from csv
 
-var headerOptions = defaultParseOptions()
-headerOptions.header = CsvHeader.FirstRow
-var doc = try csv.parse("name,age\nAlice,30\nBob,25", headerOptions)
+var doc = try csv.parse("name,age\nAlice,30\nBob,25", header: CsvHeader.FirstRow)
 print(len(doc.headers))
 print(doc.headers[0])
 print(len(doc.rows))
@@ -31,19 +28,15 @@ try {
     try csv.parse("a,b\n1")
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
-        _ -> false
+        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } => record == 1,
+        _ => false,
     })
 }
 
-var autoOptions = defaultParseOptions()
-autoOptions.delimiter = CsvDelimiter.Auto
-var auto = try csv.parse("a;b;c\n1;2;3", autoOptions)
+var auto = try csv.parse("a;b;c\n1;2;3", delimiter: CsvDelimiter.Auto)
 print(auto.rows[1][2])
 
-var tsvOptions = defaultParseOptions()
-tsvOptions.delimiter = CsvDelimiter.Exact { delimiter: '\t' }
-var tsv = try csv.parse("x\ty\n4\t5", tsvOptions)
+var tsv = try csv.parse("x\ty\n4\t5", delimiter: CsvDelimiter.Exact { delimiter: '\t' })
 print(tsv.rows[1][1])
 
 var serial = CsvDocument()
@@ -54,22 +47,18 @@ serial.rows.push(["Bob", "quote \" me"])
 var out = try csv.stringify(serial)
 print(out.contains("\"hello, world\""))
 print(out.contains("\"quote \"\" me\""))
-var roundtrip = try csv.parse(out, headerOptions)
+var roundtrip = try csv.parse(out, header: CsvHeader.FirstRow)
 print(roundtrip.rows[1][1])
 
-var quotedComment = defaultParseOptions()
-quotedComment.commentPrefix = "#"
-var comments = try csv.parse("\"# value\",x\n# ignored\ny,z", quotedComment)
+var comments = try csv.parse("\"# value\",x\n# ignored\ny,z", commentPrefix: "#")
 print(len(comments.rows))
 print(comments.rows[0][0])
 
-var limited = defaultParseOptions()
-limited.maxColumns = 1
 try {
-    try csv.parse("a,b", limited)
+    try csv.parse("a,b", maxColumns: 1)
 } catch (e: CsvError) {
     print(match (e) {
-        CsvError.ColumnLimitExceeded { limit } -> limit == 1,
-        _                                   -> false
+        CsvError.ColumnLimitExceeded { limit } => limit == 1,
+        _                                   => false,
     })
 }

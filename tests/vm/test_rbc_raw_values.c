@@ -162,7 +162,10 @@ static void inline_targets(void) {
     CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==100);
     xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
     module=NULL; OK(xr_lir_module_create(NULL,&module)); XrLirType type=0;
-    XrLirRecordField field={"score",5,XR_LIR_I64}; OK(xr_lir_record_type(module,&field,1,&type));
+    XrLirRecordField field={"score",5,XR_LIR_I64, 0}; OK(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.vm.rbc_raw_values", .module_length=sizeof("tests.vm.rbc_raw_values")-1,
+            .name="ExternalRecord", .name_length=sizeof("ExternalRecord")-1},
+        &field,1,&type));
     root=test_function(module,"external_record",NULL,0,type); XrLirBlock block=test_block(module,root,NULL,0);
     OK(xr_lir_set_entry(module,root,block)); XrLirValue number=test_constant(module,block,XR_LIR_I64,42);
     XrLirValue value=record_fixture_value(module,block,XR_LIR_RECORD_NEW,type,&number,1,0,(XrLirFunction){0});

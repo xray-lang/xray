@@ -33,6 +33,7 @@ static const char *source_scalar_type_name(XrXirType type) {
     case XR_XIR_F32: return TYPE_NAME_F32;
     case XR_XIR_F64: return TYPE_NAME_F64;
     case XR_XIR_STRING: return TYPE_NAME_STRING;
+    case XR_XIR_JSON_VALUE: return "JSON.Value";
     case XR_XIR_PANIC_INFO: return TYPE_NAME_PANIC_INFO;
     default: return NULL;
     }
@@ -135,7 +136,6 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         return true;
     case XR_XIR_TYPE_NOMINAL: {
         const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[shape->nominal.declaration];
-        if(declaration->flags&XR_XIR_NOMINAL_RECORD) {source_type_name_append(name,"object",6);return true;}
         source_type_name_append(name, (const char *) declaration->name.bytes, declaration->name.length);
         if (shape->nominal.argument_count) {
             source_type_name_append(name, "<", 1);

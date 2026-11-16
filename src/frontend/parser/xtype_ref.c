@@ -314,41 +314,6 @@ XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names_src,
-                                  XrTypeRef **field_types, const bool *field_readonly, int count) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    if (!tref_count(session, count, UINT8_MAX)) return NULL;
-    XrTypeRef *t = tref_alloc(session);
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    t->kind = XR_TREF_OBJECT;
-    t->nchildren = (uint8_t) count;
-    if (count > 0) {
-        do {
-            t->children = tref_copy_children(session, field_types, count);
-            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        } while (0);
-        do {
-            t->field_names =
-            (const char **) ast_alloc_array(session, sizeof(const char *), (size_t) count);
-            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        } while (0);
-        for (int i = 0; i < count; i++)
-            do {
-
-                t->field_names[i] = tref_strdup(session, field_names_src[i]);
-                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-            } while (0);
-        if (field_readonly) {
-            do {
-                t->field_readonly = (bool *) ast_alloc_array(session, sizeof(bool), (size_t) count);
-                if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-            } while (0);
-            if (!ast_copy(session, t->field_readonly, field_readonly, (size_t) count * sizeof(bool))) return NULL;
-        }
-    }
-    return t;
-}
-
 XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,
                                        int length) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
@@ -394,7 +359,7 @@ XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const c
  *
  * Produces human-readable type strings like "i64", "Array<string>",
  * "(i64) -> bool", etc.  Arena-allocated — no free needed.
- * Function types follow the unified arrow form (no leading `fn`).
+ * Function types use an `fn` prefix and a type-only return arrow.
  * ===================================================================== */
 
 /* Max buffer for xr_tref_to_string scratch — handles deeply nested

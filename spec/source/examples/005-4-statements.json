@@ -1,0 +1,117 @@
+{
+  "005-4-statements-example-001": {
+    "fence": "xray",
+    "code": "foo()                  // 表达式语句\nx = 1                  // 赋值表达式作为语句\nx++                    // 自增语句；不产生表达式值\n{                      // 块\n    var y = 2\n    y + 1              // 表达式但结果被丢弃\n}",
+    "trivia": {
+      "en": {
+        "3": "                  // expression statement\n",
+        "6": "                  // assignment expression as a statement\n",
+        "9": "                    // increment statement; produces no expression value\n",
+        "10": "                      // block\n    ",
+        "17": "              // expression with discarded result\n"
+      }
+    }
+  },
+  "stmt-if": {
+    "fence": "xray @id=stmt-if",
+    "code": "if (x > 0) {\n    print(\"positive\")\n} else if (x == 0) {\n    print(\"zero\")\n} else {\n    print(\"negative\")\n}"
+  },
+  "stmt-while": {
+    "fence": "xray @id=stmt-while",
+    "code": "var i = 0\nwhile (i < 10) {\n    print(i)\n    i++\n}"
+  },
+  "stmt-for-c": {
+    "fence": "xray @id=stmt-for-c",
+    "code": "for (var i = 0; i < 10; i++) {\n    print(i)\n}\nfor (var j = 100; j > 90; j--) {\n    print(j)\n}"
+  },
+  "stmt-for-in": {
+    "fence": "xray @id=stmt-for-in",
+    "code": "for (item in [1, 2, 3]) { print(item) }\nfor (i in 0..n) { print(i) }                  // 范围迭代（半开区间）\nfor (ch in \"hello\") { print(ch) }             // 字符串字符（按 Unicode scalar）\nfor (key in someMap) { print(key) }           // Map 单变量 → key\nfor (key in jsonObject) { print(key) }        // JSON.Object 即 Map，单变量 → key\nfor (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值\nfor (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>\n    print(variant.name)\n}\nfor (_ in 0..n) { count++ }                   // 占位符忽略",
+    "trivia": {
+      "en": {
+        "33": "                  // range iteration (half-open)\n",
+        "45": "             // string characters (by Unicode scalar)\n",
+        "57": "           // single variable over Map → key\n",
+        "69": "        // JSON.Object is a Map; single variable → key\n",
+        "83": "    // unit-only enum; yields Color values\n",
+        "92": "             // any concrete enum; yields EnumVariant<Event>\n    ",
+        "113": "                   // discard with placeholder"
+      }
+    }
+  },
+  "stmt-for-pairs": {
+    "fence": "xray @id=stmt-for-pairs",
+    "code": "// 形式 A：直接两标识符（更常见）\nfor (k, v in someMap) { print(\"${k}=${v}\") }     // Map → (key, value)\nfor (i, e in someArray) { print(\"${i}: ${e}\") }  // Array → (index, element)\nfor (i, c in \"hello\") { print(\"${i}:${c}\") }     // string → (index, rune)\n\n// 形式 B：元组括号包裹（与 .entries() 配合）\nfor ((i, e) in someArray.entries()) { print(\"${i}=${e}\") }\nfor ((i, c) in \"hi\".entries()) { print(\"${i}-${c}\") }",
+    "trivia": {
+      "en": {
+        "0": "// Form A: two bare identifiers (more common)\n",
+        "42": "     // string → (index, rune)\n\n// Form B: tuple-parenthesized (pairs well with .entries())\n"
+      }
+    }
+  },
+  "stmt-match": {
+    "fence": "xray @id=stmt-match @fragment",
+    "code": "match (x) { 1 => print(\"one\"), _ => print(\"other\"), }\n\nmatch (action) {\n    \"start\" => {\n        log.info(\"starting\")\n        start_engine()\n    },\n    \"stop\" => stop_engine(),\n    _ => log.warn(\"unknown\"),\n}"
+  },
+  "stmt-break-continue": {
+    "fence": "xray @id=stmt-break-continue",
+    "code": "break                  // 跳出最内层循环\ncontinue               // 进入最内层循环的下一次迭代\nbreak outer            // 跳出标签为 outer 的循环\ncontinue outer         // 进入标签为 outer 的循环的下一次迭代\n\nouter: for (i in 0..10) {\n    for (j in 0..10) {\n        if (j == 3) { continue outer }\n        if (i * j > 20) { break outer }\n    }\n}",
+    "trivia": {
+      "en": {
+        "1": "                  // exit the innermost loop\n",
+        "2": "               // proceed to the innermost loop's next iteration\n",
+        "4": "            // exit the loop labeled outer\n",
+        "6": "         // proceed to the next iteration of the loop labeled outer\n\n"
+      }
+    }
+  },
+  "stmt-return": {
+    "fence": "xray @id=stmt-return",
+    "code": "fn done() {\n    return                 // 隐式返回 ()（Unit）\n}\n\nfn answer() -> i64 {\n    return 42\n}\n\nfn pair(a: i64, b: i64) -> (i64, i64) {\n    return (a, b)          // 多返回值，必须用括号包裹元组\n}",
+    "trivia": {
+      "en": {
+        "6": "                 // implicitly returns () (Unit)\n",
+        "41": "          // multi-value return must wrap a tuple in parens\n"
+      }
+    }
+  },
+  "stmt-try": {
+    "fence": "xray @id=stmt-try @fragment",
+    "code": "enum AppError { NotFound, Timeout { milliseconds: i64 } }\n\n// 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获\ntry { throw AppError.NotFound } catch (e) {\n    match (e) {\n        AppError.NotFound => log.error(\"not found\"),\n        AppError.Timeout { milliseconds: ms } => log.error(\"timeout after ${ms}ms\"),\n    }\n}\n\n// catch panic (p) 是运行时故障（除零、越界、expr!）的独立边界\ntry { risky() } catch panic (p) {\n    log.error(\"fault:\", p)\n}\n\nthrow AppError.NotFound                      // 值返回错误通道\n// 没有 finally；用 defer 做确定性清理（见 §4.9）",
+    "trivia": {
+      "en": {
+        "12": "\n\n// Recoverable errors: enum values flow through the value-return channel,\n// caught by catch (e)\n",
+        "58": "\n\n// catch panic (p) is a separate boundary for runtime faults\n// (div-by-zero, out-of-bounds, expr!)\n",
+        "83": "                      // value-return error channel\n// There is no finally; use defer for deterministic cleanup (see §4.9)"
+      }
+    }
+  },
+  "stmt-defer": {
+    "fence": "xray @id=stmt-defer",
+    "code": "fn read_file(path: string) -> string {\n    var f = open(path)\n    defer { f.close() }              // 函数返回前必执行\n    return f.readAll()\n}\n\nfn process() {\n    defer {\n        log.info(\"done\")\n        cleanup()\n    }\n    do_work()\n}\n\nfn late_binding_and_copy() {\n    var n = 1\n    defer { print(\"late\", n) }        // 退出时读取 2\n    const saved = copy n\n    defer { print(\"saved\", saved) }   // 显式副本保持 1\n    n = 2\n}                                      // 输出 saved 1，再输出 late 2",
+    "trivia": {
+      "en": {
+        "25": "              // always runs before the function returns\n    ",
+        "71": "        // reads 2 at exit\n    ",
+        "85": "   // explicit copy remains 1\n    ",
+        "89": "                                      // prints saved 1, then late 2"
+      }
+    }
+  },
+  "stmt-print-dump": {
+    "fence": "xray @id=stmt-print-dump",
+    "code": "print(\"hello\")                 // 追加恰好一个换行\nprint(\"a:\", a, \"b:\", b)        // 多参以恰好一个空格分隔\nprint()                        // 只输出一个换行\ndump(some_obj)                 // 调试输出，含类型信息与结构布局",
+    "trivia": {
+      "en": {
+        "4": "                 // appends exactly one newline\n",
+        "14": "        // arguments separated by exactly one space\n",
+        "17": "                        // writes just that newline\n",
+        "21": "                 // debug output, with type info and structure"
+      }
+    }
+  },
+  "005-4-statements-example-013": {
+    "fence": "xray @check",
+    "code": "fn classify(n: i64) -> string {\n    if (n < 0) { return \"negative\" }\n    return match (n) {\n        0 => \"zero\",\n        1..=9 => \"small\",\n        _ => \"large\",\n    }\n}\n\nfn main() {\n    for (i in [-1, 0, 5, 100]) {\n        print(classify(i))\n    }\n}\n\nmain()"
+  }
+}

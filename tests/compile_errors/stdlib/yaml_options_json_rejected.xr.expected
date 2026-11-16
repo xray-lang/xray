@@ -1,2 +1,2 @@
 --> 5:30
-type 'JSON.Object' is not assignable to parameter type 'YamlOptions?'
+E0327: unknown named argument

@@ -78,6 +78,8 @@ typedef struct XrLirTypeData {
     XrLirCallableType callable;
     XrLirType cell_element;
     const XrLirRecordField *fields;
+    XrLirRecordIdentity record;
+    uint32_t *record_names, record_name_capacity;
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;
@@ -85,6 +87,8 @@ struct XrLirModule {
     uint32_t *type_index, type_index_capacity;
     XrLirLiteralData *literals;
     uint32_t literal_count, literal_capacity;
+    XrLirMapLiteral *map_literals;
+    uint32_t map_literal_count,map_literal_capacity;
     XrLirFunctionData *functions;
     uint32_t function_count, function_capacity;
     XrLirIntrinsic *intrinsics;
@@ -141,6 +145,7 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
 }
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
+XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);
 XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *, const XrLirType *, uint32_t,
     const XrLirFunctionCallableParameter *, uint32_t, bool);

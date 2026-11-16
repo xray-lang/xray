@@ -47,7 +47,7 @@ typedef struct LirC {
     size_t length, capacity;
     uint32_t *closure;
     uint32_t closure_count;
-    uint8_t *seen, *fixed_divisors, *used_literals, *callable_used;
+    uint8_t *seen, *fixed_divisors, *used_literals, *used_map_literals, *callable_used;
     LirCConstructedType *constructed_types;
     uint32_t constructed_count, pod_count;
     XrLirFunction function;
@@ -417,7 +417,11 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c_display_point(c, v)) { c->displays = true; return; }
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) return;
-    if (c_map_point(c, v)) { c->maps = true; return; }
+    if (c_map_point(c, v)) {
+        c->maps = true;
+        if (v->op == XR_LIR_MAP_LITERAL_NEW) (void)c_map_literal_admit(c, v);
+        return;
+    }
     if (string_role) return;
     if (c_view_point(c, v)) return;
     switch (v->op) {
@@ -1082,6 +1086,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_callable_publication(c);
     c_locations(c);
     c_literals(c);
+    c_map_literals(c);
     if (c->state) c_state_layout(c);
     else if (c->value_image) c_value_image(c,xr_lir_value_image_view(c->value_image));
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
@@ -1252,6 +1257,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.seen);
     xr_compile_resources_free(c.fixed_divisors);
     xr_compile_resources_free(c.used_literals);
+    xr_compile_resources_free(c.used_map_literals);
     xr_compile_resources_free(c.callable_used);
     xr_compile_resources_free(c.constructed_types);
     xr_compile_resources_free(c.callable_events);

@@ -44,7 +44,7 @@ static void effect_binding_cases(void) {
         XrXirFunctionIdentity ids[7] = {{0}};
         ids[1].exported = ids[2].exported = ids[4].exported = ids[5].exported = 1;
         ids[3].promises = promised ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
-        XrXirDeclarations declarations = {&source, 1, ids, NULL, 0, NULL, 0, 0, 1, NULL};
+        XrXirDeclarations declarations = {.modules=&source, .module_count=1, .functions=ids, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
         XrXirTypeNode nodes[2] = {{0}, {0}};
         for (unsigned n = 0; n < 2; ++n) {
             nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].result = XR_XIR_I64;

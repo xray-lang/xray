@@ -7,6 +7,23 @@
 
 // ===== 数组嵌套测试 =====
 
+struct UserName {
+    name: string
+}
+
+struct UserData {
+    user: UserName
+}
+
+struct Person {
+    name: string
+    age: i64
+}
+
+struct UserList {
+    users: Array<Person>
+}
+
 @test
 fn test_nested_array_2_levels() {
     var arr = JSON.parseValue("[[1, 2], [3, 4]]")
@@ -244,7 +261,7 @@ fn test_stringify_nested_array() {
 
 @test
 fn test_stringify_nested_object() {
-    var obj = { user: { name: "Alice" } }
+    var obj = UserData{ user: UserName{ name: "Alice" } }
     var jsonStr = JSON.stringify(obj)
     var parsed = JSON.parseValue(jsonStr)
     assertEqual(JSON.require<string>(parsed, ["user", "name"]), "Alice")
@@ -252,10 +269,10 @@ fn test_stringify_nested_object() {
 
 @test
 fn test_stringify_complex() {
-    var data = {
+    var data = UserList{
         users: [
-            { name: "Alice", age: 30 },
-            { name: "Bob", age: 25 }
+            Person{ name: "Alice", age: 30 },
+            Person{ name: "Bob", age: 25 }
         ]
     }
     var jsonStr = JSON.stringify(data)

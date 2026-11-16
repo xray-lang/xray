@@ -78,7 +78,7 @@ static const XrXirFunctionIdentity nested_identities[]={
     {0},{.exported=1},{.exported=1},{.exported=1},
     {.exported=1},{.exported=1},{.exported=1},{.exported=1}
 };
-static const XrXirDeclarations nested_declarations={nested_modules,1,nested_identities,NULL,0,NULL,0,0,1,NULL};
+static const XrXirDeclarations nested_declarations={.modules=nested_modules, .module_count=1, .functions=nested_identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
 static const XrXirModule nested_built={XR_XIR_BUILT,nested_functions,8,&nested_declarations,NULL,
     &nested_types,NULL,XR_XIR_PROGRAM,NULL};
 #endif // XIR_NESTED_NULLABLE_FIXTURE_H

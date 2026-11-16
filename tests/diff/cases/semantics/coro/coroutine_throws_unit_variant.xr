@@ -15,12 +15,12 @@ enum E2 { Code { code: i64 } }
 
 var a = go body()
 match (a.awaitResult()) {
-    TaskResult.Failed { error: e } -> print("failed: unit variant")
-    _ -> print("other")
+    TaskResult.Failed { error: e } => print("failed: unit variant"),
+    _ => print("other"),
 }
 
 var b = go payload_body()
 match (b.awaitResult()) {
-    TaskResult.Failed { error: e } -> print("failed: payload variant")
-    _ -> print("other")
+    TaskResult.Failed { error: e } => print("failed: payload variant"),
+    _ => print("other"),
 }

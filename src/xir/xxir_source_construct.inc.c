@@ -56,7 +56,10 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
             uint32_t slot=name->index;
             if (slot>=ctx->slot_count)
                 return source_fail(ctx,name->node,XR_XIR_BAD_STRUCTURE,"source slot name lost its actual coordinates");
-            if (ctx->slot_fact_present[slot]) continue;
+            if (ctx->slot_fact_present[slot]) {
+                if(!source_collection_key_copy(ctx,name->constant_key,&ctx->slot_facts[slot].constant_key))return false;
+                continue;
+            }
             if (ctx->slots[slot].module!=m || name->checked_library || !name->node || (!name->hidden &&
                 name->node->type!=AST_VAR_DECL && name->node->type!=AST_CONST_DECL &&
                 name->node->type!=AST_DESTRUCTURE_DECL))
@@ -65,6 +68,7 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
             size_t length=source_text_size(ctx,name->name);
             if (ctx->diagnostic.status!=XR_XIR_OK ||
                 !source_slot_fact(ctx,slot,name->name,(uint32_t)length,exported)) return false;
+            if(!source_collection_key_copy(ctx,name->constant_key,&ctx->slot_facts[slot].constant_key))return false;
         }
     }
     ctx->module=previous_module;
@@ -112,7 +116,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
     XrXirBorrowReturns returns={0};
     if (!source_mem_return_facts(ctx,&returns)) return false;
     XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime,&returns};
-    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
+    XrXirStatus status=xr_xir_compile_construction_new_v6(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 #include "xxir_source_quiescent_storage.inc.c"
@@ -199,7 +203,7 @@ static bool source_closure_parameter_items(AstNode *node,void *pointer) {
         uint32_t item=0;
         /* Scope markers are keyed by AST identity and never enter a name namespace. */
         XrHirItemSpec spec={"$closure",walk->module,parent,node->node_id,node->line,node->column,
-            XR_HIR_ITEM_PARAMETER_SCOPE};
+            node->type==AST_FUNCTION_DECL?XR_HIR_ITEM_NAMED_FUNCTION_SCOPE:XR_HIR_ITEM_PARAMETER_SCOPE};
         if(!source_item_reserve(ctx,node,spec,&item)||
             !source_parameter_items(ctx,walk->module,node,item+1))return false;
         walk->parent=item+1;
@@ -613,7 +617,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_named_factories(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
-        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_typed_body_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_lexical_prepare(ctx) && source_view_prepare(ctx) && source_lexical_refresh(ctx,NULL)) {
+        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_parameter_names_finish(ctx) && source_typed_body_finish(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx) && source_semantic_prepare(ctx) && source_lexical_prepare(ctx) && source_view_prepare(ctx) && source_lexical_refresh(ctx,NULL)) {
         source_release_retired_arrays(ctx);
         if (!source_quiescent_storage(ctx)){xr_hir_body_end(ctx->typed_body);return;}
         XrXirDeclarations declarations;

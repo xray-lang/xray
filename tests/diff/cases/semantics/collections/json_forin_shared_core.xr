@@ -13,7 +13,7 @@ for (k, v in obj) {
 }
 print("static pairs=" + staticPairs.toString())
 
-var dyn: JSON.Object = #{}
+var dyn: JSON.Object = {}
 dyn["msg"] = "hello world"
 dyn["key"] = "a&b"
 

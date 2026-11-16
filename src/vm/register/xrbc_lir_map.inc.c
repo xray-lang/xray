@@ -20,6 +20,7 @@ static uint32_t rbc_lir_map_role(const XrLirModule *module, const XrLirInstructi
 
 static bool rbc_lir_map_point(RbcLirCompiler *c, const XrLirInstructionView *i) {
     if (rbc_lir_captured_cell_point(c->input, c->function, i)) return false;
+    if (i->op == XR_LIR_MAP_LITERAL_NEW) return true;
     if (rbc_lir_map_role(c->input, i)) return true;
     if (i->op == XR_LIR_STATE_READ) return i->type == XR_LIR_MAP_STRING_I64;
     if (i->op == XR_LIR_STATE_WRITE) {

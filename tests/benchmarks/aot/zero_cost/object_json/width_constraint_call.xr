@@ -1,14 +1,25 @@
-fn nameWidth<T: { name: string }>(value: T) -> i64 {
-    return len(value.name)
+// Structural width constraints were removed; project the named field explicitly.
+struct NamedAge {
+    name: string
+    age: i64
+}
+
+struct NamedActive {
+    name: string
+    active: bool
+}
+
+fn nameLength(name: string) -> i64 {
+    return len(name)
 }
 
 fn run(n: i64) -> i64 {
-    var ada = { name: "Ada", age: 37 }
-    var bob = { name: "Bob", active: true }
+    var ada = NamedAge{ name: "Ada", age: 37 }
+    var bob = NamedActive{ name: "Bob", active: true }
     var i = 0
     var total = 0
     while (i < n) {
-        total = total + nameWidth(ada) + nameWidth(bob)
+        total = total + nameLength(ada.name) + nameLength(bob.name)
         i = i + 1
     }
     return total

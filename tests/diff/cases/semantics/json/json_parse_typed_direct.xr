@@ -1,15 +1,24 @@
 // Task 260: JSON.parse<T> constructs the exact target directly from tokens.
-type Geo = { lat: f64, verified: bool }
-type Address = { city: string, geo: Geo }
-type Item = { id: i64, label: string }
-type Profile = {
-    name: string,
-    age: i64,
-    address: Address,
-    tags: Array<JSON.Value>,
-    ids: Array<i64>,
-    items: Array<Item>,
-    scores: Map<string, i64>,
+struct Geo {
+    lat: f64
+    verified: bool
+}
+struct Address {
+    city: string
+    geo: Geo
+}
+struct Item {
+    id: i64
+    label: string
+}
+struct Profile {
+    name: string
+    age: i64
+    address: Address
+    tags: Array<JSON.Value>
+    ids: Array<i64>
+    items: Array<Item>
+    scores: Map<string, i64>
     buckets: Map<string, Array<i64>>
 }
 

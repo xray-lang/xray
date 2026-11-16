@@ -1,0 +1,6 @@
+fn swap(a:ref i64,b:ref i64){var temporary=a;a=b;b=temporary}
+var x=10
+var y=20
+swap(b:ref y,a:ref x)
+print(x)
+print(y)

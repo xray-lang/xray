@@ -353,8 +353,8 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
         "convert-to-xray": (
             "var status = 200\n"
             "var label = match (status) {\n"
-            "    200 -> \"ok\",\n"
-            "    _ -> \"other\"\n"
+            "    200 => \"ok\",\n"
+            "    _ => \"other\",\n"
             "}\n"
         ),
         "concurrency-pattern": (

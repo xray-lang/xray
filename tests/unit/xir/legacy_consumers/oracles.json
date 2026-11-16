@@ -63448,5 +63448,6 @@
       "review": "The only diff adds matching Chinese/English paragraphs admitting scalar/string leaf Array and nested Array fields in closed Task Error enums with existing cumulative work, Domain and ownership checks. These 27 control-flow/function models do not change; no execution, Sendable or whole-Task qualification is granted.",
       "preserved_status": "PREPARED_NOT_EXECUTED"
     }
-  ]
+  ],
+  "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json"
 }

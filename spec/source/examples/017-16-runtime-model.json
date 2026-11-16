@@ -1,0 +1,15 @@
+{
+  "017-16-runtime-model-example-001": {
+    "fence": "xray",
+    "code": "class PanicInfo {\n    message: string             // 人类可读消息\n    stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串\n    cause: PanicInfo?           // 链式 cause\n    code: i64                   // 错误码（从 \"E0xxx: ...\" 前缀自动解析，默认 0）\n    data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null\n\n    init(message: string = \"\", cause: PanicInfo? = null)\n    fn toString() -> string\n}",
+    "trivia": {
+      "en": {
+        "6": "             // human-readable message\n    ",
+        "12": "        // automatically captured call stack, one formatted line per frame\n    ",
+        "16": "           // chained cause\n    ",
+        "19": "                   // error code (auto-parsed from \"E0xxx: ...\" prefix; default 0)\n    ",
+        "24": "            // structured data for a runtime fault; JSON null when absent\n\n    "
+      }
+    }
+  }
+}

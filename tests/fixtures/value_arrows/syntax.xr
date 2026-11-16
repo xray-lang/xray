@@ -1,0 +1,14 @@
+fn modifiers(first: nosuspend fn(i64) -> i64,
+             second: escaping fn(i64) -> i64,
+             third: escaping nosuspend fn(i64) -> i64) {}
+const mutate = (value: ref i64) => { value += 1 }
+const consume = (value: move Buffer) => value
+const empty = () => {}
+fn selectArms(channel: Channel<i64>) {
+    select {
+        value from channel => { print(value) }
+        1 to channel => { print("sent") }
+        after 100 => { print("timeout") }
+        _ => { print("default") }
+    }
+}

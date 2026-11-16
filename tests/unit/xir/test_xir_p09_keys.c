@@ -90,6 +90,10 @@ static void key_domain_boundaries(void) {
         xr_xir_domain_drop(domain); CHECK(!live);
     }
 }
+#include "p09_enum_key_cases.h"
+#include "p09_enum_key_reject_cases.h"
+#include "p09_enum_key_owner_faults.h"
+#include "p09_enum_key_forged_cases.h"
 int main(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {NULL, domain, NULL, NULL, 100000, 0};
@@ -98,6 +102,7 @@ int main(void) {
     fail_at = SIZE_MAX; CHECK(value_allocation_calls == before);
     key_string_cases(&admission); xr_xir_domain_drop(domain); CHECK(!live);
     key_domain_boundaries(); CHECK(!value_compile_live && !value_compile_bytes);
+    enum_key_receivers();enum_key_profile_rejections();enum_key_payload_rejections();enum_key_owner_faults();enum_key_zero_width_payload_rejections();enum_key_forged_value_rejections();
     puts("Built-in typed key equivalence/hash: IEEE classes, full bytes, finite work and final physical0 PASS");
     return 0;
 }

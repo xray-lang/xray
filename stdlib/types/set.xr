@@ -11,7 +11,7 @@ struct Set<T: Hashable> {
     // @native-operation HASH_VALUES allocation=may_heap failures=allocation,retain,limit ownership=owned
     values() -> Array<T>
     // @native-operation HASH_FOR_EACH allocation=may_heap failures=allocation,retain,limit,callback ownership=unit
-    forEach(fn: fn(value: T)) -> ()
+    forEach(callback: fn(value: T)) -> ()
     // @native-operation SET_UNION allocation=may_heap failures=allocation,retain,limit ownership=owned
     union(other: Set<T>) -> Set<T>
     // @native-operation SET_INTERSECTION allocation=may_heap failures=allocation,retain,limit ownership=owned

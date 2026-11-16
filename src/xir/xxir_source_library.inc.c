@@ -12,6 +12,7 @@
 #include "xxir_internal.h"
 #include "xxir_library_import_shape.inc.c"
 #include "xxir_source_library_names.inc.c"
+static bool source_library_display_names(SourceContext *,uint32_t,const XrXirLiteral *,const uint32_t *,uint32_t);
 static bool source_owned_checked(const XrModuleSpec *spec) {
     return spec->representation==XR_MODULE_CHECKED_LIBRARY || spec->representation==XR_MODULE_CHECKED_HISTORY;
 }
@@ -176,6 +177,7 @@ typedef struct SourceLibraryMap {
     uint32_t next_function;
     uint32_t *slots, slot_count, next_slot;
     uint32_t literal_begin, literal_count;
+    uint32_t map_literal_begin,map_literal_count;
 } SourceLibraryMap;
 static void source_library_map_free(SourceLibraryMap *map) {
     xr_compile_resources_free(map->modules); xr_compile_resources_free(map->functions);
@@ -201,6 +203,7 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library declaration map is missing");
     map.module_count = d->module_count; map.function_count = library->function_count;
     map.literal_begin = ctx->literal_count; map.literal_count = d->literal_count;
+    map.map_literal_begin=ctx->map_literal_count;map.map_literal_count=d->map_literal_count;
     map.modules = source_scratch(ctx,d->module_count,sizeof(*map.modules),false);
     map.functions = source_scratch(ctx,library->function_count,sizeof(*map.functions),false);
     if (!map.modules || !map.functions) goto failed;
@@ -273,6 +276,11 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal identity overflow");
         result.immediate += map->literal_begin;
         break;
+    case XR_XIR_MAP_LITERAL:
+        if(result.immediate<0 || (uint64_t)result.immediate>=map->map_literal_count ||
+            (uint64_t)result.immediate>UINT32_MAX-map->map_literal_begin)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library Map provenance identity is invalid");
+        result.immediate+=map->map_literal_begin;break;
     case XR_XIR_TO_STRING: {
         XirStringableRead read=xir_stringable_read(ctx->request);
         if (!map->unit || !xir_stringable_text_helper(map->unit->library,function,&read))
@@ -397,6 +405,25 @@ static bool source_library_effect(SourceContext *ctx, const XrXirModule *library
     return true;
 }
 
+static bool source_library_display_names(SourceContext *ctx,uint32_t declaration,
+    const XrXirLiteral *original,const uint32_t *modes,uint32_t count) {
+    if(!count||!original)return true;
+    const char **names=source_alloc(ctx,count,sizeof(*names));
+    uint32_t *owned_modes=source_alloc(ctx,count,sizeof(*owned_modes));
+    if(!names||!owned_modes)return false;
+    for(uint32_t p=0;p<count;++p) {
+        if(!source_request_poll(ctx,NULL))return false;
+        XrXirLiteral name=original[p];
+        if(!name.length)continue;
+        char *bytes=source_alloc(ctx,(size_t)name.length+1,1);
+        if(!bytes||!source_copy_bytes(ctx,NULL,bytes,name.bytes,name.length))return false;
+        bytes[name.length]=0;names[p]=bytes;
+    }
+    if(!source_copy_bytes(ctx,NULL,owned_modes,modes,(size_t)count*sizeof(*modes)))return false;
+    XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
+    if(query->parameter_count!=count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"display parameter namespace arity diverged");
+    query->parameter_names=names;query->parameter_modes=owned_modes;return true;
+}
 static bool source_library_function_query(SourceContext *ctx,uint32_t declaration) {
     if (!source_query_parameters(ctx,declaration)) return false;
     const XrXirFunction *function=&ctx->functions[ctx->function];
@@ -405,7 +432,15 @@ static bool source_library_function_query(SourceContext *ctx,uint32_t declaratio
     XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     query->checked_receiver_count=ctx->identities[ctx->function].method_kind==XR_XIR_READ_METHOD ? 1u : 0u;
-    XrXirSourceType *parameters=(XrXirSourceType *)query->parameters;
+    const XrXirLiteral *names=ctx->bodies[ctx->function].call_parameter_names;
+    if(names) {
+        uint32_t *modes=source_alloc(ctx,function->parameter_count,sizeof(*modes));if(!modes)return false;
+        for(uint32_t p=0;p<function->parameter_count;++p)
+            modes[p]=xr_xir_declared_parameter_mode(&ctx->types,function->parameters[p],
+                function->consume_parameters,function->consume_parameter_count,p);
+        if(!source_library_display_names(ctx,declaration,names,modes,function->parameter_count))return false;
+    }
+    XrXirSourceType *parameters=(XrXirSourceType *)ctx->query.declarations[declaration-1].parameters;
     for (uint32_t p=0; p<function->parameter_count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirType shown=function->parameters[p];
@@ -467,6 +502,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     ctx->bodies[target].module = module;
     ctx->bodies[target].checked_library = true;
     ctx->bodies[target].parameters = (XrXirType *)function->parameters;
+    if (!source_parameter_names_import_function(ctx,library,index,target)) return false;
     if (!source_library_generic(ctx,library,map,index,target) ||
         !source_library_effect(ctx,library,map,index,target)) return false;
     bool helper;
@@ -564,6 +600,14 @@ static bool source_library_literals(SourceContext *ctx, const XrXirModule *libra
         if (id != map->literal_begin + i)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal interval is inconsistent");
     }
+    for(uint32_t n=0;n<map->map_literal_count;++n) {
+        XrXirMapLiteral literal=declarations->map_literals[n];
+        if(literal.module>=map->module_count || map->modules[literal.module]==UINT32_MAX)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library Map provenance module is not mapped");
+        literal.module=map->modules[literal.module];uint32_t ordinal=0;
+        if(!source_map_literal_append(ctx,NULL,&literal,&ordinal))return false;
+        if(ordinal!=map->map_literal_begin+n)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library Map provenance interval is inconsistent");
+    }
     return true;
 }
 
@@ -574,7 +618,6 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
     const XrXirNominalTable *table=library->types ? library->types->nominals : NULL;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
         uint32_t target=map->unit->nominals[n];
         XrXirStatus status=xr_hir_body_nominal_import_bind(ctx->typed_body,target,map->functions,map->function_count,ctx->request);
         if(!source_hir_nominal_status(ctx,NULL,status,"library construction helper mapping is inconsistent"))return false;
@@ -620,6 +663,30 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
     return true;
 }
 
+static bool source_library_hashable(SourceContext *ctx,const XrXirModule *library,
+    const SourceLibraryMap *map) {
+    const XrXirDeclarations *d=library->declarations;
+    if(!d->hashable_witness_count)return true;
+    if(!map->unit || map->unit->hashable_witnesses)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Hashable library owner is already installed");
+    XrXirHashableWitness *rows=source_alloc(ctx,d->hashable_witness_count,sizeof(*rows));
+    if(!rows)return false;
+    uint32_t count=0;
+    for(uint32_t i=0;i<d->hashable_witness_count;++i) {
+        if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+        const XrXirHashableWitness *r=&d->hashable_witnesses[i];
+        if(r->equals_function>=map->function_count || r->hash_function>=map->function_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Hashable library function is invalid");
+        if(map->functions[r->equals_function]==UINT32_MAX && map->functions[r->hash_function]==UINT32_MAX)continue;
+        if(map->functions[r->equals_function]==UINT32_MAX || map->functions[r->hash_function]==UINT32_MAX)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Hashable methods are outside the selected closure");
+        XrXirType type;
+        if(!source_library_type(ctx,map->unit,r->nominal_type,&type))return false;
+        rows[count++]=(XrXirHashableWitness){type,map->functions[r->equals_function],map->functions[r->hash_function]};
+    }
+    map->unit->hashable_witnesses=count?rows:NULL;map->unit->hashable_witness_count=count;
+    return true;
+}
 #include "xxir_source_library_materialization.inc.c"
 #include "xxir_source_library_comptime.inc.c"
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
@@ -643,7 +710,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     }
     if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
         !source_library_comptime(ctx,map) || !source_library_borrow_returns(ctx,map) ||
-        !source_library_implementations(ctx,library,map)) return false;
+        !source_library_implementations(ctx,library,map) || !source_library_hashable(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

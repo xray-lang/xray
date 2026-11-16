@@ -26,6 +26,11 @@ typedef struct XirTypeMatchRead {
     XirReadScratch *memory;
 } XirTypeMatchRead;
 XR_FUNC XrXirStatus xir_type_match_read(const XrXirCompileContext *context,const XirTypeMatchRead *request);
+/* The declaration reader borrows the current request and finite work counter;
+ * no cancellation state or matching fact survives the synchronous call. */
+XR_FUNC XrXirStatus xir_type_match_read_controlled(const XrXirCompileContext *context,
+    const XirTypeMatchRead *request,XrCompileRequestControl *control,
+    void *owner,XrXirNominalMatch nominal_match);
 /* The operation borrows its live ledger and excludes concurrent users. Active
  * invocations claim distinct blocks, including nested destination matching. */
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(

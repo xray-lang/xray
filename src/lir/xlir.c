@@ -143,6 +143,7 @@ static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_string.inc.c"
 #include "xlir_range.inc.c"
 #include "xlir_map.inc.c"
+#include "xlir_map_literal.inc.c"
 #include "xlir_library.inc.c"
 
 static void lir_instruction_free(XrLirInstructionData *instruction) {
@@ -181,10 +182,18 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     xr_free(m->array_intrinsics);
     for (uint32_t i = 0; i < m->literal_count; ++i) xr_free(m->literals[i].bytes);
     xr_free(m->literals);
+    for(uint32_t n=0;n<m->map_literal_count;++n) {
+        xr_free((void *)m->map_literals[n].path);xr_free((void *)m->map_literals[n].items);
+    }
+    xr_free(m->map_literals);
     xr_free(m->functions);
     xr_free(m->intrinsics);
     for (uint32_t i = 0; i < m->type_count; ++i) {
         xr_free((void *)m->types[i].callable.parameters);
+        xr_free((void *)m->types[i].record.module);
+        xr_free((void *)m->types[i].record.name);
+        xr_free((void *)m->types[i].record.arguments);
+        xr_free(m->types[i].record_names);
         if (m->types[i].fields) {
             for (uint32_t f = 0; f < m->types[i].shape.count; ++f) xr_free((void *)m->types[i].fields[f].name);
             xr_free((void *)m->types[i].fields);
@@ -322,7 +331,7 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
         spec->result == XR_LIR_ARRAY_REF || spec->result == XR_LIR_VIEW_FRAME ||
         spec->result == XR_LIR_VIEW_CELL || spec->result == XR_LIR_MAP_STRING_I64_CELL ||
-        spec->result == XR_LIR_MAP_STRING_I64_REF)
+        spec->result == XR_LIR_MAP_STRING_I64_REF || spec->result==XR_LIR_SET_I64_CELL || spec->result==XR_LIR_SET_I64_REF)
         return false;
     if (!xr_lir_internal_callable_parameters_valid(m, spec->parameters, spec->parameter_count,
         spec->callable_parameters, spec->callable_parameter_count, true)) return false;
@@ -617,7 +626,7 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
     if (!f || !input)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (input->op == XR_LIR_CELL_NEW && handle.id != f->entry && input->type != XR_LIR_ARRAY_CELL &&
-        input->type != XR_LIR_MAP_STRING_I64_CELL)
+        input->type != XR_LIR_MAP_STRING_I64_CELL && input->type != XR_LIR_SET_I64_CELL)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirBlockData *block = &f->blocks[handle.id - 1];
     XrLirInstructionData instruction = {0};

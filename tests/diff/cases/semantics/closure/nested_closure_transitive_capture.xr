@@ -10,8 +10,8 @@ type IntThunk = fn() -> i64
 
 fn transitive() -> IntThunk {
     var x = 10
-    return () -> {
-        var inner = () -> x * 2        // x comes from two scopes out
+    return () => {
+        var inner = () => x * 2        // x comes from two scopes out
         return inner() + 1
     }
 }

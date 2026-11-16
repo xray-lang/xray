@@ -34,7 +34,7 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
             !memcmp(candidate->name, identity.module.bytes, identity.module.length)) { declaring_module = m; break; }
     }
     if (declaring_module == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    if (!(identity.flags & XR_XIR_NOMINAL_RECORD) && declaring_module != caller->module) {
+    if (declaring_module != caller->module) {
         if (!identity.exported && !xr_xir_module_same_scope(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
 
         if (!xr_xir_module_imports(scope, caller->module, declaring_module) &&
@@ -95,7 +95,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             status = xr_xir_compile_nominal_access(remaining, module, function, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i), 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending,storage_scope);
-        } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
+        } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind==XR_XIR_TYPE_DATA_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
                 status = type_access_edge(types, node->result, i, pending,storage_scope);
                 if (status == XR_XIR_OK) status = type_access_edge(types, node->element, i, pending,storage_scope);

@@ -16,8 +16,8 @@ fn run(tag: i64) {
         return
     }
     var process = match (tag) {
-        0 -> passProcess(spawned!),
-        _ -> passProcess(spawned!)
+        0 => passProcess(spawned!),
+        _ => passProcess(spawned!),
     }
     print(process.wait())
 
@@ -27,8 +27,8 @@ fn run(tag: i64) {
         return
     }
     var pipe = match (tag) {
-        0 -> passPipe(opened!),
-        _ -> passPipe(opened!)
+        0 => passPipe(opened!),
+        _ => passPipe(opened!),
     }
     print(pipe.close())
 }

@@ -1,6 +1,15 @@
-type Geo = { lat: f64, verified: bool }
-type Address = { city: string, geo: Geo }
-type Profile = { name: string, address: Address }
+struct Geo {
+    lat: f64
+    verified: bool
+}
+struct Address {
+    city: string
+    geo: Geo
+}
+struct Profile {
+    name: string
+    address: Address
+}
 
 fn jsonDecodeDeepNestedObjectPlan() -> JSON.Value {
     var data: JSON.Value = JSON.parseValue("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":30.25,\"verified\":true}}}")

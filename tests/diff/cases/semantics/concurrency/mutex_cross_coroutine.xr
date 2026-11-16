@@ -9,9 +9,9 @@ const m = Mutex<i64>(0)
 const done = CountdownLatch(1)
 
 go fn() {
-    m.replace((v) -> v + 100)
+    m.replace((v) => v + 100)
     done.done()
 }()
 
 done.wait()
-print(m.lock((v) -> v))   // 100 — mutation from the spawned coroutine is visible
+print(m.lock((v) => v))   // 100 — mutation from the spawned coroutine is visible

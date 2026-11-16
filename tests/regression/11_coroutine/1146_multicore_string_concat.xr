@@ -225,12 +225,12 @@ fn test_concurrent_threshold_boundary() {
 }
 
 // ===== 测试6: 并发数据隔离性验证 =====
-type IsolationResult = {
-    id: i64,
-    result: string,
-    prefix_ok: bool,
-    suffix_ok: bool,
-    contains_id: bool,
+struct IsolationResult {
+    id: i64
+    result: string
+    prefix_ok: bool
+    suffix_ok: bool
+    contains_id: bool
 }
 
 @test
@@ -254,7 +254,7 @@ fn test_concurrent_data_isolation() {
         var expected_prefix = unique_char.repeat(30)
         var expected_suffix = unique_char.repeat(30)
         
-        return {
+        return IsolationResult{
             id: id,
             result: result,
             prefix_ok: result.startsWith(expected_prefix),

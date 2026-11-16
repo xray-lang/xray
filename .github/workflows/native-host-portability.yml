@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, master]
   push:
-    branches: [main, agent/host-arch-portability, agent/direct-cutover]
+    branches: [main, agent/host-arch-portability, agent/direct-cutover, agent/type-value-arrows]
   workflow_dispatch:
     inputs:
       scalar_performance:

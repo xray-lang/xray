@@ -129,3 +129,5 @@ XR_FUNC XrXirValueStatus xr_xir_map_set_deferred(const XrXirValuePlace *place,
     XrXirValueStatus status = hash_upsert(place, key, value, admission, retired);
     xr_xir_value_graph_end(); return status;
 }
+
+#include "xxir_set_deferred.inc.c"

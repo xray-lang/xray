@@ -426,7 +426,7 @@ def entry_kind(entry: Any) -> str:
         "StdlibEntry": "function",
         "StdlibConstEntry": "const",
         "StdlibHandleEntry": "handle",
-        "StdlibObjectShapeEntry": "object-shape",
+        "StdlibNominalStructEntry": "struct",
         "StdlibEnumEntry": "enum",
         "StdlibClassEntry": "class",
         "StdlibClassMethodEntry": "class-method",

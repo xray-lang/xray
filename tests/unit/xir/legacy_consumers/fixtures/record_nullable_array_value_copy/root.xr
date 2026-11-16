@@ -1,6 +1,10 @@
 // Test: struct field defaults, Array element, and return value
 // Expected: defaults work, array stores structs, return preserves value
 
+struct FrameContainer {
+    frame: Frame
+}
+
 struct Config {
     width: i64 = 800
     height: i64 = 600
@@ -14,16 +18,16 @@ fn make_point(x: f64, y: f64) -> Point {
     return Point{x: x, y: y}
 }
 
-type Frame = {
+struct Frame {
     wire: Array<i64>?
     status: i64
 }
 
 fn take_frame(present: bool) -> Frame {
     if (present) {
-        return {wire: [17, 25], status: 42}
+        return Frame{wire: [17, 25], status: 42}
     }
-    return {wire: null, status: -1}
+    return Frame{wire: null, status: -1}
 }
 
 fn frame_total(frame: Frame) -> i64 {
@@ -97,7 +101,7 @@ fn test_structural_object_assignment_keeps_independent_value() {
 
 @test
 fn test_structural_nested_assignment_preserves_independent_values() {
-    var original = {frame: take_frame(true)}
+    var original = FrameContainer{frame: take_frame(true)}
     var independent = original
     var child = independent.frame
     child.status = 7

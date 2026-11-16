@@ -1,1 +1,1 @@
-var f = (ref x) -> x
+var f = (ref x) => x

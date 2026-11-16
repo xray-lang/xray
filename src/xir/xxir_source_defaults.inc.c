@@ -30,7 +30,7 @@ static bool source_hir_nominal_declarations(SourceContext *ctx) {
         const char *reason=NULL;XrXirStatus status=xr_hir_body_nominal_declare(ctx->typed_body,&input,ctx->request,&reason);
         if(!source_hir_nominal_status(ctx,symbol->node,status,reason))return false;
     }
-    ctx->record_declarations_ready=true;return true;
+    return true;
 }
 static bool source_struct_defaultability(SourceContext *ctx) {
     if (!source_hir_nominal_declarations(ctx))

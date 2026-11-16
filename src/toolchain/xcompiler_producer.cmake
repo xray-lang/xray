@@ -4,7 +4,7 @@ get_filename_component(XR_COMPILER_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLU
 set(XR_COMPILER_PARSER_SOURCES
     frontend/parser/xast.c frontend/parser/xast_walk.c frontend/parser/xattribute_registry.c
     frontend/parser/xcompile_type_format.c frontend/parser/xparse.c
-    frontend/parser/xparse_coroutine.c frontend/parser/xparse_decl.c
+    frontend/parser/xparse_arrow.c frontend/parser/xparse_coroutine.c frontend/parser/xparse_decl.c
     frontend/parser/xparse_destructure.c frontend/parser/xparse_diagnostics.c
     frontend/parser/xparse_enum.c frontend/parser/xparse_exception.c frontend/parser/xparse_errors.c
     frontend/parser/xparse_expr.c

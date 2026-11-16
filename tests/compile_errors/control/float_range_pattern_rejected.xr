@@ -2,8 +2,8 @@
 // no exact-step semantics and NaN breaks the ordering.
 fn f(x: f64) -> string {
     return match (x) {
-        0.0..1.0 -> "low"
-        _ -> "high"
+        0.0..1.0 => "low",
+        _ => "high",
     }
 }
 

@@ -57,7 +57,7 @@ static void generic_method_owned_fixture(GenericMethodOwnedFixture *f) {
     f->functions[0] = (XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&f->block,1,f->ops,2,NULL,0,.error_type=XR_XIR_NEVER};
     f->functions[1] = (XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&f->init_block,1,&f->init,1,NULL,0,.error_type=XR_XIR_NEVER};
     f->owner = (XrXirSourceModule){"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}; f->identities[0].exported = 1;
-    f->program = (XrXirDeclarations){&f->owner,1,f->identities,NULL,0,NULL,0,0,0,NULL};
+    f->program = (XrXirDeclarations){.modules=&f->owner, .module_count=1, .functions=f->identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=0, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     f->module = (XrXirModule){XR_XIR_BUILT,f->functions,2,&f->program,NULL,&f->types,NULL, XR_XIR_PROGRAM, NULL};
 }
 static void generic_method_owned_assert(const XrXirInterfaceTable *table) {

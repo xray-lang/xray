@@ -279,7 +279,7 @@ static void source_enum_witness_cases(XrXirSourceRequest *request) {
     source_enum_witness_run(request,
         "interface Measure { measure()->i64 }\n"
         "enum Reading implements Measure { Value { value:i64 }, Empty "
-            "measure()->i64{return match(this){Reading.Value {value}->value,Reading.Empty->0}} "
+            "measure()->i64{return match(this){Reading.Value {value}=>value,Reading.Empty=>0,}} "
             "static fromValue(value:i64)->Reading{return Reading.Value {value:value}} }\n"
         "fn read<T:Measure>(value:T)->i64{return value.measure()}\n"
         "export fn enumWitness()->i64{return read<Reading>(Reading.fromValue(41))}\n");
@@ -287,7 +287,7 @@ static void source_enum_witness_cases(XrXirSourceRequest *request) {
         "interface Measure { measure()->i64 }\n"
         "struct Meter implements Measure { value:i64; measure()->i64{return this.value} }\n"
         "enum Reading<T:Measure> implements Measure { Value { value:T }, Empty "
-            "measure()->i64{return match(this){Reading.Value {value}->value.measure(),Reading.Empty->0}} "
+            "measure()->i64{return match(this){Reading.Value {value}=>value.measure(),Reading.Empty=>0,}} "
             "static fromValue(value:T)->Reading<T>{return Reading<T>.Value {value:value}} }\n"
         "fn read<T:Measure>(value:T)->i64{return value.measure()}\n"
         "export fn enumWitness()->i64{return read<Reading<Meter>>(Reading<Meter>.fromValue(Meter{value:41}))}\n");
@@ -309,7 +309,7 @@ static void source_enum_witness_cases(XrXirSourceRequest *request) {
     source_enum_witness_run(request,
         "interface Measure { measure()->i64 }\ninterface Derived extends Measure {}\n"
         "enum Reading implements Derived { Value { value:i64 } "
-            "measure()->i64{return match(this){Reading.Value {value}->value}} }\n"
+            "measure()->i64{return match(this){Reading.Value {value}=>value,}} }\n"
         "fn read<T:Measure>(value:T)->i64{return value.measure()}\n"
         "export fn enumWitness()->i64{return read<Reading>(Reading.Value {value:41})}\n");
     source_enum_witness_rejections(request);

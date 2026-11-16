@@ -6,10 +6,10 @@
 fn test_match_literal_int() {
     var x = 2
     var result = match (x) {
-        1 -> "one"
-        2 -> "two"
-        3 -> "three"
-        _ -> "other"
+        1 => "one",
+        2 => "two",
+        3 => "three",
+        _ => "other",
     }
     assertEqual(result, "two")
 }
@@ -18,10 +18,10 @@ fn test_match_literal_int() {
 fn test_match_literal_string() {
     var cmd = "start"
     var result = match (cmd) {
-        "start" -> 1
-        "stop" -> 2
-        "pause" -> 3
-        _ -> 0
+        "start" => 1,
+        "stop" => 2,
+        "pause" => 3,
+        _ => 0,
     }
     assertEqual(result, 1)
 }
@@ -30,9 +30,9 @@ fn test_match_literal_string() {
 fn test_match_default() {
     var x = 100
     var result = match (x) {
-        1 -> "one"
-        2 -> "two"
-        _ -> "default"
+        1 => "one",
+        2 => "two",
+        _ => "default",
     }
     assertEqual(result, "default")
 }
@@ -42,11 +42,11 @@ fn test_match_default() {
 fn test_match_range() {
     var score = 85
     var grade = match (score) {
-        90..100 -> "A"
-        80..90 -> "B"
-        70..80 -> "C"
-        60..70 -> "D"
-        _ -> "F"
+        90..100 => "A",
+        80..90 => "B",
+        70..80 => "C",
+        60..70 => "D",
+        _ => "F",
     }
     assertEqual(grade, "B")
 }
@@ -55,9 +55,9 @@ fn test_match_range() {
 fn test_match_range_boundary() {
     var x = 10
     var result = match (x) {
-        0..10 -> "less than 10"
-        10..20 -> "10 to 19"
-        _ -> "20 or more"
+        0..10 => "less than 10",
+        10..20 => "10 to 19",
+        _ => "20 or more",
     }
     assertEqual(result, "10 to 19")
 }
@@ -67,9 +67,9 @@ fn test_match_range_boundary() {
 fn test_match_multi_value() {
     var day = "Sat"
     var result = match (day) {
-        "Mon", "Tue", "Wed", "Thu", "Fri" -> "weekday"
-        "Sat", "Sun" -> "weekend"
-        _ -> "unknown"
+        "Mon", "Tue", "Wed", "Thu", "Fri" => "weekday",
+        "Sat", "Sun" => "weekend",
+        _ => "unknown",
     }
     assertEqual(result, "weekend")
 }
@@ -78,9 +78,9 @@ fn test_match_multi_value() {
 fn test_match_multi_number() {
     var x = 5
     var result = match (x) {
-        1, 3, 5, 7, 9 -> "odd"
-        2, 4, 6, 8, 10 -> "even"
-        _ -> "other"
+        1, 3, 5, 7, 9 => "odd",
+        2, 4, 6, 8, 10 => "even",
+        _ => "other",
     }
     assertEqual(result, "odd")
 }
@@ -90,11 +90,11 @@ fn test_match_multi_number() {
 fn test_match_guard() {
     var x = 15
     var result = match (x) {
-        n if (n < 0) -> "negative"
-        n if (n == 0) -> "zero"
-        n if (n < 10) -> "small"
-        n if (n < 100) -> "medium"
-        _ -> "large"
+        n if (n < 0) => "negative",
+        n if (n == 0) => "zero",
+        n if (n < 10) => "small",
+        n if (n < 100) => "medium",
+        _ => "large",
     }
     assertEqual(result, "medium")
 }
@@ -103,10 +103,10 @@ fn test_match_guard() {
 fn test_match_guard_complex() {
     var x = 42
     var result = match (x) {
-        n if (n % 2 == 0 && n > 40) -> "even and big"
-        n if (n % 2 == 0) -> "even"
-        n if (n > 40) -> "odd and big"
-        _ -> "odd and small"
+        n if (n % 2 == 0 && n > 40) => "even and big",
+        n if (n % 2 == 0) => "even",
+        n if (n > 40) => "odd and big",
+        _ => "odd and small",
     }
     assertEqual(result, "even and big")
 }
@@ -121,9 +121,9 @@ fn test_match_enum() {
     }
     var c = Color.Green
     var result = match (c) {
-        Color.Red -> "red"
-        Color.Green -> "green"
-        Color.Blue -> "blue"
+        Color.Red => "red",
+        Color.Green => "green",
+        Color.Blue => "blue",
     }
     assertEqual(result, "green")
 }
@@ -134,11 +134,11 @@ fn test_match_nested() {
     var x = 5
     var y = 10
     var result = match (x) {
-        n if (n > 0) -> match (y) {
-            m if (m > 5) -> "x>0, y>5"
-            _ -> "x>0, y<=5"
-        }
-        _ -> "x<=0"
+        n if (n > 0) => match (y) {
+            m if (m > 5) => "x>0, y>5",
+            _ => "x>0, y<=5",
+        },
+        _ => "x<=0",
     }
     assertEqual(result, "x>0, y>5")
 }
@@ -148,10 +148,10 @@ fn test_match_nested() {
 fn test_match_expression_result() {
     var x = 3
     var doubled = match (x) {
-        1 -> 2
-        2 -> 4
-        3 -> 6
-        _ -> 0
+        1 => 2,
+        2 => 4,
+        3 => 6,
+        _ => 0,
     } * 2
     // 注意：这里测试 match 结果可以参与表达式
     assertEqual(doubled, 12)
@@ -161,9 +161,9 @@ fn test_match_expression_result() {
 fn test_match_in_function() {
     fn classify(n: i64) -> string {
         return match (n) {
-            0 -> "zero"
-            n if (n > 0) -> "positive"
-            _ -> "negative"
+            0 => "zero",
+            n if (n > 0) => "positive",
+            _ => "negative",
         }
     }
     assertEqual(classify(0), "zero")
@@ -176,9 +176,9 @@ fn test_match_in_function() {
 fn test_match_first_wins() {
     var x = 5
     var result = match (x) {
-        n if (n > 0) -> "first"
-        5 -> "five"
-        _ -> "default"
+        n if (n > 0) => "first",
+        5 => "five",
+        _ => "default",
     }
     assertEqual(result, "first")
 }
@@ -187,9 +187,9 @@ fn test_match_first_wins() {
 fn test_match_all_guards_fail() {
     var x = 0
     var result = match (x) {
-        n if (n > 10) -> "big"
-        n if (n < -10) -> "small"
-        _ -> "middle"
+        n if (n > 10) => "big",
+        n if (n < -10) => "small",
+        _ => "middle",
     }
     assertEqual(result, "middle")
 }
@@ -199,8 +199,8 @@ fn test_match_no_branch_throws() {
     var caught = false
     try {
         var result = match (99) {
-            1 -> "one"
-            2 -> "two"
+            1 => "one",
+            2 => "two",
         }
         assertEqual(result, "unreachable")
     } catch panic (p) {
@@ -217,12 +217,12 @@ fn test_match_no_branch_throws() {
 fn test_match_block_arm_return() {
     fn classify(n: i64) -> string {
         match (n) {
-            1 -> {
+            1 => {
                 return "one"
-            }
-            _ -> {
+            },
+            _ => {
                 return "other"
-            }
+            },
         }
         return "unreachable"
     }

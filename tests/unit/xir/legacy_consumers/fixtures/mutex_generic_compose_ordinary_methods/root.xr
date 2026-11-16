@@ -25,10 +25,10 @@ class Mutex<T> {
 }
 
 var m = Mutex<i64>(10)
-print(m.lock((v) -> v * 2))       // 20 (reads guarded value)
-print(m.replace((v) -> v + 5))    // 15 (mutates guarded value under lock)
-print(m.lock((v) -> v))           // 15 (sees the mutation)
+print(m.lock((v) => v * 2))       // 20 (reads guarded value)
+print(m.replace((v) => v + 5))    // 15 (mutates guarded value under lock)
+print(m.lock((v) => v))           // 15 (sees the mutation)
 
 var ms = Mutex<string>("a")
-print(ms.replace((s) -> s + "b")) // ab
-print(ms.lock((s) -> s + "!"))    // ab!
+print(ms.replace((s) => s + "b")) // ab
+print(ms.lock((s) => s + "!"))    // ab!

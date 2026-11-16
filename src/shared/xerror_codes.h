@@ -54,6 +54,9 @@
 #define XR_ERR_TYPE_NOT_INDEXABLE 322
 #define XR_ERR_TYPE_NOT_ITERABLE 323
 #define XR_ERR_TYPE_INVALID_OPERAND 324
+#define XR_ERR_MAP_LITERAL_DUPLICATE_KEY 325
+#define XR_ERR_COLLECTION_LITERAL_TYPES 326
+#define XR_ERR_NAMED_ARGUMENT_BINDING 327
 
 /* ---- Error-signature diagnostics (E03xx, 330-349) ---- */
 #define XR_ERR_ANALYZE_TRY_REQUIRED 330
@@ -176,7 +179,7 @@
 #define XR_ERR_MOD_BY_ZERO 421
 #define XR_ERR_OVERFLOW 422
 
-/* ---- Runtime index/key errors (E04xx, 430-433) ---- */
+/* ---- Runtime index/key errors (E04xx, 430-434) ---- */
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #define XR_ERR_KEY_NOT_FOUND 431
 /* An Iterator<T> was pulled past its end.  The pull protocol is two-step
@@ -186,6 +189,7 @@
  * or a null the static type forbids. */
 #define XR_ERR_ITERATOR_EXHAUSTED 432
 #define XR_ERR_STRING_SLICE_RANGE 433
+#define XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME 434
 
 /* ---- Runtime system errors (E04xx, 440-445) ---- */
 #define XR_ERR_STACK_OVERFLOW 440

@@ -67,7 +67,7 @@ static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *envi
 }
 static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node) {
-    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) return node->parameter_count;
+    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) return node->parameter_count;
     if (node->kind == XR_XIR_TYPE_MAP) return 2;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return 1;
     XrXirTaskResultType info={0};
@@ -78,7 +78,7 @@ static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environme
 }
 static XrXirType sendable_child(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, uint32_t at) {
-    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) return node->parameters[at].type;
+    if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) return node->parameters[at].type;
     if (node->kind == XR_XIR_TYPE_MAP) return at ? node->result : node->element;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return node->element;
     XrXirTaskResultType info={0};
@@ -96,6 +96,8 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     XrXirType type, SendableWalk *walk,
     const XrXirCompileContext *work,bool error_edge) {
     const XrXirTypeNode *node = xr_xir_type_node(environment->types, type);
+    if(node && node->kind==XR_XIR_TYPE_DATA_UNION &&
+        (error_edge||!xr_xir_data_union_shape(environment->types,type)))return XR_XIR_BAD_TYPE;
     if (node && node->kind == XR_XIR_TYPE_UNION) {
         if (!error_edge || node->parameter_count < 2 || !node->parameters) return XR_XIR_BAD_TYPE;
     } else if (error_edge) {
@@ -134,7 +136,7 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
         XrXirStatus status=sendable_task_result(environment,node,&info) ? XR_XIR_OK :
             sendable_nominal_shape(environment,node,work,walk->read,&identity_edge);
         if (status != XR_XIR_OK) return status;
-    } else if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
+    } else if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
     } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
                node->kind != XR_XIR_TYPE_SET && node->kind != XR_XIR_TYPE_NULLABLE &&
@@ -162,7 +164,7 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
         if (frame->next == sendable_child_count(environment, node)) {
             state[frame->index] = UINT32_MAX; --walk.depth; continue;
         }
-        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) &&
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) &&
             node->parameters[frame->next].mode) {
             status = XR_XIR_BAD_TYPE; break;
         }

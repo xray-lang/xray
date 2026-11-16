@@ -1,5 +1,10 @@
-var base = { x: 1, y: 2 }
-var merged = { ...base, y: 9 }
+struct Point {
+    x: i64
+    y: i64
+}
+
+var base = Point{ x: 1, y: 2 }
+var merged = Point{ ...base, y: 9 }
 
 print(merged.x)
 print(merged.y)

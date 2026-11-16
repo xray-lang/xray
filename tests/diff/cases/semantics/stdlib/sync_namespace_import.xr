@@ -7,18 +7,18 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 import sync
 
 const counter = sync.Mutex<i64>(0)
-print(counter.lock((v) -> v + 100))
-print(counter.lock((v) -> v))
+print(counter.lock((v) => v + 100))
+print(counter.lock((v) => v))
 
 var gate = sync.RwLock<i64>(7)
-print(gate.read((v) -> v))
-print(gate.write((v) -> v + 1))
+print(gate.read((v) => v))
+print(gate.write((v) => v + 1))
 
 // Cross-coroutine mutation through a namespace-imported Mutex.
 const latch = CountdownLatch(1)
 go fn() {
-    counter.replace((v) -> v + 42)
+    counter.replace((v) => v + 42)
     latch.done()
 }()
 latch.wait()
-print(counter.lock((v) -> v))
+print(counter.lock((v) => v))

@@ -1,18 +1,18 @@
 import "./factory" as factory
 fn sent(result: SendResult) -> i64 {
     return match (result) {
-        SendResult.Sent -> 1,
-        SendResult.Full -> 2,
-        SendResult.Timeout -> 3,
-        SendResult.Closed -> 4,
+        SendResult.Sent => 1,
+        SendResult.Full => 2,
+        SendResult.Timeout => 3,
+        SendResult.Closed => 4,
     }
 }
 fn received(result: Recv<i64>) -> i64 {
     return match (result) {
-        Recv.Value { value: item } -> item,
-        Recv.Empty -> -1,
-        Recv.Timeout -> -2,
-        Recv.Closed -> -3,
+        Recv.Value { value: item } => item,
+        Recv.Empty => -1,
+        Recv.Timeout => -2,
+        Recv.Closed => -3,
     }
 }
 fn tick(counter: Atomic<i64>) { counter.add(1) }
@@ -24,10 +24,10 @@ export fn retrySend(channel: Channel<()>) -> i64 {
 }
 export fn retryRecv(channel: Channel<()>) -> i64 {
     return match (channel.tryRecv()) {
-        Recv.Value { value: ignored } -> 41,
-        Recv.Empty -> 42,
-        Recv.Timeout -> 43,
-        Recv.Closed -> 44,
+        Recv.Value { value: ignored } => 41,
+        Recv.Empty => 42,
+        Recv.Timeout => 43,
+        Recv.Closed => 44,
     }
 }
 export fn retryClose(channel: Channel<()>) -> i64 {
@@ -51,20 +51,20 @@ export fn main() -> i64 {
     const offered = arrays.trySend(payload)
     payload[0] = 99
     const original = match (arrays.tryRecv()) {
-        Recv.Value { value: item } -> item[0],
-        Recv.Empty -> -1,
-        Recv.Timeout -> -2,
-        Recv.Closed -> -3,
+        Recv.Value { value: item } => item[0],
+        Recv.Empty => -1,
+        Recv.Timeout => -2,
+        Recv.Closed => -3,
     }
     print(sent(offered), original, payload[0])
     const counter = Atomic<i64>(0)
     const units = Channel<()>(1)
     const unit_sent = units.trySend(tick(counter))
     const unit_seen = match (units.tryRecv()) {
-        Recv.Value { value: ignored } -> marker,
-        Recv.Empty -> -1,
-        Recv.Timeout -> -2,
-        Recv.Closed -> -3,
+        Recv.Value { value: ignored } => marker,
+        Recv.Empty => -1,
+        Recv.Timeout => -2,
+        Recv.Closed => -3,
     }
     print(sent(unit_sent), unit_seen, counter.load())
     const inner = Channel<string>(1)
@@ -72,25 +72,25 @@ export fn main() -> i64 {
     const inner_sent = inner.trySend("nested")
     const nested_sent = nested.trySend(inner)
     const text = match (nested.tryRecv()) {
-        Recv.Value { value: item } -> match (item.tryRecv()) {
-            Recv.Value { value: bytes } -> bytes,
-            Recv.Empty -> "empty",
-            Recv.Timeout -> "timeout",
-            Recv.Closed -> "closed",
+        Recv.Value { value: item } => match (item.tryRecv()) {
+            Recv.Value { value: bytes } => bytes,
+            Recv.Empty => "empty",
+            Recv.Timeout => "timeout",
+            Recv.Closed => "closed",
         },
-        Recv.Empty -> "outer-empty",
-        Recv.Timeout -> "outer-timeout",
-        Recv.Closed -> "outer-closed",
+        Recv.Empty => "outer-empty",
+        Recv.Timeout => "outer-timeout",
+        Recv.Closed => "outer-closed",
     }
     print(sent(inner_sent), sent(nested_sent), text, inner.capacity)
     const zero = Channel<i64>()
     print(sent(zero.trySend(7)), received(zero.tryRecv()), zero.capacity)
     const explicit_unit = Recv<()>.Value { value: tick(counter) }
     const constructed_seen = match (explicit_unit) {
-        Recv.Value { value: ignored } -> marker,
-        Recv.Empty -> -1,
-        Recv.Timeout -> -2,
-        Recv.Closed -> -3,
+        Recv.Value { value: ignored } => marker,
+        Recv.Empty => -1,
+        Recv.Timeout => -2,
+        Recv.Closed => -3,
     }
     print(constructed_seen, counter.load())
     const task_channel = Channel<i64>(1)

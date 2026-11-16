@@ -12,10 +12,10 @@
  */
 enum { LIR_ARRAY_CELL_EMPTY = 1, LIR_ARRAY_CELL_OWNED = 2 };
 static bool lir_cfg_cell(XrLirType type) {
-    return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL;
+    return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
 static bool lir_cfg_reference(XrLirType type) {
-    return type == XR_LIR_ARRAY_REF || type == XR_LIR_MAP_STRING_I64_REF;
+    return type == XR_LIR_ARRAY_REF || type == XR_LIR_MAP_STRING_I64_REF || type==XR_LIR_SET_I64_REF;
 }
 typedef struct LirArrayCellFlow {
     const XrLirFunctionData *function;
@@ -40,7 +40,7 @@ static void lir_array_cell_transfer(LirArrayCellFlow *flow, uint32_t block) {
         const XrLirInstructionView *v = &body->instructions[i].view;
         if (v->op == XR_LIR_CELL_NEW && lir_cfg_cell(v->type))
             flow->current[flow->owners[v->result - 1] - 1] = LIR_ARRAY_CELL_OWNED;
-        else if ((v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_MAP_CELL_DROP) && flow->owners[v->operands[0] - 1])
+        else if ((v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_MAP_CELL_DROP || v->op==XR_LIR_SET_CELL_DROP) && flow->owners[v->operands[0] - 1])
             flow->current[flow->owners[v->operands[0] - 1] - 1] = LIR_ARRAY_CELL_EMPTY;
     }
 }
@@ -62,14 +62,17 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
             bool allowed = lir_cfg_reference(type) ?
                 v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE ||
                 v->op == XR_LIR_MAP_REF_READ || v->op == XR_LIR_MAP_REF_WRITE ||
+                v->op == XR_LIR_SET_REF_READ || v->op == XR_LIR_SET_REF_WRITE ||
+                v->op == XR_LIR_SET_ADD || v->op == XR_LIR_SET_REMOVE || v->op == XR_LIR_SET_CLEAR ||
                 v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INTRINSIC :
                 v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_CALL ||
                 v->op == XR_LIR_CALL_INTRINSIC || v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_ARRAY_BORROW ||
-                v->op == XR_LIR_MAP_CELL_DROP || v->op == XR_LIR_MAP_BORROW;
+                v->op == XR_LIR_MAP_CELL_DROP || v->op == XR_LIR_SET_CELL_DROP || v->op == XR_LIR_MAP_BORROW || v->op == XR_LIR_SET_BORROW ||
+                v->op == XR_LIR_SET_ADD || v->op == XR_LIR_SET_REMOVE || v->op == XR_LIR_SET_CLEAR;
             if (!allowed)
                 return xr_lir_internal_error(d, "Managed Cell handle cannot escape its activation",
                     function, block + 1, i + 1, &v->source);
-            if (v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_MAP_CELL_DROP) {
+            if (v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_MAP_CELL_DROP || v->op==XR_LIR_SET_CELL_DROP) {
                 if (!owner)
                     return xr_lir_internal_error(d, "incoming Managed Cell borrow cannot be released",
                         function, block + 1, i + 1, &v->source);
@@ -106,7 +109,7 @@ static XrLirStatus lir_array_cells(const XrLirFunctionData *f, uint32_t function
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
         if (lir_cfg_cell(f->values[v].type) && definition && definition->op == XR_LIR_CELL_NEW) ++count;
         else if (lir_cfg_reference(f->values[v].type) && definition &&
-            (definition->op == XR_LIR_ARRAY_BORROW || definition->op == XR_LIR_MAP_BORROW))
+            (definition->op == XR_LIR_ARRAY_BORROW || definition->op == XR_LIR_MAP_BORROW || definition->op == XR_LIR_SET_BORROW))
             continue;
         else if (!f->values[v].parameter || f->values[v].block)
             return xr_lir_internal_error(d, "Managed Cell requires a real constructor or incoming borrow",
@@ -135,7 +138,7 @@ static XrLirStatus lir_array_cells(const XrLirFunctionData *f, uint32_t function
     }
     for (uint32_t v = 0; v < f->value_count; ++v) {
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
-        if (definition && (definition->op == XR_LIR_ARRAY_BORROW || definition->op == XR_LIR_MAP_BORROW))
+        if (definition && (definition->op == XR_LIR_ARRAY_BORROW || definition->op == XR_LIR_MAP_BORROW || definition->op == XR_LIR_SET_BORROW))
             flow.owners[v] = flow.owners[definition->operands[0] - 1];
     }
     XR_DCHECK(owner == count, "each managed Cell constructor has one flow owner");

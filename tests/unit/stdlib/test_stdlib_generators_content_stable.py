@@ -26,7 +26,7 @@ STDLIBGEN = load_module("xray_stdlibgen", ROOT / "tools" / "stdlibgen" / "stdlib
 ANALYZERGEN = load_module("xray_gen_stdlib_types", ROOT / "scripts" / "gen_stdlib_types.py")
 COMPILER = None
 TABLE_NAMES = (
-    "DEF", "CONST_DEF", "HANDLE_DEF", "OBJECT_SHAPE_DEF", "ENUM_DEF", "TYPE_METHOD_DEF",
+    "DEF", "CONST_DEF", "HANDLE_DEF", "NOMINAL_STRUCT_DEF", "ENUM_DEF", "TYPE_METHOD_DEF",
     "NATIVE_CLASS_DEF", "CLASS_DEF", "CLASS_METHOD_DEF", "CLASS_FIELD_DEF",
 )
 
@@ -144,16 +144,16 @@ typedef struct {
         metadata = [[] for _ in TABLE_NAMES]
         metadata[2] = [STDLIBGEN.StdlibHandleEntry("sample", "Handle", "", (), "public")]
         metadata[3] = [
-            STDLIBGEN.StdlibObjectShapeEntry("sample", "Shape", "", (), True, "public")
+            STDLIBGEN.StdlibNominalStructEntry("sample", "Shape", "", (), "public")
         ]
         metadata[4] = [STDLIBGEN.StdlibEnumEntry("sample", "Enum", "", (), "public")]
         self.compile_metadata(metadata, """
     if (xr_stdlib_handle_def_entries[0].field_count != 0 ||
-        xr_stdlib_object_shape_def_entries[0].field_count != 0 ||
+        xr_stdlib_nominal_struct_def_entries[0].field_count != 0 ||
         xr_stdlib_enum_def_entries[0].variant_count != 0)
         return 1;
     if (strcmp(xr_stdlib_handle_def_entries[0].name, "Handle") != 0 ||
-        strcmp(xr_stdlib_object_shape_def_entries[0].name, "Shape") != 0 ||
+        strcmp(xr_stdlib_nominal_struct_def_entries[0].name, "Shape") != 0 ||
         strcmp(xr_stdlib_enum_def_entries[0].name, "Enum") != 0)
         return 2;
 """

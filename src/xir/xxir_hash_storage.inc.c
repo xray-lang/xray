@@ -18,7 +18,7 @@ static XrXirValueStatus hash_layout(const XrXirTypeArena *arena, XrXirType type,
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), type);
     if (!node || node->parameter_span ||
         (node->kind != XR_XIR_TYPE_MAP && node->kind != XR_XIR_TYPE_SET)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_key_builtin_type(node->element)) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_compile_type_arena_key_eligible(arena,node->element)) return XR_XIR_VALUE_UNSUPPORTED;
     XrXirType value = node->kind == XR_XIR_TYPE_MAP ? node->result : XR_XIR_UNIT;
     /* Both closed leaves occupy one aligned storage word and own no nested
      * release frames. Header admission still checks every projected field. */

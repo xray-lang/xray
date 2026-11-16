@@ -7,7 +7,7 @@
 // counter goes negative; release builds carry the wrong total silently.
 var traced = 0
 while (traced < 8) {
-    assertPanics(() -> { var zero = 0
+    assertPanics(() => { var zero = 0
         var ignored = 1 / zero })
     traced = traced + 1
 }

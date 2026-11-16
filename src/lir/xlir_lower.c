@@ -117,21 +117,27 @@ static XrLirType lower_array_element(const Lower *c, XrXirType type) {
         element == XR_XIR_STRING ? XR_LIR_STRING :
         element == XR_XIR_U8 ? XR_LIR_U8 : element == XR_XIR_U64 ? XR_LIR_U64 : XR_LIR_TYPE_INVALID;
 }
+
+static bool lower_set_borrow(LowerFunction *,uint32_t,XrLirValue *);
 static bool lower_managed_type(const Lower *c, XrLirType type) {
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || xr_lir_boxed_type(c->module, type);
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64 || xr_lir_boxed_type(c->module, type);
 }
 static XrLirOp lower_retain_operation(XrLirType type) {
     return type >= XR_LIR_TYPE_COUNT ? XR_LIR_VALUE_RETAIN : type == XR_LIR_ARRAY ? XR_LIR_ARRAY_RETAIN :
-        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_RETAIN : XR_LIR_STRING_RETAIN;
+        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_RETAIN : type == XR_LIR_SET_I64 ? XR_LIR_SET_RETAIN : XR_LIR_STRING_RETAIN;
 }
 static XrLirOp lower_drop_operation(XrLirType type) {
     return type >= XR_LIR_TYPE_COUNT ? XR_LIR_VALUE_DROP : type == XR_LIR_ARRAY ? XR_LIR_ARRAY_DROP :
-        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_DROP : XR_LIR_STRING_DROP;
+        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_DROP : type == XR_LIR_SET_I64 ? XR_LIR_SET_DROP : XR_LIR_STRING_DROP;
 }
 static bool lower_map_type(const Lower *c, XrXirType type) {
     return xr_xir_type_is_map(c->source->types, type) &&
         xr_xir_map_key(c->source->types, type) == XR_XIR_STRING &&
         xr_xir_map_element(c->source->types, type) == XR_XIR_I64;
+}
+static bool lower_set_type(const Lower *c,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(c->source->types,type);
+    return node && node->kind==XR_XIR_TYPE_SET && node->element==XR_XIR_I64 && node->result==XR_XIR_UNIT;
 }
 static XrLirType lower_type(const Lower *c, XrXirType type) {
     uint32_t id = (uint32_t)type;
@@ -139,6 +145,8 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count &&
         c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE])
         return c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE];
+    if (lower_set_type(c,type))return XR_LIR_SET_I64;
+    if(xr_xir_type_is_cell(c->source->types,type) && lower_set_type(c,xr_xir_cell_element(c->source->types,type)))return XR_LIR_SET_I64_CELL;
     if (lower_map_type(c, type)) return XR_LIR_MAP_STRING_I64;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_map_type(c, xr_xir_cell_element(c->source->types, type))) return XR_LIR_MAP_STRING_I64_CELL;
@@ -372,7 +380,8 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
         case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
         case XR_XIR_ARRAY_NEW:
-        case XR_XIR_MAP_NEW: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_SET:
+        case XR_XIR_SET_NEW: case XR_XIR_SET_ADD:
+        case XR_XIR_MAP_NEW: case XR_XIR_MAP_LITERAL: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_SET:
         case XR_XIR_HASH_LEN: case XR_XIR_HASH_CONTAINS: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
         case XR_XIR_ARRAY_REPEAT:
         case XR_XIR_ARRAY_LEN:
@@ -796,6 +805,7 @@ static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruc
     return xr_xir_type_is_cell(c->source->types, type) &&
         (lower_array_element(c, xr_xir_cell_element(c->source->types, type)) ||
          lower_map_type(c, xr_xir_cell_element(c->source->types, type)) ||
+         lower_set_type(c, xr_xir_cell_element(c->source->types, type)) ||
          xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING);
 }
 static const XrXirInstruction *lower_term(Lower *c, const XrXirFunction *f, uint32_t b) {
@@ -909,7 +919,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     c->maps |= lower_map_type(c, payload);
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f, op->args[0]) : op->type;
-        if (!lower_array_element(c, type) && !lower_map_type(c, type)) return lower_unsupported(c, "non-container place");
+        if (!lower_array_element(c, type) && !lower_map_type(c, type) && !lower_set_type(c,type)) return lower_unsupported(c, "non-container place");
         return true;
     }
     if (op->op == XR_XIR_CELL_STRING_APPEND) {
@@ -1166,6 +1176,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
         if (c->owned_bindings && c->owned_bindings[index] && c->owned_bindings[index][p])
             parameters[p] = lower_owned_cell_type(c, f->parameters[p]);
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
+        if (parameters[p] == XR_LIR_SET_I64_CELL) parameters[p] = XR_LIR_SET_I64_REF;
         if (parameters[p] == XR_LIR_MAP_STRING_I64_CELL) parameters[p] = XR_LIR_MAP_STRING_I64_REF;
         if (parameters[p] == XR_LIR_STRING_CELL) { parameters[p] = XR_LIR_STRING_REF; c->string_appends = true; }
         XrLirCallableType callable;
@@ -1849,6 +1860,17 @@ static bool lower_map_borrow(LowerFunction *f, uint32_t b, XrLirValue *value) {
     if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &borrow, &output))) return false;
     *value = output; return true;
 }
+
+static bool lower_set_borrow(LowerFunction *f, uint32_t b, XrLirValue *value) {
+    Lower *c = f->owner;
+    XrLirType type = c->module->functions[f->function.id - 1].values[value->id - 1].type;
+    if (type == XR_LIR_SET_I64_REF) return true;
+    XrLirInstruction borrow = {.op=XR_LIR_SET_BORROW, .type=XR_LIR_SET_I64_REF,
+        .operands=value, .operand_count=1, .source=lower_source(c)};
+    XrLirValue output = {0};
+    if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &borrow, &output))) return false;
+    *value = output; return true;
+}
 static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -1929,6 +1951,8 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         for (uint32_t a = 0; a < op->args[1] && good; ++a)
             if (callee->parameter_types[a] == XR_LIR_ARRAY_REF)
                 good = lower_array_borrow(f, b, &arguments[a]);
+            else if(callee->parameter_types[a]==XR_LIR_SET_I64_REF)
+                good=lower_set_borrow(f,b,&arguments[a]);
             else if (callee->parameter_types[a] == XR_LIR_MAP_STRING_I64_REF)
                 good = lower_map_borrow(f, b, &arguments[a]);
             else if (callee->parameter_types[a] == XR_LIR_STRING_REF)
@@ -2067,7 +2091,7 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
     } else {
         instruction.op = create ? XR_LIR_CELL_NEW :
             op->op == XR_XIR_CELL_READ ? XR_LIR_CELL_READ : XR_LIR_CELL_WRITE;
-        if (create) instruction.type = lower_map_type(c, xr_xir_cell_element(c->source->types, op->type)) ?
+        if (create) instruction.type = lower_set_type(c,xr_xir_cell_element(c->source->types,op->type)) ? XR_LIR_SET_I64_CELL : lower_map_type(c, xr_xir_cell_element(c->source->types, op->type)) ?
             XR_LIR_MAP_STRING_I64_CELL : lower_array_element(c,
             xr_xir_cell_element(c->source->types, op->type)) ? XR_LIR_ARRAY_CELL : XR_LIR_STRING_CELL;
         if (!lower_value(f, op->args[0], &args[0]) ||
@@ -2076,6 +2100,8 @@ static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, boo
             instruction.op = op->op == XR_XIR_CELL_READ ? XR_LIR_ARRAY_REF_READ : XR_LIR_ARRAY_REF_WRITE;
         if (!create && c->module->functions[f->function.id - 1].values[args[0].id - 1].type == XR_LIR_MAP_STRING_I64_REF)
             instruction.op = op->op == XR_XIR_CELL_READ ? XR_LIR_MAP_REF_READ : XR_LIR_MAP_REF_WRITE;
+        if(!create && c->module->functions[f->function.id-1].values[args[0].id-1].type==XR_LIR_SET_I64_REF)
+            instruction.op=op->op==XR_XIR_CELL_READ?XR_LIR_SET_REF_READ:XR_LIR_SET_REF_WRITE;
         if (!create && c->module->functions[f->function.id - 1].values[args[0].id - 1].type == XR_LIR_STRING_REF) {
             instruction.op = XR_LIR_CALL_INTRINSIC;
             if (!lower_build(c, xr_lir_string_operation(c->module, op->op == XR_XIR_CELL_READ ?
@@ -2092,6 +2118,7 @@ static bool lower_managed_copy(LowerFunction *, uint32_t, XrLirValue, XrLirValue
 #include "xlir_lower_view.inc.c"
 #include "xlir_lower_array.inc.c"
 #include "xlir_lower_map.inc.c"
+#include "xlir_lower_set.inc.c"
 
 static bool lower_body(LowerFunction *f, uint32_t b) {
     Lower *c = f->owner;
@@ -2124,6 +2151,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (!lower_string_append(f, b, i, &handled)) return false;
         if (!handled && !lower_view_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_module_operation(f, b, i, &handled)) return false;
+        if (!handled && !lower_set_instruction(f,b,i,&handled))return false;
         if (!handled && !lower_map_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_array_instruction(f, b, i, &handled)) return false;
         if (!handled && lower_binding_storage(f, op)) {
@@ -2294,7 +2322,7 @@ static bool lower_frame_cells(LowerFunction *f) {
         for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
             const XrLirInstructionView *v = &function->blocks[b].instructions[i].view;
             if (v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_MAP_CELL_DROP) released[v->operands[0] - 1] = 1;
-            if (f->retired_values && (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_VALUE_DROP ||
+            if (f->retired_values && (v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_SET_DROP || v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_VALUE_DROP ||
                 xr_lir_string_role(f->owner->module, v) == XR_LIR_STRING_OP_APPEND_OWNED))
                 f->retired_values[v->operands[0] - 1] = 1;
         }
@@ -2495,7 +2523,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
     if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
-    if (!lower_modules(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
+    if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
         lower_modules_free(&c);
         xr_lir_module_destroy(c.module);
         return c.status;

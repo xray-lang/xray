@@ -28,7 +28,7 @@ class Registry {
 }
 
 fn main() {
-    print(applyM(x -> x + 1, 41))         // 42 -- alias as a parameter type
+    print(applyM(x => x + 1, 41))         // 42 -- alias as a parameter type
     print(applyM(double, 21))             // 42 -- named function satisfies it
 
     var f: Mapper = double
@@ -36,15 +36,15 @@ fn main() {
     f = negate                            // function bindings are reassignable
     print(f(10))                          // -10
 
-    var ops: Array<Mapper> = [double, negate, x -> x * x]
+    var ops: Array<Mapper> = [double, negate, x => x * x]
     print(ops[0](6))                      // 12
     print(ops[1](6))                      // -6
     print(ops[2](6))                      // 36
 
-    var r = Registry(x -> x + 1000)
+    var r = Registry(x => x + 1000)
     print(r.run(1))                       // 1001 -- function type as a field
 
-    print(mapInt([1, 2, 3], x -> x * 100))  // [100, 200, 300]
+    print(mapInt([1, 2, 3], x => x * 100))  // [100, 200, 300]
 }
 
 main()

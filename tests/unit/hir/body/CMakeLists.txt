@@ -1,6 +1,7 @@
 add_executable(test_hir_body test_body.c)
 target_link_libraries(test_hir_body PRIVATE xray_xir_source)
 target_include_directories(test_hir_body PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_hir_body PRIVATE XR_MAP_LIBRARY_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
 
 add_executable(test_hir_tuple_control test_tuple_source_control.c)
 add_executable(test_hir_nominal_control test_nominal_source_control.c)
@@ -35,3 +36,6 @@ set_tests_properties(hir_body PROPERTIES FIXTURES_SETUP hir_body_inputs WORKING_
 
 set_tests_properties(hir_body
     PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;ownership;sdk")
+
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()

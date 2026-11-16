@@ -25,8 +25,8 @@ fn test_error_isolation() {
     var result1 = task1.awaitResult()
     print("  done:", task1.done)
     print("  failed:", match (result1) {
-        TaskResult.Failed { error: _ } -> true
-        _ -> false
+        TaskResult.Failed { error: _ } => true,
+        _ => false,
     })
 
     // 测试2：错误不影响其他协程

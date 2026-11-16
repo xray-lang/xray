@@ -1,0 +1,184 @@
+{
+  "009-8-error-handling-example-001": {
+    "fence": "xray @check",
+    "code": "enum AppErr { NotFound, InvalidInput { message: string } }\n\nthrow AppErr.NotFound                       // ✅ 简单枚举变体\nthrow AppErr.InvalidInput { message: \"bad format\" } // ✅ 带载荷的 ADT 枚举变体",
+    "trivia": {
+      "en": {
+        "16": "                       // ✅ simple enum variant\n",
+        "25": " // ✅ ADT enum variant with payload"
+      }
+    }
+  },
+  "009-8-error-handling-example-002": {
+    "fence": "xray @fragment",
+    "code": "enum IOErr { Timeout, Refused { reason: string } }\n\ntry {\n    connect(host)\n} catch (e) {\n    match (e) {\n        IOErr.Timeout => log(\"timeout\"),\n        IOErr.Refused { reason } => log(\"refused: \" + reason),\n    }\n}"
+  },
+  "009-8-error-handling-example-003": {
+    "fence": "xray @fragment",
+    "code": "enum NetErr { Timeout, Refused }\nenum DbErr { ConnLost, QueryFailed { query: string } }\n\ntry {\n    riskyIO()\n} catch (e: NetErr) {\n    log(\"network:\", e)\n} catch (e: DbErr) {\n    log(\"database:\", e)\n} catch (e) {\n    log(\"unexpected:\", e)\n}"
+  },
+  "009-8-error-handling-example-004": {
+    "fence": "xray @fragment",
+    "code": "enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }\n\ntry {\n    runQuery()\n} catch (DbErr.QueryFailed { query, code: 500..=599 }) {\n    log(\"server rejected:\", query)\n} catch (DbErr.ConnLost, DbErr.Timeout) {\n    retry()\n}"
+  },
+  "009-8-error-handling-example-005": {
+    "fence": "xray @error=E0334",
+    "code": "enum NetErr { Failed }\nfn work() throws(NetErr) { throw NetErr.Failed }\nfn main() {\n    try { work() } catch (NetErr) { print(\"failed\") } // error: use catch (e: NetErr)\n}\ntry main()"
+  },
+  "009-8-error-handling-example-006": {
+    "fence": "xray @fragment",
+    "code": "enum LowErr { Fail }\nenum HighErr { Upstream }\n\ntry {\n    lowLevelCall()\n} catch (e: LowErr) {\n    log(\"low-level failed\")\n    throw HighErr.Upstream\n}"
+  },
+  "009-8-error-handling-example-007": {
+    "fence": "xray @fragment",
+    "code": "enum HttpErr {\n    NotFound { message: string },\n    ServerError { code: i64, message: string },\n    Timeout,\n}\n\nenum ParseErr {\n    Empty,\n    InvalidChar { value: string, offset: i64 },\n    Overflow,\n}\n\nfn fetchUser(id: i64) throws(HttpErr) -> User {\n    if (id <= 0) { throw HttpErr.NotFound { message: \"user not found\" } }\n    // ...\n}\n\ntry {\n    var user = fetchUser(-1)\n} catch (e: HttpErr) {\n    match (e) {\n        HttpErr.NotFound { message: msg } => log(\"404:\", msg),\n        HttpErr.ServerError { code, message: msg } => log(string(code) + \":\", msg),\n        HttpErr.Timeout => log(\"timeout\"),\n    }\n}"
+  },
+  "009-8-error-handling-example-008": {
+    "fence": "xray @fragment",
+    "code": "var task = go fetch(url)\nvar value = try await task\nvar outcome = task.awaitResult()"
+  },
+  "009-8-error-handling-example-009": {
+    "fence": "xray @run",
+    "code": "enum ParseErr { Empty }\nfn parse(s: string) throws(ParseErr) -> i64 {\n    if (len(s) == 0) { throw ParseErr.Empty }\n    return 42\n}\nfn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }\nfn main() throws(ParseErr) {\n    print(try forward(\"ok\"))\n    print((try? parse(\"\")) ?? 8080)\n    print(try! parse(\"ok\"))\n}\ntry main()",
+    "output": "42\n8080\n42\n"
+  },
+  "009-8-error-handling-example-010": {
+    "fence": "xray @error=E0330",
+    "code": "enum Failure { Bad }\nfn fail() throws(Failure) { throw Failure.Bad }\nfn main() throws(Failure) { fail() } // error: missing try\ntry main()"
+  },
+  "009-8-error-handling-example-011": {
+    "fence": "xray @error=E0331",
+    "code": "enum Failure { Bad }\nfn fail() throws(Failure) { throw Failure.Bad }\nfn caller() { try fail() } // error: undeclared escaping error\nfn main() { caller() }\ntry main()"
+  },
+  "error-panic-only": {
+    "fence": "xray @id=error-panic-only @run",
+    "code": "enum Failure { Bad }\nfn fail() throws(Failure) { throw Failure.Bad }\nfn relay() throws(Failure) {\n    try { fail() } catch panic { print(\"unexpected panic\") }\n}\nconst ch = Channel<i64>(1)\nch.close()\ntry { ch.send(1) } catch panic (p) { print(p.code) }\ntry { relay() } catch (e: Failure) { print(\"business error\") }\ntry { throw Failure.Bad } catch (e: Failure) { print(\"direct throw\") }"
+  },
+  "error-panic-mixed-redundant": {
+    "fence": "xray @id=error-panic-mixed-redundant @error=E0336",
+    "code": "try { print(42) }\ncatch (e) { print(\"ordinary\") }\ncatch panic { print(\"panic\") }"
+  },
+  "009-8-error-handling-example-014": {
+    "fence": "xray @error=E0336",
+    "code": "fn add(a: i64, b: i64) -> i64 { return a + b }\nfn worker() -> i64 { return 1 }\nfn main() {\n    print(try add(1, 2))   // error: redundant try\n    var t = go worker()\n    print(try await t)     // error: redundant try, the task cannot fail\n}\nmain()"
+  },
+  "009-8-error-handling-example-015": {
+    "fence": "xray @fragment",
+    "code": "try {\n    var arr: Array<i64> = [1, 2, 3]\n    var v = arr[10]                          // 越界 → panic\n} catch panic {\n    log(\"runtime fault caught\")\n}\n\ntry {\n    var n = 10 / 0                           // 除零 → panic\n} catch panic {\n    log(\"division by zero caught\")\n}",
+    "trivia": {
+      "en": {
+        "24": "                          // OOB → panic\n",
+        "41": "                           // division by zero → panic\n"
+      }
+    }
+  },
+  "009-8-error-handling-example-016": {
+    "fence": "xray @check",
+    "code": "enum AppErr { InvalidArg }\n\nfn process(input: i64) throws(AppErr) {\n    if (input < 0) { throw AppErr.InvalidArg }\n}\n\nfn main() {\n    try {\n        process(-1)\n    } catch (e: AppErr) {\n        print(\"business error\")              // 值返回通道\n    } catch panic {\n        print(\"runtime fault!\")              // panic 通道\n    }\n}\nmain()",
+    "trivia": {
+      "en": {
+        "54": "              // value-return channel\n    ",
+        "62": "              // panic channel\n    "
+      }
+    }
+  },
+  "009-8-error-handling-example-017": {
+    "fence": "xray @fragment",
+    "code": "class PanicInfo {\n    message: string             // 人类可读消息（如 \"index out of bounds\"）\n    stack: Array<string>        // 自动捕获的调用栈\n    cause: PanicInfo?           // 链式 cause\n    code: i64                   // 错误码\n    data: JSON.Value            // 附加数据；无数据时为 JSON null\n    replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null\n\n    init(message: string = \"\", cause: PanicInfo? = null) { /* runtime implementation omitted */ }\n    toString() -> string { /* runtime implementation omitted */ }\n}",
+    "trivia": {
+      "en": {
+        "6": "             // human-readable message (e.g. \"index out of bounds\")\n    ",
+        "12": "        // automatically captured call stack\n    ",
+        "16": "           // chained cause\n    ",
+        "19": "                   // error code\n    ",
+        "24": "            // additional data; JSON null when absent\n    ",
+        "28": "      // read-only; owned error replaced by cleanup panic, or null\n\n    "
+      }
+    }
+  },
+  "009-8-error-handling-example-018": {
+    "fence": "xray @run",
+    "code": "fn main() {\n    var arr: Array<i64> = [1, 2, 3]\n    try {\n        print(arr[10])                       // 越界 → panic\n    } catch panic (p) {\n        print(\"message:\", p.message)         // array index out of range: 10 (length 3)\n        print(\"code:\", p.code)               // 430\n    }\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "29": "                       // out of bounds → panic\n    "
+      }
+    },
+    "output": "message: array index out of range: 10 (length 3)\ncode: 430\n"
+  },
+  "009-8-error-handling-example-019": {
+    "fence": "xray @fragment",
+    "code": "fn fetch(url: string) throws(IoErr | FetchErr) -> string {\n    var conn = try open(url)\n    defer { conn.close() }                   // 无论后续如何，conn 一定关闭\n\n    var data = try conn.read()\n    if (len(data) == 0) {\n        throw FetchErr.Empty                 // defer 仍执行\n    }\n    return data\n}",
+    "trivia": {
+      "en": {
+        "32": "                   // conn is guaranteed to close\n\n    ",
+        "55": "                 // defer still runs\n    "
+      }
+    }
+  },
+  "defer-must-not-throw": {
+    "fence": "xray @id=defer-must-not-throw @run",
+    "code": "enum CloseErr { Failed }\nfn close() throws(CloseErr) { throw CloseErr.Failed }\nfn main() {\n    defer {\n        try { close() } catch (e: CloseErr) { print(\"close failed\") }\n    }\n    print(\"body\")\n}\nmain()",
+    "output": "body\nclose failed\n"
+  },
+  "009-8-error-handling-example-021": {
+    "fence": "xray @error=E0387",
+    "code": "enum CloseErr { Failed }\nfn close() throws(CloseErr) { throw CloseErr.Failed }\nfn main() {\n    defer { try close() } // error: error escapes cleanup\n}\ntry main()"
+  },
+  "009-8-error-handling-example-022": {
+    "fence": "xray @run",
+    "code": "enum LookupErr { Failed }\nfn lookup(ok: bool) throws(LookupErr) -> i64? {\n    if (!ok) { throw LookupErr.Failed }\n    return 7\n}\nfn main() {\n    var found: i64? = try? lookup(true)\n    print(found ?? 0)\n    print((try? lookup(false)) ?? 0)\n}\nmain()",
+    "output": "7\n0\n"
+  },
+  "009-8-error-handling-example-023": {
+    "fence": "xray @run",
+    "code": "enum ConnErr { Refused, Timeout }\n\n// 用一个极简的 \"连接\" 替身让示例自成一体。\nclass Conn {\n    alive: bool\n    init(alive: bool) { this.alive = alive }\n    isAlive() -> bool { return this.alive }\n    close() { print(\"closed\") }\n}\n\nfn fetchData(alive: bool) throws(ConnErr) -> string {\n    var conn = Conn(alive)\n    defer { conn.close() }             // 无论成功或抛错都会执行\n    if (!conn.isAlive()) { throw ConnErr.Timeout }\n    return \"payload\"\n}\n\nfn main() {\n    try {\n        print(fetchData(true))         // 输出：closed 然后 payload\n    } catch (e: ConnErr) {\n        print(\"connection error\")\n    }\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "7": "\n\n// A tiny stand-in \"connection\" so the example runs on its own.\n",
+        "76": "             // runs whether we succeed or throw\n    ",
+        "108": "         // prints closed, then payload\n    "
+      }
+    },
+    "output": "closed\npayload\n"
+  },
+  "009-8-error-handling-example-024": {
+    "fence": "xray @fragment",
+    "code": "var port = config?.port ?? 8080\nvar user = db.findUser(id) ?? guestUser"
+  },
+  "009-8-error-handling-example-025": {
+    "fence": "xray @check",
+    "code": "fn safeDivide(a: i64, b: i64) -> string {\n    try {\n        return string(a / b)\n    } catch panic {\n        return \"error: division by zero\"\n    }\n}"
+  },
+  "009-8-error-handling-example-026": {
+    "fence": "xray @run @check",
+    "code": "enum ParseErr { Empty, BadChar { value: string } }\n\nfn parseDigit(s: string) throws(ParseErr) -> i64 {\n    if (len(s) == 0) { throw ParseErr.Empty }\n    if (s == \"x\") { throw ParseErr.BadChar { value: s } }\n    return 42\n}\n\nfn main() {\n    try {\n        print(parseDigit(\"\"))\n    } catch (e: ParseErr) {\n        match (e) {\n            ParseErr.Empty => print(\"empty input\"),        // 输出：empty input\n            ParseErr.BadChar { value: c } => print(\"bad char:\", c),\n        }\n    }\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "97": "        // prints empty input\n            "
+      }
+    },
+    "output": "empty input\n"
+  },
+  "009-8-error-handling-example-027": {
+    "fence": "xray @run",
+    "code": "enum E { Boom }\n\nfn work() throws(E) {\n    defer { print(\"defer 1\") }\n    defer { print(\"defer 2\") }\n    print(\"body\")\n    throw E.Boom                             // 抛错时 defer 仍会执行\n}\n\nfn main() {\n    try { work() } catch (e) { print(\"caught\") }\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "36": "                             // defers still run when throwing\n"
+      }
+    },
+    "output": "body\ndefer 2\ndefer 1\ncaught\n"
+  },
+  "009-8-error-handling-example-028": {
+    "fence": "xray @run",
+    "code": "fn main() {\n    var arr: Array<i64> = [1, 2, 3]\n    try {\n        print(arr[10])\n    } catch panic (p) {\n        print(\"message:\", p.message)         // 输出：message: array index out of range: 10 (length 3)\n        print(\"code:\", p.code)               // 输出：code: 430\n    }\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "44": "         // prints message: array index out of range: 10 (length 3)\n        ",
+        "52": "               // prints code: 430\n    "
+      }
+    },
+    "output": "message: array index out of range: 10 (length 3)\ncode: 430\n"
+  }
+}

@@ -311,7 +311,7 @@ def expected_rows():
     original = _PROGRAMS['bare_lambda_expression_positions']
     selected = 'tests/unit/xir/legacy_consumers/fixtures/callable_explicit_fill/root.xr'
     before = 'var fns = Array<IntFn>(100)'
-    after = 'var fns = Array<IntFn>(100, value -> value)'
+    after = 'var fns = Array<IntFn>(100, value => value)'
     text = (ROOT/original).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
     if text.count(before) != 1 or (ROOT/selected).read_bytes().replace(b'\r\n',b'\n') != text.replace(before,after).encode('utf-8'):
         raise ValueError('Callable array port must preserve the entire original program with explicit valid fill')

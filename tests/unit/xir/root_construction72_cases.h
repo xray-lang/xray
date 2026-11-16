@@ -53,7 +53,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0},
         {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0},
         {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0}};
-    XrXirDeclarations declarations = {&construction_source_module,1,identities,NULL,0,NULL,0,0,1,NULL};
+    XrXirDeclarations declarations = {.modules=&construction_source_module, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     XrXirNominalField fields[] = {{{"a",1},XR_XIR_I64,0},{{"b",1},XR_XIR_I64,0}};
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Pair",4},1,NULL,0,fields,2,
         XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
@@ -73,7 +73,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     uint32_t helpers[] = {4,5};
     XrXirConstructionRow row = {3,helpers,2};
     XrXirConstruction *facts = NULL;
-    XrXirStatus status = xr_xir_compile_construction_new_v5(context,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&facts, NULL);
+    XrXirStatus status = xr_xir_compile_construction_new_v6(context,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&facts, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_check_v2(context,&built,facts,output,NULL);
     xr_xir_compile_construction_free(facts);
     memset(helpers,0xCC,sizeof(helpers)); memset(fields,0xCC,sizeof(fields));

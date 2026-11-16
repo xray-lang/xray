@@ -1,7 +1,7 @@
 # Xray Language Reference
 
 > Version: based on the `xray` source tree version v0.9.0 (audited on 2026-07-18).
-> Status: this is a reference manual for the implemented language. When this document and the implementation disagree, the implementation is authoritative and this document must be updated.
+> Status: accepted language definitions are owned by `spec/source`; Chinese clauses are normative and English is their translation. Implementation support requires separate evidence; code does not override the specification.
 > Chinese version: [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md).
 
 ## Table of Contents
@@ -42,7 +42,7 @@ This document is the **reference manual** for the Xray programming language. It 
 
 1. Allow a human reader to write valid Xray code with predictable behavior.
 2. Serve as a **structured source of truth** for compilers, analyzers, IDEs, AI assistants, documentation generators, and other tooling.
-3. Stay aligned with the actual implementation in the main `xray` repository — any divergence is a bug in either the document or the code.
+3. Distinguish accepted targets from measured support: disagreements must be classified as specification defects, implementation defects, or recorded implementation gaps.
 
 **This manual is not a tutorial.** For introductory material, see the Xray website and the `demos/` directory.
 
@@ -113,7 +113,7 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (52 general keywords), `src/shared/xr_exact_scalar_registry.def` (12 exact scalar keywords), and `src/frontend/lexer/xlex.c` (scanner implementation).
+> Implementation reference: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (general keyword declarations), `src/shared/xr_exact_scalar_registry.def` (exact scalar keyword declarations), and `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -141,13 +141,16 @@ A line ending **terminates** the current expression if and only if all of the fo
 
 Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `++`, `--`, `(`, `[`. Hence:
 
+<!-- xr-source:example 002-1-lexical-structure-example-001 -->
 ```xray
 var x = a
 !b            // two statements; NOT var x = a!
 ```
+<!-- /xr-source -->
 
 When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `/`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
 
+<!-- xr-source:example 002-1-lexical-structure-example-002 -->
 ```xray
 var ok = check(a)
     && check(b)      // continuation
@@ -158,13 +161,16 @@ var total = base +
 var quotient = total
     / 2              // division has only an infix role; continuation
 ```
+<!-- /xr-source -->
 
 To continue a line with `-`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
 
+<!-- xr-source:example 002-1-lexical-structure-example-003 -->
 ```xray
 var d = (total
     - used)          // line endings are transparent inside a bracket group
 ```
+<!-- /xr-source -->
 
 > The value of an expression statement is discarded, so **an expression statement with no effect is an error** (`E0208`). This pairs with the boundary rule above: a continuation line that was correctly split off does not become a silent no-op — it is reported immediately, with the rewrite suggested. The REPL is exempt, since it prints the value of a trailing bare expression and that value is therefore observed.
 
@@ -172,12 +178,14 @@ var d = (total
 
 Xray supports two kinds of comments: line comments do not nest; block comments nest:
 
+<!-- xr-source:example 002-1-lexical-structure-example-004 -->
 ```xray
 // line comment, from // to end-of-line
 /* block comment,
    may span lines;
    supports /* nested */ layers to any reasonable depth */
 ```
+<!-- /xr-source -->
 
 Comments may appear wherever whitespace is allowed. Formatters and language servers may read comment trivia; trivia does not participate in parsing.
 
@@ -185,15 +193,18 @@ Doc comments (no syntactic difference from ordinary comments): conventionally `/
 
 ### 1.4 Identifiers
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-01 -->
 ```ebnf
-Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
-IdentCont  ::= IdentStart | '0'..'9'
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 ```
+<!-- /xr-source -->
 
 After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
-**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `isolated`, `after`).
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `ref`, `move`, `isolated`, `after`).
 
 The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
@@ -205,64 +216,123 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **64 reserved keywords** in total, grouped by purpose below:
+<!-- xr-source:keywords count -->
+The current lexer reserves **63 keywords**. Appendix B is generated from the lexical declarations; a target classification change does not imply implementation.
+<!-- /xr-source -->
 
 #### 1.5.1 Declarations and Control Flow
 
+<!-- xr-source:keywords group-1 -->
 | Keyword | Purpose |
 |--|--|
-| `var` | mutable variable declaration |
-| `const` | fixes the binding and its value-semantic components |
+| `break` | loop control |
 | `comptime` | expression prefix that forces compile-time evaluation |
+| `const` | immutable field/binding modifier |
+| `continue` | loop control |
+| `else` | conditional branches |
 | `fn` | function declaration |
-| `return` | function return |
-| `yield` | generator value-yield statement |
-| `if` `else` | conditional branches |
-| `while` | loop |
-| `for` `in` | loops (C-style + for-in) |
-| `break` `continue` | loop control |
+| `for` | loops (C-style + for-in) |
+| `if` | conditional branches |
+| `in` | loops (C-style + for-in) |
 | `match` | pattern matching |
+| `return` | function return |
+| `var` | mutable variable declaration |
+| `while` | loop |
+| `yield` | generator value-yield statement |
+<!-- /xr-source -->
+
 
 #### 1.5.2 Object Orientation and Types
 
+<!-- xr-source:keywords group-2 -->
 | Keyword | Purpose |
 |--|--|
-| `class` `struct` | class / struct declaration |
-| `packed` `union` | FFI layout declarations |
-| `extends` | class inheritance |
-| `interface` `implements` | interface declaration / implementation |
+| `as` | runtime type check / cast |
+| `class` | class / struct declaration |
 | `enum` | enum declaration |
-| `type` | type alias |
-| `new` | reserved; construct objects with `T(...)` (see §3.14) |
-| `this` `super` | self / parent reference |
-| `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
-| `const` | immutable field/binding modifier |
+| `extends` | class inheritance |
 | `final` | `final class` cannot be inherited |
+| `implements` | interface declaration / implementation |
+| `interface` | interface declaration / implementation |
+| `is` | runtime type check / cast |
+| `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `operator` | reserved; the language has no operator overloading |
-| `is` `as` | runtime type check / cast |
+| `packed` | FFI layout declarations |
+| `private` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `static` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `struct` | class / struct declaration |
+| `super` | self / parent reference |
+| `this` | self / parent reference |
+| `type` | type alias |
+| `union` | FFI layout declarations |
+| `where` | Type and generic rules |
+<!-- /xr-source -->
+
 
 `abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
 
 #### 1.5.3 Error Handling
 
-`try` `catch` `throw` `defer`
+<!-- xr-source:keywords group-3 -->
+| Keyword | Purpose |
+|--|--|
+| `catch` | Error handling |
+| `defer` | Error handling |
+| `throw` | Error handling |
+| `try` | Error handling |
+<!-- /xr-source -->
+
 
 `throws` is contextual in signatures (§1.5.8), not globally reserved.
 
 #### 1.5.4 Module System
 
-`import` `export`
+<!-- xr-source:keywords group-4 -->
+| Keyword | Purpose |
+|--|--|
+| `export` | Module imports and exports |
+| `import` | Module imports and exports |
+<!-- /xr-source -->
+
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe`
+<!-- xr-source:keywords group-5 -->
+| Keyword | Purpose |
+|--|--|
+| `await` | Concurrency and low-level operations |
+| `go` | Concurrency and low-level operations |
+| `scope` | Concurrency and low-level operations |
+| `select` | Concurrency and low-level operations |
+| `unsafe` | Concurrency and low-level operations |
+<!-- /xr-source -->
+
 
 `parallel` is an explicitly imported standard-library module name, not a lexical keyword.
 
 #### 1.5.6 Type Names (reserved)
 
-`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
-`f32` `f64` `bool` `string` `rune`
+<!-- xr-source:keywords group-6 -->
+| Keyword | Purpose |
+|--|--|
+| `bool` | Built-in scalar type |
+| `f32` | Built-in scalar type |
+| `f64` | Built-in scalar type |
+| `i16` | Built-in scalar type |
+| `i32` | Built-in scalar type |
+| `i64` | Built-in scalar type |
+| `i8` | Built-in scalar type |
+| `isize` | Built-in scalar type |
+| `rune` | Built-in scalar type |
+| `string` | Built-in scalar type |
+| `u16` | Built-in scalar type |
+| `u32` | Built-in scalar type |
+| `u64` | Built-in scalar type |
+| `u8` | Built-in scalar type |
+| `usize` | Built-in scalar type |
+<!-- /xr-source -->
+
 
 `Never` is a predefined uninhabited bottom-type name, not a lexical keyword; it can appear in `throws(Never)` (§2.2.2).
 
@@ -277,43 +347,58 @@ Writing `unknown` in a type annotation is rejected by the parser; it is not a le
 
 #### 1.5.7 Literal Keywords
 
-`true` `false` `null`
+<!-- xr-source:keywords group-7 -->
+| Keyword | Purpose |
+|--|--|
+| `false` | Literal |
+| `null` | Literal |
+| `true` | Literal |
+<!-- /xr-source -->
+
 
 #### 1.5.8 Context-sensitive Keywords
 
-These are not in the lexer keyword table; the parser recognizes them by position. They **may** be used as ordinary identifiers:
-
-| Token | Where it appears |
+<!-- xr-source:keywords contextual -->
+| Keyword | Purpose |
 |--|--|
 | `init` | class/struct initializer member declaration; ordinary identifier elsewhere |
 | `from` | `select` receive arm (`x from ch`); also in named import / re-export (`import { x } from "module"`) |
 | `to` | `select` send arm (`value to ch`) |
-| `default` | reserved, currently disabled |
 | `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | ownership transfer (`move x`) |
 | `isolated` | `scope(isolated)` option (§10.7) |
-| `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `after` | `select` timeout arm (`after 1000 => ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
 | `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 | `escaping` | Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation |
+| `copy` | Explicit copy expression on a place (§2.14) |
+| `nosuspend` | Non-suspending function type prefix |
+| `override` | Explicit override marker on an instance method |
+<!-- /xr-source -->
+
+These are not in the lexer keyword table; the parser recognizes them by position. They **may** be used as ordinary identifiers:
+
 
 ### 1.6 Literals
 
 #### 1.6.1 Integer Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-02 -->
 ```ebnf
-IntLiteral ::= DecLit | HexLit | OctLit | BinLit
-DecLit ::= Digit (Digit | '_')*
-HexLit ::= '0x' HexDigit (HexDigit | '_')*
-OctLit ::= '0o' OctDigit (OctDigit | '_')*
-BinLit ::= '0b' BinDigit (BinDigit | '_')*
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 ```
+<!-- /xr-source -->
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - An integer literal without a unique numeric context defaults to `i64`. The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: the default `i64` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
 - When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `i64` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
+<!-- xr-source:example 002-1-lexical-structure-example-005 -->
 ```xray
 42
 0xFF
@@ -321,46 +406,57 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 0o77
 1_000_000      // one million
 ```
+<!-- /xr-source -->
 
 #### 1.6.2 Floating-Point Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-03 -->
 ```ebnf
-FloatLiteral ::= Digit+ '.' Digit* Exp?
-              | Digit+ Exp
-              | '.' Digit+ Exp?
-Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 ```
+<!-- /xr-source -->
 
 Without a unique floating context the literal type is `f64` (IEEE-754 double precision); a unique `f32`/`f64` context directly selects rounding precision. Complete spelling and rounding follow §17.25. The lexical target includes leading/trailing-dot forms; the current XIR source subset does not yet admit them, and converter support does not qualify the full lexical grammar.
 
+<!-- xr-source:example 002-1-lexical-structure-example-006 -->
 ```xray
 3.14
 1.0e10
 2.5E-3
 .5             // equivalent to 0.5
 ```
+<!-- /xr-source -->
 
 #### 1.6.3 BigInt Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-04 -->
 ```ebnf
-BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-007 -->
 ```xray
 123n
 0xFFn
 0b1010n
 ```
+<!-- /xr-source -->
 
 Arbitrary-precision integers; arithmetic never overflows. See §14.8 for the type.
 
 #### 1.6.4 Boolean and Null Literals
 
+<!-- xr-source:example 002-1-lexical-structure-example-008 -->
 ```xray
 true
 false
 null
 ```
+<!-- /xr-source -->
 
 - `true` / `false`: type `bool`.
 - `null`: type `null` (semantically the zero value of every nullable type `T?`).
@@ -371,6 +467,7 @@ Xray quoted literals use double quotes only; single quotes are reserved for `run
 
 ##### Inline escaped strings (Q = 1)
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-05 -->
 ```ebnf
 InlineEscapedString ::= '"' StrChar* '"'
 StrChar ::= any character that is not a double quote, backslash, or newline
@@ -382,11 +479,13 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
                   | 'u{' HexDigit{1,6} '}')
 Interpolation ::= '${' Expression '}'
 ```
+<!-- /xr-source -->
 
 - An inline literal cannot cross a physical line; use an escape or block form for line breaks.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
 - `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
+<!-- xr-source:example 002-1-lexical-structure-example-009 -->
 ```xray
 "hello"
 "Hello, ${name}! ${1 + 2}"
@@ -394,36 +493,43 @@ Interpolation ::= '${' Expression '}'
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
+<!-- /xr-source -->
 
 Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
 ##### Inline raw strings (`r` prefix, Q = 1)
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-06 -->
 ```ebnf
 InlineRawString ::= 'r' '"' RawChar* '"'
 RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
+<!-- /xr-source -->
 
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
 - The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
 - Raw strings use `r"..."`; single-quoted strings continue to use the ordinary escape rules.
 
+<!-- xr-source:example 002-1-lexical-structure-example-010 -->
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
+<!-- /xr-source -->
 
 ##### Unified prefixes and variable quote delimiters
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-07 -->
 ```ebnf
-QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
 LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
 InlineQuoted ::= '"' InlinePayload* '"' | '""'
 BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
 QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
+<!-- /xr-source -->
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
 - Decoded string payloads carry explicit byte lengths in the AST and subsequent value boundaries. A storage terminator is not a content boundary; copying, equality, signatures and formatting must not truncate at embedded NUL. Structural field names and C literals retain their separate no-NUL restrictions.
@@ -432,6 +538,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
 - `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
 
+<!-- xr-source:example 002-1-lexical-structure-example-011 -->
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
@@ -440,15 +547,19 @@ br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
 c"puts"                   // [u8; 5], ending in the appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
+<!-- /xr-source -->
 
 One quote is the inline delimiter. Two consecutive quotes represent only an empty payload in the selected prefix family and never open a block:
 
+<!-- xr-source:example 002-1-lexical-structure-example-012 -->
 ```xray
 "" r"" b"" br"" c"" cr""
 ```
+<!-- /xr-source -->
 
 Three or more consecutive quotes form a block delimiter. The opener must be followed immediately by LF or CRLF. The closer must start on its own line and may contain only “margin + exactly the opener's quote count + line ending or EOF”. No trailing whitespace, comment, comma, semicolon, or bracket is allowed on the closer line; subsequent tokens start on the next line.
 
+<!-- xr-source:example 002-1-lexical-structure-example-013 -->
 ```xray
 const HTML = r"""
 <div class="card">
@@ -461,6 +572,7 @@ echo ${HOME}
 """
 """"
 ```
+<!-- /xr-source -->
 
 The structural newline after the opener and before the closer is not part of the value. CRLF inside the body normalizes to LF. Spaces/tabs before the closer define the margin; every non-empty body line must begin with that exact byte prefix, which is removed from the payload. Tabs and spaces are not compared by visual columns.
 
@@ -470,10 +582,12 @@ Interpolation expressions are scanned in expression mode with balanced braces; n
 
 #### 1.6.6 `rune` Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-08 -->
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
+<!-- /xr-source -->
 
 - `'a'` has type `rune` and represents one Unicode scalar value.
 - The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
@@ -481,11 +595,13 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
 - Char literals do not support `${...}` interpolation.
 
+<!-- xr-source:example 002-1-lexical-structure-example-014 -->
 ```xray
 var a: rune = 'a'
 var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
+<!-- /xr-source -->
 
 ##### String interpolation
 
@@ -493,14 +609,18 @@ String templates use ordinary double quotes with `${...}` interpolation.
 
 #### 1.6.7 Regex Literals
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-09 -->
 ```ebnf
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-015 -->
 ```xray @fragment
 var letters = re"(?i)[a-z]+"
 var decimal = re"\d+\.\d+"
 ```
+<!-- /xr-source -->
 
 - `re` immediately followed by a double quote starts a regex literal; elsewhere `re` is an ordinary identifier.
 - The body is valid UTF-8 and preserves backslashes under raw rules, without string escape processing or `${...}` interpolation. Inline / block fences, physical line endings and indentation stripping follow the raw quoted forms in §1.6.5.
@@ -517,7 +637,7 @@ Full token table (by category):
 | Token | Use |
 |--|--|
 | `(` `)` | grouping, calls, parameter lists |
-| `{` `}` | blocks, object literals |
+| `{` `}` | blocks, Maps and type-prefixed struct literals |
 | `[` `]` | array literals, indexing |
 | `,` | separator |
 | `.` | member access |
@@ -567,7 +687,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`i64 \| string`) / bitwise or |
-| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
+| `->` | Type arrow: return types of functions, methods and fn lambdas; function types use `fn(T) -> R` and omit the arrow for unit (`fn(T)`) |
+| `=>` | Value arrow: arrow lambdas and `match` / `select` arms; recognized as one token by longest match |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |
@@ -576,19 +697,16 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 
 `!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
 
-#### 1.7.9 Collection-literal Starters
+#### 1.7.9 Collection Literal Boundaries
 
-| Token | Use |
-|--|--|
-| `#{` | empty Map literal |
-| `#[` | Set literal start |
+Arrays use `[` and `]`. Maps use ordinary `{` and `}` without a prefix token. Sets use ordinary named construction. Statement braces and braces after a value arrow begin blocks; Map expression contexts follow §3.10.
 
-Examples:
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+<!-- xr-source:example 002-1-lexical-structure-example-016 -->
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
+<!-- /xr-source -->
 
 #### 1.7.10 Patterns
 
@@ -614,7 +732,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Distinct Optional layers**: `T?` denotes the language item `Optional<T>`; every layer keeps its own presence tag without decomposing into a union with null.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Three type domains with distinct responsibilities**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is structural and exact in ordinary type positions, while generic constraint positions may require a minimum field set; `JSON.Value` is the schema-less recursive data-exchange domain. JSON scalars widen without materialization, while typed composites require explicit `JSON.value` encoding.
+5. **Nominal types and dynamic data**: class, struct and interface compatibility follows nominal identity, with explicit interface implementation. Structs provide fixed fields and unlabeled tuples may provide multiple returns. Maps provide dynamic keys; JSON.Value is the schema-less recursive exchange domain. Existing JSON scalar widening and explicit JSON.value composite encoding remain.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -807,6 +925,7 @@ Runtime `f64` values admit every binary64 payload, including signed, payload-bea
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
+<!-- xr-source:example types-explicit-conditions -->
 ```xray
 var ok = true
 if (ok) { }
@@ -825,6 +944,7 @@ var s = ""
 if (len(s) != 0) { }     // OK
 // if (s) { }            // compile error
 ```
+<!-- /xr-source -->
 
 #### 2.3.4 `string`
 
@@ -836,6 +956,7 @@ Strings preserve logical value copies across tasks under the Sendable and public
 
 `rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `u32`.
 
+<!-- xr-source:example 003-2-type-system-example-002 -->
 ```xray
 var a: rune = 'a'
 var zh = '中'
@@ -843,6 +964,7 @@ var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
 print(smile.toUInt32())   // 128512
 ```
+<!-- /xr-source -->
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
@@ -855,11 +977,13 @@ print(smile.toUInt32())   // 128512
 
 Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
+<!-- xr-source:example 003-2-type-system-example-003 -->
 ```xray
 fn log(msg: string) -> () { print(msg) }   // explicit Unit return
 fn ping() { print("pong") }                  // omitted return type = ()
 var r: () = log("hi")                        // allowed; r is a Unit value
 ```
+<!-- /xr-source -->
 
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
@@ -878,6 +1002,7 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
+<!-- xr-source:example 003-2-type-system-example-004 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -891,6 +1016,7 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
@@ -904,12 +1030,14 @@ unsafe {
 
 `Array<T>` is an ordered, growable value type. Assignment, saving a parameter, and returning a value preserve distinct logical copies. Implementations may share element storage, but mutation or append through one writable binding must not change other logical copies. Copying follows value-semantic components and copies only references at class or synchronized identity boundaries; it neither copies nor freezes the referenced objects. See §14.7 for methods and §2.14 for ownership.
 
+<!-- xr-source:example types-array -->
 ```xray
 var a: Array<i64> = [1, 2, 3]
 var b = a                        // b is a logical copy
 b[0] = 9                         // a[0] is still 1
 var c: Array<string> = []         // explicit empty array
 ```
+<!-- /xr-source -->
 
 `T` must be determined at compile time and must be copyable and storable. Borrowed views and noncopyable resources cannot be ordinary Array elements. An empty `[]` requires a type context; without one it is a compile error: `Empty array '[]' requires a type annotation`. A non-nullable Array requires explicit initialization; uninitialized storage is not an empty array.
 
@@ -955,6 +1083,7 @@ An owner must be a named local place, parameter, or receiver field path with a p
 
 Assignment of a `MutSlice<T>` transfers its borrow; ordinary calls temporarily reborrow it. Conversion from `MutSlice<T>` to `Slice<T>` is a shared reborrow. The original writable view cannot write while the derived read-only view is live. Subslices obey the same borrow permissions.
 
+<!-- xr-source:example types-slice -->
 ```xray
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
@@ -970,6 +1099,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ##### Borrow rules
 
@@ -1000,124 +1130,89 @@ Current implementation qualification of complete type and operation families is 
 
 #### 2.4.3 `Map<K, V>`
 
-Hash table that **preserves insertion order**. See §14.8.
+An insertion-ordered hash dictionary. A literal is `{key: value}`; every key is an expression, and a bare identifier reads its binding. Quote string keys. Empty `{}` requires a `Map<K, V>` or `JSON.Object` context. A statement-leading brace and a brace directly after `=>` begin blocks (§3.10).
 
-**Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
-
-```xray
-var m: Map<string, i64> = #{"a": 1, "b": 2}
-var m2 = #{"a": 1, "b": 2}
-var empty = #{}                                     // empty Map
-
-m["c"] = 3                                          // insert / update
-var v = m["a"]                                      // lookup; a missing key panics with E0431
-var maybe = m.get("missing")                        // safe lookup; returns null if absent
+<!-- xr-source:example types-map -->
+```xray @check
+var m: Map<string, i64> = {"a": 1, "b": 2}
+var m2 = {"a": 1, "b": 2}
+var empty: Map<string, i64> = {}
+m["c"] = 3
+var v = m["a"]
+var maybe = m.get("missing")
 ```
+<!-- /xr-source -->
 
-| Literal form | Type | Purpose |
-|---|---|---|
-| `{ key: value }` (no prefix) | exact `structural object` | see §2.4.7 |
-| `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
-| `#{}` | `Map<K, V>` (empty) | explicit empty Map |
-| `[]` | `Array<T>` | array |
-| `#[]` | `Set<T>` | set |
+Without an expected type, all keys must have one type K and all values one type V; inference does not silently create a union. Two explicit entries must not have equivalent keys. A statically determined duplicate is E0325; other duplicates panic with E0434 during construction. Map spreads overwrite in written order; duplicate checking applies only between explicit entries (§3.10).
 
-`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `equals(other: T) -> bool` and `hash() -> i64` (the parameter type of `equals` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+| Form | Type |
+|---|---|
+| `{"a": 1}` | `Map<string, i64>` |
+| `{}` (with context) | The expected Map type |
+| `[1, 2]` | `Array<i64>` |
+| `Set([1, 2])` | `Set<i64>` |
+| `Point{x: 1, y: 2}` | Nominal struct `Point` |
+
+Keys obey the existing `Hashable` capability and key equivalence (§9.2). These rules do not change numeric conversions or explicit user-type implementations. Evaluate entries in written order, each key before its value, once each.
 
 #### 2.4.4 `Set<T>`
 
-Deduplicated collection. See §14.9.
+A deduplicating collection, constructed with `Set([...])`. Write `Set<T>()` for an empty set, or `Set()` with an expected type. Elements use the existing key equivalence. `#[]` is not language syntax.
 
-```xray
-var s: Set<i64> = #[1, 2, 3]
+<!-- xr-source:example types-set -->
+```xray @check
+var s: Set<i64> = Set([1, 2, 3])
+var empty = Set<i64>()
 ```
+<!-- /xr-source -->
 
 #### 2.4.5 `Channel<T>`
 
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
+<!-- xr-source:example types-channel -->
 ```xray
 const ch: Channel<i64> = Channel<i64>(10)
 ```
+<!-- /xr-source -->
 
 #### 2.4.6 `Array<u8>`
 
 Typed byte buffer. Semantically equivalent to `Array<u8>`, but stored as contiguous memory.
 
+<!-- xr-source:example 003-2-type-system-example-010 -->
 ```xray
 var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
+<!-- /xr-source -->
 
-#### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
+#### 2.4.7 Fixed-Field Data and the JSON Value Domain
 
-A bare object literal always forms a static structural object with an exact field set. It is used for ordinary business objects, options, and multi-field returns. Runtime-unknown keys belong to `Map`; the canonical JSON-object spelling `JSON.Object` is a pure alias of `Map<string, JSON.Value>`. `JSON` is a prelude namespace that needs no import, not a value type.
+Declare fixed fields in a nominal `struct` or `class`; an unlabeled tuple also serves multiple returns. The language has no anonymous structural objects, object-shape types, structural identity, or width constraints. `type X = {...}` and `T: { field: Type }` are not type syntax. Interfaces require explicit `implements`.
 
-The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
+`JSON.Object` is a transparent alias of `Map<string, JSON.Value>` and uses the same `{key: value}` literal. `JSON` is a prelude namespace. Use structs as fixed-field typed JSON decoding targets. `JSON.value` / `JSON.stringify` still require `JSON.Encodable`; arbitrary values are not implicitly encoded.
 
-```xray
-// Structural-object literal: identifier or static string key + colon ':'
-var user = { name: "Bob", age: 25 }       // exact object shape
-typeName(user)                            // "object"
-user.name              // type: string; direct ordinal
-user["name"]           // exactly equivalent to user.name; same direct ordinal
-
-// Field shorthand: when a field name matches a variable name
-var name = "Alice"
-var age = 30
-var user = { name, age }                  // equivalent to { name: name, age: age }
-
-// Map literal: `#{}` prefix + `:`
-var m = #{"k1": 1, "k2": 2}           // type: Map<string, i64>
-var data: JSON.Object = #{"name": "Alice", "age": 30}
-data["traceId"] = "req-1"               // only Map has dynamic keys
-```
-
-**Comparison**:
-
-| Form | Type | Notes |
-|---|---|---|
-| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
-| `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
-| `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
-| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
-| `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
-
-**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
-
-```xray
-type User = { name: string, age: i64 }
-
-var u: User = { name: "Alice", age: 30 }
-print(u.name)         // OK
-// u.extra = "x"      // compile error: sealed type User has no field 'extra'
-
-var u2 = { name: "Alice", age: 30 }      // exact object shape
-// u2.extra = "x"     // compile error
-
-type Named = { name: string }
-fn showName<T: Named>(value: T) {
-    print(value.name)                     // the constraint exposes declared fields only
-    print(value["name"])                  // identical to .name
-    // print(value.age)                    // compile error: hidden field
+<!-- xr-source:example types-json-object -->
+```xray @check
+struct User {
+    name: string
+    age: i64
 }
-showName(u)                               // OK: u has a wider concrete exact shape
-
-var j: JSON.Object = #{"name": "Alice", "age": 30}
-j["extra"] = "x"                        // OK: a Map dynamic key
-var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
+var user = User{name: "Alice", age: 30}
+var data: JSON.Object = {"name": "Alice", "age": 30}
+data["traceId"] = "req-1"
 ```
+<!-- /xr-source -->
 
-**Responsibilities of product types**:
+| Type | Identity and fields | Purpose |
+|---|---|---|
+| `struct` | Nominal identity, declared fields, value semantics, methods | Fixed fields, mathematical data, FFI aggregates |
+| `class` | Nominal identity, declared fields, reference semantics, inheritance | Identity, encapsulation, reference relationships |
+| tuple | Unlabeled, positional access | Small multiple returns |
+| `Map` / `JSON.Object` | Runtime keys and Map APIs; no field access | Dynamic data and JSON objects |
 
-| | Identity | Field set | User-defined methods | Use for |
-|---|---|---|---|---|
-| object shape | structural | exact; a generic constraint may require a minimum field set | **no** | options, multi-field returns, ordinary business data |
-| `JSON.Object` | Map alias | arbitrary string keys resolved at run time | Map API | schema-less JSON objects |
-| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
-| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
-
-Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
+A bare Map key reads a variable; `{name: value}` is not named-field construction. Maps have no `.name` field access. For fixed fields, write `User{name: value, age: 30}`. For named call arguments, write `request(url: value)` (§5.2.2).
 
 #### 2.4.8 `BigInt`
 
@@ -1130,6 +1225,7 @@ Arbitrary-precision integer. See §14.8.
 - `a..b` is the half-open interval `[a, b)` and excludes `b`.
 - `a..=b` is the inclusive interval `[a, b]` and includes `b`.
 
+<!-- xr-source:example types-range -->
 ```xray
 var halfOpen = 1..4       // 1, 2, 3
 var inclusive = 1..=4     // 1, 2, 3, 4
@@ -1142,6 +1238,7 @@ for (i in 3..=5) {
     print(i)
 }
 ```
+<!-- /xr-source -->
 
 Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
@@ -1182,13 +1279,15 @@ Laziness controls runtime evaluation only. Even an unreachable default must unde
 
 This is the language contract. See §17 for execution qualification and unfinished Source/VM/native declaration families; implementation records identify the actual tests and remaining gates.
 
+<!-- xr-source:example types-nullable -->
 ```xray
 var x: i64? = null      // OK
 var y: i64? = 42        // OK
 var z: i64 = null       // compile error: null is not i64
 ```
+<!-- /xr-source -->
 
-`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
+`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a struct with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1196,6 +1295,7 @@ var z: i64 = null       // compile error: null is not i64
 
 #### Unwrapping
 
+<!-- xr-source:example 003-2-type-system-example-014 -->
 ```xray
 // 1. Null coalescing
 var v = x ?? 0
@@ -1214,13 +1314,16 @@ if (x is i64) {
     print(x + 1)
 }
 ```
+<!-- /xr-source -->
 
 ### 2.6 Union Types
 
+<!-- xr-source:example types-union-basic -->
 ```xray
 var v: i64 | string = 42
 v = "hello"             // OK
 ```
+<!-- /xr-source -->
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
@@ -1228,13 +1331,15 @@ Constraints:
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+<!-- xr-source:example 003-2-type-system-example-016 -->
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
+<!-- /xr-source -->
 
 **Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
 
@@ -1242,12 +1347,14 @@ match v {
 - Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
 - A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
 
+<!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
 var a: i64 | f64 = 1        // exact match: i64
 var b: i64 | f64 = 1.0      // exact match: f64
 var c: i32 | string = 7       // sole integer-family member: i32
 var d: f32 | string = 1.5     // sole f64-family member: f32
 ```
+<!-- /xr-source -->
 
 `is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
@@ -1259,6 +1366,7 @@ var d: f32 | string = 1.5     // sole f64-family member: f32
 
 Xray's tuples are **first-class** — they may appear as any value, be stored as fields, and nest.
 
+<!-- xr-source:example types-tuple -->
 ```xray
 // Literals
 var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)
@@ -1283,6 +1391,7 @@ var (q, r) = divmod(17, 5)        // tuple destructure
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
 var p2 = pair(1, "x")             // (i64, string)
 ```
+<!-- /xr-source -->
 
 **Notes**:
 
@@ -1298,42 +1407,49 @@ Sendable is the conjunction of all fields; this family does not automatically ex
 
 #### Worked Examples
 
+<!-- xr-source:example 003-2-type-system-example-019 -->
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // prints 1
+    print(pair.1)   // prints hello
     var (a, b) = pair    // destructuring
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // prints 1
+    print(b)        // prints hello
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 2.8 Type Aliases
 
-```xray
+<!-- xr-source:example types-alias -->
+```xray @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
-type Point = { x: f64, y: f64 }
-type Pair<T> = { first: T, second: T }
+struct Point { x: f64; y: f64 }
+type Position = Point
+type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
+<!-- /xr-source -->
 
 Aliases are **purely syntactic** equivalences; they do not introduce new types,
 runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
-```xray
-var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+<!-- xr-source:example 003-2-type-system-example-021 -->
+```xray @fragment
+var p: Pair<i64> = (1, 2)                 // equivalent to (i64, i64)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
+<!-- /xr-source -->
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
 part of type-alias syntax. Put constraints on the generic function, class /
 struct / enum / interface that uses the alias. Aliases may be forward
-referenced, but cyclic aliases, including recursive object aliases, are compile
+referenced, but cyclic aliases, including recursive tuple aliases, are compile
 errors.
 
 **Function-type syntax.** A function type is led by `fn`, written
@@ -1363,6 +1479,7 @@ Function-typed parameters are non-escaping by default, including parameters insi
 - Overrides, interface implementations and function-type matching require exact equality of each function parameter's `escaping` flag.
 - A non-escaping parameter crossing its invocation reports `E0398` at the offending use with the parameter name, destination and a suggested `escaping fn(...)` declaration. `throws` remains declared in the signature and is not inferred from callback arguments.
 
+<!-- xr-source:example types-nonescaping-parameters -->
 ```xray
 fn apply(callback: fn() -> i64) -> i64 {
     const thunk = fn() -> i64 { return callback() + 1 }
@@ -1372,6 +1489,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
     return fn(x: i64) -> i64 { return f(g(x)) }
 }
 ```
+<!-- /xr-source -->
 
 A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
 
@@ -1383,6 +1501,7 @@ When parameters, parameter modes, and results meet their existing matching rules
 
 A fn lambda with explicit `throws(E)` first checks its body against that clause, then matches an expected type by error subset; the expected type cannot widen its explicit declaration. A closure without an explicit clause uses its expected function type, or infers its errors locally from its own body when there is no expected type. An arrow lambda cannot write the clause. An outer `try` region does not extend into a nested closure body. An `E: Error` generic parameter is inferred from call arguments: a non-throwing argument can infer `E = Never`. Only a complete instantiated error type of `Never` removes the need for `try`; a signature such as `throws(E | IoErr)` still requires marking.
 
+<!-- xr-source:example 003-2-type-system-example-023 -->
 ```xray @fragment
 fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
     var out: Array<U> = []
@@ -1390,20 +1509,24 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
     return out
 }
 ```
+<!-- /xr-source -->
 
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
 
-```xray
+<!-- xr-source:example types-inference -->
+```xray @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
-var m = #{"a": 1}    // m: Map<string, i64>
-var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
+var m = {"a": 1}    // m: Map<string, i64>
+struct Named { name: string }
+var p = Named{name: "A"} // p: Named
+var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
+<!-- /xr-source -->
 
 ### 2.10 Type Compatibility and Conversion
 
@@ -1425,29 +1548,17 @@ var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred re
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| exact object shape with a different field set | exact object shape | ❌ an exact target requires an exact field set |
-| exact object shape | generic constraint `T: { a: A }` | ✅ constraint satisfaction; not an ordinary assignment conversion |
 
-> **Exact / width-constraint rule**: an ordinary type position requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. A structural type in generic constraint position means "contains at least these fields", with invariant types for common fields. It creates neither a runtime width object nor a dynamic dictionary.
-> ```xray
-> type User = { name: string }
-> var full = { name: "A", age: 18 }
-> // var u: User = full            // compile error E0352: extra field 'age'
-> fn nameOf<T: User>(value: T) -> string { return value.name }
-> print(nameOf(full))              // OK: T retains full's concrete exact shape
->
-> type Opt = { name: string, age: i64? }
-> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
-> ```
-
-> **Static objects and the dynamic JSON boundary**: known schemas use exact targets and `JSON.parse<T>`; schema-less objects use `JSON.Object` / Map. Typed composites are encoded explicitly with `JSON.value(value)`, and a dynamically processed object is validated back to a typed target with `JSON.decodeObject<T>(object)`.
+Fixed-field types convert by nominal identity. Matching field sets grant neither an implicit conversion nor an interface implementation. Typed JSON boundaries use structs and explicit `JSON.parse<T>` / `JSON.decodeObject<T>`; schema-less data uses `JSON.Object`.
 
 #### 2.10.2 Explicit `as`
 
+<!-- xr-source:example types-cast -->
 ```xray
 var n = x as i64        // throws TypeError on failure
 var n = x as i64?       // returns null on failure (safe cast)
 ```
+<!-- /xr-source -->
 
 Applies to:
 - Between numeric types (including `JSON.Value → i64`, checked at runtime).
@@ -1462,20 +1573,24 @@ An integer as operand is typed independently of the target. A direct positive li
 
 #### 2.10.3 `is` Check
 
+<!-- xr-source:example 003-2-type-system-example-026 -->
 ```xray
 if (v is User) {
     // In this branch the compiler narrows v's type to User
 }
 ```
+<!-- /xr-source -->
 
 Acts only as a type guard; does not change the value.
 
 ### 2.11 typeOf / typeName / Type Enum
 
+<!-- xr-source:example 003-2-type-system-example-027 -->
 ```xray
 typeOf(value)     // returns a Type enum value (an i64 representation)
 typeName(value)   // returns the type name as a string
 ```
+<!-- /xr-source -->
 
 `Type` enum members:
 
@@ -1499,7 +1614,7 @@ Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Refle
 
 ### 2.13 Flow-Sensitive Type Narrowing
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
+> Implementation reference: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
 
 **Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
 
@@ -1515,6 +1630,7 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 **N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
 
+<!-- xr-source:example narrowing-extract-binding -->
 ```xray
 class Address { city: string
     init(city: string) { this.city = city } }
@@ -1528,6 +1644,7 @@ fn show(u: User) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.2 Facts and Operators
 
@@ -1548,6 +1665,7 @@ fn show(u: User) {
 
 **N-5 (short-circuit inheritance)** In `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Because `T?` cannot be used directly as a condition (§2.5), this rule makes the two forms below the standard way to work with nullable values:
 
+<!-- xr-source:example narrowing-short-circuit -->
 ```xray
 fn check(a: string?) -> bool {
     if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string
@@ -1555,6 +1673,7 @@ fn check(a: string?) -> bool {
     return true
 }
 ```
+<!-- /xr-source -->
 
 **N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `Never`); otherwise the result is `T` when the two intersect and `Never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
 
@@ -1564,17 +1683,20 @@ fn check(a: string?) -> bool {
 
 **N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
 
+<!-- xr-source:example narrowing-early-return -->
 ```xray
 fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // s is narrowed to string here
 }
 ```
+<!-- /xr-source -->
 
 **N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `Never` and are absorbed by the union.
 
 **N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 
+<!-- xr-source:example narrowing-loop -->
 ```xray
 fn drain(first: string?) {
     var cur = first
@@ -1584,6 +1706,7 @@ fn drain(first: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.4 Invalidation
 
@@ -1597,6 +1720,7 @@ fn drain(first: string?) {
 
 **N-11.1 (function-body boundary)** Every function body — named function, method, or closure — owns its flow graph: facts from the enclosing body do **not** enter a closure body, and facts inside a closure do not escape it. Re-check inside the closure when narrowing is needed there.
 
+<!-- xr-source:example narrowing-invalidation -->
 ```xray
 fn f(a: string?) {
     if (a != null) {
@@ -1606,6 +1730,7 @@ fn f(a: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.5 Narrowing and Null Diagnostics
 
@@ -1645,6 +1770,7 @@ Initialization and consumption are control-flow facts, permissions come from bin
 
 `var b = a`, saving a READ parameter, returning an Array, and storing a copyable Array in another permitted container or aggregate preserve logical copies. They do not create a language-level alias to the source array's mutable storage, do not permanently mark its binding `ESCAPED`, and do not require other copies to die before the source can be mutated. Backing-store uniqueness may only optimize away detachment or copying.
 
+<!-- xr-source:example 003-2-type-system-example-033 -->
 ```xray
 var a = [1, 2, 3]
 var b = a
@@ -1656,6 +1782,7 @@ print(len(snapshot))        // 3
 print(b[0])                 // 9
 print(len(a))               // 4
 ```
+<!-- /xr-source -->
 
 A copy must acquire independently releasable result ownership; failure must not publish a partially initialized result. Self-assignment and reading an element before replacing or appending it must preserve this responsibility, without double release or access to freed storage caused by physical sharing. Evaluation follows §3.0 E2/E5. Copy or automatic-move optimizations must not change the established order of errors, destruction, or external side effects.
 
@@ -1691,63 +1818,77 @@ Self-contained programs that run as-is and pass `xray check` (comments show the 
 
 Arrays:
 
+<!-- xr-source:example 003-2-type-system-example-034 -->
 ```xray
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // prints [1, 2, 3, 4]
+    print(len(nums))     // prints 4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // prints [2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // prints [2, 4]
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 Maps and Sets:
 
-```xray
+<!-- xr-source:example types-map-set-usage -->
+```xray @run
 fn main() {
-    var scores = #{"alice": 95, "bob": 88}
+    var scores = {"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // prints 95
+    print(len(scores))                 // prints 3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // prints 2
+    print(seen.contains(1))   // prints true
 }
 
 main()
 ```
+```output
+95
+3
+2
+true
+```
+<!-- /xr-source -->
+
+
 
 Nullable types with `??`:
 
+<!-- xr-source:example 003-2-type-system-example-036 -->
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // prints anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // prints NYC
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ---
 
 ## 3. Expressions
 
-> Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
+> Implementation reference: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
 ### 3.0 Evaluation Order
 
-> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+> Implementation reference: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
 
 xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
 
@@ -1781,6 +1922,7 @@ The initial execution subset may restrict a GET-place index to a literal or ordi
 
 **E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
+<!-- xr-source:example eval-order-rules -->
 ```xray
 fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -1802,6 +1944,7 @@ arr[t("index", 0)] = t("value", 5)                     // index, value
 // E6: a complex receiver is evaluated exactly once
 mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```
+<!-- /xr-source -->
 
 ### 3.1 Precedence and Associativity
 
@@ -1831,15 +1974,18 @@ Full precedence table (highest → lowest; operators at the same level share ass
 
 ### 3.2 Unary Expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-01 -->
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'move' UnaryExpr
-            | 'await' UnaryExpr
-            | 'go' GoOptions? CallExpr
-            | 'unsafe' Block
-            | 'comptime' (Expression | Block)
-            | PostfixExpr
+           |  TryExpr
+           |  'copy' UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
 ```
+<!-- /xr-source -->
 
 | Operator | Applicable types | Result type | Notes |
 |--|--|--|--|
@@ -1853,6 +1999,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 `unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `extern "C"` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
+<!-- xr-source:example 004-3-expressions-example-002 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -1866,6 +2013,7 @@ unsafe {
     free(p)                       // extern calls must be inside unsafe
 }
 ```
+<!-- /xr-source -->
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
@@ -1877,22 +2025,27 @@ Admitted ordinary and higher-order calls, finite recursion and loops use the sam
 
 Exportable results are admitted scalars, String, Unit, Tuple, Nullable, Array and closed struct/enum data; finite recursive nominal data follows17.68. Internal Class/Function/Cell values may participate under their specific rules, but their identities or external resource handles cannot become constant results. Private-field constant replay uses authentic declaration bindings from17.67 without granting private construction authority to consumers. Type-description and derivation services do not thereby become arbitrary CTFE values or field permissions.
 
+<!-- xr-source:example 004-3-expressions-example-003 -->
 ```xray
 fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
+<!-- /xr-source -->
 
 Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. Comptime in a generic source scope captures no enclosing runtime values. Enclosing type parameters retain their lexical meaning. Program expressions depending on them undergo ordinary generic checking, actual specialization and the sole Lowered CTFE for each closed instance, then bind private literal providers through complete canonical keys (17.78). Already closed thunks follow17.71. Future Library instances still require complete relocation; neither one Value per syntax site nor runtime fallback represents actual instance results.
 
+<!-- xr-source:example 004-3-expressions-example-004 -->
 ```xray
 fn noop() {}
 export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+<!-- /xr-source -->
 
 Steps, whole-stack depth/frame, temporary heap, logical output and type/field traversal all charge the original compiler job; returns and failures reset no cumulative quota. Infinite loops, excessive recursion and huge output deterministically refuse while preserving an empty result; the wall-clock watchdog records a separate environment failure. Admission, target/profile, complete budgets, output policy2, failure cleanup and independent replay follow the CTFE execution provisions in section17.
 
 ### 3.3 Binary Expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-02 -->
 ```ebnf
 BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
@@ -1902,6 +2055,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&&' | '||'
        | '??'
 ```
+<!-- /xr-source -->
 
 #### 3.3.1 Arithmetic Operators
 
@@ -1955,9 +2109,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.5 Null Coalescing `??`
 
+<!-- xr-source:example expr-null-coalesce -->
 ```xray
 var v = nullable_expr ?? default_value
 ```
+<!-- /xr-source -->
 
 - Returns `default_value` when `nullable_expr` is `null`; otherwise returns `nullable_expr` itself.
 - **Short-circuit**: `default_value` is evaluated only when the left side is null.
@@ -1966,9 +2122,9 @@ var v = nullable_expr ?? default_value
 
 ### 3.4 Assignment and Compound Assignment
 
+<!-- xr-source:grammar 004-3-expressions-grammar-03 -->
 ```ebnf
-AssignExpr   ::= AssignLValue '=' Expression
-               | CompoundLValue CompoundOp Expression
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
 TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
 TupleAssignTarget ::= Identifier | '_'
@@ -1976,6 +2132,7 @@ CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`). Array assignment saves a logical copy. The destination and expression result each retain their value obligations; the result must not borrow an element slot that can later be overwritten. An implementation may reuse the already owned right-hand result. All fallible ownership acquisition precedes the store commit; the replaced value is released afterwards. Failure does not undo earlier right-hand side effects.
@@ -1992,13 +2149,17 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 ### 3.5 Ternary `? :`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-04 -->
 ```ebnf
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-006 -->
 ```xray
 var max = a > b ? a : b
 ```
+<!-- /xr-source -->
 
 - **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
 - The condition must be `bool`. The condition is evaluated once and only the selected branch executes; both branches are statically checked, including branches skipped by a constant condition.
@@ -2011,16 +2172,20 @@ See §3.3.5 (`??`) and below (`?.` / `?[`).
 
 #### Optional chaining `?.` / `?[`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-05 -->
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expression ']')+
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-optional-chain -->
 ```xray
 var city = user?.address        // optional property access
 var item = arr?[0]              // optional index
 var value = callback?.(input)   // optional function call
 var road = user?.address.street // whole-chain short-circuit: null when user is null
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - If the LHS of `?.` or `?[` is `null`, the **entire postfix chain** short-circuits to `null`; every later `.` / `[` / `(` in the chain is skipped.
@@ -2037,9 +2202,11 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 
 #### Force unwrap `expr!`
 
+<!-- xr-source:example 004-3-expressions-example-008 -->
 ```xray
 var v: i64 = nullable_int!      // panics with E0413 when null
 ```
+<!-- /xr-source -->
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
 
@@ -2047,16 +2214,20 @@ Legal only when `expr` is known to be a nullable type (`T?`) at compile time; us
 
 #### `is` runtime type check
 
+<!-- xr-source:grammar 004-3-expressions-grammar-06 -->
 ```ebnf
 IsExpr ::= UnaryExpr 'is' Type
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-009 -->
 ```xray
 if (v is User) {
     // v is narrowed to User in this branch
     print(v.name)
 }
 ```
+<!-- /xr-source -->
 
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
@@ -2065,15 +2236,19 @@ if (v is User) {
 
 #### `as` type cast
 
+<!-- xr-source:grammar 004-3-expressions-grammar-07 -->
 ```ebnf
 AsExpr ::= UnaryExpr 'as' Type
         |  UnaryExpr 'as' Type '?'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-010 -->
 ```xray
 var n = v as i64           // throws TypeError on failure
 var n = v as i64?          // returns null on failure (the "as nullable" safe form)
 ```
+<!-- /xr-source -->
 
 | Form | Failure behavior | Use case |
 |--|--|--|
@@ -2090,10 +2265,13 @@ var n = v as i64?          // returns null on failure (the "as nullable" safe fo
 
 #### Range `a..b` / `a..=b`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-08 -->
 ```ebnf
-RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-range -->
 ```xray
 var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)
 var closed = 0..=10    // closed interval (includes both 0 and 10)
@@ -2103,6 +2281,7 @@ for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
+<!-- /xr-source -->
 
 - Type: `Range` (i64 ranges only).
 - **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
@@ -2124,116 +2303,123 @@ Allowed in the following positions only:
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
 - Array spread uses the exact element-type contract of ordinary `Array<T>` concatenation. Under an expected `Array<T>`, a spread source must be that same `Array<T>`; ordinary elements use the existing `T` context, without an implicit conversion of a whole `Array<U>`. Without an expected type, existing literal inference determines `T`. Evaluate every ordinary element and spread source once at its written position and retain owned value snapshots before constructing the result. Later rebinding or mutation does not replace earlier snapshots. Suspension, errors and failed cleanup use ordinary call and ownership rules; failure publishes no partial result and does not roll back completed effects. Inputs and the result can be modified independently, nested values copy by value, and class/synchronization identities copy references only. Source array capacity is not preserved by contract.
-- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Map spread**: `{...base, "x": 1}` overwrites in written order. **Struct spread**: `T{...src, field: value}` checks a fixed nominal target and gives explicit fields priority. See §3.10.
 
-```xray
+<!-- xr-source:example expr-spread-collections -->
+```xray @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
+<!-- /xr-source -->
 
 ### 3.10 Literal Construction
 
-#### Array `[...]`
+An expression-leading `{` begins a Map literal. A statement-leading brace or a brace immediately after `=>` begins a block; return a Map directly with `x => ({"key": x})`. A struct literal requires its type-name prefix, and field names are not evaluated as variables. Hash-prefixed Map/Set literals, anonymous structural objects, and field shorthand are not syntax.
 
+<!-- xr-source:grammar 004-3-expressions-grammar-09 -->
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-array-lit -->
+```xray @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // type Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
+<!-- /xr-source -->
 
-#### Map `#{k: v, ...}` and `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+<!-- xr-source:example expr-map-lit -->
+```xray @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
+<!-- /xr-source -->
 
-```xray
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // empty Map
+<!-- xr-source:example expr-set-lit -->
+```xray @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
+<!-- /xr-source -->
 
-**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+<!-- xr-source:example expr-struct-lit -->
+```xray @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
+<!-- /xr-source -->
 
-```xray
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### Keys, Context, and Duplicates
 
-#### Object (structured object) `{ field: value, ... }`
+- Every Map key is an expression. Evaluate each key before its value, and all entries and spread sources once in written order. A bare identifier reads its binding. An undefined bare key receives a note suggesting a quoted string key such as `"name"`.
+- Empty Arrays, Maps, and Set construction without type arguments require an expected type. Without context, Array elements need one type, and Map keys and values each need one type; inference does not silently form unions. Existing contextual conversions apply, including scalar widening into JSON.Value in a JSON.Object literal.
+- Two explicit keys equivalent under existing key equivalence are duplicates. The syntactically defined compile-time classes are string, integer, rune and bool literals, payload-free enum variants, comptime expressions, and const bindings initialized directly or transitively from these forms. Duplicates in these classes report `E0325: duplicate key "name" in Map literal`, at the later key, with `the key first appears here` at the first key.
+- Other duplicates panic with E0434 during construction. The message includes the key and both explicit-entry positions, for example `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`. Reuse the insertion probe's hit result without another lookup; the constructor owns provenance storage and failure cleanup.
+- Map spreads overwrite in written order. Overwriting between a spread and an explicit entry is allowed. Two explicit entries must remain distinct even when a spread separates them.
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` merges fields
-```
+#### Struct Spread
 
-```xray
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+In `T{...src, field: value}`, every source must be a struct whose fields all occur in T with identical names and types. Reject classes, Maps, tuples, and sources with extra fields. Each target field comes from an explicit field or one unique source. Explicit fields override all sources regardless of position. Multiple sources for a field without an explicit override are errors. A field with neither an explicit value nor a source follows the existing declaration-default and nullable-field omission rules in §5.4; a required field still lacking a value is an error. Evaluate every source and explicit expression once in written order.
 
-- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
-- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
-- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+This is field-by-field construction of a named target, not structural identity, width subtyping, implicit interface implementation, or struct destructuring. Existing struct field-omission rules remain unchanged.
 
-#### Array<u8> `Array<u8>(...)`
+#### Heterogeneous Literal Diagnostics
 
-See §2.4.6 and §14.5.
+If a context-free literal cannot obtain one type, report one E0326 at the first value differing from the first value's type, with a note at the first value. For example, `Map literal values have different types: string and i64`, followed by `the first value is string; without a declared Map type, every value must be string`.
 
-#### Channel `Channel<T>(buf?)`
+Offer repairs in order and only when applicable: a struct declaration and literal when every key is a string literal spelling a legal identifier (capitalize the binding name, or use Record without a binding); JSON.Object when all values enter JSON.Value; an explicit Map<K, A | B> when the types form a legal union. Omit inapplicable notes. Incompatible keys use `Map literal keys have different types: ...` with only a declared Map<K, V> repair. Arrays use `Array literal elements have different types: ...`, suggesting a tuple for a fixed element count and an explicit Array<A | B> only for a legal union.
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-See §10.5.
+Array<u8> and Channel construction follow §2.4.6 and §10.5.
 
 ### 3.11 Calls / Member Access / Indexing / Slicing
 
 #### Function call
 
+<!-- xr-source:grammar 004-3-expressions-grammar-10 -->
 ```ebnf
-CallExpr ::= Primary '(' ArgList? ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
 ```
+<!-- /xr-source -->
 
-- Arguments are passed positionally; named arguments are not supported.
-- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
-- A rest parameter collects extra arguments into an array.
-- Argument-count mismatch → compile error `E0307` / `E0450`.
+A call may use `f(a, name: value)`. Positional arguments precede named arguments. Names come from the directly called named function, method, or constructor declaration. Unknown names, duplicate bindings (including a parameter already supplied positionally), and positional arguments after named arguments are E0327. Rest arguments are positional only. Function values have no parameter names, including const aliases of named functions.
+
+Evaluate the receiver or callee first, every explicit argument once in written order, and omitted defaults afterwards in declaration order. Binding does not reorder evaluation. Expected types and generic inference use the mapped formal position. Place `ref` / `move` before the value, as in `swap(left: ref a, right: ref b)`; existing place, lifetime and mode permissions remain. Parameter names are exported API and retain their declaration spelling across modules.
+
+Static tuple spread and a real rest parameter's final Array spread follow §3.9. Spreading grants no named rest form and does not relax the final-position rule for dynamic Array spread. Missing required parameters remain errors; only declared defaults permit omission.
 
 #### Member access
 
+<!-- xr-source:grammar 004-3-expressions-grammar-11 -->
 ```ebnf
 MemberAccess ::= Primary '.' Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-017 -->
 ```xray
 obj.field
 obj.method(args)
 ClassName.staticMethod()
 EnumName.MemberName
 ```
+<!-- /xr-source -->
 
 - Field access: compile-time check that the type has the field.
 - Method call: resolved to invoke (with IC cache optimization).
@@ -2242,10 +2428,13 @@ EnumName.MemberName
 
 #### Index access
 
+<!-- xr-source:grammar 004-3-expressions-grammar-12 -->
 ```ebnf
-IndexAccess ::= Primary '[' Expr ']'
+IndexAccess ::= Primary '[' Expression ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-index-access -->
 ```xray
 arr[0]
 arr[0] = 10
@@ -2253,6 +2442,7 @@ map["key"]
 var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
+<!-- /xr-source -->
 
 - An `Array<T>` index has type `i64`, with valid range `0 <= i < len(array)`. Reading produces a logical copy of T. Writing requires a writable place and checks/converts the right-hand value against T. Negative indices and indices equal to the length enter the `E0430` panic channel, not a business throw.
 - Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
@@ -2260,6 +2450,7 @@ bytes[i]                // explicit byte-view index
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User types: cannot define indexing; element access is provided through methods.
 
+<!-- xr-source:example array-read-receiver-snapshot -->
 ```xray
 var a: Array<string> = ["old"]
 fn replaceForIndex() -> i64 {
@@ -2270,7 +2461,9 @@ fn replaceForIndex() -> i64 {
 print(a[replaceForIndex()])  // Prints index, then old
 print(a[0])                 // new
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding -->
 ```xray
 var a: Array<string> = ["old"]
 fn index() -> i64 { print("index"); return 1 }
@@ -2282,25 +2475,33 @@ fn replacement() -> string {
 var written = (a[index()] = replacement())
 print(written, a[1])        // Prints index, rhs, then stored stored; no old-length rejection
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding-bounds -->
 ```xray
 var a: Array<string> = ["old0", "old1"]
 fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
 a[1] = shrink()             // Prints rhs, then E0430 panic; rebinding to ["new"] remains
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-read-parameter-mutation-rejected -->
 ```xray
 fn invalid(values: Array<string>) {
     values.push("x")       // Compile error: a read parameter is not a writable receiver
 }
 ```
+<!-- /xr-source -->
 
 #### Slice
 
+<!-- xr-source:grammar 004-3-expressions-grammar-13 -->
 ```ebnf
-Slice ::= Primary '[' Expr? ':' Expr? ']'
+Slice ::= Primary '[' Expression? ':' Expression? ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-slice -->
 ```xray
 arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
@@ -2308,6 +2509,7 @@ arr[2:]                 // from index 2 to the end
 arr[:]                  // full-length view (not a copy)
 var view: Slice<i64> = arr[1:4]
 ```
+<!-- /xr-source -->
 
 - Half-open interval `[start, end)`.
 - Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range. Omitted start is 0 and omitted end is the source length; both endpoints clamp to `[0, len]`, and start greater than end produces an empty result. An ordinary borrow selects the source position, evaluates start and end once in order, then borrows that position's current value. A `copy` range first reads a logical snapshot and then evaluates the bounds in the same order; rebinding the original position does not change that snapshot. This normalization is specific to Array and does not extend the existing subrange behavior of borrowed views.
@@ -2317,27 +2519,32 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 Anonymous Functions and Lambdas
 
-Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x => expr` and `(x) => expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
 
+<!-- xr-source:grammar 004-3-expressions-grammar-14 -->
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowBody     ::= Expression | Block
-ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
-ArrowParam    ::= Identifier (':' ParamMode? Type)?
-ParamMode     ::= 'ref' | 'move'
-FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+ParamMode ::= 'ref' | 'move'
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-lambda-forms -->
+```xray @fragment
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
 var inc = fn(x: i64) -> i64 {
@@ -2346,41 +2553,47 @@ var inc = fn(x: i64) -> i64 {
 }
 var identity = fn<T>(x: T) -> T { return x }     // generic
 ```
+<!-- /xr-source -->
 
 **Selection rule**:
 
 | Concept | Syntax | Capability and selection rule |
 |---------|--------|-------------------------------|
-| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| Arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
-- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
-- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
-- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `->` introduces only a type. `=>` introduces an expression or block and associates to the right: `x => y => x + y` returns a lambda. Its body extends to the end of the containing expression. A `{` immediately after `=>` always opens a block; parenthesize a literal expression to return it. A type arrow in value position or value arrow in type position is rejected at that arrow with a replacement hint.
+- Arrow parameter annotations are independent, so `(x: i64, y) => ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) => ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R => ...` and `(x: T) => R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `=> expr` implicitly returns the expression value. `=> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) => x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) => { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Captures follow §7.4. `go` arguments and captures must satisfy Sendable, and closures cannot capture outer `var` bindings. Copyable values preserve logical copies and identity types retain identity. Loan and synchronization rules continue to apply, with current qualification in §17.
 
 ### 3.13 `match` Expression
 
+<!-- xr-source:grammar 004-3-expressions-grammar-15 -->
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-match -->
+```xray @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // multi-value
-    10..20 -> "teen",                 // range
-    n if (n > 100) -> "big",          // guard
-    Color.Red -> "red",               // enum
-    is User -> "a user",              // type pattern
-    _ -> "default"                    // wildcard
+    1 => "one",
+    2, 3, 4 => "few",                 // multi-value
+    10..20 => "teen",                 // range
+    n if (n > 100) => "big",          // guard
+    Color.Red => "red",               // enum
+    is User => "a user",              // type pattern
+    _ => "default",                    // wildcard
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Matches top-down, taking the first successful arm.
@@ -2390,18 +2603,22 @@ var result = match (x) {
 
 ### 3.14 Construction expressions
 
+<!-- xr-source:grammar 004-3-expressions-grammar-16 -->
 ```ebnf
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
+<!-- /xr-source -->
 
 Construction has the same form as a function call: `TypeName(args)`. `new` is reserved and does not form an expression.
 
+<!-- xr-source:example expr-new -->
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<i64>()
 const ch = Channel<i64>(10)
 var m = Map<string, i64>()
 ```
+<!-- /xr-source -->
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
@@ -2409,19 +2626,24 @@ var m = Map<string, i64>()
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
-```xray
+<!-- xr-source:example expr-literal-constructor-relation -->
+```xray @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // equivalent to Array<i64>() + push
-var m = #{}                    // equivalent to Map<...>()
+var m: Map<string, i64> = {}    // an empty Map requires a type context
 var p = Point{x: 1, y: 2}      // struct literal
 ```
+<!-- /xr-source -->
 
 ### 3.15 String Interpolation
 
 See §1.6.5. In brief:
 
+<!-- xr-source:example expr-string-interpolation -->
 ```xray
 var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
+<!-- /xr-source -->
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
 - Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
@@ -2429,9 +2651,11 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 
 ### 3.16 `yield` Statement
 
+<!-- xr-source:example expr-yield -->
 ```xray
 yield expr                  // produce one generator value and suspend
 ```
+<!-- /xr-source -->
 
 `yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.5). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
@@ -2459,18 +2683,21 @@ Generators allow defer with ordinary registration, exit order and the prohibitio
 
 ## 4. Statements
 
-> Source of truth: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
+> Implementation reference: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
 
 Xray statements are separated by `\n` or `;`; the trailing `;` is optional in most positions, only the three sections of a `for` loop (init / cond / step) require `;` separators.
 
 ### 4.1 Expression Statements and Blocks
 
+<!-- xr-source:grammar 005-4-statements-grammar-01 -->
 ```ebnf
-ExprStmt   ::= Expression (';' | LineBreak)
+ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
-Block      ::= '{' Statement* '}'
+Block    ::= '{' Statement* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 005-4-statements-example-001 -->
 ```xray
 foo()                  // expression statement
 x = 1                  // assignment expression as a statement
@@ -2480,6 +2707,7 @@ x++                    // increment statement; produces no expression value
     y + 1              // expression with discarded result
 }
 ```
+<!-- /xr-source -->
 
 `++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
 
@@ -2487,12 +2715,15 @@ x++                    // increment statement; produces no expression value
 
 ### 4.2 `if` / `else`
 
+<!-- xr-source:grammar 005-4-statements-grammar-02 -->
 ```ebnf
-IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
 ElseClause  ::= 'else' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-if -->
 ```xray
 if (x > 0) {
     print("positive")
@@ -2502,6 +2733,7 @@ if (x > 0) {
     print("negative")
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
@@ -2511,11 +2743,14 @@ if (x > 0) {
 
 ### 4.3 `while`
 
+<!-- xr-source:grammar 005-4-statements-grammar-03 -->
 ```ebnf
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-while -->
 ```xray
 var i = 0
 while (i < 10) {
@@ -2523,6 +2758,7 @@ while (i < 10) {
     i++
 }
 ```
+<!-- /xr-source -->
 
 There is no `do-while` form.
 
@@ -2530,12 +2766,15 @@ There is no `do-while` form.
 
 #### C-style `for`
 
+<!-- xr-source:grammar 005-4-statements-grammar-04 -->
 ```ebnf
 ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
-ForInit ::= VarDecl | ExprStmt
+ForInit ::= VarDecl | Expression
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-c -->
 ```xray
 for (var i = 0; i < 10; i++) {
     print(i)
@@ -2544,6 +2783,7 @@ for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
+<!-- /xr-source -->
 
 - Variables declared in `ForInit` are scoped to the loop body.
 - `i++` / `i--` in the step position must be the entire step; put multiple updates at the end of the loop body.
@@ -2551,14 +2791,17 @@ for (var j = 100; j > 90; j--) {
 
 #### Single-variable `for-in`
 
+<!-- xr-source:grammar 005-4-statements-grammar-05 -->
 ```ebnf
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 The `for-in` iteration variable is a fresh immutable binding for each iteration; a closure captures the value of that iteration's binding when the closure is created.
 
 The collection expression of a built-in `Array<T>` is evaluated once and iteration owns a snapshot of that logical value. Mutating or rebinding the original array in the loop does not change the sequence being traversed. A pair binding uses a zero-based `i64` index; `_` creates no referenceable binding. Class elements preserve object identity rather than deeply copying objects (§14.7). Binding type annotations are not accepted.
 
+<!-- xr-source:example stmt-for-in -->
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
@@ -2571,16 +2814,20 @@ for (variant in Event.variants) {             // any concrete enum; yields EnumV
 }
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
+<!-- /xr-source -->
 
 #### Two-variable `for-in` destructuring
 
 A direct pair binding receives the collection pair yield; an inner Tuple pattern destructures each yielded element itself. They are not interchangeable index syntax for arbitrary collections:
 
+<!-- xr-source:grammar 005-4-statements-grammar-06 -->
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
 ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-pairs -->
 ```xray
 // Form A: two bare identifiers (more common)
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
@@ -2591,6 +2838,7 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+<!-- /xr-source -->
 
 The following mapping describes form A. Form B applies existing Tuple declaration destructuring to the single-variable yield: for example, `for ((k,v) in pairs)` over `Array<(string,i64)>` binds both fields of each element; it does not replace `k` with the Array index. Per-iteration scope, snapshot and ownership follow ordinary iteration and declaration destructuring. The admitted head has flat identifiers or `_`; this does not admit rest or nested loop patterns.
 
@@ -2617,10 +2865,12 @@ Implement an `iterator()` method that returns an `Iterator<T>` protocol object (
 
 #### Reference Iteration
 
+<!-- xr-source:grammar 005-4-statements-grammar-07 -->
 ```ebnf
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for (ref x in xs)` and `for (i, ref x in xs)` iterate Array, fixed arrays and MutSlice with exclusive references to actual elements. `for (k, ref v in m)` iterates a Map with read-only keys and references to actual entry values. The loop exclusively borrows the entire container once and performs necessary COW detachment before iteration. Each iteration writes directly to its actual element.
 
@@ -2628,28 +2878,32 @@ The body cannot access the container through another path or change its length. 
 
 ### 4.5 `match` Statement
 
+<!-- xr-source:grammar 005-4-statements-grammar-08 -->
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
 **Key syntax**:
 - The matched expression **must** be parenthesized: `match (x) {...}`.
-- Commas between arms are **optional** — both styles can be mixed in the same `match` (omitting commas is more common).
+- Commas between arms are required; a trailing comma is optional and the formatter supplies it. Arms use `=>`; an immediately following `{` always opens a block.
 - Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
 
-```xray
-match (x) { 1 -> print("one"), _ -> print("other") }
+<!-- xr-source:example stmt-match -->
+```xray @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
+<!-- /xr-source -->
 
 `match` may serve as either a statement or an expression (see §3.13); when used as an expression, the arm body must be a single expression or end with one as the last expression of a block.
 
@@ -2657,6 +2911,7 @@ For pattern details see [§6](#6-patterns).
 
 ### 4.6 `break` / `continue`
 
+<!-- xr-source:example stmt-break-continue -->
 ```xray
 break                  // exit the innermost loop
 continue               // proceed to the innermost loop's next iteration
@@ -2670,6 +2925,7 @@ outer: for (i in 0..10) {
     }
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
@@ -2680,11 +2936,14 @@ outer: for (i in 0..10) {
 
 ### 4.7 `return`
 
+<!-- xr-source:grammar 005-4-statements-grammar-09 -->
 ```ebnf
-ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-return -->
 ```xray
 fn done() {
     return                 // implicitly returns () (Unit)
@@ -2698,6 +2957,7 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // multi-value return must wrap a tuple in parens
 }
 ```
+<!-- /xr-source -->
 
 > **Note**: multi-value returns must use the tuple form `return (a, b)`; the bare-comma form `return a, b` is the compile error `E0801`.
 
@@ -2707,25 +2967,27 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 
 ### 4.8 `throw` / `try` / `catch`
 
+<!-- xr-source:grammar 005-4-statements-grammar-10 -->
 ```ebnf
-ThrowStmt     ::= 'throw' Expression
-
-TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' CatchHeader ')' Block
-                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
-CatchHeader   ::= Identifier (':' Type)?
-                | EnumPattern (',' EnumPattern)*
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example stmt-try -->
+```xray @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -2738,6 +3000,7 @@ try { risky() } catch panic (p) {
 throw AppError.NotFound                      // value-return error channel
 // There is no finally; use defer for deterministic cleanup (see §4.9)
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
@@ -2750,10 +3013,17 @@ throw AppError.NotFound                      // value-return error channel
 
 ### 4.9 `defer`
 
+<!-- xr-source:grammar 005-4-statements-grammar-11 -->
 ```ebnf
 DeferStmt ::= 'defer' Block
-```
 
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
+```
+<!-- /xr-source -->
+
+<!-- xr-source:example stmt-defer -->
 ```xray
 fn read_file(path: string) -> string {
     var f = open(path)
@@ -2777,6 +3047,7 @@ fn late_binding_and_copy() {
     n = 2
 }                                      // prints saved 1, then late 2
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
@@ -2795,12 +3066,14 @@ fn late_binding_and_copy() {
 
 `print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
 
+<!-- xr-source:example stmt-print-dump -->
 ```xray
 print("hello")                 // appends exactly one newline
 print("a:", a, "b:", b)        // arguments separated by exactly one space
 print()                        // writes just that newline
 dump(some_obj)                 // debug output, with type info and structure
 ```
+<!-- /xr-source -->
 
 **Behavior**:
 - Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
@@ -2813,13 +3086,14 @@ dump(some_obj)                 // debug output, with type info and structure
 
 Combining `if` / `match` / `for-in` control flow:
 
-```xray
+<!-- xr-source:example 005-4-statements-example-013 -->
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 
@@ -2831,6 +3105,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Output:
 
@@ -2849,19 +3124,20 @@ large
 
 ### 5.1 `var` / `const`
 
+<!-- xr-source:grammar 006-5-declarations-grammar-01 -->
 ```ebnf
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-Binding ::= Pattern (':' Type)? ('=' Expression)?
-Pattern ::= Identifier
-         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 ```
+<!-- /xr-source -->
 
 #### 5.1.1 `var` — mutable binding
 
+<!-- xr-source:example decl-var -->
 ```xray
 var x = 1                         // type inferred as i64
 var name: string = "Alice"        // explicit type
@@ -2869,6 +3145,7 @@ var count: i64                    // no initializer: zero value used
 var maybeName: string?            // OK: defaults to null
 var empty: string = ""            // string requires an explicit initializer
 ```
+<!-- /xr-source -->
 
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
@@ -2877,10 +3154,12 @@ var empty: string = ""            // string requires an explicit initializer
 
 #### 5.1.2 `const` — immutable binding
 
+<!-- xr-source:example decl-const -->
 ```xray
 const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
+<!-- /xr-source -->
 
 - An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
 - Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
@@ -2889,6 +3168,7 @@ const MAX_LEN: i64 = 1024
 - Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
 - Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
 
+<!-- xr-source:example decl-capability -->
 ```xray
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
@@ -2901,6 +3181,7 @@ current.push(4)
 print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
+<!-- /xr-source -->
 
 `const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
@@ -2908,7 +3189,8 @@ These are language contracts. See §17 for current new XIR implementation qualif
 
 #### 5.1.3 Destructuring bindings
 
-```xray
+<!-- xr-source:example decl-destructuring -->
+```xray @fragment
 // array destructuring
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // skip elements
@@ -2916,35 +3198,35 @@ var [first, , third] = [10, 20, 30]         // skip elements
 // tuple destructuring (multi-return)
 var (q, r) = divmod(17, 5)
 
-// object destructuring (extract by field name; local binding may be renamed)
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
+<!-- /xr-source -->
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
-- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
 
-The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
 
 ### 5.2 `fn` function declaration
 
+<!-- xr-source:grammar 006-5-declarations-grammar-02 -->
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ThrowsClause ::= 'throws' ('(' Type ')')?
-ParamList ::= Param (',' Param)*
-Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
-            | '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
-ReturnType ::= '->' Type
-            |  '->' '(' Type (',' Type)+ ')'   // tuple return
-TypeParams ::= '<' Identifier (',' Identifier)* '>'
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+AttrList ::= PublicAttribute*
 ```
+<!-- /xr-source -->
 
 #### 5.2.1 Basic form
 
+<!-- xr-source:example decl-fn-basic -->
 ```xray
 fn add(a: i64, b: i64) -> i64 {
     return a + b
@@ -2958,6 +3240,7 @@ fn echo(x: i64) {                       // omitted return type = ()
     print(x)
 }
 ```
+<!-- /xr-source -->
 
 **Key points**:
 - Parameters **must** carry type annotations (consistent with arrow functions).
@@ -2968,21 +3251,24 @@ fn echo(x: i64) {                       // omitted return type = ()
 
 A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
 
+<!-- xr-source:example 006-5-declarations-example-006 -->
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
+<!-- /xr-source -->
 
-These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
+These examples show signatures with bodies omitted as comments; ordinary definitions require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
 Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors (§5.2.8), but propagation sites still require marking. `fn main()` is an ordinary named function and gets no such permission. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
 
 Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
-#### 5.2.2 Default parameter values
+#### 5.2.2 Default Values and Named Arguments
 
+<!-- xr-source:example decl-fn-default -->
 ```xray
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
@@ -2992,6 +3278,7 @@ connect("localhost")              // port=8080, tls=false
 connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
+<!-- /xr-source -->
 
 - Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
 - Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
@@ -3006,8 +3293,25 @@ connect("localhost", 443, true)
 - Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
 - Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
 
+##### Named Argument Binding
+
+Positional arguments must precede named arguments. Each formal is bound at most once. Unknown names, duplicates, naming a parameter already supplied positionally, and positional arguments after named arguments report E0327. Rest arguments remain positional. Direct named-function, method and constructor calls use the called declaration's parameter names. Function values, including const aliases of named functions, accept no labels.
+
+<!-- xr-source:example decl-named-arguments -->
+```xray @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+<!-- /xr-source -->
+
+Evaluate the receiver/callee first, explicit arguments in written order, then omitted defaults in declaration order. Reorder already evaluated values into formal slots, never expressions. Expected types and generic evidence use the bound formal positions; defaults provide no extra caller inference evidence. Place `ref` or `move` after the label and before the value. Parameter names are exported API and retain their names across modules. See §3.11.
+
 #### 5.2.3 Multiple return values
 
+<!-- xr-source:example decl-fn-multi-return -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -3016,6 +3320,7 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 var (q, r) = divmod(17, 5)
 var result = divmod(10, 3)        // result has type (i64, i64)
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - The return type wraps the tuple in parentheses: `(i64, bool)`.
@@ -3026,6 +3331,7 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; acquiring ownership of a value uses `name: move T`, for copyable values as well as noncopyable resources. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
+<!-- xr-source:example decl-fn-param-modes -->
 ```xray
 fn length_sq(v: Vec2) -> f64 {
     return v.x * v.x + v.y * v.y
@@ -3044,6 +3350,7 @@ fn appended(xs: Array<string>, value: string) -> Array<string> {
 
 translate(ref point, 1.0, 2.0)
 ```
+<!-- /xr-source -->
 
 | Parameter mode | Semantics |
 |--|--|
@@ -3063,6 +3370,7 @@ Ordinary outputs use return values, tuples, or structs. Business errors follow �
 
 #### 5.2.5 Rest parameters
 
+<!-- xr-source:example decl-fn-rest -->
 ```xray
 fn sum(...nums: i64) -> i64 {
     var total = 0
@@ -3072,6 +3380,7 @@ fn sum(...nums: i64) -> i64 {
 
 sum(1, 2, 3)        // total = 6
 ```
+<!-- /xr-source -->
 
 - An ordinary named function may declare one final READ rest parameter, `...name: T`, without a default, `ref` or `move`. This does not extend anonymous functions, methods or constructors. Nested named functions retain authentic capture and owner rules.
 - The body receives a read-only `Array<T>` binding. Elements meet existing Array storage and copying requirements; rest adds no Sendable or NoSuspend promise. Ordinary value copying, COW, identity and failed cleanup apply.
@@ -3081,11 +3390,13 @@ sum(1, 2, 3)        // total = 6
 
 #### 5.2.6 Function hoisting
 
+<!-- xr-source:example 006-5-declarations-example-012 -->
 ```xray
 main()                       // OK: the function declaration is hoisted
 
 fn main() { ... }
 ```
+<!-- /xr-source -->
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
 - `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
@@ -3094,29 +3405,34 @@ fn main() { ... }
 
 The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
+<!-- xr-source:example 006-5-declarations-example-013 -->
 ```xray
 fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // tail call: optimized to a loop
 }
 ```
+<!-- /xr-source -->
 
 #### 5.2.8 Program entry point
 
 xray has **no fixed `main` entry function**. A program runs the top level of its **entry file** in order: `fn` declarations are hoisted and registered; expressions and statements run immediately.
 
+<!-- xr-source:example 006-5-declarations-example-014 -->
 ```xray
 // hello.xr (entry file)
 print("loading")          // top-level statement, runs immediately
 fn greet() { print("hi") }
 greet()                   // must be called explicitly
 ```
+<!-- /xr-source -->
 
 - The entry file is the file given directly to `xray run`, `xray build`, and similar commands. Multi-file projects specify the entry file with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`.
 - **Only the entry file may contain executable top-level statements.** The top level of an imported module may contain only declarations (`import`, `export`, functions, type and interface declarations, `extern "C"` blocks) and module-state declarations with their initializers (`const`, `var`, and their initializer expressions). A standalone expression statement or control-flow statement in an imported module is a compile error. Module state is initialized in the topological order of §11.6.
 - Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors; propagation sites still require marking. An uncaught error prints `[Uncaught Error] <value>` and exits with code 1 (§8).
 - `fn main()` has no special meaning and follows the same rules as any named function: omitting `throws` means it does not throw. Call it explicitly from the entry file's top level when needed, writing `try main()` if it can throw:
 
+<!-- xr-source:example 006-5-declarations-example-015 -->
 ```xray
 enum ConfigErr { Missing }
 
@@ -3132,6 +3448,7 @@ fn main() throws(ConfigErr) {
 
 try main()
 ```
+<!-- /xr-source -->
 
 - Top-level `return` is forbidden (compile error `E0306`).
 
@@ -3141,6 +3458,7 @@ try main()
 
 An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
+<!-- xr-source:example 006-5-declarations-example-016 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -3155,11 +3473,13 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
 
 C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
 
+<!-- xr-source:example 006-5-declarations-example-017 -->
 ```xray
 import mem
 
@@ -3172,6 +3492,7 @@ print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("count"))
 ```
+<!-- /xr-source -->
 
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
@@ -3183,6 +3504,7 @@ Rules:
 - The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callbacks use `CFn<fn(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
+<!-- xr-source:example 006-5-declarations-example-018 -->
 ```xray
 extern "C" {
     fn bsearch(
@@ -3200,16 +3522,21 @@ fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
 
 // zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
 ```
+<!-- /xr-source -->
 
 #### 5.2.10 Manifest C ABI Exports
 
 A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
 
+<!-- xr-source:example 006-5-declarations-example-019 -->
 ```xray
 fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
+
+print(add(19, 23))        // An ordinary function call inside Xray
 ```
+<!-- /xr-source -->
 
 ```toml
 [[export.c]]
@@ -3280,6 +3607,7 @@ A default argument expression uses the parameter's declared expected type and is
 
 Closure capture and higher-order functions:
 
+<!-- xr-source:example 006-5-declarations-example-020 -->
 ```xray
 fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
@@ -3288,15 +3616,17 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+    print(addBase(5))            // prints 15
+    print(apply(addBase, 7))     // prints 17 (function passed as an argument)
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 Multiple return values (a tuple):
 
+<!-- xr-source:example 006-5-declarations-example-021 -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -3304,28 +3634,33 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // prints 3
+    print(r)   // prints 2
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.3 `class` declaration
 
 Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-03 -->
 ```ebnf
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
-              ('extends' Identifier TypeArgs?)?
-              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
-Modifier ::= 'private' | 'protected' | 'static' | 'const'
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 ```
+<!-- /xr-source -->
 
 > **About default public visibility and explicit overrides**:
 >
@@ -3338,6 +3673,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 
 #### 5.3.1 Basic class
 
+<!-- xr-source:example decl-class-basic -->
 ```xray
 class Animal {
     name: string                       // field
@@ -3360,9 +3696,11 @@ var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
+<!-- /xr-source -->
 
 #### 5.3.2 Inheritance
 
+<!-- xr-source:example decl-class-inheritance -->
 ```xray
 class Dog extends Animal {
     init(name: string) {
@@ -3374,6 +3712,7 @@ class Dog extends Animal {
     }
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
@@ -3407,6 +3746,7 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 
 An initializer can declare `init(...) throws(E)`; omission means non-throwing. Its `Type(...)` call requires `try` or a handling region according to that signature, and failure does not publish a partially initialized value. Methods, including static, enum, and operator methods, use the same clause position and local checking rules.
 
+<!-- xr-source:example 006-5-declarations-example-024 -->
 ```xray
 class Point {
     x: f64
@@ -3427,6 +3767,7 @@ class Vector2 {
     }
 }
 ```
+<!-- /xr-source -->
 
 - `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
@@ -3446,6 +3787,7 @@ class Vector2 {
 
 `Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
 
+<!-- xr-source:example decl-iterator-protocol -->
 ```xray
 interface Iterator<T> {
     hasNext() -> bool       // is another element available; does not consume one
@@ -3457,6 +3799,7 @@ interface Iterable<T> {
     iterator() -> Iterator<T>
 }
 ```
+<!-- /xr-source -->
 
 Rules:
 
@@ -3473,6 +3816,7 @@ A generator function (one whose body uses `yield expr`) implements this interfac
 
 A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
 
+<!-- xr-source:example 006-5-declarations-example-026 -->
 ```xray
 class Rect {
     _w: i64
@@ -3491,11 +3835,12 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // prints 12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // prints 40
 }
 ```
+<!-- /xr-source -->
 
 Rules:
 
@@ -3512,6 +3857,7 @@ Self-contained programs that run as-is and pass `xray check` (comments show the 
 
 Inheritance with explicit override:
 
+<!-- xr-source:example 006-5-declarations-example-027 -->
 ```xray
 class Animal {
     name: string
@@ -3526,12 +3872,13 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // prints Rex
+    print(d.speak())   // prints woof
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 Named-value calls obey the contracts above, with complete implementation qualification in §17.
 
@@ -3541,12 +3888,15 @@ A copyable struct preserves logical copies according to the declared type of eac
 
 A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. A method acquiring ownership of its receiver may declare `move`, including for copyable types. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
-StructDecl ::= 'struct' Identifier TypeParams?
-               ('implements' Identifier (',' Identifier)*)?
-               '{' StructMember* '}'
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-struct-point -->
 ```xray
 struct Point {
     x: f64
@@ -3570,6 +3920,7 @@ var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
 ```
+<!-- /xr-source -->
 
 **Field rules for aggregate literals** (identical to sealed Records):
 
@@ -3579,6 +3930,7 @@ b.x = 99.0
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
+<!-- xr-source:example 006-5-declarations-example-029 -->
 ```xray
 struct Config {
     host: string
@@ -3590,6 +3942,7 @@ var c = Config{host: "localhost"}    // OK
 // Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
 // Config{port: 1}                   // compile error E0381: missing field 'host'
 ```
+<!-- /xr-source -->
 
 **Differences from `class`**:
 
@@ -3613,6 +3966,7 @@ var c = Config{host: "localhost"}    // OK
 
 A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
 
+<!-- xr-source:example 006-5-declarations-example-030 -->
 ```xray
 struct Point {
     x: i64
@@ -3623,25 +3977,28 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct assignment copies
     q.x = 99
-    print(p.x)           // => 3 (unchanged)
-    print(q.x)           // => 99
+    print(p.x)           // prints 3 (unchanged)
+    print(q.x)           // prints 99
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.5 `interface` and `implements`
 
 xray's interface implementation is **explicit** (unlike Go's structural implementation): a class/struct must list interfaces with `implements`.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-05 -->
 ```ebnf
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // method signature
-                 |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-interface-shape -->
 ```xray
 interface Shape {
     area() -> f64
@@ -3675,6 +4032,7 @@ fn describe(s: Shape) -> string {
     return "area=${s.area()}, perimeter=${s.perimeter()}"
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 
@@ -3705,6 +4063,7 @@ Checked owns constraints, interface applications, requirement identities and exp
 
 New XIR now admits ordinary read-receiver methods, explicit struct/enum implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct/enum implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. Ordinary enum READ/static methods reuse nominal method production and require match before payload extraction; method and builtin member collisions reject at declaration time under §5.6.7. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Complete explicit own arguments and inline conditions of generic interface methods have the Windows scope qualification above. Own where and value-shape inference have Windows scope qualification; late result completion and explicit method values form the next qualification family. Full bidirectional and contextual function-value inference remain OPEN. Properties, other receivers, unimplemented enum name/toString/variants consumers, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
 
+<!-- xr-source:example 006-5-declarations-example-032 -->
 ```xray
 // property signatures + interface inheritance
 interface HasLength {
@@ -3724,6 +4083,7 @@ class Buffer implements SizedCollection<i64> {
     first() -> i64 { return this.data[0] }
 }
 ```
+<!-- /xr-source -->
 
 #### Implementation Qualification
 
@@ -3733,8 +4093,9 @@ Interfaces, `implements` and polymorphism obey the contracts above, with complet
 
 xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-06 -->
 ```ebnf
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier
@@ -3743,6 +4104,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
+<!-- /xr-source -->
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
@@ -3750,7 +4112,8 @@ An enum type is identified by its declaring module, declaration and ordered type
 
 #### 5.6.1 Simple enums (0-payload enum)
 
-```xray
+<!-- xr-source:example decl-enum-simple -->
+```xray @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -3765,13 +4128,14 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
 ```
+<!-- /xr-source -->
 
 Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
 
@@ -3779,6 +4143,7 @@ Enum variants use declaration order for their stable `ordinal` and do not declar
 
 Payload variants use named record fields. Every field has a non-empty name unique within the variant:
 
+<!-- xr-source:example decl-enum-payload -->
 ```xray
 enum Option<T> {
     Some { value: T },
@@ -3805,6 +4170,7 @@ enum Expr {
     Call { name: string, args: Array<Expr> },
 }
 ```
+<!-- /xr-source -->
 
 A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
 
@@ -3817,6 +4183,7 @@ A directly recursive enum payload would have infinite size and is rejected at co
 
 Construction:
 
+<!-- xr-source:example 006-5-declarations-example-035 -->
 ```xray
 var c = Color.Red
 var r1 = Option.Some { value: 42 }
@@ -3824,17 +4191,20 @@ var e1 = NetEvent.DataReceived { bytes: b }
 var e2 = NetEvent.Error { code: 404, message: "not found" }
 var e3 = NetEvent.Connected                         // unit variant: no braces
 ```
+<!-- /xr-source -->
 
 Destructuring (match):
 
-```xray
+<!-- xr-source:example decl-enum-match -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
+<!-- /xr-source -->
 
 See §6.3.
 
@@ -3842,11 +4212,13 @@ See §6.3.
 
 Instance properties (act on the enum value):
 
+<!-- xr-source:example decl-enum-properties -->
 ```xray
 Color.Red.name        // "Red"          variant name (string)
 Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
+<!-- /xr-source -->
 
 Enum values provide `name`, `ordinal`, and `toString()`. name returns the active variant declaration name; toString returns only the original enum declaration name and active variant name. Neither appends generic arguments, reads or formats payloads, or invokes payload callbacks. Original type and member permissions still apply; these operations grant no construction authority or implicit Stringable witness, and descriptive queries cannot supply missing generic premises. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
 
@@ -3854,6 +4226,7 @@ Enum values provide `name`, `ordinal`, and `toString()`. name returns the active
 
 A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
 
+<!-- xr-source:example decl-enum-iteration -->
 ```xray
 for (color in Color) {
     print(color.name)                     // color: Color; Red, Green, Blue
@@ -3868,6 +4241,7 @@ for (variant in NetEvent.variants) {
     }
 }
 ```
+<!-- /xr-source -->
 
 The two loop forms deliberately yield different types:
 
@@ -3902,6 +4276,7 @@ Generic code must identify a concrete enum layout. `Option<i64>.variants` is val
 
 `Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
 
+<!-- xr-source:example 006-5-declarations-example-039 -->
 ```xray
 fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
@@ -3910,6 +4285,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
     return null
 }
 ```
+<!-- /xr-source -->
 
 #### 5.6.7 Enum methods
 
@@ -3917,7 +4293,8 @@ An enum resolves members separately in its type-access and value-access domains.
 
 Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 
-```xray
+<!-- xr-source:example 006-5-declarations-example-040 -->
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -3925,9 +4302,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -3936,8 +4313,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }
@@ -3946,9 +4323,11 @@ var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
+<!-- /xr-source -->
 
 Static methods use `static name(...)`. Instance methods have a READ receiver by default, use `ref` to mutate value-semantic components and `move` to acquire ownership. Both copyable and noncopyable enums may declare a `move` receiver; see §17 for qualification of complete declaration families. Enum methods do not write `fn`:
 
+<!-- xr-source:example 006-5-declarations-example-041 -->
 ```xray
 enum Color {
     Red, Green, Blue
@@ -3966,6 +4345,7 @@ enum Color {
 
 print(Color.fromInt(2).label())     // "Green"
 ```
+<!-- /xr-source -->
 
 > Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
 
@@ -3990,32 +4370,38 @@ print(Color.fromInt(2).label())     // "Green"
 
 ### 5.7 `type` aliases
 
+<!-- xr-source:grammar 006-5-declarations-grammar-07 -->
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example decl-nominal-type-aliases -->
+```xray @check
 type Outcome = i64 | string                          // union alias
 type Mapper = fn(i64) -> i64                           // function-type alias
-type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
-type Pair<T> = { first: T, second: T }                // generic alias
+struct Point { x: f64; y: f64 }
+type Position = Point                              // alias of the same nominal type
+type Pair<T> = (T, T)                               // generic alias of an unlabeled tuple
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
 - A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
 - Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
-- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- An alias of a nominal type preserves its declaration identity. Equal field sets do not make distinct structs equal. An anonymous object shape is not a valid alias RHS.
 - `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
-See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
+See §2.4.7 and [§2.8](#28-type-aliases).
 
 ### 5.8 `import` / `export`
 
 See [§11](#11-modules). Syntax highlights:
 
+<!-- xr-source:example 006-5-declarations-example-043 -->
 ```xray
 // stdlib / third-party packages: bare identifiers; alias auto-derived
 import time
@@ -4037,6 +4423,7 @@ export const VERSION = "1.0"
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
+<!-- /xr-source -->
 
 **xray does not support** the JavaScript default-import form `import name from "module"`. Use `import "module" as name`, `import module`, or `import { name } from module`.
 
@@ -4046,36 +4433,40 @@ For full rules, path resolution, and visibility details see [§11 Modules](#11-m
 
 ## 6. Patterns
 
-> Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
+> Implementation reference: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
 Patterns appear in `match` expressions/statements, in `var` / `const` destructuring, and in parenthesized `catch` headers (enum variant patterns only, see §8.1.2).
 
 ### 6.1 Literal Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-001 -->
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - Matching uses the same semantics as `==`.
 - The `null` pattern matches only `null` itself.
 
 ### 6.2 Range Patterns `a..b` / `a..=b`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-002 -->
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
+<!-- /xr-source -->
 
 - `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
 - Integer-only.
@@ -4084,13 +4475,15 @@ match (age) {
 
 #### 6.3.1 Simple variants (no payload)
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-003 -->
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
+<!-- /xr-source -->
 
 - Must be fully qualified as `EnumName.Variant`.
 
@@ -4100,33 +4493,35 @@ The scrutinee is evaluated once. Pattern bindings are immutable values scoped to
 
 ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-004 -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // Same-name binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // List only fields that are observed
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // Nested destructuring
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
+<!-- /xr-source -->
 
 #### 6.3.3 Exhaustiveness check
 
@@ -4135,7 +4530,8 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
 - If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-005 -->
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -4144,49 +4540,56 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
 }
 ```
+<!-- /xr-source -->
 
 > Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-006 -->
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // bind the narrowed value
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // bind the narrowed value
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
+<!-- /xr-source -->
 
 - Tests the dynamic type; optionally binds a narrowed variable.
 
 ### 6.5 Guard Conditions `if`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-007 -->
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - The guard must be `bool`; nullable values require an explicit comparison (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-008 -->
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - Alternatives are tried in source order; the first success skips the remaining alternatives of that arm.
 - Every alternative must bind the same names with exactly the same static types. Bindings are immutable and belong to the common arm scope.
@@ -4201,38 +4604,34 @@ match (x) {
 
 ### 6.8 Variable-binding Patterns
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-009 -->
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
+<!-- /xr-source -->
 
 - A bare `Identifier` always matches and binds the value.
 
 ### 6.9 Destructuring Patterns
 
-```xray
+Array and tuple bindings follow §5.1.3. Anonymous-object destructuring, object patterns and struct destructuring are not syntax. Named payload-field patterns of ADT variants remain governed by §6.3 and are unaffected by removing structural objects.
+
+<!-- xr-source:example 007-6-patterns-example-010 -->
+```xray @fragment
 var [a, b, c] = some_array
 var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
-
-```xray
 match (p) {
-    { x, y } -> ...           // object field destructure (shorthand binding)
-    { name: n, age } -> ...   // field rename + shorthand mixed
-    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
-    [_, mid, _] -> ...        // element-position wildcards
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
+<!-- /xr-source -->
 
-- An object pattern matches an exact structural object whose static type contains the named fields. For schema-less JSON, first commit the structure with `JSON.get/require` or `JSON.decodeObject<T>`. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
-- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
-- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
+Array patterns match length: exactly the element count without `..rest`, and at least that count with a rest. Non-rest entries are bindings or wildcards; use guards for value tests. Maps provide no field pattern. Use nominal structs and ordinary field access for fixed fields. This change does not introduce or-pattern `|`.
 
 ### 6.10 Exhaustiveness and Match Failure
 
@@ -4268,6 +4667,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 - `var` / `const` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-001 -->
 ```xray
 main()                    // OK: uses the hoisted fn
 fn main() { ... }
@@ -4275,11 +4675,13 @@ fn main() { ... }
 var y = x                 // error: x is not declared
 var x = 10
 ```
+<!-- /xr-source -->
 
 #### Shadow rules
 
 A nested block may shadow a same-named variable in an outer scope:
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-002 -->
 ```xray
 var x = 1
 {
@@ -4288,6 +4690,7 @@ var x = 1
 }
 print(x)                     // 1
 ```
+<!-- /xr-source -->
 
 ### 7.2 Closure Capture Semantics
 
@@ -4297,6 +4700,7 @@ A closure captures variables from outer scopes as **upvalues**.
 
 Ordinary `var` captures retain a shared cell; copyable non-view `const` and ordinary read parameters are captured by logical value copy:
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-003 -->
 ```xray
 fn make_counter() -> (() -> i64) {
     var count = 0
@@ -4310,6 +4714,7 @@ var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
+<!-- /xr-source -->
 
 - The closure and the original variable **share state**.
 - After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
@@ -4385,12 +4790,14 @@ This chapter specifies the target language rules of Task329. Smoke results deter
 
 `throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
 
+<!-- xr-source:example 009-8-error-handling-example-001 -->
 ```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
 throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with payload
 ```
+<!-- /xr-source -->
 
 After a throw:
 
@@ -4408,6 +4815,7 @@ A same-proof mixed debug Program must receive the generator's current observatio
 
 #### 8.1.2 `try` / `catch`
 
+<!-- xr-source:example 009-8-error-handling-example-002 -->
 ```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
@@ -4415,11 +4823,12 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
+<!-- /xr-source -->
 
 **Execution order**:
 
@@ -4431,6 +4840,7 @@ try {
 
 A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
 
+<!-- xr-source:example 009-8-error-handling-example-003 -->
 ```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
@@ -4445,6 +4855,7 @@ try {
     log("unexpected:", e)
 }
 ```
+<!-- /xr-source -->
 
 **Rules**:
 - An untyped `catch (e)` is the catch-all and matches any error value; its binding has the built-in static type `Error`.
@@ -4461,6 +4872,7 @@ Catch bindings are visible only in their handler, and both the binding and its v
 
 An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
 
+<!-- xr-source:example 009-8-error-handling-example-004 -->
 ```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
@@ -4472,6 +4884,7 @@ try {
     retry()
 }
 ```
+<!-- /xr-source -->
 
 - Every alternative is `Enum.Variant` or `Enum.Variant { fields }`, optionally module-qualified; field sub-patterns follow §6 (literals, ranges, nested enums, `_`, and bindings). A payload variant must write its braces, and `{}` tests only the tag; a unit variant cannot use `{}`.
 - Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
@@ -4481,6 +4894,7 @@ try {
 - An ordinary `catch` cannot omit its header; only `catch panic` may.
 - Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
 
+<!-- xr-source:example 009-8-error-handling-example-005 -->
 ```xray @error=E0334
 enum NetErr { Failed }
 fn work() throws(NetErr) { throw NetErr.Failed }
@@ -4489,11 +4903,13 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 #### 8.1.3 Rethrowing and error conversion
 
 A `catch` block may rethrow the original error or throw a different enum variant:
 
+<!-- xr-source:example 009-8-error-handling-example-006 -->
 ```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
@@ -4505,11 +4921,13 @@ try {
     throw HighErr.Upstream
 }
 ```
+<!-- /xr-source -->
 
 #### 8.1.4 Recommended enum error design
 
 Define business errors as ADT enums with context-carrying payloads:
 
+<!-- xr-source:example 009-8-error-handling-example-007 -->
 ```xray @fragment
 enum HttpErr {
     NotFound { message: string },
@@ -4532,12 +4950,13 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
+<!-- /xr-source -->
 
 ADT enums allow `match` to check exhaustiveness at compile time.
 
@@ -4549,11 +4968,13 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 - `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
 - Default scope cancels siblings on child failure; isolated scope lets siblings continue and aggregates only child business errors as `TaskFailures<E>`. Both drain all members before exit. Panic always uses its independent channel and never enters the aggregate. Body errors B and direct-child errors E form `B | E` and `B | TaskFailures<E>` respectively; both forms need no propagation marker when B and E are `Never`. `try scope` marks exit propagation without marking calls in its body. See §10.7.
 
+<!-- xr-source:example 009-8-error-handling-example-008 -->
 ```xray @fragment
 var task = go fetch(url)
 var value = try await task
 var outcome = task.awaitResult()
 ```
+<!-- /xr-source -->
 
 Waiting on a child that ended `Cancelled` makes the waiter itself enter cancellation unwinding, exactly as cancellation of the current task does. Either way the task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.3, §10.4). Only `awaitResult()` / `poll()` return cancellation as the value `TaskResult.Cancelled`.
 
@@ -4563,6 +4984,7 @@ Waiting on a child that ended `Cancelled` makes the waiter itself enter cancella
 
 One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. A wait that can fail is marked as `try await t`.
 
+<!-- xr-source:example 009-8-error-handling-example-009 -->
 ```xray @run
 enum ParseErr { Empty }
 fn parse(s: string) throws(ParseErr) -> i64 {
@@ -4582,18 +5004,24 @@ try main()
 8080
 42
 ```
+<!-- /xr-source -->
+
+
 
 Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Top-level statements of the entry file and module-state initializers implicitly permit arbitrary errors, but propagation calls still require markers (§5.2.8). Only the entry file may contain executable top-level statements. `main` is an ordinary function: omission of `throws` means no business errors; a throwing `main` must declare them explicitly and be called with `try main()` from the entry file.
 
 A missing marker and an undeclared escaping error are distinct diagnostics (registered numbers in §18.2, with implementation pending):
 
+<!-- xr-source:example 009-8-error-handling-example-010 -->
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
 fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-011 -->
 ```xray @error=E0331
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -4601,6 +5029,7 @@ fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
 ```
+<!-- /xr-source -->
 
 Markers appear only where business errors can occur. A `try`, `try?` or `try!` whose extent has no business-error source is rejected with `E0336`. A try block with any ordinary catch also requires a source in its protected body; adding a panic handler grants no exemption. A try block with only a panic handler requires neither a business-error source nor static proof that its body may panic, but expression markers within that body are still checked independently.
 
@@ -4608,6 +5037,7 @@ Sources include direct `throw`, calls declared to throw, and `await` or `scope` 
 
 A body with only a panic handler also permits business calls but does not catch their errors. Remaining business errors need an outer ordinary catch or the enclosing function's `throws`, otherwise they report `E0331`. Direct `throw` produces a business error itself and needs no extra try. Panic, cancellation and business errors remain separate channels.
 
+<!-- xr-source:example error-panic-only -->
 ```xray @run
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -4620,13 +5050,17 @@ try { ch.send(1) } catch panic (p) { print(p.code) }
 try { relay() } catch (e: Failure) { print("business error") }
 try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example error-panic-mixed-redundant -->
 ```xray @error=E0336
 try { print(42) }
 catch (e) { print("ordinary") }
 catch panic { print("panic") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-014 -->
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
 fn worker() -> i64 { return 1 }
@@ -4637,6 +5071,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 ### 8.2 Panic channel
 
@@ -4656,6 +5091,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 `catch panic` catches runtime faults from the panic channel:
 
+<!-- xr-source:example 009-8-error-handling-example-015 -->
 ```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
@@ -4670,9 +5106,11 @@ try {
     log("division by zero caught")
 }
 ```
+<!-- /xr-source -->
 
 **`catch` and `catch panic` can coexist**, handling both channels:
 
+<!-- xr-source:example 009-8-error-handling-example-016 -->
 ```xray @check
 enum AppErr { InvalidArg }
 
@@ -4691,6 +5129,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 **Binding and scope rules**: A `try` has at most one `catch panic`, since it matches that channel unconditionally. Its header may be omitted or written as `catch panic (p)` / `catch panic (p: PanicInfo)`; the annotation must be `PanicInfo`, not a runtime type filter. The binding is read-only and scoped to the handler. Copying or returning the reference follows class identity and ownership rules and does not grant `Sendable`. A handler protects its try body, not sibling handlers; a new panic in a handler searches the enclosing handlers. Ordinary enum errors never enter a panic handler, and panics never enter ordinary catch handlers.
 
@@ -4698,6 +5137,7 @@ main()
 
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
+<!-- xr-source:example 009-8-error-handling-example-017 -->
 ```xray @fragment
 class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
@@ -4707,10 +5147,11 @@ class PanicInfo {
     data: JSON.Value            // additional data; JSON null when absent
     replacedError: Error?      // read-only; owned error replaced by cleanup panic, or null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
+<!-- /xr-source -->
 
 User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
@@ -4718,6 +5159,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 **Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
 
+<!-- xr-source:example 009-8-error-handling-example-018 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
@@ -4735,6 +5177,9 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
+
+
 
 #### 8.2.4 Top-level diagnostic for an uncaught panic
 
@@ -4795,6 +5240,7 @@ Compile-time evaluation has an independent host boundary: a single cleanup panic
 
 A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
+<!-- xr-source:example 009-8-error-handling-example-019 -->
 ```xray @fragment
 fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     var conn = try open(url)
@@ -4807,6 +5253,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     return data
 }
 ```
+<!-- /xr-source -->
 
 **Rules**:
 - `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
@@ -4826,6 +5273,7 @@ A `defer` is a cleanup edge. No business error may escape its body, and a new bu
 
 **Rule D2 (satisfaction)**: use non-throwing cleanup APIs or handle their errors completely inside the cleanup. The valid and invalid examples are separate:
 
+<!-- xr-source:example defer-must-not-throw -->
 ```xray @run
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -4841,7 +5289,11 @@ main()
 body
 close failed
 ```
+<!-- /xr-source -->
 
+
+
+<!-- xr-source:example 009-8-error-handling-example-021 -->
 ```xray @error=E0387
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -4850,6 +5302,7 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 **Rule D3 (panic)**: a static guarantee of no business errors does not guarantee freedom from panic. A panic escaping cleanup during normal exit or business-error propagation propagates normally and may be caught by an enclosing `catch panic`. Only a double fault while another panic or cancellation is already unwinding ends execution uncatchably (§8.2.5). There is no E0443 runtime fallback for business errors escaping `defer`.
 
@@ -4859,6 +5312,7 @@ try main()
 
 `try?` has a specific result rule: a non-Optional operand of type `T` yields `T?`; an operand already typed `Optional<U>` keeps that type, without adding an outer layer or recursively flattening existing layers. Business errors become `null` and successful values are preserved. It catches neither panic nor cancellation unwinding.
 
+<!-- xr-source:example 009-8-error-handling-example-022 -->
 ```xray @run
 enum LookupErr { Failed }
 fn lookup(ok: bool) throws(LookupErr) -> i64? {
@@ -4876,6 +5330,9 @@ main()
 7
 0
 ```
+<!-- /xr-source -->
+
+
 
 ### 8.5 Decision tree: which mechanism to choose
 
@@ -4919,6 +5376,7 @@ Reference table:
 
 #### Pattern 1: enum errors + defer for resource cleanup
 
+<!-- xr-source:example 009-8-error-handling-example-023 -->
 ```xray @run
 enum ConnErr { Refused, Timeout }
 
@@ -4939,7 +5397,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed, then payload
+        print(fetchData(true))         // prints closed, then payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -4951,6 +5409,9 @@ main()
 closed
 payload
 ```
+<!-- /xr-source -->
+
+
 
 #### Pattern 2: throw + catch for library APIs
 
@@ -4958,13 +5419,16 @@ Current implementation qualification of complete type and operation families is 
 
 #### Pattern 3: `??` for default values
 
+<!-- xr-source:example 009-8-error-handling-example-024 -->
 ```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
+<!-- /xr-source -->
 
 #### Pattern 4: catch panic for runtime fault fallback
 
+<!-- xr-source:example 009-8-error-handling-example-025 -->
 ```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
@@ -4974,6 +5438,7 @@ fn safeDivide(a: i64, b: i64) -> string {
     }
 }
 ```
+<!-- /xr-source -->
 
 ### 8.7 Worked Examples
 
@@ -4981,7 +5446,8 @@ These self-contained target-language examples state expected stdout in `output` 
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray @run
+<!-- xr-source:example 009-8-error-handling-example-026 -->
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -4995,8 +5461,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // prints empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -5006,9 +5472,13 @@ main()
 ```output
 empty input
 ```
+<!-- /xr-source -->
+
+
 
 #### Example 2: `defer` order (LIFO) on the error path
 
+<!-- xr-source:example 009-8-error-handling-example-027 -->
 ```xray @run
 enum E { Boom }
 
@@ -5031,18 +5501,22 @@ defer 2
 defer 1
 caught
 ```
+<!-- /xr-source -->
+
+
 
 
 #### Example 3: `catch panic` with fault details
 
+<!-- xr-source:example 009-8-error-handling-example-028 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // prints message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // prints code: 430
     }
 }
 
@@ -5052,6 +5526,7 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
 
 ---
 
@@ -5061,15 +5536,18 @@ code: 430
 
 ### 9.1 Type Parameter Syntax `<T>`
 
+<!-- xr-source:grammar 010-9-generics-grammar-01 -->
 ```ebnf
-TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
-TypeParam  ::= Identifier (':' ConstraintList)?
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
-TypeArgs   ::= '<' Type (',' Type)* '>'
+TypeArgs    ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example generics-basic -->
+```xray @check
 // Generic function
 fn identity<T>(x: T) -> T {
     return x
@@ -5103,8 +5581,9 @@ interface Comparable<T> {
 }
 
 // Generic type alias: transparent syntax substitution, not a new type
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
+<!-- /xr-source -->
 
 Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
 no constraints. At each use site, the type arguments are substituted directly
@@ -5118,8 +5597,11 @@ Methods may declare their own type parameters, such as `map<U>(value: U)` inside
 
 Ordinary generic method signatures, bodies, defaults and nested closures are checked against both declared constraint scopes at definition time, even when unused; future arguments grant no additional capabilities. Defaults and captures inherit their original type-parameter identities and authority. Specialization substitutes only Checked parameters and rechecks before Lowered; ordinary instances exist before Program sealing. An instance method value evaluates and saves its receiver once, while a static value has no receiver. Both retain the full indirect-call signature and ordinary value ownership, effect, suspension and failure-cleanup rules.
 
+Anonymous object shapes are not generic constraints. Declare a named interface for member capabilities and require the argument type to implement it explicitly. Existing built-in predicates and other constraint rules remain.
+
 Xray's constraint syntax uses a colon `:` uniformly, with multiple constraints joined by `&` (read as "must satisfy simultaneously"). It **does not use** Java/TS `extends` / `implements` as constraint keywords.
 
+<!-- xr-source:example generics-constraints -->
 ```xray
 // Single constraint
 fn first<T: Comparable>(a: T, b: T) -> T {
@@ -5136,6 +5618,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
     return v
 }
 ```
+<!-- /xr-source -->
 
 **Finite value-equality operation constraint (frozen contract, implementation PENDING)**:
 `Equal` is a built-in predicate rather than a user-implementable interface. Its first domain is
@@ -5162,7 +5645,8 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `equals(other: T) -> bool` and `hash() -> i64`. The parameter type of `equals` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
-```xray
+<!-- xr-source:example generics-hashable-contract -->
+```xray @check
 class Token implements Hashable {
     value: i64
 
@@ -5174,9 +5658,10 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
+<!-- /xr-source -->
 
 Providing only one of `equals` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
 
@@ -5184,11 +5669,14 @@ Providing only one of `equals` or `hash()` is a compile error. If the key/elemen
 
 Constraints may also be written after the signature. `where` and `<T: C>` use the same constraint mechanism; requirements **intersect** on a shared parameter rather than overriding each other. Additional method requirements belong to the method declaration and do not modify the enclosing nominal type's parameter contract.
 
+<!-- xr-source:grammar 010-9-generics-grammar-02 -->
 ```ebnf
 WhereClause ::= 'where' WhereItem (',' WhereItem)*
 WhereItem   ::= Identifier ':' ConstraintList
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example generics-where-clause -->
 ```xray
 // A long constraint list after the signature keeps the parameters on one line
 fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
@@ -5204,6 +5692,7 @@ struct Holder<T> where T: Comparable { ... }
 interface Seq<T> where T: Comparable { ... }
 enum Wrap<T> where T: Comparable { ... }
 ```
+<!-- /xr-source -->
 
 An ordinary instance or static method's `where` clause may constrain its own type parameters and those of its enclosing nominal type, even when the method introduces no `<...>` parameters. Its effective requirements conjoin the enclosing declaration's requirements, its own inline requirements and its `where` requirements. They apply only to that method, without strengthening type construction, storage or other methods. The body, defaults and nested closures are checked in this definition context. Direct calls and method values require proof in the caller's context; concrete instantiation cannot supply a missing generic proof. Names remain unique: a failed condition does not select another overload or grant visibility, receiver authority or effect promises.
 
@@ -5234,11 +5723,13 @@ A user type's `equals` serves as its own key relation, so **it must be reflexive
 
 #### Type inference
 
+<!-- xr-source:example generics-inference -->
 ```xray
 identity(42)                    // T inferred as i64
 Box("hello")                // T inferred as string
 Pair("key", 100)            // K=string, V=i64
 ```
+<!-- /xr-source -->
 
 The inference algorithm is **bidirectional**:
 - From arguments (call-site argument types → type parameters).
@@ -5250,11 +5741,13 @@ Inference collects type evidence from original signatures, actual values, determ
 
 When inference fails or precision is needed:
 
+<!-- xr-source:example generics-explicit-instantiation -->
 ```xray
 var empty = Array<i64>()              // no element to infer from
 var m = Map<string, i64>()
 var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64
 ```
+<!-- /xr-source -->
 
 ### 9.4 Specialization and Monomorphization
 
@@ -5299,41 +5792,24 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 | Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
 | Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
-### 9.5 Protocols (Duck Typing) vs. Nominal Typing
+### 9.5 Nominal Types and Explicit Interfaces
 
-#### Nominal typing dominates
+Matching fields or methods grant neither type compatibility nor interface conformance. A named interface requires explicit `implements`; generic member capabilities follow declared constraints. Object shapes and `T: { field: Type }` are removed, so anonymous field sets grant no member access.
 
-Xray's interface implementations require **explicit `implements`** — unlike Go's "implicit interface implementation".
-
-```xray
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // explicit implements required
-    draw() { print("square") }
+<!-- xr-source:example generics-nominal-interface -->
+```xray @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // compile error: Wrong is not Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
+<!-- /xr-source -->
 
-#### Structural objects
-
-Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK: exact field set
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
-describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
-```
+Field-subset checks for struct spread construct an explicitly named target; they establish neither width subtyping nor implicit interface conformance.
 
 ### 9.6 Variance
 
@@ -5342,7 +5818,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 - Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
 - Function types: parameters contravariant, return values covariant (the standard rule).
 
-**Why not in this round**: variance states rules *on top of* the subtype relation, so it has a prerequisite — the width direction for structural types must be settled first (see the exact-field-set rule in §2.10.1). Introducing declaration-site variance while the subtype relation itself has not converged multiplies an undecided semantics by another layer, and it cannot be patched backward-compatibly afterwards. Invariance is the safe, AOT-friendly starting point, and it can be relaxed at any time.
+Declaration-site variance remains an independent unimplemented capability. Removing structural objects changes neither container invariance nor existing function-type rules; matching field sets grant no new subtype relation.
 
 ### 9.6.1 Higher-Kinded Types (HKT)
 
@@ -5356,6 +5832,7 @@ Where similar abstraction is wanted, use an interface with concrete type paramet
 
 Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typeName`'s cold-path name table:
 
+<!-- xr-source:example generics-type-identity -->
 ```xray
 class Container<T> {
     items: Array<T>
@@ -5364,6 +5841,7 @@ var c = Container<i64>()
 print(c is Container<i64>)     // true
 print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
+<!-- /xr-source -->
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
 
@@ -5406,14 +5884,17 @@ A call through an interface value or an overridable method may suspend if any im
 
 ### 10.2 `go` — start a coroutine
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-01 -->
 ```ebnf
-GoExpr   ::= 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
-GoOption ::= 'name' ':' StringLiteral
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 ```
+<!-- /xr-source -->
 
 `go` is an **expression** returning a `Task<T, E>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
 
+<!-- xr-source:example coro-go-forms -->
 ```xray @fragment
 // Form 1: call an existing function
 var t1 = go worker(0, channel)
@@ -5431,24 +5912,29 @@ var t3 = go fn() -> i64 {
 // Optional debugging name
 var named = go(name: "worker-1") worker(1, channel)
 ```
+<!-- /xr-source -->
 
 **Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without an additional copying marker. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
+<!-- xr-source:example coro-move-argument -->
 ```xray @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
 }(data)            // retain a logical copy; the caller can still use data
 ```
+<!-- /xr-source -->
 
 `go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and handle arguments through their declared READ or consuming mode:
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-003 -->
 ```xray
 var n = 10
 var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Every `go` yields `Task<T, E>` where `T` is the return type and `E` is the declared error type, defaulting to `Never`. A Unit result stays Unit, not `null`.
@@ -5460,12 +5946,15 @@ var task = go fn(x: i64) -> i64 {
 
 ### 10.3 `await` — wait for a result
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-02 -->
 ```ebnf
 AwaitExpr ::= 'await' UnaryExpr
 ```
+<!-- /xr-source -->
 
 `await` accepts only `Task<T, E>` and produces `T` on success. Waiting may suspend without blocking an OS thread. When `E = Never`, `await t` throws no business error and takes no `try`; otherwise the propagation marker order is `try await t`, and inside a protected `try { }` region `await t` needs no additional marker.
 
+<!-- xr-source:example coro-await-forms -->
 ```xray @fragment
 var job = go compute(1)            // Task<i64, Never>
 var n = await job                  // no business error, no try
@@ -5479,6 +5968,7 @@ var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
+<!-- /xr-source -->
 
 - The business error type is exactly the Task's `E`; no inference from the spawn site or worker body is needed. Cancellation is not a business error and never enters this type.
 - Child enum errors use the value-error channel; child panic uses the panic channel. A successful `null` is a real Optional result, not cancellation or failure.
@@ -5515,11 +6005,13 @@ The first three functions accept homogeneous `Array<Task<T, E>>`, without implic
 | `t.poll()` | `fn() -> TaskResult<T, E>?` | Nonblocking; `null` while unfinished |
 | `t.awaitResult()` | `fn() -> TaskResult<T, E>` | Suspend until terminal; report child errors and panic as values |
 
+<!-- xr-source:example coro-task-handle -->
 ```xray @fragment
 var t = go fetch(url)
 if (t.poll() == null) { print("running") }
 var outcome = t.awaitResult()
 ```
+<!-- /xr-source -->
 
 `TaskResult<T, E>` has exactly four terminal variants: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. Parentheses describe payload types, not construction syntax or field names. The outer Optional of `poll()` represents unfinished work; `Task.timeout` represents timeout as an error. Returning a terminal outcome does not exempt the waiter from its own cancellation unwinding.
 
@@ -5531,18 +6023,22 @@ Loop backedges are not cancellation checkpoints. Long loops may check `Task.isCa
 
 ### 10.5 Channel
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-03 -->
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
+<!-- /xr-source -->
 
 Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
+<!-- xr-source:example channel-decl-variants -->
 ```xray
 const ch  = Channel<i64>(10)    // buffered, capacity = 10
 const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
 const cha: Channel<i64> = Channel(3)   // element type from the type context
 ```
+<!-- /xr-source -->
 
 The element type must be known at construction: write `Channel<T>(n)` or provide a type context. It is never inferred from a later `send`.
 
@@ -5568,11 +6064,13 @@ Current implementation qualification of complete type and operation families is 
 
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
+<!-- xr-source:example channel-param-type -->
 ```xray
 fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - **MPMC** (multi-producer, multi-consumer).
@@ -5585,26 +6083,33 @@ fn producer(ch: Channel<i64>) {
 
 `select` multiplexes multiple channel operations. The non-blocking default branch uses `_`.
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-04 -->
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example coro-select -->
+```xray @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
-    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
-    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
-    _ -> { print("no channel ready") }                   // default arm (non-blocking)
+    msg from ch1 => { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 => { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 => { print("sent 100 to ch1") }        // send arm
+    _ => { print("no channel ready") }                   // default arm (non-blocking)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
@@ -5616,10 +6121,12 @@ select {
 
 `scope` means structured concurrency only; use `{ ... }` for ordinary lexical scope. Member tasks are started by `go` within the block, excluding nested function bodies. A block with no such `go` is a compile error with a suggestion to use an ordinary block.
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-05 -->
 ```ebnf
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
+<!-- /xr-source -->
 
 Both forms are statements without an aggregate value and wait for all members to terminate and finish cleanup before exit. A business-error-producing scope requires `try scope` or an enclosing real protected `try { }` region. `try scope` marks only the implicit exit propagation and creates no protected region: throwing calls in its body still require `try` / `try?` / `try!` or lexical protection by an outer real try body. Protection excludes nested function and closure bodies and that try statement's sibling handlers.
 
@@ -5632,6 +6139,7 @@ Let B be the business errors escaping the body after local catches, including er
 
 Normal block completion only joins members. Body Error, Panic or an outward return/break/continue cancels and drains accepted members in both forms. An isolated child failure alone does not cancel siblings. A pending normal control transfer must own its value and retain the body frame and valid loans; it is fulfilled only after draining finds no higher-priority failure, so return cannot swallow child panic. Multiple panics select the first successful publisher without promising wall-clock order. Other failures retain their original payloads for secondary diagnostics and release under unique ownership. When an isolated body error propagates directly, child business errors are secondary diagnostics; the body error is not implicitly wrapped.
 
+<!-- xr-source:example coro-scope -->
 ```xray @check
 fn worker(n: i64) -> i64 { return n + 1 }
 fn main() {
@@ -5645,6 +6153,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 Current implementation qualification of complete type and operation families is specified in §17.
 
@@ -5652,9 +6161,11 @@ Scope-induced child cancellation is not a failure, and independently cancelled m
 
 ### 10.8 `move` — Ownership Transfer
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-06 -->
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
+<!-- /xr-source -->
 
 `move x` guarantees transfer without copying and invalidates the source binding. Sources are initialized local variables, local constants and consuming parameters of the current function, with no active loan crossed. Fields, indices, call results, module bindings and READ/ref parameters cannot be sources. A rejected move preserves source state.
 
@@ -5680,11 +6191,13 @@ Mutex and RwLock callbacks are nonescaping by default. A writing callback's `ref
 
 **Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-010 -->
 ```xray
 const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
 const rate = Atomic(3.14)         // Atomic<f64>
 ```
+<!-- /xr-source -->
 
 **Method overview** (full signatures in §14.19):
 
@@ -5703,6 +6216,7 @@ const rate = Atomic(3.14)         // Atomic<f64>
 
 All methods accepting an `ord?` parameter take an `Ordering` enum to specify memory ordering. Default is `SeqCst` (strongest guarantee).
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-011 -->
 ```xray
 enum Ordering {
     Relaxed,          // No cross-thread ordering guarantee
@@ -5712,6 +6226,7 @@ enum Ordering {
     SeqCst,           // Sequential consistency (default)
 }
 ```
+<!-- /xr-source -->
 
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
@@ -5743,25 +6258,31 @@ When the target cannot provide lock-free atomics of the required width, a progra
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-012 -->
 ```xray
 const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
+<!-- /xr-source -->
 
 
 ### 10.10 `Task.yieldNow()` — yield the CPU
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-07 -->
 ```ebnf
 TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example coro-yield-loop -->
 ```xray @fragment
 for (i in 0..1000) {
     do_chunk(i)
     Task.yieldNow()                // explicit safepoint, lets other coroutines run
 }
 ```
+<!-- /xr-source -->
 
 `Task.yieldNow()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
@@ -5804,7 +6325,7 @@ A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entr
 
 ## 11. Modules
 
-> Source of truth: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
+> Implementation reference: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
 
 ### 11.1 Module Definition
 
@@ -5843,15 +6364,18 @@ local_utils = { path = "../local_utils" }
 
 `import` declarations **must appear at the module top level**. Using `import` inside a function, class, or any nested scope is a compile error.
 
+<!-- xr-source:grammar 012-11-modules-grammar-01 -->
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
-ImportModule  ::= StringLiteral | ModuleName
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 ModuleName    ::= Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-import -->
 ```xray
 // 1. stdlib: bare identifier; without `as`, the alias equals the module name
 import time
@@ -5870,6 +6394,7 @@ import "../utils/string_utils" as utils
 import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
+<!-- /xr-source -->
 
 **Not supported**:
 - JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
@@ -5893,14 +6418,17 @@ Quoting is only how text that is not an identifier gets written, which is why a 
 
 `export` visibility **must appear on a module-level declaration**. Cross-module re-exports remain declarations of their own:
 
+<!-- xr-source:grammar 012-11-modules-grammar-02 -->
 ```ebnf
 Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
-Visibility  ::= 'export'
+Visibility ::= 'export'
 ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
               | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-export -->
 ```xray
 // 1. visibility belongs to the declaration
 export fn helper() { return }
@@ -5916,6 +6444,7 @@ export { getUser, getUserAge as getAge } from "./user"
 // 3. wildcard re-export (forward all exports of another module)
 export * from "./product"
 ```
+<!-- /xr-source -->
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
@@ -5959,26 +6488,32 @@ XRAY_API void register_time_module(xray_vm_t* vm) {
 
 Usage from Xray code is identical:
 
+<!-- xr-source:example modules-use -->
 ```xray
 import time
 var t = time.now()
 time.sleep(100)
 ```
+<!-- /xr-source -->
+
+
 ### 11.8 Worked Examples
 
 Selective import and namespace import from the standard library:
 
+<!-- xr-source:example 012-11-modules-example-004 -->
 ```xray
 import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+    print(math.sqrt(144.0))   // prints 12.0
+    print(sha256("xray"))     // prints 1a46e6a6... (SHA-256 digest)
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ---
 
@@ -5990,10 +6525,13 @@ main()
 
 Xray marks test functions with the **`@test` attribute**, **not** with a `test("...")` function call.
 
+<!-- xr-source:grammar 013-12-testing-grammar-01 -->
 ```ebnf
 TestDecl ::= '@test' FnDecl
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example testing-basic -->
 ```xray
 @test
 fn test_addition() {
@@ -6007,6 +6545,7 @@ fn test_with_assertions() {
     assert(result > 0)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
@@ -6047,6 +6586,7 @@ errors and panics are distinct failure channels and their assertions are not int
 
 A `@test` function body may use `go`, `await`, and aggregate waits such as `Task.all` / `Task.first` (§10.3):
 
+<!-- xr-source:example testing-async -->
 ```xray
 @test
 fn test_async_fetch() {
@@ -6055,6 +6595,7 @@ fn test_async_fetch() {
     assertEqual(result.status, 200)
 }
 ```
+<!-- /xr-source -->
 
 ### 12.5 Attribute Overview
 
@@ -6076,6 +6617,7 @@ Other public attributes include `@deprecated("...")`, `@derive(Inspect, JSON, Eq
 
 Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
+<!-- xr-source:example testing-attributes -->
 ```xray
 import codegen
 
@@ -6103,6 +6645,7 @@ fn measuredKernel(value: u64) -> u64 {
     return measuredDispatchBoundary(hidden)
 }
 ```
+<!-- /xr-source -->
 
 > `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.
 
@@ -6120,7 +6663,7 @@ fn measuredKernel(value: u64) -> u64 {
 
 ## 13. Built-in Functions
 
-> Source of truth: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
+> Implementation reference: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
 
 These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value"; it is a documentation placeholder rather than a writable source-language type.
 
@@ -6168,6 +6711,7 @@ Generic Array<T>/callable<T> family names are available at the definition. Queri
 
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
+<!-- xr-source:example builtin-typeOf-is -->
 ```xray
 var x = 42
 print(typeOf(x) == Type.i64)    // true
@@ -6175,6 +6719,7 @@ print(typeName(x))              // "i64"
 print(x is i64)                 // true
 // typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
+<!-- /xr-source -->
 
 ### 13.4 Coroutines
 
@@ -6240,7 +6785,7 @@ BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / 
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
+> Implementation reference: prelude / analyzer / runtime built-in type registration and method definitions.
 > MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
@@ -6360,6 +6905,7 @@ Read-only get and indexing follow the value-receiver snapshot rule in §3.0: tak
 
 An ordinary read parameter cannot be a writable receiver for these ref methods. Copyable Array has no move receiver; pop removes an element without consuming the whole Array. Ref in the table is a declaration mode: the dot call remains `a.push(x)`. Pure-index GET-place snapshot elimination and transient retain/copy/drop must preserve failures as required by §3.0; backing uniqueness never bypasses access permissions.
 
+<!-- xr-source:example array-ref-current-binding -->
 ```xray
 var a: Array<string> = ["old"]
 fn replaceForPush() -> string {
@@ -6370,12 +6916,15 @@ fn replaceForPush() -> string {
 a.push(replaceForPush())
 print(a[0], a[1])           // Prints arg, then new tail
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-push-own-element -->
 ```xray
 var a: Array<string> = ["head"]
 a.push(a[0])
 print(a[0], a[1])           // head head
 ```
+<!-- /xr-source -->
 
 The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit27 members:25 instance methods, withCapacity and capacity. The executable sort subset accepts only zero-argument ascending Array<i64> calls; comparators and other element types remain rejected. The five unadmitted instance methods are iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
 
@@ -6447,7 +6996,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | insertion-order traversal with exact `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
+**Map literal**: `{"k1": v1, "k2": v2}`; empty `{}` needs an expected type. Keys are expressions. See §3.10 for duplicate explicit keys and spread.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -6474,7 +7023,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `forEach(fn)` | insertion-order traversal with exact `fn(T)->()` |
 | `iterator()` | iteration protocol |
 
-**Set literal**: `#[1, 2, 3]` or `#[]`.
+**Set construction**: `Set([1, 2, 3])`. Use `Set<T>()` for an empty set, or `Set()` with an expected type.
 
 `values()` returns `Array<T>` under the same zero-argument READ and owned-snapshot rules, preserving first insertion order. Adding an existing element preserves its position; deleting and adding it again places it last.
 
@@ -6507,7 +7056,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | Static function | Description |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | constructs a typed value directly; unknown fields default to `Reject`, with explicit `JSON.UnknownFields.Ignore` available |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root without a structural-object intermediate |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root returning JSON.Object or JSON.Value directly |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
 | `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
@@ -6522,8 +7071,10 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 `JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
-```xray
-type Request = { action: string, userId: i64 }
+<!-- xr-source:example json-boundary-and-path -->
+```xray @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // unknown fields reject by default
 var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
@@ -6533,8 +7084,9 @@ var path: JSON.Path = ["user", "profile", "name"]
 var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
+<!-- /xr-source -->
 
-JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly with an explicit `JSON.Value` target. Structs, arrays and other composites still require explicit `JSON.value(...)` encoding. `{"name": "alice"}` is a Map literal; under `JSON.Object`, keys are strings and values use existing scalar widening into JSON.Value. Fixed-field typed decoding targets are structs.
 
 ### 14.12 `Range`
 
@@ -6553,6 +7105,7 @@ JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when 
 
 The count is an `i64`. If the mathematical number of elements exceeds the `i64` maximum, it saturates at `MAX_I64` (`9223372036854775807`) without integer wraparound.
 
+<!-- xr-source:example range-members -->
 ```xray
 var pages = 1..=3
 print(pages.start)          // 1
@@ -6564,6 +7117,7 @@ print(pages.toArray())      // [1, 2, 3]
 var empty = 5..5
 print(len(empty))           // 0
 ```
+<!-- /xr-source -->
 
 ### 14.13 `DateTime`
 
@@ -6641,7 +7195,7 @@ The complete constraints and operation admission follow §9.2/§10.9: the type r
 
 ## 15. Standard Library Overview
 
-> Source of truth: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
+> Implementation reference: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
@@ -6835,6 +7389,7 @@ See `stdlib/os/` for details.
 
 The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
+<!-- xr-source:example 017-16-runtime-model-example-001 -->
 ```xray
 class PanicInfo {
     message: string             // human-readable message
@@ -6847,6 +7402,7 @@ class PanicInfo {
     fn toString() -> string
 }
 ```
+<!-- /xr-source -->
 
 Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
@@ -8347,6 +8903,9 @@ Ordinary entries follow the header; the error-signature numbers below are regist
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Two statically determined explicit Map literal keys are equivalent |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | A context-free collection literal has incompatible element, key or value types |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | Invalid named argument binding: unknown, duplicate, order, rest or indirect call |
 
 #### Error-signature diagnostics (registered numbers, implementation pending)
 
@@ -8443,6 +9002,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Duplicate explicit Map literal keys during construction; message includes both source locations |
 
 #### System, Calls, Coroutines, and Stdlib
 
@@ -8504,33 +9064,29 @@ The runtime panic channel uses the prelude `PanicInfo`; user-level `throw <enum>
 
 ## Appendix A. EBNF Grammar
 
-> Source of truth: `src/frontend/parser/xparse_*.c`. This appendix is a compact, curated EBNF; the parser implementation is the authoritative resolver of any conflicts.
+> Normative source: `spec/source/grammar/language.ebnf`. Chapters and this appendix share productions. Parser conformance requires tests; a target rule does not establish current implementation support.
 
 ### A.1 Lexical Layer
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-01 -->
 ```ebnf
 SourceFile ::= Statement*
-
 Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
-
 Identifier ::= IdStart IdContinue*
 IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
 // The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
-
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
 HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
 BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
-
 FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
-
 BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
-
 QuotedLiteral ::= StringLiteral | FixedByteLiteral
 StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
 FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
@@ -8543,19 +9099,20 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
-
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
 ```
+<!-- /xr-source -->
 
 ### A.2 Types
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-02 -->
 ```ebnf
 Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8563,22 +9120,20 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
 ```
+<!-- /xr-source -->
 
 ### A.3 Expressions
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-03 -->
 ```ebnf
 Expression ::= AssignExpr
 AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
-
 TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
@@ -8593,7 +9148,6 @@ ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
 MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 // range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
-
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'copy' UnaryExpr
@@ -8602,13 +9156,11 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
-
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
-
 GoExpr    ::= 'go' GoOptions? CallExpr
-GoOptions ::= '(' 'name' ':' StringLiteral ')'
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
-
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
              |  '.' Identifier                 // member
@@ -8618,46 +9170,40 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
-
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
-
-ArrowLambda ::= Identifier '->' (Expression | Block)
-              | '(' ArrowParams? ')' '->' (Expression | Block)
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
-
 ComptimeExpr ::= 'comptime' (Expression | Block)
-
-MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
-
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
+<!-- /xr-source -->
 
 When the next token after `try` is `{`, parse only `TryStmt`; before `scope`, parse `TryScopeStmt` (§10.7); otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
 
@@ -8665,6 +9211,7 @@ A Unit-returning function type omits `ReturnType`, as in `fn()` or `fn() throws(
 
 ### A.4 Patterns
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-04 -->
 ```ebnf
 Pattern ::= LiteralPattern
          |  RangePattern
@@ -8673,7 +9220,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
-
+         |  TuplePattern
+         |  ArrayPattern
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= EnumVariantPath
@@ -8686,10 +9234,15 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
+<!-- /xr-source -->
 
 ### A.5 Statements
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-05 -->
 ```ebnf
 Statement ::= ExprStmt
            |  IncDecStmt
@@ -8709,6 +9262,7 @@ Statement ::= ExprStmt
            |  ForStmt
            |  ForInStmt
            |  ForRefStmt
+           |  ForInTupleStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -8731,95 +9285,83 @@ Statement ::= ExprStmt
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
-
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
-ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 BreakStmt    ::= 'break' Identifier?
 ContinueStmt ::= 'continue' Identifier?
-
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' '(' CatchHeader ')' Block
              |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
 CatchHeader ::= Identifier (':' Type)?
              |  EnumPattern (',' EnumPattern)*
-
 DeferStmt ::= 'defer' Block
 
 // print is a normal global function call, syntactically an ExprStmt.
 
 // go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
-
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
-
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
-            |  Expression 'to' Expression '->' Block        // send
-            |  'after' Expression '->' Block                // timeout
-            |  '_' '->' Block                                // default
-
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
 YieldStmt ::= 'yield' Expression
 ```
+<!-- /xr-source -->
 
 ### A.6 Declarations
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-06 -->
 ```ebnf
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-Binding ::= BindingPattern (':' Type)? ('=' Expression)?
-BindingPattern ::= Identifier
-                |  '[' BindingPattern (',' BindingPattern)* ','? ']'
-                |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
-
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
 ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
-
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
-
 ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | InitDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
-
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
-
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
-
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
@@ -8829,9 +9371,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
-
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
@@ -8840,21 +9380,22 @@ ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
-
 AttrList ::= PublicAttribute*
 PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
 ```
+<!-- /xr-source -->
 
-> Note: this EBNF is curated for guidance. Precedence, associativity, and disambiguation are determined by the parser implementation; in case of ambiguity, treat `src/frontend/parser/xparse_*.c` as authoritative.
+> These productions and the prose precedence, associativity and disambiguation constraints define the target syntax. Disagreements require correction, not automatic preference for the parser. Finite tests do not prove whole-grammar equivalence.
 
 ---
 
 ## Appendix B. Keyword Index
 
-These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `isolated`, `from`, `to`, `after`, `panic`, and `nosuspend` are contextual words, not entries here; `parallel` is a standard-library module name.
+<!-- xr-source:keywords index -->
+This table is generated from the current lexical declarations. Reservation does not establish feature support. Contextual words are listed in §1.5.8; `out` is an ordinary identifier.
 
 | Keyword | Section |
 |--|--|
@@ -8921,6 +9462,7 @@ These **63 keywords** are the union of the 51 general keywords in `src/frontend/
 | `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
+<!-- /xr-source -->
 
 ---
 
@@ -8936,6 +9478,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | Statements | `++` `--` |
+| Value mapping | `=>` |
 | Types, ranges, and spread | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---
@@ -8989,7 +9532,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Conditions | truthy / falsy | conditions must be `bool`; nullable presence requires `value != null`; i64/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
+| Objects | dynamic fields | `{key: value}` is a Map; fixed fields use nominal structs and dynamic JSON uses `JSON.Object` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 

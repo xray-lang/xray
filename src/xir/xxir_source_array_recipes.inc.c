@@ -56,13 +56,6 @@ static bool source_guard_close(SourceContext *ctx, SourceGuard *guard) {
     if (guard->jumped) body->recipes[guard->jump].instruction.targets[0] = join;
     return true;
 }
-/* A callback is a closure literal typed by the receiver, or any value of a matching callable type. */
-typedef struct SourceArrayCallbackShape {
-    XrXirType parameters[2];
-    uint32_t shortest, longest;
-    SourceExpectedType result;
-    XrXirType error_type;
-} SourceArrayCallbackShape;
 /* The complete admitted native contract, rather than an expected result shape,
  * supplies the omitted-clause rule of these canonical callback declarations. */
 static bool source_native_callback_error(SourceContext *ctx, AstNode *node,
@@ -89,45 +82,7 @@ static bool source_native_callback_error(SourceContext *ctx, AstNode *node,
     }
 }
 typedef struct SourceArrayCallback { SourceValue value; uint32_t arity; } SourceArrayCallback;
-static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *argument,
-    const SourceArrayCallbackShape *shape, SourceArrayCallback *output) {
-    SourceValue *callback = &output->value;
-    SourceExpectedType result = shape->result;
-    AstNode *literal = argument;
-    while (literal && literal->type == AST_GROUPING) literal = literal->as.grouping;
-    if (literal && literal->type == AST_FUNCTION_EXPR) {
-        uint32_t count = (uint32_t) literal->as.function_expr.param_count;
-        if (count < shape->shortest || count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback takes a different number of parameters");
-        XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
-        if (count && !parameters) return false;
-        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ,
-            xr_xir_callable_signature(&ctx->types,shape->parameters[i]) != NULL &&
-            !xr_xir_type_is_c_callable(&ctx->types,shape->parameters[i])};
-        XrXirType expected;
-        if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, shape->error_type, &expected)) return false;
-        if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;
-        output->arity = count;
-    } else {
-        if (!expression(ctx, argument, callback)) return false;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
-        if (!signature || signature->parameter_count < shape->shortest || signature->parameter_count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback requires a function of the declared shape");
-        output->arity = signature->parameter_count;
-    }
-    const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
-    if (!signature || (signature->flags & XR_XIR_CALLABLE_REST))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback requires a fixed signature");
-    if (!xr_xir_error_bound_accepts(&ctx->types,signature->element,shape->error_type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"collection callback error exceeds its declaration");
-    for (uint32_t i = 0; i < signature->parameter_count; ++i)
-        if (signature->parameters[i].type != shape->parameters[i] || signature->parameters[i].mode != XR_PARAM_READ)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback parameter type differs from the element");
-    if (result.present && signature->result != result.type)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback result differs from its declared result");
-    return true;
-}
-#include "xxir_source_array_call_arguments.inc.c"
+#include "xxir_source_collection_callback_arguments.inc.c"
 static bool source_array_append_snapshot(SourceContext *ctx,
     SourceValue candidate, SourceValue array, SourceValue zero);
 
@@ -155,8 +110,8 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         if (!source_value_place(ctx, access->object, &place)) return false;
         if (!xr_xir_type_is_array(&ctx->types, place.type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "clear requires an Array place");
-        if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
-            "Array method requires its declared arguments")) return false;
+        if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=NULL,.minimum=0,.maximum=0,
+        .values=NULL,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
         if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, place.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {place.id, empty.id}, {0}, 0, {0}}, NULL))
             return false;
@@ -173,8 +128,8 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
     SourceValue argument = {0}, separator = {0};
     XrXirType parameter=recipe==SOURCE_ARRAY_JOIN ? XR_XIR_STRING : element_type;
     uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,&parameter,recipe==SOURCE_ARRAY_JOIN ? 0u : 1u,
-        1,&argument,&supplied,"Array method requires its declared arguments")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&parameter,.minimum=recipe==SOURCE_ARRAY_JOIN ? 0u : 1u,.maximum=1,
+        .values=&argument,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     if (recipe == SOURCE_ARRAY_JOIN) {
         if (supplied) {
             separator=argument;
@@ -242,8 +197,8 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method receiver is not an Array place");
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), cell_type;
     /* The input may rebind the root or suspend; only afterwards read its current value. */
-    if (!source_native_read_arguments(ctx,node,&element_type,arity,arity,&input,&supplied,
-        "Array method requires its declared arguments")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=&element_type,.minimum=arity,.maximum=arity,
+        .values=&input,.supplied=&supplied,.diagnostic="Array method requires its declared arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     if (arity && input.type != element_type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array unshift input must have the element type");
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
@@ -294,8 +249,8 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array removal receiver is not an Array place");
     uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
-        "Array removal requires no explicit arguments")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=NULL,.minimum=0,.maximum=0,
+        .values=NULL,.supplied=&supplied,.diagnostic="Array removal requires no explicit arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     if(!source_native_call_shape(ctx,shape,root.type,NULL,0))return false;
     element_type = xr_xir_array_element(&ctx->types, root.type);
     if (!source_nullable_type(ctx, element_type, &result_type) ||
@@ -354,8 +309,8 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize receiver is not an Array place");
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), array_cell, count_cell;
     XrXirType parameters[]={XR_XIR_I64,element_type};SourceValue arguments[2];uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,parameters,2,2,arguments,&supplied,
-        "Array resize requires length and fill")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=2,.maximum=2,
+        .values=arguments,.supplied=&supplied,.diagnostic="Array resize requires length and fill",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     length=arguments[0];fill=arguments[1];
     if (length.type != XR_XIR_I64 || fill.type != element_type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize arguments differ from length and element types");
@@ -399,24 +354,24 @@ static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValu
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill receiver is not an Array place");
     XrXirType element = xr_xir_array_element(&ctx->types, root.type), cell;
-    XrXirType parameters[]={element,XR_XIR_I64,XR_XIR_I64};SourceValue arguments[3];uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,parameters,1,3,arguments,&supplied,
-        "Array fill requires value and optional start and end")) return false;
+    XrXirType parameters[]={element,XR_XIR_I64,XR_XIR_I64};SourceValue arguments[3];uint32_t supplied;bool present[3];
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=1,.maximum=3,
+        .values=arguments,.supplied=&supplied,.present=present,.diagnostic="Array fill requires value and optional start and end",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     fill=arguments[0];
     if (fill.type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill value differs from its element type");
-    if (supplied > 1) {
+    if (present[1]) {
         start=arguments[1];
         if (start.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill start must be i64");
     }
-    if (supplied > 2) {
+    if (present[2]) {
         end=arguments[2];
         if (end.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill end must be i64");
     }
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length)) return false;
-    if (supplied < 2 &&
+    if (!present[1] &&
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &start)) return false;
-    if (supplied < 3) end = length;
+    if (!present[2]) end = length;
     if(!source_native_call_shape(ctx,shape,root.type,(XrXirType[]){fill.type,start.type,end.type},3))return false;
     SourceValue bounds[3] = {start, end, length};
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_RANGE_CHECK, XR_XIR_UNIT, {0}, {0}, 0, {0}}, bounds, 3, NULL)) return false;
@@ -446,8 +401,8 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     if (!xr_xir_type_is_array(&ctx->types, array.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries receiver is not an Array");
     uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
-        "Array entries takes no arguments")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=NULL,.minimum=0,.maximum=0,
+        .values=NULL,.supplied=&supplied,.diagnostic="Array entries takes no arguments",.native_owner=XR_NATIVE_DECLARATION_ARRAY})) return false;
     if(!source_native_call_shape(ctx,shape,array.type,NULL,0))return false;
     XrXirType element = xr_xir_array_element(&ctx->types, array.type), tuple, result_type, cell_type;
     XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
@@ -487,8 +442,9 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     if (!xr_xir_type_is_array(&ctx->types, receiver.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
     uint32_t count=0;SourceValue *arrays=NULL;
-    if (!source_native_variadic_read_arguments(ctx,node,receiver.type,&arrays,&count,
-        "Array concat takes ordinary trailing Array arguments")) return false;
+    if (!source_native_variadic_read_arguments(ctx,node,&(SourceNativeVariadicReadInput){
+        .parameter=receiver.type,.native_owner=XR_NATIVE_DECLARATION_ARRAY,.values=&arrays,.supplied=&count,
+        .diagnostic="Array concat takes ordinary trailing Array arguments"})) return false;
     if(!source_native_call_shape(ctx,shape,receiver.type,&receiver.type,1))return false;
     XrXirType cell_type;
     SourceValue seed, store, candidate, zero;
@@ -510,7 +466,8 @@ static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
     SourceExpectedType expected, SourceValue *value) {
     const ArrayLiteralNode *literal = &node->as.array_literal;
     SourceArrayLiteralPart *parts = source_recipe_storage(ctx,(size_t)literal->count,sizeof(*parts));
-    if (!parts) return false;
+    XrHirCollectionEntry *entries=source_alloc(ctx,(size_t)literal->count,sizeof(*entries));
+    if (!parts || !entries) return false;
     SourceExpectedType element = {expected.present,XR_XIR_UNIT,false,expected.inferred};
     XrXirType array = expected.present ? expected.type : XR_XIR_UNIT;
     if (expected.present) element.type = xr_xir_array_element(&ctx->types,array);
@@ -524,24 +481,37 @@ static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
             if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array literal spread source is missing");
             hint = (SourceExpectedType){element.present,array,false,element.inferred};
         }
-        if (!source_plan_expression(ctx,child,hint,&parts[i].value)) return false;
+        if (!source_collection_expression(ctx,child,hint,!expected.present || expected.inferred,&parts[i].value)) return false;
+        entries[i]=(XrHirCollectionEntry){.value=parts[i].value.type,.spread=parts[i].spread};
         XrXirType actual = parts[i].value.type;
         if (parts[i].spread) {
-            if (!xr_xir_type_is_array(&ctx->types,actual))
-                return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Array literal spread requires an Array value");
+            if (!xr_xir_type_is_array(&ctx->types,actual))continue;
             actual = xr_xir_array_element(&ctx->types,actual);
         }
-        if (!element.present) {
+        if (!element.present || (!i && expected.inferred && actual!=element.type)) {
             element = (SourceExpectedType){true,actual,false,true};
             if (!source_array_element_type(ctx,actual,&array)) return false;
+            if(expected.inferred)expected.present=false;
         }
-        if (actual != element.type)
-            return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Array literal entries require one exact element type");
         if ((!expected.present || expected.inferred) && !source_root_join_record(ctx,&parts[i].value)) return false;
     }
+    XrHirCollectionInput input={.kind=XR_HIR_COLLECTION_ARRAY,.expected=expected.type,.has_expected=expected.present,
+        .entries=entries,.count=(uint32_t)literal->count};
+    XrHirCollection checked={0};XrHirCollectionError error={0};
+    XrXirStatus status=xr_hir_collection_check(&ctx->compile,&ctx->types,&input,ctx->request,&checked,&error);
+    if(status==XR_XIR_BAD_TYPE && (!expected.present || expected.inferred) && error.kind==XR_HIR_COLLECTION_VALUE_TYPE)
+        return source_collection_type_failure(ctx,node,&input,error);
+    if(status==XR_XIR_BAD_TYPE && error.kind==XR_HIR_COLLECTION_SPREAD_SOURCE) {
+        AstNode *site=literal->elements[error.second];
+        if(site && site->type==AST_SPREAD_EXPR)site=site->as.spread_expr.expr;
+        return source_fail(ctx,site,XR_XIR_BAD_TYPE,"Array literal spread requires an Array value");
+    }
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"Array literal elements require one exact type");
+    if(!source_array_element_type(ctx,checked.value,&array))return false;
+    XrHirCollectionInput seed_input={.kind=XR_HIR_COLLECTION_ARRAY,.expected=array,.has_expected=true};
     XrXirType cell_type; SourceValue seed, store, candidate, zero;
     if (!source_native_array_declaration(ctx) || !source_cell_type(ctx,array,&cell_type) ||
-        !source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ARRAY_NEW,array,{0},{0},0,{0}},NULL,0,&seed) ||
+        !source_collection_construct(ctx,node,&seed_input,array,NULL,0,0,&seed) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell_type,{seed.id},{0},0,{0}},&store) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,array,{store.id},{0},0,{0}},&candidate) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero)) return false;
@@ -569,7 +539,7 @@ static bool source_array_recipe_callbacks(SourceContext *ctx, AstNode *node, Sou
     SourceArrayCallback callback = {0};
     SourceValue initial = {0};
     XrXirType accumulator = XR_XIR_UNIT;
-    if (!source_array_callback_arguments(ctx,node,recipe,array,&callback,&initial)) return false;
+    if (!source_collection_callback_arguments(ctx,node,recipe,array,&callback,&initial)) return false;
     if (recipe==SOURCE_ARRAY_REDUCE) accumulator=initial.type;
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback.value.type);
     if(!source_native_call_shape(ctx,observed,array.type,(XrXirType[]){callback.value.type,initial.type},

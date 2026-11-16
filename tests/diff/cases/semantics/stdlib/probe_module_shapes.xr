@@ -37,7 +37,7 @@ print(probeDeferValue(5))
 var addTen = probeMakeAdder(10)
 print(addTen(5))
 print(probeApply(7, probeMakeAdder(20)))
-print(probeApply(6, (v) -> v * 3))
+print(probeApply(6, (v) => v * 3))
 // plain class + functions constructing/consuming it
 var box = probeMakeBox("n", 5)
 print(probeReadBox(box))
@@ -47,7 +47,7 @@ print(_probe.probeMakeBox("m", 9).describe())
 print(ProbeBox.tagged("s", 3).describe())
 // generic class with a closure-taking method
 var cell = ProbeCell<i64>(21)
-print(cell.map((v) -> v * 2))
+print(cell.map((v) => v * 2))
 // class containing arrays of another exported module class
 var bag = probeMakeBag()
 print(bag.labels())

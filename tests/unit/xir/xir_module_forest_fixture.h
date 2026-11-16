@@ -60,7 +60,7 @@ static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, 
     };
     const XrXirSlot slot = {0, XR_XIR_STRING, 0};
     const XrXirLiteral literal = {"must not initialize", 19};
-    const XrXirDeclarations declarations = {modules, 3, identities, &slot, 1, &literal, 1, 1, 3, NULL};
+    const XrXirDeclarations declarations = {.modules=modules, .module_count=3, .functions=identities, .slots=&slot, .slot_count=1, .literals=&literal, .literal_count=1, .root_module=1, .entry_function=3, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule built = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};

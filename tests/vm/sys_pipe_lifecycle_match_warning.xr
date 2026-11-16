@@ -3,12 +3,12 @@ import sys
 fn closeOnlyInOneMatchArm(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
-        0 -> {
+        0 => {
             print(pipe!.close())
-        }
-        _ -> {
+        },
+        _ => {
             print("pipe-match-open")
-        }
+        },
     }
     print("after-match")
 }

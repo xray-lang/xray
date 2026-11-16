@@ -2,11 +2,11 @@ var bytes: Array<u8> = []
 bytes.push(7)
 bytes.push(9)
 
-var values: Map<u8, i32> = #{}
+var values: Map<u8, i32> = {}
 values.set(1, 11)
 values.set(2, 22)
 
-var seen: Set<u16> = #[]
+var seen: Set<u16> = Set()
 seen.add(1)
 seen.add(2)
 
@@ -120,8 +120,8 @@ class Bag {
     seen: Set<u16>
 
     init() {
-        this.values = #{}
-        this.seen = #[]
+        this.values = {}
+        this.seen = Set()
     }
 
     ref fill() -> i64 {

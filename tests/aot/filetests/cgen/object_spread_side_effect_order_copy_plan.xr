@@ -1,4 +1,4 @@
-type Pair = { x: i64, y: i64 }
+type Pair = Map<string, i64>
 
 var order = 0
 
@@ -9,17 +9,17 @@ fn mark(step: i64) -> i64 {
 
 fn source(step: i64, x: i64, y: i64) -> Pair {
     mark(step)
-    return { x: x, y: y }
+    return { "x": x, "y": y }
 }
 
 var merged = {
     ...source(1, 10, 11),
-    y: mark(2),
+    "y": mark(2),
     ...source(3, 30, 31),
-    z: mark(4),
+    "z": mark(4),
 }
 
 print(order)
-print(merged.x)
-print(merged.y)
-print(merged.z)
+print(merged["x"])
+print(merged["y"])
+print(merged["z"])

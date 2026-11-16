@@ -4,10 +4,21 @@
 */
 
 enum OptErr { Msg { message: string } }
-type User = { id: i64, name: string }
-type Database = { host: string, port: i64 }
-type Config = { database: Database }
-type ServerConfig = { port: i64, host: string }
+struct User {
+    id: i64
+    name: string
+}
+struct Database {
+    host: string
+    port: i64
+}
+struct Config {
+    database: Database
+}
+struct ServerConfig {
+    port: i64
+    host: string
+}
 
 fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
@@ -20,7 +31,7 @@ fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
         throw OptErr.Msg { message: "intentional json failure" }
     }
-    return { id: 1, name: "Alice" }
+    return User{ id: 1, name: "Alice" }
 }
 
 fn parseConfig() -> Config {
@@ -28,7 +39,7 @@ fn parseConfig() -> Config {
 }
 
 fn parseConfigOK() -> Config {
-    return { database: { host: "prod.example.com", port: 5432 } }
+    return Config{ database: Database{ host: "prod.example.com", port: 5432 } }
 }
 
 @test
@@ -97,11 +108,11 @@ fn test_catch_chain() {
 @test
 fn test_catch_object_default() {
     print("7. catch with object literal as fallback")
-    var cfg: ServerConfig = { port: 8080, host: "localhost" }
+    var cfg: ServerConfig = ServerConfig{ port: 8080, host: "localhost" }
     try {
         throw OptErr.Msg { message: "server config missing" }
     } catch (e) {
-        cfg = { port: 8080, host: "localhost" }
+        cfg = ServerConfig{ port: 8080, host: "localhost" }
     }
     assertEqual(cfg.host, "localhost")
     assertEqual(cfg.port, 8080)

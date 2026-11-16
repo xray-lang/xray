@@ -1138,5 +1138,6 @@
   ],
   "qualification": "NOT_RUN",
   "scope": "Explicit complete originals and observed original-prefix fixtures; no capability or global coverage claim.",
-  "target_abi": "Numeric family uses Windows x86_64 pointer width64; isize/usize retained and required_target enforced against actual binary version."
+  "target_abi": "Numeric family uses Windows x86_64 pointer width64; isize/usize retained and required_target enforced against actual binary version.",
+  "task342_migration_manifest": "tests/aot/task342_structural_responsibilities.json"
 }

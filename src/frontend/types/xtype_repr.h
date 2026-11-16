@@ -83,7 +83,6 @@ typedef enum XrTypeKind {
                             // width integer at the value level, invisible to the GC.
     XR_KIND_RUNE,           // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                             // a uint32; appended last to keep existing kind values stable.
-    XR_KIND_STRUCT_OBJECT,  // Exact/open structural object; shares ObjectShape metadata with Json.
     XR_KIND_SLICE,          // Borrowed contiguous view; source surface: Slice<T>.
     XR_KIND_COUNT
 } XrTypeKind;
@@ -132,11 +131,8 @@ static inline bool xr_kind_is_reference_counted(XrTypeKind k) {
             return true;
     }
 }
-static inline bool xr_kind_has_object_shape(XrTypeKind k) {
-    return k == XR_KIND_STRUCT_OBJECT;
-}
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
-    return xr_kind_has_object_shape(k) || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
+    return k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
 }
 
 // Forward declarations
@@ -197,15 +193,6 @@ typedef enum XrViewOriginBindStatus {
     XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY,
 } XrViewOriginBindStatus;
 
-// Compile-time metadata for exact structural object types.
-typedef struct XrObjectType {
-    const char **field_names;  // Field names array
-    XrType **field_types;      // Field types array (parallel to names)
-    bool *field_readonly;      // Per-field readonly flags (optional)
-    int field_count;           // Number of fields
-    const char *type_name;     // NULL for anonymous, name for type alias
-} XrObjectType;
-
 // Type structure
 struct XrType {
     XrTypeKind kind;            // Primary type discriminator
@@ -224,9 +211,6 @@ struct XrType {
             XrType *key_type;
             XrType *value_type;
         } map;
-
-        // For JSON/object types with structured fields
-        XrObjectType object;
 
         // For class instance
         struct {

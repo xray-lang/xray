@@ -5,21 +5,32 @@
 //
 // Usage: xray gc_linkedlist_churn.xr -- [iterations]
 
-fn makeList(length: i64) {
-    var node = null
+final class ListNode {
+    value: i64
+    next: ListNode?
+
+    init(value: i64, next: ListNode?) {
+        this.value = value
+        this.next = next
+    }
+}
+
+fn makeList(length: i64) -> ListNode? {
+    var node: ListNode? = null
     var i = 0
     while (i < length) {
-        node = { "value": i, "next": node }
+        node = ListNode(i, node)
         i = i + 1
     }
     return node
 }
 
-fn sumList(node): i64 {
+fn sumList(node: ListNode?) -> i64 {
+    var cursor = node
     var sum = 0
-    while (node != null) {
-        sum = sum + node.value
-        node = node.next
+    while (cursor != null) {
+        sum = sum + cursor!.value
+        cursor = cursor!.next
     }
     return sum
 }

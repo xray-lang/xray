@@ -67,10 +67,6 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     XrXirFormatContext *format=(XrXirFormatContext *)context;
     XrXirFormatCursor cursor={0};XrXirValue borrowed={0};
     if (!view || !xir_format_cursor(context,node,&cursor)) return 0;
-    if (cursor.field_name) {
-        view->kind=XR_VALUE_FORMAT_LITERAL;view->name=cursor.field_name->bytes;
-        view->name_size=cursor.field_name->length;return 1;
-    }
     bool is_null=false;
     if (!xr_xir_value_format_unwrap(&cursor,&cursor,&is_null,format->values,&format->status)) return 0;
     if (is_null) {view->kind=XR_VALUE_FORMAT_LITERAL;view->name="null";view->name_size=4;return 1;}
@@ -79,7 +75,7 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     if (!xr_xir_value_format_aggregate(&cursor,&aggregate)) return 0;
     view->kind=aggregate.kind==XIR_FORMAT_TUPLE?XR_VALUE_FORMAT_TUPLE:
         aggregate.kind==XIR_FORMAT_MAP?XR_VALUE_FORMAT_MAP:aggregate.kind==XIR_FORMAT_SET?XR_VALUE_FORMAT_SET:
-        aggregate.kind==XIR_FORMAT_RECORD?XR_VALUE_FORMAT_RECORD:aggregate.array?XR_VALUE_FORMAT_ARRAY:XR_VALUE_FORMAT_ENUM;
+        aggregate.array?XR_VALUE_FORMAT_ARRAY:XR_VALUE_FORMAT_ENUM;
     view->name=aggregate.name.bytes;view->name_size=aggregate.name.length;
     view->member=aggregate.member.bytes;view->member_size=aggregate.member.length;
     view->unsigned_value=aggregate.count;

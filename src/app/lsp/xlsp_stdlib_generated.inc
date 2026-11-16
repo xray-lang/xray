@@ -10,9 +10,9 @@
 
 // Coro module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_coro_symbols[] = {
-    {"CoroStats", XLSP_SYM_CLASS, "type CoroStats = { active: i64, blocked: i64, ready: i64, total: i64, created: i64 }", "Typed aggregate counters for the coroutine scheduler", NULL, 0},
-    {"CoroInfo", XLSP_SYM_CLASS, "type CoroInfo = { id: i64, name: string?, state: CoroState, reductions: i64, source: string? }", "Typed diagnostic snapshot for one coroutine", NULL, 0},
-    {"CoroDeadlock", XLSP_SYM_CLASS, "type CoroDeadlock = { members: Array<CoroInfo>, reason: string }", "Typed description of a detected coroutine wait cycle", NULL, 0},
+    {"CoroStats", XLSP_SYM_CLASS, "struct CoroStats { active: i64, blocked: i64, ready: i64, total: i64, created: i64 }", "Typed aggregate counters for the coroutine scheduler", NULL, 0},
+    {"CoroInfo", XLSP_SYM_CLASS, "struct CoroInfo { id: i64, name: string?, state: CoroState, reductions: i64, source: string? }", "Typed diagnostic snapshot for one coroutine", NULL, 0},
+    {"CoroDeadlock", XLSP_SYM_CLASS, "struct CoroDeadlock { members: Array<CoroInfo>, reason: string }", "Typed description of a detected coroutine wait cycle", NULL, 0},
     {"CoroState", XLSP_SYM_CLASS, "enum CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", NULL, 0},
     {"CoroGroupKey", XLSP_SYM_CLASS, "enum CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", NULL, 0},
     {"CoroMetric", XLSP_SYM_CLASS, "enum CoroMetric", "Metric used to rank coroutine diagnostic snapshots", NULL, 0},
@@ -116,11 +116,21 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"DISCOVERY_MULTICAST_GROUP", XLSP_SYM_CONSTANT, "string", "", NULL, 0},
     {"DISCOVERY_MULTICAST_PORT", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
     {"DISCOVERY_INTERVAL_MS", XLSP_SYM_CONSTANT, "i64", "", NULL, 0},
+    {"ClusterFrame", XLSP_SYM_CLASS, "type ClusterFrame", "Class type", NULL, 0},
+    {"ClusterTransportFrame", XLSP_SYM_CLASS, "type ClusterTransportFrame", "Class type", NULL, 0},
+    {"ClusterHandshakeRequest", XLSP_SYM_CLASS, "type ClusterHandshakeRequest", "Class type", NULL, 0},
+    {"ClusterHandshakeAck", XLSP_SYM_CLASS, "type ClusterHandshakeAck", "Class type", NULL, 0},
+    {"ClusterCoroExit", XLSP_SYM_CLASS, "type ClusterCoroExit", "Class type", NULL, 0},
+    {"ClusterDiscoveryAnnouncement", XLSP_SYM_CLASS, "type ClusterDiscoveryAnnouncement", "Class type", NULL, 0},
     {"PhiDetector", XLSP_SYM_CLASS, "type PhiDetector", "Class type", NULL, 0},
+    {"ClusterTlsOptions", XLSP_SYM_CLASS, "type ClusterTlsOptions", "Class type", NULL, 0},
+    {"ClusterConfig", XLSP_SYM_CLASS, "type ClusterConfig", "Class type", NULL, 0},
     {"ClusterDelivery", XLSP_SYM_CLASS, "type ClusterDelivery", "Enum type", NULL, 0},
+    {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo", "Class type", NULL, 0},
+    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo", "Class type", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 85
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 95
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
@@ -163,11 +173,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
 
 // csv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
-    {"defaultParseOptions", XLSP_SYM_FUNCTION, "fn(): CsvParseOptions", "", NULL, 0},
-    {"defaultWriteOptions", XLSP_SYM_FUNCTION, "fn(): CsvWriteOptions", "", NULL, 0},
-    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?) throws(CsvError): CsvParseReport", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?) throws(CsvError): CsvDocument", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, options?: CsvWriteOptions?) throws(CsvError): string", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, delimiter?: rune, ', quoteChar?: rune, escapeChar?: rune, linebreak?: string) throws(CsvError): string", "", NULL, 0},
     {"CsvDelimiter", XLSP_SYM_CLASS, "type CsvDelimiter", "Enum type", NULL, 0},
     {"CsvHeader", XLSP_SYM_CLASS, "type CsvHeader", "Enum type", NULL, 0},
     {"CsvErrorKind", XLSP_SYM_CLASS, "type CsvErrorKind", "Enum type", NULL, 0},
@@ -176,7 +182,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
     {"CsvDocument", XLSP_SYM_CLASS, "type CsvDocument", "Class type", NULL, 0},
     {"CsvParseReport", XLSP_SYM_CLASS, "type CsvParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 12
+#define GEN_XLSP_STDLIB_CSV_SYMBOL_COUNT 8
 
 // datetime module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
@@ -217,7 +223,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"textResponse", XLSP_SYM_FUNCTION, "fn(body: string, status?: i64, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"jsonResponse", XLSP_SYM_FUNCTION, "fn(value: T, status?: i64, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"json", XLSP_SYM_FUNCTION, "fn(value: T, status?: i64): HttpResponse", "", NULL, 0},
-    {"request", XLSP_SYM_FUNCTION, "fn(options: HttpRequestOptions): HttpResponse", "", NULL, 0},
+    {"request", XLSP_SYM_FUNCTION, "fn(url: string, method?: HttpMethod, headers?: Headers, body?: Array<u8>, followRedirects?: bool, maxRedirects?: i64, timeoutMs?: i64, version?: HttpVersion): HttpResponse", "", NULL, 0},
     {"get", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "", NULL, 0},
     {"post", XLSP_SYM_FUNCTION, "fn(url: string, contentType: string, body: Array<u8>, authorization?: string): HttpResponse", "", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: i64, maxTrailerHeaders?: i64): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
@@ -774,18 +780,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"children", XLSP_SYM_FUNCTION, "fn(node: XmlNode): Array<XmlNode>", "", NULL, 0},
     {"nodeText", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string?", "", NULL, 0},
     {"textContent", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlNode", "", NULL, 0},
-    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlParseReport", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions): XmlNode", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions): string", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions): bool", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, preserveWhitespace?: bool, preserveComments?: bool, preserveCData?: bool, validateEntities?: bool): XmlNode", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, preserveWhitespace?: bool, preserveComments?: bool, preserveCData?: bool, validateEntities?: bool): XmlParseReport", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, preserveWhitespace?: bool, preserveComments?: bool, preserveCData?: bool, validateEntities?: bool): XmlNode", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, indent?: i64, declaration?: bool, encoding?: string): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, indent?: i64, declaration?: bool, encoding?: string): bool", "", NULL, 0},
     {"document", XLSP_SYM_FUNCTION, "fn(children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrs?: Array<XmlAttribute>?, children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"text", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
     {"comment", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
     {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
-    {"XML_DEFAULT_OPTIONS", XLSP_SYM_CONSTANT, "XmlOptions", "", NULL, 0},
-    {"XML_DEFAULT_WRITE_OPTIONS", XLSP_SYM_CONSTANT, "XmlWriteOptions", "", NULL, 0},
     {"XmlName", XLSP_SYM_CLASS, "type XmlName", "Class type", NULL, 0},
     {"XmlAttribute", XLSP_SYM_CLASS, "type XmlAttribute", "Class type", NULL, 0},
     {"XmlNode", XLSP_SYM_CLASS, "type XmlNode", "Enum type", NULL, 0},
@@ -794,7 +798,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"XmlError", XLSP_SYM_CLASS, "type XmlError", "Enum type", NULL, 0},
     {"XmlParseReport", XLSP_SYM_CLASS, "type XmlParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 27
+#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 25
 
 // yaml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
@@ -821,12 +825,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
     {"aliasValue", XLSP_SYM_FUNCTION, "fn(name: string): YamlValue", "", NULL, 0},
     {"newMapping", XLSP_SYM_FUNCTION, "fn(): YamlMapping", "", NULL, 0},
     {"mappingSet", XLSP_SYM_FUNCTION, "fn(mapping: ref YamlMapping, key: string, value: YamlValue): ()", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: YamlOptions?): YamlValue", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, strict?: bool): YamlValue", "", NULL, 0},
     {"parseStrict", XLSP_SYM_FUNCTION, "fn(data: string): YamlValue", "", NULL, 0},
     {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string): YamlParseReport", "", NULL, 0},
     {"parseAll", XLSP_SYM_FUNCTION, "fn(data: string): Array<YamlValue>", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: YamlOptions?): YamlValue", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(value: YamlValue, options?: YamlWriteOptions?): string", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, strict?: bool): YamlValue", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(value: YamlValue, indent?: i64): string", "", NULL, 0},
     {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, value: YamlValue): bool", "", NULL, 0},
     {"YamlAnchor", XLSP_SYM_CLASS, "type YamlAnchor", "Class type", NULL, 0},
     {"YamlTag", XLSP_SYM_CLASS, "type YamlTag", "Class type", NULL, 0},

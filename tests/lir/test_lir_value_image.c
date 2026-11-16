@@ -68,11 +68,20 @@ static Fixture fixture_new(void) {
     XrLirType optional, fixed, tuple, optional_fixed, optional_tuple, optional_unit, optional_empty, pod, optional_pod;
     LIR(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
     char name[] = "label";
-    XrLirRecordField fields[] = {{"active",6,XR_LIR_I1}, {name,5,XR_LIR_STRING}, {"maybe",5,optional}};
-    LIR(xr_lir_record_type(module, fields, 3, &f.record)); name[0] = 'x';
+    XrLirRecordField fields[] = {{"active",6,XR_LIR_I1, 0}, {name,5,XR_LIR_STRING, 0}, {"maybe",5,optional, 0}};
+    LIR(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
+            .name="ImageRecord", .name_length=sizeof("ImageRecord")-1},
+        fields, 3, &f.record)); name[0] = 'x';
     LIR(xr_lir_nullable_type(module, f.record, &f.optional_record));
-    LIR(xr_lir_record_type(module, NULL, 0, &f.empty)); LIR(xr_lir_nullable_type(module, f.empty, &optional_empty));
-    XrLirRecordField field = {"score",5,XR_LIR_I64}; LIR(xr_lir_record_type(module, &field, 1, &pod));
+    LIR(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
+            .name="EmptyRecord", .name_length=sizeof("EmptyRecord")-1},
+        NULL, 0, &f.empty)); LIR(xr_lir_nullable_type(module, f.empty, &optional_empty));
+    XrLirRecordField field = {"score",5,XR_LIR_I64, 0}; LIR(xr_lir_record_type(module,
+        &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
+            .name="PodRecord", .name_length=sizeof("PodRecord")-1},
+        &field, 1, &pod));
     LIR(xr_lir_nullable_type(module, pod, &optional_pod));
     LIR(xr_lir_fixed_array_type(module, XR_LIR_U8, 13, &fixed)); LIR(xr_lir_tuple_i64_type(module, 3, &tuple));
     LIR(xr_lir_nullable_type(module, fixed, &optional_fixed)); LIR(xr_lir_nullable_type(module, tuple, &optional_tuple));

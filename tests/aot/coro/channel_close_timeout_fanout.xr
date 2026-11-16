@@ -3,8 +3,8 @@ fn recv_timeout_until_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel
     ready.send(1)
     var result = ch.recvTimeout(timeout_ms)
     done.send(match (result) {
-        Recv.Closed -> true
-        _ -> false
+        Recv.Closed => true,
+        _ => false,
     })
     return 1
 }
@@ -31,8 +31,8 @@ ch.close()
 var closed_waiters = 0
 for (var i = 0; i < waiter_count; i++) {
     if (match (done.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> false
+        Recv.Value { value: v } => v,
+        _ => false,
     }) {
         closed_waiters++
     }

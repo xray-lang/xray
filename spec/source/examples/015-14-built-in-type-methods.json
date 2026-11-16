@@ -1,0 +1,30 @@
+{
+  "array-ref-current-binding": {
+    "fence": "xray @id=array-ref-current-binding",
+    "code": "var a: Array<string> = [\"old\"]\nfn replaceForPush() -> string {\n    print(\"arg\")\n    a = [\"new\"]\n    return \"tail\"\n}\na.push(replaceForPush())\nprint(a[0], a[1])           // 依次输出 arg、new tail",
+    "trivia": {
+      "en": {
+        "50": "           // Prints arg, then new tail"
+      }
+    }
+  },
+  "array-push-own-element": {
+    "fence": "xray @id=array-push-own-element",
+    "code": "var a: Array<string> = [\"head\"]\na.push(a[0])\nprint(a[0], a[1])           // head head"
+  },
+  "json-boundary-and-path": {
+    "fence": "xray @id=json-boundary-and-path @check",
+    "code": "struct Request { action: string; userId: i64 }\nvar body = \"{\\\"action\\\":\\\"create\\\",\\\"userId\\\":7}\"\n\nvar request = JSON.parse<Request>(body)       // 未知字段默认拒绝\nvar payload = JSON.parseObject(body)          // JSON.Object，即 Map\npayload[\"traceId\"] = \"req-42\"               // 标量隐式 widening\n\nvar path: JSON.Path = [\"user\", \"profile\", \"name\"]\nvar name = JSON.get<string>(payload, path)\nJSON.set(payload, path, \"Ada\", true)",
+    "trivia": {
+      "en": {
+        "27": "       // unknown fields reject by default\n",
+        "36": "          // JSON.Object, therefore a Map\n",
+        "42": "               // scalar widening is implicit\n\n"
+      }
+    }
+  },
+  "range-members": {
+    "fence": "xray @id=range-members",
+    "code": "var pages = 1..=3\nprint(pages.start)          // 1\nprint(pages.end)            // 3\nprint(pages.contains(3))    // true\nprint(len(pages))           // 3\nprint(pages.toArray())      // [1, 2, 3]\n\nvar empty = 5..5\nprint(len(empty))           // 0"
+  }
+}

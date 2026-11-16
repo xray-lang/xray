@@ -12,8 +12,8 @@ enum Direction {
 
     symbol() -> string {
         return match (this) {
-            Direction.North -> "N",
-            Direction.East -> "E"
+            Direction.North => "N",
+            Direction.East => "E",
         }
     }
 }
@@ -24,8 +24,8 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
         }
     }
 }

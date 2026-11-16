@@ -1,7 +1,7 @@
 import parallel
 
-const plan = parallel.Plan<i64>(parallel.Options(1), lane -> lane)
+const plan = parallel.Plan<i64>(parallel.Options(1), lane => lane)
 
 go fn() {
-    plan.forEach(0..1, (state, i) -> {})
+    plan.forEach(0..1, (state, i) => {})
 }()

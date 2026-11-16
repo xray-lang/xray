@@ -1,0 +1,226 @@
+{
+  "eval-order-rules": {
+    "fence": "xray @id=eval-order-rules",
+    "code": "fn t(tag: string, v: i64) -> i64 { print(tag); return v }\nfn add(a: i64, b: i64) -> i64 { return a + b }\nfn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }\n\nclass Counter {\n    hits: i64 = 0\n}\n\nfn mk(tag: string) -> Counter { print(tag); return Counter() }\n\n// E2：被调表达式先于实参\nvar sum = pick(\"callee\")(t(\"arg1\", 1), t(\"arg2\", 2))   // callee, arg1, arg2\n\n// E5：place 子表达式先于右值\nvar arr = [0, 0, 0]\narr[t(\"index\", 0)] = t(\"value\", 5)                     // index, value\n\n// E6：复杂 receiver 只求值一次\nmk(\"receiver\").hits += t(\"delta\", 1)                   // receiver, delta",
+    "trivia": {
+      "en": {
+        "95": "\n\n// E2: the callee is evaluated before the arguments\n",
+        "117": "   // callee, arg1, arg2\n\n// E5: place subexpressions are evaluated before the right-hand side\n",
+        "143": "                     // index, value\n\n// E6: a complex receiver is evaluated exactly once\n"
+      }
+    }
+  },
+  "004-3-expressions-example-002": {
+    "fence": "xray",
+    "code": "extern \"C\" {\n    fn malloc(n: usize) -> MutPtr<u8>\n    fn free(p: MutPtr<u8>)\n}\n\nvar p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果\nunsafe {\n    p[0] = 7                      // MutPtr 写入必须在 unsafe 内\n    print(p.deref())              // 解引用必须在 unsafe 内\n    free(p)                       // extern 调用必须在 unsafe 内\n}",
+    "trivia": {
+      "en": {
+        "36": "      // the final expression is the block result\n",
+        "44": "                      // MutPtr writes must be inside unsafe\n    ",
+        "52": "              // dereference must be inside unsafe\n    ",
+        "56": "                       // extern calls must be inside unsafe\n"
+      }
+    }
+  },
+  "004-3-expressions-example-003": {
+    "fence": "xray",
+    "code": "fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }\nexport fn run()->i64 { return comptime fact(6) }"
+  },
+  "004-3-expressions-example-004": {
+    "fence": "xray",
+    "code": "fn noop() {}\nexport fn run()->i64 { return comptime { comptime noop(); 42 } }"
+  },
+  "expr-null-coalesce": {
+    "fence": "xray @id=expr-null-coalesce",
+    "code": "var v = nullable_expr ?? default_value"
+  },
+  "004-3-expressions-example-006": {
+    "fence": "xray",
+    "code": "var max = a > b ? a : b"
+  },
+  "expr-optional-chain": {
+    "fence": "xray @id=expr-optional-chain",
+    "code": "var city = user?.address        // 可选属性访问\nvar item = arr?[0]              // 可选索引\nvar value = callback?.(input)   // 可选函数调用\nvar road = user?.address.street // 整链短路：user 为 null 时结果为 null",
+    "trivia": {
+      "en": {
+        "6": "        // optional property access\n",
+        "14": "              // optional index\n",
+        "22": "   // optional function call\n",
+        "30": " // whole-chain short-circuit: null when user is null"
+      }
+    }
+  },
+  "004-3-expressions-example-008": {
+    "fence": "xray",
+    "code": "var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)",
+    "trivia": {
+      "en": {
+        "7": "      // panics with E0413 when null"
+      }
+    }
+  },
+  "004-3-expressions-example-009": {
+    "fence": "xray",
+    "code": "if (v is User) {\n    // 此分支内 v 窄化为 User\n    print(v.name)\n}",
+    "trivia": {
+      "en": {
+        "7": "\n    // v is narrowed to User in this branch\n    "
+      }
+    }
+  },
+  "004-3-expressions-example-010": {
+    "fence": "xray",
+    "code": "var n = v as i64           // 失败抛 TypeError\nvar n = v as i64?          // 失败返回 null（\"as nullable\" 安全形式）",
+    "trivia": {
+      "en": {
+        "6": "           // throws TypeError on failure\n",
+        "13": "          // returns null on failure (the \"as nullable\" safe form)"
+      }
+    }
+  },
+  "expr-range": {
+    "fence": "xray @id=expr-range",
+    "code": "var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）\nvar closed = 0..=10    // 闭区间（包含 0 和 10）\nvar r = 1..100\nvar n = 10\nfor (i in 0..n) { print(i) }\nfor (i in 0..=n) { print(i) }\nfor (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)",
+    "trivia": {
+      "en": {
+        "7": "   // left-closed right-open (includes 0, excludes 10)\n",
+        "13": "    // closed interval (includes both 0 and 10)\n",
+        "70": "   // endpoint binds first: 0..(n+1)"
+      }
+    }
+  },
+  "expr-spread-collections": {
+    "fence": "xray @id=expr-spread-collections @check",
+    "code": "var a = [1, 2]\nvar b = [3, 4]\nvar nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]\n\nvar base = {\"x\": 1, \"y\": 2}\nvar point = {...base, \"y\": 20, \"z\": 3}   // { x: 1, y: 20, z: 3 }"
+  },
+  "expr-array-lit": {
+    "fence": "xray @id=expr-array-lit @check",
+    "code": "var a = [1, 2, 3]\nvar emptyArray: Array<i64> = []\nvar mixed: Array<i64 | string> = [1, \"hello\"]"
+  },
+  "expr-map-lit": {
+    "fence": "xray @id=expr-map-lit @check",
+    "code": "const KEY = \"name\"\nvar m = {KEY: 1, \"age\": 2}\nvar empty: Map<string, i64> = {}\nvar defaults = {\"timeout\": 30, \"retries\": 3}\nvar config = {...defaults, \"retries\": 5}"
+  },
+  "expr-set-lit": {
+    "fence": "xray @id=expr-set-lit @check",
+    "code": "var s = Set([1, 2, 3])\nvar emptySet = Set<i64>()"
+  },
+  "expr-struct-lit": {
+    "fence": "xray @id=expr-struct-lit @check",
+    "code": "struct Point { x: i64; y: i64 }\nvar p = Point{x: 1, y: 2}\nvar moved = Point{...p, x: 10}"
+  },
+  "004-3-expressions-example-017": {
+    "fence": "xray",
+    "code": "obj.field\nobj.method(args)\nClassName.staticMethod()\nEnumName.MemberName"
+  },
+  "expr-index-access": {
+    "fence": "xray @id=expr-index-access",
+    "code": "arr[0]\narr[0] = 10\nmap[\"key\"]\nvar bytes: Slice<u8> = text.bytes()\nbytes[i]                // 显式 byte 视图索引",
+    "trivia": {
+      "en": {
+        "31": "                // explicit byte-view index"
+      }
+    }
+  },
+  "array-read-receiver-snapshot": {
+    "fence": "xray @id=array-read-receiver-snapshot",
+    "code": "var a: Array<string> = [\"old\"]\nfn replaceForIndex() -> i64 {\n    print(\"index\")\n    a = [\"new\"]\n    return 0\n}\nprint(a[replaceForIndex()])  // 依次输出 index、old\nprint(a[0])                 // new",
+    "trivia": {
+      "en": {
+        "39": "  // Prints index, then old\n"
+      }
+    }
+  },
+  "array-write-current-binding": {
+    "fence": "xray @id=array-write-current-binding",
+    "code": "var a: Array<string> = [\"old\"]\nfn index() -> i64 { print(\"index\"); return 1 }\nfn replacement() -> string {\n    print(\"rhs\")\n    a = [\"new0\", \"new1\"]\n    return \"stored\"\n}\nvar written = (a[index()] = replacement())\nprint(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝",
+    "trivia": {
+      "en": {
+        "71": "        // Prints index, rhs, then stored stored; no old-length rejection"
+      }
+    }
+  },
+  "array-write-current-binding-bounds": {
+    "fence": "xray @id=array-write-current-binding-bounds",
+    "code": "var a: Array<string> = [\"old0\", \"old1\"]\nfn shrink() -> string { print(\"rhs\"); a = [\"new\"]; return \"stored\" }\na[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 [\"new\"] 不回滚",
+    "trivia": {
+      "en": {
+        "42": "             // Prints rhs, then E0430 panic; rebinding to [\"new\"] remains"
+      }
+    }
+  },
+  "array-read-parameter-mutation-rejected": {
+    "fence": "xray @id=array-read-parameter-mutation-rejected",
+    "code": "fn invalid(values: Array<string>) {\n    values.push(\"x\")       // 编译错误：普通 read 参数不是可写 receiver\n}",
+    "trivia": {
+      "en": {
+        "17": "       // Compile error: a read parameter is not a writable receiver\n"
+      }
+    }
+  },
+  "expr-slice": {
+    "fence": "xray @id=expr-slice",
+    "code": "arr[1:4]                // 元素 [1,4)\narr[:3]                 // 前 3 个\narr[2:]                 // 从索引 2 到末尾\narr[:]                  // 全长视图（不是拷贝）\nvar view: Slice<i64> = arr[1:4]",
+    "trivia": {
+      "en": {
+        "6": "                // elements [1, 4)\n",
+        "11": "                 // first 3\n",
+        "16": "                 // from index 2 to the end\n",
+        "20": "                  // full-length view (not a copy)\n"
+      }
+    }
+  },
+  "expr-lambda-forms": {
+    "fence": "xray @id=expr-lambda-forms @fragment",
+    "code": "// ── arrow lambda：每个参数都可独立标注或推断 ──\narr.map(x => x * 2)\nvar add = (x: i64, y) => x + y\n\n// 表达式体隐式返回；ref 只授予可写借用，不会自动写回\nvar calculate = (x: ref i64) => x * 2\nvar doubleInPlace = (x: ref i64) => { x = x * 2 }\n\n// ── fn lambda：显式返回类型、泛型或完整参数契约 ──\nvar inc = fn(x: i64) -> i64 {\n    var y = x + 1\n    return y\n}\nvar identity = fn<T>(x: T) -> T { return x }     // 泛型",
+    "trivia": {
+      "en": {
+        "0": "// ── Arrow lambda: each parameter may be annotated or inferred independently ──\n",
+        "24": "\n\n// Expression bodies return implicitly; ref only grants a writable loan\n",
+        "54": "\n\n// ── fn lambda: explicit return type, generics, or a full parameter contract ──\n",
+        "93": "     // generic"
+      }
+    }
+  },
+  "expr-match": {
+    "fence": "xray @id=expr-match @fragment",
+    "code": "var result = match (x) {\n    1 => \"one\",\n    2, 3, 4 => \"few\",                 // 多值\n    10..20 => \"teen\",                 // 范围\n    n if (n > 100) => \"big\",          // 守卫\n    Color.Red => \"red\",               // 枚举\n    is User => \"a user\",              // 类型模式\n    _ => \"default\",                    // 通配符\n}",
+    "trivia": {
+      "en": {
+        "20": "                 // multi-value\n    ",
+        "27": "                 // range\n    ",
+        "37": "          // guard\n    ",
+        "43": "               // enum\n    ",
+        "48": "              // type pattern\n    ",
+        "52": "                    // wildcard\n"
+      }
+    }
+  },
+  "expr-new": {
+    "fence": "xray @id=expr-new",
+    "code": "var p = Point(1.0, 2.0)\nvar arr = Array<i64>()\nconst ch = Channel<i64>(10)\nvar m = Map<string, i64>()"
+  },
+  "expr-literal-constructor-relation": {
+    "fence": "xray @id=expr-literal-constructor-relation @check",
+    "code": "struct Point { x: i64; y: i64 }\nvar a = [1, 2, 3]              // 等价 Array<i64>() + push\nvar m: Map<string, i64> = {}    // 空 Map 需要类型上下文\nvar p = Point{x: 1, y: 2}      // struct literal",
+    "trivia": {
+      "en": {
+        "21": "              // equivalent to Array<i64>() + push\n",
+        "33": "    // an empty Map requires a type context\n"
+      }
+    }
+  },
+  "expr-string-interpolation": {
+    "fence": "xray @id=expr-string-interpolation",
+    "code": "var greeting = \"Hello, ${name}! Age: ${user.age + 1}\""
+  },
+  "expr-yield": {
+    "fence": "xray @id=expr-yield",
+    "code": "yield expr                  // 生成器产出一个值并挂起",
+    "trivia": {
+      "en": {
+        "2": "                  // produce one generator value and suspend"
+      }
+    }
+  }
+}

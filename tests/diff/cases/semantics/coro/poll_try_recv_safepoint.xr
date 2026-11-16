@@ -5,8 +5,8 @@
 
 fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.tryRecv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
@@ -29,8 +29,8 @@ go spin_until_value(data, out)
 go producer(data)
 
 var result = match (out.recvTimeout(1000)) {
-    Recv.Value { value: v } -> v
-    _ -> -1
+    Recv.Value { value: v } => v,
+    _ => -1,
 }
 
 data.close()

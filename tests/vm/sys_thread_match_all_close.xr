@@ -5,12 +5,12 @@ fn closeInMatch(tag: i64) {
         return 42
     })
     match (tag) {
-        0 -> {
+        0 => {
             t.detach()
-        }
-        _ -> {
+        },
+        _ => {
             print(t.join())
-        }
+        },
     }
 }
 

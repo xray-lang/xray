@@ -6,9 +6,9 @@ enum FsMode {
 
 fn code(m: FsMode) -> i64 {
     return match (m) {
-        FsMode.Boot -> 11
-        FsMode.Run -> 22
-        FsMode.Halt -> 33
+        FsMode.Boot => 11,
+        FsMode.Run => 22,
+        FsMode.Halt => 33,
     }
 }
 

@@ -77,7 +77,7 @@ fn test_parse_empty_element() {
 @test
 fn test_parse_preserve_comments() {
     var doc = xml.parse("<root><!-- comment --><item/></root>",
-        { preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true })
+        preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true)
     assertEqual(len(xml.children(doc)), 2)
 }
 
@@ -86,6 +86,6 @@ fn test_parse_preserve_comments() {
 @test
 fn test_stringify_compact() {
     var doc = xml.parse("<msg>Hi</msg>")
-    var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
+    var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
     assertEqual(str, "<msg>Hi</msg>")
 }

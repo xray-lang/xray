@@ -1,4 +1,4 @@
-var m = #{"k": "value"}
+var m = {"k": "value"}
 var name = "Ada"
 
 print("${"x"}")

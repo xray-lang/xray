@@ -41,10 +41,10 @@ var await_start = time.monotonic()
 var cancelled = 0
 for (t in tasks) {
     match (t.awaitResult()) {
-        TaskResult.Cancelled -> {
+        TaskResult.Cancelled => {
             cancelled++
-        }
-        _ -> {}
+        },
+        _ => {},
     }
 }
 var await_time = time.monotonic() - await_start

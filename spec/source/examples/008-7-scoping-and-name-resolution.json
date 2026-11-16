@@ -1,0 +1,30 @@
+{
+  "008-7-scoping-and-name-resolution-example-001": {
+    "fence": "xray",
+    "code": "main()                    // OK：使用提升后的 fn\nfn main() { ... }\n\nvar y = x                 // 错误：x 未声明\nvar x = 10",
+    "trivia": {
+      "en": {
+        "3": "                    // OK: uses the hoisted fn\n",
+        "14": "                 // error: x is not declared\n"
+      }
+    }
+  },
+  "008-7-scoping-and-name-resolution-example-002": {
+    "fence": "xray",
+    "code": "var x = 1\n{\n    var x = \"hello\"           // shadow：OK\n    print(x)                 // \"hello\"\n}\nprint(x)                     // 1",
+    "trivia": {
+      "en": {
+        "9": "           // shadow: OK\n    "
+      }
+    }
+  },
+  "008-7-scoping-and-name-resolution-example-003": {
+    "fence": "xray",
+    "code": "fn make_counter() -> (() -> i64) {\n    var count = 0\n    return fn() -> i64 {\n        count += 1                  // 修改外层 count\n        return count\n    }\n}\n\nvar c = make_counter()\nprint(c())      // 1\nprint(c())      // 2",
+    "trivia": {
+      "en": {
+        "26": "                  // mutates the outer count\n        "
+      }
+    }
+  }
+}

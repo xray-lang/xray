@@ -116,6 +116,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_TUPLE_NEW:
     case XR_XIR_TUPLE_FIELD:
     case XR_XIR_NULLABLE_NONE:
+    case XR_XIR_DATA_UNION_INJECT:
     case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME:
     case XR_XIR_NULLABLE_UNWRAP:
@@ -138,12 +139,13 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_EQ_STRING:
     case XR_XIR_NE_STRING:
     case XR_XIR_EQUAL:
+    case XR_XIR_JSON_NULL: case XR_XIR_JSON_VALUE_INJECT:
         return true;
     default: return false;
     }
 }
 static bool library_catalog_builtin(XrXirType type) {
-    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F32 || type == XR_XIR_F64;
+    return type == XR_XIR_JSON_VALUE || type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F32 || type == XR_XIR_F64;
 }
 /* Common verification validates access, ownership and every recursive type first.
  * Import admits only the ordinary value families whose full type and body
@@ -236,7 +238,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
         const XrXirTypeNode *node=&types->nodes[t];
         if (node->kind!=XR_XIR_TYPE_FIXED_ARRAY && node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
-            node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
+            node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION && node->kind!=XR_XIR_TYPE_DATA_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&
             !(node->kind==XR_XIR_TYPE_MUT_SLICE &&
               (node->element==XR_XIR_U8 || node->element==XR_XIR_I64)) &&
@@ -364,7 +366,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
                 op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLASS_METHOD_REF && op->op!=XR_XIR_GENERATOR_NEW &&
                 op->op!=XR_XIR_CALL_REQUIREMENT && op->op!=XR_XIR_CALL_DEFAULT &&
-                op->op!=XR_XIR_CONST_STRING && op->op!=XR_XIR_SLOT_LOAD &&
+                op->op!=XR_XIR_CONST_STRING && op->op!=XR_XIR_MAP_LITERAL && op->op!=XR_XIR_SLOT_LOAD &&
                 op->op!=XR_XIR_SLOT_INIT && op->op!=XR_XIR_SLOT_STORE &&
                 op->op!=XR_XIR_SLOT_PLACE && op->op!=XR_XIR_SLOT_GROUP_INIT)
                 return XR_XIR_BAD_STAGE;

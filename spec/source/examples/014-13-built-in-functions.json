@@ -1,0 +1,6 @@
+{
+  "builtin-typeOf-is": {
+    "fence": "xray @id=builtin-typeOf-is",
+    "code": "var x = 42\nprint(typeOf(x) == Type.i64)    // true\nprint(typeName(x))              // \"i64\"\nprint(x is i64)                 // true\n// typeOf(x) == \"i64\"           // compile error: use Type.i64 or typeName(x)"
+  }
+}

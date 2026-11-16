@@ -1,10 +1,16 @@
 // Demo: Maps and Sets
-// Map (dynamic key-value), Set (unique elements), object literals
+// Map (dynamic key-value), Set (unique elements), and named structs
 //
 // Run: xray demos/02-collections/maps_and_sets.xr
 
 // === Map ===
-var scores = #{"alice": 95, "bob": 87, "charlie": 92}
+struct LabeledPoint {
+    x: f64
+    y: f64
+    label: string
+}
+
+var scores = {"alice": 95, "bob": 87, "charlie": 92}
 print("scores: ${scores}")
 
 // Access and mutation
@@ -27,11 +33,11 @@ for (key in scores.keys()) {
 }
 
 // Empty map
-var empty: Map<string, i64> = #{}
+var empty: Map<string, i64> = {}
 print("empty map length: ${len(empty)}")
 
 // === Set (unique elements) ===
-var colors = #[1, 2, 3, 2, 1]
+var colors = Set([1, 2, 3, 2, 1])
 print("set: ${colors}, length: ${len(colors)}")
 
 colors.add(4)
@@ -39,7 +45,7 @@ print("has 3: ${colors.contains(3)}")
 colors.delete(1)
 print("after delete 1: ${colors}")
 
-// === Object literal (static structure) ===
-var point = { x: 3.0, y: 4.0, label: "A" }
-print("point: ${point}")
+// === Named struct (static fields) ===
+var point = LabeledPoint{ x: 3.0, y: 4.0, label: "A" }
+print("point: x=${point.x}, y=${point.y}, label=${point.label}")
 print("x: ${point.x}, label: ${point.label}")

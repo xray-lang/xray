@@ -34,7 +34,7 @@ int main(void) {
     CHECK(function->throws_clause.syntax==XR_THROWS_TYPED && function->throws_clause.type &&
         !strcmp(function->throws_clause.type->name,"Failure"));
     char printed[512]={0};
-    CHECK(xr_compile_tref_to_string_structural(xr_compile_session_compile_state(session),optional,printed,sizeof(printed))>0);
+    CHECK(xr_compile_tref_to_string_buf(xr_compile_session_compile_state(session),optional,printed,sizeof(printed))>0);
     CHECK(strstr(printed,"nosuspend fn(") && strstr(printed,"throws(Failure)"));
     char text[1024];int written=snprintf(text,sizeof(text),"fn apply(cb:%s){}\n",printed);CHECK(written>0 && (size_t)written<sizeof(text));
     AstNode *formatted=parse(session,text);XrTypeRef *again=parameter(formatted,0);

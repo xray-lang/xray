@@ -1,6 +1,6 @@
-// Guard: parse options are a typed `YamlOptions`, not a schema-less JSON object.
+// Guard: a configuration Map cannot replace flat named parameters.
 import yaml
 
-var opts: JSON.Object = JSON.parseObject("{\"strict\":true}")
-var doc = yaml.parse("a: 1", opts)
+var opts: Map<string, bool> = {"strict": true}
+var doc = yaml.parse("a: 1", options: opts)
 print(doc)

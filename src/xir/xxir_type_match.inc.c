@@ -78,6 +78,7 @@ static XrXirStatus type_match_stack_grow(const XrXirCompileContext *context,
     return XR_XIR_OK;
 }
 
+typedef struct TypeMatchControl { uint64_t remaining;XrCompileRequestControl *request; } TypeMatchControl;
 typedef struct TypeMatchContext {
     const XrXirTypes *source_types;
     const XrXirTypes *types;
@@ -88,7 +89,13 @@ typedef struct TypeMatchContext {
     XirReadScratch *read;
     void *owner;
     XrXirNominalMatch nominal_match;
+    TypeMatchControl *control;
 } TypeMatchContext;
+static XrXirStatus type_match_charge(TypeMatchContext *c) {
+    if(!c->control)return XR_XIR_OK;
+    if(!c->control->remaining)return XR_XIR_BUDGET;
+    --c->control->remaining;return xir_receive_poll(c->control->request);
+}
 static XrXirStatus type_match_run(const XrXirCompileContext *context,
     const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch);
 
@@ -101,6 +108,7 @@ static XrXirStatus type_match_terms(TypeMatchContext *c,XrXirType root,bool expe
     const XrXirTypeNode *node=error_union_node(types,root);
     uint32_t n=node ? node->parameter_count : 1;uint64_t total=0;
     for (uint32_t i=0;i<n;++i) {
+        XrXirStatus charged=type_match_charge(c);if(charged!=XR_XIR_OK)return charged;
         XrXirType type=node ? node->parameters[i].type : root;
         uint32_t id=(uint32_t)type;bool substituted=false;
         if (expected && c->count && id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
@@ -113,6 +121,7 @@ static XrXirStatus type_match_terms(TypeMatchContext *c,XrXirType root,bool expe
         const XrXirTypeNode *expanded=error_union_node(owner,type);
         uint32_t leaves=expanded ? expanded->parameter_count : 1;
         for (uint32_t p=0;p<leaves;++p) {
+            XrXirStatus charged_leaf=type_match_charge(c);if(charged_leaf!=XR_XIR_OK)return charged_leaf;
             XrXirType leaf=expanded ? expanded->parameters[p].type : type;
             if (leaf==XR_XIR_NEVER) continue;
             *erased|=leaf==XR_XIR_ERROR;
@@ -149,6 +158,7 @@ static XrXirStatus type_match_union(TypeMatchContext *c,XrXirType expected,
 }
 static XrXirStatus type_match_pair(TypeMatchContext *c,XrXirType expected,
     XrXirType actual,TypeMatchFrame *frame) {
+    XrXirStatus charged=type_match_charge(c);if(charged!=XR_XIR_OK)return charged;
     *frame=(TypeMatchFrame){0};
     uint32_t id=(uint32_t)expected;
     if (!c->count && c->source_types==c->types && expected==actual) return XR_XIR_OK;
@@ -172,7 +182,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c,XrXirType expected,
             from->nominal.declaration==to->nominal.declaration;
         if (!identity || from->nominal.argument_count!=to->nominal.argument_count) return XR_XIR_BAD_TYPE;
     } else if (from->kind!=XR_XIR_TYPE_FIXED_ARRAY && from->kind!=XR_XIR_TYPE_ARRAY && from->kind!=XR_XIR_TYPE_CELL &&
-        from->kind!=XR_XIR_TYPE_CALLABLE && from->kind!=XR_XIR_TYPE_NULLABLE && from->kind!=XR_XIR_TYPE_TUPLE &&
+        from->kind!=XR_XIR_TYPE_CALLABLE && from->kind!=XR_XIR_TYPE_NULLABLE && from->kind!=XR_XIR_TYPE_TUPLE && from->kind!=XR_XIR_TYPE_DATA_UNION &&
         from->kind!=XR_XIR_TYPE_ATOMIC && from->kind!=XR_XIR_TYPE_TASK && from->kind!=XR_XIR_TYPE_MAP &&
         from->kind!=XR_XIR_TYPE_SET && from->kind!=XR_XIR_TYPE_SLICE && from->kind!=XR_XIR_TYPE_MUT_SLICE &&
         from->kind!=XR_XIR_TYPE_ITERATOR && from->kind!=XR_XIR_TYPE_CHANNEL &&
@@ -215,7 +225,7 @@ static XrXirStatus type_match_next(TypeMatchContext *base,TypeMatchFrame *frame,
     }
     uint32_t components=from->kind==XR_XIR_TYPE_NOMINAL ? from->nominal.argument_count :
         from->kind==XR_XIR_TYPE_CALLABLE ? from->parameter_count+2 :
-        from->kind==XR_XIR_TYPE_TUPLE ? from->parameter_count :
+        (from->kind==XR_XIR_TYPE_TUPLE || from->kind==XR_XIR_TYPE_DATA_UNION) ? from->parameter_count :
         (from->kind==XR_XIR_TYPE_MAP || from->kind==XR_XIR_TYPE_TASK || from->kind==XR_XIR_TYPE_ITERATOR) ? 2 : 1;
     if (frame->next==components) {*done=true;return XR_XIR_OK;}
     XrXirType left=from->element,right=to->element;
@@ -223,7 +233,7 @@ static XrXirStatus type_match_next(TypeMatchContext *base,TypeMatchFrame *frame,
         left=from->result;right=to->result;
     } else if (from->kind==XR_XIR_TYPE_NOMINAL) {
         left=from->nominal.arguments[frame->next];right=to->nominal.arguments[frame->next];
-    } else if (from->kind==XR_XIR_TYPE_TUPLE) {
+    } else if (from->kind==XR_XIR_TYPE_TUPLE || from->kind==XR_XIR_TYPE_DATA_UNION) {
         uint32_t p=frame->next;
         if (from->parameters[p].mode || to->parameters[p].mode) return XR_XIR_BAD_TYPE;
         left=from->parameters[p].type;right=to->parameters[p].type;
@@ -239,12 +249,12 @@ static XrXirStatus type_match_next(TypeMatchContext *base,TypeMatchFrame *frame,
 }
 static XrXirStatus type_match_run_mode(const XrXirCompileContext *context,
     const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch,bool subset,
-    void *owner,XrXirNominalMatch nominal_match) {
+    void *owner,XrXirNominalMatch nominal_match,TypeMatchControl *control) {
     if (!xir_compile_context_valid(context) || !request || !scratch || scratch->resources!=context->resources ||
         (request->argument_count && !request->arguments)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext remaining=*context;
     TypeMatchContext c={request->source_types,request->actual_types,request->arguments,
-        request->argument_count,&remaining,scratch,request->memory,owner,nominal_match};
+        request->argument_count,&remaining,scratch,request->memory,owner,nominal_match,control};
     TypeMatchFrame root={0};
     XrXirStatus status=subset ? type_match_union(&c,request->expected,request->actual,true,&root) :
         type_match_pair(&c,request->expected,request->actual,&root);
@@ -256,6 +266,7 @@ static XrXirStatus type_match_run_mode(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK) {xir_read_scratch_release(c.read,root.errors);return status;}
     TypeMatchFrame *stack=claimed->frames;uint32_t depth=1;stack[0]=root;
     while (depth) {
+        XrXirStatus charged=type_match_charge(&c);if(charged!=XR_XIR_OK){status=charged;break;}
         if (status==XR_XIR_BAD_TYPE) {
             while (depth && !(stack[depth-1].errors && stack[depth-1].awaiting))
                 type_match_pop(stack,&depth,c.read,false);
@@ -282,7 +293,7 @@ static XrXirStatus type_match_run_mode(const XrXirCompileContext *context,
 }
 static XrXirStatus type_match_run(const XrXirCompileContext *context,
     const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch) {
-    return type_match_run_mode(context,request,scratch,false,NULL,NULL);
+    return type_match_run_mode(context,request,scratch,false,NULL,NULL,NULL);
 }
 XR_FUNC XrXirStatus xr_xir_compile_error_substitution_accepts(const XrXirCompileContext *context,
     const XrXirErrorMatch *match) {
@@ -290,7 +301,7 @@ XR_FUNC XrXirStatus xr_xir_compile_error_substitution_accepts(const XrXirCompile
     XirTypeMatchRead request={match->source_types,match->actual_types,match->arguments,
         match->argument_count,match->bound,match->actual,NULL};
     XrXirTypeMatchScratch scratch={context->resources,NULL};
-    XrXirStatus status=type_match_run_mode(context,&request,&scratch,true,match->owner,match->nominal_match);
+    XrXirStatus status=type_match_run_mode(context,&request,&scratch,true,match->owner,match->nominal_match,NULL);
     type_match_scratch_free(&scratch,NULL);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(const XrXirCompileContext *context,const XrXirTypes *source,const XrXirTypes *actual,const XrXirType *arguments,uint32_t count,XrXirType expected,XrXirType value,XrXirTypeMatchScratch *scratch) {
@@ -309,6 +320,16 @@ XR_FUNC XrXirStatus xir_type_match_read(const XrXirCompileContext *context,const
     if(!xir_compile_context_valid(context) || !request) return XR_XIR_BAD_STRUCTURE;
     XrXirTypeMatchScratch scratch={context->resources,NULL};
     XrXirStatus status=type_match_run(context,request,&scratch);
+    type_match_scratch_free(&scratch,request->memory);return status;
+}
+XR_FUNC XrXirStatus xir_type_match_read_controlled(const XrXirCompileContext *context,
+    const XirTypeMatchRead *request,XrCompileRequestControl *control,
+    void *owner,XrXirNominalMatch nominal_match) {
+    if(!xir_compile_context_valid(context) || !request)return XR_XIR_BAD_STRUCTURE;
+    XrXirTypeMatchScratch scratch={context->resources,NULL};
+    TypeMatchControl receiving={context->limits.instructions,control};
+    XrXirStatus status=xir_receive_poll(control);
+    if(status==XR_XIR_OK)status=type_match_run_mode(context,request,&scratch,false,owner,nominal_match,&receiving);
     type_match_scratch_free(&scratch,request->memory);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual) {

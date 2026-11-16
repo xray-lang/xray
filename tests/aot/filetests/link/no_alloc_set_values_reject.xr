@@ -2,6 +2,6 @@ fn xray_no_alloc_set_values_reject(values: Set<i64>) -> i64 {
     return len(values.values())
 }
 
-var values: Set<i64> = #[]
+var values: Set<i64> = Set<i64>()
 values.add(1)
 print(xray_no_alloc_set_values_reject(values))

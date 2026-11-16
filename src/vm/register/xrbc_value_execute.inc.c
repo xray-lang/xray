@@ -124,6 +124,12 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, size_t *leaves, siz
     }
     for (size_t n = 0; n < code->access_count; ++n) {
         XrRbcValueAccess access = code->accesses[n];
+        if (access.operation == XR_RBC_VALUE_MAP_LITERAL) {
+            size_t count = access.count;
+            if (count > SIZE_MAX / sizeof(XrtMapLiteralInput)) return false;
+            size_t bytes = count * sizeof(XrtMapLiteralInput);
+            if (bytes > *snapshots) *snapshots = bytes;
+        }
         if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) {
             size_t bytes=0;
             for (uint32_t p=0;p<access.count;++p) {
@@ -882,6 +888,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_MAP_LITERAL) status=rbc_value_map_literal(module,stack,activation,access,source);
     else if (access.operation>=XR_RBC_VALUE_RECORD_NEW && access.operation<=XR_RBC_VALUE_NULLABLE_UNWRAP)
         status=rbc_value_inline_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);

@@ -201,7 +201,7 @@ static void cp_build(CpFixture *f) {
     cp_graph(&g);
     CHECK(xr_xir_compile_types_structure_verify(f->context, &g.types) == XR_XIR_OK);
     CHECK(xr_xir_compile_declarations_verify(f->context, &g.declarations, &g.types,
-        XRCP_FUNCTIONS, g.module.linkage_kind) == XR_XIR_OK);
+        XRCP_FUNCTIONS, g.module.linkage_kind, NULL) == XR_XIR_OK);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirDiagnostic d = {0};
     XrXirStatus status = xir_fixture_check(f->context, &g.module, &checked, &d);

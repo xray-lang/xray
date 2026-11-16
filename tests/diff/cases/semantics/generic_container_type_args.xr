@@ -62,8 +62,8 @@ fn helper(n: i64) -> i64 {
 fn main() {
     var ints = [1, 2, 3]
     var words = ["ab", "cd"]
-    var scores = #{"k": 1}
-    var letters = #["a", "b"]
+    var scores = {"k": 1}
+    var letters = Set(["a", "b"])
     var doc = {"a": 1}
     var view: Slice<i64> = ints[1:3]
 

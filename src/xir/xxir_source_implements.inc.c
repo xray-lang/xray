@@ -16,8 +16,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
     }
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
-            (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
+        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
@@ -25,9 +24,12 @@ static bool source_implementation_applications(SourceContext *ctx) {
             return source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"implemented interface applications are malformed");
         for (int i=0;i<declaration.interface_count;++i) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
-                source_sendable_marker(ctx,declaration.interfaces[i])) continue;
-            if (source_mem_length_marker(ctx,d,declaration.interfaces[i])) continue;
+            bool marker=ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
+                source_sendable_marker(ctx,declaration.interfaces[i]);
+            if(ctx->diagnostic.status==XR_XIR_OK && !marker)marker=source_mem_length_marker(ctx,d,declaration.interfaces[i]);
+            if(ctx->diagnostic.status==XR_XIR_OK && !marker)marker=source_hashable_owner_marker(ctx,owner,declaration.interfaces[i]);
+            if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+            if(marker)continue;
             if (count==UINT32_MAX) return source_fail(ctx,owner->node,XR_XIR_BUDGET,"implementation count exhausted");
             ++count;
         }
@@ -47,8 +49,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
-            (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
+        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) { ok = false; break; }
         ctx->module = owner->module;
@@ -57,9 +58,13 @@ static bool source_implementation_applications(SourceContext *ctx) {
         uint32_t first = next;
         for (int i = 0; i < declaration.interface_count && ok; ++i) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ok=false;break;}
-            if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
-                source_sendable_marker(ctx,declaration.interfaces[i])) continue;
-            if (source_mem_length_marker(ctx,d,declaration.interfaces[i])) continue;
+            bool marker=ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
+                source_sendable_marker(ctx,declaration.interfaces[i]);
+            if(ctx->diagnostic.status==XR_XIR_OK && !marker)marker=source_mem_length_marker(ctx,d,declaration.interfaces[i]);
+            if(ctx->diagnostic.status==XR_XIR_OK && !marker)marker=source_hashable_marker(ctx,declaration.interfaces[i]);
+            if(ctx->diagnostic.status!=XR_XIR_OK){ok=false;break;}
+            if(marker)continue;
+            if(next>=count || !records){ok=source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"implementation inventory changed between passes");break;}
             XrXirImplementation *record = &records[next++]; record->nominal_declaration = d;
             ok = source_interface_application(ctx,owner->node,declaration.interfaces[i],&record->interface);
             for (uint32_t earlier = first; earlier + 1 < next && ok; ++earlier) {
@@ -69,7 +74,10 @@ static bool source_implementation_applications(SourceContext *ctx) {
             }
         }
     }
-    ctx->type_scope = saved; ctx->module = module; return ok;
+    ctx->type_scope = saved; ctx->module = module;
+    if(ok && ctx->diagnostic.status==XR_XIR_OK && next!=count)
+        ok=source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"implementation inventory was not filled");
+    return ok && ctx->diagnostic.status==XR_XIR_OK;
 }
 static bool source_implementation_promises(SourceContext *ctx, uint32_t function, XrXirType signature) {
     const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types,signature);
@@ -156,6 +164,7 @@ static bool source_implementations_bind(SourceContext *ctx) {
     if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&ctx->compile, &module);
     if (status != XR_XIR_OK)
         return source_fail(ctx,NULL,status,"source declaration type structure is invalid");
+    if (!source_hashable_prepare(ctx)) return false;
     if (!source_implementation_applications(ctx)) return false;
     XrXirImplementation *records = (XrXirImplementation *)ctx->implementations.records;
     for (uint32_t i = 0; i < ctx->implementations.count; ++i)

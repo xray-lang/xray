@@ -29,11 +29,11 @@ print("switched=${switched} is i64=${switched is i64} is f64=${switched is f64}"
 // Arm order does not affect which arm matches.
 var m1: i64 | f64 = 3
 match (m1) {
-    is f64 -> print("m1 f64"),
-    is i64 -> print("m1 i64"),
+    is f64 => print("m1 f64"),
+    is i64 => print("m1 i64"),
 }
 var m2: i64 | f64 = 3.5
 match (m2) {
-    is i64 -> print("m2 i64"),
-    is f64 -> print("m2 f64"),
+    is i64 => print("m2 i64"),
+    is f64 => print("m2 f64"),
 }

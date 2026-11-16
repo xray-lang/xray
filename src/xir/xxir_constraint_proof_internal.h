@@ -20,6 +20,10 @@ struct ConstraintProofMemory;
 /* The request is borrowed only by this stack operation. Legacy queries pass NULL. */
 XR_FUNC XrXirStatus xir_compile_constraints_prove_controlled(const XrXirCompileContext *context,
     const XrXirProofContext *proof,const XrXirConstraintUse *use,XrCompileRequestControl *control);
+/* One borrowed request governs signature readers and conditional witness goals
+ * throughout the same marker FIFO. It never survives in retained scratch. */
+XR_FUNC XrXirStatus xir_compile_type_markers_prove_controlled(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,XrXirType type,uint32_t markers,XrCompileRequestControl *control);
 typedef struct XirConstraintScratch {
     XrCompileResources *resources;
     struct ConstraintProofMemory *memory;

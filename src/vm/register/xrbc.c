@@ -687,6 +687,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_HOST_CLOCK_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_VALUE)
         outcome->status = XR_RBC_VALUE_FAILURE;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_MESSAGE_PANIC)
+        outcome->status = XR_RBC_MESSAGE_PANIC;
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -823,6 +825,19 @@ XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     return true;
 }
 
+XR_FUNC bool xr_rbc_outcome_message_panic(const XrRbcOutcome *outcome, uint32_t *code,
+    const char **bytes, size_t *length, uint32_t *source, const XrtLocationOwner **locations) {
+    if (!outcome || outcome->status != XR_RBC_MESSAGE_PANIC || !code || !bytes || !length || !source || !locations ||
+        outcome->failure.kind != XRT_FAILURE_MESSAGE_PANIC || !outcome->failure.detail.message.message) return false;
+    const XrtStringBacking *message = (const XrtStringBacking *)outcome->failure.detail.message.message;
+    *code = outcome->failure.detail.message.code;
+    *source = outcome->failure.detail.message.source_id;
+    *bytes = message->bytes;
+    *length = message->length;
+    *locations = outcome->locations;
+    return true;
+}
+
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations) {
     if (!outcome || outcome->status != XR_RBC_HOST_CLOCK_FAILURE || !facts || !borrowed_locations)
@@ -836,6 +851,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     if (!outcome || !*outcome) return;
     XrRbcOutcome *owned = *outcome;
     *outcome = NULL;
+    xrt_execution_failure_drop(&owned->failure);
     xr_free(owned->aggregate_bytes);
     xr_free(owned->aggregate_types);
     if (owned->result_kind == XR_RBC_STRING || owned->result_kind == XR_RBC_MAP_STRING_I64 ||

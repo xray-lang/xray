@@ -27,6 +27,9 @@ typedef struct SourceDirectArguments {
     XrXirType result;
     uint32_t receiver_count;
     XrHirBodySignature signature;
+    const uint32_t *display_argument_formals;
+    uint32_t display_argument_count;
+    bool display_argument_binding_known;
 } SourceDirectArguments;
 static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     const SourceDirectRequest *request, SourceDirectArguments *output) {
@@ -87,18 +90,20 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
         plan.values=source_recipe_storage(ctx,(uint32_t)syntax.arg_count,sizeof(*plan.values));
         if(!plan.values)return false;
     }
-    if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) return false;
+    if ((!plan.named_arguments && !source_argument_arity(ctx,node,index,supplied)) || !source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
     if(plan.rest_count&&!source_call_rest_pack(ctx,node,&plan,&syntax,values))goto done;
-    for (uint32_t p=supplied;p<function.parameter_count-(plan.rest_count?1u:0u);++p)
-        if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;
+    for (uint32_t p=offset;p<function.parameter_count-(plan.rest_count?1u:0u);++p)
+        if (source_call_default_needed(&plan,p,supplied) &&
+            !source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;
     SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,
         values,function.parameter_count,0,request->fixed_generic_values};
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
     XrXirType result;
     if (!source_substitute(ctx,&substitution,function.result,0,&result)) goto done;
     if(!source_hir_call_commit(ctx,node,&plan,values,function.parameter_count,supplied))goto done;
-    *output=(SourceDirectArguments){substitution,values,function.parameter_count,result,offset,plan.signature}; ok=true;
+    *output=(SourceDirectArguments){substitution,values,function.parameter_count,result,offset,plan.signature,
+        plan.display_argument_formals,plan.display_argument_count,plan.display_argument_binding_known}; ok=true;
 done:
     return ok;
 }
@@ -175,5 +180,8 @@ static bool source_direct_call_signature(SourceContext *ctx,AstNode *node,uint32
     }
     if(!source_direct_signature_names(ctx,node,&signature))return false;
     XrXirSourceCall *call=(XrXirSourceCall *)&ctx->calls.items[ctx->calls.count-1];
+    call->argument_formals=prepared->display_argument_formals;
+    call->argument_count=prepared->display_argument_count;
+    call->argument_binding_known=prepared->display_argument_binding_known;
     return source_copy_bytes(ctx,node,&call->signature,&signature,sizeof(signature));
 }

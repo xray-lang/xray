@@ -39,6 +39,7 @@ XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8_deferred(const XrXirVal
 /* Hash replacement transfers the old owning edge into a distinct empty Unit.
  * The caller publishes its own registry before releasing that retired value.
  * In-place changes leave it empty. Failure preserves it and the actual root. */
+XR_FUNC XrXirValueStatus xr_xir_set_add_deferred(const XrXirValuePlace *,const XrXirValue *,XrXirValueAdmission *,XrXirValue *);
 XR_FUNC XrXirValueStatus xr_xir_map_set_deferred(const XrXirValuePlace *, const XrXirValue *,
     const XrXirValue *, XrXirValueAdmission *, XrXirValue *retired);
 XR_FUNC XrXirValueStatus xr_xir_hash_delete_deferred(const XrXirValuePlace *, const XrXirValue *,

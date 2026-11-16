@@ -16,7 +16,7 @@ static bool source_slot_fact(SourceContext *ctx,uint32_t slot,const char *name,
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source slot name has no unique actual owner");
     char *owned=source_alloc(ctx,length,1);
     if (!owned || !source_copy_bytes(ctx,NULL,owned,name,length)) return false;
-    ctx->slot_facts[slot]=(XrXirSlotFact){slot,owned,length,exported};
+    ctx->slot_facts[slot]=(XrXirSlotFact){.slot=slot,.name=owned,.name_length=length,.exported=exported};
     ctx->slot_fact_present[slot]=true;return true;
 }
 static bool source_library_slot_map(SourceContext *ctx,const XrXirModule *library,
@@ -83,6 +83,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     if (!symbol) return false;
     symbol->kind=ctx->slots[target].type==XR_XIR_UNIT?SOURCE_UNIT_SLOT:SOURCE_SLOT;symbol->index=target;symbol->module=owner;
     symbol->type=ctx->slots[target].type;symbol->checked_library=true;
+    if(!source_collection_key_copy(ctx,fact->constant_key,&symbol->constant_key))return false;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,(XrXirSourceRange){owner,0,0,0,0})) return false;
     XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
     source_query_binding_type(ctx,symbol);
@@ -113,6 +114,7 @@ static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
         if (fact->slot!=s)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot fact ordinal is inconsistent");
         if (!source_slot_fact(ctx,target,fact->name,fact->name_length,fact->exported) ||
+            !source_collection_key_copy(ctx,fact->constant_key,&ctx->slot_facts[target].constant_key) ||
             !source_library_public_slot(ctx,library,map,facts,s,target)) return false;
     }
     return true;

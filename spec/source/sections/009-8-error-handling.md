@@ -34,12 +34,14 @@ Xray 的错误处理分为两个严格分离的通道：
 
 `throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
+<!-- xr-source:example 009-8-error-handling-example-001 -->
 ```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
 throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚举变体
 ```
+<!-- /xr-source -->
 
 抛出后行为：
 
@@ -57,6 +59,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 
 #### 8.1.2 `try` / `catch`
 
+<!-- xr-source:example 009-8-error-handling-example-002 -->
 ```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
@@ -64,11 +67,12 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
+<!-- /xr-source -->
 
 **执行顺序**：
 
@@ -80,6 +84,7 @@ try {
 
 `catch` 变量可带类型注解 `catch (e: T)`，运行时用 `is T` 判断枚举类型是否匹配。支持多个 `catch` 子句，按声明顺序匹配：
 
+<!-- xr-source:example 009-8-error-handling-example-003 -->
 ```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
@@ -94,6 +99,7 @@ try {
     log("unexpected:", e)
 }
 ```
+<!-- /xr-source -->
 
 **规则**：
 - 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值，绑定的静态类型为内置 `Error`
@@ -110,6 +116,7 @@ catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读�
 
 普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
 
+<!-- xr-source:example 009-8-error-handling-example-004 -->
 ```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
@@ -121,6 +128,7 @@ try {
     retry()
 }
 ```
+<!-- /xr-source -->
 
 - 每个备选都是 `Enum.Variant` 或 `Enum.Variant { 字段 }`，可带模块限定；字段子模式遵循 §6（字面量、范围、嵌套 enum、`_` 与绑定）。payload variant 必须写出花括号，`{}` 只测试 tag；unit variant 不能写 `{}`。
 - 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
@@ -130,6 +138,7 @@ try {
 - 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
 - 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
 
+<!-- xr-source:example 009-8-error-handling-example-005 -->
 ```xray @error=E0334
 enum NetErr { Failed }
 fn work() throws(NetErr) { throw NetErr.Failed }
@@ -138,11 +147,13 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 #### 8.1.3 重抛与错误转换
 
 `catch` 块内可重抛原错误或抛出不同枚举的新错误：
 
+<!-- xr-source:example 009-8-error-handling-example-006 -->
 ```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
@@ -154,11 +165,13 @@ try {
     throw HighErr.Upstream
 }
 ```
+<!-- /xr-source -->
 
 #### 8.1.4 错误枚举设计推荐
 
 定义业务错误推荐使用 ADT enum，载荷携带上下文信息：
 
+<!-- xr-source:example 009-8-error-handling-example-007 -->
 ```xray @fragment
 enum HttpErr {
     NotFound { message: string },
@@ -181,12 +194,13 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
+<!-- /xr-source -->
 
 ADT enum 可让 `match` 在编译期检查错因穷举性。
 
@@ -198,11 +212,13 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
 - 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
+<!-- xr-source:example 009-8-error-handling-example-008 -->
 ```xray @fragment
 var task = go fetch(url)
 var value = try await task
 var outcome = task.awaitResult()
 ```
+<!-- /xr-source -->
 
 等待一个以 `Cancelled` 结束的子任务时，等待方自身进入取消展开；当前任务自身被取消时同样如此。两种情况都执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.3、§10.4）。只有 `awaitResult()` / `poll()` 把取消作为 `TaskResult.Cancelled` 值返回。
 
@@ -212,6 +228,7 @@ var outcome = task.awaitResult()
 
 一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待可能失败的任务时写作 `try await t`。
 
+<!-- xr-source:example 009-8-error-handling-example-009 -->
 ```xray @run
 enum ParseErr { Empty }
 fn parse(s: string) throws(ParseErr) -> i64 {
@@ -231,18 +248,24 @@ try main()
 8080
 42
 ```
+<!-- /xr-source -->
+
+
 
 `try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误，但传播调用仍需标记（§5.2.8）。只有入口文件可以写可执行的顶层语句；`main` 是普通函数，省略 `throws` 即不抛错，会抛错的必须显式声明并在入口文件顶层写 `try main()`。
 
 缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的已登记编号，实现待接通）：
 
+<!-- xr-source:example 009-8-error-handling-example-010 -->
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
 fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-011 -->
 ```xray @error=E0331
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -250,6 +273,7 @@ fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
 ```
+<!-- /xr-source -->
 
 标记只写在可能产生业务错误的位置。`try`、`try?`、`try!` 的作用范围内没有业务错误来源时，报 `E0336`。含任意普通 catch 的 try 块也要求主体保护区域中存在业务来源；即使同时有 panic handler，也不豁免。只有 panic handler 的 try 块不要求业务来源，也不要求静态证明主体可能 panic；但其内部的表达式标记仍独立检查。
 
@@ -257,6 +281,7 @@ try main()
 
 只有 panic handler 的主体同样许可业务调用，但不捕获它们的错误。剩余业务错误必须由外层普通 catch 或所在函数的 `throws` 接收，否则报 `E0331`。直接 `throw` 本身产生业务错误，不另加 try。panic、取消和业务错误仍是独立通道。
 
+<!-- xr-source:example error-panic-only -->
 ```xray @id=error-panic-only @run
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -269,13 +294,17 @@ try { ch.send(1) } catch panic (p) { print(p.code) }
 try { relay() } catch (e: Failure) { print("business error") }
 try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example error-panic-mixed-redundant -->
 ```xray @id=error-panic-mixed-redundant @error=E0336
 try { print(42) }
 catch (e) { print("ordinary") }
 catch panic { print("panic") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-014 -->
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
 fn worker() -> i64 { return 1 }
@@ -286,6 +315,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 ### 8.2 Panic 通道
 
@@ -305,6 +335,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 `catch panic` 捕获 panic 通道的运行时故障：
 
+<!-- xr-source:example 009-8-error-handling-example-015 -->
 ```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
@@ -319,9 +350,11 @@ try {
     log("division by zero caught")
 }
 ```
+<!-- /xr-source -->
 
 **`catch` 与 `catch panic` 可共存**，分别处理两个通道：
 
+<!-- xr-source:example 009-8-error-handling-example-016 -->
 ```xray @check
 enum AppErr { InvalidArg }
 
@@ -340,6 +373,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 **绑定与作用域规则**：每个 `try` 至多有一个 `catch panic`，因为它无条件匹配该通道。可省略头部，或写 `catch panic (p)` / `catch panic (p: PanicInfo)`；注解必须是 `PanicInfo`，不是运行时类型过滤器。绑定只读且仅在 handler 内可见，复制或返回该引用遵守 class 的身份与所有权规则，不自动获得 `Sendable`。handler 只保护对应的 try 主体，不保护同级 handler；handler 中的新 panic 继续寻找外层处理器。普通 enum 错误不能进入 panic handler，panic 也不能进入普通 catch。
 
@@ -347,6 +381,7 @@ main()
 
 `PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
+<!-- xr-source:example 009-8-error-handling-example-017 -->
 ```xray @fragment
 class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
@@ -356,10 +391,11 @@ class PanicInfo {
     data: JSON.Value            // 附加数据；无数据时为 JSON null
     replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
+<!-- /xr-source -->
 
 用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
@@ -367,6 +403,7 @@ class PanicInfo {
 
 **在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
 
+<!-- xr-source:example 009-8-error-handling-example-018 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
@@ -384,6 +421,9 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
+
+
 
 #### 8.2.4 未捕获 panic 的顶层诊断
 
@@ -432,6 +472,7 @@ panic 可在 `defer` 内由内部 `catch panic` 捕获。panic 逃出清理边�
 
 cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
+<!-- xr-source:example 009-8-error-handling-example-019 -->
 ```xray @fragment
 fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     var conn = try open(url)
@@ -444,6 +485,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     return data
 }
 ```
+<!-- /xr-source -->
 
 **规则**：
 - `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
@@ -463,6 +505,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
 
 **规则 D2（满足方式）**：调用不抛错的清理 API，或在清理体内完整处理错误。下面的正例与负例分开给出：
 
+<!-- xr-source:example defer-must-not-throw -->
 ```xray @id=defer-must-not-throw @run
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -478,7 +521,11 @@ main()
 body
 close failed
 ```
+<!-- /xr-source -->
 
+
+
+<!-- xr-source:example 009-8-error-handling-example-021 -->
 ```xray @error=E0387
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -487,6 +534,7 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 **规则 D3（panic）**：静态不抛业务错误不等于不会 panic。逃出 cleanup 的 panic 在正常离开或业务错误传播时照常传播，可被外层 `catch panic` 捕获；只有已有 panic 或取消正在展开的双重故障才不可捕获地结束（§8.2.5）。不再定义业务错误逃出 defer 的 E0443 运行时兜底。
 
@@ -496,6 +544,7 @@ try main()
 
 `try?` 有专门的结果类型规则：操作数类型不是 Optional 时得到 `T?`；已经是 `Optional<U>` 时保持原类型，不增加外层，也不递归展平现有层次。业务错误映射为该结果的 `null`，成功值原样返回。它不捕获 panic，也不捕获取消展开。
 
+<!-- xr-source:example 009-8-error-handling-example-022 -->
 ```xray @run
 enum LookupErr { Failed }
 fn lookup(ok: bool) throws(LookupErr) -> i64? {
@@ -513,6 +562,9 @@ main()
 7
 0
 ```
+<!-- /xr-source -->
+
+
 
 ### 8.5 决策树：选择哪种机制
 
@@ -556,6 +608,7 @@ main()
 
 #### 模式 1：enum 错误 + defer 资源清理
 
+<!-- xr-source:example 009-8-error-handling-example-023 -->
 ```xray @run
 enum ConnErr { Refused, Timeout }
 
@@ -576,7 +629,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed 然后 payload
+        print(fetchData(true))         // 输出：closed 然后 payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -588,6 +641,9 @@ main()
 closed
 payload
 ```
+<!-- /xr-source -->
+
+
 
 #### 模式 2：throw + catch 用于库 API
 
@@ -595,13 +651,16 @@ payload
 
 #### 模式 3：`??` 提供默认值
 
+<!-- xr-source:example 009-8-error-handling-example-024 -->
 ```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
+<!-- /xr-source -->
 
 #### 模式 4：catch panic 兜底运行时故障
 
+<!-- xr-source:example 009-8-error-handling-example-025 -->
 ```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
@@ -611,6 +670,7 @@ fn safeDivide(a: i64, b: i64) -> string {
     }
 }
 ```
+<!-- /xr-source -->
 
 ### 8.7 完整可运行示例
 
@@ -618,7 +678,8 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray @run
+<!-- xr-source:example 009-8-error-handling-example-026 -->
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -632,8 +693,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // 输出：empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -643,9 +704,13 @@ main()
 ```output
 empty input
 ```
+<!-- /xr-source -->
+
+
 
 #### 示例 2：`defer` 的 LIFO 顺序与异常路径
 
+<!-- xr-source:example 009-8-error-handling-example-027 -->
 ```xray @run
 enum E { Boom }
 
@@ -668,18 +733,22 @@ defer 2
 defer 1
 caught
 ```
+<!-- /xr-source -->
+
+
 
 
 #### 示例 3：`catch panic` 兜底并读取故障信息
 
+<!-- xr-source:example 009-8-error-handling-example-028 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // 输出：message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // 输出：code: 430
     }
 }
 
@@ -689,6 +758,7 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -722,12 +792,14 @@ This chapter specifies the target language rules of Task329. Smoke results deter
 
 `throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
 
+<!-- xr-source:example 009-8-error-handling-example-001 -->
 ```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
 throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with payload
 ```
+<!-- /xr-source -->
 
 After a throw:
 
@@ -745,6 +817,7 @@ A same-proof mixed debug Program must receive the generator's current observatio
 
 #### 8.1.2 `try` / `catch`
 
+<!-- xr-source:example 009-8-error-handling-example-002 -->
 ```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
@@ -752,11 +825,12 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
+<!-- /xr-source -->
 
 **Execution order**:
 
@@ -768,6 +842,7 @@ try {
 
 A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
 
+<!-- xr-source:example 009-8-error-handling-example-003 -->
 ```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
@@ -782,6 +857,7 @@ try {
     log("unexpected:", e)
 }
 ```
+<!-- /xr-source -->
 
 **Rules**:
 - An untyped `catch (e)` is the catch-all and matches any error value; its binding has the built-in static type `Error`.
@@ -798,6 +874,7 @@ Catch bindings are visible only in their handler, and both the binding and its v
 
 An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
 
+<!-- xr-source:example 009-8-error-handling-example-004 -->
 ```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
@@ -809,6 +886,7 @@ try {
     retry()
 }
 ```
+<!-- /xr-source -->
 
 - Every alternative is `Enum.Variant` or `Enum.Variant { fields }`, optionally module-qualified; field sub-patterns follow §6 (literals, ranges, nested enums, `_`, and bindings). A payload variant must write its braces, and `{}` tests only the tag; a unit variant cannot use `{}`.
 - Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
@@ -818,6 +896,7 @@ try {
 - An ordinary `catch` cannot omit its header; only `catch panic` may.
 - Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
 
+<!-- xr-source:example 009-8-error-handling-example-005 -->
 ```xray @error=E0334
 enum NetErr { Failed }
 fn work() throws(NetErr) { throw NetErr.Failed }
@@ -826,11 +905,13 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 #### 8.1.3 Rethrowing and error conversion
 
 A `catch` block may rethrow the original error or throw a different enum variant:
 
+<!-- xr-source:example 009-8-error-handling-example-006 -->
 ```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
@@ -842,11 +923,13 @@ try {
     throw HighErr.Upstream
 }
 ```
+<!-- /xr-source -->
 
 #### 8.1.4 Recommended enum error design
 
 Define business errors as ADT enums with context-carrying payloads:
 
+<!-- xr-source:example 009-8-error-handling-example-007 -->
 ```xray @fragment
 enum HttpErr {
     NotFound { message: string },
@@ -869,12 +952,13 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
+<!-- /xr-source -->
 
 ADT enums allow `match` to check exhaustiveness at compile time.
 
@@ -886,11 +970,13 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 - `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
 - Default scope cancels siblings on child failure; isolated scope lets siblings continue and aggregates only child business errors as `TaskFailures<E>`. Both drain all members before exit. Panic always uses its independent channel and never enters the aggregate. Body errors B and direct-child errors E form `B | E` and `B | TaskFailures<E>` respectively; both forms need no propagation marker when B and E are `Never`. `try scope` marks exit propagation without marking calls in its body. See §10.7.
 
+<!-- xr-source:example 009-8-error-handling-example-008 -->
 ```xray @fragment
 var task = go fetch(url)
 var value = try await task
 var outcome = task.awaitResult()
 ```
+<!-- /xr-source -->
 
 Waiting on a child that ended `Cancelled` makes the waiter itself enter cancellation unwinding, exactly as cancellation of the current task does. Either way the task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.3, §10.4). Only `awaitResult()` / `poll()` return cancellation as the value `TaskResult.Cancelled`.
 
@@ -900,6 +986,7 @@ Waiting on a child that ended `Cancelled` makes the waiter itself enter cancella
 
 One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. A wait that can fail is marked as `try await t`.
 
+<!-- xr-source:example 009-8-error-handling-example-009 -->
 ```xray @run
 enum ParseErr { Empty }
 fn parse(s: string) throws(ParseErr) -> i64 {
@@ -919,18 +1006,24 @@ try main()
 8080
 42
 ```
+<!-- /xr-source -->
+
+
 
 Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Top-level statements of the entry file and module-state initializers implicitly permit arbitrary errors, but propagation calls still require markers (§5.2.8). Only the entry file may contain executable top-level statements. `main` is an ordinary function: omission of `throws` means no business errors; a throwing `main` must declare them explicitly and be called with `try main()` from the entry file.
 
 A missing marker and an undeclared escaping error are distinct diagnostics (registered numbers in §18.2, with implementation pending):
 
+<!-- xr-source:example 009-8-error-handling-example-010 -->
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
 fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-011 -->
 ```xray @error=E0331
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -938,6 +1031,7 @@ fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
 ```
+<!-- /xr-source -->
 
 Markers appear only where business errors can occur. A `try`, `try?` or `try!` whose extent has no business-error source is rejected with `E0336`. A try block with any ordinary catch also requires a source in its protected body; adding a panic handler grants no exemption. A try block with only a panic handler requires neither a business-error source nor static proof that its body may panic, but expression markers within that body are still checked independently.
 
@@ -945,6 +1039,7 @@ Sources include direct `throw`, calls declared to throw, and `await` or `scope` 
 
 A body with only a panic handler also permits business calls but does not catch their errors. Remaining business errors need an outer ordinary catch or the enclosing function's `throws`, otherwise they report `E0331`. Direct `throw` produces a business error itself and needs no extra try. Panic, cancellation and business errors remain separate channels.
 
+<!-- xr-source:example error-panic-only -->
 ```xray @id=error-panic-only @run
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -957,13 +1052,17 @@ try { ch.send(1) } catch panic (p) { print(p.code) }
 try { relay() } catch (e: Failure) { print("business error") }
 try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example error-panic-mixed-redundant -->
 ```xray @id=error-panic-mixed-redundant @error=E0336
 try { print(42) }
 catch (e) { print("ordinary") }
 catch panic { print("panic") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-014 -->
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
 fn worker() -> i64 { return 1 }
@@ -974,6 +1073,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 ### 8.2 Panic channel
 
@@ -993,6 +1093,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 `catch panic` catches runtime faults from the panic channel:
 
+<!-- xr-source:example 009-8-error-handling-example-015 -->
 ```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
@@ -1007,9 +1108,11 @@ try {
     log("division by zero caught")
 }
 ```
+<!-- /xr-source -->
 
 **`catch` and `catch panic` can coexist**, handling both channels:
 
+<!-- xr-source:example 009-8-error-handling-example-016 -->
 ```xray @check
 enum AppErr { InvalidArg }
 
@@ -1028,6 +1131,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 **Binding and scope rules**: A `try` has at most one `catch panic`, since it matches that channel unconditionally. Its header may be omitted or written as `catch panic (p)` / `catch panic (p: PanicInfo)`; the annotation must be `PanicInfo`, not a runtime type filter. The binding is read-only and scoped to the handler. Copying or returning the reference follows class identity and ownership rules and does not grant `Sendable`. A handler protects its try body, not sibling handlers; a new panic in a handler searches the enclosing handlers. Ordinary enum errors never enter a panic handler, and panics never enter ordinary catch handlers.
 
@@ -1035,6 +1139,7 @@ main()
 
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
+<!-- xr-source:example 009-8-error-handling-example-017 -->
 ```xray @fragment
 class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
@@ -1044,10 +1149,11 @@ class PanicInfo {
     data: JSON.Value            // additional data; JSON null when absent
     replacedError: Error?      // read-only; owned error replaced by cleanup panic, or null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
+<!-- /xr-source -->
 
 User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
@@ -1055,6 +1161,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 **Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
 
+<!-- xr-source:example 009-8-error-handling-example-018 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
@@ -1072,6 +1179,9 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
+
+
 
 #### 8.2.4 Top-level diagnostic for an uncaught panic
 
@@ -1132,6 +1242,7 @@ Compile-time evaluation has an independent host boundary: a single cleanup panic
 
 A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
+<!-- xr-source:example 009-8-error-handling-example-019 -->
 ```xray @fragment
 fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     var conn = try open(url)
@@ -1144,6 +1255,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     return data
 }
 ```
+<!-- /xr-source -->
 
 **Rules**:
 - `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
@@ -1163,6 +1275,7 @@ A `defer` is a cleanup edge. No business error may escape its body, and a new bu
 
 **Rule D2 (satisfaction)**: use non-throwing cleanup APIs or handle their errors completely inside the cleanup. The valid and invalid examples are separate:
 
+<!-- xr-source:example defer-must-not-throw -->
 ```xray @id=defer-must-not-throw @run
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -1178,7 +1291,11 @@ main()
 body
 close failed
 ```
+<!-- /xr-source -->
 
+
+
+<!-- xr-source:example 009-8-error-handling-example-021 -->
 ```xray @error=E0387
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -1187,6 +1304,7 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 **Rule D3 (panic)**: a static guarantee of no business errors does not guarantee freedom from panic. A panic escaping cleanup during normal exit or business-error propagation propagates normally and may be caught by an enclosing `catch panic`. Only a double fault while another panic or cancellation is already unwinding ends execution uncatchably (§8.2.5). There is no E0443 runtime fallback for business errors escaping `defer`.
 
@@ -1196,6 +1314,7 @@ try main()
 
 `try?` has a specific result rule: a non-Optional operand of type `T` yields `T?`; an operand already typed `Optional<U>` keeps that type, without adding an outer layer or recursively flattening existing layers. Business errors become `null` and successful values are preserved. It catches neither panic nor cancellation unwinding.
 
+<!-- xr-source:example 009-8-error-handling-example-022 -->
 ```xray @run
 enum LookupErr { Failed }
 fn lookup(ok: bool) throws(LookupErr) -> i64? {
@@ -1213,6 +1332,9 @@ main()
 7
 0
 ```
+<!-- /xr-source -->
+
+
 
 ### 8.5 Decision tree: which mechanism to choose
 
@@ -1256,6 +1378,7 @@ Reference table:
 
 #### Pattern 1: enum errors + defer for resource cleanup
 
+<!-- xr-source:example 009-8-error-handling-example-023 -->
 ```xray @run
 enum ConnErr { Refused, Timeout }
 
@@ -1276,7 +1399,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed, then payload
+        print(fetchData(true))         // prints closed, then payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -1288,6 +1411,9 @@ main()
 closed
 payload
 ```
+<!-- /xr-source -->
+
+
 
 #### Pattern 2: throw + catch for library APIs
 
@@ -1295,13 +1421,16 @@ Current implementation qualification of complete type and operation families is 
 
 #### Pattern 3: `??` for default values
 
+<!-- xr-source:example 009-8-error-handling-example-024 -->
 ```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
+<!-- /xr-source -->
 
 #### Pattern 4: catch panic for runtime fault fallback
 
+<!-- xr-source:example 009-8-error-handling-example-025 -->
 ```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
@@ -1311,6 +1440,7 @@ fn safeDivide(a: i64, b: i64) -> string {
     }
 }
 ```
+<!-- /xr-source -->
 
 ### 8.7 Worked Examples
 
@@ -1318,7 +1448,8 @@ These self-contained target-language examples state expected stdout in `output` 
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray @run
+<!-- xr-source:example 009-8-error-handling-example-026 -->
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -1332,8 +1463,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // prints empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -1343,9 +1474,13 @@ main()
 ```output
 empty input
 ```
+<!-- /xr-source -->
+
+
 
 #### Example 2: `defer` order (LIFO) on the error path
 
+<!-- xr-source:example 009-8-error-handling-example-027 -->
 ```xray @run
 enum E { Boom }
 
@@ -1368,18 +1503,22 @@ defer 2
 defer 1
 caught
 ```
+<!-- /xr-source -->
+
+
 
 
 #### Example 3: `catch panic` with fault details
 
+<!-- xr-source:example 009-8-error-handling-example-028 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // prints message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // prints code: 430
     }
 }
 
@@ -1389,4 +1528,5 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
 <!-- /xr-spec:en -->

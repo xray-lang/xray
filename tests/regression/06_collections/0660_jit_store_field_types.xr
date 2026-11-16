@@ -1,5 +1,10 @@
 // Hot JSON.Object mutations keep full JSON.Value tags and payloads intact.
 
+struct Point {
+    x: i64
+    y: i64
+}
+
 @test
 fn test_scalar_kind_transitions() {
     var object: JSON.Object = JSON.parseObject("{\"value\":0}")
@@ -18,7 +23,7 @@ fn test_scalar_kind_transitions() {
 @test
 fn test_nested_composite_store() {
     var object: JSON.Object = JSON.parseObject("{}")
-    object.set("child", JSON.value({ x: 10, y: 20 }))
+    object.set("child", JSON.value(Point{ x: 10, y: 20 }))
     assertEqual(JSON.require<i64>(object, ["child", "x"]), 10)
     object.set("items", JSON.value([1, 2, 3]))
     assertEqual(JSON.require<i64>(object, ["items", 2]), 3)

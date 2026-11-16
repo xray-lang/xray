@@ -1,21 +1,21 @@
 fn sent(r: SendResult) -> bool {
     return match (r) {
-        SendResult.Sent -> true
-        _ -> false
+        SendResult.Sent => true,
+        _ => false,
     }
 }
 
 fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
 fn recv_ok(r: Recv<i64>) -> bool {
     return match (r) {
-        Recv.Value { value: _ } -> true
-        _ -> false
+        Recv.Value { value: _ } => true,
+        _ => false,
     }
 }
 

@@ -1,7 +1,10 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 fn jsonObjectRoundtripCodecBridgePlan() -> JSON.Value {
-    var user: User = { name: "Ada", age: 37 }
+    var user: User = User{ name: "Ada", age: 37 }
     var encoded = JSON.value(user)
     var decoded = JSON.decode<User>(encoded)
     return JSON.value(decoded!)

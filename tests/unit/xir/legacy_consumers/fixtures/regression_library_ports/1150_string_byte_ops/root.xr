@@ -67,7 +67,7 @@ fn test_byte_at_equals_char_at_ascii() {
 
 // ===== DNA reverse complement =====
 
-var COMP = #{"A": "T", "T": "A", "C": "G", "G": "C"}
+var COMP = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
 fn reverseComplement(seq: string) -> string {
     var reversed = text.reverseRunes(seq)

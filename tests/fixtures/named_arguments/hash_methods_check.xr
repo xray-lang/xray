@@ -1,0 +1,19 @@
+fn scenario() {
+    var values={"a":1}
+    values.set(...("c",3))
+    print(values.containsValue(value:1))
+    values.forEach(callback:(key,value)=>print(value))
+    var first=Set([1,2])
+    const second=Set([2,3])
+    first.add(value:3)
+    print(first.contains(value:3))
+    print(first.delete(value:1))
+    first.forEach(callback:(value)=>print(value))
+    const combined=first.union(other:second)
+    const common=first.intersection(other:second)
+    const left=first.difference(other:second)
+    const different=first.symmetricDifference(other:second)
+    print(first.isSubset(other:second))
+    print(first.isSuperset(other:second))
+}
+scenario()

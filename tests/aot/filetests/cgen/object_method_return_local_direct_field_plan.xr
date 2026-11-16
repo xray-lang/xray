@@ -1,8 +1,11 @@
-type User = { name: string, age: i64 }
+struct User {
+    name: string
+    age: i64
+}
 
 class ObjectMethodReturnLocalFactory {
     makeUser() -> User {
-        return { name: "ada", age: 7 }
+        return User{ name: "ada", age: 7 }
     }
 }
 
@@ -14,7 +17,7 @@ fn objectMethodReturnLocalPlan() -> i64 {
 
 fn objectMethodAssignedReturnLocalPlan() -> string {
     var f = ObjectMethodReturnLocalFactory()
-    var user: User = { name: "zero", age: 0 }
+    var user: User = User{ name: "zero", age: 0 }
     user = f.makeUser()
     return user.name
 }

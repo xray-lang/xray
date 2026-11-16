@@ -11,6 +11,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     if (decl->initializer) {
         AstNode *saved_initializer=ctx->recursive_initializer;
         const char *saved_name=ctx->recursive_name;
+        AstNode *saved_binding=ctx->binding_site;ctx->binding_site=node;
         bool recursive=!top && source_recursive_binding_readonly(ctx,node);
         const char *recursive_name=recursive?source_owned_text(ctx,decl->name):NULL;
         if(recursive&&!recursive_name)return false;
@@ -19,14 +20,21 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         bool built=source_plan_expression(ctx,decl->initializer,
             (SourceExpectedType){decl->type_annotation!=NULL,annotation,false,false},&initial);
         ctx->recursive_initializer=saved_initializer;ctx->recursive_name=saved_name;
+        ctx->binding_site=saved_binding;
         if(!built)return false;
     } else if (!source_default_value(ctx, node, annotation, &initial)) return false;
 
+    XrXirConstantKey constant={0};
+    if(decl->is_const && decl->initializer) {
+        XrXirConstantKey borrowed={0};
+        if(!source_collection_key(ctx,decl->initializer,initial,&borrowed) || !source_collection_key_copy(ctx,borrowed,&constant))return false;
+    }
     SourceName *symbol;
     bool initial_some = false;
     if (top) {
         symbol = find_name(ctx, ctx->names[ctx->module], decl->name);
         if (!symbol || symbol->kind != SOURCE_SLOT) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "binding declaration missing");
+        symbol->constant_key=constant;
         symbol->inferred=!decl->type_annotation;symbol->annotation=annotation;symbol->has_annotation=decl->type_annotation!=NULL;
         if (symbol->inferred && !source_root_join_record(ctx,&initial)) return false;
         if (!source_binding_prepare(ctx, symbol, &initial)) return false;
@@ -47,7 +55,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     *symbol=(SourceName){.node=node,.kind=logical_type==XR_XIR_UNIT&&decl->is_const?SOURCE_UNIT_LOCAL:SOURCE_LOCAL,
         /* owned: This AST loan ends with Source construction; HIR/history copy the name. */
         .name=decl->name,.type=logical_type,.module=ctx->module,.mutable=!decl->is_const,.inferred=!decl->type_annotation,
-        .annotation=annotation,.has_annotation=decl->type_annotation!=NULL};
+        .annotation=annotation,.has_annotation=decl->type_annotation!=NULL,.constant_key=constant};
     bool direct_borrowed=false;
     if(!decl->is_const&&!source_local_borrowed_storage(ctx,symbol,&direct_borrowed))return false;
     symbol->direct_borrowed=direct_borrowed;
@@ -96,7 +104,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     symbol->module = ctx->module; symbol->mutable = false; symbol->construction = false; symbol->inferred = true;
     if (!symbol->declaration && !source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
         source_query_range(ctx, node, symbol->name))) return false;
-    if(!source_hir_value_declared(ctx,node,symbol,value))return false;
+    if(!source_hir_value_declared(ctx,node,symbol,value)||!source_hir_declared_function(ctx,node,symbol,value))return false;
     source_query_binding_type(ctx, symbol);
     return true;
 }

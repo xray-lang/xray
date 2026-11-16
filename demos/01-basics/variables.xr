@@ -4,6 +4,11 @@
 // Run: xray demos/01-basics/variables.xr
 
 // === let (mutable) vs const (immutable) ===
+struct Person {
+    first: string
+    score: i64
+}
+
 var count = 0
 count = count + 1
 print("count = ${count}")
@@ -46,6 +51,7 @@ print("17 / 5 = ${quotient} remainder ${remainder}")
 var [a, b, c] = [10, 20, 30]
 print("a=${a}, b=${b}, c=${c}")
 
-var person = { first: "Bob", score: 99 }
-var { first, score } = person
+var person = Person{ first: "Bob", score: 99 }
+var first = person.first
+var score = person.score
 print("${first}, score ${score}")

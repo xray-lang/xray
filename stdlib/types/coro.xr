@@ -28,27 +28,27 @@ enum CoroMetric {
 }
 
 // CoroStats - Typed aggregate counters for the coroutine scheduler.
-type CoroStats = {
-    const active: i64,
-    const blocked: i64,
-    const ready: i64,
-    const total: i64,
-    const created: i64,
+struct CoroStats {
+    const active: i64
+    const blocked: i64
+    const ready: i64
+    const total: i64
+    const created: i64
 }
 
 // CoroInfo - Typed diagnostic snapshot for one coroutine.
-type CoroInfo = {
-    const id: i64,
-    const name: string?,
-    const state: CoroState,
-    const reductions: i64,
-    const source: string?,
+struct CoroInfo {
+    const id: i64
+    const name: string?
+    const state: CoroState
+    const reductions: i64
+    const source: string?
 }
 
 // CoroDeadlock - Typed description of a detected coroutine wait cycle.
-type CoroDeadlock = {
-    const members: Array<CoroInfo>,
-    const reason: string,
+struct CoroDeadlock {
+    const members: Array<CoroInfo>
+    const reason: string
 }
 
 // CoroLocal is an opaque compiler value whose operations lower directly to

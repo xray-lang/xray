@@ -9,7 +9,7 @@
 @test
 fn test_bare_lambda_map() {
     var arr = [1, 2, 3, 4, 5]
-    var doubled = arr.map(x -> x * 2)
+    var doubled = arr.map(x => x * 2)
     assertEqual(doubled[0], 2)
     assertEqual(doubled[4], 10)
     print(len(doubled))
@@ -21,7 +21,7 @@ fn test_bare_lambda_map() {
 @test
 fn test_bare_lambda_filter() {
     var arr = [1, 2, 3, 4, 5, 6]
-    var evens = arr.filter(x -> x % 2 == 0)
+    var evens = arr.filter(x => x % 2 == 0)
     assertEqual(len(evens), 3)
     assertEqual(evens[0], 2)
     assertEqual(evens[2], 6)
@@ -37,7 +37,7 @@ fn test_bare_lambda_filter() {
 @test
 fn test_bare_lambda_find() {
     var arr = [10, 20, 30, 40]
-    var found = arr.find(x -> x > 25)
+    var found = arr.find(x => x > 25)
     assertEqual(found, 30)
     print(found!)
 }
@@ -45,12 +45,12 @@ fn test_bare_lambda_find() {
 @test
 fn test_bare_lambda_every_some() {
     var arr = [2, 4, 6, 8]
-    assertEqual(arr.every(x -> x % 2 == 0), true)
-    assertEqual(arr.some(x -> x > 7), true)
-    assertEqual(arr.some(x -> x > 10), false)
-    print(arr.every(x -> x % 2 == 0))
-    print(arr.some(x -> x > 7))
-    print(arr.some(x -> x > 10))
+    assertEqual(arr.every(x => x % 2 == 0), true)
+    assertEqual(arr.some(x => x > 7), true)
+    assertEqual(arr.some(x => x > 10), false)
+    print(arr.every(x => x % 2 == 0))
+    print(arr.some(x => x > 7))
+    print(arr.some(x => x > 10))
 }
 
 // ===== Chained bare lambdas =====
@@ -58,7 +58,7 @@ fn test_bare_lambda_every_some() {
 @test
 fn test_bare_lambda_chain() {
     var arr = [1, 2, 3, 4, 5]
-    var result = arr.filter(x -> x > 2).map(x -> x * 10)
+    var result = arr.filter(x => x > 2).map(x => x * 10)
     assertEqual(result[0], 30)
     assertEqual(result[1], 40)
     assertEqual(result[2], 50)
@@ -73,7 +73,7 @@ fn test_bare_lambda_chain() {
 @test
 fn test_bare_lambda_block_body() {
     var arr = [1, 2, 3]
-    var result = arr.map(x -> {
+    var result = arr.map(x => {
         var doubled = x * 2
         return doubled + 1
     })
@@ -92,7 +92,7 @@ fn test_bare_lambda_block_body() {
 fn test_bare_lambda_closure() {
     var factor = 3
     var arr = [1, 2, 3]
-    var scaled = arr.map(x -> x * factor)
+    var scaled = arr.map(x => x * factor)
     assertEqual(scaled[0], 3)
     assertEqual(scaled[1], 6)
     assertEqual(scaled[2], 9)
@@ -109,7 +109,7 @@ fn test_bare_lambda_fn_arg() {
     fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
         return f(x)
     }
-    var result = apply(x -> x * 5, 4)
+    var result = apply(x => x * 5, 4)
     assertEqual(result, 20)
     print(result)
 }
@@ -120,7 +120,7 @@ fn test_bare_lambda_fn_arg() {
 fn test_bare_lambda_foreach() {
     var arr = [10, 20, 30]
     var sum = 0
-    arr.forEach(x -> {
+    arr.forEach(x => {
         sum += x
     })
     assertEqual(sum, 60)
@@ -132,7 +132,7 @@ fn test_bare_lambda_foreach() {
 @test
 fn test_bare_lambda_string_map() {
     var words = ["hello", "world"]
-    var lengths = words.map(w -> len(w))
+    var lengths = words.map(w => len(w))
     assertEqual(lengths[0], 5)
     assertEqual(lengths[1], 5)
     print(len(lengths))

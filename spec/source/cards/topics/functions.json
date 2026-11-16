@@ -31,6 +31,13 @@
       "markdown": "The function's throws clause bounds its body. Only omitted arguments evaluate their defaults and contribute escaping default errors to the call; explicitly supplied arguments skip those defaults. Throwing calls inside default expressions require their own try at the declaration, independently of the caller's propagation marker."
     },
     {
+      "heading": "Named arguments",
+      "fences": [
+        "decl-named-arguments"
+      ],
+      "markdown": "Genuine declarations own parameter labels; exported names are API metadata, independently of Fn type identity. Positional arguments precede named arguments. Values evaluate once in written order, then omitted defaults evaluate in declaration order. HIR owns the authenticated source-to-formal binding plan. Function values and aliases have no label namespace; rest parameters cannot be named. A named ref argument uses label: ref place."
+    },
+    {
       "heading": "Multiple return values",
       "fences": [
         "decl-fn-multi-return"
@@ -54,7 +61,8 @@
       "heading": "Lambda forms",
       "fences": [
         "expr-lambda-forms"
-      ]
+      ],
+      "markdown": "Arrow lambdas and match/select arms use => for a value or block. Return types and fn(...) -> R function types use ->. Arrow lambdas are right-associative; a following brace is always a block, so parenthesize a returned literal. Wrong-position arrows are rejected with replacement hints."
     },
     {
       "heading": "Error signatures and external verification",

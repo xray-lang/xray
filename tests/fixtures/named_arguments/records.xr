@@ -1,0 +1,23 @@
+struct Pair {
+    z: i64
+    name: string
+}
+struct Phantom<T> { const score: i64 }
+fn make(z: i64, name: string) -> Pair {
+    return Pair{z: z, name: name}
+}
+fn copy(value: Pair) -> Pair { return value }
+fn inspect(value: Pair) -> i64 {
+    print(value.name)
+    return value.z
+}
+var value = make(name: "kept", z: 17)
+print(inspect(copy(value)))
+const integer = Phantom<i64>{score: 19}
+const text = Phantom<string>{score: 23}
+const integers = Phantom<Array<i64>>{score: 29}
+const strings = Phantom<Array<string>>{score: 31}
+print(integer.score)
+print(text.score)
+print(integers.score)
+print(strings.score)

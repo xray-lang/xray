@@ -3,7 +3,7 @@ fn has<K: Hashable>(items: Set<K>, key: K) -> bool {
 }
 
 fn run(n: i64) -> i64 {
-    var values: Set<i64> = #[]
+    var values: Set<i64> = Set()
     var seed = 0
     while (seed < 64) {
         values.add(seed)

@@ -19,9 +19,12 @@ fn greet(name: string = "World") {
 fn add(a: i64, b: i64 = 10, c: i64 = 100) -> i64 {
     return a + b + c
 }
-type Point = { x: i64, y: i64 }
+struct Point {
+    x: i64
+    y: i64
+}
 fn createPoint(x: i64 = 0, y: i64 = 0) -> Point {
-    return { x: x, y: y }
+    return Point{ x: x, y: y }
 }
 fn formatName(first: string, last: string = "Unknown") -> string {
     return first + " " + last

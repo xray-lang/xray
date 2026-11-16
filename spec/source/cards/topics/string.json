@@ -12,11 +12,11 @@
     {
       "heading": "Quoted literals",
       "before_text": "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[u8; L]`, and `c/cr` for `[u8; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.",
-      "code": [
-        "var card = r\"\"\"\n<div class=\"card\">\n  ${title}\n</div>\n\"\"\"",
-        "var path = br\"C:\\\\raw\\\\path\"\nvar asset = cr\"asset-name\""
-      ],
-      "after_text": "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide."
+      "after_text": "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide.",
+      "source_examples": [
+        "knowledge-string-1-1",
+        "knowledge-string-1-2"
+      ]
     },
     {
       "heading": "String interpolation",

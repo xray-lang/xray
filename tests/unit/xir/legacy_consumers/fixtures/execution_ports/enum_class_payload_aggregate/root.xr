@@ -34,24 +34,24 @@ enum Node {
 
 fn tagOf(node: Node) -> string {
     return match (node) {
-        Node.Element { name, attributes: attrs, children } -> name.local,
-        Node.Text { content: t } -> "#text",
-        Node.Document { children: kids } -> "#document"
+        Node.Element { name, attributes: attrs, children } => name.local,
+        Node.Text { content: t } => "#text",
+        Node.Document { children: kids } => "#document",
     }
 }
 
 fn childCount(node: Node) -> i64 {
     return match (node) {
-        Node.Document { children: kids } -> len(kids),
-        Node.Element { name, attributes: attrs, children: kids } -> len(kids),
-        Node.Text { content: t } -> 0
+        Node.Document { children: kids } => len(kids),
+        Node.Element { name, attributes: attrs, children: kids } => len(kids),
+        Node.Text { content: t } => 0,
     }
 }
 
 fn firstAttrValue(node: Node) -> string {
     return match (node) {
-        Node.Element { name, attributes: attrs, children: kids } -> (len(attrs) > 0 ? attrs[0].value : ""),
-        _ -> ""
+        Node.Element { name, attributes: attrs, children: kids } => (len(attrs) > 0 ? attrs[0].value : ""),
+        _ => "",
     }
 }
 

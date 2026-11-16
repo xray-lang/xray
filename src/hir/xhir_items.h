@@ -4,7 +4,7 @@
 #include "xhir_diagnostics.h"
 typedef struct XrHirItems XrHirItems;
 typedef enum {XR_HIR_ITEM_DECLARATION,XR_HIR_ITEM_PARAMETER,XR_HIR_ITEM_PARAMETER_SCOPE,
-    XR_HIR_ITEM_METHOD} XrHirItemKind;
+    XR_HIR_ITEM_METHOD,XR_HIR_ITEM_NAMED_FUNCTION_SCOPE} XrHirItemKind;
 typedef struct XrHirItemSpec {
     const char *name;
     uint32_t module,parent,node; /* Zero parent is the module; otherwise item+1. */
@@ -23,6 +23,7 @@ XR_FUNC XrCompileResourceStatus xr_hir_items_claim(XrHirItems *,const XrHirItemS
 XR_FUNC bool xr_hir_items_find(const XrHirItems *,uint32_t,uint32_t,const char *,uint32_t *);
 /* Methods and private parameter scopes each have one AST-keyed parameter owner. */
 XR_FUNC bool xr_hir_items_find_scope(const XrHirItems *,uint32_t,uint32_t,uint32_t *);
+XR_FUNC bool xr_hir_items_named_function(const XrHirItems *,uint32_t,uint32_t);
 XR_FUNC bool xr_hir_items_module(const XrHirItems *,uint32_t,uint32_t *);
 /* Receiving bindings are synchronous borrows, never part of a report. */
 XR_FUNC bool xr_hir_items_bind(XrHirItems *,uint32_t,void *);

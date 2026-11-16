@@ -3,7 +3,7 @@ enum Choice { Number { value:i64 }, Empty }
 final class Box { value:i64 init(value:i64) { this.value=value } }
 fn first(value:i64)->i64 { return value+11 }
 fn second(value:i64)->i64 { return value+99 }
-fn score(value:Choice)->i64 { return match(value) { Choice.Number{value}->value, Choice.Empty->0 } }
+fn score(value:Choice)->i64 { return match(value) { Choice.Number{value}=>value, Choice.Empty=>0, } }
 var pair:(i64,string)=(11,"old")
 const incomingPair:(i64,string)=(99,"new\0value")
 var optional:i64?=11

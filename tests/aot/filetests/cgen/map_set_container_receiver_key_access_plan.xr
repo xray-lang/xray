@@ -1,12 +1,12 @@
 fn makeScores(value: i64) -> Map<i64, i64> {
-    var scores: Map<i64, i64> = #{}
+    var scores: Map<i64, i64> = {}
     scores.set(1, value)
     scores[2] = value
     return scores
 }
 
 fn makeSeen(value: i64) -> Set<i64> {
-    var seen: Set<i64> = #[]
+    var seen: Set<i64> = Set()
     seen.add(value)
     return seen
 }

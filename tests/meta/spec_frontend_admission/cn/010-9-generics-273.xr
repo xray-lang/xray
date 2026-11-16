@@ -1,0 +1,7 @@
+type Point = { x: f64, y: f64 }
+
+fn describe(p: Point) { ... }
+
+describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
+describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'

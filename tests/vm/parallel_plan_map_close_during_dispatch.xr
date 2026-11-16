@@ -1,12 +1,12 @@
 import { Options, ParallelError, Plan } from parallel
 
-var mapPlan = Plan<i64>(Options(2), lane -> lane + 1)
+var mapPlan = Plan<i64>(Options(2), lane => lane + 1)
 
 fn closeMapPlan() {
     mapPlan.close()
 }
 
-var mapped = mapPlan.map(0..20000, (state, i) -> {
+var mapped = mapPlan.map(0..20000, (state, i) => {
     if (i == 10000) {
         closeMapPlan()
     }
@@ -16,26 +16,26 @@ var mapped = mapPlan.map(0..20000, (state, i) -> {
 print(len(mapped) == 20000)
 
 try {
-    mapPlan.forEach(0..1, (state, i) -> {
+    mapPlan.forEach(0..1, (state, i) => {
         print(state + i)
     })
     print("map-miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("map-closed")
-        ParallelError.ConcurrentDispatch -> print("map-active-leak")
-        _ -> print("map-other")
+        ParallelError.ClosedPlan => print("map-closed"),
+        ParallelError.ConcurrentDispatch => print("map-active-leak"),
+        _ => print("map-other"),
     }
 }
 
-var intoPlan = Plan<i64>(Options(2), lane -> lane + 3)
+var intoPlan = Plan<i64>(Options(2), lane => lane + 3)
 
 fn closeIntoPlan() {
     intoPlan.close()
 }
 
 var out: Array<i64> = []
-intoPlan.mapInto(0..20000, ref out, (state, i) -> {
+intoPlan.mapInto(0..20000, ref out, (state, i) => {
     if (i == 10000) {
         closeIntoPlan()
     }
@@ -45,13 +45,13 @@ intoPlan.mapInto(0..20000, ref out, (state, i) -> {
 print(len(out) == 20000)
 
 try {
-    intoPlan.reduce(0..1, 0, (state, i) -> state + i, (a, b) -> a + b)
+    intoPlan.reduce(0..1, 0, (state, i) => state + i, (a, b) => a + b)
     print("mapinto-miss")
 } catch (e) {
     match (e) {
-        ParallelError.ClosedPlan -> print("mapinto-closed")
-        ParallelError.ConcurrentDispatch -> print("mapinto-active-leak")
-        _ -> print("mapinto-other")
+        ParallelError.ClosedPlan => print("mapinto-closed"),
+        ParallelError.ConcurrentDispatch => print("mapinto-active-leak"),
+        _ => print("mapinto-other"),
     }
 }
 

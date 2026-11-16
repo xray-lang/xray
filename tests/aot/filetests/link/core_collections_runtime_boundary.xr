@@ -16,14 +16,14 @@ fn run_collections_boundary() {
     var view: Slice<i64> = xs[1:3]
     print(len(view))
 
-    var scores: Map<string, i64> = #{"a": 1}
+    var scores: Map<string, i64> = {"a": 1}
     scores.set("b", 2)
     print(scores.get("b"))
     print(scores.containsKey("a"))
     scores.delete("a")
     print(len(scores))
 
-    var seen: Set<string> = #["x"]
+    var seen: Set<string> = Set(["x"])
     seen.add("y")
     print(seen.contains("y"))
     seen.delete("x")

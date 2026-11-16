@@ -29,10 +29,12 @@ static XrXirValueStatus key_charge(XrXirValueAdmission *admission, uint64_t work
     admission->work -= work;
     return xr_xir_domain_work(admission->domain, work) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_LIMIT;
 }
+#include "xxir_value_key_enum.inc.c"
 /* The caller owns a graph operation and has checked the exact builtin key,
  * output pointer and current admission domain. Value bytes remain validated. */
 static XrXirValueStatus key_hash_graph_operation(const XrXirValue *value,
     XrXirValueAdmission *admission, uint64_t *output) {
+    if(!xr_xir_key_builtin_type((XrXirType)value->type))return key_enum_hash(value,admission,output);
     if (!xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirString *string = value->type == XR_XIR_STRING ? string_pointer(value) : NULL;
     uint64_t length = string ? (uint64_t)string->length : 8;
@@ -52,6 +54,8 @@ static XrXirValueStatus key_hash_graph_operation(const XrXirValue *value,
  * operation. Equality still validates both payloads and charges actual work. */
 static XrXirValueStatus key_equal_graph_operation(const XrXirValue *left,
     const XrXirValue *right, XrXirValueAdmission *admission, bool *output) {
+    if(!xr_xir_key_builtin_type((XrXirType)left->type)||!xr_xir_key_builtin_type((XrXirType)right->type))
+        return key_enum_equal(left,right,admission,output);
     if (!xr_xir_value_valid(left) || !xr_xir_value_valid(right)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirString *a = left->type == XR_XIR_STRING ? string_pointer(left) : NULL;
     XirString *b = a ? string_pointer(right) : NULL;
@@ -67,7 +71,7 @@ XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
     XrXirValueAdmission *admission, uint64_t *output) {
     if (!value || !output || !admission || !xr_xir_domain_current(admission->domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_key_builtin_type((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
+    if ((uint32_t)value->type<XR_XIR_CONSTRUCTED_TYPE_BASE&&!xr_xir_key_builtin_type((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = key_hash_graph_operation(value, admission, output);
     xr_xir_value_graph_end();
@@ -76,8 +80,9 @@ XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
 XR_FUNC XrXirValueStatus xr_xir_key_equal(const XrXirValue *left,
     const XrXirValue *right, XrXirValueAdmission *admission, bool *output) {
     if (!left || !right || !output || !admission || !xr_xir_domain_current(admission->domain) ||
-        left->type != right->type) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!xr_xir_key_builtin_type((XrXirType)left->type)) return XR_XIR_VALUE_UNSUPPORTED;
+        ((xr_xir_key_builtin_type((XrXirType)left->type)||xr_xir_key_builtin_type((XrXirType)right->type))&&
+            left->type!=right->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if ((uint32_t)left->type<XR_XIR_CONSTRUCTED_TYPE_BASE&&!xr_xir_key_builtin_type((XrXirType)left->type)) return XR_XIR_VALUE_UNSUPPORTED;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = key_equal_graph_operation(left, right, admission, output);
     xr_xir_value_graph_end();

@@ -104,10 +104,10 @@ static const char library_carrier_member_consumer[]=
     "export fn result()->i64{const envelope=lib.make<i64>(41);if(envelope.text!=\"owned\"){return 0;};if(envelope.entries[0].1==null){return 0;};if(envelope.first()!=41){return 0;};var counter=lib.Counter(40);counter.bump();if(counter.read()!=41){return 0;};const dispatch=lib.Dispatch{invoke:lib.increment()};if(dispatch.run(40)!=41){return 0;};return lib.apply(lib.increment(),40);}\n"
 ;
 static const char library_enum_owned_definition[]=
-    "export enum Packet<T>{Empty,Value{item:T,text:string},Other{item:T} item(fallback:T)->T{return match(this){Packet.Empty->fallback,Packet.Value{item}->item,Packet.Other{item}->item};}}\n"
+    "export enum Packet<T>{Empty,Value{item:T,text:string},Other{item:T} item(fallback:T)->T{return match(this){Packet.Empty=>fallback,Packet.Value{item}=>item,Packet.Other{item}=>item,};}}\n"
     "enum Hidden{Only}\n"
     "export fn make<T>(value:T)->Packet<T>{return Packet<T>.Value{item:value,text:\"owned\"};}\n"
-    "export fn read(value:Packet<i64>)->i64{return match(value){Packet.Value{item,text}-> {if(text!=\"owned\"){return 0;};item},Packet.Empty->0,Packet.Other{item}->item};}\n"
+    "export fn read(value:Packet<i64>)->i64{return match(value){Packet.Value{item,text}=> {if(text!=\"owned\"){return 0;};item},Packet.Empty=>0,Packet.Other{item}=>item,};}\n"
 ;
 static const char library_enum_owned_consumer[]=
     "import \"./enum_owned\" as lib;\n"

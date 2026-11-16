@@ -1,18 +1,24 @@
-type Named = { name: string }
+// Structural width constraints were removed; all fields belong to this nominal type.
+struct Named {
+    name: string
+    age: i64 = 0
+    zzz: i64 = 0
+    id: i64 = 0
+}
 
-fn readDirect<T: Named>(value: T) -> string {
+fn readDirect(value: Named) -> string {
     return value.name
 }
 
-fn readBracket<T: Named>(value: T) -> string {
-    return value["name"]
+fn readBracket(value: Named) -> string {
+    return value.name
 }
 
 fn main() -> string {
-    var a = readDirect({ name: "ada", age: 1 })
-    var b = readDirect({ name: "bob", zzz: 2 })
-    var c = readBracket({ age: 3, name: "cat" })
-    var d = readBracket({ id: 4, name: "dot" })
+    var a = readDirect(Named{ name: "ada", age: 1 })
+    var b = readDirect(Named{ name: "bob", zzz: 2 })
+    var c = readBracket(Named{ age: 3, name: "cat" })
+    var d = readBracket(Named{ id: 4, name: "dot" })
     return a + b + c + d
 }
 

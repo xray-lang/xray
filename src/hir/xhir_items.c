@@ -113,17 +113,17 @@ static bool hir_item_spec_valid(const XrHirItems *h,const XrHirItemSpec *spec) {
         (!spec->parent||h->items[spec->parent-1].module==spec->module)&&
         (spec->kind==XR_HIR_ITEM_DECLARATION||
          (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent)||
-         (spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE&&spec->node)||
+         ((spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE||spec->kind==XR_HIR_ITEM_NAMED_FUNCTION_SCOPE)&&spec->node)||
          (spec->kind==XR_HIR_ITEM_METHOD&&spec->parent&&spec->node));
 }
 XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
     if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uint32_t previous=UINT32_MAX;
     for(uint32_t link=hir_name_head(h,spec->module,spec->parent,spec->name);
-        spec->kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&link;link=h->items[link-1].name_next) {
+        spec->kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&spec->kind!=XR_HIR_ITEM_NAMED_FUNCTION_SCOPE&&link;link=h->items[link-1].name_next) {
         uint32_t i=link-1;
         if(h->items[i].module==spec->module&&
-        h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&
+        h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&h->items[i].kind!=XR_HIR_ITEM_NAMED_FUNCTION_SCOPE&&
         h->items[i].parent==spec->parent&&!strcmp(h->items[i].name,spec->name)&&i<previous)previous=i;
     }
     XrCompileResourceStatus s=XR_COMPILE_RESOURCE_OK;
@@ -169,7 +169,7 @@ bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const
     uint32_t found = UINT32_MAX;
     for(uint32_t link=hir_name_head(h,module,parent,name);link;link=h->items[link-1].name_next) {
         uint32_t i=link-1;
-        if(h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&
+        if(h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&h->items[i].kind!=XR_HIR_ITEM_NAMED_FUNCTION_SCOPE&&
         h->items[i].module==module&&h->items[i].parent==parent&&!strcmp(h->items[i].name,name)) {
             if (found != UINT32_MAX)
                 return false;
@@ -186,7 +186,7 @@ bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,u
         return false;
     uint32_t found = UINT32_MAX;
     for(uint32_t i=0;i<h->count;++i)if((h->items[i].kind==XR_HIR_ITEM_PARAMETER_SCOPE||
-        h->items[i].kind==XR_HIR_ITEM_METHOD)&&h->items[i].module==module&&h->items[i].node==node) {
+        h->items[i].kind==XR_HIR_ITEM_METHOD||h->items[i].kind==XR_HIR_ITEM_NAMED_FUNCTION_SCOPE)&&h->items[i].module==module&&h->items[i].node==node) {
             if (found != UINT32_MAX)
                 return false;
             found = i;
@@ -195,6 +195,10 @@ bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,u
         return false;
     *out = found;
     return true;
+}
+bool xr_hir_items_named_function(const XrHirItems *h,uint32_t module,uint32_t node) {
+    uint32_t item=0;
+    return xr_hir_items_find_scope(h,module,node,&item)&&h->items[item].kind==XR_HIR_ITEM_NAMED_FUNCTION_SCOPE;
 }
 bool xr_hir_items_module(const XrHirItems *h,uint32_t item,uint32_t *out) {
     if (!h || !out || item >= h->count)

@@ -26,7 +26,7 @@ static XrXirArtifact *zero_scratch_cleanup_lowered(const XrXirCompileContext *co
         {"cleanup",7,NULL,0,XR_XIR_UNIT,&cleanup_block,1,cleanup,2,NULL,0,XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[3]={{0}};identities[2].cleanup_owner=2;
     const XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={.modules=&source, .module_count=1, .functions=identities, .slots=NULL, .slot_count=0, .literals=NULL, .literal_count=0, .root_module=0, .entry_function=1, .implementations=NULL, .map_literals=NULL, .map_literal_count=0};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*lowered=NULL;

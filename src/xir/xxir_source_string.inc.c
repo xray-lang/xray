@@ -101,6 +101,38 @@ static bool source_string_slice_reference(SourceContext *ctx,AstNode *node,
     }
     return source_query_target_token_reference(ctx,node,declaration,XR_XIR_SOURCE_CALL);
 }
+static bool source_string_display_signature(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member,const XrXirType *types,uint32_t count,XrXirType result,
+    const SourceCallDisplayBinding *display) {
+    if(!ctx->call_observations)return true;
+    if(!ctx->calls.count||member->parameter_count!=count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"string call display has no actual declaration");
+    uint32_t selected=ctx->calls.count-1;
+    const XrXirSourceCall *call=&ctx->calls.items[selected];
+    if(call->reference>=ctx->query.reference_count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"string call display reference is missing");
+    uint32_t target=ctx->query.references[call->reference].target;
+    if(!target||target>ctx->query.declaration_count||ctx->query.declarations[target-1].native_identity!=member->id)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"string call display identity diverged");
+    XrXirSourceType *parameters=count?source_alloc(ctx,count,sizeof(*parameters)):NULL;
+    uint32_t *flags=count?source_alloc(ctx,count,sizeof(*flags)):NULL;
+    const char **names=count?source_alloc(ctx,count,sizeof(*names)):NULL;
+    uint32_t *modes=count?source_alloc(ctx,count,sizeof(*modes)):NULL;
+    if(count&&(!parameters||!flags||!names||!modes))return false;
+    for(uint32_t p=0;p<count;++p) {
+        if(!source_request_poll(ctx,node))return false;
+        parameters[p]=source_query_type(ctx,types[p]);
+        flags[p]=(member->parameters[p].optional?XR_XIR_SOURCE_CALL_OPTIONAL:0)|
+            (member->parameters[p].variadic?XR_XIR_SOURCE_CALL_VARIADIC:0);
+        names[p]=source_owned_text(ctx,member->parameters[p].name);if(!names[p])return false;
+        modes[p]=XR_PARAM_READ;
+    }
+    XrXirSourceDeclaration *declaration=(XrXirSourceDeclaration *)&ctx->query.declarations[target-1];
+    declaration->parameter_names=names;declaration->parameter_modes=modes;
+    XrXirSourceCall *observed=(XrXirSourceCall *)&ctx->calls.items[selected];
+    observed->signature=(XrXirSourceCallSignature){.parameters=parameters,.parameter_count=count,
+        .result=source_query_type(ctx,result),.known=true,.owner_type=source_query_type(ctx,XR_XIR_STRING),.parameter_flags=flags};
+    observed->argument_formals=display->argument_formals;observed->argument_count=display->argument_count;
+    observed->argument_binding_known=display->argument_binding_known;return true;
+}
 static bool source_string_intrinsic_call(SourceContext *ctx, AstNode *node,
     SourceValue receiver, const XrNativeIntrinsicDeclaration *call, SourceValue *value) {
     bool slice=call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE;
@@ -112,9 +144,9 @@ static bool source_string_intrinsic_call(SourceContext *ctx, AstNode *node,
         !xr_xir_intrinsic_type(call->member->result, &result))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "intrinsic declaration is not executable");
     SourceValue arguments[3] = {receiver, {0}, {0}};
-    uint32_t supplied = 0;
-    if (!source_native_read_arguments(ctx, node, parameters, 1, count, &arguments[1], &supplied,
-        "intrinsic requires its declared plain arguments")) return false;
+    uint32_t supplied = 0;SourceCallDisplayBinding display={0};
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=1,.maximum=count,
+        .values=&arguments[1],.supplied=&supplied,.diagnostic="intrinsic requires its declared plain arguments",.native_owner=XR_NATIVE_DECLARATION_STRING,.display=&display})) return false;
     for(uint32_t p=0;p<supplied;++p) if(arguments[p+1].type!=parameters[p])
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"intrinsic argument type mismatch");
     if(slice && supplied==1 && !source_recipe_record(ctx,
@@ -122,7 +154,8 @@ static bool source_string_intrinsic_call(SourceContext *ctx, AstNode *node,
     XrXirInstruction instruction = {XR_XIR_CALL_INTRINSIC, result, {0}, {0}, call->id, {0}};
     return source_recipe_group(ctx, instruction, arguments, count+1, value) &&
         (slice?source_string_slice_reference(ctx,node->as.call_expr.callee,call->member):
-            source_string_member_reference(ctx,node->as.call_expr.callee,call->member));
+            source_string_member_reference(ctx,node->as.call_expr.callee,call->member))&&
+        source_string_display_signature(ctx,node,call->member,parameters,count,result,&display);
 }
 static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -163,8 +196,8 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation declaration shape is inconsistent");
     SourceValue args[3] = {receiver, {0}, {0}};
     XrXirType parameters[]={XR_XIR_STRING,XR_XIR_I64};uint32_t supplied;
-    if (!source_native_read_arguments(ctx,node,parameters,1,indexed ? 2u : 1u,&args[1],&supplied,
-        "string operation requires its declared plain arguments")) return false;
+    if (!source_native_read_arguments(ctx,node,&(SourceNativeReadInput){.parameters=parameters,.minimum=1,.maximum=indexed ? 2u : 1u,
+        .values=&args[1],.supplied=&supplied,.diagnostic="string operation requires its declared plain arguments",.native_owner=XR_NATIVE_DECLARATION_STRING})) return false;
     if (args[1].type != XR_XIR_STRING)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation pattern type mismatch");
     if (indexed) {

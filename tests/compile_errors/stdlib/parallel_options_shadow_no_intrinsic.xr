@@ -8,6 +8,6 @@ class Options {
     }
 }
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     print(i)
 }, Options(2))

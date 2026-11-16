@@ -1,0 +1,7 @@
+class Token implements Hashable {
+ value:i64
+ init(value:i64){this.value=value}
+ hash()->i64{return this.value}
+}
+var counts:Map<Token,i64>={}
+counts.set(Token(7),99)

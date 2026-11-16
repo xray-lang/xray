@@ -1,8 +1,8 @@
 # Xray 语言参考手册
 
 > 版本：基于 `xray` v0.9.0 源码（校对日期 2026-07-18）
-> 性质：语言规范与参考手册。本文档是描述 xray 语言**实际行为**的真值源。
-> 实现：所有语义以 `xray` 当前主仓代码为准；本文档与代码不一致以代码为准并视为本文档需更新。
+> 性质：语言规范与参考手册。已接受的目标规则与当前实现支持程度分别表述。
+> 规则权威：`spec/source` 组织已接受的语言定义；中文条文为裁决文本，英文为翻译。当前代码不能自动覆盖规范。
 > 受众：xray 编写者、IDE / AI 工具实现者、编译器内部贡献者。
 
 ## 目录
@@ -43,7 +43,7 @@
 
 1. 让人类阅读后能写出合法且行为可预测的 xray 代码；
 2. 作为编译器、分析器、IDE、AI 助手、文档生成器等工具的**结构化真值源**；
-3. 与 `xray` 主仓的实际实现保持一致——任何不一致都视为本文档或代码的 bug。
+3. 明确区分已接受目标与实测支持：不一致须记录为规范错误、实现缺陷或已登记的实现缺口。
 
 **本手册不是教程**。完整的入门材料见 xray 官网与 `demos/` 目录。
 
@@ -89,7 +89,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 #### 0.4.2 源码引用
 
-本文档大量引用 xray 主仓源码作为真值源。引用格式：
+本文档引用主仓源码以定位实现和声明输入；引用不授予实现覆盖规范的权力。引用格式：
 
 ```
 路径:行号
@@ -114,7 +114,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字表，52 条）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字表，12 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 实现参考：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字声明）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字声明）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -142,13 +142,16 @@ xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达�
 
 条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`++`、`--`、`(`、`[`。因此：
 
+<!-- xr-source:example 002-1-lexical-structure-example-001 -->
 ```xray
 var x = a
 !b            // 两条语句；不是 var x = a!
 ```
+<!-- /xr-source -->
 
 行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`/`、`as`、`is` 等）时不存在歧义，续行照常工作：
 
+<!-- xr-source:example 002-1-lexical-structure-example-002 -->
 ```xray
 var ok = check(a)
     && check(b)      // 续行
@@ -159,13 +162,16 @@ var total = base +
 var quotient = total
     / 2              // 除法只有中缀角色，续行
 ```
+<!-- /xr-source -->
 
 若需要以 `-` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
 
+<!-- xr-source:example 002-1-lexical-structure-example-003 -->
 ```xray
 var d = (total
     - used)          // 括号组内行结尾透明
 ```
+<!-- /xr-source -->
 
 > 表达式语句的值会被丢弃，因此**没有任何效果的表达式语句是错误**（`E0208`）。这条规则与上面的语句边界规则配套：被正确断开的续行不会变成静默的空操作，而是立刻报错并提示改写方式。REPL 例外——它会打印末尾裸表达式的值，该值属于被观察的结果。
 
@@ -173,12 +179,14 @@ var d = (total
 
 xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
+<!-- xr-source:example 002-1-lexical-structure-example-004 -->
 ```xray
 // 行注释，从 // 到行尾
 /* 块注释，
    可跨行；
    支持 /* 嵌套 */ 到任意合理深度 */
 ```
+<!-- /xr-source -->
 
 注释可出现在任何空白能出现的地方。formatter 与 LSP 可以读取注释 trivia；trivia 不参与语法分析。
 
@@ -186,15 +194,18 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ### 1.4 标识符
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-01 -->
 ```ebnf
-Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
-IdentCont  ::= IdentStart | '0'..'9'
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 ```
+<!-- /xr-source -->
 
 输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
-**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`isolated`、`after` 可作为普通标识符）。
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`ref`、`move`、`isolated`、`after` 可作为普通标识符）。
 
 字符 `_` 是**专用通配符 token**，不是普通标识符：
 
@@ -206,64 +217,123 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **64 个保留关键字**，按用途分组如下：
+<!-- xr-source:keywords count -->
+当前词法实现保留 **63 个关键字**。完整名单由词法声明生成，见附录 B；目标分类的变更不代表已实现。
+<!-- /xr-source -->
 
 #### 1.5.1 声明与流程控制
 
+<!-- xr-source:keywords group-1 -->
 | 关键字 | 用途 |
 |--|--|
-| `var` | 可变变量声明 |
-| `const` | 固定绑定及其值语义部分 |
+| `break` | 循环控制 |
 | `comptime` | 强制编译期求值的表达式前缀 |
+| `const` | 固定绑定及其值语义部分 |
+| `continue` | 循环控制 |
+| `else` | 条件分支 |
 | `fn` | 函数声明 |
-| `return` | 函数返回 |
-| `yield` | 生成器产值语句 |
-| `if` `else` | 条件分支 |
-| `while` | 循环 |
-| `for` `in` | 循环（C 风格 + for-in） |
-| `break` `continue` | 循环控制 |
+| `for` | 循环（C 风格 + for-in） |
+| `if` | 条件分支 |
+| `in` | 循环（C 风格 + for-in） |
 | `match` | 模式匹配 |
+| `return` | 函数返回 |
+| `var` | 可变变量声明 |
+| `while` | 循环 |
+| `yield` | 生成器产值语句 |
+<!-- /xr-source -->
+
 
 #### 1.5.2 面向对象与类型
 
+<!-- xr-source:keywords group-2 -->
 | 关键字 | 用途 |
 |--|--|
-| `class` `struct` | 类/结构体声明 |
-| `packed` `union` | FFI 布局声明 |
-| `extends` | 类继承 |
-| `interface` `implements` | 接口声明/实现 |
+| `as` | 运行时类型检查 / 转换 |
+| `class` | 类/结构体声明 |
 | `enum` | 枚举声明 |
-| `type` | 类型别名 |
-| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
-| `this` `super` | 自我/父类引用 |
-| `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
-| `const` | 不可变字段/绑定修饰符 |
+| `extends` | 类继承 |
 | `final` | `final class` 禁止继承 |
+| `implements` | 接口声明/实现 |
+| `interface` | 接口声明/实现 |
+| `is` | 运行时类型检查 / 转换 |
+| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `operator` | 保留字；语言不提供运算符重载 |
-| `is` `as` | 运行时类型检查 / 转换 |
+| `packed` | FFI 布局声明 |
+| `private` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `static` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `struct` | 类/结构体声明 |
+| `super` | 自我/父类引用 |
+| `this` | 自我/父类引用 |
+| `type` | 类型别名 |
+| `union` | FFI 布局声明 |
+| `where` | 类型与泛型规则 |
+<!-- /xr-source -->
+
 
 `abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
 
 #### 1.5.3 错误处理
 
-`try` `catch` `throw` `defer`
+<!-- xr-source:keywords group-3 -->
+| 关键字 | 用途 |
+|--|--|
+| `catch` | 错误处理 |
+| `defer` | 错误处理 |
+| `throw` | 错误处理 |
+| `try` | 错误处理 |
+<!-- /xr-source -->
+
 
 `throws` 是签名位置的上下文关键字（§1.5.8），不是全局保留字。
 
 #### 1.5.4 模块系统
 
-`import` `export`
+<!-- xr-source:keywords group-4 -->
+| 关键字 | 用途 |
+|--|--|
+| `export` | 模块导入与导出 |
+| `import` | 模块导入与导出 |
+<!-- /xr-source -->
+
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe`
+<!-- xr-source:keywords group-5 -->
+| 关键字 | 用途 |
+|--|--|
+| `await` | 并发与底层能力 |
+| `go` | 并发与底层能力 |
+| `scope` | 并发与底层能力 |
+| `select` | 并发与底层能力 |
+| `unsafe` | 并发与底层能力 |
+<!-- /xr-source -->
+
 
 `parallel` 是需要显式 import 的标准库模块名，不是词法关键字。
 
 #### 1.5.6 类型名（保留）
 
-`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
-`f32` `f64` `bool` `string` `rune`
+<!-- xr-source:keywords group-6 -->
+| 关键字 | 用途 |
+|--|--|
+| `bool` | 内建标量类型 |
+| `f32` | 内建标量类型 |
+| `f64` | 内建标量类型 |
+| `i16` | 内建标量类型 |
+| `i32` | 内建标量类型 |
+| `i64` | 内建标量类型 |
+| `i8` | 内建标量类型 |
+| `isize` | 内建标量类型 |
+| `rune` | 内建标量类型 |
+| `string` | 内建标量类型 |
+| `u16` | 内建标量类型 |
+| `u32` | 内建标量类型 |
+| `u64` | 内建标量类型 |
+| `u8` | 内建标量类型 |
+| `usize` | 内建标量类型 |
+<!-- /xr-source -->
+
 
 `Never` 是预置的无值底类型名，不是词法关键字；它可用于 `throws(Never)`（§2.2.2）。
 
@@ -278,43 +348,58 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.7 字面量关键字
 
-`true` `false` `null`
+<!-- xr-source:keywords group-7 -->
+| 关键字 | 用途 |
+|--|--|
+| `false` | 字面量 |
+| `null` | 字面量 |
+| `true` | 字面量 |
+<!-- /xr-source -->
+
 
 #### 1.5.8 上下文敏感关键字
 
-不在 lexer 关键字表中，由 parser 按位置识别。**可以**作为普通标识符使用：
-
-| Token | 出现位置 |
+<!-- xr-source:keywords contextual -->
+| 关键字 | 用途 |
 |--|--|
 | `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
-| `default` | 保留，当前未启用 |
 | `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `isolated` | `scope(isolated)` 选项（§10.7） |
-| `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `after` | `select` 的超时分支 (`after 1000 => ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
 | `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 | `escaping` | 参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存 |
+| `copy` | 位置的显式复制表达式（§2.14） |
+| `nosuspend` | 函数类型的无挂起承诺前缀 |
+| `override` | 类实例方法的显式覆写标记 |
+<!-- /xr-source -->
+
+不在 lexer 关键字表中，由 parser 按位置识别。**可以**作为普通标识符使用：
+
 
 ### 1.6 字面量
 
 #### 1.6.1 整数字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-02 -->
 ```ebnf
-IntLiteral ::= DecLit | HexLit | OctLit | BinLit
-DecLit ::= Digit (Digit | '_')*
-HexLit ::= '0x' HexDigit (HexDigit | '_')*
-OctLit ::= '0o' OctDigit (OctDigit | '_')*
-BinLit ::= '0b' BinDigit (BinDigit | '_')*
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 ```
+<!-- /xr-source -->
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 无唯一数值上下文的整数字面量默认类型为 `i64`。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：默认 `i64` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
 - 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `i64` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
 
+<!-- xr-source:example 002-1-lexical-structure-example-005 -->
 ```xray
 42
 0xFF
@@ -322,46 +407,57 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 0o77
 1_000_000      // 一百万
 ```
+<!-- /xr-source -->
 
 #### 1.6.2 浮点字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-03 -->
 ```ebnf
-FloatLiteral ::= Digit+ '.' Digit* Exp?
-              | Digit+ Exp
-              | '.' Digit+ Exp?
-Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 ```
+<!-- /xr-source -->
 
 无唯一浮点上下文时，字面量类型为 `f64`（IEEE-754 双精度）；唯一的 `f32`/`f64` 上下文直接选择舍入精度，完整拼写和舍入合同见 §17.25。词法目标包含前导/尾随点号形式；当前 XIR 源码子集尚未准入这些形式，不能将转换核心的支持计为完整词法实现。
 
+<!-- xr-source:example 002-1-lexical-structure-example-006 -->
 ```xray
 3.14
 1.0e10
 2.5E-3
 .5             // 等价 0.5
 ```
+<!-- /xr-source -->
 
 #### 1.6.3 BigInt 字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-04 -->
 ```ebnf
-BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-007 -->
 ```xray
 123n
 0xFFn
 0b1010n
 ```
+<!-- /xr-source -->
 
 任意精度整数，运算永不溢出。类型见 §14.8。
 
 #### 1.6.4 布尔与 null 字面量
 
+<!-- xr-source:example 002-1-lexical-structure-example-008 -->
 ```xray
 true
 false
 null
 ```
+<!-- /xr-source -->
 
 - `true` / `false`：类型 `bool`。
 - `null`：类型 `null`（语义上是所有可空类型 `T?` 的零值）。
@@ -372,9 +468,10 @@ Xray 的 quoted literal 只使用双引号；单引号专用于 `rune`，反引�
 
 ##### Inline escaped string（Q = 1）
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-05 -->
 ```ebnf
 InlineEscapedString ::= '"' StrChar* '"'
-StrChar ::= 任何非双引号、非反斜杠、非换行符
+StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -383,11 +480,13 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
                   | 'u{' HexDigit{1,6} '}')
 Interpolation ::= '${' Expression '}'
 ```
+<!-- /xr-source -->
 
 - inline literal 不能跨物理行；需要换行时使用 escape 或 block form。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
 - `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
+<!-- xr-source:example 002-1-lexical-structure-example-009 -->
 ```xray
 "hello"
 "Hello, ${name}! ${1 + 2}"
@@ -395,44 +494,52 @@ Interpolation ::= '${' Expression '}'
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
+<!-- /xr-source -->
 
 插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
 
 ##### Inline raw string（`r` prefix，Q = 1）
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-06 -->
 ```ebnf
 InlineRawString ::= 'r' '"' RawChar* '"'
-RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
+RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
+<!-- /xr-source -->
 
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
 - 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
 - raw string 使用 `r"..."`；单引号只解析为 `rune`。
 
+<!-- xr-source:example 002-1-lexical-structure-example-010 -->
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
 r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
 ```
+<!-- /xr-source -->
 
 ##### 统一 prefix 与可变 quote delimiter
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-07 -->
 ```ebnf
-QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
 LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
 InlineQuoted ::= '"' InlinePayload* '"' | '""'
 BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
 QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
+<!-- /xr-source -->
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。字段标识符和 C literal 仍遵守各自的无 NUL 限制。
 - `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
 - `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
 
+<!-- xr-source:example 002-1-lexical-structure-example-011 -->
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // 反斜杠原样，仍插值
@@ -441,15 +548,19 @@ br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
 c"puts"                   // [u8; 5]，最后一项是 appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
+<!-- /xr-source -->
 
 一个双引号是 inline delimiter；两个连续双引号只表示当前 prefix family 的空 payload，不是 block opener：
 
+<!-- xr-source:example 002-1-lexical-structure-example-012 -->
 ```xray
 "" r"" b"" br"" c"" cr""
 ```
+<!-- /xr-source -->
 
 三个及以上连续双引号形成 block delimiter。opener 后必须立即是 LF 或 CRLF；closer 必须从自己的行开始，形状只能是“margin + 与 opener 完全相同数量的双引号 + 换行或 EOF”。closer 行不能有尾随空白、注释、逗号、分号或括号；后续 token 从下一行开始。
 
+<!-- xr-source:example 002-1-lexical-structure-example-013 -->
 ```xray
 const HTML = r"""
 <div class="card">
@@ -462,6 +573,7 @@ echo ${HOME}
 """
 """"
 ```
+<!-- /xr-source -->
 
 opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统一为 LF。closer 前的 spaces/tabs 是 margin；每个非空正文行必须以完全相同的 byte prefix 开头，移除后才形成 payload。tabs 与 spaces 不按可视列等价。
 
@@ -471,10 +583,12 @@ opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统�
 
 #### 1.6.6 `rune` 字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-08 -->
 ```ebnf
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 ```
+<!-- /xr-source -->
 
 - `'a'` 的类型是 `rune`，表示一个 Unicode scalar value。
 - 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
@@ -482,11 +596,13 @@ CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 - 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
 - rune 字面量不支持 `${...}` 插值。
 
+<!-- xr-source:example 002-1-lexical-structure-example-014 -->
 ```xray
 var a: rune = 'a'
 var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
+<!-- /xr-source -->
 
 ##### 字符串插值
 
@@ -494,14 +610,18 @@ var smile: rune = '\u{1F600}'
 
 #### 1.6.7 正则字面量
 
+<!-- xr-source:grammar 002-1-lexical-structure-grammar-09 -->
 ```ebnf
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 002-1-lexical-structure-example-015 -->
 ```xray @fragment
 var letters = re"(?i)[a-z]+"
 var decimal = re"\d+\.\d+"
 ```
+<!-- /xr-source -->
 
 - `re` 后面紧跟双引号时识别为正则字面量；其他位置的 `re` 是普通标识符。
 - 内容是合法 UTF-8，按 raw 规则保留反斜杠，不解释字符串转义，也不进行 `${...}` 插值。inline / block 引号、物理换行及缩进裁剪规则与 §1.6.5 的 raw 引号形式相同。
@@ -518,7 +638,7 @@ var decimal = re"\d+\.\d+"
 | Token | 用途 |
 |--|--|
 | `(` `)` | 分组、调用、参数列表 |
-| `{` `}` | 块、对象字面量 |
+| `{` `}` | 块、Map 与带类型名的 struct 字面量 |
 | `[` `]` | 数组字面量、索引 |
 | `,` | 分隔符 |
 | `.` | 成员访问 |
@@ -568,7 +688,8 @@ var decimal = re"\d+\.\d+"
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`i64 \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
+| `->` | 类型箭头：函数、方法及 fn lambda 的返回类型；函数类型写 `fn(T) -> R`，返回 unit 时省略箭头（`fn(T)`） |
+| `=>` | 值箭头：箭头 lambda、`match` 与 `select` 分支；按最长匹配识别为一个 token |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -577,19 +698,16 @@ var decimal = re"\d+\.\d+"
 
 `!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
 
-#### 1.7.9 集合字面量起始符
+#### 1.7.9 集合字面量边界
 
-| Token | 用途 |
-|--|--|
-| `#{` | 空 Map 字面量 |
-| `#[` | Set 字面量起始 |
+Array 使用 `[` 与 `]`；Map 使用普通 `{` 与 `}`，不添加前缀 token；Set 使用普通具名构造。语句位置及值箭头后的 `{` 是块，Map 表达式的上下文规则见 §3.10。
 
-例：
-
-```xray
-var empty_map = #{}
-var primes = #[2, 3, 5, 7]
+<!-- xr-source:example 002-1-lexical-structure-example-016 -->
+```xray @check
+var empty_map: Map<string, i64> = {}
+var primes = Set([2, 3, 5, 7])
 ```
+<!-- /xr-source -->
 
 #### 1.7.10 模式
 
@@ -615,7 +733,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Optional 层独立**：`T?` 是语言项 `Optional<T>` 的写法；每层保留独立的存在标签，不拆成含 null 的 union。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
+5. **名义类型与动态数据**：`class` / `struct` / `interface` 按名义身份兼容，interface 必须显式 implements；固定字段使用 struct，多字段返回也可使用无标签 tuple。动态键使用 Map，`JSON.Value` 是 schema-less 递归数据交换值域；JSON 标量按既有规则 widening，复合 typed value 通过 `JSON.value` 显式编码。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -795,6 +913,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
+<!-- xr-source:example types-explicit-conditions -->
 ```xray
 var ok = true
 if (ok) { }
@@ -813,6 +932,7 @@ var s = ""
 if (len(s) != 0) { }     // OK
 // if (s) { }            // 编译错误
 ```
+<!-- /xr-source -->
 
 #### 2.3.4 `string`
 
@@ -824,6 +944,7 @@ if (len(s) != 0) { }     // OK
 
 `rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `u32` 的别名。
 
+<!-- xr-source:example 003-2-type-system-example-002 -->
 ```xray
 var a: rune = 'a'
 var zh = '中'
@@ -831,6 +952,7 @@ var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
 print(smile.toUInt32())   // 128512
 ```
+<!-- /xr-source -->
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
@@ -843,11 +965,13 @@ print(smile.toUInt32())   // 128512
 
 xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 
+<!-- xr-source:example 003-2-type-system-example-003 -->
 ```xray
 fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回
 fn ping() { print("pong") }                  // 省略返回类型 = ()
 var r: () = log("hi")                        // 允许；r 是 Unit 值
 ```
+<!-- /xr-source -->
 
 - 一个函数省略返回类型等同于 `-> ()`。
 - `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
@@ -866,6 +990,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
+<!-- xr-source:example 003-2-type-system-example-004 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -879,6 +1004,7 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
@@ -892,12 +1018,14 @@ unsafe {
 
 `Array<T>` 是有序、可增长的值类型。赋值、保存参数和返回值保留独立的逻辑副本；实现可以共享元素存储，但经一个可写绑定修改或追加元素不得改变其他逻辑副本。复制沿值语义部分递归，在 class 或同步身份处只复制引用，不复制或冻结所引用的对象。方法见 §14.7，所有权规则见 §2.14。
 
+<!-- xr-source:example types-array -->
 ```xray
 var a: Array<i64> = [1, 2, 3]
 var b = a                        // b 是逻辑副本
 b[0] = 9                         // a[0] 仍为 1
 var c: Array<string> = []         // 显式空数组
 ```
+<!-- /xr-source -->
 
 `T` 必须在编译期确定，且可复制、可保存；借用视图和不可复制资源不能作为普通 Array 元素。空 `[]` 需要类型上下文，无上下文时是编译错误：`Empty array '[]' requires a type annotation`。非 nullable Array 必须显式初始化，不从未初始化存储推定为空数组。
 
@@ -943,6 +1071,7 @@ owner 必须是可证明存活的具名局部 place、参数或 receiver 字段�
 
 `MutSlice<T>` 赋值转移借用，普通调用暂时重借用。`MutSlice<T>` 到 `Slice<T>` 是共享重借用；派生的只读视图存活期间，原可写视图不能写入。子切片也必须遵守同一借用权限。
 
+<!-- xr-source:example types-slice -->
 ```xray
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
@@ -958,6 +1087,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ##### 借用规则
 
@@ -988,124 +1118,89 @@ tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验
 
 #### 2.4.3 `Map<K, V>`
 
-哈希字典，**保持插入顺序**。详见 §14.8。
+保持插入顺序的哈希字典。字面量写 `{key: value}`，键是任意表达式；裸标识符取其绑定的值。字符串键必须加引号。空 `{}` 需要 `Map<K, V>` 或 `JSON.Object` 上下文；语句开头及 `=>` 后的 `{` 是块（§3.10）。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
-
-```xray
-var m: Map<string, i64> = #{"a": 1, "b": 2}
-var m2 = #{"a": 1, "b": 2}
-var empty = #{}                                     // 空 Map
-
-m["c"] = 3                                          // 添加/修改
-var v = m["a"]                                      // 取值；键不存在时 panic E0431
-var maybe = m.get("missing")                        // 安全查询；不存在返回 null
+<!-- xr-source:example types-map -->
+```xray @check
+var m: Map<string, i64> = {"a": 1, "b": 2}
+var m2 = {"a": 1, "b": 2}
+var empty: Map<string, i64> = {}
+m["c"] = 3
+var v = m["a"]
+var maybe = m.get("missing")
 ```
+<!-- /xr-source -->
 
-| 字面量形式 | 类型 | 用途 |
-|---|---|---|
-| `{ key: value }`（无前缀） | exact `structural object` | 见 §2.4.7 |
-| `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
-| `#{}` | `Map<K, V>`（空） | 显式空 Map |
-| `[]` | `Array<T>` | 数组 |
-| `#[]` | `Set<T>` | 集合 |
+没有类型上下文时，全部键须取得同一类型 K，全部值须取得同一类型 V；不自动推为联合类型。两个显式项的键不得在键等价关系下相同；静态可确定的重复报 E0325，其余重复在构造时 panic E0434。Map 展开按书写顺序覆盖，只有两个显式项之间做重复检查（§3.10）。
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `equals(other: T) -> bool` 与 `hash() -> i64` 的自定义类型（`equals` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+| 写法 | 类型 |
+|---|---|
+| `{"a": 1}` | `Map<string, i64>` |
+| `{}`（带上下文） | 上下文中的 Map 类型 |
+| `[1, 2]` | `Array<i64>` |
+| `Set([1, 2])` | `Set<i64>` |
+| `Point{x: 1, y: 2}` | 名义 struct `Point` |
+
+键必须满足现行 `Hashable` 与键等价关系（§9.2）；本任务不改变这些能力、数值转换或用户类型的显式实现规则。字面量键和值按书写顺序、先键后值各求值一次。
 
 #### 2.4.4 `Set<T>`
 
-去重集合。详见 §14.9。
+去重集合，使用 `Set([...])` 构造；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。元素沿用既有键等价关系。`#[]` 不属于语言语法。
 
-```xray
-var s: Set<i64> = #[1, 2, 3]
+<!-- xr-source:example types-set -->
+```xray @check
+var s: Set<i64> = Set([1, 2, 3])
+var empty = Set<i64>()
 ```
+<!-- /xr-source -->
 
 #### 2.4.5 `Channel<T>`
 
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
+<!-- xr-source:example types-channel -->
 ```xray
 const ch: Channel<i64> = Channel<i64>(10)
 ```
+<!-- /xr-source -->
 
 #### 2.4.6 `Array<u8>`
 
 类型化字节缓冲。语义等价 `Array<u8>`，但底层是连续内存。
 
+<!-- xr-source:example 003-2-type-system-example-010 -->
 ```xray
 var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
+<!-- /xr-source -->
 
-#### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
+#### 2.4.7 固定字段数据与 JSON 值域
 
-裸对象字面量永远形成字段集精确的静态结构对象，用于普通业务对象、options 和多字段返回值。运行期未知键由 `Map` 承担；JSON object 的标准拼写 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名。`JSON` 是无需 import 的 prelude 命名空间，不是值类型。
+固定字段数据声明为名义 `struct` 或 `class`；多字段返回值也可以使用无标签 tuple。语言没有匿名结构对象、对象形状类型、结构化身份或宽度约束。`type X = {...}` 与 `T: { field: Type }` 不属于类型语法。interface 必须显式 `implements`。
 
-**对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
+`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，使用相同的 `{key: value}` 字面量；`JSON` 是 prelude 命名空间。固定字段的类型化 JSON 解码目标使用 struct。`JSON.value` / `JSON.stringify` 仍要求 `JSON.Encodable`，不是任意值的隐式编码。
 
-```xray
-// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
-var user = { name: "Bob", age: 25 }       // exact 对象形状
-typeName(user)                            // "object"
-user.name              // 类型: string；direct ordinal
-user["name"]           // 与 user.name 完全等价；同一 direct ordinal
-
-// 字段简写：当字段名与变量名相同
-var name = "Alice"
-var age = 30
-var user = { name, age }                  // 等价 { name: name, age: age }
-
-// Map 字面量：`#{}` 前缀 + `:`
-var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, i64>
-var data: JSON.Object = #{"name": "Alice", "age": 30}
-data["traceId"] = "req-1"               // 动态键只属于 Map
-```
-
-**对照表**：
-
-| 写法 | 类型 | 备注 |
-|---|---|---|
-| `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
-| `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
-| `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
-| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
-| `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
-
-**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
-
-```xray
-type User = { name: string, age: i64 }
-
-var u: User = { name: "Alice", age: 30 }
-print(u.name)         // OK
-// u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
-
-var u2 = { name: "Alice", age: 30 }      // exact 对象形状
-// u2.extra = "x"     // 编译错误
-
-type Named = { name: string }
-fn showName<T: Named>(value: T) {
-    print(value.name)                     // 约束只暴露已声明字段
-    print(value["name"])                  // 与 .name 相同
-    // print(value.age)                    // 编译错误：隐藏字段不可见
+<!-- xr-source:example types-json-object -->
+```xray @check
+struct User {
+    name: string
+    age: i64
 }
-showName(u)                               // OK：u 的 concrete exact shape 更宽
-
-var j: JSON.Object = #{"name": "Alice", "age": 30}
-j["extra"] = "x"                        // OK：Map 动态键
-var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
+var user = User{name: "Alice", age: 30}
+var data: JSON.Object = {"name": "Alice", "age": 30}
+data["traceId"] = "req-1"
 ```
+<!-- /xr-source -->
 
-**乘积类型的职责划分**：
+| 类型 | 身份与字段 | 用途 |
+|---|---|---|
+| `struct` | 名义身份、声明的字段、值语义，可声明方法 | 固定字段、数学数据、FFI 聚合 |
+| `class` | 名义身份、声明的字段、引用语义，可继承 | 身份、封装与引用关系 |
+| tuple | 无标签、按位置访问 | 小型多值返回 |
+| `Map` / `JSON.Object` | 运行期键、Map API，不提供字段访问 | 动态数据与 JSON object |
 
-| | 身份 | 字段集 | 用户可定义方法 | 用途 |
-|---|---|---|---|---|
-| 对象形状 | 结构化 | exact；泛型约束可要求最小字段集 | **否** | options、多字段返回值、普通业务数据 |
-| `JSON.Object` | Map 别名 | 任意字符串键，运行期确定 | Map API | schema-less JSON object |
-| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
-| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
-
-结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
+Map 的裸标识符键是变量值，不能把 `{name: value}` 当作命名字段构造。Map 不支持 `.name` 字段访问。需要固定字段时写 `User{name: value, age: 30}`；需要命名调用参数时写 `request(url: value)`（§5.2.2）。
 
 #### 2.4.8 `BigInt`
 
@@ -1118,6 +1213,7 @@ var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
 - `a..b` 是半开区间 `[a, b)`，不包含终点 `b`。
 - `a..=b` 是闭区间 `[a, b]`，包含终点 `b`。
 
+<!-- xr-source:example types-range -->
 ```xray
 var halfOpen = 1..4       // 1, 2, 3
 var inclusive = 1..=4     // 1, 2, 3, 4
@@ -1130,6 +1226,7 @@ for (i in 3..=5) {
     print(i)
 }
 ```
+<!-- /xr-source -->
 
 范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
@@ -1170,13 +1267,15 @@ null 测试始终观察本次 R 的最外层；同一 binding 的第一次测试
 
 这是语言合同；各 Source／VM／native 声明族的实际执行资格与未完成表面见 §17，具体测试与剩余门由同批实现记录说明。
 
+<!-- xr-source:example types-nullable -->
 ```xray
 var x: i64? = null      // OK
 var y: i64? = 42        // OK
 var z: i64 = null       // 编译错误：null 不是 i64
 ```
+<!-- /xr-source -->
 
-`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 struct。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -1184,6 +1283,7 @@ var z: i64 = null       // 编译错误：null 不是 i64
 
 #### 解包
 
+<!-- xr-source:example 003-2-type-system-example-014 -->
 ```xray
 // 1. 空合并
 var v = x ?? 0
@@ -1202,13 +1302,16 @@ if (x is i64) {
     print(x + 1)
 }
 ```
+<!-- /xr-source -->
 
 ### 2.6 Union 类型
 
+<!-- xr-source:example types-union-basic -->
 ```xray
 var v: i64 | string = 42
 v = "hello"             // OK
 ```
+<!-- /xr-source -->
 
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
@@ -1216,13 +1319,15 @@ v = "hello"             // OK
 - **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
-```xray
-var v: i64 | string = ...
-match v {
-    is i64    -> print("i64: ${v}"),
-    is string -> print("str: ${v}"),
+<!-- xr-source:example 003-2-type-system-example-016 -->
+```xray @fragment
+var v: i64 | string = 1
+match (v) {
+    is i64    => print("i64: ${v}"),
+    is string => print("str: ${v}"),
 }
 ```
+<!-- /xr-source -->
 
 **成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
 
@@ -1230,12 +1335,14 @@ match v {
 - 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
 - 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
 
+<!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
 var a: i64 | f64 = 1        // 精确匹配 i64
 var b: i64 | f64 = 1.0      // 精确匹配 f64
 var c: i32 | string = 7       // 唯一整数族成员：i32
 var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 ```
+<!-- /xr-source -->
 
 `is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
@@ -1247,6 +1354,7 @@ var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 
 xray 的元组**是头等公民**——可以作为任意值出现、作为字段保存、嵌套。
 
+<!-- xr-source:example types-tuple -->
 ```xray
 // 字面量
 var t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)
@@ -1271,6 +1379,7 @@ var (q, r) = divmod(17, 5)        // tuple destructure
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
 var p2 = pair(1, "x")             // (i64, string)
 ```
+<!-- /xr-source -->
 
 **注意事项**：
 
@@ -1286,37 +1395,44 @@ Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。
 
 #### 完整可运行示例
 
+<!-- xr-source:example 003-2-type-system-example-019 -->
 ```xray
 fn main() {
     var pair = (1, "hello")
-    print(pair.0)   // => 1
-    print(pair.1)   // => hello
+    print(pair.0)   // 输出：1
+    print(pair.1)   // 输出：hello
     var (a, b) = pair    // 解构
-    print(a)        // => 1
-    print(b)        // => hello
+    print(a)        // 输出：1
+    print(b)        // 输出：hello
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 2.8 类型别名
 
-```xray
+<!-- xr-source:example types-alias -->
+```xray @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
-type Point = { x: f64, y: f64 }
-type Pair<T> = { first: T, second: T }
+struct Point { x: f64; y: f64 }
+type Position = Point
+type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
+<!-- /xr-source -->
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
-```xray
-var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
-var f: Mapper2<i64, string> = (n) -> string(n)
+<!-- xr-source:example 003-2-type-system-example-021 -->
+```xray @fragment
+var p: Pair<i64> = (1, 2)                 // 等价于 (i64, i64)
+var f: Mapper2<i64, string> = (n) => string(n)
 ```
+<!-- /xr-source -->
 
-泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归 tuple 别名）是编译错误。
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
@@ -1335,6 +1451,7 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 - 覆写方法、接口实现和函数类型比较要求每个函数参数的 `escaping` 标志精确相等。
 - 不逃逸参数越过期限时在违规使用处报告 `E0398`，指出参数名和去向，并提示相应参数改为 `escaping fn(...)`。`throws` 继续由签名陈述，错误类型不按 callback 实参推导。
 
+<!-- xr-source:example types-nonescaping-parameters -->
 ```xray
 fn apply(callback: fn() -> i64) -> i64 {
     const thunk = fn() -> i64 { return callback() + 1 }
@@ -1344,6 +1461,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
     return fn(x: i64) -> i64 { return f(g(x)) }
 }
 ```
+<!-- /xr-source -->
 
 末尾 READ rest 在函数类型中写作 `fn(...T) -> R`，带固定前缀时为 `fn(P, ...T) -> R`。rest 是真实 callable 类型事实；体内物理 Array 不使它与 `fn(Array<T>) -> R` 或固定元数类型相等，也不隐式适配。取值、泛型替换、嵌套类型、格式化及冷库接收均保留该事实。`throws`、root 与 `nosuspend` 仍按各自既有规则匹配；这不增加 C 可变参数 ABI。
 
@@ -1355,6 +1473,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
 
 fn lambda 显式写 `throws(E)` 时，先按该子句检查自身函数体，再按错误子集规则匹配期望类型；期望类型不能放宽显式声明。无显式子句的闭包有期望函数类型时按该类型检查，没有期望类型时才从自身函数体局部推导错误类型。箭头 lambda 不书写该子句。外层 `try` 区域不会延伸到嵌套闭包体。泛型错误参数 `E: Error` 由调用实参推导：传入不抛错函数时可推出 `E = Never`；仅当实例化后的完整错误类型为 `Never` 时才不要求调用点加 `try`，例如签名为 `throws(E | IoErr)` 时仍需标记。
 
+<!-- xr-source:example 003-2-type-system-example-023 -->
 ```xray @fragment
 fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
     var out: Array<U> = []
@@ -1362,20 +1481,24 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
     return out
 }
 ```
+<!-- /xr-source -->
 
 ### 2.9 类型推断
 
 详见 §7.4。简述：
 
-```xray
+<!-- xr-source:example types-inference -->
+```xray @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
 var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<i64>
-var m = #{"a": 1}    // m: Map<string, i64>
-var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
+var m = {"a": 1}    // m: Map<string, i64>
+struct Named { name: string }
+var p = Named{name: "A"} // p: Named
+var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
+<!-- /xr-source -->
 
 ### 2.10 类型兼容性与转换
 
@@ -1397,29 +1520,17 @@ var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回�
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
-| 字段集不同的 exact 对象形状 | exact 对象形状 | ❌ exact target 要求精确字段集 |
-| exact 对象形状 | 泛型约束 `T: { a: A }` | ✅ 约束满足关系；不是普通赋值转换 |
 
-> **exact / width-constraint 规则**：普通类型位置要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。泛型约束位置的结构类型表示“至少包含这些字段”，同名字段类型保持不变；它不产生运行时宽度对象或动态字典。
-> ```xray
-> type User = { name: string }
-> var full = { name: "A", age: 18 }
-> // var u: User = full            // 编译错误 E0352：extra field 'age'
-> fn nameOf<T: User>(value: T) -> string { return value.name }
-> print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
->
-> type Opt = { name: string, age: i64? }
-> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
-> ```
-
-> **静态对象与 JSON 动态边界**：已知 schema 使用 exact target 与 `JSON.parse<T>`；schema-less object 使用 `JSON.Object` / Map。typed 复合值通过 `JSON.value(value)` 显式编码，动态 object 通过 `JSON.decodeObject<T>(object)` 显式验证回 typed target。
+固定字段类型按名义身份转换；字段集合相同不产生隐式转换或 interface 实现。JSON 的类型化边界显式使用 struct 与 `JSON.parse<T>` / `JSON.decodeObject<T>`；schema-less 数据使用 `JSON.Object`。
 
 #### 2.10.2 显式 `as`
 
+<!-- xr-source:example types-cast -->
 ```xray
 var n = x as i64        // 失败抛 TypeError
 var n = x as i64?       // 失败返回 null（安全转换）
 ```
+<!-- /xr-source -->
 
 适用于：
 - 数值之间（含 `JSON.Value → i64`，运行时检查）。
@@ -1434,20 +1545,24 @@ var n = x as i64?       // 失败返回 null（安全转换）
 
 #### 2.10.3 `is` 检查
 
+<!-- xr-source:example 003-2-type-system-example-026 -->
 ```xray
 if (v is User) {
     // 编译器在此分支窄化 v 的类型为 User
 }
 ```
+<!-- /xr-source -->
 
 仅作类型守卫；不改变值。
 
 ### 2.11 typeOf / typeName / Type 枚举
 
+<!-- xr-source:example 003-2-type-system-example-027 -->
 ```xray
 typeOf(value)     // 返回 Type 枚举值（i64 表示）
 typeName(value)   // 返回类型名字符串
 ```
+<!-- /xr-source -->
 
 `Type` 枚举成员：
 
@@ -1471,7 +1586,7 @@ Xray 默认只保留最小类型身份层：
 
 ### 2.13 流敏感类型收窄
 
-> 真值源：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
+> 实现参考：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
 
 **收窄（narrowing）**指在特定控制流位置上把一个绑定的**静态类型**收紧为其声明类型的子类型。收窄结果参与成员查找、重载解析、`match` 穷尽性判定与**代码生成**，因此收窄是**语义**而非诊断优化：对同一程序，VM 与 AOT 两条后端必须得到相同的收窄结果。
 
@@ -1487,6 +1602,7 @@ Xray 默认只保留最小类型身份层：
 
 **N-3** 需要对不可收窄位置做流敏感处理时，先提取一个局部绑定：
 
+<!-- xr-source:example narrowing-extract-binding -->
 ```xray
 class Address { city: string
     init(city: string) { this.city = city } }
@@ -1500,6 +1616,7 @@ fn show(u: User) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.2 事实与算子
 
@@ -1520,6 +1637,7 @@ fn show(u: User) {
 
 **N-5（短路继承）** `e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析；`e1 \|\| e2` 的 `e2` 在 `e1` 的 false 事实下分析。由于 `T?` 不能直接作条件（§2.5），这条规则使下面两种写法成为处理可空值的标准形式：
 
+<!-- xr-source:example narrowing-short-circuit -->
 ```xray
 fn check(a: string?) -> bool {
     if (a != null && len(a) > 0) { return true }     // e2 在 a: string 下分析
@@ -1527,6 +1645,7 @@ fn check(a: string?) -> bool {
     return true
 }
 ```
+<!-- /xr-source -->
 
 **N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `Never`）；非 union 时若可交则为 `T`，否则为 `Never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
 
@@ -1536,17 +1655,20 @@ fn check(a: string?) -> bool {
 
 **N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
 
+<!-- xr-source:example narrowing-early-return -->
 ```xray
 fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // 此处 s 已收窄为 string
 }
 ```
+<!-- /xr-source -->
 
 **N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `Never` 并被并集吸收。
 
 **N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
 
+<!-- xr-source:example narrowing-loop -->
 ```xray
 fn drain(first: string?) {
     var cur = first
@@ -1556,6 +1678,7 @@ fn drain(first: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.4 失效
 
@@ -1569,6 +1692,7 @@ fn drain(first: string?) {
 
 **N-11.1（函数体边界）** 每个函数体（具名函数、方法、闭包）拥有独立的流图：外层的收窄事实**不**进入闭包体，闭包体内的事实也不流出。闭包内需要收窄时在闭包内重新检查。
 
+<!-- xr-source:example narrowing-invalidation -->
 ```xray
 fn f(a: string?) {
     if (a != null) {
@@ -1578,6 +1702,7 @@ fn f(a: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.5 收窄与 null 诊断
 
@@ -1617,6 +1742,7 @@ class 实例和同步对象具有身份。复制其引用仍指向同一个对�
 
 `var b = a`、保存只读参数、返回 Array，以及把可复制 Array 存入另一个合法容器或聚合，均保留逻辑副本，不建立对源数组可变存储的语言级别名。它们不会把源绑定标为永久 `ESCAPED`，也不要求其他副本先结束存活期才能修改源值。底层存储的唯一性只可用于省略分离或复制的优化。
 
+<!-- xr-source:example 003-2-type-system-example-033 -->
 ```xray
 var a = [1, 2, 3]
 var b = a
@@ -1628,6 +1754,7 @@ print(len(snapshot))        // 3
 print(b[0])                 // 9
 print(len(a))               // 4
 ```
+<!-- /xr-source -->
 
 复制必须取得可独立释放的结果责任；失败不得发布部分初始化的结果。自赋值、读取自身元素后写回或追加均须维持这一责任，不能因物理共享造成重复释放或使用已释放存储。求值顺序遵循 §3.0 E2/E5；复制或自动移动优化不能改变既定错误、析构或外部副作用顺序。
 
@@ -1663,63 +1790,77 @@ print(len(a))               // 4
 
 数组：
 
+<!-- xr-source:example 003-2-type-system-example-034 -->
 ```xray
 fn main() {
     var nums = [1, 2, 3]
     nums.push(4)
-    print(nums)          // => [1, 2, 3, 4]
-    print(len(nums))     // => 4
+    print(nums)          // 输出：[1, 2, 3, 4]
+    print(len(nums))     // 输出：4
     var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
-    print(doubled)       // => [2, 4, 6, 8]
+    print(doubled)       // 输出：[2, 4, 6, 8]
     var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
-    print(evens)         // => [2, 4]
+    print(evens)         // 输出：[2, 4]
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 Map 与 Set：
 
-```xray
+<!-- xr-source:example types-map-set-usage -->
+```xray @run
 fn main() {
-    var scores = #{"alice": 95, "bob": 88}
+    var scores = {"alice": 95, "bob": 88}
     scores.set("carol", 77)
-    print(scores.get("alice") ?? 0)   // => 95
-    print(len(scores))                 // => 3
+    print(scores.get("alice") ?? 0)   // 输出：95
+    print(len(scores))                 // 输出：3
 
     var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
-    print(len(seen))          // => 2
-    print(seen.contains(1))   // => true
+    print(len(seen))          // 输出：2
+    print(seen.contains(1))   // 输出：true
 }
 
 main()
 ```
+```output
+95
+3
+2
+true
+```
+<!-- /xr-source -->
+
+
 
 可空类型与 `??`：
 
+<!-- xr-source:example 003-2-type-system-example-036 -->
 ```xray
 fn main() {
     var name: string? = null
-    print(name ?? "anonymous")   // => anonymous
+    print(name ?? "anonymous")   // 输出：anonymous
     var city: string? = "NYC"
-    print(city ?? "unknown")     // => NYC
+    print(city ?? "unknown")     // 输出：NYC
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ---
 
 ## 3. 表达式 (Expressions)
 
-> 真值源：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
+> 实现参考：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
 
 ### 3.0 求值顺序
 
-> 真值源：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
+> 实现参考：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
 
 xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）或未定义（undefined）的求值顺序，VM 与 AOT 后端必须产生完全相同的副作用序列。
 
@@ -1753,6 +1894,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 
 **E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
+<!-- xr-source:example eval-order-rules -->
 ```xray
 fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn add(a: i64, b: i64) -> i64 { return a + b }
@@ -1774,6 +1916,7 @@ arr[t("index", 0)] = t("value", 5)                     // index, value
 // E6：复杂 receiver 只求值一次
 mk("receiver").hits += t("delta", 1)                   // receiver, delta
 ```
+<!-- /xr-source -->
 
 ### 3.1 优先级与结合性
 
@@ -1803,15 +1946,18 @@ mk("receiver").hits += t("delta", 1)                   // receiver, delta
 
 ### 3.2 一元表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-01 -->
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'move' UnaryExpr
-            | 'await' UnaryExpr
-            | 'go' GoOptions? CallExpr
-            | 'unsafe' Block
-            | 'comptime' (Expression | Block)
-            | PostfixExpr
+           |  TryExpr
+           |  'copy' UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
 ```
+<!-- /xr-source -->
 
 | 运算符 | 适用类型 | 结果类型 | 备注 |
 |--|--|--|--|
@@ -1825,6 +1971,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 `unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `extern "C"` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
+<!-- xr-source:example 004-3-expressions-example-002 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -1838,6 +1985,7 @@ unsafe {
     free(p)                       // extern 调用必须在 unsafe 内
 }
 ```
+<!-- /xr-source -->
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
@@ -1849,22 +1997,27 @@ unsafe {
 
 可导出结果是准入的标量、String、Unit、Tuple、Nullable、Array及关闭的struct/enum数据；有限递归nominal数据遵守§17.68。内部Class/Function/Cell等可以按其专属规则参与计算，但其身份或外部资源句柄不能成为常量结果。私有字段的常量重放使用§17.67的真实声明绑定，不给使用方私有构造权。类型描述与派生服务不由此成为任意CTFE值或字段权限。
 
+<!-- xr-source:example 004-3-expressions-example-003 -->
 ```xray
 fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
+<!-- /xr-source -->
 
 块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域中的comptime不捕获外围运行期值。外围类型参数保留原lexical含义；依赖它们的Program表达式先进入普通泛型检查，经实际特化和唯一Lowered CTFE逐关闭实例执行，再以完整规范键接回私有literal provider（17.78）。自身完全关闭的thunk仍按17.71执行。Library未来泛型实例仍待完整重定位，不能以一个站点单一Value或运行期fallback代替实际结果。
 
+<!-- xr-source:example 004-3-expressions-example-004 -->
 ```xray
 fn noop() {}
 export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+<!-- /xr-source -->
 
 步骤、整个调用栈的深度/frame、临时堆、逻辑输出和类型/字段遍历都向原编译作业收费，返回与失败不重置累计费用。无限循环、深递归或巨大输出会确定性地拒绝并保全空结果，墙钟watchdog另记环境失败。准入、target/profile、完整预算、输出policy2、失败清理及独立重放细则见§17的CTFE执行条款。
 
 ### 3.3 二元表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-02 -->
 ```ebnf
 BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
@@ -1874,6 +2027,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&&' | '||'
        | '??'
 ```
+<!-- /xr-source -->
 
 #### 3.3.1 算术运算符
 
@@ -1927,9 +2081,11 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.5 空值合并 `??`
 
+<!-- xr-source:example expr-null-coalesce -->
 ```xray
 var v = nullable_expr ?? default_value
 ```
+<!-- /xr-source -->
 
 - 当 `nullable_expr` 为 `null` 时返回 `default_value`，否则返回 `nullable_expr` 本身。
 - **短路**：`default_value` 只在前者为 null 时求值。
@@ -1938,9 +2094,9 @@ var v = nullable_expr ?? default_value
 
 ### 3.4 赋值与复合赋值
 
+<!-- xr-source:grammar 004-3-expressions-grammar-03 -->
 ```ebnf
-AssignExpr   ::= AssignLValue '=' Expression
-               | CompoundLValue CompoundOp Expression
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
 TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
 TupleAssignTarget ::= Identifier | '_'
@@ -1948,6 +2104,7 @@ CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。Array 赋值保存逻辑副本；目标与表达式结果各自保有值责任，不能让结果借用一个随后可被覆盖的元素槽。实现可复用已持有的右侧结果，所有可能失败的持有工作必须先于存储提交，提交后再释放被替换的旧值。失败不回滚此前完成的右侧副作用。
@@ -1964,13 +2121,17 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 
 ### 3.5 三元 `? :`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-04 -->
 ```ebnf
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-006 -->
 ```xray
 var max = a > b ? a : b
 ```
+<!-- /xr-source -->
 
 - **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
 - 条件必须是 `bool`。条件恰好求值一次，只执行被选择的分支；两个分支都参与静态检查，包括常量条件未选中的分支。
@@ -1983,16 +2144,20 @@ var max = a > b ? a : b
 
 #### 可选链 `?.` / `?[`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-05 -->
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expression ']')+
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-optional-chain -->
 ```xray
 var city = user?.address        // 可选属性访问
 var item = arr?[0]              // 可选索引
 var value = callback?.(input)   // 可选函数调用
 var road = user?.address.street // 整链短路：user 为 null 时结果为 null
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 若 `?.` 或 `?[` 左侧为 `null`，**整条后缀链**短路返回 `null`，链上后续的 `.` / `[` / `(` 一律不求值。
@@ -2009,9 +2174,11 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 
 #### 强制解包 `expr!`
 
+<!-- xr-source:example 004-3-expressions-example-008 -->
 ```xray
 var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 ```
+<!-- /xr-source -->
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
 
@@ -2019,16 +2186,20 @@ var v: i64 = nullable_int!      // null 时触发强制解包 panic (E0413)
 
 #### `is` 运行时类型检查
 
+<!-- xr-source:grammar 004-3-expressions-grammar-06 -->
 ```ebnf
 IsExpr ::= UnaryExpr 'is' Type
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-009 -->
 ```xray
 if (v is User) {
     // 此分支内 v 窄化为 User
     print(v.name)
 }
 ```
+<!-- /xr-source -->
 
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
@@ -2037,15 +2208,19 @@ if (v is User) {
 
 #### `as` 类型转换
 
+<!-- xr-source:grammar 004-3-expressions-grammar-07 -->
 ```ebnf
 AsExpr ::= UnaryExpr 'as' Type
         |  UnaryExpr 'as' Type '?'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-010 -->
 ```xray
 var n = v as i64           // 失败抛 TypeError
 var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 ```
+<!-- /xr-source -->
 
 | 形式 | 失败行为 | 用途 |
 |--|--|--|
@@ -2062,10 +2237,13 @@ var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 
 #### 范围 `a..b` / `a..=b`
 
+<!-- xr-source:grammar 004-3-expressions-grammar-08 -->
 ```ebnf
-RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-range -->
 ```xray
 var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）
 var closed = 0..=10    // 闭区间（包含 0 和 10）
@@ -2075,6 +2253,7 @@ for (i in 0..n) { print(i) }
 for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
+<!-- /xr-source -->
 
 - 类型 `Range`（仅 i64 范围）。
 - **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
@@ -2096,116 +2275,123 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 - tuple 展开在其书写位置单次求值，按源 tuple 的静态字段顺序接入结果；普通元素和每个展开字段仍按其结果位置执行既有上下文类型检查与转换。嵌套的 tuple 字面量展开可以消费外层对应位置的上下文，不能靠运行期值决定字段数。`()` 展开零个字段，但其求值副作用保留；一个普通 `()` 元素仍占一个 Unit 字段。展开后的总字段数须与期望 tuple 精确匹配；零字段结果为 Unit，单字段结果仍是单元素 tuple。值复制、class/同步身份、挂起、错误及失败清理沿普通规则，不发布部分结果或撤销此前副作用；无约束泛型不能凭实例化实参假设自己是 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
 - 数组展开沿普通 `Array<T>` 拼接的精确元素类型合同；期望 `Array<T>` 时，展开源须为同一 `Array<T>`，普通元素按既有 `T` 上下文检查，不隐式转换整个 `Array<U>`。没有期望类型时沿既有字面量推导规则确定 `T`。所有普通元素与展开源先在其书写位置各求值一次并保存拥有式值快照，再构造结果；后续表达式的重绑或写入不替换先前快照。挂起、错误和失败清理使用普通调用与所有权规则，失败不发布部分结果且不撤销已完成的副作用。结果与输入可独立修改，嵌套值按值复制，class/同步身份只复制引用；不承诺保留源数组容量。
-- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+- **Map 展开**：`{...base, "x": 1}` 按书写顺序覆盖；**struct 展开**：`T{...src, field: value}` 按固定目标字段检查，显式字段优先。具体规则见 §3.10。
 
-```xray
+<!-- xr-source:example expr-spread-collections -->
+```xray @check
 var a = [1, 2]
 var b = [3, 4]
 var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
 
-var base = { x: 1, y: 2 }
-var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+var base = {"x": 1, "y": 2}
+var point = {...base, "y": 20, "z": 3}   // { x: 1, y: 20, z: 3 }
 ```
+<!-- /xr-source -->
 
 ### 3.10 字面量构造
 
-#### Array `[...]`
+表达式位置的 `{` 开始 Map 字面量；语句开头及 `=>` 后紧跟的 `{` 开始块。直接返回 Map 写 `x => ({"key": x})`。struct 字面量必须有类型名前缀，字段名不作变量求值。`#{}`、`#[]`、匿名结构对象及字段简写均不属于语言语法。
 
+<!-- xr-source:grammar 004-3-expressions-grammar-09 -->
 ```ebnf
-ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
-ArrayElem ::= '...' Expr | Expr
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-array-lit -->
+```xray @check
 var a = [1, 2, 3]
-var empty: Array<i64> = []
-var mixed = [1, "hello"]    // 类型 Array<i64 | string>
+var emptyArray: Array<i64> = []
+var mixed: Array<i64 | string> = [1, "hello"]
 ```
+<!-- /xr-source -->
 
-#### Map `#{k: v, ...}` 与 `#{}`
-
-```ebnf
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
+<!-- xr-source:example expr-map-lit -->
+```xray @check
+const KEY = "name"
+var m = {KEY: 1, "age": 2}
+var empty: Map<string, i64> = {}
+var defaults = {"timeout": 30, "retries": 3}
+var config = {...defaults, "retries": 5}
 ```
+<!-- /xr-source -->
 
-```xray
-var m = #{"a": 1, "b": 2}
-var empty = #{}                           // 空 Map
+<!-- xr-source:example expr-set-lit -->
+```xray @check
+var s = Set([1, 2, 3])
+var emptySet = Set<i64>()
 ```
+<!-- /xr-source -->
 
-**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
-
-#### Set `#[...]`
-
-```ebnf
-SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+<!-- xr-source:example expr-struct-lit -->
+```xray @check
+struct Point { x: i64; y: i64 }
+var p = Point{x: 1, y: 2}
+var moved = Point{...p, x: 10}
 ```
+<!-- /xr-source -->
 
-```xray
-var s = #[1, 2, 3]
-var empty = #[]
-```
+#### 键、上下文与重复
 
-#### Object（结构化对象）`{ field: value, ... }`
+- Map 键是任意表达式，先求键、再求值；条目与展开源按书写顺序各求值一次。裸标识符取其绑定的值。未定义的裸键附提示：若想写字符串键，使用 `"name"`。
+- 空 Array、Map 与无类型实参的 Set 构造需要类型上下文。没有上下文时，Array 元素须有同一类型，Map 的键和值分别须有同一类型；不自动生成联合类型。有上下文时沿用该类型的转换规则；`JSON.Object` 中标量值按已有 JSON widening 进入 `JSON.Value`。
+- 两个显式键在既有键等价关系下相同就是重复。字符串、整数、rune、bool 字面量、无载荷 enum 变体、`comptime` 表达式，以及初值直接或传递地属于这些形式的 const 绑定，是由语法确定的编译期键；这类键的重复报 `E0325: duplicate key "name" in Map literal`。主位置在后一个键，note `the key first appears here` 指向前一个。
+- 其他重复在构造时 panic E0434，消息含键及两个显式项的位置，例如 `duplicate key "name" in Map literal (entries at app.xr:3:12 and 3:24)`。检查复用插入时已有的命中结果，不额外查询；来源位置的存储与失败清理由构造器负责。
+- Map 展开按书写顺序覆盖。展开项与显式项相互覆盖不触发重复错误；两个显式项即使被展开隔开也必须互不相同。
 
-```ebnf
-ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
-ObjectField ::= Identifier ':' Expr
-              | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
-              | '...' Expr            // spread: `{ ...base }` 合并字段
-```
+#### struct 展开
 
-```xray
-var p = { name: "Alice", age: 30 }
-var users = "Bob"
-var obj = { users }              // shorthand
-```
+`T{...src, field: value}` 中来源必须是 struct。来源的每个字段须为 T 中同名、同类型的字段；class、Map、tuple 或含额外字段的来源被拒绝。T 的每个字段来自显式字段或唯一一个提供它的来源；显式字段优先于全部来源，与书写先后无关。两个来源提供同一字段且没有显式字段覆盖时报错；没有显式值或来源的字段按 §5.4 的既有声明默认值与可空字段缺省规则处理，仍未得到值的必需字段报错。所有来源与显式表达式仍按书写顺序各求值一次。
 
-- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
-- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
+这只是目标类型写明的逐字段构造，不产生结构化身份、宽度子类型、隐式 interface 实现或 struct 解构，也不改变 struct 已有的字段缺省规则。
 
-#### Array<u8> `Array<u8>(...)`
+#### 类型不一致的诊断
 
-详见 §2.4.6 与 §14.5。
+无上下文且无法取得同一类型时，报一个 E0326，主位置为第一个与首值不一致的值；note 指向首值。例如 `Map literal values have different types: string and i64`，附 `the first value is string; without a declared Map type, every value must be string`。
 
-#### Channel `Channel<T>(buf?)`
+修法按条件依次给出：所有键均为合法标识符的字符串字面量时，建议声明 struct 并使用其字面量（名字取绑定名首字母大写，无绑定名用 Record）；全部值可进入 JSON.Value 时建议标注 JSON.Object；各类型可组成合法 union 时建议显式 Map<K, A | B>。不满足条件的 note 不出现。键类型不一致使用 `Map literal keys have different types: ...`，修法只提示声明 Map<K, V>。数组使用 `Array literal elements have different types: ...`，固定元素数时提示 tuple，可组成合法 union 时提示显式 Array<A | B>。
 
-```xray
-const ch: Channel<i64> = Channel<i64>(10)
-```
-
-详见 §10.5。
+Array<u8> 与 Channel 构造沿用 §2.4.6、§10.5。
 
 ### 3.11 调用 / 成员访问 / 索引 / 切片
 
 #### 函数调用
 
+<!-- xr-source:grammar 004-3-expressions-grammar-10 -->
 ```ebnf
-CallExpr ::= Primary '(' ArgList? ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out')? Expr
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
 ```
+<!-- /xr-source -->
 
-- 参数按位置传递；不支持命名参数。
-- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
-- rest 参数收集多余参数到数组。
-- 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
+调用可写 `f(a, name: value)`。位置实参在前，命名实参在后；名字取自直接调用的具名函数、方法或构造器声明。未知名字、重复绑定（包括先按位置给出）、命名实参后的普通位置实参，均报 E0327。rest 只能按位置给出。函数值调用没有参数名，即使值来自具名函数的 const 别名，也不能用命名实参。
+
+接收者或被调表达式先求值；所有显式实参按书写顺序各求值一次，再按声明顺序计算省略的默认值。参数映射不重排求值，泛型推导与期望类型按映射后的形参位置取得证据。`ref` / `move` 写在值之前，如 `swap(left: ref a, right: ref b)`；真实 place、借用存活与模式权限沿用原规则。参数名是导出 API 的一部分，跨模块调用使用同一声明参数名。
+
+静态 tuple 展开与真实 rest 的末尾 Array 展开沿 §3.9；展开不能为 rest 参数引入命名形式，也不改变动态 Array 展开必须位于末尾的规则。缺失的必需参数仍是错误，只有声明了默认值的参数可以省略。
 
 #### 成员访问
 
+<!-- xr-source:grammar 004-3-expressions-grammar-11 -->
 ```ebnf
 MemberAccess ::= Primary '.' Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 004-3-expressions-example-017 -->
 ```xray
 obj.field
 obj.method(args)
 ClassName.staticMethod()
 EnumName.MemberName
 ```
+<!-- /xr-source -->
 
 - 字段访问：编译期检查类型有此字段。
 - 方法调用：解析为 invoke（带 IC 缓存优化）。
@@ -2214,10 +2400,13 @@ EnumName.MemberName
 
 #### 索引访问
 
+<!-- xr-source:grammar 004-3-expressions-grammar-12 -->
 ```ebnf
-IndexAccess ::= Primary '[' Expr ']'
+IndexAccess ::= Primary '[' Expression ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-index-access -->
 ```xray
 arr[0]
 arr[0] = 10
@@ -2225,6 +2414,7 @@ map["key"]
 var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
+<!-- /xr-source -->
 
 - `Array<T>` 索引的类型为 `i64`，合法范围为 `0 <= i < len(array)`。读取产生 T 的逻辑副本；写入要求可写 place，右侧按 T 检查及转换。负索引及等于长度的索引均进入 `E0430` panic 通道，不是业务 throw。
 - 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
@@ -2232,6 +2422,7 @@ bytes[i]                // 显式 byte 视图索引
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 用户类型：不能定义下标；以方法提供元素访问。
 
+<!-- xr-source:example array-read-receiver-snapshot -->
 ```xray
 var a: Array<string> = ["old"]
 fn replaceForIndex() -> i64 {
@@ -2242,7 +2433,9 @@ fn replaceForIndex() -> i64 {
 print(a[replaceForIndex()])  // 依次输出 index、old
 print(a[0])                 // new
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding -->
 ```xray
 var a: Array<string> = ["old"]
 fn index() -> i64 { print("index"); return 1 }
@@ -2254,25 +2447,33 @@ fn replacement() -> string {
 var written = (a[index()] = replacement())
 print(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-write-current-binding-bounds -->
 ```xray
 var a: Array<string> = ["old0", "old1"]
 fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
 a[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 ["new"] 不回滚
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-read-parameter-mutation-rejected -->
 ```xray
 fn invalid(values: Array<string>) {
     values.push("x")       // 编译错误：普通 read 参数不是可写 receiver
 }
 ```
+<!-- /xr-source -->
 
 #### 切片
 
+<!-- xr-source:grammar 004-3-expressions-grammar-13 -->
 ```ebnf
-Slice ::= Primary '[' Expr? ':' Expr? ']'
+Slice ::= Primary '[' Expression? ':' Expression? ']'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example expr-slice -->
 ```xray
 arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
@@ -2280,6 +2481,7 @@ arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全长视图（不是拷贝）
 var view: Slice<i64> = arr[1:4]
 ```
+<!-- /xr-source -->
 
 - 半开区间 `[start, end)`。
 - Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。省略的 start 为 0，省略的 end 为来源长度；两端均夹到 `[0, len]`，若 start 大于 end 则结果为空。普通借用先选定来源位置，再按 start、end 的顺序各求值一次，边界成功后借用该位置的当前值。`copy` 范围先读取来源的逻辑快照，再按同序求边界；边界副作用改绑原位置不会改变这个快照。此数值归一化规则针对 Array，不推广到既有借用视图的子切片。
@@ -2289,27 +2491,32 @@ var view: Slice<i64> = arr[1:4]
 
 ### 3.12 匿名函数与 Lambda
 
-xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x -> expr` 与 `(x) -> expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
+xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x => expr` 与 `(x) => expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
 
+<!-- xr-source:grammar 004-3-expressions-grammar-14 -->
 ```ebnf
 AnonFunction  ::= ArrowLambda | FnExpression
-ArrowLambda   ::= Identifier '->' ArrowBody
-                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowBody     ::= Expression | Block
-ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
-ArrowParam    ::= Identifier (':' ParamMode? Type)?
-ParamMode     ::= 'ref' | 'move'
-FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+ParamMode ::= 'ref' | 'move'
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-lambda-forms -->
+```xray @fragment
 // ── arrow lambda：每个参数都可独立标注或推断 ──
-arr.map(x -> x * 2)
-var add = (x: i64, y) -> x + y
+arr.map(x => x * 2)
+var add = (x: i64, y) => x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref i64) -> x * 2
-var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+var calculate = (x: ref i64) => x * 2
+var doubleInPlace = (x: ref i64) => { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
 var inc = fn(x: i64) -> i64 {
@@ -2318,41 +2525,47 @@ var inc = fn(x: i64) -> i64 {
 }
 var identity = fn<T>(x: T) -> T { return x }     // 泛型
 ```
+<!-- /xr-source -->
 
 **选择规则**：
 
 | 概念 | 语法 | 能力与选择条件 |
 |------|------|----------------|
-| arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
+| arrow lambda | `x => expr` / `(x: T, y) => expr` / `(x: ref T) => { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
-- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
-- arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
-- `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `->` 只引入类型；`=>` 引入表达式或块，右结合。`x => y => x + y` 表示返回 lambda 的 lambda，函数体延伸到包含它的表达式结束。紧跟 `=>` 的 `{` 一律是块；要返回字面量表达式，须用括号包裹。值位置的 `->` 与类型位置的 `=>` 均拒绝，并在错误箭头处提示替换。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) => ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) => ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
+- arrow 没有返回类型位置。`(x: T): R => ...` 与 `(x: T) => R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
+- `=> expr` 隐式返回表达式值。`=> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) => x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) => { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获遵循 §7.4。`go` 实参与捕获必须满足 Sendable，闭包不得捕获外层 `var`。可复制值保留逻辑副本，身份类型保持身份。借用与同步规则继续适用，当前实现资格见 §17。
 
 ### 3.13 `match` 表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-15 -->
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
-MatchArm ::= Pattern ('if' Expr)? '->' Expression
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example expr-match -->
+```xray @fragment
 var result = match (x) {
-    1 -> "one",
-    2, 3, 4 -> "few",                 // 多值
-    10..20 -> "teen",                 // 范围
-    n if (n > 100) -> "big",          // 守卫
-    Color.Red -> "red",               // 枚举
-    is User -> "a user",              // 类型模式
-    _ -> "default"                    // 通配符
+    1 => "one",
+    2, 3, 4 => "few",                 // 多值
+    10..20 => "teen",                 // 范围
+    n if (n > 100) => "big",          // 守卫
+    Color.Red => "red",               // 枚举
+    is User => "a user",              // 类型模式
+    _ => "default",                    // 通配符
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 自上而下匹配第一个成功的分支。
@@ -2362,18 +2575,22 @@ var result = match (x) {
 
 ### 3.14 构造表达式
 
+<!-- xr-source:grammar 004-3-expressions-grammar-16 -->
 ```ebnf
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
+<!-- /xr-source -->
 
 构造与普通函数调用同形：`TypeName(args)`。`new` 是保留字，不构成合法表达式。
 
+<!-- xr-source:example expr-new -->
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<i64>()
 const ch = Channel<i64>(10)
 var m = Map<string, i64>()
 ```
+<!-- /xr-source -->
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
@@ -2381,19 +2598,24 @@ var m = Map<string, i64>()
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
-```xray
+<!-- xr-source:example expr-literal-constructor-relation -->
+```xray @check
+struct Point { x: i64; y: i64 }
 var a = [1, 2, 3]              // 等价 Array<i64>() + push
-var m = #{}                    // 等价 Map<...>()
+var m: Map<string, i64> = {}    // 空 Map 需要类型上下文
 var p = Point{x: 1, y: 2}      // struct literal
 ```
+<!-- /xr-source -->
 
 ### 3.15 字符串插值
 
 详见 §1.6.5。简要：
 
+<!-- xr-source:example expr-string-interpolation -->
 ```xray
 var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 ```
+<!-- /xr-source -->
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
 - `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
@@ -2401,9 +2623,11 @@ var greeting = "Hello, ${name}! Age: ${user.age + 1}"
 
 ### 3.16 `yield` 语句
 
+<!-- xr-source:example expr-yield -->
 ```xray
 yield expr                  // 生成器产出一个值并挂起
 ```
+<!-- /xr-source -->
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.5）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
@@ -2431,18 +2655,21 @@ producer拥有独立frame，由原Instance执行器推进；I/O或Timer等真实
 
 ## 4. 语句 (Statements)
 
-> 真值源：`src/frontend/parser/xparse_stmt.c`、`src/frontend/parser/xast_nodes_stmt.h`。
+> 实现参考：`src/frontend/parser/xparse_stmt.c`、`src/frontend/parser/xast_nodes_stmt.h`。
 
 Xray 语句以 `\n` 或 `;` 分隔；语句末尾的 `;` 在大多数位置可省略，仅 `for` 循环的初始化/条件/步进三段必须用 `;` 分隔。
 
 ### 4.1 表达式语句与块
 
+<!-- xr-source:grammar 005-4-statements-grammar-01 -->
 ```ebnf
-ExprStmt   ::= Expression (';' | LineBreak)
+ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
-Block      ::= '{' Statement* '}'
+Block    ::= '{' Statement* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 005-4-statements-example-001 -->
 ```xray
 foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
@@ -2452,6 +2679,7 @@ x++                    // 自增语句；不产生表达式值
     y + 1              // 表达式但结果被丢弃
 }
 ```
+<!-- /xr-source -->
 
 `++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
@@ -2459,12 +2687,15 @@ x++                    // 自增语句；不产生表达式值
 
 ### 4.2 `if` / `else`
 
+<!-- xr-source:grammar 005-4-statements-grammar-02 -->
 ```ebnf
-IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
 ElseClause  ::= 'else' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-if -->
 ```xray
 if (x > 0) {
     print("positive")
@@ -2474,6 +2705,7 @@ if (x > 0) {
     print("negative")
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 条件**必须**用括号包裹（与 Go/Rust 不同）。
@@ -2483,11 +2715,14 @@ if (x > 0) {
 
 ### 4.3 `while`
 
+<!-- xr-source:grammar 005-4-statements-grammar-03 -->
 ```ebnf
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-while -->
 ```xray
 var i = 0
 while (i < 10) {
@@ -2495,6 +2730,7 @@ while (i < 10) {
     i++
 }
 ```
+<!-- /xr-source -->
 
 无 `do-while` 形式。
 
@@ -2502,12 +2738,15 @@ while (i < 10) {
 
 #### C 风格 `for`
 
+<!-- xr-source:grammar 005-4-statements-grammar-04 -->
 ```ebnf
 ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
-ForInit ::= VarDecl | ExprStmt
+ForInit ::= VarDecl | Expression
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-c -->
 ```xray
 for (var i = 0; i < 10; i++) {
     print(i)
@@ -2516,6 +2755,7 @@ for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
+<!-- /xr-source -->
 
 - `ForInit` 中声明的变量作用域限于循环体。
 - 步进项里的 `i++` / `i--` 必须是整个 step；若要多个更新，写在循环体末尾。
@@ -2523,14 +2763,17 @@ for (var j = 100; j > 90; j--) {
 
 #### `for-in` 单变量
 
+<!-- xr-source:grammar 005-4-statements-grammar-05 -->
 ```ebnf
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
 
 内建 `Array<T>` 的集合表达式求值一次，遍历拥有该次逻辑值的快照；循环内修改或重绑原数组不改变当前序列。双变量索引是从零开始的 `i64`，`_` 不建立可引用绑定。元素为 class 时保留对象身份，不作对象深复制（§14.7）。绑定不接受类型注解。
 
+<!-- xr-source:example stmt-for-in -->
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
@@ -2543,16 +2786,20 @@ for (variant in Event.variants) {             // 任意具体 enum；产出 Enum
 }
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
+<!-- /xr-source -->
 
 #### `for-in` 双变量解构
 
 直接双变量接收来源的 pair 产出；内层 Tuple 模式解构每次迭代的元素本身。两者不是对任意集合都等价的索引写法：
 
+<!-- xr-source:grammar 005-4-statements-grammar-06 -->
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
 ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-pairs -->
 ```xray
 // 形式 A：直接两标识符（更常见）
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
@@ -2563,6 +2810,7 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+<!-- /xr-source -->
 
 形式 A 的迭代来源与产出对应关系如下。形式 B 对下表的单变量产出应用已有 Tuple 声明解构规则：例如 `Array<(string,i64)>` 的 `for ((k,v) in pairs)` 绑定每个元素的两个字段；不将 `k` 改成数组下标。每轮绑定的作用域、快照和拥有责任与普通迭代及声明解构一致。当前接收平坦的标识符或 `_`，不由此开放 rest 或嵌套循环模式。
 
@@ -2589,10 +2837,12 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 #### 引用迭代
 
+<!-- xr-source:grammar 005-4-statements-grammar-07 -->
 ```ebnf
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for (ref x in xs)` 与 `for (i, ref x in xs)` 用于 Array、定长数组和 MutSlice，迭代变量独占引用实际元素。`for (k, ref v in m)` 用于 Map，键保持只读，值引用实际 entry。循环开始时独占借用整个容器并完成必要的 COW 分离，每轮引用直接写入实际元素。
 
@@ -2600,28 +2850,32 @@ ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
 
 ### 4.5 `match` 语句
 
+<!-- xr-source:grammar 005-4-statements-grammar-08 -->
 ```ebnf
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
 **关键语法**：
 - 被匹配的表达式**必须**用括号包裹：`match (x) {...}`。
-- 分支之间的逗号**可选**——同一个 match 中可以混用（不写更常见）。
+- 分支之间必须写逗号；末尾逗号可写可不写，格式化器统一补齐。分支用 `=>`，其后的 `{` 一律是块。
 - 守卫条件 `if` 后的表达式必须用括号：`n if (n > 0)`。
 
-```xray
-match (x) { 1 -> print("one"), _ -> print("other") }
+<!-- xr-source:example stmt-match -->
+```xray @fragment
+match (x) { 1 => print("one"), _ => print("other"), }
 
 match (action) {
-    "start" -> {
+    "start" => {
         log.info("starting")
         start_engine()
-    }
-    "stop" -> stop_engine()
-    _ -> log.warn("unknown")
+    },
+    "stop" => stop_engine(),
+    _ => log.warn("unknown"),
 }
 ```
+<!-- /xr-source -->
 
 `match` 既可作语句也可作表达式（详见 §3.13）；当作表达式时分支体必须是单一表达式或块的最后一个表达式。
 
@@ -2629,6 +2883,7 @@ match (action) {
 
 ### 4.6 `break` / `continue`
 
+<!-- xr-source:example stmt-break-continue -->
 ```xray
 break                  // 跳出最内层循环
 continue               // 进入最内层循环的下一次迭代
@@ -2642,6 +2897,7 @@ outer: for (i in 0..10) {
     }
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 必须在 `while` / `for` 内部；否则编译错误 `E0304` / `E0305`。
@@ -2652,11 +2908,14 @@ outer: for (i in 0..10) {
 
 ### 4.7 `return`
 
+<!-- xr-source:grammar 005-4-statements-grammar-09 -->
 ```ebnf
-ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-return -->
 ```xray
 fn done() {
     return                 // 隐式返回 ()（Unit）
@@ -2670,6 +2929,7 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // 多返回值，必须用括号包裹元组
 }
 ```
+<!-- /xr-source -->
 
 > **注意**：多返回值必须用元组形式 `return (a, b)`；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
@@ -2679,24 +2939,26 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 
 ### 4.8 `throw` / `try` / `catch`
 
+<!-- xr-source:grammar 005-4-statements-grammar-10 -->
 ```ebnf
-ThrowStmt     ::= 'throw' Expression
-
-TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' CatchHeader ')' Block
-                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
-CatchHeader   ::= Identifier (':' Type)?
-                | EnumPattern (',' EnumPattern)*
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example stmt-try -->
+```xray @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
     match (e) {
-        AppError.NotFound -> log.error("not found"),
-        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+        AppError.NotFound => log.error("not found"),
+        AppError.Timeout { milliseconds: ms } => log.error("timeout after ${ms}ms"),
     }
 }
 
@@ -2708,6 +2970,7 @@ try { risky() } catch panic (p) {
 throw AppError.NotFound                      // 值返回错误通道
 // 没有 finally；用 defer 做确定性清理（见 §4.9）
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
@@ -2720,10 +2983,17 @@ throw AppError.NotFound                      // 值返回错误通道
 
 ### 4.9 `defer`
 
+<!-- xr-source:grammar 005-4-statements-grammar-11 -->
 ```ebnf
 DeferStmt ::= 'defer' Block
-```
 
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
+```
+<!-- /xr-source -->
+
+<!-- xr-source:example stmt-defer -->
 ```xray
 fn read_file(path: string) -> string {
     var f = open(path)
@@ -2747,6 +3017,7 @@ fn late_binding_and_copy() {
     n = 2
 }                                      // 输出 saved 1，再输出 late 2
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
@@ -2765,12 +3036,14 @@ fn late_binding_and_copy() {
 
 `print` / `dump` 是**内置全局函数**（非关键字，详见 §13.1），列于此处便于查阅：
 
+<!-- xr-source:example stmt-print-dump -->
 ```xray
 print("hello")                 // 追加恰好一个换行
 print("a:", a, "b:", b)        // 多参以恰好一个空格分隔
 print()                        // 只输出一个换行
 dump(some_obj)                 // 调试输出，含类型信息与结构布局
 ```
+<!-- /xr-source -->
 
 **行为说明**：
 - 接受任意类型与任意数量参数（变长）；每个参数自动调用其 `toString()` 或内置格式化。
@@ -2783,13 +3056,14 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 综合 `if` / `match` / `for-in` 的控制流：
 
-```xray
+<!-- xr-source:example 005-4-statements-example-013 -->
+```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
-        0 -> "zero"
-        1..=9 -> "small"
-        _ -> "large"
+        0 => "zero",
+        1..=9 => "small",
+        _ => "large",
     }
 }
 
@@ -2801,6 +3075,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 输出：
 
@@ -2819,19 +3094,20 @@ large
 
 ### 5.1 `var` / `const`
 
+<!-- xr-source:grammar 006-5-declarations-grammar-01 -->
 ```ebnf
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-Binding ::= Pattern (':' Type)? ('=' Expression)?
-Pattern ::= Identifier
-         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
-         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
-ObjectBinding ::= Identifier (':' Identifier)?
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 ```
+<!-- /xr-source -->
 
 #### 5.1.1 `var` — 可变绑定
 
+<!-- xr-source:example decl-var -->
 ```xray
 var x = 1                         // 类型推断为 i64
 var name: string = "Alice"        // 显式类型
@@ -2839,6 +3115,7 @@ var count: i64                    // 仅声明无初值：使用零值
 var maybeName: string?            // OK：默认 null
 var empty: string = ""            // string 必须显式初始化
 ```
+<!-- /xr-source -->
 
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
@@ -2847,10 +3124,12 @@ var empty: string = ""            // string 必须显式初始化
 
 #### 5.1.2 `const` — 不可变绑定
 
+<!-- xr-source:example decl-const -->
 ```xray
 const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
+<!-- /xr-source -->
 
 - **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
 - 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
@@ -2859,6 +3138,7 @@ const MAX_LEN: i64 = 1024
 - `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
 - 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
 
+<!-- xr-source:example decl-capability -->
 ```xray
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
@@ -2871,6 +3151,7 @@ current.push(4)
 print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
+<!-- /xr-source -->
 
 `const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
 
@@ -2878,7 +3159,8 @@ print(len(snapshot))        // 3
 
 #### 5.1.3 解构绑定
 
-```xray
+<!-- xr-source:example decl-destructuring -->
+```xray @fragment
 // 数组解构
 var [a, b, c] = [1, 2, 3]
 var [first, , third] = [10, 20, 30]         // 跳过元素
@@ -2886,35 +3168,35 @@ var [first, , third] = [10, 20, 30]         // 跳过元素
 // 元组解构（多返回值）
 var (q, r) = divmod(17, 5)
 
-// 对象解构（按字段名提取，可重命名本地绑定）
-var { name, age } = { name: "Alice", age: 30 }
-var { name: localName, age } = { name: "Alice", age: 30 }
 ```
+<!-- /xr-source -->
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
-- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
 
-当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
 
 ### 5.2 `fn` 函数声明
 
+<!-- xr-source:grammar 006-5-declarations-grammar-02 -->
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ThrowsClause ::= 'throws' ('(' Type ')')?
-ParamList ::= Param (',' Param)*
-Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
-            | '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
-ReturnType ::= '->' Type
-            |  '->' '(' Type (',' Type)+ ')'   // 元组返回
-TypeParams ::= '<' Identifier (',' Identifier)* '>'
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+AttrList ::= PublicAttribute*
 ```
+<!-- /xr-source -->
 
 #### 5.2.1 基本形式
 
+<!-- xr-source:example decl-fn-basic -->
 ```xray
 fn add(a: i64, b: i64) -> i64 {
     return a + b
@@ -2928,6 +3210,7 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
     print(x)
 }
 ```
+<!-- /xr-source -->
 
 **关键**：
 - 参数**必须**带类型标注（与箭头函数一致）。
@@ -2938,21 +3221,24 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 
 具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
 
+<!-- xr-source:example 006-5-declarations-example-006 -->
 ```xray @fragment
-fn add(a: i64, b: i64) -> i64
-fn parse(s: string) throws(ParseErr) -> i64
-fn load(path: string) throws(IoErr | ParseErr) -> Config
-fn runAll() throws
+fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
+fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
+fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
+fn runAll() throws { /* body omitted */ }
 ```
+<!-- /xr-source -->
 
-上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
+上例只展示签名，函数体以注释省略；普通函数定义必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
 
 入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误（§5.2.8），但传播点仍须标记。`fn main()` 是普通具名函数，没有这项许可。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
 
 可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
-#### 5.2.2 默认参数值
+#### 5.2.2 默认参数值与命名实参
 
+<!-- xr-source:example decl-fn-default -->
 ```xray
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
@@ -2962,13 +3248,14 @@ connect("localhost")              // port=8080, tls=false
 connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
+<!-- /xr-source -->
 
-- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 默认值在**调用点**求值：省略已声明默认值的参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
 - 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
 - 有默认值的参数必须在尾部连续出现。
 - 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
 - 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
-- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
 - 函数的 `throws(E)` 只约束函数体，不包含调用方执行的参数默认表达式。调用的错误包含被调声明的错误，以及本次实际执行的默认表达式逃逸的错误；显式实参不承担被跳过默认表达式的错误。按实际泛型实参替换后再检查这一规则，不把所有默认值的错误无条件并入函数签名。
 - 默认表达式中的抛错调用仍须在声明处有自己的传播标记，调用方的外层 `try` 不能代替它。例如 `fn f(x: i64 = try read()) {}` 可有不抛错的函数体；省略参数的 `try f()` 承担默认值错误，显式 `f(1)` 不承担。遗漏默认表达式内的 `try` 或省略参数时缺少所需的调用点标记均报错；`try { } catch` 区域仍按 §8 的普通规则处理。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
@@ -2976,8 +3263,25 @@ connect("localhost", 443, true)
 - 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
 - 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
 
+##### 命名实参与参数绑定
+
+位置实参必须在命名实参之前；每个形参至多绑定一次，未知名字、重复名字、按位置给出后再命名、命名之后的位置实参均报 E0327。rest 只能按位置传递。直接调用具名函数、方法和构造器使用被调声明的参数名；函数值调用不能使用标签，包括具名函数的 const 别名。
+
+<!-- xr-source:example decl-named-arguments -->
+```xray @check
+fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
+    return "${method} ${url} ${followRedirects}"
+}
+request("https://a")
+request(url: "https://a", followRedirects: false)
+```
+<!-- /xr-source -->
+
+接收者/被调表达式先求值，显式实参按书写顺序求值，省略的默认值按声明顺序求值。按形参顺序排列的是已经求出的值，不得重排表达式。期望类型与泛型证据按绑定后的形参位置取得；默认值不补充新的调用方推导证据。`ref`、`move` 位于标签后的值之前；参数名属于导出 API，跨模块保持同一名字。参见 §3.11。
+
 #### 5.2.3 多返回值
 
+<!-- xr-source:example decl-fn-multi-return -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -2986,6 +3290,7 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 var (q, r) = divmod(17, 5)
 var result = divmod(10, 3)        // result 类型 (i64, i64)
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 返回类型用括号包裹元组：`(i64, bool)`。
@@ -2996,6 +3301,7 @@ var result = divmod(10, 3)        // result 类型 (i64, i64)
 
 普通参数默认为 READ；写借用使用 `name: ref T`，取得值的持有权使用 `name: move T`，包括可复制值与不可复制资源。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
 
+<!-- xr-source:example decl-fn-param-modes -->
 ```xray
 fn length_sq(v: Vec2) -> f64 {
     return v.x * v.x + v.y * v.y
@@ -3014,6 +3320,7 @@ fn appended(xs: Array<string>, value: string) -> Array<string> {
 
 translate(ref point, 1.0, 2.0)
 ```
+<!-- /xr-source -->
 
 | 参数模式 | 语义 |
 |--|--|
@@ -3033,6 +3340,7 @@ READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保�
 
 #### 5.2.5 rest 参数
 
+<!-- xr-source:example decl-fn-rest -->
 ```xray
 fn sum(...nums: i64) -> i64 {
     var total = 0
@@ -3042,6 +3350,7 @@ fn sum(...nums: i64) -> i64 {
 
 sum(1, 2, 3)        // total = 6
 ```
+<!-- /xr-source -->
 
 - 普通具名函数允许一个末尾 READ rest：`...name: T`；不能带默认值、`ref` 或 `move`，也不扩展匿名函数、方法或构造器。嵌套具名函数沿真实捕获和拥有者规则。
 - 体内参数是只读绑定的 `Array<T>`；元素须满足既有 Array 保存和复制条件。不附加 Sendable 或 NoSuspend 承诺。普通值复制、COW、身份及失败清理规则保持。
@@ -3051,11 +3360,13 @@ sum(1, 2, 3)        // total = 6
 
 #### 5.2.6 函数提升
 
+<!-- xr-source:example 006-5-declarations-example-012 -->
 ```xray
 main()                       // OK：函数声明被提升
 
 fn main() { ... }
 ```
+<!-- /xr-source -->
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
 - `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
@@ -3064,29 +3375,34 @@ fn main() { ... }
 
 Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
+<!-- xr-source:example 006-5-declarations-example-013 -->
 ```xray
 fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
 }
 ```
+<!-- /xr-source -->
 
 #### 5.2.8 程序入口
 
 xray **没有固定的 `main` 入口函数**。程序从**入口文件**的顶层开始顺序执行：遇到 `fn` 声明被提升注册，遇到表达式或语句立即执行。
 
+<!-- xr-source:example 006-5-declarations-example-014 -->
 ```xray
 // hello.xr（入口文件）
 print("loading")          // 顶层语句，立即执行
 fn greet() { print("hi") }
 greet()                   // 必须显式调用
 ```
+<!-- /xr-source -->
 
 - 入口文件是 `xray run`、`xray build` 等命令直接给出的文件。多文件项目的入口文件由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`。
 - **只有入口文件可以包含可执行的顶层语句。** 被导入的模块，顶层只能包含声明（`import`、`export`、函数、类型与接口声明、`extern "C"` 块）以及模块状态的声明与初始化（`const`、`var` 及其初始化表达式）。被导入的模块中出现独立的表达式语句或控制流语句时，编译报错。模块状态按 §11.6 的拓扑序初始化。
 - 入口文件的顶层语句和各模块状态的初始化表达式隐式允许抛任意错误，传播点仍须标记；未捕获时输出 `[Uncaught Error] <值>` 并以退出码 1 结束（§8）。
 - `fn main()` 没有任何特殊含义，和其他具名函数遵守同一规则：省略 `throws` 即不抛错。需要时在入口文件顶层显式调用它，会抛错的写 `try main()`：
 
+<!-- xr-source:example 006-5-declarations-example-015 -->
 ```xray
 enum ConfigErr { Missing }
 
@@ -3102,6 +3418,7 @@ fn main() throws(ConfigErr) {
 
 try main()
 ```
+<!-- /xr-source -->
 
 - 顶层不允许 `return`（编译错误 `E0306`）。
 
@@ -3111,6 +3428,7 @@ try main()
 
 `extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
+<!-- xr-source:example 006-5-declarations-example-016 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -3125,11 +3443,13 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
 
 C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
 
+<!-- xr-source:example 006-5-declarations-example-017 -->
 ```xray
 import mem
 
@@ -3142,6 +3462,7 @@ print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("count"))
 ```
+<!-- /xr-source -->
 
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
@@ -3154,6 +3475,7 @@ print(mem.offsetOf<CHeader>("count"))
 - C 回调参数必须写成 `CFn<fn(A, B) -> R>`，不能使用普通 xray 函数类型 `fn(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
+<!-- xr-source:example 006-5-declarations-example-018 -->
 ```xray
 extern "C" {
     fn bsearch(
@@ -3171,11 +3493,13 @@ fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
 
 // zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
 ```
+<!-- /xr-source -->
 
 #### 5.2.10 Manifest C ABI 导出
 
 模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
+<!-- xr-source:example 006-5-declarations-example-019 -->
 ```xray
 fn add(a: i32, b: i32) -> i32 {
     return a + b
@@ -3183,6 +3507,7 @@ fn add(a: i32, b: i32) -> i32 {
 
 print(add(19, 23))        // Xray 内部仍是普通函数调用
 ```
+<!-- /xr-source -->
 
 ```toml
 [[export.c]]
@@ -3259,6 +3584,7 @@ no_suspend = true
 
 闭包捕获与高阶函数：
 
+<!-- xr-source:example 006-5-declarations-example-020 -->
 ```xray
 fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
@@ -3267,15 +3593,17 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 fn main() {
     var base = 10
     var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
-    print(addBase(5))            // => 15
-    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+    print(addBase(5))            // 输出：15
+    print(apply(addBase, 7))     // 输出：17（函数作为参数传入）
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 多返回值（元组）：
 
+<!-- xr-source:example 006-5-declarations-example-021 -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -3283,28 +3611,33 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 
 fn main() {
     var (q, r) = divmod(17, 5)
-    print(q)   // => 3
-    print(r)   // => 2
+    print(q)   // 输出：3
+    print(r)   // 输出：2
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.3 `class` 声明
 
 class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-03 -->
 ```ebnf
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
-              ('extends' Identifier TypeArgs?)?
-              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
-Modifier ::= 'private' | 'protected' | 'static' | 'const'
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 ```
+<!-- /xr-source -->
 
 > **关于默认公开可见性和显式覆写**：
 >
@@ -3317,6 +3650,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 
 #### 5.3.1 基本类
 
+<!-- xr-source:example decl-class-basic -->
 ```xray
 class Animal {
     name: string                       // 字段
@@ -3339,9 +3673,11 @@ var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
+<!-- /xr-source -->
 
 #### 5.3.2 继承
 
+<!-- xr-source:example decl-class-inheritance -->
 ```xray
 class Dog extends Animal {
     init(name: string) {
@@ -3353,6 +3689,7 @@ class Dog extends Animal {
     }
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
@@ -3386,6 +3723,7 @@ class Dog extends Animal {
 
 构造器可以声明 `init(...) throws(E)`；省略子句表示不抛错。构造调用 `Type(...)` 按该签名要求 `try` 或处理区域；构造失败不发布部分初始化的值。方法（包括 static、enum 与运算符方法）采用同样的 `throws(E)` 位置和局部检查规则。
 
+<!-- xr-source:example 006-5-declarations-example-024 -->
 ```xray
 class Point {
     x: f64
@@ -3406,6 +3744,7 @@ class Vector2 {
     }
 }
 ```
+<!-- /xr-source -->
 
 - `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
@@ -3425,6 +3764,7 @@ class Vector2 {
 
 `Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
 
+<!-- xr-source:example decl-iterator-protocol -->
 ```xray
 interface Iterator<T> {
     hasNext() -> bool       // 是否还有下一个元素；不消费元素
@@ -3436,6 +3776,7 @@ interface Iterable<T> {
     iterator() -> Iterator<T>
 }
 ```
+<!-- /xr-source -->
 
 规则：
 
@@ -3452,6 +3793,7 @@ interface Iterable<T> {
 
 字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
 
+<!-- xr-source:example 006-5-declarations-example-026 -->
 ```xray
 class Rect {
     _w: i64
@@ -3470,11 +3812,12 @@ class Rect {
 
 fn main() {
     var r = Rect(3, 4)
-    print(r.area)       // => 12
+    print(r.area)       // 输出：12
     r.width = 10
-    print(r.area)       // => 40
+    print(r.area)       // 输出：40
 }
 ```
+<!-- /xr-source -->
 
 规则：
 
@@ -3491,6 +3834,7 @@ fn main() {
 
 继承与显式覆写：
 
+<!-- xr-source:example 006-5-declarations-example-027 -->
 ```xray
 class Animal {
     name: string
@@ -3505,12 +3849,13 @@ class Dog extends Animal {
 
 fn main() {
     var d = Dog("Rex")
-    print(d.name)      // => Rex
-    print(d.speak())   // => woof
+    print(d.name)      // 输出：Rex
+    print(d.speak())   // 输出：woof
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 具名变量调用遵循上述合同，完整实现资格见 §17。
 
@@ -3520,12 +3865,15 @@ main()
 
 struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。取得自身持有权的方法可声明 `move` receiver，包括可复制类型。完整聚合、receiver 和借用声明族的实现资格见 §17。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
-StructDecl ::= 'struct' Identifier TypeParams?
-               ('implements' Identifier (',' Identifier)*)?
-               '{' StructMember* '}'
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-struct-point -->
 ```xray
 struct Point {
     x: f64
@@ -3549,8 +3897,9 @@ var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
 ```
+<!-- /xr-source -->
 
-**聚合字面量的字段规则**（与 sealed structural object 一致）：
+**聚合字面量的字段规则**（名义 struct 的声明字段）：
 
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
@@ -3558,6 +3907,7 @@ b.x = 99.0
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
 - **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
+<!-- xr-source:example 006-5-declarations-example-029 -->
 ```xray
 struct Config {
     host: string
@@ -3569,6 +3919,7 @@ var c = Config{host: "localhost"}    // OK
 // Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
 // Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
 ```
+<!-- /xr-source -->
 
 **与 `class` 的差异**：
 
@@ -3592,6 +3943,7 @@ var c = Config{host: "localhost"}    // OK
 
 可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
 
+<!-- xr-source:example 006-5-declarations-example-030 -->
 ```xray
 struct Point {
     x: i64
@@ -3602,25 +3954,28 @@ fn main() {
     var p = Point{x: 3, y: 4}
     var q = p            // struct 赋值是拷贝
     q.x = 99
-    print(p.x)           // => 3（不受影响）
-    print(q.x)           // => 99
+    print(p.x)           // 输出：3（不受影响）
+    print(q.x)           // 输出：99
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.5 `interface` 与 `implements`
 
 xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 / struct 必须用 `implements` 列出实现的接口。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-05 -->
 ```ebnf
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // 方法签名
-                 |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-interface-shape -->
 ```xray
 interface Shape {
     area() -> f64
@@ -3654,6 +4009,7 @@ fn describe(s: Shape) -> string {
     return "area=${s.area()}, perimeter=${s.perimeter()}"
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 
@@ -3684,6 +4040,7 @@ Checked 拥有约束、接口应用、要求身份和显式实现映射。单态
 
 当前新 XIR 已接通普通 read receiver 方法、显式 struct/enum 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct/enum 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。enum 普通 READ/static 方法复用名义方法机制，载荷先经 match 解构；方法及内建成员碰撞按 §5.6.7 在声明处拒绝。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。接口方法自身泛型的完整显式列表、内联/where条件及调用值形状推断已取得上述Windows范围验证；晚结果上下文补足和显式方法取值为下一验证族，完整双向和函数值上下文推断仍OPEN。属性、其他 receiver、未接通的 enum name/toString/variants 消费、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
 
+<!-- xr-source:example 006-5-declarations-example-032 -->
 ```xray
 // 属性签名 + 接口继承
 interface HasLength {
@@ -3703,6 +4060,7 @@ class Buffer implements SizedCollection<i64> {
     first() -> i64 { return this.data[0] }
 }
 ```
+<!-- /xr-source -->
 
 #### 实现资格
 
@@ -3712,8 +4070,9 @@ class Buffer implements SizedCollection<i64> {
 
 xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-06 -->
 ```ebnf
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier
@@ -3722,6 +4081,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
+<!-- /xr-source -->
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
@@ -3729,7 +4089,8 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' T
 
 #### 5.6.1 简单枚举（0-payload enum）
 
-```xray
+<!-- xr-source:example decl-enum-simple -->
+```xray @fragment
 enum Color { Red, Green, Blue }
 
 Color.Red.ordinal     // 0
@@ -3744,13 +4105,14 @@ enum HttpStatus {
 
     code() -> i64 {
         return match (this) {
-            HttpStatus.OK -> 200,
-            HttpStatus.NotFound -> 404,
-            HttpStatus.InternalError -> 500
+            HttpStatus.OK => 200,
+            HttpStatus.NotFound => 404,
+            HttpStatus.InternalError => 500,
         }
     }
 }
 ```
+<!-- /xr-source -->
 
 enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
 
@@ -3758,6 +4120,7 @@ enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backi
 
 payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
 
+<!-- xr-source:example decl-enum-payload -->
 ```xray
 enum Option<T> {
     Some { value: T },
@@ -3784,6 +4147,7 @@ enum Expr {
     Call { name: string, args: Array<Expr> },
 }
 ```
+<!-- /xr-source -->
 
 直接按值递归的 enum payload 会导致无限大小，必须编译拒绝（`E0352`）。递归数据结构必须显式间接化，有两种手段：
 
@@ -3796,6 +4160,7 @@ enum Expr {
 
 构造：
 
+<!-- xr-source:example 006-5-declarations-example-035 -->
 ```xray
 var c = Color.Red
 var r1 = Option.Some { value: 42 }
@@ -3803,17 +4168,20 @@ var e1 = NetEvent.DataReceived { bytes: b }
 var e2 = NetEvent.Error { code: 404, message: "not found" }
 var e3 = NetEvent.Connected                         // unit 变体不写 braces
 ```
+<!-- /xr-source -->
 
 解构（match）：
 
-```xray
+<!-- xr-source:example decl-enum-match -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
+<!-- /xr-source -->
 
 详见 §6.3。
 
@@ -3821,11 +4189,13 @@ match (event) {
 
 实例属性（作用在枚举值上）：
 
+<!-- xr-source:example decl-enum-properties -->
 ```xray
 Color.Red.name        // "Red"          变体名 (string)
 Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
+<!-- /xr-source -->
 
 enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体的声明名，toString只返回原enum声明名和活动变体名，不附加泛型实参、不读取或格式化payload、不调用载荷回调。两者按原类型与成员权限检查，不能授予构造权限或隐式Stringable见证；描述查询也不能补足原泛型约束。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
 
@@ -3833,6 +4203,7 @@ enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体�
 
 仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
 
+<!-- xr-source:example decl-enum-iteration -->
 ```xray
 for (color in Color) {
     print(color.name)                     // color: Color；Red、Green、Blue
@@ -3847,6 +4218,7 @@ for (variant in NetEvent.variants) {
     }
 }
 ```
+<!-- /xr-source -->
 
 两种循环语法相似，但产出类型有意不同：
 
@@ -3881,6 +4253,7 @@ unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则�
 
 默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
 
+<!-- xr-source:example 006-5-declarations-example-039 -->
 ```xray
 fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
@@ -3889,6 +4262,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
     return null
 }
 ```
+<!-- /xr-source -->
 
 #### 5.6.7 enum 方法
 
@@ -3896,7 +4270,8 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 `enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
-```xray
+<!-- xr-source:example 006-5-declarations-example-040 -->
+```xray @fragment
 enum Shape {
     Circle { radius: f64 },
     Rect { width: f64, height: f64 },
@@ -3904,9 +4279,9 @@ enum Shape {
 
     area() -> f64 {
         return match (this) {
-            Shape.Circle { radius } -> 3.14159 * radius * radius,
-            Shape.Rect { width, height } -> width * height,
-            Shape.Triangle { a, b, c } -> {
+            Shape.Circle { radius } => 3.14159 * radius * radius,
+            Shape.Rect { width, height } => width * height,
+            Shape.Triangle { a, b, c } => {
                 var s = (a + b + c) / 2.0
                 return (s * (s-a) * (s-b) * (s-c)).sqrt()
             },
@@ -3915,8 +4290,8 @@ enum Shape {
 
     isRound() -> bool {
         return match (this) {
-            Shape.Circle {} -> true,
-            _               -> false,
+            Shape.Circle {} => true,
+            _               => false,
         }
     }
 }
@@ -3925,9 +4300,11 @@ var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
+<!-- /xr-source -->
 
 静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver，取得持有权使用 `move` receiver，可复制与不可复制 enum 均适用；完整声明族的准入见 §17。enum 方法不写 `fn`：
 
+<!-- xr-source:example 006-5-declarations-example-041 -->
 ```xray
 enum Color {
     Red, Green, Blue
@@ -3945,6 +4322,7 @@ enum Color {
 
 print(Color.fromInt(2).label())     // "Green"
 ```
+<!-- /xr-source -->
 
 > 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
 
@@ -3969,32 +4347,38 @@ print(Color.fromInt(2).label())     // "Green"
 
 ### 5.7 `type` 别名
 
+<!-- xr-source:grammar 006-5-declarations-grammar-07 -->
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example decl-nominal-type-aliases -->
+```xray @check
 type Outcome = i64 | string                          // union 别名
 type Mapper = fn(i64) -> i64                              // 函数类型别名
-type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
-type Pair<T> = { first: T, second: T }                // 泛型别名
+struct Point { x: f64; y: f64 }
+type Position = Point                              // 同一名义类型的别名
+type Pair<T> = (T, T)                               // 无标签 tuple 的泛型别名
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
 - 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
 - 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
-- `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
+- 名义类型的别名保留原声明身份；字段集合相同不会使不同 struct 相等。匿名对象形状不是合法的别名 RHS。
 - `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
 - 别名可前向引用，但**禁止循环别名**。
 
-详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
+详见 §2.4.7 与 [§2.8](#28-类型别名)。
 
 ### 5.8 `import` / `export`
 
 详见 [§11](#11-模块系统-modules)。语法要点：
 
+<!-- xr-source:example 006-5-declarations-example-043 -->
 ```xray
 // stdlib / 第三方包：裸标识符，可自动生成别名
 import time
@@ -4016,6 +4400,7 @@ export const VERSION = "1.0"
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
+<!-- /xr-source -->
 
 **xray 不支持** JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 
@@ -4025,36 +4410,40 @@ export * from "./other"
 
 ## 6. 模式 (Patterns)
 
-> 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
+> 实现参考：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
 模式出现在 `match` 表达式/语句、`var` / `const` 解构，以及括号内的 `catch` 头部（仅 enum variant pattern，见 §8.1.2）中。
 
 ### 6.1 字面量模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-001 -->
+```xray @fragment
 match (x) {
-    0 -> "zero"
-    3.14 -> "pi"
-    "hello" -> "greeting"
-    true -> "yes"
-    null -> "nothing"
-    _ -> "other"
+    0 => "zero",
+    3.14 => "pi",
+    "hello" => "greeting",
+    true => "yes",
+    null => "nothing",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 匹配使用与 `==` 相同的语义。
 - `null` 模式只匹配 `null` 本身。
 
 ### 6.2 范围模式 `a..b` / `a..=b`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-002 -->
+```xray @fragment
 match (age) {
-    0..13 -> "child"
-    13..20 -> "teen"
-    20..=65 -> "adult"
-    _ -> "senior"
+    0..13 => "child",
+    13..20 => "teen",
+    20..=65 => "adult",
+    _ => "senior",
 }
 ```
+<!-- /xr-source -->
 
 - `a..b` 为半开区间 `[a, b)`；`a..=b` 为闭区间 `[a, b]`。
 - 仅整数。
@@ -4063,13 +4452,15 @@ match (age) {
 
 #### 6.3.1 简单变体（无 payload）
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-003 -->
+```xray @fragment
 match (color) {
-    Color.Red   -> "red",
-    Color.Green -> "green",
-    Color.Blue  -> "blue",
+    Color.Red   => "red",
+    Color.Green => "green",
+    Color.Blue  => "blue",
 }
 ```
+<!-- /xr-source -->
 
 - 需完整限定 `EnumName.Variant`。
 
@@ -4079,33 +4470,35 @@ match (color) {
 
 ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-004 -->
+```xray @fragment
 match (event) {
-    NetEvent.Connected                         -> print("connected"),
-    NetEvent.Disconnected { reason }           -> print("by:", reason),
-    NetEvent.DataReceived { bytes }            -> process(bytes),
-    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+    NetEvent.Connected                         => print("connected"),
+    NetEvent.Disconnected { reason }           => print("by:", reason),
+    NetEvent.DataReceived { bytes }            => process(bytes),
+    NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 
 // 同名 binding shorthand
 match (opt) {
-    Option.Some { value: v } -> print("got:", v),
-    Option.None    -> print("nothing"),
+    Option.Some { value: v } => print("got:", v),
+    Option.None    => print("nothing"),
 }
 
 // 只列需要观察的字段
 match (event) {
-    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
-    _                                        -> continue,
+    NetEvent.Error { code } if (code >= 500) => { throw NetErr.ServerFault { code: code } },
+    _                                        => { continue },
 }
 
 // 嵌套解构
 match (msg) {
-    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
-    Option.None                                           -> skip(),
-    _                                                     -> skip(),
+    Option.Some { value: NetEvent.DataReceived { bytes } } => process(bytes),
+    Option.None                                           => skip(),
+    _                                                     => skip(),
 }
 ```
+<!-- /xr-source -->
 
 #### 6.3.3 穷举性检查
 
@@ -4114,7 +4507,8 @@ match (msg) {
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
 - 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-005 -->
+```xray @fragment
 enum NetEvent {
     Connected,
     Disconnected { reason: string },
@@ -4123,49 +4517,56 @@ enum NetEvent {
 }
 
 match (event) {
-    NetEvent.Connected                     -> "ok",
-    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    NetEvent.Connected                     => "ok",
+    NetEvent.Disconnected { reason: r }    => "down: ${r}",
     // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
 }
 ```
+<!-- /xr-source -->
 
 > 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-006 -->
+```xray @fragment
 match (value) {
-    is i64 n -> "i64: ${n}"       // 绑定窄化值
-    is string -> "a string"
-    is User u -> "user: ${u.name}"
-    _ -> "unknown"
+    is i64 n => "i64: ${n}",       // 绑定窄化值
+    is string => "a string",
+    is User u => "user: ${u.name}",
+    _ => "unknown",
 }
 ```
+<!-- /xr-source -->
 
 - 检查动态类型；可选绑定窄化变量。
 
 ### 6.5 守卫条件 `if`
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-007 -->
+```xray @fragment
 match (x) {
-    n if (n > 0 && n < 10) -> "small positive"
-    n if (n < 0) -> "negative"
-    _ -> "other"
+    n if (n > 0 && n < 10) => "small positive",
+    n if (n < 0) => "negative",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 守卫表达式必须是 `bool`，nullable 值须显式比较（见 §2.3.3），与 `if` / `while` 条件规则一致。
 - 失败时继续尝试下一分支。
 
 ### 6.6 多值模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-008 -->
+```xray @fragment
 match (x) {
-    1, 2, 3 -> "small"
-    Color.Red, Color.Yellow -> "warm"
-    _ -> "other"
+    1, 2, 3 => "small",
+    Color.Red, Color.Yellow => "warm",
+    _ => "other",
 }
 ```
+<!-- /xr-source -->
 
 - 按源码顺序尝试备选，首次成功后不再尝试该 arm 的其他备选。
 - 所有备选必须绑定相同的名称集合，且每个同名绑定的确切静态类型相同；绑定不可变，属于该 arm 的共同作用域。
@@ -4180,38 +4581,34 @@ match (x) {
 
 ### 6.8 变量绑定模式
 
-```xray
+<!-- xr-source:example 007-6-patterns-example-009 -->
+```xray @fragment
 match (http_status) {
-    200 -> "ok"
-    code if (code >= 400) -> "error: ${code}"
-    code -> "other: ${code}"
+    200 => "ok",
+    code if (code >= 400) => "error: ${code}",
+    code => "other: ${code}",
 }
 ```
+<!-- /xr-source -->
 
 - 裸 `Identifier` 总匹配并绑定为值。
 
 ### 6.9 解构模式
 
-```xray
+数组与 tuple 绑定沿 §5.1.3；匿名对象解构、对象模式和 struct 解构不属于语言语法。ADT 变体的具名 payload 字段模式仍按 §6.3，不受删除对象族的影响。
+
+<!-- xr-source:example 007-6-patterns-example-010 -->
+```xray @fragment
 var [a, b, c] = some_array
 var (q, r) = divmod(17, 5)
-var { name, age } = user
-```
-
-详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
-
-```xray
 match (p) {
-    { x, y } -> ...           // 对象字段解构（簡寫绑定）
-    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
-    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
-    [_, mid, _] -> ...        // 元素位通配
+    [a, b, ..rest,] => print(a, b, rest),
+    [_, mid, _] => print(mid),
 }
 ```
+<!-- /xr-source -->
 
-- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
-- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
-- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
+数组模式按长度匹配：没有 `..rest` 时长度必须等于元素数，有 rest 时长度至少为元素数。非 rest 元素只能是绑定或通配；按值判断使用守卫。Map 不提供字段模式；静态字段数据使用名义 struct 并通过普通字段访问取得值。or-pattern `|` 不在本任务引入。
 
 ### 6.10 穷举性与匹配失败
 
@@ -4247,6 +4644,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 - `var` / `const` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-001 -->
 ```xray
 main()                    // OK：使用提升后的 fn
 fn main() { ... }
@@ -4254,11 +4652,13 @@ fn main() { ... }
 var y = x                 // 错误：x 未声明
 var x = 10
 ```
+<!-- /xr-source -->
 
 #### Shadow 规则
 
 嵌套块可 shadow 外层同名变量：
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-002 -->
 ```xray
 var x = 1
 {
@@ -4267,6 +4667,7 @@ var x = 1
 }
 print(x)                     // 1
 ```
+<!-- /xr-source -->
 
 ### 7.2 闭包捕获语义
 
@@ -4276,6 +4677,7 @@ print(x)                     // 1
 
 可变 `var` 按 **共享 cell 引用捕获**，`const` 按值捕获：
 
+<!-- xr-source:example 008-7-scoping-and-name-resolution-example-003 -->
 ```xray
 fn make_counter() -> (() -> i64) {
     var count = 0
@@ -4289,6 +4691,7 @@ var c = make_counter()
 print(c())      // 1
 print(c())      // 2
 ```
+<!-- /xr-source -->
 
 - 闭包与原变量**共享**。
 - 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
@@ -4362,12 +4765,14 @@ Xray 的错误处理分为两个严格分离的通道：
 
 `throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
+<!-- xr-source:example 009-8-error-handling-example-001 -->
 ```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
 throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚举变体
 ```
+<!-- /xr-source -->
 
 抛出后行为：
 
@@ -4385,6 +4790,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 
 #### 8.1.2 `try` / `catch`
 
+<!-- xr-source:example 009-8-error-handling-example-002 -->
 ```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
@@ -4392,11 +4798,12 @@ try {
     connect(host)
 } catch (e) {
     match (e) {
-        IOErr.Timeout -> log("timeout"),
-        IOErr.Refused { reason } -> log("refused: " + reason),
+        IOErr.Timeout => log("timeout"),
+        IOErr.Refused { reason } => log("refused: " + reason),
     }
 }
 ```
+<!-- /xr-source -->
 
 **执行顺序**：
 
@@ -4408,6 +4815,7 @@ try {
 
 `catch` 变量可带类型注解 `catch (e: T)`，运行时用 `is T` 判断枚举类型是否匹配。支持多个 `catch` 子句，按声明顺序匹配：
 
+<!-- xr-source:example 009-8-error-handling-example-003 -->
 ```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
@@ -4422,6 +4830,7 @@ try {
     log("unexpected:", e)
 }
 ```
+<!-- /xr-source -->
 
 **规则**：
 - 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值，绑定的静态类型为内置 `Error`
@@ -4438,6 +4847,7 @@ catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读�
 
 普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
 
+<!-- xr-source:example 009-8-error-handling-example-004 -->
 ```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
@@ -4449,6 +4859,7 @@ try {
     retry()
 }
 ```
+<!-- /xr-source -->
 
 - 每个备选都是 `Enum.Variant` 或 `Enum.Variant { 字段 }`，可带模块限定；字段子模式遵循 §6（字面量、范围、嵌套 enum、`_` 与绑定）。payload variant 必须写出花括号，`{}` 只测试 tag；unit variant 不能写 `{}`。
 - 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
@@ -4458,6 +4869,7 @@ try {
 - 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
 - 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
 
+<!-- xr-source:example 009-8-error-handling-example-005 -->
 ```xray @error=E0334
 enum NetErr { Failed }
 fn work() throws(NetErr) { throw NetErr.Failed }
@@ -4466,11 +4878,13 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 #### 8.1.3 重抛与错误转换
 
 `catch` 块内可重抛原错误或抛出不同枚举的新错误：
 
+<!-- xr-source:example 009-8-error-handling-example-006 -->
 ```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
@@ -4482,11 +4896,13 @@ try {
     throw HighErr.Upstream
 }
 ```
+<!-- /xr-source -->
 
 #### 8.1.4 错误枚举设计推荐
 
 定义业务错误推荐使用 ADT enum，载荷携带上下文信息：
 
+<!-- xr-source:example 009-8-error-handling-example-007 -->
 ```xray @fragment
 enum HttpErr {
     NotFound { message: string },
@@ -4509,12 +4925,13 @@ try {
     var user = fetchUser(-1)
 } catch (e: HttpErr) {
     match (e) {
-        HttpErr.NotFound { message: msg } -> log("404:", msg),
-        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
-        HttpErr.Timeout -> log("timeout"),
+        HttpErr.NotFound { message: msg } => log("404:", msg),
+        HttpErr.ServerError { code, message: msg } => log(string(code) + ":", msg),
+        HttpErr.Timeout => log("timeout"),
     }
 }
 ```
+<!-- /xr-source -->
 
 ADT enum 可让 `match` 在编译期检查错因穷举性。
 
@@ -4526,11 +4943,13 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
 - 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
+<!-- xr-source:example 009-8-error-handling-example-008 -->
 ```xray @fragment
 var task = go fetch(url)
 var value = try await task
 var outcome = task.awaitResult()
 ```
+<!-- /xr-source -->
 
 等待一个以 `Cancelled` 结束的子任务时，等待方自身进入取消展开；当前任务自身被取消时同样如此。两种情况都执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.3、§10.4）。只有 `awaitResult()` / `poll()` 把取消作为 `TaskResult.Cancelled` 值返回。
 
@@ -4540,6 +4959,7 @@ var outcome = task.awaitResult()
 
 一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待可能失败的任务时写作 `try await t`。
 
+<!-- xr-source:example 009-8-error-handling-example-009 -->
 ```xray @run
 enum ParseErr { Empty }
 fn parse(s: string) throws(ParseErr) -> i64 {
@@ -4559,18 +4979,24 @@ try main()
 8080
 42
 ```
+<!-- /xr-source -->
+
+
 
 `try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误，但传播调用仍需标记（§5.2.8）。只有入口文件可以写可执行的顶层语句；`main` 是普通函数，省略 `throws` 即不抛错，会抛错的必须显式声明并在入口文件顶层写 `try main()`。
 
 缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的已登记编号，实现待接通）：
 
+<!-- xr-source:example 009-8-error-handling-example-010 -->
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
 fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-011 -->
 ```xray @error=E0331
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -4578,6 +5004,7 @@ fn caller() { try fail() } // error: undeclared escaping error
 fn main() { caller() }
 try main()
 ```
+<!-- /xr-source -->
 
 标记只写在可能产生业务错误的位置。`try`、`try?`、`try!` 的作用范围内没有业务错误来源时，报 `E0336`。含任意普通 catch 的 try 块也要求主体保护区域中存在业务来源；即使同时有 panic handler，也不豁免。只有 panic handler 的 try 块不要求业务来源，也不要求静态证明主体可能 panic；但其内部的表达式标记仍独立检查。
 
@@ -4585,6 +5012,7 @@ try main()
 
 只有 panic handler 的主体同样许可业务调用，但不捕获它们的错误。剩余业务错误必须由外层普通 catch 或所在函数的 `throws` 接收，否则报 `E0331`。直接 `throw` 本身产生业务错误，不另加 try。panic、取消和业务错误仍是独立通道。
 
+<!-- xr-source:example error-panic-only -->
 ```xray @run
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
@@ -4597,13 +5025,17 @@ try { ch.send(1) } catch panic (p) { print(p.code) }
 try { relay() } catch (e: Failure) { print("business error") }
 try { throw Failure.Bad } catch (e: Failure) { print("direct throw") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example error-panic-mixed-redundant -->
 ```xray @error=E0336
 try { print(42) }
 catch (e) { print("ordinary") }
 catch panic { print("panic") }
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 009-8-error-handling-example-014 -->
 ```xray @error=E0336
 fn add(a: i64, b: i64) -> i64 { return a + b }
 fn worker() -> i64 { return 1 }
@@ -4614,6 +5046,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 ### 8.2 Panic 通道
 
@@ -4633,6 +5066,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 `catch panic` 捕获 panic 通道的运行时故障：
 
+<!-- xr-source:example 009-8-error-handling-example-015 -->
 ```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
@@ -4647,9 +5081,11 @@ try {
     log("division by zero caught")
 }
 ```
+<!-- /xr-source -->
 
 **`catch` 与 `catch panic` 可共存**，分别处理两个通道：
 
+<!-- xr-source:example 009-8-error-handling-example-016 -->
 ```xray @check
 enum AppErr { InvalidArg }
 
@@ -4668,6 +5104,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 **绑定与作用域规则**：每个 `try` 至多有一个 `catch panic`，因为它无条件匹配该通道。可省略头部，或写 `catch panic (p)` / `catch panic (p: PanicInfo)`；注解必须是 `PanicInfo`，不是运行时类型过滤器。绑定只读且仅在 handler 内可见，复制或返回该引用遵守 class 的身份与所有权规则，不自动获得 `Sendable`。handler 只保护对应的 try 主体，不保护同级 handler；handler 中的新 panic 继续寻找外层处理器。普通 enum 错误不能进入 panic handler，panic 也不能进入普通 catch。
 
@@ -4675,6 +5112,7 @@ main()
 
 `PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
+<!-- xr-source:example 009-8-error-handling-example-017 -->
 ```xray @fragment
 class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
@@ -4684,10 +5122,11 @@ class PanicInfo {
     data: JSON.Value            // 附加数据；无数据时为 JSON null
     replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null
 
-    init(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
+    init(message: string = "", cause: PanicInfo? = null) { /* runtime implementation omitted */ }
+    toString() -> string { /* runtime implementation omitted */ }
 }
 ```
+<!-- /xr-source -->
 
 用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
@@ -4695,6 +5134,7 @@ class PanicInfo {
 
 **在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
 
+<!-- xr-source:example 009-8-error-handling-example-018 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
@@ -4712,6 +5152,9 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
+
+
 
 #### 8.2.4 未捕获 panic 的顶层诊断
 
@@ -4760,6 +5203,7 @@ panic 可在 `defer` 内由内部 `catch panic` 捕获。panic 逃出清理边�
 
 cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
+<!-- xr-source:example 009-8-error-handling-example-019 -->
 ```xray @fragment
 fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     var conn = try open(url)
@@ -4772,6 +5216,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
     return data
 }
 ```
+<!-- /xr-source -->
 
 **规则**：
 - `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
@@ -4791,6 +5236,7 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
 
 **规则 D2（满足方式）**：调用不抛错的清理 API，或在清理体内完整处理错误。下面的正例与负例分开给出：
 
+<!-- xr-source:example defer-must-not-throw -->
 ```xray @run
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -4806,7 +5252,11 @@ main()
 body
 close failed
 ```
+<!-- /xr-source -->
 
+
+
+<!-- xr-source:example 009-8-error-handling-example-021 -->
 ```xray @error=E0387
 enum CloseErr { Failed }
 fn close() throws(CloseErr) { throw CloseErr.Failed }
@@ -4815,6 +5265,7 @@ fn main() {
 }
 try main()
 ```
+<!-- /xr-source -->
 
 **规则 D3（panic）**：静态不抛业务错误不等于不会 panic。逃出 cleanup 的 panic 在正常离开或业务错误传播时照常传播，可被外层 `catch panic` 捕获；只有已有 panic 或取消正在展开的双重故障才不可捕获地结束（§8.2.5）。不再定义业务错误逃出 defer 的 E0443 运行时兜底。
 
@@ -4824,6 +5275,7 @@ try main()
 
 `try?` 有专门的结果类型规则：操作数类型不是 Optional 时得到 `T?`；已经是 `Optional<U>` 时保持原类型，不增加外层，也不递归展平现有层次。业务错误映射为该结果的 `null`，成功值原样返回。它不捕获 panic，也不捕获取消展开。
 
+<!-- xr-source:example 009-8-error-handling-example-022 -->
 ```xray @run
 enum LookupErr { Failed }
 fn lookup(ok: bool) throws(LookupErr) -> i64? {
@@ -4841,6 +5293,9 @@ main()
 7
 0
 ```
+<!-- /xr-source -->
+
+
 
 ### 8.5 决策树：选择哪种机制
 
@@ -4884,6 +5339,7 @@ main()
 
 #### 模式 1：enum 错误 + defer 资源清理
 
+<!-- xr-source:example 009-8-error-handling-example-023 -->
 ```xray @run
 enum ConnErr { Refused, Timeout }
 
@@ -4904,7 +5360,7 @@ fn fetchData(alive: bool) throws(ConnErr) -> string {
 
 fn main() {
     try {
-        print(fetchData(true))         // => closed 然后 payload
+        print(fetchData(true))         // 输出：closed 然后 payload
     } catch (e: ConnErr) {
         print("connection error")
     }
@@ -4916,6 +5372,9 @@ main()
 closed
 payload
 ```
+<!-- /xr-source -->
+
+
 
 #### 模式 2：throw + catch 用于库 API
 
@@ -4923,13 +5382,16 @@ payload
 
 #### 模式 3：`??` 提供默认值
 
+<!-- xr-source:example 009-8-error-handling-example-024 -->
 ```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
+<!-- /xr-source -->
 
 #### 模式 4：catch panic 兜底运行时故障
 
+<!-- xr-source:example 009-8-error-handling-example-025 -->
 ```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
@@ -4939,6 +5401,7 @@ fn safeDivide(a: i64, b: i64) -> string {
     }
 }
 ```
+<!-- /xr-source -->
 
 ### 8.7 完整可运行示例
 
@@ -4946,7 +5409,8 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray @run
+<!-- xr-source:example 009-8-error-handling-example-026 -->
+```xray @run @check
 enum ParseErr { Empty, BadChar { value: string } }
 
 fn parseDigit(s: string) throws(ParseErr) -> i64 {
@@ -4960,8 +5424,8 @@ fn main() {
         print(parseDigit(""))
     } catch (e: ParseErr) {
         match (e) {
-            ParseErr.Empty -> print("empty input"),        // => empty input
-            ParseErr.BadChar { value: c } -> print("bad char:", c),
+            ParseErr.Empty => print("empty input"),        // 输出：empty input
+            ParseErr.BadChar { value: c } => print("bad char:", c),
         }
     }
 }
@@ -4971,9 +5435,13 @@ main()
 ```output
 empty input
 ```
+<!-- /xr-source -->
+
+
 
 #### 示例 2：`defer` 的 LIFO 顺序与异常路径
 
+<!-- xr-source:example 009-8-error-handling-example-027 -->
 ```xray @run
 enum E { Boom }
 
@@ -4996,18 +5464,22 @@ defer 2
 defer 1
 caught
 ```
+<!-- /xr-source -->
+
+
 
 
 #### 示例 3：`catch panic` 兜底并读取故障信息
 
+<!-- xr-source:example 009-8-error-handling-example-028 -->
 ```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
-        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
-        print("code:", p.code)               // => code: 430
+        print("message:", p.message)         // 输出：message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // 输出：code: 430
     }
 }
 
@@ -5017,6 +5489,7 @@ main()
 message: array index out of range: 10 (length 3)
 code: 430
 ```
+<!-- /xr-source -->
 
 ---
 
@@ -5026,15 +5499,18 @@ code: 430
 
 ### 9.1 类型参数语法 `<T>`
 
+<!-- xr-source:grammar 010-9-generics-grammar-01 -->
 ```ebnf
-TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
-TypeParam  ::= Identifier (':' ConstraintList)?
-ConstraintList ::= Type ('&' Type)*               // 交叉约束用 '&' 连接
-TypeArgs   ::= '<' Type (',' Type)* '>'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
+ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
+TypeArgs    ::= '<' Type (',' Type)* '>'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example generics-basic -->
+```xray @check
 // 泛型函数
 fn identity<T>(x: T) -> T {
     return x
@@ -5068,10 +5544,11 @@ interface Comparable<T> {
 }
 
 // 泛型 type alias：透明语法替换，不产生新类型
-type PairAlias<T> = { first: T, second: T }
+type PairAlias<T> = (T, T)
 ```
+<!-- /xr-source -->
 
-`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `(i64, i64)`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -5079,8 +5556,11 @@ type PairAlias<T> = { first: T, second: T }
 
 普通泛型方法的签名、体、默认参数和嵌套闭包在定义处按两层已声明约束检查，即使方法未使用；不从未来实参增加能力。默认参数与捕获继承原声明的类型参数身份和权限。特化仅替换已Checked的参数，复验后进入Lowered，普通实例在Program封存前形成。实例方法函数值只求值并保存接收者一次；静态函数值没有接收者。两者沿用完整间接调用签名、值所有权、效应、挂起和失败清理规则。
 
+匿名对象形状不再是泛型约束；需要成员能力时声明具名 interface，并由实参类型显式 implements。既有内置类型谓词及其余约束规则保持不变。
+
 xray 的约束语法统一用冒号 `:`，多个约束用 `&` 连接（读作“同时满足”）。**不使用** Java/TS 的 `extends` / `implements` 作为约束关键字。
 
+<!-- xr-source:example generics-constraints -->
 ```xray
 // 单一约束
 fn first<T: Comparable>(a: T, b: T) -> T {
@@ -5097,6 +5577,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
     return v
 }
 ```
+<!-- /xr-source -->
 
 **有限值相等操作约束（合同冻结，正式实施 PENDING）**：`Equal` 是内置谓词，
 不是用户可 implements 的接口。首域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T>
@@ -5120,7 +5601,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `equals(other: T) -> bool` 与 `hash() -> i64`。`equals` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
-```xray
+<!-- xr-source:example generics-hashable-contract -->
+```xray @check
 class Token implements Hashable {
     value: i64
 
@@ -5132,9 +5614,10 @@ class Token implements Hashable {
     hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, i64> = #{}
+var counts: Map<Token, i64> = {}
 counts.set(Token(7), 99)
 ```
+<!-- /xr-source -->
 
 只提供旧式 `hashCode()` 不满足契约；只提供 `equals` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
 
@@ -5142,11 +5625,14 @@ counts.set(Token(7), 99)
 
 约束也可以写在签名之后。`where` 与 `<T: C>` 使用同一约束机制，同一个参数上的要求**取交集**而非互相覆盖。方法的附加要求属于方法声明，不修改外层名义类型的参数合同。
 
+<!-- xr-source:grammar 010-9-generics-grammar-02 -->
 ```ebnf
 WhereClause ::= 'where' WhereItem (',' WhereItem)*
 WhereItem   ::= Identifier ':' ConstraintList
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example generics-where-clause -->
 ```xray
 // 约束列表长时，写在后面不会把参数挤出一行
 fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
@@ -5162,6 +5648,7 @@ struct Holder<T> where T: Comparable { ... }
 interface Seq<T> where T: Comparable { ... }
 enum Wrap<T> where T: Comparable { ... }
 ```
+<!-- /xr-source -->
 
 普通实例方法或静态方法的 `where` 可以约束方法自身及外层名义类型的类型参数；方法不必另有 `<...>`。其有效条件为外层声明条件、自身内联条件与方法 `where` 条件的合取，只作用于该方法，不改变类型本身的构造、保存或其他方法准入。方法体、默认值及嵌套闭包在此定义上下文检查；直接调用和方法取值都必须由调用方证明条件，不能等具体实例补足缺失的泛型证明。名称仍唯一，条件失败不触发另选重载，也不扩大可见性、receiver 权限或效应承诺。
 
@@ -5192,11 +5679,13 @@ enum Wrap<T> where T: Comparable { ... }
 
 #### 类型推断
 
+<!-- xr-source:example generics-inference -->
 ```xray
 identity(42)                    // T 推断为 i64
 Box("hello")                // T 推断为 string
 Pair("key", 100)            // K=string, V=i64
 ```
+<!-- /xr-source -->
 
 推断算法是**双向推断**：
 - 从参数推断（调用位置实参类型 → 类型参数）。
@@ -5208,11 +5697,13 @@ Pair("key", 100)            // K=string, V=i64
 
 在推断失败或需要明确时：
 
+<!-- xr-source:example generics-explicit-instantiation -->
 ```xray
 var empty = Array<i64>()              // 无元素可推
 var m = Map<string, i64>()
 var result = identity<f64>(0)            // 泛型实参提供唯一上下文，0 直接定型为 f64
 ```
+<!-- /xr-source -->
 
 ### 9.4 特化与 monomorphization
 
@@ -5257,41 +5748,24 @@ var result = identity<f64>(0)            // 泛型实参提供唯一上下文，
 | 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
 | 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
-### 9.5 协议（duck typing）与名义类型
+### 9.5 名义类型与显式 interface 实现
 
-#### 名义类型为主
+字段或方法集合相同不会产生类型兼容或 interface 实现。具名 interface 由声明显式 `implements`；泛型成员能力按声明的约束取得。对象形状与 `T: { field: Type }` 已删除，不能通过匿名字段集获得成员权限。
 
-xray 的接口实现需**显式 `implements`**——这与 Go 的"隐式接口实现"不同。
-
-```xray
-interface Drawable { draw() -> () }
-
-class Square implements Drawable {        // 必须显式 implements
-    draw() { print("square") }
+<!-- xr-source:example generics-nominal-interface -->
+```xray @check
+interface Named { name() -> string }
+struct User implements Named {
+    value: string
+    name() -> string { return this.value }
 }
-
-class Wrong {
-    draw() { print("wrong") }
-}
-
-fn render(d: Drawable) { d.draw() }
-render(Square())     // OK
-// render(Wrong())   // 编译错误：Wrong 不是 Drawable
+fn show<T: Named>(value: T) -> string { return value.name() }
+var user = User{value: "A"}
+var text = show(user)
 ```
+<!-- /xr-source -->
 
-#### 结构化对象
-
-仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
-
-```xray
-type Point = { x: f64, y: f64 }
-
-fn describe(p: Point) { ... }
-
-describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
-describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
-describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
-```
+struct 展开的字段子集检查只用于构造一个写明类型的目标，不建立宽度子类型或隐式 interface 实现。
 
 ### 9.6 方差（Variance）
 
@@ -5300,7 +5774,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 - 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
 - 函数类型：参数逆变、返回值协变（标准规则）。
 
-**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+声明点方差仍是独立的未实现能力，本任务只删除结构对象，不改变容器不变性或既有函数类型规则；不能通过字段集合相同推导新的子类型关系。
 
 ### 9.6.1 高阶类型（HKT）
 
@@ -5314,6 +5788,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 
 由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typeName` 的冷路径名字表提供：
 
+<!-- xr-source:example generics-type-identity -->
 ```xray
 class Container<T> {
     items: Array<T>
@@ -5322,6 +5797,7 @@ var c = Container<i64>()
 print(c is Container<i64>)     // true
 print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
+<!-- /xr-source -->
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
 
@@ -5359,14 +5835,17 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 
 ### 10.2 `go` — 启动协程
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-01 -->
 ```ebnf
-GoExpr   ::= 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
-GoOption ::= 'name' ':' StringLiteral
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 ```
+<!-- /xr-source -->
 
 `go` 是**表达式**，返回 `Task<T, E>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
+<!-- xr-source:example coro-go-forms -->
 ```xray @fragment
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
@@ -5384,24 +5863,29 @@ var t3 = go fn() -> i64 {
 // 可选调试名称
 var named = go(name: "worker-1") worker(1, channel)
 ```
+<!-- /xr-source -->
 
 **按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，无需额外复制标记。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
+<!-- xr-source:example coro-move-argument -->
 ```xray @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
 }(data)            // 保存逻辑副本，调用方 data 仍可使用
 ```
+<!-- /xr-source -->
 
 `go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，参数按声明的 READ 或消费模式处理：
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-003 -->
 ```xray
 var n = 10
 var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T, E>`，其中 `T` 是被调函数的返回类型，`E` 是其声明的错误类型，默认 `Never`。返回 Unit 的任务仍保留 Unit 成功值，不把它映射成 `null`。
@@ -5413,12 +5897,15 @@ var task = go fn(x: i64) -> i64 {
 
 ### 10.3 `await` — 等待结果
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-02 -->
 ```ebnf
 AwaitExpr ::= 'await' UnaryExpr
 ```
+<!-- /xr-source -->
 
 `await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。`E = Never` 时 `await t` 不抛业务错误，不写 `try`；否则传播标记顺序固定为 `try await t`，在 `try { }` 区域内可直接写 `await t`。
 
+<!-- xr-source:example coro-await-forms -->
 ```xray @fragment
 var job = go compute(1)            // Task<i64, Never>
 var n = await job                  // 不抛业务错误，不写 try
@@ -5432,6 +5919,7 @@ var first = try Task.first(tasks)
 var firstOk = try Task.firstSuccess(tasks)
 var bounded = try Task.timeout(task, 1000)
 ```
+<!-- /xr-source -->
 
 - 等待的业务错误类型就是 Task 的 `E`，无需从任务创建点或函数体反推错误集合。取消不是业务错误，不进入这个类型。
 - 子任务的 enum 错误沿值错误通道传播，panic 沿 panic 通道传播。成功的 `null` 是真实 Optional 结果，不表示任务取消或失败。
@@ -5468,11 +5956,13 @@ var bounded = try Task.timeout(task, 1000)
 | `t.poll()` | `fn() -> TaskResult<T, E>?` | 非阻塞；未完成时返回 `null` |
 | `t.awaitResult()` | `fn() -> TaskResult<T, E>` | 挂起等待终态，以值报告而不重抛子任务的错误或 panic |
 
+<!-- xr-source:example coro-task-handle -->
 ```xray @fragment
 var t = go fetch(url)
 if (t.poll() == null) { print("running") }
 var outcome = t.awaitResult()
 ```
+<!-- /xr-source -->
 
 `TaskResult<T, E>` 只有四种终态：`Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`。括号表示载荷类型，不是构造语法或字段名声明；未完成由 `poll()` 的外层 Optional 表达，超时由 `Task.timeout` 的错误表达。`awaitResult()` 返回终态不意味着当前等待者免于取消展开。
 
@@ -5484,18 +5974,22 @@ var outcome = t.awaitResult()
 
 ### 10.5 Channel
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-03 -->
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
+<!-- /xr-source -->
 
 Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
+<!-- xr-source:example channel-decl-variants -->
 ```xray
 const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
 const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
 const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 ```
+<!-- /xr-source -->
 
 构造时必须能确定元素类型：写 `Channel<T>(n)`，或由类型上下文给出；不从后续 `send` 推断。
 
@@ -5521,11 +6015,13 @@ const cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
+<!-- xr-source:example channel-param-type -->
 ```xray
 fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - **MPMC**（多生产者多消费者）。
@@ -5538,26 +6034,33 @@ fn producer(ch: Channel<i64>) {
 
 `select` 在多个 channel 操作中多路复用；非阻塞分支用 `_` 占位。
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-04 -->
 ```ebnf
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
-RecvArm    ::= Identifier 'from' Expression '->' Block
-SendArm    ::= Expression 'to' Expression '->' Block
-TimeoutArm ::= 'after' Expression '->' Block
-DefaultArm ::= '_' '->' Block
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
+RecvArm    ::= Identifier 'from' Expression '=>' Block
+SendArm    ::= Expression 'to' Expression '=>' Block
+TimeoutArm ::= 'after' Expression '=>' Block
+DefaultArm ::= '_' '=>' Block
 ```
+<!-- /xr-source -->
 
-```xray
+<!-- xr-source:example coro-select -->
+```xray @fragment
 const ch1 = Channel<i64>(2)
 const ch2 = Channel<i64>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
-    msg from ch2 -> { print("got from ch2:", msg) }      // 接收分支
-    100  to   ch1 -> { print("sent 100 to ch1") }        // 发送分支
-    _ -> { print("no channel ready") }                   // 默认分支（非阻塞）
+    msg from ch1 => { print("got from ch1:", msg) }      // 接收分支
+    msg from ch2 => { print("got from ch2:", msg) }      // 接收分支
+    100  to   ch1 => { print("sent 100 to ch1") }        // 发送分支
+    _ => { print("no channel ready") }                   // 默认分支（非阻塞）
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
@@ -5569,10 +6072,12 @@ select {
 
 `scope` 只表示结构化并发；普通词法作用域直接写 `{ ... }`。scope 子任务是在该块中、不含嵌套函数正文的 `go` 所启动的任务。块内没有这样的 `go` 时编译报错并提示改用普通块。
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-05 -->
 ```ebnf
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
+<!-- /xr-source -->
 
 两种 scope 都是语句，不返回聚合值；退出前等待所有成员任务终结和清理完成。会传播业务错误时写 `try scope`，或者将 scope 放入真实 `try { }` 的保护区域。`try scope` 只标记 scope 退出处的隐式传播，不建立保护区域；主体内会抛业务错误的调用仍须有 `try` / `try?` / `try!`，或处于外层真实 try 主体的词法保护区域。保护范围不进入嵌套函数或闭包，也不包含该 try 的同级 handler。
 
@@ -5585,6 +6090,7 @@ TryScopeStmt ::= 'try' ScopeStmt
 
 正常块末仅 join 成员；主体 Error、Panic 或向外 return/break/continue 时，两种 scope 都取消并 drain 已接管成员。isolated 的子失败本身不取消兄弟。待履行的正常控制转移必须拥有其值并保活主体帧和有效借用；只有 drain 后没有更高优先级失败才履行，不能用 return 吞掉子 panic。多个 panic 选择首个成功发布者，不承诺墙钟顺序；其余失败保留原始载荷用于次级诊断并按唯一拥有责任释放。isolated 主体错误直接传播时，子业务错误仅作次级诊断，不隐式包装主体错误。
 
+<!-- xr-source:example coro-scope -->
 ```xray @check
 fn worker(n: i64) -> i64 { return n + 1 }
 fn main() {
@@ -5598,6 +6104,7 @@ fn main() {
 }
 main()
 ```
+<!-- /xr-source -->
 
 完整类型及操作族的当前实现资格见 §17。
 
@@ -5605,9 +6112,11 @@ scope 自身引起的子任务取消不算失败，独立取消的成员也不�
 
 ### 10.8 `move` — 所有权转移
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-06 -->
 ```ebnf
 MoveExpr ::= 'move' Identifier
 ```
+<!-- /xr-source -->
 
 `move x` 保证转移时不复制，并使源绑定失效。允许的源是当前函数已初始化的局部变量、局部常量和消费参数，且不能穿过活动借用。字段、索引、调用结果、模块绑定及 READ/ref 参数不能作为源。被拒绝的移动保持源状态。
 
@@ -5633,11 +6142,13 @@ Mutex 与 RwLock 的回调默认不逃逸。写回调的 `ref T` 指向锁内实
 
 **声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-010 -->
 ```xray
 const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
 const rate = Atomic(3.14)         // Atomic<f64>
 ```
+<!-- /xr-source -->
 
 **方法一览**（完整签名见 §14.19）：
 
@@ -5656,6 +6167,7 @@ const rate = Atomic(3.14)         // Atomic<f64>
 
 所有接受 `ord?` 参数的方法均可传入 `Ordering` 枚举指定内存序，默认 `SeqCst`（最强保证）。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-011 -->
 ```xray
 enum Ordering {
     Relaxed,          // 无跨线程排序保证
@@ -5665,6 +6177,7 @@ enum Ordering {
     SeqCst,           // 顺序一致（默认）
 }
 ```
+<!-- /xr-source -->
 
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
@@ -5696,25 +6209,31 @@ i64 的加减按 §2.3.1 模 2^64 环绕。f64 的构造、load、store、swap �
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
 
+<!-- xr-source:example 011-10-concurrency-and-coroutines-example-012 -->
 ```xray
 const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
+<!-- /xr-source -->
 
 
 ### 10.10 `Task.yieldNow()` — 让出 CPU
 
+<!-- xr-source:grammar 011-10-concurrency-and-coroutines-grammar-07 -->
 ```ebnf
 TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example coro-yield-loop -->
 ```xray @fragment
 for (i in 0..1000) {
     do_chunk(i)
     Task.yieldNow()                // 主动 safepoint，让其他协程有机会跑
 }
 ```
+<!-- /xr-source -->
 
 `Task.yieldNow()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
@@ -5757,7 +6276,7 @@ Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。F
 
 ## 11. 模块系统 (Modules)
 
-> 真值源：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
+> 实现参考：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
 
 ### 11.1 模块定义
 
@@ -5796,15 +6315,18 @@ local_utils = { path = "../local_utils" }
 
 `import` 声明**只能出现在模块顶层**。在函数、类或任何嵌套作用域内使用 `import` 会产生编译错误。
 
+<!-- xr-source:grammar 012-11-modules-grammar-01 -->
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
-ImportModule  ::= StringLiteral | ModuleName
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 ModuleName    ::= Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-import -->
 ```xray
 // 1. stdlib：裸标识符；没有 `as` 时别名等于模块名
 import time
@@ -5823,6 +6345,7 @@ import "../utils/string_utils" as utils
 import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
+<!-- /xr-source -->
 
 **不支持**：
 - JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
@@ -5847,14 +6370,17 @@ import { publicFn } from "./modules/mod_a"
 
 `export` 可见性**只能出现在模块顶层声明上**。跨模块重导出仍是独立声明：
 
+<!-- xr-source:grammar 012-11-modules-grammar-02 -->
 ```ebnf
 Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
-Visibility  ::= 'export'
+Visibility ::= 'export'
 ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
               | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-export -->
 ```xray
 // 1. 声明自身携带 export 可见性
 export fn helper() { return }
@@ -5870,6 +6396,7 @@ export { getUser, getUserAge as getAge } from "./user"
 // 3. 通配重导出（把另一个模块的全部 export 转出）
 export * from "./product"
 ```
+<!-- /xr-source -->
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
@@ -5911,26 +6438,32 @@ XRAY_API void register_time_module(xray_vm_t* vm) {
 
 xray 端用法相同：
 
+<!-- xr-source:example modules-use -->
 ```xray
 import time
 var t = time.now()
 time.sleep(100)
 ```
+<!-- /xr-source -->
+
+
 ### 11.8 完整可运行示例
 
 从标准库按需导入与命名空间导入：
 
+<!-- xr-source:example 012-11-modules-example-004 -->
 ```xray
 import { sha256 } from crypto
 import math
 
 fn main() {
-    print(math.sqrt(144.0))   // => 12.0
-    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+    print(math.sqrt(144.0))   // 输出：12.0
+    print(sha256("xray"))     // 输出：1a46e6a6...（SHA-256 摘要）
 }
 
 main()
 ```
+<!-- /xr-source -->
 
 ---
 
@@ -5942,10 +6475,13 @@ main()
 
 xray 用 **`@test` 注解**标注测试函数，**不**通过 `test("...")` 函数调用形式。
 
+<!-- xr-source:grammar 013-12-testing-grammar-01 -->
 ```ebnf
 TestDecl ::= '@test' FnDecl
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example testing-basic -->
 ```xray
 @test
 fn test_addition() {
@@ -5959,6 +6495,7 @@ fn test_with_assertions() {
     assert(result > 0)
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `@test` 标注的函数会被 `xray test` 自动发现并运行；普通函数不会。
@@ -5999,6 +6536,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 
 `@test` 函数体内可使用 `go`、`await` 及 `Task.all` / `Task.first` 等聚合等待（§10.3）：
 
+<!-- xr-source:example testing-async -->
 ```xray
 @test
 fn test_async_fetch() {
@@ -6007,6 +6545,7 @@ fn test_async_fetch() {
     assertEqual(result.status, 200)
 }
 ```
+<!-- /xr-source -->
 
 ### 12.5 注解（Attributes）总览
 
@@ -6028,6 +6567,7 @@ xray 的公开注解来自唯一 attribute registry；可用 `xray language attr
 
 effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
 
+<!-- xr-source:example testing-attributes -->
 ```xray
 import codegen
 
@@ -6055,6 +6595,7 @@ fn measuredKernel(value: u64) -> u64 {
     return measuredDispatchBoundary(hidden)
 }
 ```
+<!-- /xr-source -->
 
 > `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
 
@@ -6072,7 +6613,7 @@ fn measuredKernel(value: u64) -> u64 {
 
 ## 13. 内置函数 (Built-in Functions)
 
-> 真值源：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
+> 实现参考：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
 
 不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，只是文档占位符，不是源码中的类型名。
 
@@ -6120,6 +6661,7 @@ fn measuredKernel(value: u64) -> u64 {
 
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
+<!-- xr-source:example builtin-typeOf-is -->
 ```xray
 var x = 42
 print(typeOf(x) == Type.i64)    // true
@@ -6127,6 +6669,7 @@ print(typeName(x))              // "i64"
 print(x is i64)                 // true
 // typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
+<!-- /xr-source -->
 
 ### 13.4 协程
 
@@ -6182,7 +6725,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 ## 14. 内置类型方法 (Built-in Type Methods)
 
-> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
+> 实现参考：prelude / analyzer / runtime 中的内置类型注册与方法定义。
 > MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
 
 本节按主题汇总每种内置类型的方法、签名和行为。
@@ -6298,6 +6841,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 普通 read 参数不能成为这些 ref 方法的可写 receiver；可复制 Array 不声明 move receiver，pop 删除元素也不消费整个 Array。下表的 ref 是声明模式，dot-call 仍写 `a.push(x)`。纯索引 GET-place 的快照消除及瞬时 retain/copy/drop 必须遵守 §3.0 的错误保持要求，不能以共享 backing 的唯一性猜测绕过访问权限。
 
+<!-- xr-source:example array-ref-current-binding -->
 ```xray
 var a: Array<string> = ["old"]
 fn replaceForPush() -> string {
@@ -6308,12 +6852,15 @@ fn replaceForPush() -> string {
 a.push(replaceForPush())
 print(a[0], a[1])           // 依次输出 arg、new tail
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-push-own-element -->
 ```xray
 var a: Array<string> = ["head"]
 a.push(a[0])
 print(a[0], a[1])           // head head
 ```
+<!-- /xr-source -->
 
 同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入27个成员（25个实例方法、withCapacity和capacity）；sort当前仅接Array<i64>的零实参升序调用，比较器与其它元素类型仍拒绝。未准入的五个实例方法为iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
@@ -6394,7 +6941,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
+**Map 字面量**：`{"k1": v1, "k2": v2}`，空 `{}` 需要类型上下文。键为表达式；重复显式键与展开规则见 §3.10。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -6419,7 +6966,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 按插入序调用精确 `fn(T)->()` |
 | `iterator()` | 迭代协议 |
 
-**Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+**Set 构造**：`Set([1, 2, 3])`；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。
 
 `values()` 以同样的零参数 READ 和拥有式快照规则返回 `Array<T>`，按首次插入顺序排列；重复添加不改变位置，删除后重新添加位于末尾。
 
@@ -6452,7 +6999,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | 静态函数 | 说明 |
 |--|--|
 | `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
-| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，直接返回 JSON.Object 或 JSON.Value |
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
 | `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
@@ -6467,8 +7014,10 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
-```xray
-type Request = { action: string, userId: i64 }
+<!-- xr-source:example json-boundary-and-path -->
+```xray @check
+struct Request { action: string; userId: i64 }
+var body = "{\"action\":\"create\",\"userId\":7}"
 
 var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
 var payload = JSON.parseObject(body)          // JSON.Object，即 Map
@@ -6478,8 +7027,9 @@ var path: JSON.Path = ["user", "profile", "name"]
 var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
+<!-- /xr-source -->
 
-JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；struct、数组和其他复合值仍通过 `JSON.value(...)` 显式编码。`{"name": "alice"}` 是 Map 字面量；在 `JSON.Object` 上下文中，键为 string，值按现有标量规则进入 JSON.Value。固定字段的类型化解码目标使用 struct。
 
 ### 14.12 `Range`
 
@@ -6498,6 +7048,7 @@ JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Val
 
 计数结果为 `i64`；若数学上的元素数量超过 `i64` 上限，返回 `MAX_I64`（`9223372036854775807`），不发生整数回绕。
 
+<!-- xr-source:example range-members -->
 ```xray
 var pages = 1..=3
 print(pages.start)          // 1
@@ -6509,6 +7060,7 @@ print(pages.toArray())      // [1, 2, 3]
 var empty = 5..5
 print(len(empty))           // 0
 ```
+<!-- /xr-source -->
 
 ### 14.13 `DateTime`
 
@@ -6586,7 +7138,7 @@ print(len(empty))           // 0
 
 ## 15. 标准库概览 (Standard Library)
 
-> 真值源：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
+> 实现参考：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
@@ -6780,6 +7332,7 @@ L0 在特化后判定类型是否可能成环，L1 允许通过 `weak` 显式断
 
 内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
+<!-- xr-source:example 017-16-runtime-model-example-001 -->
 ```xray
 class PanicInfo {
     message: string             // 人类可读消息
@@ -6792,6 +7345,7 @@ class PanicInfo {
     fn toString() -> string
 }
 ```
+<!-- /xr-source -->
 
 用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
@@ -6900,7 +7454,7 @@ class PanicInfo {
 
 ## 17. 编译流水线 (Compilation Pipeline)
 
-> 真值源：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
+> 实现参考：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
 
 ### 17.1 两条执行路径
 
@@ -8122,6 +8676,9 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
+| `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Map 字面量中静态可确定的两个显式键重复 |
+| `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | 无上下文的集合字面量无法取得同一元素、键或值类型 |
+| `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | 命名实参绑定错误：未知、重复、顺序、rest 或间接调用 |
 
 #### 错误签名诊断（编号已登记，实现待接通）
 
@@ -8218,6 +8775,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.5 |
 | `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
+| `E0434` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY_RUNTIME` | Map 字面量构造时发现两个显式键重复；消息含两处源位置 |
 
 #### 系统、调用、coroutine 与 stdlib
 
@@ -8279,33 +8837,29 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 ## 附录 A. EBNF 语法
 
-> 真值源：`src/frontend/parser/xparse_*.c`。本附录给出整理后的紧凑 EBNF；具体冲突由 parser 实现决议。
+> 规范源：`spec/source/grammar/language.ebnf`。正文与本附录使用同一组产生式。解析器实现须接受一致性测试；目标规则的存在不表示当前实现已经支持。
 
 ### A.1 词法层
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-01 -->
 ```ebnf
 SourceFile ::= Statement*
-
 Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
-
 Identifier ::= IdStart IdContinue*
 IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
-// 源文件先整体校验为 UTF-8；lexer 将任意非 ASCII UTF-8 字节视为 identifier 字节，当前不做 XID/NFC 归一化。
-
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
 HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
 BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
 OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
-
 FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
+              |  '.' DecimalInt Exponent?
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
-
 BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
-
 QuotedLiteral ::= StringLiteral | FixedByteLiteral
 StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
 FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
@@ -8318,19 +8872,20 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
-
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
 ```
+<!-- /xr-source -->
 
 ### A.2 类型
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-02 -->
 ```ebnf
 Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8338,22 +8893,20 @@ FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? Ret
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
                      | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
-ObjectType  ::= '{' FieldList? '}'
-FieldList   ::= ObjectField (',' ObjectField)* ','?
-ObjectField ::= Identifier ':' Type
 QualifiedIdent ::= Identifier ('.' Identifier)*
 TypeArgs    ::= '<' Type (',' Type)* '>'
 TypeList    ::= Type (',' Type)*
 ```
+<!-- /xr-source -->
 
 ### A.3 表达式
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-03 -->
 ```ebnf
 Expression ::= AssignExpr
 AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
-
 TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
 NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
@@ -8367,8 +8920,7 @@ RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
 MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
-// range 松于所有算术运算符、紧于比较，非结合（a..b..c 是语法错误）；安全转换写为 `x as T?`，T? 是可空类型。
-
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'copy' UnaryExpr
@@ -8377,13 +8929,11 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
-
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
-
 GoExpr    ::= 'go' GoOptions? CallExpr
-GoOptions ::= '(' 'name' ':' StringLiteral ')'
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+GoOption ::= 'name' ':' StringLiteral | 'main' | 'background' | 'pinned'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
-
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
              |  '.' Identifier                 // member
@@ -8393,46 +8943,40 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | StructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
          |  MatchExpr
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
-
 ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
 ArrayElem ::= '...' Expression | Expression
-MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
-MapEntry ::= Expression ':' Expression
-SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
-ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
-
-ArrowLambda ::= Identifier '->' (Expression | Block)
-              | '(' ArrowParams? ')' '->' (Expression | Block)
+MapLit   ::= '{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= '...' Expression | Expression ':' Expression
+StructLit ::= NamedType '{' (StructEntry (',' StructEntry)* ','?)? '}'
+StructEntry ::= '...' Expression | Identifier ':' Expression
+ArrowLambda ::= Identifier '=>' (Expression | Block)
+              | '(' ArrowParams? ')' '=>' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
-
 ComptimeExpr ::= 'comptime' (Expression | Block)
-
-MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
-
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ArgList ::= CallArg (',' CallArg)* ','?
-CallArg ::= ('ref' | 'out') Expression
-          | '...' Expression
-          | '_'
-          | Expression
+CallArg ::= NamedCallArg | PositionalCallArg | '...' Expression | '_'
+NamedCallArg ::= Identifier ':' ArgumentValue
+PositionalCallArg ::= ArgumentValue
+ArgumentValue ::= ('ref' | 'move')? Expression
 ```
+<!-- /xr-source -->
 
 `try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，后接 `scope` 时解析为 `TryScopeStmt`（§10.7），其余情况解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
 
@@ -8440,6 +8984,7 @@ CallArg ::= ('ref' | 'out') Expression
 
 ### A.4 模式
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-04 -->
 ```ebnf
 Pattern ::= LiteralPattern
          |  RangePattern
@@ -8448,7 +8993,8 @@ Pattern ::= LiteralPattern
          |  WildcardPattern
          |  BindingPattern
          |  MultiPattern
-
+         |  TuplePattern
+         |  ArrayPattern
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= EnumVariantPath
@@ -8461,10 +9007,15 @@ TypePattern     ::= 'is' Type Identifier?
 WildcardPattern ::= '_'
 BindingPattern  ::= Identifier
 MultiPattern    ::= Pattern (',' Pattern)+
+TuplePattern ::= '(' ')' | '(' Pattern ',' (Pattern (',' Pattern)* ','?)? ')'
+ArrayPattern ::= '[' (ArrayPatternItem (',' ArrayPatternItem)* ','?)? ']'
+ArrayPatternItem ::= Identifier | '_' | '..' Identifier?
 ```
+<!-- /xr-source -->
 
 ### A.5 语句
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-05 -->
 ```ebnf
 Statement ::= ExprStmt
            |  IncDecStmt
@@ -8484,6 +9035,7 @@ Statement ::= ExprStmt
            |  ForStmt
            |  ForInStmt
            |  ForRefStmt
+           |  ForInTupleStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
@@ -8497,103 +9049,92 @@ Statement ::= ExprStmt
            |  DeferStmt
            |  YieldStmt
            |  Block
-           // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
+           // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
 
-// LineBreak 不是一个 token：它是"行结尾在此结束语句"这一判定的结果。
-// 判定规则（上一 token 可结束表达式 + 新行首 token 可开始表达式 + 不在
-// '(' / '[' 之内）是规范性的，完整定义见 §1.2.1。
+// LineBreak is not a token: it is the outcome of deciding that a line ending
+// terminates the statement here. That decision (previous token can end an
+// expression + the new line's first token can begin one + not inside '(' / '[')
+// is normative; see §1.2.1 for the full definition.
 ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
-
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
-ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
-MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
-
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 BreakStmt    ::= 'break' Identifier?
 ContinueStmt ::= 'continue' Identifier?
-
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' '(' CatchHeader ')' Block
              |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
 CatchHeader ::= Identifier (':' Type)?
              |  EnumPattern (',' EnumPattern)*
-
 DeferStmt ::= 'defer' Block
 
-// print 是普通全局函数调用，语法上属于 ExprStmt。
+// print is a normal global function call, syntactically an ExprStmt.
 
-// go 是表达式，返回 Task<T, E>。不作为独立语句类别出现（封装在 ExprStmt 中）。
-
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
 ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
-
 SelectStmt ::= 'select' '{' SelectArm+ '}'
-SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
-            |  Expression 'to' Expression '->' Block        // 发送
-            |  'after' Expression '->' Block                // 超时
-            |  '_' '->' Block                                // 默认
-
+SelectArm  ::= Identifier 'from' Expression '=>' Block      // receive
+            |  Expression 'to' Expression '=>' Block        // send
+            |  'after' Expression '=>' Block                // timeout
+            |  '_' '=>' Block                                // default
 YieldStmt ::= 'yield' Expression
 ```
+<!-- /xr-source -->
 
 ### A.6 声明
 
+<!-- xr-source:grammar 020-appendix-a-ebnf-grammar-06 -->
 ```ebnf
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-Binding ::= BindingPattern (':' Type)? ('=' Expression)?
-BindingPattern ::= Identifier
-                |  '[' BindingPattern (',' BindingPattern)* ','? ']'
-                |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
-ObjectBinding ::= Identifier (':' Identifier)?
-
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
 ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
-              // 公开可见性是默认语义；final 只作为 class 前缀
-
+              // public visibility is the default; final is only a class prefix
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
-TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
-
 ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | InitDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
-
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
-
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
-
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
@@ -8603,9 +9144,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
-
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
@@ -8614,21 +9153,22 @@ ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
-
 AttrList ::= PublicAttribute*
 PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
                   | '@derive' '(' Identifier (',' Identifier)* ')'
 ```
+<!-- /xr-source -->
 
-> 注：以上 EBNF 为指导性整理。precedence、associativity、消歧由 parser 实现决议；遇到歧义请以 `src/frontend/parser/xparse_*.c` 为准。
+> 本文法与正文中的优先级、结合性和消歧约束共同定义目标语法。冲突须修正规范或实现，不能以当前解析器自动裁决；有限测试也不构成全语法等价证明。
 
 ---
 
 ## 附录 B. 关键字索引
 
-以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`isolated`、`from`、`to`、`after`、`panic`、`nosuspend` 是上下文词，不在本表；`parallel` 是标准库模块名。
+<!-- xr-source:keywords index -->
+下表由当前词法声明生成。它记录实际保留集，不证明相关功能已实现。上下文词见 §1.5.8；`out` 是普通标识符。
 
 | 关键字 | 节 |
 |--|--|
@@ -8695,6 +9235,7 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
 | `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
+<!-- /xr-source -->
 
 ---
 
@@ -8710,6 +9251,7 @@ PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
 | 逻辑 | `&&` `\|\|` `!` |
 | 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | 语句 | `++` `--` |
+| 值映射 | `=>` |
 | 类型、范围与展开 | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---
@@ -8763,7 +9305,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 条件 | truthy / falsy | 条件必须是 `bool`；nullable 存在性须显式比较 `value != null`，i64/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 i64↔f64 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
+| 对象 | 动态字段 | `{key: value}` 为 Map；固定字段使用名义 struct，动态 JSON 使用 `JSON.Object` |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 

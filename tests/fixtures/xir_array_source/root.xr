@@ -217,7 +217,7 @@ export fn enumAggregate() -> string {
     items[0] = items[1]
     items.push(ItemChoice.Empty)
     return match(first<ItemChoice>(items)) {
-        ItemChoice.Text{text} -> text,
-        ItemChoice.Empty -> "wrong"
+        ItemChoice.Text{text} => text,
+        ItemChoice.Empty => "wrong",
     }
 }

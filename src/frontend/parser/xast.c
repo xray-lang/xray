@@ -1029,41 +1029,6 @@ AstNode *xr_ast_tuple_literal(XrCompilerSession *session, AstNode **elements, in
     return node;
 }
 
-// Create object literal node (static structure)
-// keys: key expression array (usually string literals)
-// values: value expression array
-// count: key-value pair count
-AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
-                               int count, int line) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    AstNode *node = alloc_node(session, AST_OBJECT_LITERAL, line);
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    node->as.object_literal.count = count;
-
-    // Copy key-value pair array
-    if (count > 0) {
-        do {
-            node->as.object_literal.keys =
-            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
-            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        } while (0);
-        do {
-            node->as.object_literal.values =
-            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
-            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        } while (0);
-        for (int i = 0; i < count; i++) {
-            if (!ast_copy(session, &node->as.object_literal.keys[i], &keys[i], sizeof(node->as.object_literal.keys[i]))) return NULL;
-            if (!ast_copy(session, &node->as.object_literal.values[i], &values[i], sizeof(node->as.object_literal.values[i]))) return NULL;
-        }
-    } else {
-        node->as.object_literal.keys = NULL;
-        node->as.object_literal.values = NULL;
-    }
-
-    return node;
-}
-
 // Create Map literal node (dynamic container)
 // keys: key expression array
 // values: value expression array
@@ -1097,32 +1062,6 @@ AstNode *xr_ast_map_literal(XrCompilerSession *session, AstNode **keys, AstNode 
     }
 
     // compile_type set by type inference, not here (avoid analyzer pool dependency)
-
-    return node;
-}
-
-// Create Set literal node
-// elements: element expression array
-// count: element count
-AstNode *xr_ast_set_literal(XrCompilerSession *session, AstNode **elements, int count, int line) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    AstNode *node = alloc_node(session, AST_SET_LITERAL, line);
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    node->as.set_literal.count = count;
-
-    // Copy element array
-    if (count > 0) {
-        do {
-            node->as.set_literal.elements =
-            (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) count);
-            if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-        } while (0);
-        for (int i = 0; i < count; i++) {
-            if (!ast_copy(session, &node->as.set_literal.elements[i], &elements[i], sizeof(node->as.set_literal.elements[i]))) return NULL;
-        }
-    } else {
-        node->as.set_literal.elements = NULL;
-    }
 
     return node;
 }
@@ -1857,19 +1796,6 @@ AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, char *
     return node;
 }
 
-// Create object match pattern node: { x, y } / { x: sub }
-AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, AstNode **patterns,
-                               int count, int line) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    AstNode *node = alloc_node(session, AST_PATTERN_OBJECT, line);
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    node->as.pattern_object.field_names = field_names;
-    node->as.pattern_object.patterns = patterns;
-    node->as.pattern_object.count = count;
-    node->as.pattern_object.field_name_spans = NULL;
-    return node;
-}
-
 // Create array match pattern node: [a, b, ..rest]
 AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, int count,
                               bool has_rest, char *rest_name, int line) {
@@ -2047,12 +1973,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "ReturnStmt";
         case AST_ARRAY_LITERAL:
             return "ArrayLiteral";
-        case AST_OBJECT_LITERAL:
-            return "ObjectLiteral";
         case AST_MAP_LITERAL:
             return "MapLiteral";
-        case AST_SET_LITERAL:
-            return "SetLiteral";
         case AST_TUPLE_LITERAL:
             return "TupleLiteral";
         case AST_INDEX_GET:
@@ -2133,8 +2055,6 @@ const char *xr_ast_typename(AstNodeType type) {
             return "PatternTuple";
         case AST_PATTERN_ADT:
             return "PatternAdt";
-        case AST_PATTERN_OBJECT:
-            return "PatternObject";
         case AST_PATTERN_ARRAY:
             return "PatternArray";
         case AST_PATTERN_TYPE:
@@ -2441,19 +2361,6 @@ void xr_ast_print(AstNode *node, int indent) {
             }
             break;
 
-        // Data structure literal nodes
-        case AST_OBJECT_LITERAL:
-            printf(" {%d pairs} (object)\n", node->as.object_literal.count);
-            for (int i = 0; i < node->as.object_literal.count; i++) {
-                printf("%*s", (indent + 1) * 2, "");
-                printf("Key %d:", i);
-                xr_ast_print(node->as.object_literal.keys[i], indent + 2);
-                printf("%*s", (indent + 1) * 2, "");
-                printf("Value %d:", i);
-                xr_ast_print(node->as.object_literal.values[i], indent + 2);
-            }
-            break;
-
         case AST_MAP_LITERAL:
             printf(" {%d pairs} (map)\n", node->as.map_literal.count);
             for (int i = 0; i < node->as.map_literal.count; i++) {
@@ -2463,13 +2370,6 @@ void xr_ast_print(AstNode *node, int indent) {
                 printf("%*s", (indent + 1) * 2, "");
                 printf("Value %d:", i);
                 xr_ast_print(node->as.map_literal.values[i], indent + 2);
-            }
-            break;
-
-        case AST_SET_LITERAL:
-            printf(" #[%d elements] (set)\n", node->as.set_literal.count);
-            for (int i = 0; i < node->as.set_literal.count; i++) {
-                xr_ast_print(node->as.set_literal.elements[i], indent + 1);
             }
             break;
 
@@ -2690,24 +2590,6 @@ XrDestructurePattern *xr_pattern_tuple(XrCompilerSession *session, XrDestructure
     pattern->type = PATTERN_TUPLE;
     pattern->as.array.elements = elements;
     pattern->as.array.element_count = count;
-    return pattern;
-}
-
-// Create object destructuring pattern (curly braces)
-// var {name, age} = person or var {name: userName} = person
-XrDestructurePattern *xr_pattern_object(XrCompilerSession *session, char **fields,
-                                        XrDestructurePattern **patterns, int count,
-                                        bool use_shorthand) {
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    (void) session;
-    XrDestructurePattern *pattern =
-        (XrDestructurePattern *) ast_alloc(session, sizeof(XrDestructurePattern));
-    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    pattern->type = PATTERN_OBJECT;
-    pattern->as.object.field_names = fields;
-    pattern->as.object.patterns = patterns;
-    pattern->as.object.field_count = count;
-    pattern->as.object.use_shorthand = use_shorthand;
     return pattern;
 }
 

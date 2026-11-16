@@ -6,14 +6,14 @@ class Bag {
     }
 
     scores() -> Map<i64, i64> {
-        var scores: Map<i64, i64> = #{}
+        var scores: Map<i64, i64> = {}
         scores.set(1, this.value)
         scores[2] = this.value
         return scores
     }
 
     seen() -> Set<i64> {
-        var seen: Set<i64> = #[]
+        var seen: Set<i64> = Set()
         seen.add(this.value)
         return seen
     }

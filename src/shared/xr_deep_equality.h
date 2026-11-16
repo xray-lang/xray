@@ -39,7 +39,6 @@ typedef enum XrDeepEqualityKind {
     XR_DEEP_EQUALITY_TUPLE,
     XR_DEEP_EQUALITY_MAP,
     XR_DEEP_EQUALITY_SET,
-    XR_DEEP_EQUALITY_STRUCT_OBJECT,
     XR_DEEP_EQUALITY_DERIVED_INSTANCE,
     XR_DEEP_EQUALITY_ENUM,
     XR_DEEP_EQUALITY_KIND_COUNT,
@@ -66,8 +65,6 @@ typedef struct XrDeepEqualityOps {
     bool (*set_entry)(void *adapter, XrValue set, uint32_t slot, bool *present, XrValue *value);
     bool (*set_contains_key_equivalent)(void *adapter, XrValue set, XrValue value,
                                         bool *contains);
-    bool (*struct_field_pair)(void *adapter, XrValue left, XrValue right, uint32_t left_ordinal,
-                              XrValue *left_value, XrValue *right_value);
 } XrDeepEqualityOps;
 
 typedef struct XrDeepEqualityPair {
@@ -181,27 +178,6 @@ static inline bool xr_deep_equality_set(XrDeepEqualityContext *ctx, XrValue left
     return equal;
 }
 
-static inline bool xr_deep_equality_struct(XrDeepEqualityContext *ctx, XrValue left,
-                                           XrValue right, const XrDeepEqualityNode *left_node,
-                                           const XrDeepEqualityNode *right_node) {
-    if (!ctx->ops->struct_field_pair || left_node->nominal_identity != right_node->nominal_identity ||
-        left_node->logical_count != right_node->logical_count)
-        return false;
-    bool already_seen = false;
-    if (!xr_deep_equality_enter(ctx, left_node, right_node, &already_seen))
-        return false;
-    bool equal = true;
-    for (uint32_t i = 0; !already_seen && equal && i < left_node->logical_count; i++) {
-        XrValue left_value = {0};
-        XrValue right_value = {0};
-        equal = ctx->ops->struct_field_pair(ctx->adapter, left, right, i, &left_value,
-                                            &right_value) &&
-                xr_deep_equality_value(ctx, left_value, right_value);
-    }
-    xr_deep_equality_leave(ctx, already_seen);
-    return equal;
-}
-
 static inline bool xr_deep_equality_value(XrDeepEqualityContext *ctx, XrValue left,
                                           XrValue right) {
     if (!ctx || !ctx->ops || !ctx->ops->describe || !ctx->ops->fallback_equal)
@@ -227,8 +203,6 @@ static inline bool xr_deep_equality_value(XrDeepEqualityContext *ctx, XrValue le
             return xr_deep_equality_map(ctx, left, right, &left_node, &right_node);
         case XR_DEEP_EQUALITY_SET:
             return xr_deep_equality_set(ctx, left, right, &left_node, &right_node);
-        case XR_DEEP_EQUALITY_STRUCT_OBJECT:
-            return xr_deep_equality_struct(ctx, left, right, &left_node, &right_node);
         case XR_DEEP_EQUALITY_DERIVED_INSTANCE:
             if (left_node.nominal_identity != right_node.nominal_identity)
                 return false;

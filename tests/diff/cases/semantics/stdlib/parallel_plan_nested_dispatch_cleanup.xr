@@ -1,11 +1,11 @@
 import parallel
 
-const seqPlan = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)
+const seqPlan = parallel.Plan<i64>(parallel.Options(1), (lane) => lane)
 
 try {
-    seqPlan.forEach(0..4, (state, i) -> {
+    seqPlan.forEach(0..4, (state, i) => {
         if (i == 0) {
-            seqPlan.forEach(0..1, (innerState, j) -> {
+            seqPlan.forEach(0..1, (innerState, j) => {
                 print(innerState + j)
             })
         }
@@ -13,23 +13,23 @@ try {
     print("seq-miss")
 } catch (e) {
     match (e) {
-        parallel.ParallelError.ConcurrentDispatch -> print("seq-concurrent")
-        _ -> print("seq-other")
+        parallel.ParallelError.ConcurrentDispatch => print("seq-concurrent"),
+        _ => print("seq-other"),
     }
 }
 
 const seqTouched = Atomic<i64>(0)
-seqPlan.forEach(0..4, (state, i) -> {
+seqPlan.forEach(0..4, (state, i) => {
     seqTouched.add(1, Ordering.Relaxed)
 })
 print(seqTouched.load(Ordering.Relaxed) == 4)
 
-const vmPlan = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
+const vmPlan = parallel.Plan<i64>(parallel.Options(2), (lane) => lane)
 
 try {
-    vmPlan.forEach(0..20000, (state, i) -> {
+    vmPlan.forEach(0..20000, (state, i) => {
         if (i == 10000) {
-            vmPlan.forEach(0..1, (innerState, j) -> {
+            vmPlan.forEach(0..1, (innerState, j) => {
                 print(innerState + j)
             })
         }
@@ -37,13 +37,13 @@ try {
     print("vm-miss")
 } catch (e) {
     match (e) {
-        parallel.ParallelError.ConcurrentDispatch -> print("vm-concurrent")
-        _ -> print("vm-other")
+        parallel.ParallelError.ConcurrentDispatch => print("vm-concurrent"),
+        _ => print("vm-other"),
     }
 }
 
 const vmTouched = Atomic<i64>(0)
-vmPlan.forEach(0..4, (state, i) -> {
+vmPlan.forEach(0..4, (state, i) => {
     vmTouched.add(1, Ordering.Relaxed)
 })
 print(vmTouched.load(Ordering.Relaxed) == 4)

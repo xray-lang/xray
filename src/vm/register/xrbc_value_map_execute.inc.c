@@ -6,6 +6,42 @@
  *
  * xrbc_value_map_execute.inc.c - Fixed Map owners and common binding updates
  */
+static XrtManagedStatus rbc_value_map_literal(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
+    if (!access.index || access.index > module->map_literal_count || !module->map_literals)
+        return XRT_MANAGED_ARGUMENT;
+    const XrtMapLiteral *literal = &module->map_literals[access.index - 1];
+    if (literal->count > activation->snapshot_capacity / sizeof(XrtMapLiteralInput)) return XRT_MANAGED_ARGUMENT;
+    XrtMapLiteralInput *inputs = (XrtMapLiteralInput *)activation->snapshots;
+    uint32_t operand = 0;
+    for (size_t n = 0; n < literal->count; ++n) {
+        if (operand >= access.count) return XRT_MANAGED_ARGUMENT;
+        uint32_t value = activation->code->arguments[access.first + operand++];
+        if (literal->items[n].kind) {
+            XrtPlace place;
+            const XrtManagedHeader *header = NULL;
+            XrtManagedStatus status = rbc_value_place(rbc_value_origin(activation,value),false,0,&place);
+            if (status == XRT_MANAGED_OK) status = xrt_place_borrow(place,&header);
+            if (status != XRT_MANAGED_OK) return status;
+            inputs[n] = (XrtMapLiteralInput){.source.spread=(const XrtMapBacking *)header};
+        } else {
+            const XrtStringBacking *key = NULL;
+            XrtManagedStatus status = rbc_value_string_borrow(activation,value,&key);
+            if (status != XRT_MANAGED_OK) return status;
+            if (operand >= access.count) return XRT_MANAGED_ARGUMENT;
+            value = activation->code->arguments[access.first + operand++];
+            XrRbcRegister *scalar = rbc_value_register(stack,activation,value);
+            if (!scalar) return XRT_MANAGED_ARGUMENT;
+            inputs[n] = (XrtMapLiteralInput){.source.key=key};
+            memcpy(&inputs[n].value,&scalar->bits,sizeof(inputs[n].value));
+        }
+    }
+    if (operand != access.count) return XRT_MANAGED_ARGUMENT;
+    const XrLirValueHome *home = rbc_value_home(activation->code,access.result);
+    if (!home) return XRT_MANAGED_ARGUMENT;
+    xrt_native_map_literal_create(activation->frame,home->temporary_first_owner,literal,inputs,source);
+    return rbc_value_array_publish(activation,access.result);
+}
 static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *activation,
     XrRbcValueAccess access,const XrtBackingTypes *types) {
     size_t count=access.count/2;

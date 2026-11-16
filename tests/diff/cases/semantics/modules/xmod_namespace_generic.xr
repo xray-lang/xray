@@ -8,8 +8,8 @@ import "./_genbox" as bx
 
 var b = bx.Box<i64>(10)
 print(b.get())                 // 10
-print(b.map((v) -> v * 2))     // 20
+print(b.map((v) => v * 2))     // 20
 
 var s = bx.Box<string>("hi")
 print(s.get())                 // hi
-print(s.map((v) -> v + "!"))   // hi!
+print(s.map((v) => v + "!"))   // hi!

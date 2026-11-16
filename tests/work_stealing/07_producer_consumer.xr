@@ -16,8 +16,8 @@ const done_ch = Channel(10)
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {
-        Recv.Value { value: v } -> v
-        _ -> null
+        Recv.Value { value: v } => v,
+        _ => null,
     }
 }
 

@@ -17,6 +17,7 @@ static void source_semantic_free(SourceSemanticEnvironment *environment) {
     for (uint32_t i=0;i<environment->symbol_count;++i) {
         xr_compile_resources_free((void *)environment->symbols[i].name);
         xr_compile_resources_free((void *)environment->symbols[i].imported);
+        xr_compile_resources_free((void *)environment->symbols[i].constant_key.string.bytes);
     }
     xr_compile_module_graph_free(environment->graph);
     xr_compile_resources_free(environment->latest);
@@ -125,6 +126,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
             SourceName *owned=&environment->symbols[environment->symbol_count++];
             SourceName copy=*symbol;
             copy.next=NULL;copy.name=NULL;copy.imported=NULL;copy.node=NULL;
+            copy.constant_key.string.bytes=NULL;
             copy.typed_binding=(XrHirBodyBinding){0};copy.binding_function=UINT32_MAX;
             if (!source_copy_bytes(ctx,NULL,owned,&copy,sizeof(*owned))) goto failed;
             owned->name=source_semantic_text(ctx,symbol->name);
@@ -134,6 +136,12 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
             }
             owned->imported=source_semantic_text(ctx,symbol->imported);
             if (symbol->imported && !owned->imported) goto failed;
+            if(symbol->constant_key.kind==XR_XIR_KEY_STRING && symbol->constant_key.string.length) {
+                char *bytes=source_semantic_alloc(ctx,symbol->constant_key.string.length,1);
+                if(!bytes)goto failed;
+                owned->constant_key.string.bytes=bytes;
+                if(!source_copy_bytes(ctx,NULL,bytes,symbol->constant_key.string.bytes,symbol->constant_key.string.length))goto failed;
+            }
             if (symbol->node) {
                 bool exact=false;
                 XrModuleStatus status=xr_compile_module_graph_owns_top_level_decl(ctx->graph,

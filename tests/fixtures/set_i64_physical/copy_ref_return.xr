@@ -1,0 +1,12 @@
+fn make() -> Set<i64> { return Set([1, 2, 2]) }
+fn addThird(values: ref Set<i64>) { values.add(3) }
+fn main() {
+    var first = make()
+    var second = first
+    addThird(values: ref second)
+    print(first.contains(3))
+    print(second.contains(3))
+    print(len(first))
+    print(len(second))
+}
+main()

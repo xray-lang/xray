@@ -4,7 +4,7 @@ class Node {
 }
 fn f(n: Node?) -> i64 {
     var cur = n
-    const clear = () -> { cur = null }
+    const clear = () => { cur = null }
     if (cur != null) {
         return cur.v
     }

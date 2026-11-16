@@ -2,7 +2,7 @@ class BoolIntMapBag {
     values: Map<bool, i64>
 
     init() {
-        var values: Map<bool, i64> = #{}
+        var values: Map<bool, i64> = {}
         this.values = values
     }
 

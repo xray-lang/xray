@@ -23,14 +23,14 @@ fn envelope(seed: u8) -> Buffer {
 
 fn receive_buffer(ch: Channel<Buffer>) -> Buffer {
     return match (ch.recv()) {
-        Recv.Value { value } -> value
-        _ -> mem.allocZeroed(0)
+        Recv.Value { value } => value,
+        _ => mem.allocZeroed(0),
     }
 }
 
 @test
 fn test_cluster_transports_only_opaque_envelopes() {
-    var config: ClusterConfig = {
+    var config: ClusterConfig = ClusterConfig{
         name: "opaque-transport-test",
         port: 0,
         secret: null,

@@ -8,7 +8,13 @@
 
 // === Rule 1: const (immutable cross-coroutine sharing) ===
 // Zero-copy reads from any coroutine
-const CONFIG = {
+struct WorkerConfig {
+    host: string
+    port: i64
+    maxRetries: i64
+}
+
+const CONFIG = WorkerConfig{
     host: "localhost",
     port: 8080,
     maxRetries: 3
@@ -35,8 +41,8 @@ fn sender(ch: Channel<i64>) {
 
 go sender(ch)
 var val = match (ch.recv()) {
-    Recv.Value { value: v } -> v
-    _             -> -1
+    Recv.Value { value: v } => v,
+    _             => -1,
 }
 print("received via channel: ${val}")
 ch.close()

@@ -1,0 +1,29 @@
+struct Part { a: i64 }
+struct Whole {
+    a: i64
+    b: string = "default"
+}
+fn part(value: i64) -> Part {
+    print(value)
+    return Part{a: value}
+}
+fn whole() -> Whole {
+    print("source")
+    return Whole{a: 1, b: "source"}
+}
+fn mark(value: i64) -> i64 { print(value); return value }
+var extended = Whole{...part(7), b: "extended"}
+print(extended.a)
+print(extended.b)
+var updated = Whole{...whole(), a: mark(9)}
+print(updated.a)
+print(updated.b)
+var explicit = Whole{a: mark(11), ...whole(), b: "explicit"}
+print(explicit.a)
+print(explicit.b)
+var overridden = Whole{...part(13), ...part(17), a: 19, b: "overridden"}
+print(overridden.a)
+print(overridden.b)
+var fallback = Whole{...part(23)}
+print(fallback.a)
+print(fallback.b)

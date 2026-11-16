@@ -117,7 +117,7 @@ fn ctfeOldGraph() -> i64 {
         if (p.code != 420 || p.replacedError == null) { return -2 }
         try { throw p.replacedError! }
         catch (e: Failure) {
-            return match (e) { Failure.Bad { text: t, number: n } -> t == "old é\0界" && n == 23 ? 42 : -3 }
+            return match (e) { Failure.Bad { text: t, number: n } => t == "old é\0界" && n == 23 ? 42 : -3, }
         }
         catch (e) { return -4 }
     }
@@ -129,7 +129,7 @@ fn ctfeBothMessage() -> string {
         if (p.code != 446 || p.replacedError == null) { return "missing graph" }
         try { throw p.replacedError! }
         catch (e: Failure) {
-            const valid = match (e) { Failure.Bad { text: t, number: n } -> t == "old é\0界" && n == 23 }
+            const valid = match (e) { Failure.Bad { text: t, number: n } => t == "old é\0界" && n == 23, }
             return valid ? p.message : "bad replaced graph"
         }
         catch (e) { return "wrong replaced type" }
@@ -160,7 +160,7 @@ fn ctfeRemaining() -> i64 {
 }
 fn ctfeBusinessLocal() -> i64 {
     try { return caughtCleanup() }
-    catch (e: Failure) { return match (e) { Failure.Bad { text: t, number: n } -> t == "caught" ? n : -1 } }
+    catch (e: Failure) { return match (e) { Failure.Bad { text: t, number: n } => t == "caught" ? n : -1, } }
 }
 fn ctfeDouble() -> i64 { defer { const ignored = remainder(0) }; return divide(0) }
 fn ctfeDouble446() -> i64 { defer { const ignored = try! nextFailure() }; return try! priorFailure() }

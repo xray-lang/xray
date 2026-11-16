@@ -11,6 +11,6 @@ print(lenOf(xs))
 xs.push(4)
 print(lenOf(xs))
 
-var m: Map<string, i64> = #{}
+var m: Map<string, i64> = {}
 m.set("x", 7)
 print(first(m, "x"))

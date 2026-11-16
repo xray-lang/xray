@@ -15,7 +15,7 @@ CASES = [('public',
   'export fn make()->Choice{return Choice.Some{box:Pair{value:7,text:"a\\0b"}}}\n',
   'import {make,Choice} from "./enum-values"\n'
   'const p=comptime make()\n'
-  'match(p){Choice.Empty->print(0),Choice.Some{box}->print(box.value,box.text)}\n',
+  'match(p){Choice.Empty=>print(0),Choice.Some{box}=>print(box.value,box.text),}\n',
   b'7 a\x00b\n'),
  ('fields',
   'struct Box{xs:Array<Array<i8>>;text:string}\n'

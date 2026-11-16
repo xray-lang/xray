@@ -4,7 +4,7 @@ fn worker() -> i64 {
     return 1
 }
 
-parallel.forEach(0..4, (i) -> {
+parallel.forEach(0..4, (i) => {
     var task = go worker()
     print(task)
 }, parallel.Options(2))

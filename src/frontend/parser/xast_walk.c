@@ -305,15 +305,6 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_TUPLE_LITERAL:
             emit_array(w, n->as.tuple_literal.elements, n->as.tuple_literal.count);
             return true;
-        case AST_SET_LITERAL:
-            emit_array(w, n->as.set_literal.elements, n->as.set_literal.count);
-            return true;
-        case AST_OBJECT_LITERAL:
-            for (int i = 0; i < n->as.object_literal.count && !w->stopped; i++) {
-                emit(w, n->as.object_literal.keys ? n->as.object_literal.keys[i] : NULL);
-                emit(w, n->as.object_literal.values ? n->as.object_literal.values[i] : NULL);
-            }
-            return true;
         case AST_MAP_LITERAL:
             for (int i = 0; i < n->as.map_literal.count && !w->stopped; i++) {
                 emit(w, n->as.map_literal.keys ? n->as.map_literal.keys[i] : NULL);
@@ -437,9 +428,6 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             return true;
         case AST_PATTERN_TUPLE:
             emit_array(w, n->as.pattern_tuple.patterns, n->as.pattern_tuple.count);
-            return true;
-        case AST_PATTERN_OBJECT:
-            emit_array(w, n->as.pattern_object.patterns, n->as.pattern_object.count);
             return true;
         case AST_PATTERN_ARRAY:
             emit(w, n->as.pattern_array.rest_binding);
@@ -634,16 +622,6 @@ static void sig_destructure(SigBuf *s, const XrDestructurePattern *p) {
             break;
         case PATTERN_SKIP:
             break;
-        case PATTERN_OBJECT:
-            sig_add(s, "{%d,sh%d}", p->as.object.field_count, p->as.object.use_shorthand ? 1 : 0);
-            for (int i = 0; i < p->as.object.field_count; i++) {
-                sig_add(s, " %s:",
-                        p->as.object.field_names && p->as.object.field_names[i]
-                            ? p->as.object.field_names[i]
-                            : "<null>");
-                sig_destructure(s, p->as.object.patterns ? p->as.object.patterns[i] : NULL);
-            }
-            break;
         case PATTERN_IDENTIFIER:
             sig_name(s, "id", p->as.identifier.name);
             sig_add(s, ":");
@@ -833,16 +811,28 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
                 sig_add(s, " a%u",
                         (unsigned) (n->as.call_expr.arg_accesses ? n->as.call_expr.arg_accesses[i]
                                                                  : 0));
+            if (n->as.call_expr.arg_labels) {
+                for (int i = 0; i < n->as.call_expr.arg_count; ++i)
+                    sig_name(s, "label", n->as.call_expr.arg_labels[i].name);
+            }
             return true;
         case AST_NEW_EXPR:
             sig_name(s, "module", n->as.new_expr.module_name);
             sig_name(s, "class", n->as.new_expr.class_name);
             sig_add(s, " args=%d ns=%d", n->as.new_expr.arg_count,
                     n->as.new_expr.is_type_namespace ? 1 : 0);
+            if (n->as.new_expr.arg_labels) {
+                for (int i = 0; i < n->as.new_expr.arg_count; ++i)
+                    sig_name(s, "label", n->as.new_expr.arg_labels[i].name);
+            }
             return true;
         case AST_SUPER_CALL:
             sig_name(s, "method", n->as.super_call.method_name);
             sig_add(s, " args=%d", n->as.super_call.arg_count);
+            if (n->as.super_call.arg_labels) {
+                for (int i = 0; i < n->as.super_call.arg_count; ++i)
+                    sig_name(s, "label", n->as.super_call.arg_labels[i].name);
+            }
             return true;
         case AST_MEMBER_ACCESS:
             sig_name(s, "name", n->as.member_access.name);
@@ -863,12 +853,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_TUPLE_LITERAL:
             sig_add(s, " n=%d", n->as.tuple_literal.count);
-            return true;
-        case AST_SET_LITERAL:
-            sig_add(s, " n=%d", n->as.set_literal.count);
-            return true;
-        case AST_OBJECT_LITERAL:
-            sig_add(s, " n=%d", n->as.object_literal.count);
             return true;
         case AST_MAP_LITERAL:
             sig_add(s, " n=%d", n->as.map_literal.count);
@@ -1063,13 +1047,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_PATTERN_TUPLE:
             sig_add(s, " n=%d", n->as.pattern_tuple.count);
-            return true;
-        case AST_PATTERN_OBJECT:
-            sig_add(s, " n=%d", n->as.pattern_object.count);
-            for (int i = 0; i < n->as.pattern_object.count; i++)
-                sig_name(s, "f",
-                         n->as.pattern_object.field_names ? n->as.pattern_object.field_names[i]
-                                                          : NULL);
             return true;
         case AST_PATTERN_ARRAY:
             sig_add(s, " n=%d rest=%d", n->as.pattern_array.count,

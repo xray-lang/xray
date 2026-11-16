@@ -2,7 +2,7 @@ var value = 2
 
 try {
     var result = match (value) {
-        1 -> "one"
+        1 => "one",
     }
     print(result)
 } catch panic (p) {

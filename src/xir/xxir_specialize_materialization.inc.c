@@ -51,7 +51,7 @@ static XrXirStatus spec_materialization_construction_base(SpecContext *c,
     XrXirStatus status=xir_construction_project(&c->remaining,module->types,slots,&empty, c->control);
     if (status!=XR_XIR_OK) return status;
     XrXirConstructionSpec input={empty->rows,empty->count,edges,count,NULL,NULL};
-    status=xr_xir_compile_construction_new_v5(&c->remaining,module->types,&input,slots,output, c->control);
+    status=xr_xir_compile_construction_new_v6(&c->remaining,module->types,&input,slots,output, c->control);
     xr_xir_compile_construction_free(empty);return status;
 }
 static XrXirStatus spec_materialization_construction(SpecContext *c,
@@ -79,7 +79,7 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
         XrXirBorrowReturns returns={count?rows:NULL,count};
         XrXirConstructionSpec input={base->rows,base->count,base->materializations,base->materialization_count,
             &base->comptime,&returns};
-        status=xr_xir_compile_construction_new_v5(&c->remaining,module->types,&input,&base->slots,output,c->control);
+        status=xr_xir_compile_construction_new_v6(&c->remaining,module->types,&input,&base->slots,output,c->control);
     }
     xr_xir_compile_construction_free(base);return status;
 }

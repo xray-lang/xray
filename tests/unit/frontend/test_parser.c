@@ -199,7 +199,7 @@ TEST(parser_selective_import_freezes_exact_locator) {
     teardown();
 }
 
-TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
+TEST(parser_block_map_key_and_coroutine_name_use_shared_decoder) {
     setup();
     AstNode *program = parse_ok("var object = {\n"
                                 "    \"\"\"\n"
@@ -212,10 +212,10 @@ TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
                                 "    \"\"\"\n"
                                 ") work()\n");
     AstNode *object = program->as.program.statements[0]->as.var_decl.initializer;
-    ASSERT_EQ_INT(object->type, AST_OBJECT_LITERAL);
-    ASSERT_EQ_INT(object->as.object_literal.count, 1);
-    ASSERT_STR_EQ(object->as.object_literal.keys[0]->as.literal.raw_value.string_val, "key");
-    ASSERT_EQ_INT(object->as.object_literal.keys[0]->as.literal.source_form, XR_LITERAL_BLOCK);
+    ASSERT_EQ_INT(object->type, AST_MAP_LITERAL);
+    ASSERT_EQ_INT(object->as.map_literal.count, 1);
+    ASSERT_STR_EQ(object->as.map_literal.keys[0]->as.literal.raw_value.string_val, "key");
+    ASSERT_EQ_INT(object->as.map_literal.keys[0]->as.literal.source_form, XR_LITERAL_BLOCK);
     AstNode *go_expr = program->as.program.statements[1]->as.var_decl.initializer;
     ASSERT_EQ_INT(go_expr->type, AST_GO_EXPR);
     ASSERT_STR_EQ(go_expr->as.go_expr.name, "worker");
@@ -434,7 +434,7 @@ TEST(parser_for_stmt) {
 
 TEST(parser_select_wildcard_default_arm) {
     setup();
-    AstNode *stmt = parse_first("select {\n  _ -> { print(\"idle\") }\n}");
+    AstNode *stmt = parse_first("select {\n  _ => { print(\"idle\") }\n}");
     ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
     ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
     AstNode *case_node = stmt->as.select_stmt.cases[0];
@@ -448,7 +448,7 @@ TEST(parser_select_wildcard_default_arm) {
 
 TEST(parser_select_channel_arrow_remains_arm_delimiter) {
     setup();
-    AstNode *stmt = parse_first("select {\n  value from ch -> { print(value) }\n}");
+    AstNode *stmt = parse_first("select {\n  value from ch => { print(value) }\n}");
     ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
     ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
     AstNode *case_node = stmt->as.select_stmt.cases[0];
@@ -463,7 +463,7 @@ TEST(parser_select_channel_arrow_remains_arm_delimiter) {
 TEST(parser_select_default_keyword_rejected) {
     setup();
     AstNode *ast = parse_program(X_session,
-                            "select {\n  default -> { print(\"idle\") }\n}");
+                            "select {\n  default => { print(\"idle\") }\n}");
     ASSERT_NULL(ast);
     teardown();
 }
@@ -817,17 +817,17 @@ TEST(parser_index_get) {
     teardown();
 }
 
-/* ========== Object/Map Tests ========== */
+/* ========== Map Tests ========== */
 
-TEST(parser_object_literal) {
+TEST(parser_map_literal_keys_are_expressions) {
     setup();
-    // Object literal in assignment context (bare {} is parsed as block)
+    // Bare identifiers are variable keys; string keys remain literal expressions.
     AstNode *stmt = parse_first("var obj = {a: 1, b: 2}");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_NOT_NULL(init);
-    ASSERT_EQ_INT(init->type, AST_OBJECT_LITERAL);
-    ASSERT_EQ_INT(init->as.object_literal.count, 2);
+    ASSERT_EQ_INT(init->type, AST_MAP_LITERAL);
+    ASSERT_EQ_INT(init->as.map_literal.count, 2);
     teardown();
 }
 
@@ -991,8 +991,8 @@ TEST(parser_enum_record_payload_surface) {
     ASSERT_EQ_INT(construct->as.enum_construct.field_values[0]->type, AST_LITERAL_INT);
 
     AstNode *binding = parse_first("var y = match (x) {\n"
-                                   "  Result.Ok { value } -> value,\n"
-                                   "  Result.Err { error: _ } -> 0\n"
+                                   "  Result.Ok { value } => value,\n"
+                                   "  Result.Err { error: _ } => 0,\n"
                                    "}");
     AstNode *match = binding->as.var_decl.initializer;
     ASSERT_EQ_INT(match->type, AST_MATCH_EXPR);
@@ -1140,7 +1140,7 @@ TEST(parser_rejects_positional_enum_payload_surface) {
     ASSERT_NULL(parse_program(X_session,
                          "enum Result { Ok(i64), Err(string) }"));
     ASSERT_NULL(parse_program(X_session,
-                         "var y = match (x) { Result.Ok(value) -> value }"));
+                         "var y = match (x) { Result.Ok(value) => value }"));
     ASSERT_NULL(parse_program(X_session,
                          "enum Color { Red fn label() -> string { return this.name } }"));
     teardown();
@@ -1207,6 +1207,48 @@ TEST(parser_call_expr) {
     ASSERT_EQ_INT(expr->column, 1);
     ASSERT_EQ_INT(expr->end_line, 1);
     ASSERT_EQ_INT(expr->end_column, 13);
+    teardown();
+}
+
+TEST(parser_call_labels_preserve_order_modes_and_positions) {
+    setup();
+    AstNode *call = parse_expr("foo(1, 2, 3, 4, 5, right: ref x, left: move y)");
+    ASSERT_EQ_INT(call->as.call_expr.arg_count, 7);
+    XrCallArgLabel *labels = call->as.call_expr.arg_labels;
+    ASSERT_NOT_NULL(labels);
+    for (int i = 0; i < 5; ++i) ASSERT_NULL(labels[i].name);
+    ASSERT_STR_EQ(labels[5].name, "right");
+    ASSERT_EQ_INT(labels[5].span.line, 1);
+    ASSERT_EQ_INT(labels[5].span.column, (int)strlen("var __probe = foo(1, 2, 3, 4, 5, ") + 1);
+    ASSERT_STR_EQ(labels[6].name, "left");
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[5], XR_CALL_ARG_REF);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[6], XR_CALL_ARG_MOVE);
+    ASSERT_STR_EQ(call->as.call_expr.arguments[5]->as.variable.name, "x");
+    AstNode *plain = parse_expr("foo(a, b, c)");
+    ASSERT_NULL(plain->as.call_expr.arg_labels);
+    AstNode *generic = parse_expr("foo<i64>(value: 7)");
+    ASSERT_STR_EQ(generic->as.call_expr.arg_labels[0].name, "value");
+    AstNode *construct = parse_expr("Array<i64>(capacity: 8)");
+    ASSERT_EQ_INT(construct->type, AST_NEW_EXPR);
+    ASSERT_STR_EQ(construct->as.new_expr.arg_labels[0].name, "capacity");
+    AstNode *super = parse_expr("super(value: 3)");
+    ASSERT_EQ_INT(super->type, AST_SUPER_CALL);
+    ASSERT_STR_EQ(super->as.super_call.arg_labels[0].name, "value");
+    teardown();
+}
+
+TEST(parser_call_labels_in_templates_keep_original_positions) {
+    setup();
+    const char *source = "var s = \"prefix ${foo(value: 7)}\"";
+    AstNode *decl = parse_first(source);
+    AstNode *templ = decl->as.var_decl.initializer;
+    ASSERT_EQ_INT(templ->type, AST_TEMPLATE_STRING);
+    ASSERT_EQ_INT(templ->as.template_str.part_count, 2);
+    AstNode *call = templ->as.template_str.parts[1];
+    ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(call->as.call_expr.arg_labels[0].span.line, 1);
+    ASSERT_EQ_INT(call->as.call_expr.arg_labels[0].span.column,
+                  (int)(strstr(source, "value:") - source) + 1);
     teardown();
 }
 
@@ -1477,7 +1519,7 @@ TEST(parser_arrow_fn_not_tuple) {
     setup();
     /* `(a, b) -> a + b` must still parse as a function expression,
      * not as a 2-tuple of variable references followed by `->`. */
-    AstNode *stmt = parse_first("var f = (a, b) -> a + b");
+    AstNode *stmt = parse_first("var f = (a, b) => a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     teardown();
@@ -1485,7 +1527,7 @@ TEST(parser_arrow_fn_not_tuple) {
 
 TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     setup();
-    AstNode *stmt = parse_first("var f = (a: i64, b, c: ref i64, d: move Buffer,) -> a + b");
+    AstNode *stmt = parse_first("var f = (a: i64, b, c: ref i64, d: move Buffer,) => a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 4);
@@ -1499,15 +1541,15 @@ TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     ASSERT_EQ_INT(init->as.function_expr.params[3]->passing_mode, XR_PARAM_MOVE);
 
     XrCompilerSession *session = X_session;
-    ASSERT_NULL(parse_program(session, "var f = (ref x) -> x"));
-    ASSERT_NULL(parse_program(session, "var f = (x: i64 = 1) -> x"));
-    ASSERT_NULL(parse_program(session, "var f = (...xs: i64) -> xs"));
+    ASSERT_NULL(parse_program(session, "var f = (ref x) => x"));
+    ASSERT_NULL(parse_program(session, "var f = (x: i64 = 1) => x"));
+    ASSERT_NULL(parse_program(session, "var f = (...xs: i64) => xs"));
     teardown();
 }
 
 TEST(parser_bare_lambda_in_expression_position) {
     setup();
-    AstNode *stmt = parse_first("var f: fn(i64) -> i64 = x -> x * 2");
+    AstNode *stmt = parse_first("var f: fn(i64) -> i64 = x => x * 2");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 1);
@@ -1603,34 +1645,50 @@ TEST(parser_tuple_destructure_for_in) {
     teardown();
 }
 
-TEST(parser_object_destructure_rename) {
+TEST(parser_rejects_removed_object_binding_and_assignment) {
     setup();
-    AstNode *stmt = parse_first("var { name: localName, age } = user");
-    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
-    XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
-    ASSERT_NOT_NULL(p);
-    ASSERT_EQ_INT(p->type, PATTERN_OBJECT);
-    ASSERT_EQ_INT(p->as.object.field_count, 2);
-    ASSERT_STR_EQ(p->as.object.field_names[0], "name");
-    ASSERT_EQ_INT(p->as.object.patterns[0]->type, PATTERN_IDENTIFIER);
-    ASSERT_STR_EQ(p->as.object.patterns[0]->as.identifier.name, "localName");
-    ASSERT_STR_EQ(p->as.object.field_names[1], "age");
-    ASSERT_EQ_INT(p->as.object.patterns[1]->type, PATTERN_IDENTIFIER);
-    ASSERT_STR_EQ(p->as.object.patterns[1]->as.identifier.name, "age");
+    ASSERT_NULL(parse_program(X_session, "var { name: localName, age } = user"));
+    ASSERT_NULL(parse_program(X_session, "({ name: localName, age }) = user"));
     teardown();
 }
 
-TEST(parser_object_destructure_assign_rename) {
+TEST(parser_rejects_removed_object_shapes_patterns_and_prefixes) {
     setup();
-    AstNode *stmt = parse_first("{ name: localName, age } = user");
-    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_ASSIGN);
-    XrDestructurePattern *p = stmt->as.destructure_assign.pattern;
-    ASSERT_NOT_NULL(p);
-    ASSERT_EQ_INT(p->type, PATTERN_OBJECT);
-    ASSERT_EQ_INT(p->as.object.field_count, 2);
-    ASSERT_STR_EQ(p->as.object.field_names[0], "name");
-    ASSERT_EQ_INT(p->as.object.patterns[0]->type, PATTERN_IDENTIFIER);
-    ASSERT_STR_EQ(p->as.object.patterns[0]->as.identifier.name, "localName");
+    const char *invalid[] = {
+        "type Shape = { x: i64 }",
+        "fn inspect<T: { x: i64 }>(v: T) {}",
+        "var a = #{\"x\": 1}",
+        "var a = #[1, 2]",
+        "var a = [\"x\": 1]",
+        "var a = {x}",
+        "var a = match (v) { {x} => x, _ => 0 }"
+    };
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+        ASSERT_NULL(parse_program(X_session, invalid[i]));
+    teardown();
+}
+
+TEST(parser_map_and_struct_spreads_keep_written_order_and_spans) {
+    setup();
+    AstNode *map = parse_expr("{...base, key(): value(), \"x\": 3}");
+    ASSERT_EQ_INT(map->type, AST_MAP_LITERAL);
+    ASSERT_EQ_INT(map->as.map_literal.count, 3);
+    ASSERT_NULL(map->as.map_literal.keys[0]);
+    ASSERT_EQ_INT(map->as.map_literal.values[0]->type, AST_SPREAD_EXPR);
+    ASSERT_EQ_INT(map->as.map_literal.keys[1]->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(map->as.map_literal.values[1]->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(map->as.map_literal.entry_spans[0].key.column,
+                  (int)strlen("var __probe = {") + 1);
+    AstNode *record = parse_expr("Point{...base, x: value(), ...extra}");
+    ASSERT_EQ_INT(record->type, AST_STRUCT_LITERAL);
+    ASSERT_EQ_INT(record->as.struct_literal.field_count, 3);
+    ASSERT_NULL(record->as.struct_literal.field_names[0]);
+    ASSERT_STR_EQ(record->as.struct_literal.field_names[1], "x");
+    ASSERT_NULL(record->as.struct_literal.field_names[2]);
+    ASSERT_EQ_INT(record->as.struct_literal.field_values[0]->type, AST_SPREAD_EXPR);
+    ASSERT_EQ_INT(record->as.struct_literal.field_values[2]->type, AST_SPREAD_EXPR);
+    ASSERT_EQ_INT(record->as.struct_literal.field_name_spans[1].column,
+                  (int)strlen("var __probe = Point{...base, ") + 1);
     teardown();
 }
 
@@ -1685,7 +1743,7 @@ int main(void) {
     RUN_TEST(parser_block_string_normalizes_crlf_and_margin);
     RUN_TEST(parser_non_expression_string_consumers_use_shared_decoder);
     RUN_TEST(parser_selective_import_freezes_exact_locator);
-    RUN_TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder);
+    RUN_TEST(parser_block_map_key_and_coroutine_name_use_shared_decoder);
     RUN_TEST(parser_fixed_bytes_are_one_compact_payload_node);
     RUN_TEST(parser_c_literal_retains_nul_policy_without_element_ast);
     RUN_TEST(parser_q2_is_empty_for_every_prefix_family);
@@ -1731,7 +1789,7 @@ int main(void) {
     // Collections
     RUN_TEST(parser_array_literal);
     RUN_TEST(parser_index_get);
-    RUN_TEST(parser_object_literal);
+    RUN_TEST(parser_map_literal_keys_are_expressions);
 
     // Classes
     RUN_TEST(parser_class_decl);
@@ -1748,6 +1806,8 @@ int main(void) {
 
     // Calls
     RUN_TEST(parser_call_expr);
+    RUN_TEST(parser_call_labels_preserve_order_modes_and_positions);
+    RUN_TEST(parser_call_labels_in_templates_keep_original_positions);
     RUN_TEST(parser_retired_builder_name_is_an_ordinary_identifier);
     RUN_TEST(parser_call_arg_access_markers_only_in_direct_argument_slot);
     RUN_TEST(parser_member_access);
@@ -1775,8 +1835,9 @@ int main(void) {
     RUN_TEST(parser_tuple_destructure_const);
     RUN_TEST(parser_tuple_destructure_fn_param);
     RUN_TEST(parser_tuple_destructure_for_in);
-    RUN_TEST(parser_object_destructure_rename);
-    RUN_TEST(parser_object_destructure_assign_rename);
+    RUN_TEST(parser_rejects_removed_object_binding_and_assignment);
+    RUN_TEST(parser_rejects_removed_object_shapes_patterns_and_prefixes);
+    RUN_TEST(parser_map_and_struct_spreads_keep_written_order_and_spans);
 
     // Error handling
     RUN_TEST(parser_error_returns_null);

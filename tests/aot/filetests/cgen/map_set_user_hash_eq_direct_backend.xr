@@ -16,10 +16,10 @@ class Token implements Hashable {
 
 fn userHashEqPlan() -> i64 {
     var token = Token(7)
-    var values: Map<Token, i64> = #{}
+    var values: Map<Token, i64> = {}
     values.set(token, 99)
     var strict = values[token]
-    var seen: Set<Token> = #[]
+    var seen: Set<Token> = Set()
     seen.add(token)
     if (values.containsKey(token) && seen.contains(token)) {
         seen.delete(token)

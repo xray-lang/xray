@@ -37,7 +37,7 @@ static ParseRule rules[] = {
     // Token type              prefix fn        infix fn        precedence
     [TK_LPAREN] = {xr_parse_grouping, xr_parse_call_expr, PREC_CALL},
     [TK_RPAREN] = {NULL, NULL, PREC_NONE},
-    [TK_LBRACE] = {xr_parse_object_literal, NULL, PREC_NONE},  // Object literal
+    [TK_LBRACE] = {xr_parse_map_literal, NULL, PREC_NONE},  // Map literal
     [TK_RBRACE] = {NULL, NULL, PREC_NONE},
     [TK_LBRACKET] = {xr_parse_array_literal, xr_parse_index_access, PREC_CALL},
     [TK_RBRACKET] = {NULL, NULL, PREC_NONE},
@@ -48,6 +48,7 @@ static ParseRule rules[] = {
     [TK_COLON] = {NULL, NULL, PREC_NONE},
     [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
     [TK_ARROW] = {NULL, xr_parse_bare_lambda, PREC_ASSIGNMENT},
+    [TK_FAT_ARROW] = {NULL, xr_parse_bare_lambda, PREC_ASSIGNMENT},
 
     // Arithmetic operators
     [TK_PLUS] = {NULL, xr_parse_binary, PREC_TERM},
@@ -68,8 +69,6 @@ static ParseRule rules[] = {
     [TK_RSHIFT] = {NULL, xr_parse_binary, PREC_SHIFT},
 
     // New syntax tokens
-    [TK_EMPTY_MAP_START] = {xr_parse_empty_map_literal, NULL, PREC_NONE},  // #{ - empty Map
-    [TK_SET_START] = {xr_parse_set_literal_new, NULL, PREC_NONE},          // #[ - Set literal
 
     // Comparison operators
     [TK_EQ] = {NULL, xr_parse_binary, PREC_EQUALITY},
@@ -276,12 +275,6 @@ static bool line_break_ends_expr(const Parser *parser) {
         return false;
     if (!xr_token_can_end_expr(parser->previous.type))
         return false;
-    /* Inside a match arm's expression body, a line starting with `is` opens
-     * the next arm's type pattern. `is` is infix-only (no prefix rule), so
-     * the generic check below would otherwise glue it onto the previous arm
-     * body as an infix type test. */
-    if (parser->match_arm_body_depth > 0 && parser->current.type == TK_IS)
-        return !xr_parser_in_group(parser);
     if (xr_get_rule(parser->current.type)->prefix == NULL)
         return false;
     return !xr_parser_in_group(parser);
@@ -290,9 +283,9 @@ static bool line_break_ends_expr(const Parser *parser) {
 /* ========== Token Operations ========== */
 
 // Update the open-bracket bitstack for a token that has just been consumed.
-// See Parser::bracket_bits. `(` `[` `?[` `#[` open a *group* (bit 1: no
+// See Parser::bracket_bits. `(` `[` `?[` open a *group* (bit 1: no
 // statement can begin inside, so line breaks must not terminate anything);
-// `{` `#{` open a brace scope (bit 0: statements do begin inside, so line
+// `{` opens a brace scope (bit 0: statements do begin inside, so line
 // breaks terminate normally).
 static void track_bracket(Parser *parser, XrTokenType type) {
     if (!xr_parser_healthy(parser)) return;
@@ -300,13 +293,11 @@ static void track_bracket(Parser *parser, XrTokenType type) {
         case TK_LPAREN:
         case TK_LBRACKET:
         case TK_QUESTION_LBRACKET:
-        case TK_SET_START:
             if (parser->bracket_depth < XR_PARSER_MAX_BRACKET_BITS)
                 parser->bracket_bits |= (uint64_t) 1 << parser->bracket_depth;
             parser->bracket_depth++;
             break;
         case TK_LBRACE:
-        case TK_EMPTY_MAP_START:
             if (parser->bracket_depth < XR_PARSER_MAX_BRACKET_BITS)
                 parser->bracket_bits &= ~((uint64_t) 1 << parser->bracket_depth);
             parser->bracket_depth++;
@@ -404,6 +395,72 @@ int xr_parser_match(Parser *parser, XrTokenType type) {
 }
 
 // Consume token of specified type, or report error
+bool xr_parser_source_token(Parser *parser, const Token *token, Token *output) {
+    if (!xr_parser_healthy(parser) || !token || !output) return false;
+    if (parser->source_token_callback)
+        return parser->source_token_callback(parser->source_token_data, token, output);
+    *output = *token;
+    return true;
+}
+
+void xr_parser_observe_arrow(Parser *parser, const Token *token, bool value_arrow) {
+    if (parser->arrow_syntax_callback)
+        parser->arrow_syntax_callback(parser->arrow_syntax_data, token, value_arrow);
+}
+
+void xr_parser_set_arrow_syntax_callback(Parser *parser, XrParseArrowSyntaxFn callback, void *data) {
+    if (!parser) return;
+    parser->arrow_syntax_callback = callback;
+    parser->arrow_syntax_data = data;
+}
+
+void xr_parser_set_match_arm_syntax_callback(Parser *parser, XrParseMatchArmSyntaxFn callback, void *data) {
+    if (!parser) return;
+    parser->match_arm_syntax_callback = callback;
+    parser->match_arm_syntax_data = data;
+}
+
+bool xr_parser_check_value_arrow(Parser *parser) {
+    return xr_parser_check(parser, TK_FAT_ARROW) || xr_parser_check(parser, TK_ARROW);
+}
+
+void xr_parser_arrow_error(Parser *parser, Token *token, bool value_arrow) {
+    if (!xr_parser_healthy(parser) || parser->panic_mode ||
+        (parser->max_errors > 0 && parser->error_count >= parser->max_errors)) return;
+    if (parser->arrow_error_callback) {
+        parser->had_error = 1;
+        parser->panic_mode = 1;
+        ++parser->error_count;
+        parser->arrow_error_callback(parser->arrow_error_data, token, value_arrow);
+        return;
+    }
+    const char *title = value_arrow ?
+        "use `=>` for lambdas, match arms and select arms; `->` only introduces a type" :
+        "use `->` before a return type or in a function type; `=>` maps a value";
+    const char *repair = value_arrow ? "replace `->` with `=>`" : "replace `=>` with `->`";
+    /* Callback consumers own one message, so retain the repair there instead
+     * of losing the separately rendered console note. */
+    char message[256];
+    if (parser->error_callback) {
+        if (!xr_parser_format(parser, message, sizeof(message), "%s\nnote: %s", title, repair)) return;
+        title = message;
+        repair = NULL;
+    }
+    xr_parser_error_coded_note(parser, token, 0, title, repair);
+}
+
+int xr_parser_match_arrow(Parser *parser, bool value_arrow) {
+    XrTokenType expected = value_arrow ? TK_FAT_ARROW : TK_ARROW;
+    XrTokenType wrong = value_arrow ? TK_ARROW : TK_FAT_ARROW;
+    if (!xr_parser_check(parser, expected)) {
+        if (xr_parser_check(parser, wrong)) xr_parser_arrow_error(parser, &parser->current, value_arrow);
+        return 0;
+    }
+    xr_parser_observe_arrow(parser, &parser->current, value_arrow);
+    xr_parser_advance(parser);
+    return xr_parser_healthy(parser);
+}
+
 void xr_parser_consume(Parser *parser, XrTokenType type, const char *message) {
     if (!xr_parser_healthy(parser)) return;
     XR_DCHECK(parser != NULL, "parser_consume: NULL parser");
@@ -1016,7 +1073,7 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
 
     // Recoverable parsing may reject the prefix expression while leaving an
-    // assignment-like token (for example the removed `=>` match arm syntax)
+    // assignment-like token (for example the malformed `= >` arm delimiter)
     // as the current token. Do not dispatch an infix rule with a NULL left
     // operand; the outer recoverable loop will synchronize at the error.
     if (!first_expr)
@@ -1534,7 +1591,7 @@ AstNode *xr_parse_variable(Parser *parser) {
             do {
                 xr_parser_error_at_previous(
                 parser,
-                "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
+                "'lambda' is not supported. Use 'fn(params) { }' or '(params) => expr' in Xray");
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
         }
@@ -1617,8 +1674,8 @@ AstNode *xr_parse_variable(Parser *parser) {
             if (xr_parser_check(parser, TK_COLON)) {
                 is_struct_literal = true;
             }
-        } else if (xr_parser_check(parser, TK_RBRACE)) {
-            // Empty struct literal: Point{}
+        } else if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            // Empty literals and spread-leading literals retain the nominal prefix.
             is_struct_literal = true;
         }
 
@@ -1690,7 +1747,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         // Arena bulk-frees left/member; no individual free needed.
         return node;
     }
-    // Destructure assignment: [a, b] = arr or (a, b) = pair or {x, y} = obj
+    // Destructure assignment: [a, b] = arr or (a, b) = pair
     else if (left->type == AST_ARRAY_LITERAL) {
         XrDestructurePattern *pattern =
             convert_array_literal_to_pattern(parser, left);
@@ -1717,21 +1774,6 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
             } while (0);
             return NULL;
         }
-        AstNode *value = xr_parse_expression(parser);
-        if (!xr_parser_healthy(parser)) return NULL;
-        return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
-    } else if (left->type == AST_OBJECT_LITERAL) {
-        XrDestructurePattern *pattern =
-            convert_object_literal_to_pattern(parser, left);
-        if (!xr_parser_healthy(parser)) return NULL;
-        if (!pattern) {
-            do {
-                xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-
         AstNode *value = xr_parse_expression(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);

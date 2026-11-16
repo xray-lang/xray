@@ -134,10 +134,18 @@ static XrLirStatus type_pool_build(XrLirModule **module) {
             if (status != XR_LIR_OK) REQUIRE(tuple == XR_LIR_I64);
         }
         if (status == XR_LIR_OK) {
-            XrLirRecordField fields[] = {{"name", 4, XR_LIR_STRING}, {"score", 5, XR_LIR_I64}};
+            XrLirRecordField fields[] = {{"name", 4, XR_LIR_STRING, 0}, {"score", 5, XR_LIR_I64, 0}};
             XrLirType record = XR_LIR_I64;
-            status = xr_lir_record_type(*module, fields, 2, &record);
+            XrLirRecordArgument argument = {XR_LIR_I64, 0};
+            XrLirRecordIdentity identity = {.module="test", .module_length=4, .name="Entry", .name_length=5, .arguments=&argument, .argument_count=1};
+            status = xr_lir_record_type(*module, &identity, fields, 2, &record);
             if (status != XR_LIR_OK) REQUIRE(record == XR_LIR_I64);
+        }
+        if(status==XR_LIR_OK) {
+            XrLirMapLiteralOrigin origins[]={{0,3,12},{1,4,9}};
+            XrLirMapLiteral literal={"app.xr",6,origins,2};uint32_t ordinal=77;
+            status=xr_lir_map_literal_add(*module,&literal,&ordinal);
+            if(status!=XR_LIR_OK)REQUIRE(ordinal==77);
         }
     }
     return status;
@@ -150,8 +158,10 @@ static void callable_import_failures(bool cells, bool records) {
     XrLirType type = XR_LIR_I64;
     for (uint32_t i = 0; i < 16; ++i) {
         if (records) {
-            XrLirRecordField field = {"child", 5, type};
-            REQUIRE(xr_lir_record_type(source, &field, 1, &type) == XR_LIR_OK);
+            XrLirRecordField field = {"child", 5, type, 0};
+            XrLirRecordArgument argument = {type, 0};
+            XrLirRecordIdentity identity = {.module="test", .module_length=4, .name="Chain", .name_length=5, .arguments=&argument, .argument_count=1};
+            REQUIRE(xr_lir_record_type(source, &identity, &field, 1, &type) == XR_LIR_OK);
             REQUIRE(xr_lir_nullable_type(source, type, &type) == XR_LIR_OK);
             continue;
         }

@@ -10,7 +10,7 @@ fn test_fn_type_basic() {
         return f(x)
     }
     
-    var result = apply(5, (n) -> n * 2)
+    var result = apply(5, (n) => n * 2)
     var p19CallableValue0 = result
     assertEqual(p19CallableValue0, 10)
     print(p19CallableValue0)
@@ -28,7 +28,7 @@ fn test_fn_type_void() {
         }
     }
     
-    forEach([1, 2, 3], (x) -> {
+    forEach([1, 2, 3], (x) => {
         count = count + x
     })
     var p19CallableValue1 = count
@@ -44,7 +44,7 @@ fn test_fn_type_no_params() {
         return f()
     }
     
-    var result = callIt(() -> 42)
+    var result = callIt(() => 42)
     var p19CallableValue2 = result
     assertEqual(p19CallableValue2, 42)
     print(p19CallableValue2)
@@ -58,10 +58,10 @@ fn test_fn_type_multi_params() {
         return f(a, b)
     }
     
-    var p19CallableValue3 = combine(3, 4, (a, b) -> a + b)
+    var p19CallableValue3 = combine(3, 4, (a, b) => a + b)
     assertEqual(p19CallableValue3, 7)
     print(p19CallableValue3)
-    var p19CallableValue4 = combine(3, 4, (a, b) -> a * b)
+    var p19CallableValue4 = combine(3, 4, (a, b) => a * b)
     assertEqual(p19CallableValue4, 12)
     print(p19CallableValue4)
 }
@@ -74,7 +74,7 @@ fn test_fn_type_string_return() {
         return f(x)
     }
     
-    var result = transform(42, (n) -> "value: " + string(n))
+    var result = transform(42, (n) => "value: " + string(n))
     var p19CallableValue5 = result
     assertEqual(p19CallableValue5, "value: 42")
     print(p19CallableValue5)
@@ -85,7 +85,7 @@ fn test_fn_type_string_return() {
 @test
 fn test_fn_type_higher_order() {
     fn makeAdder(n: i64) -> fn(i64) -> i64 {
-        return (x) -> x + n
+        return (x) => x + n
     }
     
     var add5 = makeAdder(5)
@@ -105,10 +105,10 @@ fn test_fn_type_nested() {
         return f(f(x))
     }
     
-    var p19CallableValue8 = applyTwice(3, (n) -> n * 2)
+    var p19CallableValue8 = applyTwice(3, (n) => n * 2)
     assertEqual(p19CallableValue8, 12)
     print(p19CallableValue8)
-    var p19CallableValue9 = applyTwice(1, (n) -> n + 10)
+    var p19CallableValue9 = applyTwice(1, (n) => n + 10)
     assertEqual(p19CallableValue9, 21)
     print(p19CallableValue9)
 }
@@ -117,7 +117,7 @@ fn test_fn_type_nested() {
 
 @test
 fn test_fn_type_variable() {
-    var f: fn(i64) -> i64 = (x) -> x * 3
+    var f: fn(i64) -> i64 = (x) => x * 3
     var p19CallableValue10 = f(5)
     assertEqual(p19CallableValue10, 15)
     print(p19CallableValue10)
@@ -131,7 +131,7 @@ fn test_fn_type_optional() {
         return f(x)
     }
     
-    var p19CallableValue11 = maybeApply(5, (n) -> n + 1)
+    var p19CallableValue11 = maybeApply(5, (n) => n + 1)
     assertEqual(p19CallableValue11, 6)
     print(p19CallableValue11)
 }

@@ -19,8 +19,8 @@ class Snapshot {
 }
 
 fn run(n: i64) -> i64 {
-    var values: Map<Key, i64> = #{}
-    var keys: Set<Key> = #[]
+    var values: Map<Key, i64> = {}
+    var keys: Set<Key> = Set()
     var inserted = Key(7, "alpha")
     var snapshot = Snapshot(5)
     values.set(inserted, 41)

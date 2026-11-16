@@ -22,6 +22,17 @@
  * existing deterministic FNV64 content seed, with no new per-instance seed. */
 XR_FUNC XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, XrtStringBacking *const *keys, const int64_t *, size_t count);
+/* Explicit entries remain distinct from overwriting spreads. Duplicate output
+ * changes only on DUPLICATE_KEY and names the first and second explicit input
+ * ordinals. All failures preserve the old slot and retire this pending value. */
+XR_FUNC XrtManagedStatus xrt_map_backing_literal_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, const XrtMapLiteral *, const XrtMapLiteralInput *, XrtMapLiteralDuplicate *);
+/* Synchronous constructor pins precede every allocator callback. Retain either
+ * holds all inputs or refunds its prefix; release consumes that complete hold.
+ * The caller still supplies real typed borrows, not arbitrary pointer bytes. */
+XR_FUNC XrtManagedStatus xrt_map_literal_inputs_retain(const XrtMapLiteral *,
+    const XrtMapLiteralInput *, size_t *capacity);
+XR_FUNC void xrt_map_literal_inputs_drop(const XrtMapLiteral *, const XrtMapLiteralInput *);
 /* A miss publishes value=0 and found=false; a failure leaves both unchanged. */
 XR_FUNC XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *,
     const XrtStringBacking *, int64_t *value, bool *found);

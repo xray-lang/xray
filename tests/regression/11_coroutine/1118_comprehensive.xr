@@ -4,15 +4,15 @@
 
 fn recv_int(r: Recv<i64>) -> i64 {
     return match (r) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
 fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
-        Recv.Value { value: v } -> v
-        _ -> -1
+        Recv.Value { value: v } => v,
+        _ => -1,
     }
 }
 
@@ -38,8 +38,8 @@ fn test_main() {
     task3.cancel()
     var result3 = task3.awaitResult()
     print("cancelled:", match (result3) {
-        TaskResult.Cancelled -> true
-        _ -> false
+        TaskResult.Cancelled => true,
+        _ => false,
     })
     print("cancelled status:", task3.status)
     cancel_ch.close()

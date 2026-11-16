@@ -1,63 +1,64 @@
 // anchor: match-struct-destructure
-// D44: match object `{ x, y }` / `{ x: a }` and array `[a, b, ..rest]` patterns,
+// Named struct fields and array `[a, b, ..rest]` patterns,
 // exercised through the VM/AOT differential runner for parity.
 
-// ---- Object patterns ----
-var p = {x: 3, y: 4}
-match (p) {
-    { x, y } -> { print(x + y) }       // 7
-    _ -> { print(0) }
+// ---- Named struct projections; object patterns have been removed ----
+struct Point {
+    x: i64
+    y: i64
 }
-
-var user = {name: "Bob", age: 5}
-match (user) {
-    { name: n, age } -> {
-        print(n)                        // Bob
-        print(age)                      // 5
-    }
-    _ -> { print("none") }
+struct Person {
+    name: string
+    age: i64
 }
-
-// Object pattern with a refutable field sub-pattern (field reads are null-safe).
-var cfg = {mode: 2, label: "go"}
-match (cfg) {
-    { mode: 1 } -> { print("one") }
-    { mode: 2, label } -> { print("two:" + label) }   // two:go
-    _ -> { print("other") }
+struct Config {
+    mode: i64
+    label: string
+}
+var p = Point{x: 3, y: 4}
+print(p.x + p.y)
+var user = Person{name: "Bob", age: 5}
+print(user.name)
+print(user.age)
+var cfg = Config{mode: 2, label: "go"}
+match (cfg.mode) {
+    1 => { print("one") },
+    2 => { print("two:" + cfg.label) },
+    _ => { print("other") },
 }
 
 // ---- Array patterns ----
 var a = [10, 20, 30]
 match (a) {
-    [first, ..rest] -> {
+    [first, ..rest] => {
         print(first)                    // 10
         print(len(rest))              // 2
         print(rest[0])                  // 20
-    }
-    _ -> { print(-1) }
+    },
+    _ => { print(-1) },
 }
 
 // Length-based arm selection: exact-length arm.
 var pair = [1, 2]
 match (pair) {
-    [x] -> { print("one") }
-    [x, y] -> { print(x * 10 + y) }     // 12
-    _ -> { print(0) }
+    [x] => { print("one") },
+    [x, y] => { print(x * 10 + y) },     // 12
+    _ => { print(0) },
 }
 
 // Empty rest.
 var single = [99]
 match (single) {
-    [head, ..tail] -> {
+    [head, ..tail] => {
         print(head)                     // 99
         print(len(tail))              // 0
-    }
-    _ -> { print(-1) }
+    },
+    _ => { print(-1) },
 }
 
 // Wildcards in element positions.
 var triple = [7, 8, 9]
 match (triple) {
-    [_, mid, _] -> { print(mid) }       // 8
-    _ -> { print(0) }
+    [_, mid, _] => { print(mid) },       // 8
+    _ => { print(0) },
 }

@@ -866,6 +866,7 @@ static void map_retirement_and_lifetimes(void) {
     CHECK(!atomic_load(&strings.audit.bytes) && !atomic_load(&maps.audit.bytes));
 }
 #include "backing_place_cases.h"
+#include "backing_map_literal_cases.h"
 int main(void) {
     setup_failures();
     string_values();
@@ -889,6 +890,9 @@ int main(void) {
     map_cow_and_failures();
     map_collisions_and_growth();
     map_retirement_and_lifetimes();
+    map_literal_semantics();
+    map_literal_rejections();
+    map_literal_callback_lifetimes();
     puts("fixed String, Array and Map backings: operations, rollback, order and retirement passed");
     return 0;
 }

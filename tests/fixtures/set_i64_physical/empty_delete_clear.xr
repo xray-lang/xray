@@ -1,0 +1,13 @@
+fn main() {
+    var values = Set<i64>()
+    print(len(values))
+    print(values.contains(1))
+    values.add(-9223372036854775808)
+    values.add(9223372036854775807)
+    print(values.delete(-9223372036854775808))
+    print(values.delete(-9223372036854775808))
+    print(len(values))
+    values.clear()
+    print(len(values))
+}
+main()

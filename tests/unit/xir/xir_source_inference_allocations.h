@@ -59,7 +59,7 @@ static void inference_source_allocations(void) {
         "var count=0\nfn nop(){count+=1}\n"
         "fn grouped(){return (nop())}\n"
         "fn conditional(){return true ? grouped() : nop()}\n"
-        "fn matched(){return match(true){true->{conditional()},false->nop()}}\n"
+        "fn matched(){return match(true){true=>{conditional()},false=>nop(),}}\n"
         "fn invoke(f:fn()){return f()}\n"
         "export fn answer()->i64{matched();invoke(fn(){return matched()});return count+39}\n");
     inference_source_allocation_fixture(28,"Dead catch initialization region","enum E { Bad {text:string} }\nfn accept(text:string)->string{return text}\nstruct C { const value:string\n init(){try{}catch(E.Bad{text}){this.value=accept(text)};this.value=\"normal\"}}\nconst c=C()\n");

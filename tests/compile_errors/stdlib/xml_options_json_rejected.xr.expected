@@ -1,2 +1,2 @@
 --> 5:29
-type 'JSON.Object' is not assignable to parameter type 'XmlOptions'
+E0327: unknown named argument

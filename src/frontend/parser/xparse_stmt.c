@@ -54,9 +54,7 @@ static bool expr_stmt_is_effectless(const AstNode *expr) {
         case AST_FUNCTION_REF:
         case AST_THIS_EXPR:
         case AST_ARRAY_LITERAL:
-        case AST_OBJECT_LITERAL:
         case AST_MAP_LITERAL:
-        case AST_SET_LITERAL:
         case AST_TUPLE_LITERAL:
         // Pure operators: the result is the only thing they produce.
         case AST_UNARY_NEG:

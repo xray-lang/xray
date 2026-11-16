@@ -1,0 +1,7 @@
+interface Named { name() -> string }
+struct Wrong {
+ value:string
+ name() -> string { return this.value }
+}
+fn show<T: Named>(value:T)->string{return value.name()}
+var text=show(Wrong{value:"x"})

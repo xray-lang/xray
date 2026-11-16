@@ -64,10 +64,10 @@ fn selectWithTimeout() {
     const ch = new Channel(1)
 
     select {
-        msg from ch -> {
+        msg from ch => {
             print("Received: " + msg)
         }
-        _ -> {
+        _ => {
             print("No message, doing default action")
         }
     }
@@ -101,11 +101,11 @@ fn coordinatedShutdown() {
         go fn(id) {
             while (true) {
                 select {
-                    _ from done -> {
+                    _ from done => {
                         print("Worker " + id + " shutting down")
                         return
                     }
-                    _ -> {
+                    _ => {
                         doWork()
                         yield
                     }

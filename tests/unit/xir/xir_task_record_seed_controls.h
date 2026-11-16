@@ -24,7 +24,7 @@ static void *record_seed_allocate(const XrXirCompileContext *context,size_t byte
 #undef xir_compile_alloc
 static bool record_seed_cancelled(const void *unused) {(void)unused;return record_seed_cancel;}
 static const char record_seed_source[]=
-    "const config={name:\"owned\",value:42}\nfn read()->i64{return config.value}\nscope{go read()}";
+    "struct Config{name:string;value:i64}\nconst config=Config{name:\"owned\",value:42}\nfn read()->i64{return config.value}\nscope{go read()}";
 static void scope_record_seed_controls(const XrXirCompileContext *context) {
     uint64_t baseline=held(context->resources);XrXirSourceResult source={0};
     CHECK(check(context,record_seed_source,&source,NULL)==XR_XIR_OK);
@@ -33,7 +33,8 @@ static void scope_record_seed_controls(const XrXirCompileContext *context) {
     for(uint32_t n=0;n<types->count;++n) {
         const XrXirTypeNode *node=types->nodes+n;
         if(node->kind==XR_XIR_TYPE_NOMINAL&&!node->parameter_span&&node->nominal.field_count==2&&
-            (types->nominals->declarations[node->nominal.declaration].flags&XR_XIR_NOMINAL_RECORD)) {
+            types->nominals->declarations[node->nominal.declaration].name.length==6 &&
+            !memcmp(types->nominals->declarations[node->nominal.declaration].name.bytes,"Config",6)) {
             record=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);break;
         }
     }

@@ -5,7 +5,7 @@ print(len(values))
 print(len(values))
 print(len(values) + len(values))
 
-var seen: Set<i64> = #[]
+var seen: Set<i64> = Set()
 seen.add(1)
 seen.add(2)
 seen.add(1)
@@ -13,7 +13,7 @@ print(len(seen))
 print(len(seen))
 print(len(seen) + len(seen))
 
-var scores: Map<string, i64> = #{}
+var scores: Map<string, i64> = {}
 scores.set("a", 10)
 scores.set("b", 20)
 print(len(scores))

@@ -11,10 +11,10 @@ fn skipJoinTry(t: Thread<i64>) {
 
 fn skipJoinMatch(t: Thread<i64>) {
     match (0) {
-        0 -> {
+        0 => {
             return
-        }
-        _ -> {}
+        },
+        _ => {},
     }
     print(t.join())
 }

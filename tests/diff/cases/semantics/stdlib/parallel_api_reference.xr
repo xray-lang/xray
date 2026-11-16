@@ -2,35 +2,35 @@ import parallel
 import { Options, Plan } from parallel
 
 const seen: Atomic<i64> = Atomic<i64>(0)
-parallel.forEach(0..5, (i) -> {
+parallel.forEach(0..5, (i) => {
     seen.add(i, Ordering.Relaxed)
 }, Options(2))
 print(seen.load(Ordering.Relaxed))
 
-var mapped = parallel.map(0..4, (i) -> i * i, Options(0))
+var mapped = parallel.map(0..4, (i) => i * i, Options(0))
 print(len(mapped))
 print(mapped[0])
 print(mapped[3])
 
 var out: Array<i64> = [99]
-parallel.mapInto(1..4, ref out, (i) -> i + 10)
+parallel.mapInto(1..4, ref out, (i) => i + 10)
 print(len(out))
 print(out[0])
 print(out[2])
 
-var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(1))
+var total = parallel.reduce(0..5, 10, (i) => i, (a, b) => a + b, Options(1))
 print(total)
 
 const initSum = Atomic<i64>(0)
-var plan = Plan<i64>(Options(3), (lane) -> {
+var plan = Plan<i64>(Options(3), (lane) => {
     initSum.add(lane, Ordering.Relaxed)
     return 100 + lane
 })
 print(initSum.load(Ordering.Relaxed))
-var planSum = plan.reduce(0..4, 0, (state, i) -> state + i, (a, b) -> a + b)
+var planSum = plan.reduce(0..4, 0, (state, i) => state + i, (a, b) => a + b)
 print(planSum)
 
-var planValues = plan.map(0..3, (state, i) -> state + i)
+var planValues = plan.map(0..3, (state, i) => state + i)
 print(planValues[0] >= 100 && planValues[0] <= 102)
 print(planValues[2] >= 102 && planValues[2] <= 104)
 

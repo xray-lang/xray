@@ -1,0 +1,540 @@
+{
+  "schema": 1,
+  "task": 342,
+  "retirement_base": "8c050f296b83bf551d0ef97f4669cf230621c564",
+  "policy": "Atomic retirement of deleted structural machine assertions; original XR and independent stdout remain. Remaining legal products are not accepted by inventory or model success.",
+  "retired_machine_oracles": [
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_access_direct_field_plan.expect",
+      "retired_oracle_sha256": "edc2bec78995ce214afbac7330f68520c4a12eb90181455330c7dfaca0be8dcc",
+      "source": "tests/aot/filetests/cgen/object_access_direct_field_plan.xr",
+      "original_source_lf_sha256": "9feef7dec5fc4a498d93efa337b3028e72a64d5ca973780221986380d4facfb4",
+      "current_source_lf_sha256": "2a2590824cdaca3ad33a1918815aa3e8868a3ff94564b10d68ab9e8868505eda",
+      "expected_stdout_utf8": "1\n",
+      "retained_responsibilities": [
+        "nominal identity",
+        "direct field read"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_closure_capture_direct_field_plan.expect",
+      "retired_oracle_sha256": "7de6404bfba3bd639c8d9660e852df2d5e78c2f95e9ed646545d76489535554e",
+      "source": "tests/aot/filetests/cgen/object_closure_capture_direct_field_plan.xr",
+      "original_source_lf_sha256": "31126679aef3767f7d39ee368c4febad2e0998e97e54a2587a6a7402bb7f393d",
+      "current_source_lf_sha256": "a6fc9c21bccc08842d948e2013560aaa5966a926260230e1caba2ac09cb64019",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "nominal capture owner",
+        "field read after capture"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "Captured nominal FUNCTION_REF physical binding transport remains unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_container_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_container_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "cafd98edf3a6c96c0aee480d337fdd3db8a41df53a7e25fe72ac7bd4906eb8cf",
+      "current_source_lf_sha256": "31645d94278afe263f78fe9c733c37680c4fc89432b405347dade6170751b87d",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "typed Array element",
+        "nominal receiver field read"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "Array<nominal struct> physical ARRAY_NEW carrier remains unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_destructure_assign_copy_plan.expect",
+      "retired_oracle_sha256": "a17f8d779148bc8c7a92c02bd71f8a07db0bc95d7aac504e6a2c9e291acf9312",
+      "source": "tests/aot/filetests/cgen/object_destructure_assign_copy_plan.xr",
+      "original_source_lf_sha256": "9b7a7ca4aa08c84d5b24371a0f5eb1847e39e483c4711f7a44fd2da8da7d1111",
+      "current_source_lf_sha256": "69f95e98a9099bb032d883d79c447cf8b6b39a809e9203dcbe31265efc24c47f",
+      "expected_stdout_utf8": "Ada:7\n",
+      "retained_responsibilities": [
+        "explicit field read",
+        "assignment retains source fields"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_destructure_copy_plan.expect",
+      "retired_oracle_sha256": "a17f8d779148bc8c7a92c02bd71f8a07db0bc95d7aac504e6a2c9e291acf9312",
+      "source": "tests/aot/filetests/cgen/object_destructure_copy_plan.xr",
+      "original_source_lf_sha256": "cc05f8ed9f0e96f3a3636cfc8bde5ccd7001365f54779a5d522319f7f24147d3",
+      "current_source_lf_sha256": "223ef3fee1d4391d956940b1b0c5b3ab2ac10b073711136ee14dbdba2c9eb1b0",
+      "expected_stdout_utf8": "Ada:7\n",
+      "retained_responsibilities": [
+        "explicit field read",
+        "String copy retains source"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_field_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_field_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "1ff943bf0e4f6d88cfd5ea97dc20548045b2dc8f1539575cf876becaba069b24",
+      "current_source_lf_sha256": "91976ea7ed335776411ceaa20a0c877af0c60512351add40918f0862606e5584",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "nested nominal class field",
+        "original receiver identity"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "Class CALL physical carrier remains unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_generic_width_direct_ordinal.expect",
+      "retired_oracle_sha256": "5ffe5676f1304c1a808fb892a5e023f2eb6c3ba3f459893d92a57ead83492a60",
+      "source": "tests/aot/filetests/cgen/object_generic_width_direct_ordinal.xr",
+      "original_source_lf_sha256": "4070556cf925a3bc2537a80822d70b288b32a594270543ecd5deb9390c997db2",
+      "current_source_lf_sha256": "0a623e05eacf99e12a335c441394c1c48a1c2aaa3033721fd5b714d801e8f46a",
+      "expected_stdout_utf8": "adabobcatdoteve\n",
+      "retained_responsibilities": [
+        "one Named declaration identity",
+        "declared defaults",
+        "five original String results"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_indirect_return_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_indirect_return_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "9349964d7a1892ab9f2a4513e3917ce57b0a38b399ab8b71eade1eb148fef372",
+      "current_source_lf_sha256": "aef74e492c6ce96ee022d66923ac866ed6a9a5282d245ad8f5049b6b0310fac4",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "returned nominal value",
+        "temporary field receiver lifetime"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_method_return_local_direct_field_plan.expect",
+      "retired_oracle_sha256": "dc9f9796b4927059258558086de2ee79cc3673d080030ba17cac92bb84146c2c",
+      "source": "tests/aot/filetests/cgen/object_method_return_local_direct_field_plan.xr",
+      "original_source_lf_sha256": "51021d8fbc05bed38bfd811fb46fdbcfae732dd9c147728898c317387e6d451c",
+      "current_source_lf_sha256": "f43b286f47a15b958e06bf525e03786e5c46c83be1baabd4fb2c101f67d35224",
+      "expected_stdout_utf8": "7\nada\n",
+      "retained_responsibilities": [
+        "class method result",
+        "local replacement",
+        "retained nominal String"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "Class CALL and returned nominal struct physical carrier remain unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_method_return_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_method_return_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "141de52e7a509b84c02163a22e92ec03db6c4760202df4f2e9f12572cb1f955e",
+      "current_source_lf_sha256": "a047fea4b0dc7c694e78fa814bd6bdf15130cf844297a713a9bfba292344cbd9",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "class method result",
+        "temporary field receiver lifetime"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "Class CALL and returned nominal struct receiver physical carrier remain unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_param_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_param_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "5e464349901de2d179cc22e2e4eee85b4fc4169c75e88e7f7bf0b12af838a5d3",
+      "current_source_lf_sha256": "260b7af705f595d575d4db1f9e14520bf02f2f767287d83a53c92f4e9480e2fc",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "nominal parameter owner",
+        "field read"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_return_local_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_return_local_direct_field_plan.xr",
+      "original_source_lf_sha256": "731735b518e5f0bff88a038d12a1377f44fb18743506d732b3d8cf342dd06990",
+      "current_source_lf_sha256": "0a0e63574448af1ed71231775f854bcd7416df2ec2b9c07981dca7fab03d309f",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "returned nominal value",
+        "local field owner"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_return_receiver_direct_field_plan.expect",
+      "retired_oracle_sha256": "237fb9cc29714ef14682cfaa01d3e774691deb1390d5d30605719102d49341df",
+      "source": "tests/aot/filetests/cgen/object_return_receiver_direct_field_plan.xr",
+      "original_source_lf_sha256": "6545e79632d0557ca6127b43afeab82c4122d7b5f0d662059accece68488d15a",
+      "current_source_lf_sha256": "189fa1412ef6801cd88922540936f9516aada0d84114b651908b1aa7ddb95cf2",
+      "expected_stdout_utf8": "7\n",
+      "retained_responsibilities": [
+        "returned nominal value",
+        "temporary field receiver"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_spread_inline_source_merge.expect",
+      "retired_oracle_sha256": "88ec5f87b7b1903cd79179ef5cbdd08ac62d5fa788a67ef26406818e484102ff",
+      "source": "tests/aot/filetests/cgen/object_spread_inline_source_merge.xr",
+      "original_source_lf_sha256": "7b5c4629da139087bfa6bb64a906e6fb3a589cd36d642e7a66c9a08047c74828",
+      "current_source_lf_sha256": "46b99edcdf9595a3b854e4607a9ce112089fafb86445de1846a5afe53a64a31d",
+      "expected_stdout_utf8": "1\n7\n8\n",
+      "retained_responsibilities": [
+        "Map spread",
+        "later write wins",
+        "retained base entries"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_spread_non_native_copy_table.expect",
+      "retired_oracle_sha256": "406e0cd348cc4b1a242f718c81a8383211410df0cddc6cd175f79af7f4d619d4",
+      "source": "tests/aot/filetests/cgen/object_spread_non_native_copy_table.xr",
+      "original_source_lf_sha256": "8e0497be3a953c715992dfd604631b8a637dd508bec2b0c5cbd582c10bddd9c7",
+      "current_source_lf_sha256": "8bc070166b7d79f59761f117579d29d6ccbb3bea6b7cba202b25178d6d35db3a",
+      "expected_stdout_utf8": "7\nbase\ntrue\nnew\n",
+      "retained_responsibilities": [
+        "nested nominal field copy",
+        "JSON value retain",
+        "explicit field override"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "UNACCEPTED_DEPENDENCY",
+      "remaining_dependency": "JSON.Value nominal domain and nested nominal copy remain unaccepted.",
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_spread_side_effect_order_copy_plan.expect",
+      "retired_oracle_sha256": "51f3918ff75785b759b5b34d4fc0268956ad194c7c681af15d9336bc71b72c8b",
+      "source": "tests/aot/filetests/cgen/object_spread_side_effect_order_copy_plan.xr",
+      "original_source_lf_sha256": "41bf3696b15781ce6517985d93ad1768dede61f6a95ef02b4fb0a157945d69f1",
+      "current_source_lf_sha256": "c5c507a2ca21fdabd42a678c555ac32c1ef037347b84bc4c48906fb72476283a",
+      "expected_stdout_utf8": "1234\n30\n31\n4\n",
+      "retained_responsibilities": [
+        "left-to-right evaluation",
+        "Map overwrite order",
+        "spread source evaluation"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/cgen/object_spread_uses_object_merge.expect",
+      "retired_oracle_sha256": "320ae4ed792d4ccf7effa622ddd6cba4555b755e84beab8908856880e867c5a5",
+      "source": "tests/aot/filetests/cgen/object_spread_uses_object_merge.xr",
+      "original_source_lf_sha256": "d9863c2cad1fa9c8b7c9a07fde9483f68ca10593063f9c064b902aacb92ac2bd",
+      "current_source_lf_sha256": "535960a2d2b3e658c35cce2e6857679dacfad7366025e92140dff89fdf9184b8",
+      "expected_stdout_utf8": "1\n9\n",
+      "retained_responsibilities": [
+        "nominal field copy",
+        "explicit override"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/link/object_merge_evidence_dump.expect",
+      "retired_oracle_sha256": "b031984ca00c9859afcc7d25800f792206c9803bb9b110873f3d166895c0e23f",
+      "source": "tests/aot/filetests/link/object_merge_evidence_dump.xr",
+      "original_source_lf_sha256": "d9863c2cad1fa9c8b7c9a07fde9483f68ca10593063f9c064b902aacb92ac2bd",
+      "current_source_lf_sha256": "535960a2d2b3e658c35cce2e6857679dacfad7366025e92140dff89fdf9184b8",
+      "expected_stdout_utf8": "1\n9\n",
+      "retained_responsibilities": [
+        "nominal field copy",
+        "current native runtime ownership"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    },
+    {
+      "retired_oracle": "tests/aot/filetests/link/object_shape_evidence_dump.expect",
+      "retired_oracle_sha256": "0e3368d419b599d1ccfb2142ab9a77ffe09c3023856ab09e26bda926344a82d1",
+      "source": "tests/aot/filetests/link/object_shape_evidence_dump.xr",
+      "original_source_lf_sha256": "ce8ecf32cef60c29ed3c08a9b949911847cd82d747a2edeebb9201e4f36ffae7",
+      "current_source_lf_sha256": "00bd4df5e8fad6c1952429b7d1aff85eb1051423da11aec6128471a97fc53b25",
+      "expected_stdout_utf8": "1\n",
+      "retained_responsibilities": [
+        "nominal declaration identity",
+        "current Source-to-native field read"
+      ],
+      "retired_responsibilities": [
+        "structural object shape/access/width/merge machine plan",
+        "removed --dump-xaot-plan API assertions"
+      ],
+      "product_gate": "REQUIRED",
+      "remaining_dependency": null,
+      "replacement_gate": "task342_nominal_struct_products",
+      "model_is_product_evidence": false
+    }
+  ],
+  "model_inputs": [
+    {
+      "original_source": "tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr",
+      "preserved_model_input_lf_sha256": "3d865fcd62b556cefef18a632cd33fd24b6c652eedec8eb63bc47f3545c08247",
+      "current_source": "tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr",
+      "current_source_lf_sha256": "884a6e2db9f7b942e52a66e1176fe013029bb3451305f07003cda3529090e4e2",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr",
+      "preserved_model_input_lf_sha256": "a44a8f2ce1319e6ba8a1f83320c4b9449d4465d796b6846ea2ec3d1f13432222",
+      "current_source": "tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr",
+      "current_source_lf_sha256": "b2730c9c1e765b90ab2dc3cb6f1ce1a4ac535272afb3c1dd99bd668bca335b39",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
+      "preserved_model_input_lf_sha256": "565be502da48d3e7ff398ecc3dc41e38938af86aba7e53a2c882931a12bb9d6a",
+      "current_source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
+      "current_source_lf_sha256": "7abaeecf02230af6a2b648fa2ca046eb72bec024bd29e0be33379750684488f7",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+      "preserved_model_input_lf_sha256": "f0111fe78a6eb7e824178accc3f8c5c9a8cc547d524042f89d31b39ed2eac471",
+      "current_source": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+      "current_source_lf_sha256": "636d53c6264fb10f1e7a1ba5fdded70438597cb27851c0e195fe73dc062c80ad",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+      "preserved_model_input_lf_sha256": "a639d105c31383cc77f81290a57fa36dc682303d10da64992ff6506e093f8581",
+      "current_source": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+      "current_source_lf_sha256": "46a04a1f524ad7500854dc03acfcab270f7ee8fe671f92440f0e5cd05f8d9cd5",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/object/object_destructure.xr",
+      "preserved_model_input_lf_sha256": "c163e9de6e5b796f74f4d2dca99a2312ca502bc33ab5e68b47e531f0ff1f8231",
+      "current_source": "tests/diff/cases/semantics/object/object_destructure.xr",
+      "current_source_lf_sha256": "6ba70c47bb8697fedd8366d6985c34a892fca0dcf6c2be46fc8ca1c128ca36ff",
+      "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
+    }
+  ],
+  "preexisting_authority_observations": [
+    {
+      "original_source": "spec/source/sections/008-7-scoping-and-name-resolution.md",
+      "preserved_model_input_lf_sha256": "ec46ac53d1f2886e2ff2a5ebf3d5b7bd7e7d99ccf472b8ad64ca4b75f8370fc7",
+      "current_source": "spec/source/sections/008-7-scoping-and-name-resolution.md",
+      "current_source_lf_sha256": "299114740090a142b46916fd60cb34c9a8cff792a4779d7b884ba80dbec053bc",
+      "scope": "PREEXISTING_DIVERGENCE_ONLY_NOT_ACCEPTED_AS_CURRENT_OR_ARCHIVED_AUTHORITY",
+      "base_8c050f296_lf_sha256": "299114740090a142b46916fd60cb34c9a8cff792a4779d7b884ba80dbec053bc",
+      "task342_modified": false
+    },
+    {
+      "original_source": "spec/source/sections/014-13-built-in-functions.md",
+      "preserved_model_input_lf_sha256": "2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380",
+      "current_source": "spec/source/sections/014-13-built-in-functions.md",
+      "current_source_lf_sha256": "97249fea04f298a9968746e8ae77875d971403722e6c12a6736c04539c7a657a",
+      "scope": "PREEXISTING_DIVERGENCE_ONLY_NOT_ACCEPTED_AS_CURRENT_OR_ARCHIVED_AUTHORITY",
+      "base_8c050f296_lf_sha256": "97249fea04f298a9968746e8ae77875d971403722e6c12a6736c04539c7a657a",
+      "task342_modified": false
+    },
+    {
+      "original_source": "stdlib/mem/mem.xr",
+      "preserved_model_input_lf_sha256": "9750e120d6b22f5c2caffd2d59d13238393ac6939c17827090a3829c33fa9dab",
+      "current_source": "stdlib/mem/mem.xr",
+      "current_source_lf_sha256": "4f157b8856255cb4569bf05f6353aa6a2ff9ab3095a26a87be8e93eddb905df1",
+      "scope": "PREEXISTING_DIVERGENCE_ONLY_NOT_ACCEPTED_AS_CURRENT_OR_ARCHIVED_AUTHORITY",
+      "base_8c050f296_lf_sha256": "4f157b8856255cb4569bf05f6353aa6a2ff9ab3095a26a87be8e93eddb905df1",
+      "task342_modified": false
+    },
+    {
+      "original_source": "stdlib/ws/ws.xr",
+      "preserved_model_input_lf_sha256": "fd82ecd9793b8b8312aea5ab480367b1689517fbd1520c2653dfc96b52fcafb0",
+      "current_source": "stdlib/ws/ws.xr",
+      "current_source_lf_sha256": "e24792b0e54776621109017d753635b19767de511f704cda1c3292710037176b",
+      "scope": "PREEXISTING_DIVERGENCE_ONLY_NOT_ACCEPTED_AS_CURRENT_OR_ARCHIVED_AUTHORITY",
+      "base_8c050f296_lf_sha256": "e24792b0e54776621109017d753635b19767de511f704cda1c3292710037176b",
+      "task342_modified": false
+    }
+  ],
+  "preexisting_input_observations": [
+    {
+      "original_source": "tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr",
+      "preserved_model_input_lf_sha256": "883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08",
+      "current_source": "tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr",
+      "current_source_lf_sha256": "883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/regression/13_types/1471_default_read_rest_param.xr",
+      "preserved_model_input_lf_sha256": "363eef017e2a79197fbd24c786533e3167ad5605951a9578ad43ef9d6e1079be",
+      "current_source": "tests/regression/13_types/1471_default_read_rest_param.xr",
+      "current_source_lf_sha256": "363eef017e2a79197fbd24c786533e3167ad5605951a9578ad43ef9d6e1079be",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "363eef017e2a79197fbd24c786533e3167ad5605951a9578ad43ef9d6e1079be",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/regression/13_types/1472_default_read_destructure_param.xr",
+      "preserved_model_input_lf_sha256": "c1675c7e68842ac4c7d4fe075d94dda9d17270294f02b5abbba9b09353a7caf3",
+      "current_source": "tests/regression/13_types/1472_default_read_destructure_param.xr",
+      "current_source_lf_sha256": "c1675c7e68842ac4c7d4fe075d94dda9d17270294f02b5abbba9b09353a7caf3",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "c1675c7e68842ac4c7d4fe075d94dda9d17270294f02b5abbba9b09353a7caf3",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr",
+      "preserved_model_input_lf_sha256": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f",
+      "current_source": "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr",
+      "current_source_lf_sha256": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+      "preserved_model_input_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+      "current_source": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+      "current_source_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr",
+      "preserved_model_input_lf_sha256": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433",
+      "current_source": "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr",
+      "current_source_lf_sha256": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433",
+      "task342_modified": false
+    },
+    {
+      "original_source": "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr",
+      "preserved_model_input_lf_sha256": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2",
+      "current_source": "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr",
+      "current_source_lf_sha256": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2",
+      "scope": "PREEXISTING_SOURCE_DIVERGENCE_NOT_ADMITTED_AS_TASK342_MIGRATION",
+      "base_8c050f296_lf_sha256": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2",
+      "task342_modified": false
+    }
+  ]
+}

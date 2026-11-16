@@ -69,6 +69,20 @@ TEST(lexer_comparison_ops) {
     assert_token(scan_single(">="), TK_GE, ">=");
 }
 
+TEST(lexer_type_and_value_arrows_use_longest_match) {
+    Scanner scanner;
+    lexer_scanner_open(&scanner, "-> => >= == = >", false);
+    const XrTokenType expected[] = {
+        TK_ARROW, TK_FAT_ARROW, TK_GE, TK_EQ, TK_ASSIGN, TK_GT, TK_EOF
+    };
+    const int widths[] = {2, 2, 2, 2, 1, 1, 0};
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        Token token = xr_scanner_scan(&scanner);
+        ASSERT_EQ_INT(token.type, expected[i]);
+        ASSERT_EQ_INT(token.length, widths[i]);
+    }
+}
+
 /* ========== Assignment Operator Tests ========== */
 
 TEST(lexer_assignment_ops) {
@@ -742,6 +756,7 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Comparison Operators");
     RUN_TEST(lexer_comparison_ops);
+    RUN_TEST(lexer_type_and_value_arrows_use_longest_match);
 
     RUN_TEST_SUITE("Assignment Operators");
     RUN_TEST(lexer_assignment_ops);

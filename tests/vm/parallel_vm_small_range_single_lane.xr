@@ -2,10 +2,10 @@ import parallel
 import sys
 
 const initCount = Atomic<i64>(0)
-const tls = sys.ThreadLocal<i64, Never>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
+const tls = sys.ThreadLocal<i64, Never>(() => initCount.fetchAdd(1, Ordering.AcquireRelease))
 const touched = Atomic<i64>(0)
 
-parallel.forEach(0..1, (i) -> {
+parallel.forEach(0..1, (i) => {
     var token = try! tls.get()
     if (token >= 0) {
         touched.add(1, Ordering.Relaxed)

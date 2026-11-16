@@ -74,14 +74,13 @@ typedef struct XrStdlibHandleDefEntry {
     uint16_t field_count;
 } XrStdlibHandleDefEntry;
 
-typedef struct XrStdlibObjectShapeDefEntry {
+typedef struct XrStdlibNominalStructDefEntry {
     const char *module;
     const char *name;
     const char *doc;
     const XrStdlibHandleFieldDefEntry *fields;
     uint16_t field_count;
-    bool exact;
-} XrStdlibObjectShapeDefEntry;
+} XrStdlibNominalStructDefEntry;
 
 typedef struct XrStdlibEnumVariantDefEntry {
     const char *name;
@@ -307,7 +306,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[1] = {0};
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) 0)
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_nominal_struct_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "i64", true},
     {"Coro", "CoroStats", "blocked", "i64", true},
     {"Coro", "CoroStats", "ready", "i64", true},
@@ -315,7 +314,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[
     {"Coro", "CoroStats", "created", "i64", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroInfo[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_nominal_struct_fields_Coro_CoroInfo[] = {
     {"Coro", "CoroInfo", "id", "i64", true},
     {"Coro", "CoroInfo", "name", "string?", true},
     {"Coro", "CoroInfo", "state", "CoroState", true},
@@ -323,17 +322,17 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroInfo[]
     {"Coro", "CoroInfo", "source", "string?", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlock[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_nominal_struct_fields_Coro_CoroDeadlock[] = {
     {"Coro", "CoroDeadlock", "members", "Array<CoroInfo>", true},
     {"Coro", "CoroDeadlock", "reason", "string", true},
 };
 
-static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
-    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
-    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
-    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
+static const XrStdlibNominalStructDefEntry xr_stdlib_nominal_struct_def_entries[] = {
+    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_nominal_struct_fields_Coro_CoroStats, 5},
+    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_nominal_struct_fields_Coro_CoroInfo, 5},
+    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_nominal_struct_fields_Coro_CoroDeadlock, 2},
 };
-#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) 3)
+#define XR_STDLIB_NOMINAL_STRUCT_DEF_ENTRY_COUNT ((uint32_t) 3)
 
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroState_variants[] = {
     {"Unknown", NULL, 0},

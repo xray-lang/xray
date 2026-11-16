@@ -19,7 +19,7 @@ class WeakPlain {
 // （union 字段不在此列——`weak` 只能标引用类型，union 标了是 E0394）
 class WeakMap {
     weak peers: Map<string, WeakMap>?
-    init() { this.peers = #{} }
+    init() { this.peers = {} }
 }
 
 // 对应 BigNode：大对象参与，缓冲走 large_set

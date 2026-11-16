@@ -53,6 +53,7 @@ static XrCompileResourceStatus syntax_call_arguments_observe(XlspSyntaxSnapshot 
     const AstNode *node=syntax->node;
     AstNode *const *nodes=node->type==AST_CALL_EXPR?node->as.call_expr.arguments:node->as.new_expr.arguments;
     if(!nodes)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    const XrCallArgLabel *labels=node->type==AST_CALL_EXPR?node->as.call_expr.arg_labels:node->as.new_expr.arg_labels;
     for(size_t i=0;i<record->argument_count;++i) {
         status=xr_compile_session_poll(session);if(status!=XR_COMPILE_RESOURCE_OK)return status;
         const XrParseArgumentSyntax *input=&syntax->arguments[i];const AstNode *argument=input->node;
@@ -64,6 +65,7 @@ static XrCompileResourceStatus syntax_call_arguments_observe(XlspSyntaxSnapshot 
         XlspSyntaxArgumentRecord *fact=&record->arguments[i];
         fact->address=(uintptr_t)argument;fact->node_id=argument->node_id;fact->type=argument->type;
         fact->start=input->start;fact->end=input->end;
+        fact->has_label=labels&&labels[i].name;
         if(argument->type==AST_VARIABLE) {
             const char *name=argument->as.variable.name;if(!name)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
             if(argument->line<=0||argument->column<=0)continue;

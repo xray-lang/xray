@@ -93,9 +93,13 @@ print("10/3 = ${ok ?? 0.0}")
 print("10/0 = ${bad ?? 0.0} (fallback)")
 
 // Optional chaining on a statically known nullable field
-type InnerValue = { value: i64 }
-type OptionalWrapper = { inner: InnerValue? }
-var obj: OptionalWrapper = { inner: { value: 42 } }
-var empty: OptionalWrapper = { inner: null }
+struct InnerValue {
+    value: i64
+}
+struct OptionalWrapper {
+    inner: InnerValue?
+}
+var obj: OptionalWrapper = OptionalWrapper{ inner: InnerValue{ value: 42 } }
+var empty: OptionalWrapper = OptionalWrapper{ inner: null }
 print("optional chain: ${obj?.inner?.value}")
 print("missing chain: ${empty?.inner?.value}")

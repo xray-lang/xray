@@ -1,0 +1,20 @@
+{
+  "testing-basic": {
+    "fence": "xray @id=testing-basic",
+    "code": "@test\nfn test_addition() {\n    assertEqual(1 + 1, 2)\n}\n\n@test\nfn test_with_assertions() {\n    var result = compute()\n    assertEqual(result, 42)\n    assert(result > 0)\n}"
+  },
+  "testing-async": {
+    "fence": "xray @id=testing-async",
+    "code": "@test\nfn test_async_fetch() {\n    var task = go fetch_data(\"http://...\")\n    var result = await task\n    assertEqual(result.status, 200)\n}"
+  },
+  "testing-attributes": {
+    "fence": "xray @id=testing-attributes",
+    "code": "import codegen\n\n@test                                 // 标记测试\nfn test_basic() { return }\n\n@test(skip)                           // 跳过此测试\nfn test_wip() { return }\n\n@before_each\nfn reset_fixture() { resetState() }\n\n@deprecated(\"use newAPI() instead\")\nfn oldAPI() { return }\n\n@inline\nfn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }\n\n@noinline\nfn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n\nfn measuredKernel(value: u64) -> u64 {\n    var hidden = codegen.opaque(value)\n    codegen.compilerFence()\n    return measuredDispatchBoundary(hidden)\n}",
+    "trivia": {
+      "en": {
+        "4": "                                 // mark as a test\n",
+        "16": "                           // skip this test\n"
+      }
+    }
+  }
+}
