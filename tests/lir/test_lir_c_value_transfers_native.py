@@ -93,14 +93,15 @@ int main(void) {
     XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(Node), .alignment=_Alignof(Node),
         .capacity_offset=SIZE_MAX, .drop_payload=retired};
     OK(xrt_runtime_type_plan_new(billing, &spec, &plan)); OK(xrt_managed_ops_bind(billing, plan, &ops));
-    OK(xrt_managed_root_new(billing, &root)); OK(xrl_frame_1_enter(root, &caller, &caller_payload));
+    OK(xrt_managed_root_new(billing, &root));
+    OK(xrt_managed_frame_enter_payload(root, &xrl_frame_1, &caller, &caller_payload));
     Value *landing_value = at(caller_payload, COPY0_OFFSET);
     fill(caller, landing_value, COPY0_FIRST, ops, 100);
     XrlLanding_1 landing = {caller, COPY0_FIRST, COPY0_TEMP_FIRST, landing_value, at(caller_payload, COPY0_TEMP)};
     for (unsigned iteration = 0; iteration < 2; ++iteration) {
         pod_input.f0 = pod_expected = 5 + iteration; pod_loop.f0 = 0; pod_exit.f0 = 37;
         XrtManagedFrame *callee = NULL; void *payload = NULL;
-        OK(xrl_frame_1_enter(root, &callee, &payload));
+        OK(xrt_managed_frame_enter_payload(root, &xrl_frame_1, &callee, &payload));
         fill(callee, at(payload, COPY0_OFFSET), COPY0_FIRST, ops, 1 + (int)iteration * 10);
         fill(callee, at(payload, COPY1_OFFSET), COPY1_FIRST, ops, 3 + (int)iteration * 10);
         OK(xrl_edge_1_1_1(callee, payload, NULL, &pod_loop, &pod_input)); CHECK(pod_loop.f0 == pod_expected);
