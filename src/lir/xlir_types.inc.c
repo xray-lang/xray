@@ -82,6 +82,11 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
 
 static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
     uint32_t ordinal, XrLirTypeLayout *output) {
+    if (shape.kind == XR_LIR_TYPE_SLICE) {
+        if (shape.count || (shape.element != XR_LIR_I64 && shape.element != XR_LIR_U8)) return false;
+        *output = (XrLirTypeLayout){sizeof(XrtReadonlyArraySlice), _Alignof(XrtReadonlyArraySlice), 0, false};
+        return true;
+    }
     if (lir_fixed_shape(shape)) {
         *output = (XrLirTypeLayout){shape.count, 1, shape.count, false};
         return true;
@@ -260,6 +265,10 @@ XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *m, uint32_t count, XrLirT
 XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *m, const XrLirRecordIdentity *identity, const XrLirRecordField *fields,
     uint32_t count, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_RECORD, 0, count}, NULL, 0, fields, identity, output);
+}
+
+XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *m, XrLirType element, XrLirType *output) {
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, NULL, output);
 }
 XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *m, XrLirType type,
     const XrLirRecordField **fields, uint32_t *count) {

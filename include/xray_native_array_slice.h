@@ -49,11 +49,17 @@ XRAY_API XrtManagedStatus xrt_array_slice_reborrow(const XrtInlineValueHome *,
     XrtBackingArrayKind, const XrtReadonlyArraySlice *, size_t start, size_t count);
 /* Only a confirmed END/cleanup may clear a bundle. Its zero bytes do not form
  * another readable Slice. Each reader consumes an already admitted live loan;
- * these allocation-free operations do not query a compiler pool or acquire RC. */
+ * binding/reborrow has checked the backing extent and element geometry. Normal
+ * readers check only the dynamic index, never revalidate that cold geometry.
+ * They do not query a compiler pool or acquire RC. */
 XRAY_API XrtManagedStatus xrt_array_slice_clear(const XrtInlineValueHome *);
 XRAY_API XrtManagedStatus xrt_array_slice_length(const XrtReadonlyArraySlice *, int64_t *);
 XRAY_API XrtManagedStatus xrt_array_slice_read_bits(const XrtReadonlyArraySlice *,
     XrtBackingArrayKind, int64_t index, uint64_t *);
+/* The live Slice's real keeper protects its source through allocating setup
+ * and copy callbacks. Destination is an ordinary true-empty Array slot. */
+XRAY_API void xrt_native_array_slice_copy(XrtManagedFrame *, size_t,
+    XrtBackingArrayKind, const XrtReadonlyArraySlice *, uint32_t source_id);
 #ifdef __cplusplus
 }
 #endif

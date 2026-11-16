@@ -10,6 +10,7 @@
 #include "lir/xlir_internal.h"
 #include "runtime/native/xnative_string_backing.h"
 #include "xray_native_function.h"
+#include "xray_native_array_slice.h"
 #include "base/xmalloc.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -347,8 +348,46 @@ static void callable_layouts(void) {
     xrt_value_plan_drop((XrtValuePlan *)plan); CHECK(atomic_load(&owner.audit.final) == 1);
     printf("callable signatures: exact contracts, independent dependencies and %zu allocation rollback sites passed\n", allocations);
 }
+static void slice_layouts(void) {
+    XrLirModule *module = NULL, *received = NULL;
+    LIR(xr_lir_module_create(NULL, &module));
+    XrLirType slices[2] = {0}, imported = 0;
+    LIR(xr_lir_slice_type(module, XR_LIR_I64, &slices[0]));
+    LIR(xr_lir_slice_type(module, XR_LIR_U8, &slices[1]));
+    LIR(xr_lir_module_create(NULL, &received));
+    LIR(xr_lir_import_type(received, module, slices[1], &imported));
+    XrLirTypeView shape; LIR(xr_lir_type_view(received, imported, &shape));
+    CHECK(shape.kind == XR_LIR_TYPE_SLICE && shape.element == XR_LIR_U8 && !shape.count);
+    LIR(xr_lir_module_finish(module, NULL));
+    Owner owner; owner_new(&owner, SIZE_MAX);
+    XrLirValueLayoutKey roots[] = {{slices[0],0,0}, {slices[1],0,0}};
+    XrLirValueLayouts *set = NULL;
+    size_t before = xrt_billing_owner_stats(owner.billing).allocations;
+    LAYOUT(xr_lir_value_layouts_create(module, roots, 2, owner.billing, &set));
+    size_t allocations = xrt_billing_owner_stats(owner.billing).allocations - before;
+    const XrtValuePlan *plan = get(set, slices[0]);
+    XrtValuePlanSpec spec = view(plan);
+    CHECK(spec.kind == XRT_VALUE_SLICE_I64 && spec.size == sizeof(XrtReadonlyArraySlice) &&
+        spec.alignment == alignof(XrtReadonlyArraySlice) && !spec.owned_count && !spec.element);
+    CHECK(view(get(set, slices[1])).kind == XRT_VALUE_SLICE_U8);
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)plan));
+    xr_lir_value_layouts_destroy(set); set = NULL;
+    XrtBillingStats baseline = xrt_billing_owner_stats(owner.billing);
+    for (size_t allowed = 0; allowed < allocations; ++allowed) {
+        xrt_billing_owner_fail_after(owner.billing, allowed);
+        CHECK(xr_lir_value_layouts_create(module, roots, 2, owner.billing, &set) == XR_LIR_VALUE_LAYOUT_OOM && !set);
+        XrtBillingStats after = xrt_billing_owner_stats(owner.billing);
+        CHECK(after.bytes == baseline.bytes && after.blocks == baseline.blocks);
+    }
+    xrt_billing_owner_fail_after(owner.billing, SIZE_MAX);
+    xr_lir_module_destroy(module); xr_lir_module_destroy(received);
+    owner_drop(&owner); CHECK(!atomic_load(&owner.audit.final));
+    CHECK(view(plan).size == sizeof(XrtReadonlyArraySlice) && !view(plan).owned_count);
+    xrt_value_plan_drop((XrtValuePlan *)plan); CHECK(atomic_load(&owner.audit.final) == 1);
+}
 int main(void) {
     natural_layouts(); creator_retirement(); failures_and_boundaries(); inline_overflow(); callable_layouts();
+    slice_layouts();
     puts("Admitted LIR value layouts: natural offsets, independent plans, billed rollback and real inline owners passed");
     return 0;
 }

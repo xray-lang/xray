@@ -7,6 +7,8 @@
  * xnative_array_slice.c - Stable keeper publication for readonly natural windows
  */
 #include "xnative_array_slice.h"
+#include "xnative_values.h"
+#include "xray_native_values.h"
 #include <string.h>
 
 static XrtManagedStatus slice_range(const XrtReadonlyArraySlice *slice, XrtBackingArrayKind kind) {
@@ -52,8 +54,12 @@ XRAY_API XrtManagedStatus xrt_array_slice_length(const XrtReadonlyArraySlice *sl
 XRAY_API XrtManagedStatus xrt_array_slice_read_bits(const XrtReadonlyArraySlice *slice,
     XrtBackingArrayKind kind, int64_t index, uint64_t *output) {
     if (!output) return XRT_MANAGED_ARGUMENT;
+    if (!slice || !slice->backing || (kind != XRT_BACKING_ARRAY_I64 && kind != XRT_BACKING_ARRAY_U8))
+        return XRT_MANAGED_ARGUMENT;
+#if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
     XrtManagedStatus status = slice_range(slice, kind);
     if (status != XRT_MANAGED_OK) return status;
+#endif
     if (index < 0 || (uint64_t)index >= slice->count) return XRT_MANAGED_BOUNDS;
     size_t position = slice->start + (size_t)index;
     uint64_t bits = 0;
@@ -72,4 +78,13 @@ XR_FUNCDEF XrtManagedStatus xrt_array_slice_copy_create(XrtManagedFrame *frame, 
     return xrt_array_backing_i64_create(frame, slot, types,
         (const int64_t *)(const void *)(slice->backing->elements + slice->start * sizeof(int64_t)),
         slice->count, slice->count);
+}
+XRAY_API void xrt_native_array_slice_copy(XrtManagedFrame *frame, size_t slot,
+    XrtBackingArrayKind kind, const XrtReadonlyArraySlice *slice, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = slice_range(slice, kind);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK) status = xrt_array_slice_copy_create(frame, slot, types, kind, slice);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }

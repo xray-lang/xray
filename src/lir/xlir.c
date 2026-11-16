@@ -12,6 +12,7 @@
  *   A failed build can only be destroyed, never published for execution.
  */
 #include "xlir_internal.h"
+#include "xray_native_array_slice.h"
 #include "xlir_verify.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

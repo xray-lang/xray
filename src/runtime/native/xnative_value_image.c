@@ -71,7 +71,7 @@ static bool image_shape(const XrtValueImage *image) {
     }
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        if ((unsigned)type->kind > XRT_VALUE_ENVIRONMENT || type->throws > 1 ||
+        if ((unsigned)type->kind > XRT_VALUE_SLICE_U8 || type->throws > 1 ||
             !image_span(type->first_owned, type->owned_count, image->owned_count) ||
             !image_span(type->first_field, type->field_count, image->slot_count) ||
             !image_span(type->first_capture, type->capture_count, image->slot_count) ||
