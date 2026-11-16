@@ -89,6 +89,42 @@ static void pure_captures(void) {
         execute(program,42);
     }
 }
+static void direct_weakened_formal(void) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirCallableParameter parameter={.type=XR_LIR_I64};
+    XrLirCallableType signature={.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64,
+        .flags=XR_LIR_CALLABLE_NO_SUSPEND};
+    XrLirType strong=0,weak=0,scalar=XR_LIR_I64;
+    OK(xr_lir_callable_type(c.module,&signature,&strong));
+    signature.flags=0; OK(xr_lir_callable_type(c.module,&signature,&weak));
+    XrLirFunction target={0},use={0},root={0};
+    XrLirFunctionSpec spec={.name="plus_two",.name_length=8,.parameters=&scalar,.parameter_count=1,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&target));
+    OK(xr_lir_set_closure_target(c.module,target,(XrLirClosureTarget){.callable=strong}));
+    OK(xr_lir_define_function(c.module,target)); XrLirBlock block={0};
+    OK(xr_lir_add_block(c.module,target,NULL,0,&block)); OK(xr_lir_set_entry(c.module,target,block));
+    XrLirValue input={0}; OK(xr_lir_function_parameter(c.module,target,0,&input));
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,input,ca_constant(&c,block,2)));
+    XrLirType parameters[]={weak,scalar};
+    spec=(XrLirFunctionSpec){.name="use_weak",.name_length=8,.parameters=parameters,.parameter_count=2,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&use)); OK(xr_lir_define_function(c.module,use));
+    OK(xr_lir_add_block(c.module,use,NULL,0,&block)); OK(xr_lir_set_entry(c.module,use,block));
+    XrLirValue arguments[2]={{0}};
+    OK(xr_lir_function_parameter(c.module,use,0,&arguments[0]));
+    OK(xr_lir_function_parameter(c.module,use,1,&arguments[1]));
+    ca_return(&c,block,ca_value(&c,block,XR_LIR_CALL_INDIRECT,scalar,arguments,2));
+    spec=(XrLirFunctionSpec){.name="root",.name_length=4,.result=scalar};
+    OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_define_function(c.module,root));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,root,block));
+    XrLirInstruction instruction={.op=XR_LIR_FUNCTION_REF,.type=strong,.callee=target};
+    OK(xr_lir_emit_value(c.module,block,&instruction,&arguments[0]));
+    arguments[1]=ca_constant(&c,block,40);
+    instruction=(XrLirInstruction){.op=XR_LIR_CALL,.type=scalar,.callee=use,.operands=arguments,.operand_count=2};
+    XrLirValue result={0}; OK(xr_lir_emit_value(c.module,block,&instruction,&result));
+    ca_return(&c,block,result); OK(xr_lir_module_finish(c.module,NULL));
+    XrRbcProgram *program=compile(c.module,root);
+    xr_lir_module_destroy(c.module); execute(program,42);
+}
 static void owned_zero_capture(void) {
     CArrayFixture c={0};
     OK(xr_lir_module_create(NULL,&c.module));
@@ -305,6 +341,7 @@ static void scope_receiving(void) {
 
 int main(void) {
     pure_captures();
+    direct_weakened_formal();
     owned_zero_capture();
     supported_and_rejected_captures();
     owned_duplicate_edge();
