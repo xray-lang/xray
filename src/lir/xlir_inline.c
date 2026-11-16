@@ -95,8 +95,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
             xr_lir_value_type(c->input, (XrLirValue){c->input, f + 1, v}, &type);
             info->managed_owners |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL ||
                 type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF || type == XR_LIR_STRING_REF ||
-                type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
-                type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
+                type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
         }
         info->first = c->edge_count;
         for (uint32_t b = 0; b < info->view.block_count; ++b) {

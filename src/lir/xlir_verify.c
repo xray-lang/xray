@@ -46,7 +46,8 @@ XR_FUNC const char *xr_lir_op_name(XrLirOp op) {
     return op > XR_LIR_OP_INVALID && op < XR_LIR_OP_COUNT ? lir_op_names[op] : "invalid";
 }
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bool unit) {
-    if (type < XR_LIR_TYPE_COUNT) return type > XR_LIR_TYPE_INVALID && (unit || type != XR_LIR_UNIT);
+    if (type < XR_LIR_TYPE_COUNT) return type > XR_LIR_TYPE_INVALID && (unit || type != XR_LIR_UNIT) &&
+        type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64;
     return m && m->types && m->type_count <= m->type_capacity && type - XR_LIR_TYPE_COUNT < m->type_count;
 }
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
@@ -130,7 +131,6 @@ static bool lir_signature_matches(const XrLirModule *m, const XrLirFunctionData 
 static const XrLirInstructionView *lir_terminator(const XrLirFunctionData *, uint32_t);
 #include "xlir_state_verify.inc.c"
 #include "xlir_array_verify.inc.c"
-#include "xlir_view_verify.inc.c"
 
 #include "xlir_callable_verify.inc.c"
 
@@ -387,6 +387,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     const XrLirFunctionData *f = &m->functions[function - 1];
     const char *message = "instruction type or signature mismatch";
     if (v->op <= XR_LIR_OP_INVALID || v->op >= XR_LIR_OP_COUNT ||
+        v->op == XR_LIR_VIEW_FRAME_ENTER || v->op == XR_LIR_VIEW_FRAME_LEAVE ||
         !xr_lir_internal_type_valid(m, v->type, true))
         goto invalid;
     if ((v->operand_count && !v->operands) ||
@@ -407,7 +408,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_RECORD_FIELD &&
-        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_MAP_LITERAL_NEW && !lir_view_operation(v->op) && v->bits)
+        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
@@ -501,10 +502,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                 return XR_LIR_OK;
             }
             if (entry->operation) {
-                if (!xr_lir_internal_view_intrinsic_valid(entry) ||
-                    !lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result) ||
-                    !lir_view_instruction_types(m, f, v)) goto invalid;
-                return XR_LIR_OK;
+                goto invalid;
             }
             const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
             if (shape) {
@@ -528,7 +526,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     }
     if (((v->op >= XR_LIR_MODULE_BEGIN && v->op <= XR_LIR_STATE_WRITE) ||
          v->op == XR_LIR_STATE_GROUP_INITIALIZE) ? !lir_state_instruction_types(m, f, v) :
-        (lir_view_operation(v->op) ? !lir_view_instruction_types(m, f, v) : !lir_scalar_instruction_types(m, f, v)))
+        !lir_scalar_instruction_types(m, f, v))
         goto invalid;
     if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;
     return XR_LIR_OK;
@@ -1031,7 +1029,7 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
         bool empty = !shape || (!shape->id && !shape->parameter_elements && !shape->parameter_count &&
             !shape->result_element && !shape->variadic && !shape->operation);
         if (entry->operation) {
-            if (!empty || (!xr_lir_internal_view_intrinsic_valid(entry) && !xr_lir_internal_slice_intrinsic_valid(m, entry) &&
+            if (!empty || (!xr_lir_internal_slice_intrinsic_valid(m, entry) &&
                 !xr_lir_display_intrinsic_valid(entry) &&
                 !xr_lir_string_intrinsic_valid(entry) && !xr_lir_range_intrinsic_valid(entry) &&
                 !xr_lir_map_intrinsic_valid(m, entry)))
@@ -1095,8 +1093,6 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             memset(seen, 0, f->value_count);
         bool scopes = false;
         XrLirStatus status = lir_definitions(m, index, seen, &scopes, d);
-        if (status == XR_LIR_OK && !lir_view_function_shape(m, f))
-            status = xr_lir_internal_error(d, "view activation or return shape is invalid", index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK)
             status = lir_literal_consumers(f, index + 1, seen, d);
         if (status != XR_LIR_OK) { xr_free(seen); return status; }

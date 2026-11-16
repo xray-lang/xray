@@ -50,7 +50,7 @@ XR_FUNC const char *xr_lir_string_native_symbol(XrLirStringOperation role) {
     return role >= XR_LIR_STRING_OP_APPEND_OWNED && role < XR_LIR_STRING_OP_END ?
         lir_string_signatures[role - XR_LIR_STRING_OP_APPEND_OWNED].symbol : NULL;
 }
-XR_FUNC XrLirStatus xr_lir_string_catalog_install(XrLirModule *m, bool views, bool arrays, bool display) {
-    return lir_library_catalog(m, (views ? LIR_LIBRARY_VIEW : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
+XR_FUNC XrLirStatus xr_lir_string_catalog_install(XrLirModule *m, bool slices, bool arrays, bool display) {
+    return lir_library_catalog(m, (slices ? LIR_LIBRARY_SLICE : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
         (display ? LIR_LIBRARY_DISPLAY : 0) | LIR_LIBRARY_STRING);
 }

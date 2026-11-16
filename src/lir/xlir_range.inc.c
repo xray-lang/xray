@@ -21,8 +21,8 @@ XR_FUNC XrLirStatus xr_lir_range_operation(const XrLirModule *m, uint32_t *outpu
         }
     return XR_LIR_UNSUPPORTED;
 }
-XR_FUNC XrLirStatus xr_lir_range_catalog_install(XrLirModule *m, bool views,
+XR_FUNC XrLirStatus xr_lir_range_catalog_install(XrLirModule *m, bool slices,
     bool arrays, bool display, bool strings) {
-    return lir_library_catalog(m, (views ? LIR_LIBRARY_VIEW : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
+    return lir_library_catalog(m, (slices ? LIR_LIBRARY_SLICE : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
         (display ? LIR_LIBRARY_DISPLAY : 0) | (strings ? LIR_LIBRARY_STRING : 0) | LIR_LIBRARY_RANGE);
 }

@@ -61,9 +61,9 @@ XR_FUNC XrLirStatus xr_lir_map_operation(const XrLirModule *m, XrLirMapOperation
     }
     return XR_LIR_UNSUPPORTED;
 }
-XR_FUNC XrLirStatus xr_lir_map_catalog_install(XrLirModule *m, bool views, bool arrays,
+XR_FUNC XrLirStatus xr_lir_map_catalog_install(XrLirModule *m, bool slices, bool arrays,
     bool display, bool strings, bool ranges) {
-    return lir_library_catalog(m, (views ? LIR_LIBRARY_VIEW : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
+    return lir_library_catalog(m, (slices ? LIR_LIBRARY_SLICE : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
         (display ? LIR_LIBRARY_DISPLAY : 0) | (strings ? LIR_LIBRARY_STRING : 0) |
         (ranges ? LIR_LIBRARY_RANGE : 0) | LIR_LIBRARY_MAP);
 }

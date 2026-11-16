@@ -38,8 +38,8 @@ XR_FUNC XrLirStatus xr_lir_display_operation(const XrLirModule *m, uint32_t *out
         }
     return XR_LIR_UNSUPPORTED;
 }
-XR_FUNC XrLirStatus xr_lir_display_catalog_install(XrLirModule *m, bool views, bool arrays) {
-    return lir_library_catalog(m, (views ? LIR_LIBRARY_VIEW : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
+XR_FUNC XrLirStatus xr_lir_display_catalog_install(XrLirModule *m, bool slices, bool arrays) {
+    return lir_library_catalog(m, (slices ? LIR_LIBRARY_SLICE : 0) | (arrays ? LIR_LIBRARY_ARRAY : 0) |
         LIR_LIBRARY_DISPLAY);
 }
 XR_FUNC XrLirStatus xr_lir_pod_type(const XrLirModule *m, XrLirType type, XrPodType *output) {

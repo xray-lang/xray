@@ -4,29 +4,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_view.h - Closed library roles on actual typed activation resources
+ * xlir_view.h - Closed roles for natural readonly Array windows
  */
 #ifndef XLIR_VIEW_H
 #define XLIR_VIEW_H
 #include "xlir_builder.h"
 
-typedef enum XrLirViewOperation {
-    XR_LIR_VIEW_OP_NONE,
-#define XR_LIR_VIEW_OP(name, symbol, result, count, a, b, c, d, e, f) XR_LIR_VIEW_OP_##name,
-#include "xlir_view_ops.def"
-#undef XR_LIR_VIEW_OP
-    XR_LIR_VIEW_OP_COUNT
-} XrLirViewOperation;
-
-/* The receiving registry owns signatures and numeric roles. Activation slot
- * constants remain real call operands and are checked against their producer. */
-XR_FUNC XrLirStatus xr_lir_view_catalog_install(XrLirModule *);
-XR_FUNC XrLirStatus xr_lir_view_operation(const XrLirModule *, XrLirViewOperation, uint32_t *);
-XR_FUNC const char *xr_lir_view_native_symbol(XrLirViewOperation);
-
 /* Natural readonly Array operations use no ViewFrame or ViewCell operand.
- * These closed roles are distinct from the activation catalog above;
- * only the shared verifier may turn their instructions into loan facts. */
+ * Only the shared verifier may turn these closed instructions into loan facts. */
 typedef enum XrLirSliceOperation {
     XR_LIR_SLICE_OP_NONE,
     XR_LIR_SLICE_OP_NEW,

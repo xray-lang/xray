@@ -43,6 +43,6 @@ XR_FUNC XrLirStatus xr_lir_map_literals_copy(XrLirModule *,const XrLirModule *);
 XR_FUNC XrLirStatus xr_lir_map_operation(const XrLirModule *, XrLirMapOperation,
     XrLirType receiver, uint32_t *id);
 XR_FUNC bool xr_lir_map_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);
-XR_FUNC XrLirStatus xr_lir_map_catalog_install(XrLirModule *, bool views, bool arrays,
+XR_FUNC XrLirStatus xr_lir_map_catalog_install(XrLirModule *, bool slices, bool arrays,
     bool display, bool strings, bool ranges);
 #endif // XLIR_MAP_H

@@ -19,6 +19,6 @@ XR_FUNC bool xr_lir_display_type(const XrLirModule *, XrLirType);
 XR_FUNC bool xr_lir_display_intrinsic_valid(const XrLirIntrinsic *);
 XR_FUNC bool xr_lir_display_point(const XrLirModule *, const XrLirInstructionView *);
 XR_FUNC XrLirStatus xr_lir_display_operation(const XrLirModule *, uint32_t *);
-XR_FUNC XrLirStatus xr_lir_display_catalog_install(XrLirModule *, bool views, bool arrays);
+XR_FUNC XrLirStatus xr_lir_display_catalog_install(XrLirModule *, bool slices, bool arrays);
 XR_FUNC XrLirStatus xr_lir_pod_type(const XrLirModule *, XrLirType, XrPodType *);
 #endif // XLIR_DISPLAY_H

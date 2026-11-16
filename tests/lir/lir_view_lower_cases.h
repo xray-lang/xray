@@ -65,7 +65,6 @@ static void view_cold_checked_sources(const char *programs) {
             continue;
         }
         uint32_t intrinsic;
-        CHECK(xr_lir_view_operation(output.module, XR_LIR_VIEW_OP_NEW, &intrinsic) == XR_LIR_UNSUPPORTED);
         XrLirStatus role = xr_lir_slice_operation(output.module, XR_LIR_SLICE_OP_NEW,
             original_u8 ? XR_LIR_U8 : XR_LIR_I64, XR_LIR_ARRAY_CELL, &intrinsic);
         if (!strcmp(names[n], "view_copy_unused_parameter")) {
