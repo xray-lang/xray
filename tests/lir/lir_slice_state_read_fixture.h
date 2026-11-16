@@ -86,7 +86,8 @@ static SliceStateReadFixture slice_state_read_fixture(XrLirType element, bool mu
     XrLirValue parts[] = {length,item};
     XrLirValue total = slice_state_read_value(&c,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,
         .operands=parts,.operand_count=2});
-    slice_state_read_effect(&c,(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&total,.operand_count=1});
+    XrLirInstruction finish = {.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&total,.operand_count=1};
+    OK(xr_lir_set_terminator(c.module,c.block,&finish));
     return c;
 }
 #endif // LIR_SLICE_STATE_READ_FIXTURE_H
