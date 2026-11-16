@@ -312,6 +312,13 @@ XR_FUNC XrLirStatus xr_lir_cell_type_view(const XrLirModule *m, XrLirType type, 
     *output = (XrLirCellType){shape.element, m->types[type - XR_LIR_TYPE_COUNT].cell_element};
     return XR_LIR_OK;
 }
+XR_FUNC bool xr_lir_cell_value_type(const XrLirModule *m, XrLirType type, XrLirCellType *output) {
+    XrLirCellType cell;
+    if (xr_lir_cell_type_view(m, type, &cell) != XR_LIR_OK || cell.array_element ||
+        (cell.payload != XR_LIR_I64 && cell.payload != XR_LIR_MAP_STRING_I64)) return false;
+    if (output) *output = cell;
+    return true;
+}
 
 XR_FUNC XrLirStatus xr_lir_type_view(const XrLirModule *m, XrLirType type,
     XrLirTypeView *output) {
