@@ -107,6 +107,8 @@ struct XrLirModule {
 };
 
 XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *);
+XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);
+XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *, XrLirType);
 XR_FUNC const XrLirIntrinsic *xr_lir_internal_view_intrinsic(const XrLirModule *, uint32_t);
 XR_FUNC bool xr_lir_internal_view_construct_slot(const XrLirModule *,
     const XrLirFunctionData *, const XrLirInstructionView *, uint32_t *);

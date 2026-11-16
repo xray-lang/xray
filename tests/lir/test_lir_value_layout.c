@@ -358,6 +358,24 @@ static void slice_layouts(void) {
     LIR(xr_lir_import_type(received, module, slices[1], &imported));
     XrLirTypeView shape; LIR(xr_lir_type_view(received, imported, &shape));
     CHECK(shape.kind == XR_LIR_TYPE_SLICE && shape.element == XR_LIR_U8 && !shape.count);
+    LIR(xr_lir_slice_catalog_install(module));
+    for (uint32_t family = 0; family < 2; ++family) {
+        XrLirType element = family ? XR_LIR_U8 : XR_LIR_I64;
+        for (uint32_t role = XR_LIR_SLICE_OP_NEW; role < XR_LIR_SLICE_OP_COUNT; ++role) {
+            uint32_t id = 0; XrLirSliceIntrinsic projection;
+            XrLirType binding = role == XR_LIR_SLICE_OP_NEW ? XR_LIR_ARRAY_CELL : XR_LIR_TYPE_INVALID;
+            LIR(xr_lir_slice_operation(module, (XrLirSliceOperation)role, element, binding, &id));
+            LIR(xr_lir_slice_intrinsic_view(module, id, &projection));
+            CHECK(projection.id == id && projection.operation == (XrLirSliceOperation)role &&
+                projection.element == element && projection.binding_type == binding);
+            XrLirIntrinsic entry; LIR(xr_lir_intrinsic_view(module, id, &entry));
+            CHECK(entry.parameters[0] == (binding ? binding : slices[family]));
+        }
+        uint32_t id = 0;
+        LIR(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_NEW, element, XR_LIR_ARRAY_REF, &id));
+    }
+    uint32_t unchanged = 99;
+    CHECK(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_GET, XR_LIR_F64, 0, &unchanged) == XR_LIR_UNSUPPORTED && unchanged == 99);
     LIR(xr_lir_module_finish(module, NULL));
     Owner owner; owner_new(&owner, SIZE_MAX);
     XrLirValueLayoutKey roots[] = {{slices[0],0,0}, {slices[1],0,0}};

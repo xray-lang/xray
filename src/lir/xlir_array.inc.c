@@ -285,6 +285,9 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
             return signature.result_element;
     }
     if (v->op == XR_LIR_CALL_INTRINSIC) {
+        XrLirSliceIntrinsic slice;
+        if (xr_lir_slice_intrinsic_view(m, v->intrinsic, &slice) == XR_LIR_OK &&
+            slice.operation == XR_LIR_SLICE_OP_COPY) return slice.element;
         uint32_t index = lir_array_intrinsic_index(m, v->intrinsic);
         if (index != UINT32_MAX && (m->intrinsics[index].operation == XR_LIR_VIEW_OP_CELL_READ ||
             m->intrinsics[index].operation == XR_LIR_VIEW_OP_COPY)) return XR_LIR_I64;

@@ -10,13 +10,33 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     enum { string_count = sizeof(lir_string_signatures) / sizeof(*lir_string_signatures) };
-    XrLirIntrinsic local[XR_LIR_VIEW_OP_COUNT + string_count + 1] = {{0}};
+    XrLirIntrinsic local[XR_LIR_VIEW_OP_COUNT + string_count + 1 + LIR_SLICE_CATALOG_COUNT] = {{0}};
     XrLirIntrinsic *entries = local;
     if (flags & LIR_LIBRARY_MAP) {
         entries = xr_malloc((sizeof(local) / sizeof(*local) + LIR_MAP_CATALOG_COUNT) * sizeof(*entries));
         if (!entries) return lir_fail(m, XR_LIR_OUT_OF_MEMORY);
     }
     uint32_t count = 0;
+    XrLirType slice_parameters[LIR_SLICE_CATALOG_COUNT][4] = {{0}};
+    if (flags & LIR_LIBRARY_SLICE) {
+        uint32_t added = 0;
+        for (uint32_t family = 0; family < 4; ++family) {
+            XrLirType element = family < 2 ? XR_LIR_I64 : XR_LIR_U8, slice = 0;
+            status = xr_lir_slice_type(m, element, &slice);
+            if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
+            for (uint32_t role = 1; role < XR_LIR_SLICE_OP_COUNT; ++role) {
+                if ((family & 1u) && role != XR_LIR_SLICE_OP_NEW) continue;
+                uint32_t encoded = family * XR_LIR_SLICE_OP_COUNT + role;
+                XrLirSliceIntrinsic shape;
+                bool decoded = lir_slice_decode(LIR_SLICE_OPERATION_BASE + encoded, &shape);
+                XR_CHECK(decoded && added < LIR_SLICE_CATALOG_COUNT, "the closed readonly catalog has bounded exact roles");
+                XrLirType result;
+                uint32_t arity = lir_slice_signature(shape, slice, slice_parameters[added], &result);
+                entries[count++] = (XrLirIntrinsic){LIR_SLICE_ID_BASE + encoded,
+                    slice_parameters[added++], arity, result, true, LIR_SLICE_OPERATION_BASE + encoded};
+            }
+        }
+    }
     for (uint32_t role = 1; (flags & LIR_LIBRARY_VIEW) && role < XR_LIR_VIEW_OP_COUNT; ++role) {
         const LirViewSignature *shape = &lir_view_signatures[role];
         entries[count++] = (XrLirIntrinsic){XR_LIR_ARRAY_CATALOG_COUNT + role,
