@@ -41,6 +41,7 @@ static XrLirModule *string_append_fixture(bool shared,XrLirFunction *root) {
     spec=(XrLirFunctionSpec){.name="append_caller",.name_length=13,.result=XR_LIR_STRING};
     OK(xr_lir_declare_function(module,&spec,root)); OK(xr_lir_define_function(module,*root));
     block=(XrLirBlock){0}; OK(xr_lir_add_block(module,*root,NULL,0,&block)); OK(xr_lir_set_entry(module,*root,block));
+    literal=(XrLirLiteral){0};
     OK(xr_lir_add_literal(module,(const uint8_t *)"!",1,&literal));
     suffix=managed_state_value(module,block,XR_LIR_STRING_LITERAL,XR_LIR_STRING,NULL,0,literal.id);
     result=(XrLirValue){0};
