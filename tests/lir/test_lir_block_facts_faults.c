@@ -43,7 +43,7 @@ static XrLirModule *fact_module(XrLirBlock *late) {
     XrLirModule *module=NULL;REQUIRE(xr_lir_module_create(NULL,&module)==XR_LIR_OK);
     for (uint32_t f=0;f<2;++f) {
         XrLirFunction function={0};XrLirBlock entry={0};
-        REQUIRE(xr_lir_declare_function(module,&(XrLirFunctionSpec){.name="actual",.name_length=6,
+        REQUIRE(xr_lir_declare_function(module,&(XrLirFunctionSpec){.name=f ? "second" : "actual",.name_length=6,
             .result=XR_LIR_I64},&function)==XR_LIR_OK);REQUIRE(xr_lir_define_function(module,function)==XR_LIR_OK);
         REQUIRE(xr_lir_add_block(module,function,NULL,0,&entry)==XR_LIR_OK);
         REQUIRE(xr_lir_set_entry(module,function,entry)==XR_LIR_OK);
