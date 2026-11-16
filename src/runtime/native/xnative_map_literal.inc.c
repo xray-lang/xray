@@ -34,13 +34,24 @@ static void map_literal_drop_prefix(const XrtMapLiteral *literal, const XrtMapLi
 XR_FUNCDEF void xrt_map_literal_inputs_drop(const XrtMapLiteral *literal, const XrtMapLiteralInput *inputs) {
     map_literal_drop_prefix(literal, inputs, literal->count);
 }
+/* This proves address-space representability, not that arbitrary pointer bytes
+ * name a live array. The caller still supplies complete synchronous borrows. */
+static bool map_literal_span(const void *base, size_t count, size_t stride) {
+    if (count > SIZE_MAX / stride) return false;
+    size_t bytes = count * stride;
+    return (uintptr_t)base <= UINTPTR_MAX - bytes;
+}
 XR_FUNCDEF XrtManagedStatus xrt_map_literal_inputs_retain(const XrtMapLiteral *literal,
     const XrtMapLiteralInput *inputs, size_t *capacity) {
     if (!literal || !capacity || (literal->path_length != 0) != (literal->path != NULL) ||
-        literal->path_length == SIZE_MAX || (literal->path_length &&
+        literal->path_length == SIZE_MAX || (literal->count && (!literal->items || !inputs))) return XRT_MANAGED_ARGUMENT;
+    if (!map_literal_span(literal->items, literal->count, sizeof(*literal->items)) ||
+        !map_literal_span(inputs, literal->count, sizeof(*inputs)) ||
+        !map_literal_span(literal->path, literal->path_length, 1)) return XRT_MANAGED_OVERFLOW;
+    if (literal->path_length &&
         (memchr(literal->path, 0, literal->path_length) ||
-         xr_utf8_core_scan_strict((const uint8_t *)literal->path, literal->path_length).error != XR_UTF8_OK)) ||
-        literal->count > 65536 || (literal->count && (!literal->items || !inputs))) return XRT_MANAGED_ARGUMENT;
+         xr_utf8_core_scan_strict((const uint8_t *)literal->path, literal->path_length).error != XR_UTF8_OK))
+        return XRT_MANAGED_ARGUMENT;
     size_t entries = 0, reserved = 0;
     for (size_t n = 0; n < literal->count; ++n) {
         const XrtMapLiteralOrigin *origin = &literal->items[n];
