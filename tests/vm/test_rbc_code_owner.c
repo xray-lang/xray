@@ -232,39 +232,57 @@ static void raw_callable_exact_boundaries(void) {
     raw_callable_rejection(&raw,program,alias);
     callable_raw_reset(&raw);
     uint32_t callee=raw.accesses[wrapper].index;
-    const XrRbcValueCode *original=raw.codes[callee];
-    XrRbcValueCode receiver=*original; XrLirValueHomes homes=*original->homes;
-    size_t count=(size_t)receiver.value_count+1;
-    XrLirValueHome *values=xr_malloc(count*sizeof(*values));
-    XrRbcValueLocation *locations=xr_malloc(count*sizeof(*locations));
-    XrLirHomeBytes *bytes=xr_malloc((homes.byte_count+1)*sizeof(*bytes));
-    XrLirHomeEvent *events=xr_malloc((homes.event_count+2)*sizeof(*events));
-    CHECK(values && locations && bytes && events);
-    memcpy(values,homes.values,count*sizeof(*values)); memcpy(locations,receiver.locations,count*sizeof(*locations));
-    if (homes.byte_count) memcpy(bytes,homes.bytes,homes.byte_count*sizeof(*bytes));
-    if (homes.event_count) memcpy(events,homes.events,homes.event_count*sizeof(*events));
-    uint32_t formal=receiver.parameters[0],type=raw.values[leaf_value].type;
+    const XrRbcFunction *scalar=&raw.functions[callee];
+    CHECK(scalar->capture_count==1 && scalar->parameter_count==2 && !scalar->state_capture);
+    size_t count=(size_t)scalar->register_count+1;
+    XrLirValueHome *values=xr_calloc(count,sizeof(*values));
+    XrRbcValueLocation *locations=xr_calloc(count,sizeof(*locations));
+    CHECK(values && locations);
+    uint32_t parameters[XR_RBC_REGISTER_COUNT_MAX]={0};
+    XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX]; uint32_t signatures[XR_RBC_REGISTER_COUNT_MAX]={0};
+    for (uint32_t r=0;r<scalar->register_count;++r) {
+        kinds[r]=rbc_register_kind(scalar,r);
+        CHECK(kinds[r]==XR_RBC_BITS);
+        values[r+1]=(XrLirValueHome){.offset=SIZE_MAX,.first_owner=SIZE_MAX,
+            .temporary_offset=SIZE_MAX,.temporary_first_owner=SIZE_MAX};
+        locations[r+1]=(XrRbcValueLocation){XR_RBC_VALUE_REGISTER,r};
+    }
+    for (uint32_t r=0;r<scalar->parameter_count;++r) {
+        parameters[r]=r+1; values[r+1].parameter=r+1;
+    }
+    uint32_t formal=parameters[0],type=raw.values[leaf_value].type;
     values[formal]=(XrLirValueHome){.type=type,.parameter=1,.offset=SIZE_MAX,.size=sizeof(XrtFunction),
         .first_owner=SIZE_MAX,.temporary_offset=SIZE_MAX,.temporary_first_owner=SIZE_MAX,
-        .first_bytes=homes.byte_count,.byte_count=1,.transport=XR_LIR_CALLABLE_TRANSPORT_BORROW};
+        .first_bytes=0,.byte_count=1,.transport=XR_LIR_CALLABLE_TRANSPORT_BORROW};
     locations[formal]=(XrRbcValueLocation){XR_RBC_VALUE_NOWHERE,0};
-    bytes[homes.byte_count++]=(XrLirHomeBytes){0,sizeof(XrtFunction)};
-    events[homes.event_count++]=(XrLirHomeEvent){.kind=XR_LIR_OWNERSHIP_CALLABLE_VALUE,.source=formal,
-        .callable_transport=XR_LIR_CALLABLE_TRANSPORT_BORROW};
-    events[homes.event_count++]=(XrLirHomeEvent){.kind=XR_LIR_OWNERSHIP_PARAMETER_BORROW,.source=formal};
-    homes.values=values; homes.bytes=bytes; homes.events=events;
-    receiver.homes=&homes; receiver.locations=locations; raw.codes[callee]=&receiver;
-    XrRbcRegisterKind kinds[XR_RBC_REGISTER_COUNT_MAX]; uint32_t signatures[XR_RBC_REGISTER_COUNT_MAX]={0};
-    memcpy(kinds,raw.functions[callee].register_kinds,raw.functions[callee].register_count*sizeof(*kinds));
+    XrLirHomeBytes bytes={0,sizeof(XrtFunction)};
+    XrLirHomeEvent events[]={
+        {.kind=XR_LIR_OWNERSHIP_CALLABLE_VALUE,.source=formal,.callable_transport=XR_LIR_CALLABLE_TRANSPORT_BORROW},
+        {.kind=XR_LIR_OWNERSHIP_PARAMETER_BORROW,.source=formal}};
+    CHECK(raw.entries[callee].signature_type && raw.entries[callee].signature_type<=raw.module.borrowed_value_image->type_count);
+    const XrtValueImageType *signature=&raw.module.borrowed_value_image->types[raw.entries[callee].signature_type-1];
+    CHECK(signature->kind==XRT_VALUE_FUNCTION && signature->result);
+    XrLirValueHomes homes={.source_function=raw.entries[callee].source_function,.value_count=scalar->register_count,
+        .result_type=signature->result,.values=values,.events=events,.event_count=2,.bytes=&bytes,.byte_count=1,
+        .frame={.payload_alignment=1}};
+    /* This fixture's scalar body returns its visible formal. Give the new raw
+     * receiving description that same body through the complete value path. */
+    XrRbcValueAccess result={.operation=XR_RBC_VALUE_RETURN,.source=parameters[scalar->capture_count]};
+    XrRbcValueCode receiver={.homes=&homes,.locations=locations,.value_count=scalar->register_count,
+        .parameters=parameters,.parameter_count=scalar->parameter_count,.accesses=&result,.access_count=1};
+    uint32_t body=0;
+    CHECK(xr_rbc_encode(&body,(XrRbcOperands){.op=XR_RBC_VALUE_ACCESS}));
+    raw.codes[callee]=&receiver; raw.functions[callee].code=&body; raw.functions[callee].code_count=1;
+    raw.functions[callee].source_ids=NULL; raw.functions[callee].source_id_count=0;
     kinds[0]=XR_RBC_FUNCTION; signatures[0]=rbc_value_signature(&raw.module,&raw.code,leaf_value);
     CHECK(signatures[0]);
-    raw.functions[callee].register_kinds=kinds; raw.functions[callee].register_callables=signatures;
-    raw.functions[callee].register_callable_count=raw.functions[callee].register_count;
+    raw.functions[callee].register_kinds=kinds; raw.functions[callee].register_kind_count=scalar->register_count;
+    raw.functions[callee].register_callables=signatures; raw.functions[callee].register_callable_count=scalar->register_count;
     XrRbcCallableValue capture={XR_RBC_CALLABLE_FUNCTION,signatures[0]-1}; raw.functions[callee].captures=&capture;
     raw.arguments[raw.accesses[wrapper].first]=leaf_value;
     raw.functions[0].environment_size=(uint32_t)(sizeof(XrtFunction)*2);
     raw_callable_rejection(&raw,program,wrapper);
-    xr_free(events); xr_free(bytes); xr_free(locations); xr_free(values);
+    xr_free(locations); xr_free(values);
     callable_raw_free(&raw); xr_rbc_program_destroy(program);
     CHECK(!tracked_live);
 }
