@@ -50,6 +50,7 @@ enum XrLirBuiltinType {
     XR_LIR_ARRAY,
     XR_LIR_ARRAY_CELL,
     XR_LIR_ARRAY_REF,
+    /* Retired numeric identities stay invalid at every construction boundary. */
     XR_LIR_VIEW_FRAME,
     XR_LIR_VIEW_CELL,
     XR_LIR_SLICE_I64,

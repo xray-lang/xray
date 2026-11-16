@@ -102,12 +102,8 @@ struct XrLirModule {
     XrLirCallableFacts *callable_facts;
 };
 
-XR_FUNC bool xr_lir_internal_view_intrinsic_valid(const XrLirIntrinsic *);
 XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *);
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *, XrLirType);
-XR_FUNC const XrLirIntrinsic *xr_lir_internal_view_intrinsic(const XrLirModule *, uint32_t);
-XR_FUNC bool xr_lir_internal_view_construct_slot(const XrLirModule *,
-    const XrLirFunctionData *, const XrLirInstructionView *, uint32_t *);
 
 /* Operand validation may reach a later block before its shape is checked. */
 static inline const XrLirInstructionView *xr_lir_internal_value_definition(

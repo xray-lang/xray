@@ -23,6 +23,6 @@ typedef enum XrLirStringOperation {
 XR_FUNC bool xr_lir_string_intrinsic_valid(const XrLirIntrinsic *);
 XR_FUNC uint32_t xr_lir_string_role(const XrLirModule *, const XrLirInstructionView *);
 XR_FUNC XrLirStatus xr_lir_string_operation(const XrLirModule *, XrLirStringOperation, uint32_t *);
-XR_FUNC XrLirStatus xr_lir_string_catalog_install(XrLirModule *, bool views, bool arrays, bool display);
+XR_FUNC XrLirStatus xr_lir_string_catalog_install(XrLirModule *, bool slices, bool arrays, bool display);
 XR_FUNC const char *xr_lir_string_native_symbol(XrLirStringOperation);
 #endif // XLIR_STRING_H
