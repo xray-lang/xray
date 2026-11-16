@@ -280,6 +280,7 @@ static void cross_root_cell_guard(void) {
     STATUS(xrt_place_edge_transfer(copies,1,NULL),XRT_MANAGED_ARGUMENT);
     atomic_fetch_and(&cell->managed.flags,~UINT32_C(1));
     CHECK(xr_signed_rc_read(&cell->managed.references)==2);
+    copied = NULL;
     OK(xrt_managed_slot_borrow(other_frame,3,&copied)); CHECK(copied==cell->value);
     same_bill(&f,single_before);
     STATUS(xrt_place_move_replace(copies[0].destination,binding,NULL),XRT_MANAGED_ARGUMENT);
