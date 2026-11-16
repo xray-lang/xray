@@ -130,7 +130,10 @@ def judge(case, result, fixture):
             continue
         path, row, column, message = matched.groups()
         code = re.search(r"\bE\d{4}\b", message)
-        same = os.path.normcase(os.path.abspath(path)) == os.path.normcase(str(fixture.resolve()))
+        try:
+            same = os.path.samefile(path, fixture)
+        except (OSError, ValueError):
+            same = False
         diagnostics.append(dict(path="@fixture" if same else path, line=int(row), column=int(column), message=message, code=code.group() if code else None))
     first = diagnostics[0] if diagnostics else None
     if case["role"] == "DEFERRED":
