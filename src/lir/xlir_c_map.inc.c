@@ -71,7 +71,10 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
         c_error(c, XR_LIR_C_INVALID_LIR, "Map mutation lost its common binding workspace"); return;
     }
     c_values_ensure(c, source);
-    c_text(c, "    { bool removed = false;\n    xrt_native_map_update_place("); c_value(c, v->operands[0]);
+    c_text(c, "    { bool removed = false;\n    ");
+    if (binding->kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {
+        c_text(c,"xrt_native_cell_map_update("); c_value(c,binding->source);
+    } else { c_text(c,"xrt_native_map_update_place("); c_value(c,v->operands[0]); }
     c_format(c, ", xrl_frame, %zu, &(XrtMapUpdate){%s, ", workspace->first_owner,
         role == XR_LIR_MAP_OP_SET ? "XRT_MAP_UPDATE_SET" : role == XR_LIR_MAP_OP_REMOVE ? "XRT_MAP_UPDATE_REMOVE" : "XRT_MAP_UPDATE_CLEAR");
     if (role == XR_LIR_MAP_OP_CLEAR) c_text(c, "NULL");
@@ -85,6 +88,11 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
 static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     uint32_t role = c_map_role(c, v);
     if (role) { c_map_call(c, v, role, source); return; }
+    if (v->op == XR_LIR_MAP_REF_WRITE && c->homes->bindings[v->operands[0]].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {
+        const XrLirHomeBinding *binding = &c->homes->bindings[v->operands[0]];
+        c_text(c,"    xrt_native_cell_map_write("); c_value(c,binding->source); c_text(c,", ");
+        c_value(c,v->operands[1]); c_format(c,", UINT32_C(%" PRIu32 "));\n",source); return;
+    }
     if (v->op != XR_LIR_MAP_BORROW) c_values_ensure(c, source);
     if (v->op == XR_LIR_MAP_BORROW) {
         const XrLirHomeBinding *binding = &c->homes->bindings[v->result];
