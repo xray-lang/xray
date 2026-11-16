@@ -44,8 +44,56 @@ static bool effect_module_export_kind(uint8_t kind, XirModuleEffectTermKind *out
     default: return false;
     }
 }
-static XrXirStatus effect_module_export_set(const EffectCheckedRoots *roots, uint32_t node, uint8_t property,
+typedef struct EffectModuleProjection {
+    const XrXirArtifact *actual, *producer;
+    const XrXirProvenance *instance;
+    const EffectCheckedRoots *roots;
+    uint32_t *witnesses;
+    size_t term_limit;
+} EffectModuleProjection;
+
+/* The specializing producer retains its exact Source derivation rather than
+ * solving the same facts again for each physical function. Its real origins
+ * relocate rows; no absent equation is replaced with an empty summary. */
+static XrXirStatus effect_module_export_projection(const XrXirArtifact *artifact,
+    EffectModuleProjection *projection) {
+    *projection = (EffectModuleProjection){.actual=artifact,.producer=artifact};
+    if (!artifact->program_final && !artifact->checked_effects) {
+        const XrXirProvenance *instance=artifact->module.provenance;
+        if (!instance || instance->kind!=XR_XIR_EVIDENCE_INSTANCE || !instance->source ||
+            !instance->origins || instance->count!=artifact->module.function_count ||
+            instance->source==artifact || instance->source->context.resources!=artifact->context.resources)
+            return XR_XIR_BAD_STRUCTURE;
+        projection->producer=instance->source; projection->instance=instance;
+    }
+    const XrXirDeclarations *actual=artifact->module.declarations;
+    const XrXirDeclarations *source=projection->producer->module.declarations;
+    if (!actual || !source || actual->module_count!=source->module_count || actual->slot_count!=source->slot_count)
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t slot=0;slot<actual->slot_count;++slot)
+        if (actual->slots[slot].module!=source->slots[slot].module) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t module=0;module<actual->module_count;++module) {
+        const XrXirSourceModule *a=&actual->modules[module], *b=&source->modules[module];
+        if (a->dependency_count!=b->dependency_count || (a->dependency_count &&
+            memcmp(a->dependencies,b->dependencies,(size_t)a->dependency_count*sizeof(*a->dependencies))))
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus effect_module_export_function(const EffectModuleProjection *projection,
+    uint32_t function, uint32_t *origin) {
+    *origin=projection->instance ? projection->instance->origins[function].function : function;
+    if (*origin>=projection->producer->module.function_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *actual=&projection->actual->module.functions[function];
+    const XrXirFunction *source=&projection->producer->module.functions[*origin];
+    const XrXirFunctionIdentity *a=&projection->actual->module.declarations->functions[function];
+    const XrXirFunctionIdentity *b=&projection->producer->module.declarations->functions[*origin];
+    return actual->parameter_count==source->parameter_count && actual->instruction_count==source->instruction_count &&
+        a->module==b->module && a->capture_count==b->capture_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus effect_module_export_set(const EffectModuleProjection *projection, uint32_t node, uint8_t property,
     XirModuleEffectSpan *span, size_t *used, XirModuleEffectTerm *terms) {
+    const EffectCheckedRoots *roots=projection->roots;
     if (node >= roots->nodes) return XR_XIR_BAD_STRUCTURE;
     if (!roots->module_access) { *span = (XirModuleEffectSpan){0}; return XR_XIR_OK; }
     size_t first = *used; uint32_t visited = 0;
@@ -53,27 +101,39 @@ static XrXirStatus effect_module_export_set(const EffectCheckedRoots *roots, uin
         if (m >= roots->module_members || visited++ >= roots->module_members || *used == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
         EffectModuleMember member = roots->module_member[m]; XirModuleEffectTermKind kind;
         if (member.node != node || member.property != property || !effect_module_export_kind(member.kind, &kind)) return XR_XIR_BAD_STRUCTURE;
-        if (terms) terms[*used] = (XirModuleEffectTerm){kind,member.identity,member.function,member.instruction};
+        if (terms) {
+            if (*used>=projection->term_limit) return XR_XIR_BAD_STRUCTURE;
+            uint32_t witness=member.function, instruction=member.instruction;
+            if (projection->witnesses) {
+                if (witness!=UINT32_MAX && witness>=projection->producer->module.function_count) return XR_XIR_BAD_STRUCTURE;
+                witness=witness==UINT32_MAX ? UINT32_MAX : projection->witnesses[witness];
+                if (witness==UINT32_MAX) instruction=UINT32_MAX;
+            }
+            terms[*used] = (XirModuleEffectTerm){kind,member.identity,witness,instruction};
+        }
         ++*used; m = member.next;
     }
     *span = (XirModuleEffectSpan){*used == first ? 0 : first,*used - first}; return XR_XIR_OK;
 }
-static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, uint32_t count,
+static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, const EffectModuleProjection *projection,
     XirModuleEffectExportView *view, bool copy) {
     size_t used = 0, value = 0; XrXirStatus status = XR_XIR_OK;
-    for (uint32_t f = 0; f < count && status == XR_XIR_OK; ++f) {
-        EffectCheckFunction source = roots->function[f]; XirModuleEffectFunction row = {
+    for (uint32_t f = 0; f < view->function_count && status == XR_XIR_OK; ++f) {
+        uint32_t declaration=0; status=effect_module_export_function(projection,f,&declaration);
+        if (status!=XR_XIR_OK || declaration>=roots->templates || declaration>=roots->functions) return XR_XIR_BAD_STRUCTURE;
+        EffectCheckFunction source = roots->function[declaration]; XirModuleEffectFunction row = {
             .module=source.module,.parameter_count=source.parameters,.capture_count=source.capture_count,
             .first_value=value,.value_count=source.values};
-        if (source.first > roots->nodes || source.values > roots->nodes - source.first) return XR_XIR_BAD_STRUCTURE;
-        status = effect_module_export_set(roots, source.root, EFFECT_MODULE_ACCESS, &row.access, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
-        if (status == XR_XIR_OK) status = effect_module_export_set(roots, source.root, EFFECT_MODULE_WRITE, &row.write, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
-        if (status == XR_XIR_OK) status = effect_module_export_set(roots, source.result, EFFECT_MODULE_ORIGIN, &row.result_origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (source.first > roots->nodes || source.values > roots->nodes - source.first ||
+            (copy && (value>view->value_count || source.values>view->value_count-value))) return XR_XIR_BAD_STRUCTURE;
+        status = effect_module_export_set(projection, source.root, EFFECT_MODULE_ACCESS, &row.access, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (status == XR_XIR_OK) status = effect_module_export_set(projection, source.root, EFFECT_MODULE_WRITE, &row.write, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        if (status == XR_XIR_OK) status = effect_module_export_set(projection, source.result, EFFECT_MODULE_ORIGIN, &row.result_origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
         if (copy) ((XirModuleEffectFunction *)view->functions)[f] = row;
         if (source.values > SIZE_MAX - value) return XR_XIR_OVERFLOW;
         for (uint32_t v = 0; v < source.values && status == XR_XIR_OK; ++v) {
             XirModuleEffectSpan origin;
-            status = effect_module_export_set(roots, source.first + v, EFFECT_MODULE_ORIGIN, &origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+            status = effect_module_export_set(projection, source.first + v, EFFECT_MODULE_ORIGIN, &origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
             if (copy && status == XR_XIR_OK) ((XirModuleEffectValue *)view->values)[value + v].origin = origin;
         }
         value += source.values;
@@ -103,24 +163,42 @@ XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact
     if (!artifact || !output || *output) return XR_XIR_BAD_STRUCTURE;
     if (artifact->module.stage != XR_XIR_CHECKED && artifact->module.stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     const XrXirCompileContext *context = &artifact->context;
-    XirEffectInput input = {&artifact->module,artifact->construction,NULL};
-    const XrXirEffects *effects = artifact->program_final ? artifact->program_final : artifact->checked_effects;
+    EffectModuleProjection projection={0};
+    XrXirStatus status=effect_module_export_projection(artifact,&projection);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirArtifact *producer=projection.producer;
+    XirEffectInput input = {&producer->module,producer->construction,NULL};
+    const XrXirEffects *effects = producer->program_final ? producer->program_final : producer->checked_effects;
     if (!effects || !effect_final_outcomes(effects) || !effects->checked_roots)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xir_effects_source_body_match_input(context, input, effects);
+    projection.roots=effects->checked_roots;
+    status = xir_effects_source_body_match_input(context, input, effects);
     if (status != XR_XIR_OK) return status;
     if (!input.module->declarations) return XR_XIR_BAD_STRUCTURE;
     XirModuleEffectExport *owned = xir_compile_calloc(context, 1, sizeof(*owned), &status);
     if (!owned) return status;
     XirModuleEffectExportView *view = &owned->view;
-    view->function_count = input.module->function_count;
+    view->function_count = artifact->module.function_count;
     view->module_access_complete = effects->checked_roots->module_access;
-    status = effect_module_export_terms(effects->checked_roots, view->function_count, view, false);
-    if (status == XR_XIR_OK) status = effect_module_export_allocate(context, input.module->declarations, view);
+    if (projection.instance) {
+        uint64_t bytes=(uint64_t)producer->module.function_count*sizeof(*projection.witnesses);
+        if (bytes>SIZE_MAX) status=XR_XIR_OVERFLOW;
+        else projection.witnesses=xir_compile_alloc(context,(size_t)bytes,&status);
+        if (projection.witnesses) {
+            for (uint32_t f=0;f<producer->module.function_count;++f) projection.witnesses[f]=UINT32_MAX;
+            for (uint32_t f=0;f<view->function_count && status==XR_XIR_OK;++f) {
+                uint32_t origin=0; status=effect_module_export_function(&projection,f,&origin);
+                if (status==XR_XIR_OK && projection.witnesses[origin]==UINT32_MAX) projection.witnesses[origin]=f;
+            }
+        }
+    }
+    if (status==XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, &projection, view, false);
+    projection.term_limit=view->term_count;
+    if (status == XR_XIR_OK) status = effect_module_export_allocate(context, artifact->module.declarations, view);
     if (status == XR_XIR_OK) status = xir_effects_source_body_match_input(context, input, effects);
-    if (status == XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, view->function_count, view, true);
+    if (status == XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, &projection, view, true);
     if (status == XR_XIR_OK) {
-        const XrXirDeclarations *declarations = input.module->declarations; size_t next = 0;
+        const XrXirDeclarations *declarations = artifact->module.declarations; size_t next = 0;
         if (view->module_count != declarations->module_count || view->slot_count != declarations->slot_count) status = XR_XIR_BAD_STRUCTURE;
         for (uint32_t m = 0; m < view->module_count && status == XR_XIR_OK; ++m) {
             XrXirSourceModule source = declarations->modules[m];
@@ -135,6 +213,7 @@ XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact
             ((XirModuleEffectSlot *)view->slots)[s].module = declarations->slots[s].module;
     }
     if (status == XR_XIR_OK) status = xir_effects_source_body_match_input(context, input, effects);
+    xr_compile_resources_free(projection.witnesses);
     if (status != XR_XIR_OK) { xir_effects_module_export_free(owned); return status; }
     *output = owned; return XR_XIR_OK;
 }

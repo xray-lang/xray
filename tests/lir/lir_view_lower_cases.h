@@ -7,6 +7,7 @@
  * lir_view_lower_cases.h - Cold Checked view contracts and receiving owners
  */
 #include "xir/xxir_checked.h"
+#include "xir/xxir_effect_module_export_internal.h"
 #include "lir/xlir_view.h"
 #include "lir/xlir_string.h"
 
@@ -42,12 +43,31 @@ static void view_cold_checked_sources(const char *programs) {
         xr_xir_compile_checked_packet_free(&packet);
         CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(decoded);
+        XirModuleEffectExport *summary = NULL; XirModuleEffectExportView summary_view = {0};
+        XirModuleEffectFunction first_summary = {0}; uint32_t summary_functions = 0;
+        if (!strcmp(names[n],"view_return")) {
+            const XrXirModule *actual=xr_xir_compile_artifact_module(closed);
+            CHECK(xir_effects_module_export_copy(closed,&summary)==XR_XIR_OK && summary);
+            CHECK(xir_effects_module_export_view(summary,&summary_view)==XR_XIR_OK && summary_view.module_access_complete &&
+                summary_view.function_count==actual->function_count);
+            summary_functions=summary_view.function_count; CHECK(summary_functions);
+            first_summary=summary_view.functions[0];
+            for (uint32_t f=0;f<summary_functions;++f)
+                CHECK(summary_view.functions[f].parameter_count==actual->functions[f].parameter_count &&
+                    summary_view.functions[f].capture_count==actual->declarations->functions[f].capture_count);
+        }
         XrLirLowered output = {0};
         XrLirLowerRequest request = {closed, fixture.source.snapshot, false};
         OK(xr_lir_lower_program_checked(&request, &output, NULL));
         xr_xir_compile_artifact_free(closed);
         source_fixture_free(&fixture);
         xr_compile_resources_release(receiver.resources);
+        if (summary) {
+            CHECK(xir_effects_module_export_view(summary,&summary_view)==XR_XIR_OK &&
+                summary_view.function_count==summary_functions && summary_view.module_access_complete);
+            CHECK(!memcmp(&summary_view.functions[0],&first_summary,sizeof(first_summary)));
+            xir_effects_module_export_free(summary);
+        }
         OK(xr_lir_verify(output.module, NULL));
         if (!strcmp(names[n],"string_parameter_loop")) {
             CHECK(!xr_lir_intrinsic_count(output.module));

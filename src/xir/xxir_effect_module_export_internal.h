@@ -46,8 +46,12 @@ typedef struct XirModuleEffectExport XirModuleEffectExport;
 /* Copy only completed equations from this exact immutable input. Terms stay
  * symbolic, including unknowns; absence is never a substitute for an unknown
  * write. This projection grants no call, origin, loan or mutation permission.
- * All numbers use original input coordinates. Lower must perform its actual
- * module/slot/function relocation before publishing receiving facts.
+ * Function rows use the actual Artifact directory, including specialized
+ * instances relocated from their retained Source derivation. Parameter and
+ * State identities keep that producer's physical ordinals. Diagnostic witnesses
+ * relocate to an actual instance or UINT32_MAX when no instance exists; an
+ * unavailable witness never removes its symbolic dependency. Lower performs
+ * its actual module/slot/function relocation before publishing receiving facts.
  * No Effects, descriptor-pool, construction or AST pointer survives the call.
  * Failure preserves an empty output; the independent owner survives all
  * producer retirement, with its charged allocations retaining their ledger. */
