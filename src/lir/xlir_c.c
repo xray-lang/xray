@@ -1195,6 +1195,11 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_cell.inc.c"
 #include "xlir_c_value_transfers.inc.c"
 #include "xlir_c_values.inc.c"
+static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
+    XrLirTypeView shape = {0};
+    return type == XR_LIR_SLICE_I64 || (type >= XR_LIR_TYPE_COUNT &&
+        xr_lir_type_view(module, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_SLICE);
+}
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic, bool standalone) {
     if (diagnostic)
@@ -1208,7 +1213,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         !request->resources || !request->translation_unit || !request->module ||
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
-        entry.kind != XR_LIR_FUNCTION_DEFINITION || c_slice_type(&c, entry.result) ||
+        entry.kind != XR_LIR_FUNCTION_DEFINITION || c_input_slice_result(request->module, entry.result) ||
         (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;
