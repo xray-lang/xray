@@ -456,15 +456,16 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *v, XrRbcCompileDiagnostic *d, RbcLirOutputValues *output) {
     d->function = f.id;
     d->block = d->instruction = 0;
-    if (rbc_lir_slice_type(input,v->result)) {
-        rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"Slice results require a complete caller loan hook",(XrLirSource){0});
-        return false;
-    }
-    for (uint32_t p=0;p<v->parameter_count;++p)
-        if (rbc_lir_slice_type(input,v->parameter_types[p])) {
-            rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"Slice parameters require a complete borrowed call hook",(XrLirSource){0});
+    bool slice_boundary=rbc_lir_slice_type(input,v->result);
+    for (uint32_t p=0;p<v->parameter_count;++p) slice_boundary|=rbc_lir_slice_type(input,v->parameter_types[p]);
+    if (slice_boundary) {
+        XrLirSliceFunctionFact fact={0};
+        if (xr_lir_slice_function_fact(input,f.id,&fact)!=XR_LIR_OK || !fact.available ||
+            fact.parameter_count!=v->parameter_count) {
+            rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"Slice boundary has no checked caller loan",(XrLirSource){0});
             return false;
         }
+    }
     for (uint32_t p = 0; p < v->callable_parameter_count; ++p) {
         XrLirCallableParameter contract = v->callable_parameters[p].contract;
         if (contract.mode != XR_PARAM_READ) {
@@ -490,7 +491,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && v->result != XR_LIR_MAP_STRING_I64 &&
          v->result != XR_LIR_SLICE_I64 &&
-         !xr_lir_boxed_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_aggregate_type(input, v->result))) {
+         !xr_lir_boxed_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_slice_type(input,v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
             rbc_lir_value_source(input, f, v, 0, d));
@@ -618,7 +619,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
     case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
-    case XR_LIR_SLICE_CLEANUP: return true;
+    case XR_LIR_SLICE_CLEANUP: case XR_LIR_SLICE_FORMAL_CLEANUP: return true;
     case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return false;
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
@@ -1905,7 +1906,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (all > SIZE_MAX / sizeof(uint32_t))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "function table exceeds address space",
             (XrLirSource) {0});
-    if (rbc_lir_inline_type(input,root.result))
+    if (rbc_lir_inline_type(input,root.result) || rbc_lir_slice_type(input,root.result))
         return rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"inline value results require an internal typed caller",(XrLirSource){0});
     uint32_t *ids = xr_malloc(all * sizeof(*ids));
     uint32_t *mapping = xr_calloc(all, sizeof(*mapping));

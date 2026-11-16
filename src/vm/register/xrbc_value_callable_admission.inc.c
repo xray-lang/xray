@@ -18,6 +18,8 @@ static bool rbc_value_formal_accepts(const XrRbcModule *module,const XrRbcValueC
     if (rbc_value_function(module,receiving,formal,false))
         return rbc_value_function(module,sending,source,false) && rbc_callable_accepts(module,
             rbc_value_signature(module,receiving,formal),rbc_value_signature(module,sending,source));
+    if (rbc_value_slice(module,receiving,formal))
+        return rbc_value_slice(module,sending,source) && to->type==from->type;
     return to->type==from->type;
 }
 static const XrLirHomeEvent *rbc_value_event(const XrRbcValueCode *code,uint32_t index,uint32_t kind) {

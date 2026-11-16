@@ -284,6 +284,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             .index=(uint32_t)i->bits,.count=i->operand_count,.window=UINT32_MAX};
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
         break;
+    case XR_LIR_SLICE_FORMAL_CLEANUP:
+        /* The common verifier ends only this independent formal loan. */
+        *handled=true; return true;
     case XR_LIR_SLICE_CLEANUP:
         if (!i->bits || i->bits>UINT32_MAX)
             return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup lost its resource target");
@@ -404,6 +407,11 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_CALL:
         if (!rbc_lir_value_call(c,i)) return true;
         access.operation = XR_RBC_VALUE_CALL; access.source = access.other = 0;
+        if (rbc_lir_slice_type(c->input,i->type)) {
+            if (c->value_call_cursor>UINT32_MAX)
+                return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"Slice call ordinal exceeds typed code");
+            access.other=(uint32_t)c->value_call_cursor;
+        }
         access.index = c->functions[i->callee - 1] - 1; access.count = i->operand_count;
         access.window = c->register_count - rbc_lir_scalar_arguments(c->input,i) - 1;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
@@ -411,7 +419,8 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_RET:
         access.operation = XR_RBC_VALUE_RETURN;
         if (i->operand_count && (rbc_lir_callable_type(c->input,rbc_lir_value_type(c,i->operands[0])) ||
-                rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,i->operands[0]))))
+                rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,i->operands[0])) ||
+                rbc_lir_slice_type(c->input,rbc_lir_value_type(c,i->operands[0]))))
             access.index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_RETURN_TRANSFER,i->operands[0]);
         break;
     default: return true;

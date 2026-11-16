@@ -6,15 +6,6 @@
  *
  * xrbc_value_slice_execute.inc.c - Borrowed windows over common Frame keepers
  */
-static XrtManagedStatus rbc_value_slice_storage(RbcValueActivation *activation,
-    uint32_t ordinal,XrtInlineValueHome *output) {
-    const XrLirHomeWorkspace *workspace=rbc_value_slice_workspace(activation->code,ordinal);
-    if (!workspace || !activation->frame || !activation->payload) return XRT_MANAGED_ARGUMENT;
-    *output=(XrtInlineValueHome){.frame=activation->frame,.value=activation->payload+workspace->offset,
-        .temporary=activation->payload+workspace->temporary_offset,.first_owner=workspace->first_owner,
-        .temporary_first_owner=workspace->temporary_first_owner};
-    return XRT_MANAGED_OK;
-}
 static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
@@ -32,6 +23,8 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
     XrtManagedStatus status=XRT_MANAGED_OK;
     if (construct || access.index==XR_LIR_SLICE_OP_END) {
         const XrLirHomeEvent *event=&activation->code->homes->events[access.window-1];
+        if (event->view_storage==XR_LIR_SLICE_STORAGE_BORROWED_FORMAL)
+            return access.index==XR_LIR_SLICE_OP_END ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
         status=rbc_value_slice_storage(activation,event->view_workspace,&destination);
         if (status!=XRT_MANAGED_OK) return status;
     }
