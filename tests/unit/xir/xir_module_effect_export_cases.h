@@ -75,7 +75,10 @@ static void module_export_slice_sources(void) {
     CHECK(module_export_contains(view, view.functions[indirect].write, XIR_MODULE_EFFECT_CALLBACK, 0) ||
         module_export_contains(view, view.functions[indirect].write, XIR_MODULE_EFFECT_UNKNOWN, 0));
     xr_xir_compile_artifact_free(artifact); xir_effects_module_export_free(owned); effect_mark_check(baseline);
-    artifact = root_source("slice_callback_disjoint.xr", XR_XIR_OK); owned = NULL;
+    /* The complete live-after-callback positive stays in its own fixture;
+     * normalizing that indirect loan still needs contextual lifetime facts.
+     * This receiver checks the admitted whole-call module WRITE contract. */
+    artifact = root_source("slice_callback_after_read.xr", XR_XIR_OK); owned = NULL;
     CHECK(xir_effects_module_export_copy(artifact, &owned) == XR_XIR_OK);
     CHECK(xir_effects_module_export_view(owned, &view) == XR_XIR_OK && view.module_access_complete);
     uint32_t change = root_find(&artifact->module, "change");

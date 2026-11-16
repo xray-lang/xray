@@ -1,0 +1,8 @@
+var values = [1,2,3]
+var other = [4,5,6]
+fn invoke(part:Slice<i64>, callback:fn()->i64)->i64 {
+    const saved = part[0]
+    return saved + callback()
+}
+fn change()->i64 { values[0] = 9; return 0 }
+print(invoke(other[0:2], change))
