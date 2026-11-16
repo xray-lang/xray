@@ -41,6 +41,10 @@ typedef struct XrLirHomeTransfer {
     /* Copied from the selected ownership event. NONE is a POD byte transfer;
      * BORROW preserves the full representation without an owning transaction. */
     XrLirOwnershipTransferMode transfer_mode;
+    /* Separate actual keepers for a borrowed Slice edge. The natural bytes
+     * remain BORROW; these one-based workspace ordinals describe physical RC. */
+    XrLirOwnershipTransferMode hold_transfer_mode;
+    uint32_t source_workspace, target_workspace;
 } XrLirHomeTransfer;
 typedef struct XrLirHomeEdge {
     uint32_t block, edge, target_block;

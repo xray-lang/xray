@@ -21,7 +21,8 @@ typedef enum XrLirTypeKind {
     XR_LIR_TYPE_CALLABLE,
     XR_LIR_TYPE_CELL,
     XR_LIR_TYPE_TUPLE,
-    XR_LIR_TYPE_RECORD
+    XR_LIR_TYPE_RECORD,
+    XR_LIR_TYPE_SLICE
 } XrLirTypeKind;
 
 typedef struct XrLirTypeView {
@@ -72,6 +73,9 @@ XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordField *,
 XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *, XrLirType,
     const XrLirRecordField **, uint32_t *count);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
+/* The readonly natural family admits exact I64 and U8 Array windows. Its bytes
+ * have no owned leaves; loan validity and private keepers are separate facts. */
+XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *, XrLirType element, XrLirType *output);
 /* POD queries accept a live, unfailed construction or a finished module.
  * They preserve output on failure. Capabilities retain their dedicated ABI
  * and have no ordinary storage layout or scalar-leaf projection here. */

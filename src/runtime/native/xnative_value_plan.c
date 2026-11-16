@@ -11,6 +11,7 @@
  *   leaves before publication; physical object retirement stays in the kernel.
  */
 #include "xnative_value_plan.h"
+#include "xray_native_array_slice.h"
 #include "xray_native_function.h"
 #include "base/xchecks.h"
 #include "base/xmax_align.h"
@@ -180,6 +181,8 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
         (!(spec->entry.signature->view.signature.flags & XRT_VALUE_C_ABI) || !spec->capture_count) &&
         layout_slots(spec, spec->captures, spec->capture_count, false);
     if (spec->owned_count) return false;
+    if (spec->kind == XRT_VALUE_SLICE_I64 || spec->kind == XRT_VALUE_SLICE_U8)
+        return spec->size == sizeof(XrtReadonlyArraySlice) && spec->alignment == alignof(XrtReadonlyArraySlice);
     if (spec->kind == XRT_VALUE_FIXED_U8) return spec->count && spec->count <= 65535 &&
         spec->size == spec->count && spec->alignment == 1;
     if (spec->kind == XRT_VALUE_TUPLE_I64) return spec->count && spec->count <= SIZE_MAX / 8 &&

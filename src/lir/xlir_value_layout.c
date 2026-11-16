@@ -13,6 +13,7 @@
 #include "xlir_value_layout.h"
 #include "xlir_internal.h"
 #include "xray_native_function.h"
+#include "xray_native_array_slice.h"
 #include "base/xchecks.h"
 #include <stdalign.h>
 #include <string.h>
@@ -138,7 +139,8 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
             for (uint32_t p = 0; p < signature.parameter_count && status == XR_LIR_VALUE_LAYOUT_OK; ++p)
                 status = need_callable_type(set, signature.parameters[p].type, signature.parameters[p].array_element, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
-        } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_TUPLE)
+        } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_TUPLE &&
+            shape.kind != XR_LIR_TYPE_SLICE)
             return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     return XR_LIR_VALUE_LAYOUT_OK;
@@ -224,6 +226,12 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     XrLirTypeView shape;
     if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *spec = (XrtValuePlanSpec){0};
+    if (shape.kind == XR_LIR_TYPE_SLICE) {
+        if (shape.element != XR_LIR_I64 && shape.element != XR_LIR_U8) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+        spec->kind = shape.element == XR_LIR_I64 ? XRT_VALUE_SLICE_I64 : XRT_VALUE_SLICE_U8;
+        spec->size = sizeof(XrtReadonlyArraySlice); spec->alignment = alignof(XrtReadonlyArraySlice);
+        return XR_LIR_VALUE_LAYOUT_OK;
+    }
     if (shape.kind == XR_LIR_TYPE_CALLABLE) {
         XrLirCallableType signature;
         if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
