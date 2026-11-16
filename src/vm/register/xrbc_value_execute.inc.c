@@ -738,6 +738,7 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     size_t cell_base=stack->cell_count,spill_base=stack->spill_count;
     stack->frames[stack->depth++]=(XrRbcFrame){access.index,0,base,receiving ? access.result : access.window,
         cell_base,0,spill_base,0};
+    xr_rbc_cells_begin(stack,cell_base,callee->cell_count);
     xr_rbc_entry_clear(stack->slots+base,&stack->entries[access.index]);
     stack->cell_count+=callee->cell_count; stack->spill_count+=callee->spill_count;
     if (callee->aggregate_size && !xr_rbc_aggregate_reserve(stack,&stack->frames[parent+1],callee)) return XR_RBC_OUT_OF_MEMORY;

@@ -447,6 +447,57 @@ static void slice_call_boundaries(void) {
         xr_lir_module_destroy(c.module); execute(program,68);
     }
 }
+static XrLirSource ca_source(void) {
+    const char *path="frame-scalar-cell.xr";
+    return (XrLirSource){path,strlen(path),3,1,3,9};
+}
+#include "lir_frame_scalar_cell_fixture.h"
+static void late_frame_scalar_cells(void) {
+    FrameScalarCellFixture c=frame_scalar_cell_fixture(FRAME_SCALAR_CELL_VALID);
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrRbcProgram *program=compile(c.module,c.root);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    bool sparse=false;
+    for (size_t f=0;f<module->function_count;++f) {
+        const XrRbcFunction *function=&module->functions[f];
+        if (function->cell_count!=3) continue;
+        uint32_t mask=0;
+        for (size_t pc=0;pc<function->code_count;++pc) {
+            uint32_t word=function->code[pc];
+            if ((word&255)!=XR_RBC_CELL_NEW) continue;
+            CHECK((word>>16)<3 && !(mask&(1u<<(word>>16)))); mask|=1u<<(word>>16);
+        }
+        CHECK(mask==7); sparse=true;
+    }
+    CHECK(sparse); xr_lir_module_destroy(c.module); execute(program,73);
+    const FrameScalarCellCase rejected[]={FRAME_SCALAR_CELL_LOOP,FRAME_SCALAR_CELL_UNINITIALIZED};
+    for (size_t n=0;n<2;++n) {
+        c=frame_scalar_cell_fixture(rejected[n]);
+        CHECK(xr_lir_module_finish(c.module,NULL)!=XR_LIR_OK); xr_lir_module_destroy(c.module);
+    }
+}
+static void compacted_frame_scalar_cells(void) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirFunction root={0}; XrLirBlock entry={0},dead={0},live={0};
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="late_cell",.name_length=9,.result=XR_LIR_I64},&root));
+    OK(xr_lir_define_function(c.module,root));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,root,entry));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&dead)); OK(xr_lir_add_block(c.module,root,NULL,0,&live));
+    OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{live,NULL,0}}}));
+    XrLirBlock blocks[]={dead,live};
+    for (size_t n=0;n<2;++n) {
+        XrLirValue value=ca_constant(&c,blocks[n],n ? 42 : 17);
+        XrLirValue cell=ca_value(&c,blocks[n],XR_LIR_CELL_NEW,XR_LIR_I64_CELL,&value,1);
+        ca_return(&c,blocks[n],ca_value(&c,blocks[n],XR_LIR_CELL_READ,XR_LIR_I64,&cell,1));
+    }
+    OK(xr_lir_module_finish(c.module,NULL)); XrRbcProgram *program=compile(c.module,root);
+    const XrRbcModule *module=xr_rbc_program_view(program); CHECK(module->function_count==1);
+    const XrRbcFunction *function=&module->functions[0]; CHECK(function->cell_count==1);
+    for (size_t pc=0;pc<function->code_count;++pc)
+        if ((function->code[pc]&255)==XR_RBC_CELL_NEW) CHECK(!(function->code[pc]>>16));
+    xr_lir_module_destroy(c.module); execute(program,42);
+}
 #include "lir_slice_state_read_fixture.h"
 static void slice_state_reads(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
@@ -753,6 +804,8 @@ int main(void) {
     owned_map_captures();
     borrowed_map_binding_frontier();
     slice_call_boundaries();
+    late_frame_scalar_cells();
+    compacted_frame_scalar_cells();
     slice_state_reads();
     owned_duplicate_edge();
     scope_receiving();

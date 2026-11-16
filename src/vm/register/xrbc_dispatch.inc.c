@@ -128,11 +128,12 @@ XR_RBC_CASE(RELOAD) {
 }
 XR_RBC_CASE(CELL_NEW) {
     uint32_t ordinal = instruction >> 16;
-    for (uint32_t skipped = frame->initialized_cells; skipped < ordinal; ++skipped)
-        if (!function->cell_kinds || !rbc_indexed_cell_kind(function->cell_kinds[skipped])) return XR_RBC_INVALID;
+    if (ordinal>=function->cell_count) return XR_RBC_INVALID;
     size_t index = frame->cell_base + ordinal;
+    if (stack->cell_ready[index]) return XR_RBC_INVALID;
     stack->cells[index].bits = XR_RBC_REG(XR_RBC_A());
-    if (ordinal >= frame->initialized_cells) frame->initialized_cells = ordinal + 1;
+    stack->cell_ready[index]=1;
+    ++frame->initialized_cells;
     XR_RBC_REG(XR_RBC_A()) = (uint64_t)index + 1;
     XR_RBC_NEXT();
 }
@@ -345,6 +346,7 @@ XR_RBC_CASE(CALL) {
     // touching the new frame or its arguments, including on partial growth.
     frame = &stack->frames[stack->depth++];
     *frame = (XrRbcFrame){target, 0, base, XR_RBC_A(), stack->cell_count, 0, stack->spill_count, 0};
+    xr_rbc_cells_begin(stack,frame->cell_base,callee->cell_count);
     registers = stack->slots + base;
     xr_rbc_entry_clear(registers, &entries[target]);
     if (callee->reference_spill_count)

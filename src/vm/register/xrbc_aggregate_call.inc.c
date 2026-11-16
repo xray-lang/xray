@@ -169,6 +169,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_control(const XrRbcModule *modul
         *frame = (XrRbcFrame){access.callee, 0, base,
             callee->aggregate_result_type ? access.destination : access.window,
             stack->cell_count, 0, stack->spill_count, 0};
+        xr_rbc_cells_begin(stack,frame->cell_base,callee->cell_count);
 
         xr_rbc_entry_clear(stack->slots + base, &stack->entries[access.callee]);
         if (callee->reference_spill_count)

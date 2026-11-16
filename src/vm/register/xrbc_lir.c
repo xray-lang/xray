@@ -692,6 +692,19 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 xr_lir_instruction_view(input, block, n, &i);
                 d->block = block.id;
                 d->instruction = n + 1;
+                if (i.op==XR_LIR_CELL_NEW && i.type==XR_LIR_I64_CELL) {
+                    bool may_repeat=true;
+                    if (xr_lir_block_may_repeat(input,block,&may_repeat)!=XR_LIR_OK) {
+                        rbc_lir_error(d,XR_RBC_COMPILE_INVALID,
+                            "Frame scalar Cell lost its finished block construction fact",i.source);
+                        goto rejected;
+                    }
+                    if (may_repeat) {
+                        rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,
+                            "Frame scalar Cell constructor may repeat in this activation",i.source);
+                        goto rejected;
+                    }
+                }
                 if (i.op == XR_LIR_FUNCTION_REF && i.bits==XR_LIR_CLOSURE_FRAME && i.operand_count) {
                     if (!facts) {
                         XrLirStatus status=xr_lir_callable_facts_create(input,&facts);
@@ -1447,6 +1460,22 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
     xr_free(positions);
     return true;
 }
+static bool rbc_lir_cells_compact(RbcLirCompiler *c) {
+    uint32_t count=0;
+    for (size_t pc=0;pc<c->code_count;++pc) {
+        uint32_t word=c->code[pc];
+        if ((word&255)!=XR_RBC_CELL_NEW) continue;
+        uint32_t previous=word>>16;
+        if (previous>=c->cell_count || c->cell_kinds[previous]!=XR_RBC_BITS || count>UINT16_MAX)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"scalar Cell lost its reserved constructor ordinal");
+        // The encoded NEW is the sole scalar ordinal use. All actual handles
+        // flow from that instruction; no capture or access metadata embeds it.
+        c->code[pc]=(word&UINT32_C(65535))|(count<<16);
+        c->cell_kinds[count++]=XR_RBC_BITS;
+    }
+    c->cell_count=count;
+    return true;
+}
 static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     if(!rbc_lir_output_values(c->input,c->function,&c->view,&c->output,c->diagnostic)) {
         c->status=c->diagnostic->status;return false;
@@ -1529,7 +1558,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c)) return false;
+    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
     XrLirArrayShape array_result={0};
     if(c->view.result==XR_LIR_ARRAY && xr_lir_array_result_view(c->input,c->function,&array_result)!=XR_LIR_OK)
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");
