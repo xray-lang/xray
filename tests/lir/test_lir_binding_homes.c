@@ -188,7 +188,7 @@ static XrLirModule *borrowed_map_fixture(bool writes) {
     XrLirDiagnostic diagnostic={0}; XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
     if (status!=XR_LIR_OK) fprintf(stderr,"borrowed Map homes writes=%u f%u b%u i%u: %s\n",
         writes ? 1u : 0u,diagnostic.function,diagnostic.block,diagnostic.instruction,
-        diagnostic.message ? diagnostic.message : "no diagnostic");
+        diagnostic.message[0] ? diagnostic.message : "no diagnostic");
     OK(status); return c.module;
 }
 static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
