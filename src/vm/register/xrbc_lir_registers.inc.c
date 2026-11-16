@@ -179,6 +179,7 @@ static XrLirType rbc_lir_value_type(RbcLirCompiler *c, uint32_t value) {
 static bool rbc_lir_common_value(RbcLirCompiler *c, uint32_t value) {
     return c->typed_values && c->homes &&
         (c->homes->values[value].owner_count ||
+         rbc_lir_callable_type(c->input, rbc_lir_value_type(c, value)) ||
          rbc_lir_inline_type(c->input, rbc_lir_value_type(c, value)) ||
          (c->homes->bindings && c->homes->bindings[value].type));
 }

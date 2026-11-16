@@ -21,7 +21,7 @@
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
 #include "xray_native_values.h"
-#include "xray_native_map.h"
+#include "xray_native_function.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
@@ -315,6 +315,8 @@ typedef struct XrRbcCodeLease {
     void (*release)(void *);
 } XrRbcCodeLease;
 
+struct XrRbcValueCode;
+struct XrRbcCallableEntry;
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
@@ -344,7 +346,15 @@ typedef struct {
     size_t function_scope_count;
     const XrRbcFunctionCallableParameters *function_callable_parameters;
     size_t function_callable_parameter_count;
-    const XrtMapLiteral *map_literals;
+    /* Explicit immutable typed descriptions share the raw caller's code
+     * lifetime, optionally extended by its lease. Admission accepts only proven
+     * Frame/borrow transport; these pointers never authorize an owner slot. */
+    const struct XrRbcValueCode *const *borrowed_value_codes;
+    size_t borrowed_value_code_count;
+    const struct XrtValueImage *borrowed_value_image;
+    const struct XrRbcCallableEntry *borrowed_callable_entries;
+    const uint32_t *borrowed_type_callables;
+    const struct XrtMapLiteral *map_literals;
     size_t map_literal_count;
 } XrRbcModule;
 
@@ -394,6 +404,12 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output);
+/* Internal receiving entry for a real Owned Fn outcome. Its Env supplies the
+ * exact RBC code owner, raw snapshot and original locations. Arguments are
+ * ordinary scalar bits; preparation holds the Env independently of the lender.
+ * Failure preserves the empty output and invokes no guest code. */
+XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uint64_t *,
+    size_t argument_count, XrRbcExecution **empty);
 // A valid single-use run transfers its already allocated non-NULL outcome,
 // including ordinary VM failure. NULL/consumed misuse invokes no guest.
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
@@ -416,6 +432,8 @@ XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtManagedHeader *
 XR_FUNC bool xr_rbc_outcome_take_array(XrRbcOutcome *, XrtManagedHeader **empty);
 XR_FUNC bool xr_rbc_outcome_map(const XrRbcOutcome *, const XrtManagedHeader **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_map(XrRbcOutcome *, XrtManagedHeader **empty);
+XR_FUNC bool xr_rbc_outcome_function(const XrRbcOutcome *, const XrtFunction **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_function(XrRbcOutcome *, XrtFunction *empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,

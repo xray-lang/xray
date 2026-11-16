@@ -14,11 +14,15 @@
 
 #include "xrbc_internal.h"
 #include "xrbc_value_code.h"
+#include "xrbc_code_owner.h"
 #include "lir/xlir_string.h"
 #include "lir/xlir_map.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_values.h"
+#include "runtime/native/xnative_capture_backing.h"
+#include "runtime/native/xnative_module_state.h"
+#include "runtime/native/xnative_value_image.h"
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -84,7 +88,10 @@ typedef struct {
     XrRbcClosureScope *closure_scopes;
     size_t closure_scope_count, closure_scope_capacity;
     XrRbcValueRuntime *values;
+    const XrtModuleLayout *layout;
     XrtManagedHeader **value_result;
+    XrtFunction *function_result;
+    const XrtFunction *entry_function;
     /* Borrowed only during execution; the pending outcome retains this owner.
      * Keeping it in cold state avoids a live dispatch register on scalar paths. */
     const XrtLocationOwner *call_locations;
@@ -100,6 +107,7 @@ struct XrRbcOutcome {
     XrPodType *aggregate_types;
     size_t aggregate_type_count;
     uint8_t *aggregate_bytes;
+    XrtFunction function;
 };
 
 struct XrRbcExecution {
@@ -113,6 +121,7 @@ struct XrRbcExecution {
     XrtModuleLayout *layout;
     XrtModuleState *state;
     XrRbcCodeLease code_lease;
+    XrtFunction owned_function;
     bool consumed;
 };
 
@@ -171,6 +180,7 @@ static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *function, uint32
 #include "xrbc_callable_admission.inc.c"
 #include "xrbc_aggregate_admission.inc.c"
 #include "xrbc_value_admission.inc.c"
+#include "xrbc_borrowed_values.inc.c"
 
 static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     if (!(function->code && function->code_count && function->register_count &&
@@ -291,6 +301,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_CALL:
         if (a >= registers || index >= module->function_count ||
+            rbc_callable_inline_signature(module,index) ||
             module->functions[index].callable ||
             module->functions[index].aggregate_parameter_count || module->functions[index].aggregate_result_type ||
             a + 1 + module->functions[index].parameter_count != registers) return false;
@@ -336,7 +347,10 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     for (size_t f = 0; f < module->function_count; ++f)
         if (!xr_rbc_function_valid(&module->functions[f]) &&
             !xr_rbc_typed_container_function_valid(module,&module->functions[f])) return XR_RBC_INVALID;
-    if (!rbc_callable_metadata_valid(module)) return XR_RBC_INVALID;
+    if (!xr_rbc_module_code_owner(module) && !rbc_callable_signatures_valid(module)) return XR_RBC_INVALID;
+    XrRbcStatus borrowed=rbc_borrowed_values_admit(module);
+    if (borrowed!=XR_RBC_OK) return borrowed;
+    if (!rbc_callable_metadata_valid(module) || !rbc_callable_image_valid(module)) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f)
         if (!rbc_aggregate_metadata_valid(module, &module->functions[f])) return XR_RBC_INVALID;
     if (!xr_rbc_state_layout_valid(module)) return XR_RBC_INVALID;
@@ -427,6 +441,7 @@ static XrRbcRegister *xr_rbc_cell(XrRbcStack *stack, const XrRbcModule *module,
 #include "xrbc_state_execute.inc.c"
 #include "xrbc_aggregate_execute.inc.c"
 #include "xrbc_aggregate_call.inc.c"
+#include "xrbc_owned_function.inc.c"
 #include "xrbc_value_execute.inc.c"
 
 /* Keep dispatch handlers independent of unrelated cold code placement. MSVC
@@ -466,26 +481,49 @@ static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution, bool instanti
     if (status == XRT_MANAGED_OK && instantiate)
         status = xr_rbc_state_caches(execution->layout, execution->state,
             &execution->stack.module_accesses);
+    if (status==XRT_MANAGED_OK) execution->stack.layout=execution->layout;
     return status == XRT_MANAGED_OK ? XR_RBC_OK :
         status == XRT_MANAGED_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_VALUE_FAILURE;
 }
 
-XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, uint32_t entry,
-    const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
-    XrRbcExecution **output) {
+typedef struct RbcPrepareRequest {
+    const XrRbcModule *module;
+    uint32_t entry;
+    const uint64_t *arguments;
+    size_t argument_count;
+    XrtLocationOwner *locations;
+    XrtFunction *owned_function;
+} RbcPrepareRequest;
+static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution **output) {
+    const XrRbcModule *module=request->module;
+    uint32_t entry=request->entry;
+    const uint64_t *arguments=request->arguments;
+    size_t argument_count=request->argument_count;
+    XrtLocationOwner *locations=request->locations;
     if (!output || *output || !locations || !module || !module->functions ||
         entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    bool inject_state = module->state_spec && entry == module->state_entry;
-    if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_FUNCTION || function->result_kind == XR_RBC_BOXED ||
-        function->capture_count || function->state_capture ||
+    bool owned=request->owned_function!=NULL;
+    size_t captures=owned ? function->capture_count : 0;
+    bool inject_state = !owned && module->state_spec && entry == module->state_entry;
+    const XrRbcValueCode *value_code=xr_rbc_module_value_code(module,entry);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    const XrRbcCodeOwner *owner=xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
+        module->code_lease.retain,module->code_lease.release});
+    bool function_result=function->result_kind==XR_RBC_FUNCTION;
+    if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_BOXED ||
+        (!owned && function->capture_count) || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
-        argument_count != function->parameter_count - (inject_state ? 1u : 0u) ||
+        captures>function->parameter_count ||
+        argument_count != function->parameter_count - captures - (inject_state ? 1u : 0u) ||
+        (function_result && (!owner || !image || !value_code || !value_code->homes ||
+            !value_code->homes->result_type || value_code->homes->result_type>image->type_count ||
+            image->types[value_code->homes->result_type-1].kind!=XRT_VALUE_FUNCTION)) ||
         (!inject_state && function->parameter_count &&
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
     for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
-        if (function->register_kinds[p] != XR_RBC_BITS) return XR_RBC_INVALID;
+        if (function->register_kinds[captures+p] != XR_RBC_BITS) return XR_RBC_INVALID;
     if (function->callable) {
         XrRbcCallableType type = module->callable_types[function->callable - 1];
         for (size_t p = 0; p < argument_count; ++p)
@@ -493,8 +531,14 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
     }
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
+    if (owned) {
+        execution->owned_function=*request->owned_function;
+        *request->owned_function=(XrtFunction){0};
+        execution->stack.entry_function=&execution->owned_function;
+    }
     if (module->code_lease.owner) {
         if (!module->code_lease.retain(module->code_lease.owner)) {
+            xrt_managed_drop(execution->owned_function.owner);
             xr_free(execution);
             return XR_RBC_VALUE_FAILURE;
         }
@@ -523,6 +567,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
     execution->pending->result_kind = function->result_kind;
     execution->stack.entries = execution->entries;
     execution->stack.value_result = &execution->pending->value.string;
+    execution->stack.function_result = &execution->pending->function;
     if (function->aggregate_result_type) {
         execution->pending->aggregate_type = module->aggregate_types[function->aggregate_result_type - 1];
         execution->pending->aggregate_bytes = xr_malloc(execution->pending->aggregate_type.physical.size);
@@ -545,7 +590,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
     }
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
     if (argument_count)
-        for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[i].bits = arguments[i];
+        for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[captures+i].bits = arguments[i];
     if (inject_state) execution->stack.slots[argument_count].state = execution->state;
     if (function->reference_spill_count)
         memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
@@ -555,6 +600,34 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, ui
     execution->stack.spill_count = function->spill_count;
     *output = execution;
     return XR_RBC_OK;
+}
+
+XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, uint32_t entry,
+    const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
+    XrRbcExecution **output) {
+    RbcPrepareRequest request={module,entry,arguments,argument_count,locations,NULL};
+    return rbc_prepare(&request,output);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *borrowed,
+    const uint64_t *arguments, size_t argument_count, XrRbcExecution **empty) {
+    if (!borrowed || !borrowed->entry || !borrowed->owner || !empty || *empty ||
+        (argument_count && !arguments)) return XR_RBC_INVALID;
+    XrtFunction owned=*borrowed;
+    if (!xrt_managed_retain(owned.owner)) return XR_RBC_VALUE_FAILURE;
+    RbcOwnedFunction received={0};
+    XrtManagedStatus native=rbc_owned_function_borrow(&owned,&received);
+    XrRbcStatus status=native==XRT_MANAGED_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_INVALID;
+    if (native==XRT_MANAGED_OK) {
+        status=xr_rbc_module_admit(received.code->module,received.code->locations);
+        if (status==XR_RBC_OK) {
+            RbcPrepareRequest request={received.code->module,received.function,arguments,argument_count,
+                received.code->locations,&owned};
+            status=rbc_prepare(&request,empty);
+        }
+    }
+    xrt_managed_drop(owned.owner);
+    return status;
 }
 
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
@@ -573,6 +646,17 @@ static void xr_rbc_root(void *context) {
     execution->pending->status = xr_rbc_values_begin(execution->module, &execution->stack,
         (uint32_t)execution->stack.frames[0].function, 0);
     if (execution->pending->status != XR_RBC_OK) return;
+    if (execution->stack.entry_function) {
+        RbcFunctionCall call={0};
+        uint32_t target=(uint32_t)execution->stack.frames[0].function;
+        XrtManagedStatus status=rbc_value_function_target(execution->module,&execution->stack,
+            execution->stack.entry_function,execution->module->functions[target].callable,&call);
+        if (status==XRT_MANAGED_OK && execution->stack.values && execution->stack.values->top)
+            status=rbc_value_function_captures(execution->module,&execution->stack,
+                execution->stack.values->top,&call);
+        else if (status==XRT_MANAGED_OK) status=XRT_MANAGED_ARGUMENT;
+        if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,0);
+    }
     execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
         execution->pending->locations, &execution->pending->value, execution->entries);
 }
@@ -628,6 +712,7 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
     xr_rbc_outcome_free(&owned->pending);
     xrt_module_layout_drop(&owned->layout);
     xrt_value_root_drain(&owned->values);
+    xrt_managed_drop(owned->owned_function.owner);
     if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
 }
@@ -691,6 +776,20 @@ XR_FUNC bool xr_rbc_outcome_take_map(XrRbcOutcome *outcome, XrtManagedHeader **o
         !outcome->value.string || !output || *output) return false;
     *output=outcome->value.string; outcome->value.string=NULL; return true;
 }
+XR_FUNC bool xr_rbc_outcome_function(const XrRbcOutcome *outcome,const XrtFunction **borrowed) {
+    if (!outcome || outcome->status!=XR_RBC_OK || outcome->result_kind!=XR_RBC_FUNCTION ||
+        !outcome->function.entry || !outcome->function.owner || !borrowed) return false;
+    *borrowed=&outcome->function;
+    return true;
+}
+XR_FUNC bool xr_rbc_outcome_take_function(XrRbcOutcome *outcome,XrtFunction *empty) {
+    const XrtFunction *borrowed=NULL;
+    if (!empty || empty->entry || empty->environment || empty->owner ||
+        !xr_rbc_outcome_function(outcome,&borrowed)) return false;
+    *empty=*borrowed;
+    outcome->function=(XrtFunction){0};
+    return true;
+}
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **locations) {
     if (!outcome || outcome->status != XR_RBC_VALUE_FAILURE || !status || !source_id || !locations) return false;
@@ -753,6 +852,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     xr_free(owned->aggregate_types);
     if (owned->result_kind == XR_RBC_STRING || owned->result_kind == XR_RBC_MAP_STRING_I64 ||
         rbc_array_kind(owned->result_kind)) xrt_managed_drop(owned->value.string);
+    xrt_managed_drop(owned->function.owner);
     xrt_locations_release(owned->locations);
     xr_free(owned);
 }

@@ -97,6 +97,7 @@ static bool rbc_aggregate_call_valid(const XrRbcModule *module, const XrRbcFunct
         access.result.index || access.result.spill || access.first > f->aggregate_argument_count ||
         access.count > f->aggregate_argument_count - access.first) return false;
     const XrRbcFunction *callee = &module->functions[access.callee];
+    if (rbc_callable_inline_signature(module,access.callee)) return false;
     if ((!callee->aggregate_parameter_count && !callee->aggregate_result_type && !callee->callable) ||
         access.count != callee->aggregate_parameter_count || access.window >= f->register_count ||
         callee->parameter_count != f->register_count - access.window - 1 ||

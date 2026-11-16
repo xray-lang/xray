@@ -47,13 +47,62 @@ static bool rbc_callable_parameter_owned(const XrRbcModule *m, const XrRbcFuncti
         if (view.rows[p].parameter == parameter) return view.rows[p].contract.escaping;
     return false;
 }
+static bool rbc_callable_image_value(const XrRbcModule *module, uint32_t id, XrRbcCallableValue value) {
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!image || !id || id>image->type_count) return false;
+    XrtValueKind kind=image->types[id-1].kind;
+    if (value.kind==XR_RBC_CALLABLE_FUNCTION) {
+        const uint32_t *types=xr_rbc_module_type_callables(module);
+        return types && kind==XRT_VALUE_FUNCTION && types[id-1]==value.type+1;
+    }
+    if (value.kind==XR_RBC_CALLABLE_SCALAR) {
+        XrtValueKind scalar;
+        return xr_pod_value_kind((XrPodScalar)value.type,&scalar) && scalar==kind;
+    }
+    if (value.kind==XR_RBC_CALLABLE_REFERENCE)
+        return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_MAP_STRING_I64 ?
+            kind==XRT_VALUE_MAP_STRING_I64 : rbc_array_kind((XrRbcRegisterKind)value.type) &&
+            kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+xr_rbc_array_family((XrRbcRegisterKind)value.type));
+    return false;
+}
+static bool rbc_callable_image_valid(const XrRbcModule *module) {
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    const uint32_t *types=xr_rbc_module_type_callables(module);
+    if (!image) return !types;
+    if (!types && image->type_count) {
+        for (uint32_t n=0;n<image->type_count;++n) if (image->types[n].kind==XRT_VALUE_FUNCTION) return false;
+        return true;
+    }
+    for (uint32_t n=0;n<image->type_count;++n) {
+        const XrtValueImageType *row=&image->types[n];
+        if (row->kind!=XRT_VALUE_FUNCTION) { if (types[n]) return false; continue; }
+        uint32_t id=types[n];
+        if (!id || id>module->callable_type_count) return false;
+        const XrRbcCallableType *signature=&module->callable_types[id-1];
+        if (row->parameter_count!=signature->parameter_count || row->flags!=signature->flags || row->throws ||
+            !rbc_callable_image_value(module,row->result,signature->result)) return false;
+        for (uint32_t p=0;p<row->parameter_count;++p) {
+            XrtValueImageParameter parameter=image->parameters[row->first_parameter+p];
+            XrRbcCallableParameter expected=signature->parameters[p];
+            if (parameter.mode!=expected.mode || (parameter.escaping!=0)!=expected.escaping ||
+                !rbc_callable_image_value(module,parameter.type,expected.value)) return false;
+        }
+    }
+    const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(module);
+    if (entries) for (size_t n=0;n<module->function_count;++n) {
+        uint32_t signature=entries[n].signature_type;
+        if (module->functions[n].callable ? !signature || signature>image->type_count ||
+                !entries[n].source_function || types[signature-1]!=module->functions[n].callable : signature!=0) return false;
+    }
+    return true;
+}
 
-static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
-    if (m->callable_type_count > UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
-    if (m->callable_results ? m->callable_result_count != m->function_count : m->callable_result_count != 0) return false;
-    if (m->function_scopes ? m->function_scope_count != m->function_count : m->function_scope_count != 0) return false;
-    if (m->function_callable_parameters ? m->function_callable_parameter_count != m->function_count :
-        m->function_callable_parameter_count != 0) return false;
+static bool rbc_callable_signatures_valid(const XrRbcModule *m) {
+    if (m->callable_type_count>UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
+    if (m->callable_results ? m->callable_result_count!=m->function_count : m->callable_result_count!=0) return false;
+    if (m->function_scopes ? m->function_scope_count!=m->function_count : m->function_scope_count!=0) return false;
+    if (m->function_callable_parameters ? m->function_callable_parameter_count!=m->function_count :
+        m->function_callable_parameter_count!=0) return false;
     for (size_t t = 0; t < m->callable_type_count; ++t) {
         XrRbcCallableType type = m->callable_types[t];
         if (type.parameter_count > 65536 || (type.parameter_count && !type.parameters) ||
@@ -65,6 +114,10 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
                 (parameter.escaping && (parameter.value.kind != XR_RBC_CALLABLE_FUNCTION || parameter.mode != 0))) return false;
         }
     }
+    return true;
+}
+static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
+    if (!rbc_callable_signatures_valid(m)) return false;
     for (size_t n = 0; n < m->function_count; ++n) {
         const XrRbcFunction *f = &m->functions[n];
         XrRbcFunctionScopes scopes = rbc_function_scopes(m, f);
@@ -126,13 +179,17 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
         XrRbcCallableType type = m->callable_types[f->callable - 1];
         if (f->state_capture && (!m->state_spec || f->parameter_count == f->capture_count ||
             rbc_register_kind(f, f->parameter_count - 1) != XR_RBC_STATE)) return false;
+        const XrRbcValueCode *typed=xr_rbc_module_value_code(m,(uint32_t)n);
         if (type.parameter_count != f->parameter_count - f->capture_count - f->state_capture || f->aggregate_parameter_count ||
-            type.result.kind == XR_RBC_CALLABLE_AGGREGATE || type.result.kind == XR_RBC_CALLABLE_FUNCTION ||
+            type.result.kind == XR_RBC_CALLABLE_AGGREGATE ||
+            (type.result.kind==XR_RBC_CALLABLE_FUNCTION && (!typed || !typed->homes ||
+                !rbc_callable_image_value(m,typed->homes->result_type,type.result))) ||
             rbc_callable_value_kind(type.result) != f->result_kind) return false;
         for (uint32_t p = 0; p < type.parameter_count; ++p) {
             XrRbcCallableValue value = type.parameters[p].value;
             uint32_t formal = f->capture_count + p;
-            if (value.kind == XR_RBC_CALLABLE_AGGREGATE || rbc_callable_value_kind(value) != rbc_register_kind(f, formal) ||
+            if (type.parameters[p].mode!=XR_PARAM_READ || value.kind == XR_RBC_CALLABLE_AGGREGATE ||
+                rbc_callable_value_kind(value) != rbc_register_kind(f, formal) ||
                 (value.kind == XR_RBC_CALLABLE_FUNCTION && (f->register_callables[formal] != value.type + 1 ||
                  type.parameters[p].escaping != rbc_callable_parameter_owned(m, f, formal)))) return false;
         }
@@ -142,10 +199,30 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
         uint32_t bytes = 0;
         for (uint32_t e = 0; e < f->environment_count; ++e) {
             XrRbcEnvironment environment = f->environments[e];
-            if (environment.callee >= m->function_count || environment.offset != bytes ||
-                !f->aggregate_accesses || environment.producer >= f->aggregate_access_count) return false;
+            if (environment.callee >= m->function_count || environment.offset != bytes) return false;
             const XrRbcFunction *callee = &m->functions[environment.callee];
             uint32_t count = callee->capture_count + callee->state_capture;
+            if (environment.producer==UINT32_MAX) {
+                const XrRbcValueCode *code=xr_rbc_module_value_code(m,(uint32_t)n);
+                bool found=false;
+                for (size_t a=0;code && a<code->access_count;++a) {
+                    XrRbcValueAccess access=code->accesses[a];
+                    if (access.operation==XR_RBC_VALUE_FUNCTION_NEW && access.window==e+1) {
+                        if (found || access.index!=environment.callee || access.count!=count) return false;
+                        found=true;
+                    }
+                }
+                if (!found || !count || bytes>UINT32_MAX-sizeof(XrtFunction)) return false;
+                bytes+=(uint32_t)sizeof(XrtFunction);
+                for (uint32_t p=0;p<count;++p) {
+                    uint32_t size=p<callee->capture_count && callee->captures[p].kind==XR_RBC_CALLABLE_FUNCTION ?
+                        (uint32_t)sizeof(XrtFunction) : 8u;
+                    if (bytes>UINT32_MAX-size) return false;
+                    bytes+=size;
+                }
+                continue;
+            }
+            if (!f->aggregate_accesses || environment.producer>=f->aggregate_access_count) return false;
             if (!count || bytes > UINT32_MAX - sizeof(XrtFunction) ||
                 count > (UINT32_MAX - bytes - sizeof(XrtFunction)) / 8u) return false;
             XrRbcAggregateAccess access = f->aggregate_accesses[environment.producer];
@@ -159,6 +236,17 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     return true;
 }
 
+static bool rbc_callable_inline_signature(const XrRbcModule *module,uint32_t function) {
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!code || !code->homes || !image) return false;
+    if (code->homes->result_type && image->types[code->homes->result_type-1].kind==XRT_VALUE_FUNCTION) return true;
+    for (uint32_t p=0;p<code->parameter_count;++p) {
+        uint32_t type=code->homes->values[code->parameters[p]].type;
+        if (type && image->types[type-1].kind==XRT_VALUE_FUNCTION) return true;
+    }
+    return false;
+}
 static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction *f,
     XrRbcAggregateAccess access) {
     if ((access.operation >= XR_RBC_CAPTURED_CELL_NEW && access.operation <= XR_RBC_CAPTURED_CELL_BIND) ||
@@ -205,6 +293,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
     if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
         if (access.source || access.window || access.callee >= m->function_count) return false;
         const XrRbcFunction *callee = &m->functions[access.callee];
+        if (rbc_callable_inline_signature(m,access.callee)) return false;
         uint32_t count = callee->capture_count + callee->state_capture;
         if (count) {
             if (!access.destination || access.destination > f->environment_count || access.count != count ||

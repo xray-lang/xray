@@ -26,12 +26,13 @@ typedef struct XrRbcHomeLocation {
 /* Only the receiving compiler creates and destroys these immutable code assets.
  * No runtime plan, Ops, Layout, module pointer or actual owner is retained here. */
 /* The physical function index is zero-based. The immutable module snapshot must
- * carry the compiler's live code lease for the entire borrow. Raw modules and
- * scalar-only functions have no descriptor. Cold homes stay outside the hot
+ * carry the compiler's live code lease or explicit validated owner-free raw
+ * descriptions for the entire borrow. Scalar-only functions may have no
+ * descriptor. Cold homes stay outside the hot
  * function table so adding physical metadata cannot change interpreter stride. */
 XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *, uint32_t function);
-/* The same real code lease protects this raw metadata borrow. Scalar-only and
- * foreign borrowed modules have no compiler-owned image. */
+/* The same lease or the raw caller's explicit immutable storage protects this
+ * metadata borrow. It grants no owning slot or escaping environment. */
 XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *);
 /* A scalar-only or entirely borrowed activation creates no frame and performs
  * no payload initialization. Formal parameters borrow their caller's normalized
