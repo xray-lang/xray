@@ -47,6 +47,43 @@ static XrtManagedHeader **frame_owner(XrtManagedFrame *frame, XrtManagedSlot *sl
     return slot->owner_offset == SIZE_MAX ? &slot->committed :
         (XrtManagedHeader **)((unsigned char *)frame + frame->payload_offset + slot->owner_offset);
 }
+static const uint32_t cell_guard = UINT32_C(1);
+XR_FUNCDEF bool xrt_managed_domain_valid(XrtManagedSlotLocation domain) {
+    return !!domain.busy != !!domain.cell_domain;
+}
+XR_FUNCDEF bool xrt_managed_domain_same(XrtManagedSlotLocation left, XrtManagedSlotLocation right) {
+    return xrt_managed_domain_valid(left) && xrt_managed_domain_valid(right) &&
+        left.busy == right.busy && left.cell_domain == right.cell_domain;
+}
+XR_FUNCDEF bool xrt_managed_domain_held(XrtManagedSlotLocation domain) {
+    if (!xrt_managed_domain_valid(domain)) return false;
+    return domain.busy ? *domain.busy :
+        (atomic_load_explicit(&domain.cell_domain->flags, memory_order_acquire) & cell_guard) != 0;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_domain_enter(XrtManagedSlotLocation domain) {
+    if (!xrt_managed_domain_valid(domain)) return XRT_MANAGED_ARGUMENT;
+    if (domain.busy) {
+        if (*domain.busy) return XRT_MANAGED_ARGUMENT;
+        *domain.busy = true; return XRT_MANAGED_OK;
+    }
+    XrtManagedHeader *cell = domain.cell_domain;
+    if (!xrt_managed_retain(cell)) return XRT_MANAGED_REFCOUNT;
+    uint32_t flags = atomic_load_explicit(&cell->flags, memory_order_relaxed);
+    while (!(flags & cell_guard)) {
+        if (atomic_compare_exchange_weak_explicit(&cell->flags, &flags, flags | cell_guard,
+            memory_order_acquire, memory_order_relaxed)) return XRT_MANAGED_OK;
+    }
+    xrt_managed_drop(cell);
+    return XRT_MANAGED_ARGUMENT;
+}
+XR_FUNCDEF void xrt_managed_domain_leave(XrtManagedSlotLocation domain) {
+    XR_CHECK(xrt_managed_domain_held(domain), "only an acquired actual domain can leave");
+    if (domain.busy) *domain.busy = false;
+    else {
+        atomic_fetch_and_explicit(&domain.cell_domain->flags, ~cell_guard, memory_order_release);
+        xrt_managed_drop(domain.cell_domain);
+    }
+}
 static void frame_abort(XrtManagedFrame *frame) {
     for (size_t i = 0; i < frame->slot_count; ++i)
         xrt_managed_abort(&frame_slots(frame)[i].pending);
@@ -346,7 +383,7 @@ XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size
     XrtManagedSlotLocation *output) {
     if (!output || !frame || !frame->root || index >= frame->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = &frame_slots(frame)[index];
-    *output = (XrtManagedSlotLocation){frame_owner(frame, slot), &slot->pending, &frame->root->busy};
+    *output = (XrtManagedSlotLocation){frame_owner(frame, slot), &slot->pending, &frame->root->busy, NULL};
     return XRT_MANAGED_OK;
 }
 
@@ -357,13 +394,13 @@ static XrtManagedSlot *reserved_slot(const XrtManagedSlotReservation *handle) {
     XrtManagedFrame *frame=root->reserved_frame;
     if (root->reservation!=handle || !root->busy || root->reserved_phase==RESERVED_CALLBACK ||
         !frame || frame->root!=root || root->reserved_index>=frame->slot_count ||
-        !root->reserved_binding.owner || !root->reserved_binding.busy || !*root->reserved_binding.busy) return NULL;
+        !root->reserved_binding.owner || !xrt_managed_domain_held(root->reserved_binding)) return NULL;
     return &frame_slots(frame)[root->reserved_index];
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *frame, size_t index,
     XrtManagedSlotLocation binding, XrtManagedSlotReservation *handle) {
     if (!frame || !frame->root || !handle || handle->root || index>=frame->slot_count ||
-        !binding.owner || !binding.busy || !*binding.busy || !*binding.owner) return XRT_MANAGED_ARGUMENT;
+        !binding.owner || !xrt_managed_domain_held(binding) || !*binding.owner) return XRT_MANAGED_ARGUMENT;
     XrtManagedRoot *root=frame->root;
     XrtManagedSlot *slot=&frame_slots(frame)[index];
     if (!root->busy || root->reservation || !slot_empty(frame,slot) ||
@@ -476,10 +513,10 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_end(XrtManagedSlotReservat
     XrtManagedHeader **candidate=frame_owner(root->reserved_frame,slot);
     XrtManagedHeader *discard=*candidate; *candidate=NULL;
     xrt_managed_drop(discard);
-    bool *binding_busy=root->reserved_binding.busy;
+    XrtManagedSlotLocation binding=root->reserved_binding;
     root->reservation=NULL; root->reserved_frame=NULL; root->reserved_index=0;
     root->reserved_binding=(XrtManagedSlotLocation){0}; root->reserved_phase=RESERVED_EMPTY;
     handle->root=NULL;
-    *binding_busy=false; root->busy=false;
+    xrt_managed_domain_leave(binding); root->busy=false;
     return XRT_MANAGED_OK;
 }

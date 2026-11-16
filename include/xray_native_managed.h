@@ -32,8 +32,8 @@ typedef struct XrtManagedHeader XrtManagedHeader;
 #else
 typedef struct XrtManagedHeader {
     _Atomic(int32_t) references;
-    /* The high bit is reserved for dead-only retirement continuation state. */
-    uint32_t flags;
+    /* The low bit guards a live Cell; the high bit is dead-only continuation. */
+    _Atomic(uint32_t) flags;
     const XrtManagedOps *ops;
 } XrtManagedHeader;
 _Static_assert(sizeof(XrtManagedHeader) == 16, "managed storage has a sixteen-byte header");
