@@ -27,8 +27,9 @@ typedef enum XrtPlaceNull {
 } XrtPlaceNull;
 /* This descriptor, its owner field, busy domain and guard context remain stable
  * through the synchronous call. Exactly one busy domain protects each field;
- * related fields may share it. These control objects have one execution owner;
- * plain bool is neither a cross-thread lock nor a source of mutation authority.
+ * related fields may share it. Exactly one of busy and cell_domain is present.
+ * A Cell uses its actual Header guard across all instances; other control
+ * objects use their one executor's bool. Neither grants mutation authority.
  * Preflight is mandatory and consumes the receiver's readiness/mutability facts.
  * Its domain is already busy; that fact is not a reason to reject this call.
  * It must not allocate, longjmp, mutate any place/descriptor/domain, or retire
@@ -38,6 +39,7 @@ typedef struct XrtExternalOwner {
     bool *busy;
     XrtManagedStatus (*preflight)(void *, XrtPlaceAction);
     void *context;
+    XrtManagedHeader *cell_domain;
 } XrtExternalOwner;
 typedef struct XrtPlace {
     XrtManagedFrame *frame;

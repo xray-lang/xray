@@ -89,13 +89,15 @@ XRAY_API XrtManagedStatus xrt_managed_slot_commit(XrtManagedFrame *, size_t);
 XRAY_API XrtManagedStatus xrt_managed_slot_abort(XrtManagedFrame *, size_t);
 
 /* Internal location resolution for a bounded ownership transaction. The caller
- * borrows an active frame, acquires the returned busy domain before inspecting
+ * borrows an active frame, acquires the returned domain before inspecting
  * pending/owner state, and releases it only after retirement callbacks finish.
+ * A location selects exactly one bool busy or actual Cell Header domain.
  * These addresses never grant guest borrowing or mutation permissions. */
 typedef struct XrtManagedSlotLocation {
     XrtManagedHeader **owner;
     const XrtManagedPending *pending;
     bool *busy;
+    XrtManagedHeader *cell_domain;
 } XrtManagedSlotLocation;
 XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation *);

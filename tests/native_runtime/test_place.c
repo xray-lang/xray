@@ -169,7 +169,7 @@ static void external_transfers(void) {
     XrtManagedHeader *one = make(&fixture, 0, 1), *two = make(&fixture, 1, 2);
     XrtManagedHeader *outside = NULL; bool busy = false;
     Guard guard = {.readable=true, .writable=true};
-    XrtExternalOwner external = {&outside, &busy, preflight, &guard};
+    XrtExternalOwner external = {&outside, &busy, preflight, &guard, NULL};
     XrtPlace field = {.external=&external, .nulls=XRT_PLACE_NONNULL};
     guard.from = slot(&fixture, 0); guard.to = field; guard.reentry = true;
     OK(xrt_place_move_replace(field, slot(&fixture, 0), NULL)); CHECK(outside == one && !busy);
@@ -239,7 +239,7 @@ static void escaped_lifetime(void) {
     make(&fixture, 0, 1);
     XrtManagedHeader *outside = NULL; bool busy = false;
     Guard guard = {.readable=true, .writable=true};
-    XrtExternalOwner external = {&outside, &busy, preflight, &guard};
+    XrtExternalOwner external = {&outside, &busy, preflight, &guard, NULL};
     XrtPlace field = {.external=&external, .nulls=XRT_PLACE_NONNULL};
     OK(xrt_place_move_replace(field, slot(&fixture, 0), NULL));
     fixture_retire(&fixture);
@@ -256,7 +256,7 @@ static void edge_guards_and_retirement(void) {
     make(&fixture, 3, 4);
     XrtManagedHeader *outside = NULL; bool busy = false;
     Guard guard = {.readable=true, .writable=true};
-    XrtExternalOwner external = {&outside, &busy, preflight, &guard};
+    XrtExternalOwner external = {&outside, &busy, preflight, &guard, NULL};
     XrtPlace field = {.external=&external, .nulls=XRT_PLACE_NONNULL};
     OK(xrt_place_move_replace(field, slot(&fixture, 3), NULL));
     XrtPlaceEdge edges[] = {{slot(&fixture, 2), slot(&fixture, 0), slot(&fixture, 8), XRT_PLACE_TRANSFER_MOVE},
@@ -485,7 +485,7 @@ static void external_edge_copies(void) {
     make(&fixture, 1, 2); make(&fixture, 2, 3);
     XrtManagedHeader *outside = NULL; bool busy = false;
     Guard guard = {.readable=true, .writable=true};
-    XrtExternalOwner external = {&outside, &busy, preflight, &guard};
+    XrtExternalOwner external = {&outside, &busy, preflight, &guard, NULL};
     XrtPlace field = {.external=&external, .nulls=XRT_PLACE_NONNULL};
     OK(xrt_place_move_replace(field, slot(&fixture, 0), NULL));
     guard.from = field; guard.to = slot(&fixture, 3); guard.reentry = true; guard.writable = false;

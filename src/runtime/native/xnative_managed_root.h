@@ -17,6 +17,15 @@
  * Root registers this handle's address and both stable fields. Copying the
  * handle does not copy that registration. Every callback returns normally. */
 typedef struct XrtManagedSlotReservation { XrtManagedRoot *root; } XrtManagedSlotReservation;
+
+/* A Cell domain pins its real owner before entering its atomic Header guard.
+ * A bool domain belongs to one executor. The descriptor stays borrowed and
+ * unchanged until leave; entering confers no guest mutation permission. */
+XR_FUNC bool xrt_managed_domain_valid(XrtManagedSlotLocation);
+XR_FUNC bool xrt_managed_domain_same(XrtManagedSlotLocation, XrtManagedSlotLocation);
+XR_FUNC XrtManagedStatus xrt_managed_domain_enter(XrtManagedSlotLocation);
+XR_FUNC bool xrt_managed_domain_held(XrtManagedSlotLocation);
+XR_FUNC void xrt_managed_domain_leave(XrtManagedSlotLocation);
 typedef XrtManagedStatus (*XrtManagedReservedApply)(XrtManagedHeader *, void *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation binding, XrtManagedSlotReservation *empty);

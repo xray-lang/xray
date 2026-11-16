@@ -346,17 +346,18 @@ static bool retirement_next(XrtManagedHeader *value, XrtManagedHeader *parent,
     bool entering, size_t children, XrtManagedHeader **child) {
     if (entering) {
         XR_CHECK(xr_signed_rc_read(&value->references) == 0, "only a last release owns retirement storage");
-        XR_CHECK(!(value->flags & retirement_cursor), "live flags exclude the dead cursor phase");
+        XR_CHECK(!(atomic_load_explicit(&value->flags, memory_order_relaxed) & retirement_cursor),
+            "live flags exclude the dead cursor phase");
         if (!children) return false;
         *child = child_take(value, 0);
         child_store(value, 0, parent);
         return true;
     }
     if (children < 2) return false;
-    if (!(value->flags & retirement_cursor)) {
+    if (!(atomic_load_explicit(&value->flags, memory_order_relaxed) & retirement_cursor)) {
         *child = child_take(value, 1);
         cursor_store(value, 2);
-        value->flags |= retirement_cursor;
+        atomic_fetch_or_explicit(&value->flags, retirement_cursor, memory_order_relaxed);
         return true;
     }
     size_t index;
@@ -375,7 +376,7 @@ static XrtManagedHeader *retirement_finish(XrtManagedHeader *value, XrtManagedHe
     const XrtRuntimeTypePlan *plan = ops->plan;
     if (children) parent = child_take(value, 0);
     if (children > 1) child_store(value, 1, NULL);
-    value->flags &= ~retirement_cursor;
+    atomic_fetch_and_explicit(&value->flags, ~retirement_cursor, memory_order_relaxed);
     if (plan->spec.stride) {
         size_t capacity = (bytes - plan->spec.fixed_size) / plan->spec.stride;
         memcpy((unsigned char *)value + plan->spec.capacity_offset, &capacity, sizeof(capacity));
@@ -421,6 +422,7 @@ XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, 
     memset(memory, 0, bytes);
     XrtManagedHeader *value = memory;
     xr_signed_rc_initialize(&value->references);
+    atomic_init(&value->flags, 0);
     value->ops = ops;
     for (size_t i = 0; i < children; ++i) child_store(value, i, NULL);
     if (spec->stride) {

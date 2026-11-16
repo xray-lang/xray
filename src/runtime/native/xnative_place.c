@@ -26,10 +26,12 @@ static XrtManagedStatus place_location(XrtPlace place, PlaceLocation *output) {
         XrtManagedStatus status = xrt_managed_slot_location(place.frame, place.slot, &location.slot);
         if (status != XRT_MANAGED_OK) return status;
     } else {
-        if (!place.external->owner || !place.external->busy || !place.external->preflight) return XRT_MANAGED_ARGUMENT;
+        if (!place.external->owner || !place.external->preflight) return XRT_MANAGED_ARGUMENT;
         location.slot.owner = place.external->owner;
         location.slot.busy = place.external->busy;
+        location.slot.cell_domain = place.external->cell_domain;
     }
+    if (!xrt_managed_domain_valid(location.slot)) return XRT_MANAGED_ARGUMENT;
     *output = location;
     return XRT_MANAGED_OK;
 }
@@ -45,15 +47,19 @@ static XrtManagedStatus place_check(PlaceLocation location, XrtPlaceAction actio
     return XRT_MANAGED_OK;
 }
 static XrtManagedStatus place_lock_pair(PlaceLocation destination, PlaceLocation source) {
-    if (destination.slot.owner == source.slot.owner && destination.slot.busy != source.slot.busy)
+    bool same = xrt_managed_domain_same(destination.slot, source.slot);
+    if (destination.slot.owner == source.slot.owner && !same)
         return XRT_MANAGED_ARGUMENT;
-    if (*destination.slot.busy || *source.slot.busy) return XRT_MANAGED_ARGUMENT;
-    *destination.slot.busy = *source.slot.busy = true;
+    XrtManagedStatus status = xrt_managed_domain_enter(destination.slot);
+    if (status != XRT_MANAGED_OK) return status;
+    if (!same && (status = xrt_managed_domain_enter(source.slot)) != XRT_MANAGED_OK) {
+        xrt_managed_domain_leave(destination.slot); return status;
+    }
     return XRT_MANAGED_OK;
 }
 static void place_unlock_pair(PlaceLocation destination, PlaceLocation source) {
-    *source.slot.busy = false;
-    *destination.slot.busy = false;
+    if (!xrt_managed_domain_same(destination.slot, source.slot)) xrt_managed_domain_leave(source.slot);
+    xrt_managed_domain_leave(destination.slot);
 }
 XR_FUNCDEF XrtManagedStatus xrt_place_replacement_begin(XrtPlace binding, XrtManagedFrame *frame,
     size_t index, XrtPlaceReplacement *output) {
@@ -84,11 +90,11 @@ XRAY_API XrtManagedStatus xrt_place_borrow(XrtPlace place, const XrtManagedHeade
     PlaceLocation location;
     XrtManagedStatus status = place_location(place, &location);
     if (status != XRT_MANAGED_OK) return status;
-    if (*location.slot.busy) return XRT_MANAGED_ARGUMENT;
-    *location.slot.busy = true;
+    status = xrt_managed_domain_enter(location.slot);
+    if (status != XRT_MANAGED_OK) return status;
     status = place_check(location, XRT_PLACE_BORROW);
     if (status == XRT_MANAGED_OK) *output = *location.slot.owner;
-    *location.slot.busy = false;
+    xrt_managed_domain_leave(location.slot);
     return status;
 }
 static XrtManagedStatus place_replace(XrtPlace destination, XrtPlace source, bool copy,
@@ -140,16 +146,16 @@ static PlaceLocation edge_location(const XrtPlaceEdge *edges, size_t index) {
         "an exclusively borrowed edge descriptor retains its resolved location");
     return location;
 }
-static bool edge_first_domain(const XrtPlaceEdge *edges, size_t index, bool *domain) {
+static bool edge_first_domain(const XrtPlaceEdge *edges, size_t index, XrtManagedSlotLocation domain) {
     for (size_t previous = 0; previous < index; ++previous)
-        if (edge_location(edges, previous).slot.busy == domain) return false;
+        if (xrt_managed_domain_same(edge_location(edges, previous).slot, domain)) return false;
     return true;
 }
 static void edge_unlock(const XrtPlaceEdge *edges, size_t nodes) {
     while (nodes) {
         size_t index = --nodes;
         PlaceLocation location = edge_location(edges, index);
-        if (edge_first_domain(edges, index, location.slot.busy)) *location.slot.busy = false;
+        if (edge_first_domain(edges, index, location.slot)) xrt_managed_domain_leave(location.slot);
     }
 }
 static XrtManagedStatus edge_preflight(const XrtPlaceEdge *edges, size_t count) {
@@ -212,13 +218,13 @@ XRAY_API XrtManagedStatus xrt_place_edge_transfer(const XrtPlaceEdge *edges, siz
         if (status != XRT_MANAGED_OK) { edge_unlock(edges, i); return status; }
         for (size_t p = 0; p < i; ++p) {
             PlaceLocation previous = edge_location(edges, p);
-            if (previous.slot.owner == location.slot.owner && previous.slot.busy != location.slot.busy) {
+            if (previous.slot.owner == location.slot.owner && !xrt_managed_domain_same(previous.slot, location.slot)) {
                 edge_unlock(edges, i); return XRT_MANAGED_ARGUMENT;
             }
         }
-        if (edge_first_domain(edges, i, location.slot.busy)) {
-            if (*location.slot.busy) { edge_unlock(edges, i); return XRT_MANAGED_ARGUMENT; }
-            *location.slot.busy = true;
+        if (edge_first_domain(edges, i, location.slot)) {
+            status = xrt_managed_domain_enter(location.slot);
+            if (status != XRT_MANAGED_OK) { edge_unlock(edges, i); return status; }
         }
     }
     XrtManagedStatus status = edge_preflight(edges, count);

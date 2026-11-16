@@ -115,7 +115,7 @@ XRAY_API XrtModuleStatus xrt_module_external_owner(const XrtModuleRef *reference
     const XrtValuePlanSpec *spec = &module_slot_type(state, reference->slot)->spec;
     if (leaf >= spec->owned_count) return XRT_MANAGED_ARGUMENT;
     *out = (XrtExternalOwner){(XrtManagedHeader **)((uint8_t *)module_payload(state, reference->slot) +
-        spec->owned_offsets[leaf]), &state->busy, module_binding_guard, (void *)reference};
+        spec->owned_offsets[leaf]), &state->busy, module_binding_guard, (void *)reference, NULL};
     return XRT_MANAGED_OK;
 }
 
@@ -245,7 +245,7 @@ XRAY_API XrtModuleStatus xrt_module_replace(XrtModuleRef *reference, const void 
     for (size_t i = 0; i < type->spec.owned_count; ++i) {
         xrt_module_external_owner(reference, i, &state->destinations[i]);
         state->sources[i] = (XrtExternalOwner){(XrtManagedHeader **)(state->scratch + type->spec.owned_offsets[i]),
-            &state->scratch_busy, module_scratch_guard, state};
+            &state->scratch_busy, module_scratch_guard, state, NULL};
         state->edges[i] = (XrtPlaceEdge){.destination={.external=&state->destinations[i], .nulls=XRT_PLACE_NULLABLE},
             .source={.external=&state->sources[i], .nulls=XRT_PLACE_NULLABLE},
             .temporary={.frame=state->temporary_frame, .slot=i, .nulls=XRT_PLACE_NULLABLE},

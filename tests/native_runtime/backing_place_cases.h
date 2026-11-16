@@ -225,7 +225,7 @@ static void map_place_guards(void) {
     XrtStringBacking *key = map_key(&source, 3, "key", 3);
     OK(xrt_map_backing_create(source.frame, 0, &source.types, NULL, NULL, 0));
     ArrayFieldGuard field = {.ready=true}; OK(xrt_managed_slot_take(source.frame, 0, &field.owner));
-    XrtExternalOwner external = {&field.owner, &field.busy, array_field_guard, &field};
+    XrtExternalOwner external = {&field.owner, &field.busy, array_field_guard, &field, NULL};
     XrtPlace binding = {.external=&external, .nulls=XRT_PLACE_NONNULL};
     XrtMapUpdate edit = {XRT_MAP_UPDATE_SET, key, 42}; bool removed = true;
     XrtManagedHeader *before = field.owner;
@@ -258,7 +258,7 @@ static void array_place_guards(void) {
     Fixture source,destination; fixture_init(&source,SIZE_MAX); fixture_init(&destination,SIZE_MAX);
     array_place_scalar(&source,XRT_BACKING_ARRAY_I64,2);
     ArrayFieldGuard field={.ready=true}; OK(xrt_managed_slot_take(source.frame,0,&field.owner));
-    XrtExternalOwner external={&field.owner,&field.busy,array_field_guard,&field};
+    XrtExternalOwner external={&field.owner,&field.busy,array_field_guard,&field,NULL};
     XrtPlace binding={.external=&external,.nulls=XRT_PLACE_NONNULL};
     const XrtManagedHeader *borrowed=NULL; OK(xrt_place_borrow(binding,&borrowed)); CHECK(borrowed==field.owner && field.borrows==1);
     XrtArrayUpdate edit={XRT_ARRAY_UPDATE_SET,0,{.kind=XRT_BACKING_ARRAY_I64,.value.i64=99}};
