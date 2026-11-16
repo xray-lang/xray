@@ -257,6 +257,24 @@ XRAY_API XrtManagedStatus xrt_managed_frame_payload(XrtManagedFrame *frame,
     *bytes = frame->payload_size;
     return XRT_MANAGED_OK;
 }
+XRAY_API XrtManagedStatus xrt_managed_frame_enter_payload(XrtManagedRoot *root,
+    const XrtManagedFrameSpec *spec, XrtManagedFrame **output, void **payload) {
+    if (!output || *output || !payload || *payload || (void *)output == (void *)payload)
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedFrame *frame = NULL;
+    void *bytes = NULL;
+    size_t extent = 0;
+    XrtManagedStatus status = xrt_managed_frame_enter_layout(root, spec, &frame);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_managed_frame_payload(frame, &bytes, &extent);
+    if (status != XRT_MANAGED_OK) {
+        XrtManagedStatus cleanup = xrt_managed_frame_leave(root, frame);
+        return cleanup == XRT_MANAGED_OK ? status : cleanup;
+    }
+    *output = frame;
+    *payload = bytes;
+    return XRT_MANAGED_OK;
+}
 XRAY_API XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {
     if (!frame || frame->root != root || !root || root->top != frame || !root_begin(root))
         return XRT_MANAGED_ARGUMENT;

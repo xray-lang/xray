@@ -490,12 +490,13 @@ static void inline_payload_homes(void) {
     XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
     size_t offsets[] = {offsetof(InlineHomes, first), offsetof(InlineHomes, second), SIZE_MAX, SIZE_MAX};
     XrtManagedFrameSpec spec = {4, sizeof(InlineHomes), alignof(XrMaxAlignment), offsets};
-    OK(xrt_managed_frame_enter_layout(root, &spec, &frame));
+    void *memory = NULL, *observed = NULL;
+    OK(xrt_managed_frame_enter_payload(root, &spec, &frame, &memory));
     CHECK(xrt_billing_owner_stats(fixture.billing).allocations == baseline.allocations + 1);
-    void *memory = NULL;
     size_t bytes = 0;
-    OK(xrt_managed_frame_payload(frame, &memory, &bytes));
-    CHECK(memory && bytes == sizeof(InlineHomes) && (uintptr_t)memory % alignof(XrMaxAlignment) == 0);
+    OK(xrt_managed_frame_payload(frame, &observed, &bytes));
+    CHECK(memory == observed && memory && bytes == sizeof(InlineHomes) &&
+        (uintptr_t)memory % alignof(XrMaxAlignment) == 0);
     InlineHomes *homes = memory;
     CHECK(!homes->first && !homes->second);
     homes->tag = 17;
@@ -538,6 +539,41 @@ static void inline_payload_homes(void) {
     OK(xrt_managed_root_destroy(&root));
     fixture_finish(&fixture);
     puts("inline frame homes: real Header fields, one allocation, atomic publication and source retirement PASS");
+}
+static void combined_frame_boundary(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    XrtManagedFrameSpec spec = {1, 0, 1, NULL};
+    BAD(xrt_managed_frame_enter_payload(root, &spec, NULL, &payload));
+    BAD(xrt_managed_frame_enter_payload(root, &spec, &frame, NULL));
+    BAD(xrt_managed_frame_enter_payload(NULL, &spec, &frame, &payload));
+    payload = &fixture;
+    BAD(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    CHECK(!frame && payload == &fixture);
+    payload = NULL;
+    spec.payload_alignment = 3;
+    BAD(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    spec.payload_alignment = 1;
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    CHECK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload) == XRT_MANAGED_OOM);
+    CHECK(!frame && !payload);
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    OK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    CHECK(frame && !payload);
+    XrtManagedFrame *existing = frame;
+    BAD(xrt_managed_frame_enter_payload(root, &spec, &existing, &payload));
+    CHECK(existing == frame && !payload);
+    OK(xrt_managed_frame_leave(root, frame));
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    OK(xrt_managed_root_destroy(&root));
+    fixture_finish(&fixture);
 }
 static void inline_payload_rejection(void) {
     Fixture fixture;
@@ -776,6 +812,7 @@ int main(void) {
     metadata_failures();
     scalar_and_closed();
     inline_payload_homes();
+    combined_frame_boundary();
     inline_payload_rejection();
     inline_payload_jump();
     fixed_execution_boundary();

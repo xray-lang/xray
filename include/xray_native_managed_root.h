@@ -45,6 +45,11 @@ typedef struct XrtManagedFrameSpec {
 } XrtManagedFrameSpec;
 XRAY_API XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *,
     const XrtManagedFrameSpec *, XrtManagedFrame **);
+/* Establish both empty output locations at the same lazy creation point.
+ * Both remain unchanged on failure. The active frame owns the returned slab;
+ * this cold boundary grants no additional access or borrowing authority. */
+XRAY_API XrtManagedStatus xrt_managed_frame_enter_payload(XrtManagedRoot *,
+    const XrtManagedFrameSpec *, XrtManagedFrame **empty_frame, void **empty_payload);
 /* The borrowed slab lives exactly as long as the active frame. Scalar bytes may
  * be accessed by the admitted typed code. Its owner fields are the actual slot
  * storage, not a second set of references: copies, transfers and publication
