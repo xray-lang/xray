@@ -58,6 +58,15 @@ XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
  * and cannot retire the participating Frame while this transaction is active. */
 XRAY_API void xrt_native_string_append_owned(XrtManagedFrame *,
     const XrtStringAppendOwned *, uint32_t source_id);
+/* Cold preparation only: initialize this execution's existing backing setup
+ * before taking any checked String binding or suffix projection. This grants
+ * no access permission and creates no Cell or managed Frame. */
+XRAY_API void xrt_native_string_binding_prepare(uint32_t source_id);
+/* Requires the preceding cold preparation. This receiver never performs lazy
+ * setup; the actual binding is not consumed and workspace is a distinct empty
+ * candidate slot. Failure leaves its transaction before nonlocal recovery. */
+XRAY_API void xrt_native_string_append_place(XrtPlace, XrtManagedFrame *, size_t workspace,
+    const XrtStringBacking *suffix, uint32_t source_id);
 
 typedef struct XrtModuleState XrtModuleState;
 typedef struct XrtNativeEnvironmentInput {

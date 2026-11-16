@@ -12,6 +12,7 @@
  */
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_values.h"
+#include "runtime/native/xnative_string_backing_ops.h"
 #include "xray_native_values.h"
 #include "xray_native_place.h"
 #include "xray_native_state.h"
@@ -242,10 +243,90 @@ static void managed_message_owner(void) {
 }
 #include "execution_map_literals.inc.c"
 #include "execution_environments.inc.c"
+typedef struct StringBindingCall {
+    XrtValueRoot *owner;
+    XrtBillingOwner *billing;
+    const XrtBackingTypes *foreign;
+    size_t allowance, preparation_allocations;
+    unsigned projections, completed;
+    bool scan;
+} StringBindingCall;
+static void string_binding_root(void *context) {
+    StringBindingCall *call = context;
+    XrtManagedRoot *root = xrt_native_managed_root(1); XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter(root, 4, &frame));
+    size_t before = xrt_billing_owner_stats(call->billing).allocations;
+    const XrtBackingTypes *types = call->foreign;
+    if (!types) {
+        if (call->scan) xrt_billing_owner_fail_after(call->billing, call->allowance);
+        xrt_native_string_binding_prepare(1);
+        call->preparation_allocations = xrt_billing_owner_stats(call->billing).allocations - before;
+        CHECK(call->preparation_allocations);
+        xrt_billing_owner_fail_after(call->billing, SIZE_MAX);
+        managed_require(xrt_native_values_backings(call->owner, &types));
+    }
+    managed_require(xrt_string_backing_create(frame, 0, types, "ab", 2, 64));
+    managed_require(xrt_string_backing_create(frame, 3, types, "z", 1, 0));
+    before = xrt_billing_owner_stats(call->billing).allocations;
+    xrt_billing_owner_fail_after(call->billing, 0);
+    const XrtManagedHeader *left = NULL, *suffix = NULL;
+    XrtPlace binding = {.frame=frame,.slot=0,.nulls=XRT_PLACE_NONNULL};
+    managed_require(xrt_place_borrow(binding, &left));
+    managed_require(xrt_place_borrow((XrtPlace){.frame=frame,.slot=3,.nulls=XRT_PLACE_NONNULL}, &suffix));
+    ++call->projections;
+    xrt_native_string_append_place(binding, frame, 2, (const XrtStringBacking *)suffix, 1);
+    xrt_native_string_append_place(binding, frame, 2, (const XrtStringBacking *)left, 1);
+    const XrtManagedHeader *after = NULL;
+    managed_require(xrt_place_borrow(binding, &after));
+    const XrtStringBacking *text = (const XrtStringBacking *)after;
+    CHECK(after == left && text->length == 6 && !memcmp(text->bytes, "abzabz", 6) &&
+        xr_signed_rc_read(&after->references) == 1);
+    XrtBillingStats stats = xrt_billing_owner_stats(call->billing);
+    CHECK(stats.allocations == before && !stats.fail_after);
+    managed_require(xrt_managed_frame_leave(root, frame)); ++call->completed;
+}
+static void managed_string_bindings(void) {
+    XrtLocationOwner *map = locations("string-binding.xr");
+    XrtBillingOwner *foreign_billing = NULL; XrtBackingTypes foreign = {0};
+    CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &foreign_billing) == XRT_MANAGED_OK);
+    CHECK(xrt_backing_types_init(foreign_billing, &foreign) == XRT_MANAGED_OK);
+    XrtBillingStats foreign_before = xrt_billing_owner_stats(foreign_billing);
+    for (unsigned missing = 0; missing < 2; ++missing) {
+        XrtValueRoot owner = {0}; XrtBillingOwner *billing = NULL; XrtExecutionFailure failure = {0};
+        CHECK(xrt_native_values_prepare(&owner, &billing) == XRT_MANAGED_OK && xrt_billing_owner_retain(billing));
+        StringBindingCall call = {.owner=&owner,.billing=billing,.foreign=missing ? &foreign : NULL};
+        XrtExecutionStatus status = xrt_run_embedded_owned(map, &failure, string_binding_root, &call, &owner);
+        CHECK(xrt_value_root_empty(&owner) && !xrt_value_root_active());
+        if (missing) CHECK(status == XRT_EXECUTION_FAILURE && !call.completed && call.projections == 1 &&
+            !call.preparation_allocations && failure.kind == XRT_FAILURE_VALUE &&
+            failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT && failure.detail.value.source_id == 1);
+        else CHECK(status == XRT_EXECUTION_COMPLETED && call.completed == 1 && call.preparation_allocations);
+        CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
+        XrtBillingStats stats = xrt_billing_owner_stats(foreign_billing);
+        CHECK(stats.bytes == foreign_before.bytes && stats.blocks == foreign_before.blocks);
+    }
+#if defined(XR_NATIVE_VALUE_ALLOCATIONS)
+    for (size_t allowance = 0; allowance < 64; ++allowance) {
+        XrtValueRoot owner = {0}; XrtBillingOwner *billing = NULL; XrtExecutionFailure failure = {0};
+        CHECK(xrt_native_values_prepare(&owner, &billing) == XRT_MANAGED_OK && xrt_billing_owner_retain(billing));
+        StringBindingCall call = {.owner=&owner,.billing=billing,.allowance=allowance,.scan=true};
+        XrtExecutionStatus status = xrt_run_embedded_owned(map, &failure, string_binding_root, &call, &owner);
+        CHECK(xrt_value_root_empty(&owner) && !xrt_value_root_active() && xrt_billing_owner_stats(billing).blocks == 1);
+        xrt_billing_owner_drop(billing);
+        if (status == XRT_EXECUTION_COMPLETED) { CHECK(allowance && call.completed == 1); break; }
+        CHECK(allowance + 1 < 64 && status == XRT_EXECUTION_FAILURE && !call.completed && !call.projections &&
+            failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_OOM);
+    }
+#endif
+    xrt_backing_types_drop(&foreign); xrt_billing_owner_drop(foreign_billing); xrt_locations_release(map);
+}
 static void state_string_root(void *context, XrtModuleState *state) {
     unsigned *completed = context;
     XrtManagedRoot *root = xrt_native_managed_root(1); XrtManagedFrame *frame = NULL;
-    managed_require(xrt_managed_frame_enter(root,2,&frame));
+    managed_require(xrt_managed_frame_enter(root,4,&frame));
+    xrt_native_string_binding_prepare(1);
+    const XrtBackingTypes *types = NULL;
+    managed_require(xrt_native_values_backings(xrt_value_root_current(1), &types));
     xrt_native_string_create(frame,0,"state",5,1); XrtManagedHeader *first = NULL;
     managed_require(xrt_managed_slot_borrow(frame,0,&first));
     xrt_module_require(xrt_module_begin(state,0),1); XrtModuleRef *reference = NULL;
@@ -263,7 +344,34 @@ static void state_string_root(void *context, XrtModuleState *state) {
     CHECK(old->length == 5 && !memcmp(old->bytes,"state",5));
     const void *binding = NULL; xrt_module_require(xrt_module_borrow(reference,&binding),1);
     CHECK(*(XrtManagedHeader *const *)binding == replacement);
-    managed_require(xrt_managed_frame_leave(root,frame)); ++*completed;
+    xrt_native_string_create(frame,2,"!",1,1);
+    XrtManagedHeader *suffix = NULL; managed_require(xrt_managed_slot_borrow(frame,2,&suffix));
+    XrtPlace place = {.external=&source,.nulls=XRT_PLACE_NONNULL};
+    xrt_native_string_append_place(place,frame,3,(const XrtStringBacking *)suffix,1);
+    const XrtManagedHeader *current = NULL; managed_require(xrt_place_borrow(place,&current));
+    CHECK(current != replacement && ((const XrtStringBacking *)current)->length == 4 &&
+        !memcmp(((const XrtStringBacking *)current)->bytes,"new!",4));
+    CHECK(((const XrtStringBacking *)replacement)->length == 3 && !memcmp(old->bytes,"state",5));
+    XrtBillingOwner *billing = NULL;
+    managed_require(xrt_native_values_prepare(xrt_value_root_current(1),&billing));
+    xrt_billing_owner_fail_after(billing,0);
+    size_t allocations = xrt_billing_owner_stats(billing).allocations;
+    xrt_native_string_append_place(place,frame,3,(const XrtStringBacking *)current,1);
+    const XrtManagedHeader *doubled = NULL; managed_require(xrt_place_borrow(place,&doubled));
+    CHECK(doubled == current && ((const XrtStringBacking *)doubled)->length == 8 &&
+        !memcmp(((const XrtStringBacking *)doubled)->bytes,"new!new!",8) &&
+        xrt_billing_owner_stats(billing).allocations == allocations);
+    managed_require(xrt_place_copy_replace((XrtPlace){.frame=frame,.slot=0,.nulls=XRT_PLACE_NONNULL},place,NULL));
+    CHECK(xrt_string_backing_append_place(place,frame,3,types,(const XrtStringBacking *)suffix) == XRT_MANAGED_OOM);
+    const XrtManagedHeader *preserved = NULL; managed_require(xrt_place_borrow(place,&preserved));
+    CHECK(preserved == doubled && ((const XrtStringBacking *)preserved)->length == 8);
+    XrtManagedHeader *escaped = NULL; managed_require(xrt_managed_slot_take(frame,0,&escaped));
+    managed_require(xrt_managed_frame_leave(root,frame));
+    xrt_module_state_clear(state);
+    CHECK(((const XrtStringBacking *)escaped)->length == 8 &&
+        !memcmp(((const XrtStringBacking *)escaped)->bytes,"new!new!",8) &&
+        xr_signed_rc_read(&escaped->references) == 1);
+    xrt_managed_drop(escaped); ++*completed;
 }
 static void standalone_state_string(void) {
     size_t owned = 0;
@@ -282,6 +390,7 @@ int main(void) {
     managed_map_literals();
     managed_environments();
     managed_cells();
+    managed_string_bindings();
     standalone_state_string();
     Context *outer = xr_calloc(1, sizeof(*outer));
     Context *inner = xr_calloc(1, sizeof(*inner));
