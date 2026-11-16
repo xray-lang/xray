@@ -27,7 +27,7 @@ typedef struct {
     size_t first, count;
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
-    bool active, self, returns, eligible, cell_storage, managed_owners;
+    bool active, self, returns, eligible, cell_storage, managed_owners, borrow_scope;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -109,6 +109,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
                 if (scratch > info->scratch) info->scratch = scratch;
                 info->returns |= v.op == XR_LIR_RET;
                 info->cell_storage |= v.op == XR_LIR_CELL_NEW || v.op == XR_LIR_FUNCTION_SCOPE_ENTER;
+                info->borrow_scope |= v.op == XR_LIR_SLICE_FORMAL_CLEANUP;
                 if (v.op != XR_LIR_CALL) continue;
                 if (c->edge_count == SIZE_MAX) return XR_LIR_OUT_OF_MEMORY;
                 ++c->edge_count;
@@ -176,10 +177,12 @@ static void inline_components(Inliner *c) {
         }
     }
     // These caps control duplication, not the admission of otherwise valid programs.
+    /* Formal cleanup belongs to its call's borrow scope. Aliasing the formal
+     * directly to an actual would incorrectly end the caller's loan. */
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
-            !info->self && !info->cell_storage && !info->managed_owners &&
+            !info->self && !info->cell_storage && !info->managed_owners && !info->borrow_scope &&
             c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
             info->instructions <= 256 && info->scratch <= 256;
@@ -227,6 +230,7 @@ static XrLirStatus inline_declarations(Inliner *c) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
+    if (status == XR_LIR_OK) status = xr_lir_internal_slice_effects_copy(c->output, c->input, c->functions, c->count);
     return status;
 }
 
@@ -351,7 +355,7 @@ static XrLirStatus inline_branch(Inliner *c, XrLirBlock from, XrLirBlock to,
 }
 static XrLirStatus inline_copy(InlineBody *b, XrLirBlock cursor,
     const XrLirInstructionView *v, XrLirBlock continuation) {
-    if (v->op == XR_LIR_SLICE_CLEANUP)
+    if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP)
         return lir_slice_copy_cleanup_record(&b->cleanups, b->owner->output, cursor, v);
     if (continuation.id && v->op == XR_LIR_RET) {
         XrLirValue value = v->operand_count ? b->values[v->operands[0]] : (XrLirValue){0};

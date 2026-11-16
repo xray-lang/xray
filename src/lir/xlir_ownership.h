@@ -12,6 +12,7 @@
 #include "xlir_map.h"
 #include "xlir_string.h"
 #include "xlir_callable_facts.h"
+#include "xlir_slice_facts.h"
 
 typedef struct XrLirOwnershipPlan XrLirOwnershipPlan;
 
@@ -97,6 +98,10 @@ typedef struct XrLirOwnershipFact {
     /* CLEANUP is a resource target and has no ordinary SSA operand read. */
     uint32_t view_operation;
     XrLirOwnershipTransferMode hold_transfer_mode;
+    XrLirSliceStorage view_storage;
+    /* Actual zero-based formal origin, UINT32_MAX when inapplicable. RETURN
+     * names the function's proven origin; CALL names the callee's ordinal. */
+    uint32_t view_parameter;
     /* CELL_VALUE describes a real Cell identity and lexical owner; NEW/COPY/
      * BIND keep the source live. A local KEEP moves, a borrowed KEEP copies.
      * CELL_OPERATION value is the actual Cell SSA; target_value is its

@@ -35,14 +35,16 @@ static bool lower_slice_source(LowerFunction *f, uint32_t ordinal, XrLirValue *o
 }
 static bool lower_view_empty_entry(LowerFunction *f, uint32_t block) {
     if (block || f->owner->instruction) return false;
+    for (uint32_t p = 0; p < f->source->parameter_count; ++p)
+        if (lower_slice_element(f->owner,f->source->parameters[p])) return false;
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
         const XrXirInstruction *term = lower_term(f->owner, f->source, b);
         if (!term) return false;
         for (uint32_t e = 0; e < lower_edge_count(term); ++e)
             if (!term->targets[e]) return false;
     }
-    /* No edge can revisit this activation entry. Slice formals are excluded,
-     * so every local keeper is truly empty before its first instruction. */
+    /* No edge can revisit this activation entry, and no formal loan has a
+     * logical death to preserve. Every local keeper is still truly empty. */
     return true;
 }
 static void *lower_view_reserve(Lower *c, void *storage, size_t count, size_t *capacity, size_t size) {
@@ -129,7 +131,9 @@ static bool lower_view_cleanups_finish(LowerFunction *f) {
     for (size_t n = 0; n < views->cleanup_count; ++n) {
         LowerViewCleanup cleanup = views->cleanups[n]; uint32_t cell = f->cell_for[cleanup.owner];
         if (cell == UINT32_MAX) {
-            cleanup.insertion.target = f->values[cleanup.owner]; items[used++] = cleanup.insertion;
+            cleanup.insertion.target = f->values[cleanup.owner];
+            cleanup.insertion.formal = cleanup.owner < f->source->parameter_count;
+            items[used++] = cleanup.insertion;
         } else {
             /* A local place owns its writer incarnations and live-in phis.
              * Independent LOCAL_READ copies retain their own keeper identity. */

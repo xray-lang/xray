@@ -173,6 +173,7 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
     if (!m)
         return;
     xr_lir_callable_facts_destroy(m->callable_facts);
+    xr_lir_slice_facts_destroy(m->slice_facts);
     for (uint32_t i = 0; i < m->function_count; ++i)
         lir_function_free(&m->functions[i]);
     for (uint32_t i = 0; i < m->intrinsic_count; ++i)
@@ -774,7 +775,8 @@ XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_batch(XrLirModule *m, XrLirFun
         bool terminated = block->terminated; block->terminated = false;
         for (size_t n = first; n < first + added; ++n) {
             const XrLirSliceCleanupInsertion *item = &items[order[n]];
-            XrLirInstruction cleanup = {.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=item->target.id,.source=item->source};
+            XrLirInstruction cleanup = {.op=item->formal ? XR_LIR_SLICE_FORMAL_CLEANUP : XR_LIR_SLICE_CLEANUP,
+                .type=XR_LIR_UNIT,.bits=item->target.id,.source=item->source};
             status = xr_lir_emit_effect(m, item->block, &cleanup);
             if (status != XR_LIR_OK) break;
         }
