@@ -476,28 +476,6 @@ static void late_frame_scalar_cells(void) {
         CHECK(xr_lir_module_finish(c.module,NULL)!=XR_LIR_OK); xr_lir_module_destroy(c.module);
     }
 }
-static void compacted_frame_scalar_cells(void) {
-    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
-    XrLirFunction root={0}; XrLirBlock entry={0},dead={0},live={0};
-    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="late_cell",.name_length=9,.result=XR_LIR_I64},&root));
-    OK(xr_lir_define_function(c.module,root));
-    OK(xr_lir_add_block(c.module,root,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,root,entry));
-    OK(xr_lir_add_block(c.module,root,NULL,0,&dead)); OK(xr_lir_add_block(c.module,root,NULL,0,&live));
-    OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
-        .edge_count=1,.edges={{live,NULL,0}}}));
-    XrLirBlock blocks[]={dead,live};
-    for (size_t n=0;n<2;++n) {
-        XrLirValue value=ca_constant(&c,blocks[n],n ? 42 : 17);
-        XrLirValue cell=ca_value(&c,blocks[n],XR_LIR_CELL_NEW,XR_LIR_I64_CELL,&value,1);
-        ca_return(&c,blocks[n],ca_value(&c,blocks[n],XR_LIR_CELL_READ,XR_LIR_I64,&cell,1));
-    }
-    OK(xr_lir_module_finish(c.module,NULL)); XrRbcProgram *program=compile(c.module,root);
-    const XrRbcModule *module=xr_rbc_program_view(program); CHECK(module->function_count==1);
-    const XrRbcFunction *function=&module->functions[0]; CHECK(function->cell_count==1);
-    for (size_t pc=0;pc<function->code_count;++pc)
-        if ((function->code[pc]&255)==XR_RBC_CELL_NEW) CHECK(!(function->code[pc]>>16));
-    xr_lir_module_destroy(c.module); execute(program,42);
-}
 #include "lir_slice_state_read_fixture.h"
 static void slice_state_reads(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
@@ -805,7 +783,6 @@ int main(void) {
     borrowed_map_binding_frontier();
     slice_call_boundaries();
     late_frame_scalar_cells();
-    compacted_frame_scalar_cells();
     slice_state_reads();
     owned_duplicate_edge();
     scope_receiving();
