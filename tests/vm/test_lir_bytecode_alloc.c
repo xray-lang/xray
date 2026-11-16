@@ -155,6 +155,9 @@ static void callable_allocation_failures(XrLirModule *module, XrLirFunction root
     for (size_t point = 1; point <= compile_calls; ++point) {
         attempts = 0; fail_at = point;
         CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        if (program || diagnostic.status != XR_RBC_COMPILE_OUT_OF_MEMORY || attempts < point || live_allocations)
+            fprintf(stderr, "%s compile fault %zu/%zu: program=%d status=%d attempts=%zu live=%zu\n",
+                name, point, compile_calls, program != NULL, (int)diagnostic.status, attempts, live_allocations);
         CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY &&
             attempts >= point && !live_allocations);
     }
