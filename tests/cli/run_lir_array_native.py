@@ -149,6 +149,7 @@ def main() -> None:
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
         "reject_ref_alias": b"ref arguments of one call must not alias",
         "reject_scalar_ref_callback_write": b"E0382: ref of module binding `shared` conflicts with",
+        "reject_local_scalar_ref_callback_write": b"ref argument conflicts with a callable capture of the same mutable root",
         "reject_view_live_write": b"during view lifetime normalization",
         "reject_view_copy_live_write": b"during view lifetime normalization",
         "reject_view_module_alias": b"during view lifetime normalization",

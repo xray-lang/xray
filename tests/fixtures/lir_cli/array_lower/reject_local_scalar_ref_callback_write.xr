@@ -1,0 +1,17 @@
+fn invoke_local(slot: ref i64, action: fn() -> i64) -> i64 {
+    slot = slot + 1
+    return action()
+}
+
+fn sample() -> i64 {
+    var values = [11, 22, 33]
+    const part: Slice<i64> = values[1:3]
+    var value: i64 = 1
+    const action = fn() -> i64 {
+        value = value + 1
+        return value
+    }
+    return invoke_local(ref value, action) + part[0] + len(part)
+}
+
+print(sample())
