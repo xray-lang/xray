@@ -7,21 +7,20 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import shutil
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, install_native_runtime, native_c11_options
 
 
 def header_clients(build, logs, libraries):
+    build, logs = build.resolve(), logs.resolve()
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$',
                            (build / 'CMakeCache.txt').read_text(encoding='utf-8'), re.M))
     graph = subprocess.run([cache['CMAKE_MAKE_PROGRAM'], '-C', build, '-t', 'commands',
                             'test_native_runtime_0'], capture_output=True, check=True, timeout=15)
     recipe = next(line for line in graph.stdout.decode('utf-8').splitlines()
                   if 'MAP_KIND=0' in line and 'client.c' in line)
-    source = Path(cache['CMAKE_HOME_DIRECTORY'])
     compiler = cache['CMAKE_C_COMPILER']
     msvc = os.name == 'nt' and Path(compiler).name.lower() in ('cl', 'cl.exe', 'clang-cl', 'clang-cl.exe')
     system_libraries = []
@@ -30,26 +29,15 @@ def header_clients(build, logs, libraries):
         system_libraries = [str(p) for p in libraries[-2:]]
         libraries = libraries[:-2]
     assert len(libraries) == 1 and all(p.is_absolute() and p.is_file() and p.name in ("xray_native_runtime.lib", "libxray_native_runtime.a") for p in libraries), libraries
-    prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
-    (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
-    shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
-    shutil.copyfile(source / 'include/xray_native_state.h', prefix / 'include/xray_native_state.h')
-    shutil.copyfile(source / 'include/xray_native_callable.h', prefix / 'include/xray_native_callable.h')
-    shutil.copyfile(source / 'include/xray_native_metadata.h', prefix / 'include/xray_native_metadata.h')
-    shutil.copyfile(source / 'include/xray_native_array.h', prefix / 'include/xray_native_array.h')
-    shutil.copyfile(source / 'include/xray_native_map.h', prefix / 'include/xray_native_map.h')
-    shutil.copyfile(source / 'include/xray_native_set.h', prefix / 'include/xray_native_set.h')
-    shutil.copyfile(source / 'include/xray_native_boxed.h', prefix / 'include/xray_native_boxed.h')
-    shutil.copyfile(source / 'include/xray_native_view.h', prefix / 'include/xray_native_view.h')
-    shutil.copyfile(source / 'include/xray_native_pod.h', prefix / 'include/xray_native_pod.h')
-    shutil.copyfile(source / 'include/xray_native_string.h', prefix / 'include/xray_native_string.h')
-    shutil.copyfile(source / 'include/xray_string_cursor.h', prefix / 'include/xray_string_cursor.h')
-    shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
-    for library in libraries:
-        shutil.copyfile(library, prefix / 'lib' / library.name)
+    prefix = Path(tempfile.mkdtemp(prefix='native install with spaces-', dir=logs))
+    runtime = install_native_runtime(build, prefix, logs)
+    original = libraries[0]
+    installed = runtime / original.name
+    assert installed.is_file() and hashlib.sha256(installed.read_bytes()).digest() == hashlib.sha256(original.read_bytes()).digest(), installed
     moved = prefix.with_name(prefix.name + '-moved'); prefix.rename(moved)
-    libraries = [moved / 'lib' / p.name for p in libraries]
-    include = moved / 'include'
+    runtime = moved / runtime.relative_to(prefix)
+    libraries = [runtime / original.name]
+    include = runtime / 'include'
     sanitizer = re.findall(r'(?<!\S)[/-](?:clang:-)?fsanitize=[^\s]+', recipe)
     if msvc:
         crt = re.findall(r'(?<!\S)[/-]M[TD]d?(?=\s)', recipe)
@@ -61,13 +49,72 @@ def header_clients(build, logs, libraries):
         link = [
             ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
             '-pthread']
+    witness = logs / 'header-values.c'
+    witness.write_text('''#include "xray_native_runtime.h"
+#include "xray_native_values.h"
+#include "xray_native_map.h"
+#include "xray_native_place.h"
+#include <string.h>
+#define REQUIRE(call) do { if ((call) != XRT_MANAGED_OK) return 0; } while (0)
+int xray_header_values(void) {
+    XrtManagedRoot *root = xrt_native_managed_root(0);
+    XrtManagedFrame *frame = NULL;
+    REQUIRE(xrt_managed_frame_enter(root, 8, &frame));
+    xrt_native_string_create(frame, 0, "head", 4, 0);
+    xrt_native_string_i64_create(frame, 1, 7, 0);
+    XrtManagedHeader *head = NULL, *number = NULL, *joined = NULL, *empty = NULL;
+    REQUIRE(xrt_managed_slot_borrow(frame, 0, &head));
+    REQUIRE(xrt_managed_slot_borrow(frame, 1, &number));
+    xrt_native_string_concat_create(frame, 2, head, number, 0);
+    XrtPlace source = {frame, 2, NULL, XRT_PLACE_NONNULL};
+    XrtPlace copied = {frame, 3, NULL, XRT_PLACE_NULLABLE};
+    XrtPlace moved = {frame, 4, NULL, XRT_PLACE_NULLABLE};
+    REQUIRE(xrt_place_copy_replace(copied, source, NULL));
+    REQUIRE(xrt_place_move_replace(moved, copied, NULL));
+    REQUIRE(xrt_managed_slot_borrow(frame, 3, &empty));
+    REQUIRE(xrt_managed_slot_borrow(frame, 4, &joined));
+    const XrtStringBacking *text = (const XrtStringBacking *)joined;
+    if (empty || !text || text->length != 5 || memcmp(text->bytes, "head7", 5)) return 0;
+    REQUIRE(xrt_managed_slot_drop(frame, 4));
+    REQUIRE(xrt_managed_slot_drop(frame, 3));
+    const XrtMapInput input = {NULL, NULL, 0};
+    xrt_native_map_create(frame, 5, &input, 0);
+    xrt_native_string_create(frame, 6, "key", 3, 0);
+    XrtManagedHeader *key = NULL, *map = NULL;
+    REQUIRE(xrt_managed_slot_borrow(frame, 6, &key));
+    const XrtStringBacking *key_value = (const XrtStringBacking *)key;
+    XrtPlace binding = {frame, 5, NULL, XRT_PLACE_NONNULL};
+    const XrtMapUpdate update = {XRT_MAP_UPDATE_SET, key_value, 42};
+    bool removed = false;
+    xrt_native_map_update_place(binding, frame, 7, &update, &removed, 0);
+    REQUIRE(xrt_managed_slot_borrow(frame, 5, &map));
+    int64_t value = 0;
+    if (removed || ((const XrtMapBacking *)map)->length != 1 ||
+        !xrt_native_map_get(map, key_value, &value, 0) || value != 42 ||
+        xrt_native_map_index(map, key_value, 0) != 42) return 0;
+    REQUIRE(xrt_managed_frame_leave(root, frame));
+    return 1;
+}
+''', encoding='ascii')
+    object_file = logs / ('header-values.obj' if msvc else 'header-values.o')
+    if msvc:
+        witness_command = [compiler, *flags, *native_c11_options(compiler, driver='msvc'),
+                           '/I' + str(include), '/c', '/Tc' + str(witness), '/Fo' + str(object_file)]
+    else:
+        witness_command = [compiler, *flags, *native_c11_options(compiler, driver='gnu'),
+                           '-I' + str(include), '-c', witness, '-o', object_file]
+    compiled = subprocess.run(witness_command, cwd=logs, capture_output=True, timeout=30)
+    (logs / 'header-values.compile.json').write_text(json.dumps([str(x) for x in witness_command], indent=2))
+    (logs / 'header-values.compile.log').write_bytes(compiled.stdout + compiled.stderr)
+    assert compiled.returncode == 0, (witness_command, compiled.stdout, compiled.stderr)
     text = ('#include "xray_native_runtime.h"\n'
+            '#include "xray_native_values.h"\n'
             '#include "xray_native_array.h"\n'
             '#include "xray_native_map.h"\n'
-            '#include "xray_native_set.h"\n'
-            '#include "xray_native_string.h"\n'
-            '#include "xray_native_callable.h"\n'
+            '#include "xray_native_state.h"\n'
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
+            '#ifdef __cplusplus\nextern "C" int xray_header_values(void);\n'
+            '#else\nint xray_header_values(void);\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'
             'static void (*const text)(const char *, size_t, uint32_t) = xrt_print_string;\n'
@@ -76,27 +123,9 @@ def header_clients(build, logs, libraries):
             'static int64_t (*const monotonic)(uint32_t) = xrt_clock_monotonic_nanos;\n'
             'static int64_t (*const offset)(int64_t, uint32_t) = xrt_clock_utc_offset_at;\n'
             'static void invoke(void *context) { int64_t a = monotonic(0);\n'
-            ' static const XrtCallableImage image = {XRT_CALLABLE_IMAGE_HEADER, NULL, 0, NULL, 0};\n'
-            ' XrtCallableScope scope; xrt_callable_scope_enter(&scope, &image, 0);\n'
-            ' (void)xrt_callable_scope_leave(&scope, NULL, 0);\n'
             ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a ||\n'
             ' offset(INT64_C(1700000000), 0) != offset(INT64_C(1700000000), 0)) return;\n'
-            ' XrtString *s = xrt_string_new("head", 4, 0);\n'
-            ' XrtString *n = xrt_string_i64(7, 0);\n'
-            ' XrtString *t = xrt_string_concat(s, n, 0);\n'
-            ' XrtString *copy = xrt_string_retain(t, 0), *moved = NULL;\n'
-            ' size_t size = 0; const char *bytes = xrt_string_bytes(copy, &size);\n'
-            ' if (size != 5 || bytes[4] != 55) return;\n'
-            ' xrt_string_move(&moved, &copy); xrt_string_drop(&moved);\n'
-            ' xrt_string_owned_drop(&copy); xrt_string_drop(&s); xrt_string_drop(&n);\n'
-            ' XrtMap *map = xrt_map_string_i64_new(NULL, NULL, 0, 0);\n'
-            ' XrtString *key = xrt_string_new("key", 3, 0);\n'
-            ' XrtMapRef reference = xrt_map_ref_local(&map, 0);\n'
-            ' xrt_map_ref_string_i64_set(reference, key, 42, 0);\n'
-            ' int64_t value = 0;\n'
-            ' if (xrt_map_length(map, 0) != 1 ||\n'
-            ' !xrt_map_string_i64_get(map, key, &value, 0) || value != 42) return;\n'
-            ' xrt_map_drop(&map); xrt_string_drop(&key);\n'
+            ' if (!xray_header_values()) return;\n'
             ' text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
@@ -106,25 +135,34 @@ def header_clients(build, logs, libraries):
         client.write_text(text, encoding='ascii')
         executable = logs / ('header-client-' + language.replace('+', 'x') + ('.exe' if msvc else ''))
         if msvc:
-            command = [compiler, *flags, '/std:' + language,
+            mode = native_c11_options(compiler, driver='msvc') if language == 'c11' else ['/std:c++17']
+            command = [compiler, *flags, *mode,
                        '/I' + str(include), ('/Tc' if language == 'c11' else '/Tp') + str(client),
+                       object_file,
                        *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '/Fe:' + str(executable), *link]
         else:
             command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
-                       '-I' + str(include), client, '-x', 'none', *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '-o', executable, *link]
+                       '-I' + str(include), client, '-x', 'none', object_file, *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
         compile_log.write_bytes(compiled.stdout + compiled.stderr)
         assert compiled.returncode == 0, (command, str(compile_log))
         ran = subprocess.run([executable], capture_output=True, timeout=15)
+        label = language.replace('+', 'x')
+        (logs / (label + '.stdout')).write_bytes(ran.stdout)
+        (logs / (label + '.stderr')).write_bytes(ran.stderr)
+        (logs / (label + '.exit')).write_text(str(ran.returncode), encoding='ascii')
         assert (ran.returncode, ran.stdout, ran.stderr) == (1, b'header\n', b'[Uncaught Panic] E0421: modulo by zero\n')
         records.append({'language': language, 'command': [str(x) for x in command],
                         'actualClientRecipe': recipe,
                         'compileExit': compiled.returncode, 'exit': ran.returncode,
+                        'stdoutHex': ran.stdout.hex(),
                         'stderrHex': ran.stderr.hex(),
                         'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in libraries],
                         'systemLibraries': system_libraries,
-                        'headerSHA256': hashlib.sha256((source / 'include/xray_native_runtime.h').read_bytes()).hexdigest()})
+                        'headerSHA256': hashlib.sha256((include / 'xray_native_runtime.h').read_bytes()).hexdigest(),
+                        'witnessSHA256': hashlib.sha256(witness.read_bytes()).hexdigest(),
+                        'witnessObjectSHA256': hashlib.sha256(object_file.read_bytes()).hexdigest()})
     (logs / 'header-clients.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
     return records
 

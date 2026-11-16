@@ -15,6 +15,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.artifacts import complete_native_artifacts
+from xraytest.toolchain import install_native_runtime
 
 
 def main() -> None:
@@ -320,13 +321,11 @@ def main() -> None:
     absent = run("relocated-missing-runtime",
                  [relocated, "build", fixtures / "hello.xr", "-o", work / "absent.exe"], 1)
     assert b"native runtime" in absent.stderr and not (work / "absent.exe").exists()
-    runtime = prefix / "lib/xray/native"
-    (runtime / "include").mkdir(parents=True)
-    for library in args.runtime_library:
-        shutil.copy2(library, runtime / library.name)
-    for header in ("xray_native_runtime.h", "xray_native_state.h", "xray_native_array.h", "xray_native_map.h", "xray_native_set.h", "xray_native_boxed.h", "xray_native_view.h", "xray_native_pod.h", "xray_native_string.h",
-                   "xray_string_cursor.h", "xray_native_callable.h", "xray_native_metadata.h", "xray_export.h"):
-        shutil.copy2(root / "include" / header, runtime / "include" / header)
+    assert len(args.runtime_library) == 1 and args.runtime_library[0].is_file(), args.runtime_library
+    runtime = install_native_runtime(binary.parent, prefix, work)
+    installed = runtime / args.runtime_library[0].name
+    assert installed.is_file() and hashlib.sha256(installed.read_bytes()).digest() == hashlib.sha256(
+        args.runtime_library[0].read_bytes()).digest(), (installed, args.runtime_library)
     array_header = runtime / "include/xray_native_array.h"
     hidden_header = array_header.with_suffix(".hidden")
     array_header.rename(hidden_header)

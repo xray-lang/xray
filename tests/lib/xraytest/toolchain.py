@@ -15,11 +15,13 @@ result is cached per-process: a suite asks the same question many times.
 from __future__ import annotations
 
 import hashlib
+import json
 import ntpath
 import os
 import re
 import shutil
 import struct
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -97,6 +99,36 @@ def native_c11_options(compiler, *, driver: str) -> "list[str]":
             options.append("/experimental:c11atomics")
         return options
     return ["-std=c11"]
+
+
+def install_native_runtime(build: Path, prefix: Path, logs: Path) -> Path:
+    """Receive the actual runtime component without recreating its inventory."""
+    build, prefix, logs = build.resolve(), prefix.resolve(), logs.resolve()
+    cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$',
+                           (build / "CMakeCache.txt").read_text(encoding="utf-8"), re.M))
+    command = [cache["CMAKE_COMMAND"], "--install", str(build), "--prefix", str(prefix),
+               "--component", "XrayRuntime"]
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "runtime-install.command.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8")
+    try:
+        result = subprocess.run(command, capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired as failure:
+        (logs / "runtime-install.stdout").write_bytes(failure.stdout or b"")
+        (logs / "runtime-install.stderr").write_bytes(failure.stderr or b"")
+        (logs / "runtime-install.exit").write_text("TIMEOUT\n", encoding="ascii")
+        raise
+    (logs / "runtime-install.stdout").write_bytes(result.stdout)
+    (logs / "runtime-install.stderr").write_bytes(result.stderr)
+    (logs / "runtime-install.exit").write_text(str(result.returncode) + "\n", encoding="ascii")
+    assert result.returncode == 0, (command, result.stdout, result.stderr)
+    runtime = prefix / "lib/xray/native"
+    assert (runtime / "include/xray_native_runtime.h").is_file(), runtime
+    archives = [path for path in runtime.iterdir() if path.is_file() and path.suffix in (".a", ".lib")]
+    assert len(archives) == 1 and archives[0].name in ("xray_native_runtime.lib", "libxray_native_runtime.a"), archives
+    files = [{"path": str(path.relative_to(prefix)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+             for path in sorted(runtime.rglob("*")) if path.is_file()]
+    (logs / "runtime-install.files.json").write_text(json.dumps(files, indent=2) + "\n", encoding="utf-8")
+    return runtime
 
 
 @dataclass(frozen=True)
