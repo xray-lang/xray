@@ -66,6 +66,10 @@ static const XrLirHomeBinding *rbc_value_binding(const XrRbcValueCode *code, uin
     return rbc_value_id(code,value) && code->homes && code->homes->bindings &&
         value<=code->homes->value_count && code->homes->bindings[value].type ? &code->homes->bindings[value] : NULL;
 }
+static bool rbc_value_binding_state_cap(const XrRbcValueCode *code,uint32_t value) {
+    const XrLirHomeBinding *binding=rbc_value_binding(code,value);
+    return binding && binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==value;
+}
 static XrtValueKind rbc_value_kind(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value) {
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrLirHomeBinding *binding=rbc_value_binding(code,value);
@@ -316,16 +320,20 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     XrRbcValueAccess a = code->accesses[index];
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
         a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
+        a.operation!=XR_RBC_VALUE_BINDING_NEW && a.operation!=XR_RBC_VALUE_BINDING_WRITE &&
+        a.operation!=XR_RBC_VALUE_STRING_APPEND_BINDING &&
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
         a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
+        !(a.operation>=XR_RBC_VALUE_BINDING_NEW && a.operation<=XR_RBC_VALUE_BINDING_DROP) &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
     switch (a.operation) {
     case XR_RBC_VALUE_CELL: return rbc_value_cell_access_valid(module,code,function,a);
     case XR_RBC_VALUE_STRING_APPEND_OWNED: return rbc_value_string_append_valid(module,code,a);
+    case XR_RBC_VALUE_STRING_APPEND_BINDING: return rbc_value_string_binding_append_valid(module,code,function,a);
     case XR_RBC_VALUE_SLICE: return rbc_value_slice_access_valid(module,code,function,a);
     case XR_RBC_VALUE_FUNCTION_NEW: case XR_RBC_VALUE_FUNCTION_CALL:
     case XR_RBC_VALUE_FUNCTION_ALIAS: case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
@@ -384,7 +392,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 formal=rbc_value_home(callee,callee->parameters[p]); location=callee->locations[callee->parameters[p]];
             }
             const XrLirHomeBinding *binding=rbc_value_binding(callee,callee ? callee->parameters[p] : 0);
-            if (binding) {
+            if (binding && !rbc_value_binding_state_cap(callee,callee->parameters[p])) {
                 const XrLirHomeBinding *actual=rbc_value_binding(code,source);
                 if (!actual || binding->kind!=XR_LIR_HOME_BINDING_PARAMETER || binding->parameter!=p+1 ||
                     binding->type!=actual->type || !rbc_value_binding_valid(module,code,function,source)) return false;

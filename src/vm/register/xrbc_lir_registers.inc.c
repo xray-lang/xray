@@ -183,7 +183,9 @@ static bool rbc_lir_common_value(RbcLirCompiler *c, uint32_t value) {
          rbc_lir_captured_cell(c->input, rbc_lir_value_type(c, value)) ||
          rbc_lir_slice_type(c->input, rbc_lir_value_type(c, value)) ||
          rbc_lir_inline_type(c->input, rbc_lir_value_type(c, value)) ||
-         (c->homes->bindings && c->homes->bindings[value].type));
+         (c->homes->bindings && c->homes->bindings[value].type &&
+          !(c->homes->bindings[value].kind==XR_LIR_HOME_BINDING_STATE_BORROW &&
+            c->homes->bindings[value].source==value)));
 }
 #include "xrbc_lir_spill_edges.inc.c"
 static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget) {

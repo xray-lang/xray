@@ -502,6 +502,10 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             return false;
         }
     if (!rbc_lir_output_values(input, f, v, output,d)) return false;
+    if (v->result==XR_LIR_STRING_CELL || v->result==XR_LIR_STRING_REF) {
+        rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"String bindings have no escaping result receiver",(XrLirSource){0});
+        return false;
+    }
     if (v->result == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         if (xr_lir_array_result_view(input, f, &shape) != XR_LIR_OK ||
@@ -526,11 +530,6 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
                 rbc_lir_value_source(input, f, v, value, d));
             return false;
         }
-        if (type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF) {
-            rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"selected value family has no fixed execution plan",
-                rbc_lir_value_source(input,f,v,value,d));
-            return false;
-        }
         if (type == XR_LIR_STATE_REF) {
             XrLirStateReference shape = {0};
             if (xr_lir_state_reference_view(input, (XrLirValue){input, f.id, value}, &shape) != XR_LIR_OK ||
@@ -548,7 +547,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
     uint32_t string_role = xr_lir_string_role(input,i);
-    if (string_role && string_role != XR_LIR_STRING_OP_APPEND_OWNED) return false;
+    if (string_role >= XR_LIR_STRING_OP_END) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
@@ -605,7 +604,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
-        if (string_role == XR_LIR_STRING_OP_APPEND_OWNED) return true;
+        if (string_role) return true;
         if (slice_operation) return true;
         if (rbc_lir_map_role(input,i)) return true;
         if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
@@ -767,7 +766,8 @@ rejected:
  * temporary of the matching bank, never a slot from the other typed pool. */
 static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value, XrLirType type) {
     if (type == XR_LIR_MAP_STRING_I64) return XR_RBC_MAP_STRING_I64;
-    if (type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF) return XR_RBC_BITS;
+    if (type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
+        type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF) return XR_RBC_BITS;
     if (type == XR_LIR_I64_CELL) return XR_RBC_I64_BINDING;
     if (rbc_lir_callable_type(c->input, type)) return XR_RBC_FUNCTION;
     if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) return XR_RBC_BITS;
@@ -778,9 +778,8 @@ static XrRbcRegisterKind rbc_lir_register_kind(RbcLirCompiler *c, uint32_t value
         uint32_t family = rbc_lir_array_family(shape.element);
         return xr_rbc_array_kind_at(family);
     }
-    if (type == XR_LIR_STRING_REF) return XR_RBC_STRING_REF;
-    return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL :
-        type == XR_LIR_STATE ? XR_RBC_STATE : type == XR_LIR_STATE_REF ? XR_RBC_STATE_REF : XR_RBC_BITS;
+    return type == XR_LIR_STRING ? XR_RBC_STRING : type == XR_LIR_STATE ? XR_RBC_STATE :
+        type == XR_LIR_STATE_REF ? XR_RBC_STATE_REF : XR_RBC_BITS;
 }
 
 static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind) {
