@@ -16,6 +16,7 @@
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
 #include "xlir_callable_copy.h"
+#include "xlir_slice_copy.h"
 #include "xlir_types.h"
 #include "xlir_map.h"
 #include "base/xchecks.h"
@@ -53,6 +54,7 @@ typedef struct {
     XrLirValue *values, *arguments;
     XrLirType *types;
     bool *sites;
+    LirSliceCopyCleanups cleanups;
     size_t depth;
     uint64_t scratch;
 } InlineBody;
@@ -229,6 +231,7 @@ static XrLirStatus inline_declarations(Inliner *c) {
 }
 
 static void inline_body_free(InlineBody *b) {
+    xr_free(b->cleanups.items);
     xr_free(b->blocks); xr_free(b->stack); xr_free(b->values);
     xr_free(b->arguments); xr_free(b->types); xr_free(b->sites);
 }
@@ -348,6 +351,8 @@ static XrLirStatus inline_branch(Inliner *c, XrLirBlock from, XrLirBlock to,
 }
 static XrLirStatus inline_copy(InlineBody *b, XrLirBlock cursor,
     const XrLirInstructionView *v, XrLirBlock continuation) {
+    if (v->op == XR_LIR_SLICE_CLEANUP)
+        return lir_slice_copy_cleanup_record(&b->cleanups, b->owner->output, cursor, v);
     if (continuation.id && v->op == XR_LIR_RET) {
         XrLirValue value = v->operand_count ? b->values[v->operands[0]] : (XrLirValue){0};
         if (v->operand_count && !value.id) return XR_LIR_VERIFY_ERROR;
@@ -401,6 +406,9 @@ static XrLirStatus inline_site(InlineBody *caller, XrLirBlock *cursor,
         while (status == XR_LIR_OK && inline_next(&clone, &frame, &v))
             status = inline_copy(&clone, frame->cursor, &v, continuation);
     }
+    if (status == XR_LIR_OK)
+        status = lir_slice_copy_cleanup_finish(&clone.cleanups, c->output,
+            clone.destination, clone.values, clone.view.value_count);
     // Original incoming edges still target the prefix; only emission advances.
     if (status == XR_LIR_OK) *cursor = continuation;
     inline_body_free(&clone);
@@ -426,6 +434,9 @@ static XrLirStatus inline_definition(Inliner *c, uint32_t id) {
             else status = inline_copy(&body, frame->cursor, &v, (XrLirBlock){0});
         }
     }
+    if (status == XR_LIR_OK)
+        status = lir_slice_copy_cleanup_finish(&body.cleanups, c->output,
+            body.destination, body.values, body.view.value_count);
     inline_body_free(&body);
     return status;
 }
