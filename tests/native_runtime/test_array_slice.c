@@ -71,7 +71,21 @@ static void kernel(XrtBackingArrayKind kind) {
     CHECK(before.allocations == after.allocations && before.bytes == after.bytes && before.blocks == after.blocks);
     xrt_billing_owner_fail_after(billing, SIZE_MAX);
     OK(xrt_managed_slot_drop(frame, 4));
-    OK(xrt_array_slice_clear(&primary)); CHECK(!storage->value.hold && !storage->value.value.backing);
+    CHECK(xrt_array_slice_clear(NULL,primary.value,primary.temporary,primary.first_owner,
+        primary.temporary_first_owner)==XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_array_slice_clear(primary.frame,primary.value,primary.temporary,primary.temporary_first_owner,
+        primary.first_owner)==XRT_MANAGED_ARGUMENT);
+    CHECK(!memcmp(&saved,&storage->value,sizeof(saved)) && !storage->temporary.hold);
+    XrtBillingStats clear_before=xrt_billing_owner_stats(billing);
+    xrt_billing_owner_fail_after(billing,0);
+    OK(xrt_array_slice_clear(primary.frame,primary.value,primary.temporary,primary.first_owner,
+        primary.temporary_first_owner)); CHECK(!storage->value.hold && !storage->value.value.backing);
+    OK(xrt_array_slice_clear(primary.frame,primary.value,primary.temporary,primary.first_owner,
+        primary.temporary_first_owner));
+    XrtBillingStats clear_after=xrt_billing_owner_stats(billing);
+    CHECK(clear_after.allocations==clear_before.allocations && clear_after.bytes==clear_before.bytes &&
+        clear_after.blocks==clear_before.blocks);
+    xrt_billing_owner_fail_after(billing,SIZE_MAX);
     OK(xrt_array_slice_read_bits(&storage->child.value, kind, 0, &bits)); CHECK(bits == 33);
     OK(xrt_array_slice_copy_create(frame, 5, &types, kind, &storage->child.value));
     XrtManagedHeader *copy = NULL; OK(xrt_managed_slot_borrow(frame, 5, &copy)); CHECK(copy && copy != header);
@@ -80,7 +94,8 @@ static void kernel(XrtBackingArrayKind kind) {
     xrt_billing_owner_close(billing);
     OK(xrt_array_slice_read_bits(&storage->child.value, kind, 0, &bits)); CHECK(bits == 33);
     OK(xrt_array_slice_reborrow(&primary, kind, &storage->child.value, 0, 1));
-    OK(xrt_array_slice_clear(&child));
+    OK(xrt_array_slice_clear(child.frame,child.value,child.temporary,child.first_owner,
+        child.temporary_first_owner));
     CHECK(xrt_array_slice_length(&storage->child.value, &length) == XRT_MANAGED_ARGUMENT);
     CHECK(storage->value.hold == header);
     OK(xrt_managed_root_destroy(&root));

@@ -13,7 +13,8 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         const XrLirHomeEvent *event=&activation->code->homes->events[access.window-1];
         XrtInlineValueHome destination={0};
         XrtManagedStatus status=rbc_value_slice_storage(activation,event->view_workspace,&destination);
-        return status==XRT_MANAGED_OK ? xrt_array_slice_clear(&destination) : status;
+        return status==XRT_MANAGED_OK ? xrt_array_slice_clear(destination.frame,destination.value,
+            destination.temporary,destination.first_owner,destination.temporary_first_owner) : status;
     }
     const uint32_t *args=activation->code->arguments+access.first;
     bool construct=access.index==XR_LIR_SLICE_OP_NEW || access.index==XR_LIR_SLICE_OP_REBORROW || access.index==XR_LIR_SLICE_OP_BIND;
@@ -28,7 +29,8 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         status=rbc_value_slice_storage(activation,event->view_workspace,&destination);
         if (status!=XRT_MANAGED_OK) return status;
     }
-    if (access.index==XR_LIR_SLICE_OP_END) return xrt_array_slice_clear(&destination);
+    if (access.index==XR_LIR_SLICE_OP_END) return xrt_array_slice_clear(destination.frame,destination.value,
+        destination.temporary,destination.first_owner,destination.temporary_first_owner);
     int64_t start=0,limit=0;
     if (access.index==XR_LIR_SLICE_OP_NEW || access.index==XR_LIR_SLICE_OP_REBORROW) {
         XrRbcRegister *first=rbc_value_register(stack,activation,args[1]),*last=rbc_value_register(stack,activation,args[2]);
