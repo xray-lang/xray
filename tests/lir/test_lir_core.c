@@ -23,16 +23,19 @@ static void slice_callable_captures(void) {
         bool conflicting=shape==SLICE_CALLABLE_ARRAY || shape==SLICE_CALLABLE_DIRECT_LOCAL_WRITE ||
             shape==SLICE_CALLABLE_INDIRECT_LOCAL_WRITE || shape==SLICE_CALLABLE_CAPTURE_CONTEXTS;
         XrLirStatus expected=safe?XR_LIR_OK:conflicting?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
+        const char *expected_message=conflicting?"Array binding write":"captured binding effect facts";
         XrLirDiagnostic diagnostic={0};
         XrLirStatus status=xr_lir_module_finish(m,&diagnostic);
-        if (status!=expected) fprintf(stderr,"Slice callable case %u: status %u, f%u b%u i%u: %s\n",
-            shape,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.message);
+        if (status!=expected || (!safe && !strstr(diagnostic.message,expected_message)))
+            fprintf(stderr,"Slice callable case %u: status %u (expected %u), f%u b%u i%u: %s; expected message: %s\n",
+                shape,(unsigned)status,(unsigned)expected,diagnostic.function,diagnostic.block,
+                diagnostic.instruction,diagnostic.message,safe?"none":expected_message);
         CHECK(status==expected);
         if (safe) {
             OK(xr_lir_verify(m,NULL));XrLirModule *copy=NULL;OK(xr_lir_rebuild(m,&copy));
             xr_lir_module_destroy(m);OK(xr_lir_verify(copy,NULL));xr_lir_module_destroy(copy);
         } else {
-            CHECK(strstr(diagnostic.message,conflicting?"Array binding write":"captured binding effect facts"));
+            CHECK(strstr(diagnostic.message,expected_message));
             xr_lir_module_destroy(m);
         }
     }
