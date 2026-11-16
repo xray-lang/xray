@@ -155,6 +155,7 @@ def main() -> None:
         "reject_view_module_alias": b"during view lifetime normalization",
         "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
         "reject_view_capture_module_write": b"during view lifetime normalization",
+        "reject_view_indirect_callback_write": b"during view lifetime normalization",
         "reject_view_local_return": b"constructed XIR failed checking",
     }
     for name, diagnostic in rejected_sources.items():
