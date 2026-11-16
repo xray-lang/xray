@@ -78,6 +78,8 @@ XR_LIR_OP(TUPLE_NEW, "tuple_new", -1)
 XR_LIR_OP(TUPLE_FIELD, "tuple_field", 1)
 XR_LIR_OP(STATE_GROUP_INITIALIZE, "state_group_initialize", -1)
 XR_LIR_OP(FUNCTION_WEAKEN, "function_weaken", 1)
+/* bits names a local Slice resource target, not a readable SSA operand. */
+XR_LIR_OP(SLICE_CLEANUP, "slice_cleanup", 0)
 XR_LIR_OP(MAP_RETAIN, "map_retain", 1)
 XR_LIR_OP(MAP_DROP, "map_drop", 1)
 XR_LIR_OP(MAP_CELL_DROP, "map_cell_drop", 1)

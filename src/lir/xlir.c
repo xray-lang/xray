@@ -707,6 +707,30 @@ XR_FUNC XrLirStatus xr_lir_emit_effect(XrLirModule *m, XrLirBlock block,
                                        const XrLirInstruction *instruction) {
     return lir_emit(m, block, instruction, 1, NULL);
 }
+XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_insert(XrLirModule *m, XrLirBlock handle,
+    uint32_t ordinal, XrLirValue target, const XrLirSource *source) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    XrLirFunctionData *f = lir_block_function(m, handle);
+    if (!f || !lir_value_handle_valid(m, handle.function, target)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirBlockData *block = &f->blocks[handle.id - 1];
+    uint32_t count = block->instruction_count; bool terminated = block->terminated;
+    if (ordinal > count || (terminated && ordinal == count)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirInstruction cleanup = {.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=target.id,
+        .source=source ? *source : (XrLirSource){0}};
+    block->terminated = false;
+    status = xr_lir_emit_effect(m, handle, &cleanup);
+    block = &f->blocks[handle.id - 1]; block->terminated = terminated;
+    if (status != XR_LIR_OK) return status;
+    XrLirInstructionData saved = block->instructions[count];
+    memmove(block->instructions + ordinal + 1, block->instructions + ordinal,
+        (size_t)(count - ordinal) * sizeof(*block->instructions));
+    block->instructions[ordinal] = saved;
+    for (uint32_t n = 0; n < f->value_count; ++n)
+        if (!f->values[n].parameter && f->values[n].block == handle.id && f->values[n].instruction >= ordinal)
+            ++f->values[n].instruction;
+    return XR_LIR_OK;
+}
 XR_FUNC XrLirStatus xr_lir_set_terminator(XrLirModule *m, XrLirBlock block,
                                           const XrLirInstruction *instruction) {
     return lir_emit(m, block, instruction, 2, NULL);

@@ -94,6 +94,8 @@ typedef struct XrLirHomeEvent {
     /* VALUE names its receiving workspace; END names the source workspace.
      * Selected edges carry both workspace ordinals in HomeTransfer instead. */
     uint32_t view_operation, view_workspace;
+    /* CLEANUP may retire an empty/already-ended target; no natural value is
+     * read. A Frame absent on this path implies no keeper was published. */
     XrLirOwnershipTransferMode hold_transfer_mode;
 } XrLirHomeEvent;
 

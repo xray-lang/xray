@@ -297,6 +297,13 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
             }
             for (uint32_t i = 0; i < block->instruction_count; ++i) {
                 const XrLirInstructionView *v = &block->instructions[i].view;
+                if (v->op == XR_LIR_SLICE_CLEANUP) {
+                    uint32_t value = (uint32_t)v->bits;
+                    if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_VIEW_END,
+                        .function=function,.block=b + 1,.instruction=i + 1,.value=value,
+                        .type=f->values[value - 1].type,.view_operation=XR_LIR_SLICE_OP_CLEANUP}))
+                        return XR_LIR_OUT_OF_MEMORY;
+                }
                 if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
                 XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
                 for (uint32_t a = 0; a < v->operand_count; ++a) {

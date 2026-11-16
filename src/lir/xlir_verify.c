@@ -408,11 +408,17 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_RECORD_FIELD &&
-        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
+        v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
+    if (v->op == XR_LIR_SLICE_CLEANUP) {
+        if (v->type != XR_LIR_UNIT || !v->bits || v->bits > f->value_count ||
+            !xr_lir_internal_slice_type(m, f->values[v->bits - 1].type) ||
+            (f->values[v->bits - 1].parameter && !f->values[v->bits - 1].block)) goto invalid;
+        return XR_LIR_OK;
+    }
     uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR ? 2 : 0);
     if (v->edge_count != edges || !lir_edges_valid(f, v)) {
         message = "control flow edge target or parameter signature mismatch";
