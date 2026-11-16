@@ -208,6 +208,14 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     XrRbcValueAccess access = {.result=i->result,.source=i->operand_count ? i->operands[0] : 0,
         .other=i->operand_count > 1 ? i->operands[1] : 0};
     switch (i->op) {
+    case XR_LIR_SLICE_CLEANUP:
+        if (!i->bits || i->bits>UINT32_MAX)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup lost its resource target");
+        access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_SLICE,.index=XR_LIR_SLICE_OP_CLEANUP,
+            .window=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_VIEW_END,(uint32_t)i->bits)};
+        if (!access.window)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup lost its common keeper event");
+        break;
     case XR_LIR_FUNCTION_REF: case XR_LIR_FUNCTION_WEAKEN: case XR_LIR_FUNCTION_BIND:
     case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_CALL_INDIRECT:
         if (i->op==XR_LIR_FUNCTION_BIND && !rbc_lir_callable_type(c->input,i->type)) return true;

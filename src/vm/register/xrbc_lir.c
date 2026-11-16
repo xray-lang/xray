@@ -605,6 +605,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
     case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE: return true;
+    case XR_LIR_SLICE_CLEANUP: return true;
     case XR_LIR_VIEW_FRAME_ENTER: case XR_LIR_VIEW_FRAME_LEAVE: return false;
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
