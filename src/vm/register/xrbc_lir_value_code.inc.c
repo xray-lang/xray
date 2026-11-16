@@ -251,6 +251,12 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     }
     case XR_LIR_CALL_INTRINSIC: {
+        if (xr_lir_string_role(c->input,i)==XR_LIR_STRING_OP_APPEND_OWNED) {
+            access.operation=XR_RBC_VALUE_STRING_APPEND_OWNED;
+            access.index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_APPEND_TRANSFER,access.source);
+            if (!access.index) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"String append lost its common transfer event");
+            break;
+        }
         XrLirSliceIntrinsic slice={0};
         if (xr_lir_slice_intrinsic_view(c->input,i->intrinsic,&slice)==XR_LIR_OK && slice.id) {
             if (!rbc_lir_slice_access(c,i,slice,&access)) return false;

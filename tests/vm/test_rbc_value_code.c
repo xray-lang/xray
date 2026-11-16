@@ -7,6 +7,7 @@
  * test_rbc_value_code.c - Typed receiving descriptions and their actual code lease
  */
 #include "lir/xlir_builder.h"
+#include "lir/xlir_string.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_string_value.h"
@@ -464,6 +465,7 @@ static void inline_code_retirement(void) {
     printf("inline Record/Nullable code: %zu allocation failures preserved empty output and retired metadata\n",sites);
 }
 #include "lir_slice_bytecode_cases.h"
+#include "lir_string_append_cases.h"
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
@@ -472,7 +474,7 @@ int main(void) {
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
     allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
     array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); inline_code_retirement();
-    slice_bytecode_retirement(); CHECK(!compiler_live_allocations);
+    slice_bytecode_retirement(); string_append_retirement(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }

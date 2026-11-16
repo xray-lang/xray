@@ -545,7 +545,8 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     const XrLirInstructionView *i, const RbcLirOutputValues *output) {
-    if (xr_lir_string_role(input,i)) return false;
+    uint32_t string_role = xr_lir_string_role(input,i);
+    if (string_role && string_role != XR_LIR_STRING_OP_APPEND_OWNED) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
@@ -596,6 +597,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
+        if (string_role == XR_LIR_STRING_OP_APPEND_OWNED) return true;
         if (slice_operation) return true;
         if (rbc_lir_map_role(input,i)) return true;
         if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
