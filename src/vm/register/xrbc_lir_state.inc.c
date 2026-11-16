@@ -8,7 +8,7 @@
  */
 static bool rbc_lir_state_payload(RbcLirCompiler *c, XrLirType type, XrLirType element, XrtValueKind *kind) {
     const XrtValuePlan *plan = NULL; uint32_t id = 0;
-    XrLirValueLayoutKey key = {type,type == XR_LIR_ARRAY ? element : 0};
+    XrLirValueLayoutKey key = {type,type == XR_LIR_ARRAY ? element : 0,0};
     if (!c->literals->layouts || xr_lir_value_layouts_lookup(c->literals->layouts,key,&plan,&id) != XR_LIR_VALUE_LAYOUT_OK)
         return false;
     XrtValuePlanSpec spec;

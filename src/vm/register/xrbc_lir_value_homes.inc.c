@@ -24,7 +24,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
-    *key = (XrLirValueLayoutKey){type,0};
+    *key = (XrLirValueLayoutKey){type,0,0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         XrLirStatus status = value ? xr_lir_array_shape_view(module,
@@ -82,7 +82,7 @@ static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, Rbc
     for (uint32_t i = 0; valid && state && i < state->slot_count; ++i) {
         const XrLirStateSlot *slot = &state->slots[i];
         XrLirValueLayoutKey key;
-        if (slot->payload == XR_LIR_ARRAY) key = (XrLirValueLayoutKey){XR_LIR_ARRAY,slot->array_element};
+        if (slot->payload == XR_LIR_ARRAY) key = (XrLirValueLayoutKey){XR_LIR_ARRAY,slot->array_element,0};
         else if (!rbc_home_key(input,(XrLirFunction){0},0,slot->payload,&key)) {
             valid = rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"State payload has no fixed value plan"); break;
         }
