@@ -42,6 +42,10 @@ static bool lower_view_cell_graph(LowerFunction *f, LowerViewCellGraph *graph) {
             if (!lower_view_cell_link(f, graph, op->operands[0], op->result)) return false;
     }
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
+        f->owner->block = b;
+        f->owner->instruction = f->source->blocks[b].first + f->source->blocks[b].count - 1;
+        if (f->cell_count) memcpy(f->current, &f->states[(size_t)b * f->cell_count],
+            (size_t)f->cell_count * sizeof(*f->current));
         const XrXirInstruction *term = lower_term(f->owner, f->source, b);
         if (!term) return false;
         for (uint32_t e = 0; e < lower_edge_count(term); ++e) {
