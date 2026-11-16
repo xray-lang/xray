@@ -128,6 +128,8 @@ def main():
                 'slice-proof-live-i64': 43, 'slice-proof-live-u8': 43,
                 'slice-proof-bind-i64': 43, 'slice-proof-bind-u8': 43,
                 'slice-proof-loop-i64': 43, 'slice-proof-loop-u8': 43,
+                'slice-proof-call-before-i64': 43, 'slice-proof-call-before-u8': 43,
+                'slice-proof-call-after-i64': 43, 'slice-proof-call-after-u8': 43,
                 'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73,
                 'slice-boundary-i64': 68, 'slice-boundary-u8': 68,
                 'slice-state-const-i64': 25, 'slice-state-const-u8': 25,
