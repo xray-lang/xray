@@ -435,6 +435,10 @@ static void array_c_output(const char *name, const char *path) {
     else if (!strcmp(name, "function-owned-return")) callable_factory_fixture(&m, &root, false);
     else if (!strcmp(name, "function-scoped-owned-return")) callable_factory_fixture_mode(&m, &root, false, true);
     else if (!strcmp(name,"callable-weaken")) callable_direct_weak_fixture(&m,&root);
+    else if (!strcmp(name,"callable-nonentry-frame") || !strcmp(name,"callable-loop-before-frame")) {
+        XrLirValue reference = {0};
+        callable_construction_fixture(!strcmp(name,"callable-loop-before-frame") ? 1u : 0u,&m,&root,&reference);
+    }
     else if (!strcmp(name,"cell-i64-frame")) callable_cell_c_fixture(&m,&root,false,false);
     else if (!strcmp(name,"cell-i64-owned")) callable_cell_c_fixture(&m,&root,false,true);
     else if (!strcmp(name,"cell-map-frame")) callable_cell_c_fixture(&m,&root,true,false);

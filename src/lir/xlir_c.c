@@ -66,8 +66,6 @@ typedef struct LirC {
     XrLirStateProjection *state_projection;
     const XrLirValueHomes *homes;
     struct LirCValueTypes *value_types;
-    void *callable_cfg;
-    uint8_t *callable_cycles;
     const XrLirHomeEvent **callable_events;
     size_t callable_scope_event;
     const XrLirHomeEvent **cell_events;
@@ -530,8 +528,6 @@ static void c_admit(LirC *c) {
     c->seen = seen;
     c_visit(c, c->request->entry.id);
     for (uint32_t cursor = 0; cursor < c->closure_count && c->status == XR_LIR_C_OK; ++cursor) {
-        xr_compile_resources_free(c->callable_cfg);
-        c->callable_cfg = NULL; c->callable_cycles = NULL;
         c->block = c->instruction = 0;
         c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
@@ -1260,7 +1256,6 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.used_literals);
     xr_compile_resources_free(c.callable_used);
     xr_compile_resources_free(c.constructed_types);
-    xr_compile_resources_free(c.callable_cfg);
     xr_compile_resources_free(c.callable_events);
     xr_compile_resources_free(c.cell_events);
     c_values_destroy(&c);
