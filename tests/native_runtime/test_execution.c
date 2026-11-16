@@ -235,6 +235,7 @@ static void standalone_state_string(void) {
 int main(void) {
     managed_scopes();
     managed_environments();
+    managed_cells();
     standalone_state_string();
     Context *outer = xr_calloc(1, sizeof(*outer));
     Context *inner = xr_calloc(1, sizeof(*inner));

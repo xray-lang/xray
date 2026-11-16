@@ -161,38 +161,80 @@ XR_FUNCDEF XrtManagedStatus xrt_map_cell_create(XrtManagedFrame *frame, size_t s
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *owned = (XrtManagedHeader *)&initial->managed;
     if (!xrt_managed_retain(owned)) return capture_finish(frame, slot, XRT_MANAGED_REFCOUNT);
-    ((XrtMapCell *)payload)->value = (XrtMapBacking *)owned;
+    ((XrtMapCell *)payload)->value = owned;
     return capture_finish(frame, slot, XRT_MANAGED_OK);
 }
 XR_FUNCDEF XrtManagedStatus xrt_i64_cell_read(const XrtI64Cell *cell, int64_t *output) {
     if (!cell || !output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlotLocation domain = {.cell_domain=(XrtManagedHeader *)&cell->managed};
+    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    if (status != XRT_MANAGED_OK) return status;
     *output = cell->value;
+    xrt_managed_domain_leave(domain);
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_cell_borrow(const XrtMapCell *cell, const XrtMapBacking **empty) {
-    if (!cell || !empty || *empty || !cell->value) return XRT_MANAGED_ARGUMENT;
-    *empty = cell->value;
-    return XRT_MANAGED_OK;
-}
-XR_FUNCDEF XrtManagedStatus xrt_map_cell_read_copy(XrtManagedFrame *frame, size_t slot, const XrtMapCell *cell) {
-    if (!cell || !cell->value) return XRT_MANAGED_ARGUMENT;
-    XrtManagedHeader *owned = &cell->value->managed;
-    if (!xrt_managed_retain(owned)) return XRT_MANAGED_REFCOUNT;
-    XrtManagedStatus status = xrt_managed_slot_replace(frame, slot, &owned);
-    xrt_managed_drop(owned);
+    if (!cell || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlotLocation domain = {.cell_domain=(XrtManagedHeader *)&cell->managed};
+    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    if (status != XRT_MANAGED_OK) return status;
+    if (!cell->value) status = XRT_MANAGED_ARGUMENT;
+    else *empty = (const XrtMapBacking *)cell->value;
+    xrt_managed_domain_leave(domain);
     return status;
 }
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_read_copy(XrtManagedFrame *frame, size_t slot, const XrtMapCell *cell) {
+    XrtExternalOwner binding = {0};
+    XrtManagedStatus status = xrt_map_cell_external((XrtMapCell *)cell, &binding);
+    return status == XRT_MANAGED_OK ? xrt_place_copy_replace(
+        (XrtPlace){.frame=frame, .slot=slot, .nulls=XRT_PLACE_NONNULL},
+        (XrtPlace){.external=&binding, .nulls=XRT_PLACE_NONNULL}, NULL) : status;
+}
 XR_FUNCDEF XrtManagedStatus xrt_i64_cell_write_exclusive(XrtI64Cell *cell, int64_t value) {
-    if (!cell || xr_signed_rc_read(&cell->managed.references) <= 0) return XRT_MANAGED_ARGUMENT;
-    cell->value = value;
-    return XRT_MANAGED_OK;
+    if (!cell) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlotLocation domain = {.cell_domain=&cell->managed};
+    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    if (status != XRT_MANAGED_OK) return status;
+    if (xr_signed_rc_read(&cell->managed.references) <= 0) status = XRT_MANAGED_ARGUMENT;
+    else cell->value = value;
+    xrt_managed_domain_leave(domain);
+    return status;
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_cell_write_exclusive(XrtMapCell *cell, const XrtMapBacking *value) {
-    if (!cell || !cell->value || !value || xr_signed_rc_read(&cell->managed.references) <= 0) return XRT_MANAGED_ARGUMENT;
+    if (!cell || !value) return XRT_MANAGED_ARGUMENT;
+    XrtManagedSlotLocation domain = {.cell_domain=&cell->managed};
+    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *owned = (XrtManagedHeader *)&value->managed;
-    if (!xrt_managed_retain(owned)) return XRT_MANAGED_REFCOUNT;
-    XrtMapBacking *old = cell->value;
-    cell->value = (XrtMapBacking *)owned;
-    xrt_managed_drop(&old->managed);
+    if (!cell->value || xr_signed_rc_read(&cell->managed.references) <= 0) status = XRT_MANAGED_ARGUMENT;
+    else if (!xrt_managed_retain(owned)) status = XRT_MANAGED_REFCOUNT;
+    else {
+        XrtManagedHeader *old = cell->value;
+        cell->value = owned;
+        xrt_managed_drop(old);
+    }
+    xrt_managed_domain_leave(domain);
+    return status;
+}
+static XrtManagedStatus map_cell_preflight(void *context, XrtPlaceAction action) {
+    XrtMapCell *cell = context;
+    if (!xrt_managed_domain_held((XrtManagedSlotLocation){.cell_domain=&cell->managed}) || !cell->value ||
+        action == XRT_PLACE_MOVE_FROM ||
+        (action == XRT_PLACE_REPLACE && xr_signed_rc_read(&cell->managed.references) <= 0))
+        return XRT_MANAGED_ARGUMENT;
     return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_external(XrtMapCell *cell, XrtExternalOwner *empty) {
+    if (!cell || !empty || empty->owner || empty->busy || empty->preflight || empty->context || empty->cell_domain)
+        return XRT_MANAGED_ARGUMENT;
+    *empty = (XrtExternalOwner){.owner=&cell->value, .preflight=map_cell_preflight,
+        .context=cell, .cell_domain=&cell->managed};
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_cell_update_exclusive(XrtMapCell *cell, XrtManagedFrame *frame,
+    size_t workspace, const XrtBackingTypes *types, const XrtMapUpdate *update, bool *removed) {
+    XrtExternalOwner binding = {0};
+    XrtManagedStatus status = xrt_map_cell_external(cell, &binding);
+    return status == XRT_MANAGED_OK ? xrt_map_update_place(
+        (XrtPlace){.external=&binding, .nulls=XRT_PLACE_NONNULL}, frame, workspace, types, update, removed) : status;
 }

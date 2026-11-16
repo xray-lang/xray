@@ -26,6 +26,14 @@ typedef struct Audit {
     const XrtMapCell *cell;
     const XrtMapBacking *published;
     size_t observed;
+    XrtMapCell *guard_cell;
+    XrtManagedRoot *guard_root;
+    XrtManagedFrame *other_frame;
+    const XrtBackingTypes *guard_types;
+    const XrtMapBacking *guard_map;
+    bool probe_allocate, probe_free, drop_snapshot;
+    size_t allocation_probes, retirement_probes, guard_publications;
+    const void *guard_retiring;
 } Audit;
 typedef struct Fixture {
     Audit audit;
@@ -45,8 +53,34 @@ static void provider_drop(void *context) {
         atomic_fetch_add(&audit->finalized,1);
     }
 }
+static void cell_probe(Audit *audit, bool retiring) {
+    if (!(retiring ? audit->probe_free : audit->probe_allocate)) return;
+    STATUS(xrt_managed_root_drain(audit->guard_root),XRT_MANAGED_ARGUMENT);
+    const XrtMapBacking *borrowed = NULL;
+    STATUS(xrt_map_cell_borrow(audit->guard_cell,&borrowed),XRT_MANAGED_ARGUMENT); CHECK(!borrowed);
+    STATUS(xrt_map_cell_write_exclusive(audit->guard_cell,audit->guard_map),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_map_cell_read_copy(audit->other_frame,0,audit->guard_cell),XRT_MANAGED_ARGUMENT);
+    XrtExternalOwner external = {0}; OK(xrt_map_cell_external(audit->guard_cell,&external));
+    const XrtManagedHeader *header = NULL;
+    STATUS(xrt_place_borrow((XrtPlace){.external=&external,.nulls=XRT_PLACE_NONNULL},&header),XRT_MANAGED_ARGUMENT);
+    CHECK(!header);
+    XrtMapUpdate clear = {.operation=XRT_MAP_UPDATE_CLEAR}; bool removed = true;
+    STATUS(xrt_map_cell_update_exclusive(audit->guard_cell,audit->other_frame,1,audit->guard_types,&clear,&removed),
+        XRT_MANAGED_ARGUMENT); CHECK(removed);
+    CHECK(atomic_load(&audit->guard_cell->managed.flags) & 1u);
+    XrtManagedHeader *snapshot = NULL; OK(xrt_managed_slot_borrow(audit->other_frame,0,&snapshot));
+    if (retiring) ++audit->retirement_probes;
+    else {
+        ++audit->allocation_probes;
+        if (audit->drop_snapshot) {
+            audit->drop_snapshot = false;
+            OK(xrt_managed_slot_drop(audit->other_frame,0));
+        }
+    }
+}
 static void *provider_allocate(void *context,size_t bytes) {
     Audit *audit=context; atomic_fetch_add(&audit->calls,1);
+    cell_probe(audit,false);
     size_t remaining=atomic_load(&audit->remaining);
     while (remaining!=SIZE_MAX) {
         if (!remaining) return NULL;
@@ -58,8 +92,14 @@ static void *provider_allocate(void *context,size_t bytes) {
 }
 static void provider_free(void *context,void *memory,size_t bytes) {
     Audit *audit=context;
+    cell_probe(audit,true);
+    if (memory==audit->guard_retiring) {
+        CHECK(audit->guard_cell->value!=(XrtManagedHeader *)memory &&
+            ((const XrtMapBacking *)audit->guard_cell->value)->length==2);
+        ++audit->guard_publications;
+    }
     if (memory==audit->watched) {
-        CHECK(audit->cell && audit->cell->value==audit->published);
+        CHECK(audit->cell && audit->cell->value==&audit->published->managed);
         ++audit->observed;
     }
     CHECK(atomic_fetch_sub(&audit->bytes,bytes)>=bytes);
@@ -145,12 +185,17 @@ static void identity_cells(void) {
     OK(xrt_backing_slot_copy(f.frame,4,&number->managed)); CHECK(xr_signed_rc_read(&number->managed.references)==2);
     OK(xrt_i64_cell_write_exclusive(number,42)); int64_t answer=0;
     OK(xrt_i64_cell_read((XrtI64Cell *)borrow(&f,4),&answer)); CHECK(answer==42);
+    XrtManagedSlotLocation number_domain = {.cell_domain=&number->managed};
+    OK(xrt_managed_domain_enter(number_domain)); answer=0;
+    STATUS(xrt_i64_cell_read(number,&answer),XRT_MANAGED_ARGUMENT); CHECK(!answer);
+    STATUS(xrt_i64_cell_write_exclusive(number,0),XRT_MANAGED_ARGUMENT);
+    xrt_managed_domain_leave(number_domain); OK(xrt_i64_cell_read(number,&answer)); CHECK(answer==42);
     OK(xrt_map_cell_create(f.frame,5,map_type,first)); XrtMapCell *cell=(XrtMapCell *)borrow(&f,5);
     OK(xrt_backing_slot_copy(f.frame,6,&cell->managed));
     OK(xrt_map_cell_read_copy(f.frame,7,cell)); CHECK(borrow(&f,7)==&first->managed);
     OK(xrt_managed_slot_drop(f.frame,1));
     XrtBillingStats before=xrt_billing_owner_stats(f.billing); size_t calls=atomic_load(&f.audit.calls);
-    OK(xrt_map_cell_write_exclusive(cell,second)); CHECK(cell->value==second&&map_value((XrtMapBacking *)borrow(&f,7))==10);
+    OK(xrt_map_cell_write_exclusive(cell,second)); CHECK(cell->value==&second->managed&&map_value((XrtMapBacking *)borrow(&f,7))==10);
     const XrtMapBacking *borrowed=NULL; OK(xrt_map_cell_borrow((XrtMapCell *)borrow(&f,6),&borrowed)); CHECK(borrowed==second);
     OK(xrt_map_cell_write_exclusive(cell,second)); CHECK(xr_signed_rc_read(&second->managed.references)==2);
     CHECK(atomic_load(&f.audit.calls)==calls); same_bill(&f,before);
@@ -158,21 +203,91 @@ static void identity_cells(void) {
     OK(xrt_managed_slot_drop(f.frame,7)); CHECK(f.audit.observed==1); f.audit.watched=NULL;
     before=xrt_billing_owner_stats(f.billing);
     atomic_store(&second->managed.references,INT32_MAX);
-    STATUS(xrt_map_cell_write_exclusive(cell,second),XRT_MANAGED_REFCOUNT); CHECK(cell->value==second);
+    STATUS(xrt_map_cell_write_exclusive(cell,second),XRT_MANAGED_REFCOUNT); CHECK(cell->value==&second->managed);
     STATUS(xrt_map_cell_read_copy(f.frame,7,cell),XRT_MANAGED_REFCOUNT); CHECK(!borrow(&f,7));
     atomic_store(&second->managed.references,2); same_bill(&f,before);
     atomic_store(&number->managed.references,-2);
     STATUS(xrt_i64_cell_write_exclusive(number,7),XRT_MANAGED_ARGUMENT); CHECK(number->value==42);
     atomic_store(&number->managed.references,2);
     atomic_store(&cell->managed.references,-2);
-    STATUS(xrt_map_cell_write_exclusive(cell,second),XRT_MANAGED_ARGUMENT); CHECK(cell->value==second);
+    STATUS(xrt_map_cell_write_exclusive(cell,second),XRT_MANAGED_ARGUMENT); CHECK(cell->value==&second->managed);
     atomic_store(&cell->managed.references,2);
     OK(xrt_map_cell_read_copy(f.frame,5,cell)); CHECK(borrow(&f,5)==&second->managed);
-    CHECK(((XrtMapCell *)borrow(&f,6))->value==second&&xr_signed_rc_read(&second->managed.references)==3);
+    CHECK(((XrtMapCell *)borrow(&f,6))->value==&second->managed&&xr_signed_rc_read(&second->managed.references)==3);
     xrt_capture_type_drop(&integer_type); xrt_capture_type_drop(&map_type);
     xrt_value_plan_drop(maps); xrt_value_plan_drop(i64); xrt_value_plan_drop(map); xrt_value_plan_drop(integer);
     fixture_done(&f);
     puts("identity I64/Map Cells, snapshot copies and publish-before-release passed");
+}
+static void cross_root_cell_guard(void) {
+    Fixture f; fixture_init(&f,SIZE_MAX,true);
+    XrtValuePlan *map = map_plan(&f), *plan = cell_plan(&f,map);
+    XrtCaptureType *type = type_new(&f,plan);
+    XrtMapBacking *first = make_map(&f,1,10), *second = make_map(&f,2,20);
+    OK(xrt_map_cell_create(f.frame,3,type,first));
+    XrtMapCell *cell = (XrtMapCell *)borrow(&f,3);
+    XrtManagedRoot *other = NULL; XrtManagedFrame *other_frame = NULL;
+    OK(xrt_managed_root_new(f.billing,&other)); OK(xrt_managed_frame_enter(other,8,&other_frame));
+    OK(xrt_backing_slot_copy(other_frame,2,&cell->managed));
+    xrt_capture_type_drop(&type); xrt_value_plan_drop(plan); xrt_value_plan_drop(map);
+    OK(xrt_managed_slot_drop(f.frame,1));
+    OK(xrt_map_cell_read_copy(other_frame,0,cell));
+    OK(xrt_string_backing_create(f.frame,4,&f.types,"added",5,0));
+    XrtStringBacking *key = (XrtStringBacking *)borrow(&f,4);
+    XrtMapUpdate update = {XRT_MAP_UPDATE_SET,key,42}; bool removed = true;
+    atomic_store(&cell->managed.flags,UINT32_C(0x1000));
+    f.audit.guard_cell=cell; f.audit.guard_root=f.root; f.audit.other_frame=other_frame;
+    f.audit.guard_types=&f.types; f.audit.guard_map=second; f.audit.guard_retiring=first;
+    f.audit.probe_allocate=f.audit.probe_free=true;
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    atomic_store(&f.audit.remaining,0);
+    STATUS(xrt_map_cell_update_exclusive(cell,f.frame,6,&f.types,&update,&removed),XRT_MANAGED_OOM);
+    CHECK(cell->value==&first->managed && removed && !borrow(&f,6)); same_bill(&f,before);
+    CHECK(atomic_load(&cell->managed.flags)==UINT32_C(0x1000) && xr_signed_rc_read(&cell->managed.references)==2);
+    atomic_store(&f.audit.remaining,SIZE_MAX);
+    XrtStringBacking *old_key = NULL;
+    for (size_t n=0;n<first->capacity;++n) if (first->rows[n].key) old_key=(XrtStringBacking *)first->rows[n].key;
+    CHECK(old_key && xr_signed_rc_read(&old_key->managed.references)==1);
+    atomic_store(&old_key->managed.references,INT32_MAX);
+    STATUS(xrt_map_cell_update_exclusive(cell,f.frame,6,&f.types,&update,&removed),XRT_MANAGED_REFCOUNT);
+    atomic_store(&old_key->managed.references,1);
+    CHECK(cell->value==&first->managed && removed && !borrow(&f,6)); same_bill(&f,before);
+    f.audit.drop_snapshot=true;
+    OK(xrt_map_cell_update_exclusive(cell,f.frame,6,&f.types,&update,&removed));
+    f.audit.probe_allocate=f.audit.probe_free=false;
+    f.audit.guard_retiring=NULL;
+    CHECK(!removed && !borrow(&f,6) && f.audit.allocation_probes>=3 && f.audit.retirement_probes>=2 && f.audit.guard_publications==1);
+    CHECK(atomic_load(&cell->managed.flags)==UINT32_C(0x1000) && xr_signed_rc_read(&cell->managed.references)==2);
+    const XrtMapBacking *current = NULL; OK(xrt_map_cell_borrow(cell,&current));
+    int64_t answer = 0; bool found = false;
+    OK(xrt_map_backing_get(current,key,&answer,&found)); CHECK(found && answer==42 && current->length==2);
+    XrtExternalOwner external = {0}; OK(xrt_map_cell_external(cell,&external));
+    CHECK(!external.busy && external.cell_domain==&cell->managed && external.owner==&cell->value);
+    XrtPlace binding = {.external=&external,.nulls=XRT_PLACE_NONNULL};
+    XrtPlaceEdge copies[] = {
+        {{.frame=other_frame,.slot=3,.nulls=XRT_PLACE_NONNULL},binding,
+            {.frame=other_frame,.slot=5,.nulls=XRT_PLACE_NONNULL},XRT_PLACE_TRANSFER_COPY},
+        {{.frame=other_frame,.slot=4,.nulls=XRT_PLACE_NONNULL},binding,
+            {.frame=other_frame,.slot=6,.nulls=XRT_PLACE_NONNULL},XRT_PLACE_TRANSFER_COPY}};
+    OK(xrt_place_edge_transfer(copies,2,NULL));
+    CHECK(xr_signed_rc_read(&cell->managed.references)==2);
+    XrtManagedHeader *copied = NULL; OK(xrt_managed_slot_borrow(other_frame,3,&copied)); CHECK(copied==cell->value);
+    STATUS(xrt_place_move_replace(copies[0].destination,binding,NULL),XRT_MANAGED_ARGUMENT);
+    bool wrong = false; XrtExternalOwner invalid = external; invalid.busy=&wrong;
+    const XrtManagedHeader *absent = NULL;
+    STATUS(xrt_place_borrow((XrtPlace){.external=&invalid,.nulls=XRT_PLACE_NONNULL},&absent),XRT_MANAGED_ARGUMENT);
+    CHECK(!absent && !wrong);
+    atomic_store(&cell->managed.references,-2);
+    current=NULL; OK(xrt_map_cell_borrow(cell,&current));
+    STATUS(xrt_map_cell_write_exclusive(cell,second),XRT_MANAGED_ARGUMENT);
+    removed=true; STATUS(xrt_map_cell_update_exclusive(cell,f.frame,6,&f.types,&update,&removed),XRT_MANAGED_ARGUMENT);
+    CHECK(removed && !borrow(&f,6)); atomic_store(&cell->managed.references,INT32_MAX);
+    current=NULL; STATUS(xrt_map_cell_borrow(cell,&current),XRT_MANAGED_REFCOUNT); CHECK(!current);
+    atomic_store(&cell->managed.references,2);
+    OK(xrt_map_cell_write_exclusive(cell,second)); current=NULL; OK(xrt_map_cell_borrow(cell,&current)); CHECK(current==second);
+    CHECK(atomic_load(&cell->managed.flags)==UINT32_C(0x1000));
+    OK(xrt_managed_root_destroy(&other)); fixture_done(&f);
+    puts("one Cell guard spans Roots, callbacks, copy edges, creator retirement and precise OOM refunds");
 }
 typedef struct CodeAudit { _Atomic(size_t) finalized,retains,drops; } CodeAudit;
 typedef struct CodeOwner { _Atomic(size_t) references; CodeAudit *audit; char *bytes; } CodeOwner;
@@ -226,7 +341,7 @@ static void creator_retirement(void) {
     XrtI64Cell *number=NULL; memcpy(&number,payload,sizeof(number)); OK(xrt_i64_cell_read(number,&seed)); CHECK(seed==7);
     OK(xrt_i64_cell_write_exclusive(number,8));
     capture_type=NULL; payload=NULL; OK(xrt_environment_capture_borrow(&environment,3,&capture_type,&payload));
-    XrtMapCell *saved_cell=NULL; memcpy(&saved_cell,payload,sizeof(saved_cell)); CHECK(saved_cell->value==saved_map);
+    XrtMapCell *saved_cell=NULL; memcpy(&saved_cell,payload,sizeof(saved_cell)); CHECK(saved_cell->value==&saved_map->managed);
     capture_type=NULL; payload=NULL; STATUS(xrt_environment_capture_borrow(&environment,4,&capture_type,&payload),XRT_MANAGED_BOUNDS); CHECK(!capture_type&&!payload);
     CHECK(atomic_load(&metadata.audit.calls)==metadata_calls&&atomic_load(&objects.audit.calls)==object_calls&&atomic_load(&data.audit.calls)==data_calls);
     CHECK(atomic_load(&code_audit.retains)==code_retains&&atomic_load(&code_audit.drops)==code_drops);
@@ -388,6 +503,6 @@ static void empty_and_deep_environments(void) {
     puts("empty environment and 100000 escaping capture links retire on the default stack");
 }
 int main(void) {
-    identity_cells(); creator_retirement(); owned_environment_context(); failures_and_pending(); actual_payload_quota(); empty_and_deep_environments();
+    identity_cells(); cross_root_cell_guard(); creator_retirement(); owned_environment_context(); failures_and_pending(); actual_payload_quota(); empty_and_deep_environments();
     puts("escaping environment and necessary Cell kernel passed"); return 0;
 }

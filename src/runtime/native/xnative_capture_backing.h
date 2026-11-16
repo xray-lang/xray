@@ -23,7 +23,7 @@ typedef struct XrtI64Cell {
 } XrtI64Cell;
 typedef struct XrtMapCell {
     XrtManagedHeader managed;
-    XrtMapBacking *value;
+    XrtManagedHeader *value;
 } XrtMapCell;
 _Static_assert(sizeof(XrtI64Cell) == 24 && sizeof(XrtMapCell) == 24 &&
     offsetof(XrtI64Cell, value) == 16 && offsetof(XrtMapCell, value) == 16,
@@ -71,16 +71,25 @@ XR_FUNC XrtManagedStatus xrt_i64_cell_create(XrtManagedFrame *, size_t,
 XR_FUNC XrtManagedStatus xrt_map_cell_create(XrtManagedFrame *, size_t,
     const XrtCaptureType *, const XrtMapBacking *initial);
 /* These handles already have their exact admitted Cell kind and a live real
- * owner. Read results are scalar copies or synchronous Map borrows. read_copy
+ * owner. Every operation pins that Cell and acquires its actual Header guard.
+ * Read results are scalar copies or synchronous Map borrows. A Map borrow
+ * requires the caller to preserve the Cell owner and exclude replacement;
+ * use read_copy before callbacks or later mutations can retire that child. read_copy
  * first retains the Map and then publishes it into the stable destination. */
 XR_FUNC XrtManagedStatus xrt_i64_cell_read(const XrtI64Cell *, int64_t *);
 XR_FUNC XrtManagedStatus xrt_map_cell_borrow(const XrtMapCell *, const XrtMapBacking **empty);
 XR_FUNC XrtManagedStatus xrt_map_cell_read_copy(XrtManagedFrame *, size_t, const XrtMapCell *);
-/* The caller already owns exclusive access to the actual Cell identity and
- * excludes reentrant mutation. References/borrows do not grant write authority.
+/* The caller already owns exclusive access to the actual Cell identity.
+ * References/borrows and the reentry guard do not grant write authority.
  * Cells are not COW values: multiple positive-band owners observe one identity.
  * Shared-band Cells remain read-only. Map writes retain before publication and
  * release the previous child afterwards, including pointer-equal writes. */
 XR_FUNC XrtManagedStatus xrt_i64_cell_write_exclusive(XrtI64Cell *, int64_t);
 XR_FUNC XrtManagedStatus xrt_map_cell_write_exclusive(XrtMapCell *, const XrtMapBacking *);
+/* A borrowed descriptor of the actual Map child and Cell guard. The caller
+ * keeps a real Cell/Env owner for its complete lifetime. MOVE_FROM is rejected:
+ * a complete Map Cell never loses its non-NULL child to a consuming read. */
+XR_FUNC XrtManagedStatus xrt_map_cell_external(XrtMapCell *, XrtExternalOwner *empty);
+XR_FUNC XrtManagedStatus xrt_map_cell_update_exclusive(XrtMapCell *, XrtManagedFrame *,
+    size_t workspace, const XrtBackingTypes *, const XrtMapUpdate *, bool *removed);
 #endif // XNATIVE_CAPTURE_BACKING_H

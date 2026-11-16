@@ -16,6 +16,7 @@
 #include "xray_native_string_value.h"
 #include "xray_native_function.h"
 #include "xray_native_value_image.h"
+#include "xray_native_map.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +69,8 @@ typedef struct XrtNativeEnvironmentInput {
 } XrtNativeEnvironmentInput;
 /* Entry is the admitted immutable backend entry object for this exact Env row,
  * not a function-pointer cast. Code pins that object and the raw image through
- * this execution; static executable data already has permanent lifetime. With
+ * this execution; an empty Code lease selects permanent immutable entry/image
+ * storage. With
  * State, type belongs to its bound image and no second image is bound here.
  * The caller holds Code or State and every input owner throughout this whole
  * synchronous call, including callbacks. Captures are complete admitted values
@@ -79,6 +81,35 @@ typedef struct XrtNativeEnvironmentInput {
  * while every produced Env independently keeps its Plan and code alive. */
 XRAY_API XrtFunction xrt_native_environment_create(XrtManagedFrame *, size_t slot,
     const XrtNativeEnvironmentInput *, uint32_t source_id);
+
+typedef struct XrtNativeCellInput {
+    const XrtValueImage *image;
+    XrtModuleState *state;
+    XrtManagedLease code;
+    uint32_t type;
+    union { int64_t i64; const XrtManagedHeader *map; } initial;
+} XrtNativeCellInput;
+/* Type is this image's admitted Cell<I64> or Cell<Map<String,I64>> row. The
+ * caller keeps Code or State and every input owner alive throughout this call,
+ * including callbacks. An empty Code lease requires permanent immutable image
+ * storage. State reuses its bound plan; the output is one real
+ * owner in the caller's true-empty temporary slot. */
+XRAY_API void xrt_native_cell_create(XrtManagedFrame *, size_t,
+    const XrtNativeCellInput *, uint32_t source_id);
+/* These operations consume already admitted exact Cell kinds and borrowing or
+ * exclusive-write facts. The caller holds a real Cell/Env owner through the
+ * entire synchronous operation, including callbacks; RC and the Header guard
+ * confer no language authority. Shared-band Cells reject writes. */
+XRAY_API int64_t xrt_native_cell_i64_read(const XrtManagedHeader *, uint32_t source_id);
+XRAY_API void xrt_native_cell_i64_write(XrtManagedHeader *, int64_t, uint32_t source_id);
+XRAY_API void xrt_native_cell_map_read_copy(XrtManagedFrame *, size_t,
+    const XrtManagedHeader *, uint32_t source_id);
+XRAY_API void xrt_native_cell_map_write(XrtManagedHeader *, const XrtManagedHeader *, uint32_t source_id);
+XRAY_API void xrt_native_cell_map_update(XrtManagedHeader *, XrtManagedFrame *, size_t workspace,
+    const XrtMapUpdate *, bool *removed, uint32_t source_id);
+/* The returned binding borrows its actual Cell guard and child field. Keep the
+ * real Cell/Env owner alive for the complete descriptor lifetime. */
+XRAY_API XrtExternalOwner xrt_native_cell_map_binding(XrtManagedHeader *, uint32_t source_id);
 
 #ifdef __cplusplus
 }
